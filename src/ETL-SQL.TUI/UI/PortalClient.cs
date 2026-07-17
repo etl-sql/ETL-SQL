@@ -9,7 +9,7 @@ using ETL_SQL.Core.Governance;
 namespace ETL_SQL.TUI.UI
 {
     /// <summary>
-    /// Minimal Report Portal HTTP client mirroring the VS Code publish flow:
+    /// Minimal Portal HTTP client mirroring the VS Code publish flow:
     /// login → upload script → list folders → create report.
     /// </summary>
     public sealed class PortalClient

@@ -1,6 +1,6 @@
-# ETL-SQL Report Portal: User Guide
+# ETL-SQL Portal: User Guide
 
-The Report Portal is a web application that lets you browse, run, and subscribe to reports built with Report-SQL scripts. You don't need to know ETL-SQL syntax to use it — this guide covers everything from first login to managing your own subscriptions.
+The Portal is a web application that lets you browse, run, and subscribe to reports built with Report-SQL scripts. You don't need to know ETL-SQL syntax to use it — this guide covers everything from first login to managing your own subscriptions.
 
 ---
 

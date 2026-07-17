@@ -1,7 +1,7 @@
 # Alerting and Service Objectives
 
 This guide defines baseline service indicators, starter objectives, alert routing, and runbook
-actions for Report Portal and related operational signals. Tune thresholds from measured workload
+actions for Portal and related operational signals. Tune thresholds from measured workload
 history and business criticality; these defaults are conservative starter values, not universal SLOs.
 
 ## Service Indicators

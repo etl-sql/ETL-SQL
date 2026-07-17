@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
-/// End-to-end integration tests for the Report Portal.
+/// End-to-end integration tests for the Portal.
 /// Tests run against a real in-process Kestrel + temp SQLite database.
 /// Coverage: auth → user → folder → report publish → subscription CRUD → audit log.
 /// </summary>
@@ -102,7 +102,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.NotNull(index);
         Assert.Contains(index!, item => item!["path"]!.GetValue<string>() == "README.md");
 
-        var searchResponse = await _client.GetAsync("/api/docs/search?q=report portal");
+        var searchResponse = await _client.GetAsync("/api/docs/search?q=portal");
         Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
         var results = await searchResponse.Content.ReadFromJsonAsync<JsonArray>(_json);
         Assert.NotNull(results);
@@ -112,7 +112,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, docResponse.StatusCode);
         var doc = await docResponse.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.Equal("README.md", doc!["path"]!.GetValue<string>());
-        Assert.Contains("# ETL-SQL Documentation Map", doc["markdown"]!.GetValue<string>());
+        Assert.Contains("# ETL-SQL Documentation", doc["markdown"]!.GetValue<string>());
 
         var traversal = await _client.GetAsync("/api/docs/document?path=../appsettings.json");
         Assert.Equal(HttpStatusCode.NotFound, traversal.StatusCode);

@@ -39,7 +39,7 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
 }
 // Integrate with the Windows SCM so the portal can run as a Windows Service (installed by the MSI);
 // this also sets the content root to the executable's directory.
-builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Report Portal");
+builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Portal");
 #endif
 builder.Configuration.AddSecureConfiguration();
 builder.Configuration.AddEnterprisePolicy();
@@ -332,7 +332,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { Title = "ETL-SQL Report Portal", Version = "v1" });
+    c.SwaggerDoc("v1", new() { Title = "ETL-SQL Portal", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
         Name = "Authorization",

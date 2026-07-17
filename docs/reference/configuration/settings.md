@@ -193,9 +193,9 @@ Configuration details for the background runner service.
 
 ---
 
-## 10. Report Portal
+## 10. Portal
 
-Configuration settings for the Report Portal UI server, shared storage, and active integrations.
+Configuration settings for the Portal UI server, shared storage, and active integrations.
 
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -335,6 +335,6 @@ Standard ASP.NET Core connection configurations.
 
 ## References
 - [Administrators Guide](../../guides/administration.md)
-- [Report Portal Administrators Guide](../../guides/report-portal-admin.md)
+- [Portal Administrators Guide](../../guides/portal-admin.md)
 - [Orchestrators Guide](../../guides/job-orchestration.md)
 

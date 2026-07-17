@@ -39,7 +39,7 @@ public class CreateDirectoryInReportRule : ILintRule
                     RuleName = Name,
                     Severity = LintSeverity.Error,
                     Message = "CREATE DIRECTORY is a file-system operation and has no effect inside a report script. " +
-                                   "To organise reports in the Report Portal, use CREATE FOLDER instead.",
+                                   "To organise reports in the Portal, use CREATE FOLDER instead.",
                     LineNumber = stmt.Line,
                     ColumnNumber = stmt.Column
                 });

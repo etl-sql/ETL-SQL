@@ -1,6 +1,6 @@
-# Architecture: ETL-SQL Report Portal
+# Architecture: ETL-SQL Portal
 
-The Report Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above the shared report hosting/runtime services it calls for execution.
+The Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above the shared report hosting/runtime services it calls for execution.
 
 ---
 
@@ -155,7 +155,7 @@ GET /api/jobs/{jobId}          — poll job status
 GET /api/reports/{id}/snapshot — fetch completed snapshot JSON
 ```
 
-**Supported topology:** one active Report Portal process per portal SQLite database and
+**Supported topology:** one active Portal process per portal SQLite database and
 script/snapshot/dataset storage root. Portal nodes are allowed to run concurrently when they share
 the configured database and artifact storage roots. Startup-critical singleton work, such as EF
 migrations, is serialized with the database-backed cluster lock instead of a node-local filesystem

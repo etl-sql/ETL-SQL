@@ -738,7 +738,7 @@
 
         const publishBtn = document.createElement('button');
         publishBtn.className = 'header-btn';
-        publishBtn.title = 'Publish to Report Portal';
+        publishBtn.title = 'Publish to Portal';
         publishBtn.textContent = 'Publish';
         publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
         actions.appendChild(publishBtn);

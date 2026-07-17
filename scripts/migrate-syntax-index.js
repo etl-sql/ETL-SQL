@@ -3,7 +3,7 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const legacyIndexPath = path.join(repoRoot, 'Docs_Legacy', 'Syntax_Index.md');
-const newIndexPath = path.join(repoRoot, 'docs', 'Syntax_Index.md');
+const newIndexPath = path.join(repoRoot, 'docs', 'syntax-index.md');
 
 // Load all file paths in the new docs/ folder so we can search for them
 function walkDir(dir, fileList = []) {
@@ -118,4 +118,4 @@ const updatedContent = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label
 });
 
 fs.writeFileSync(newIndexPath, updatedContent, 'utf8');
-console.log('Syntax_Index.md migrated to docs/Syntax_Index.md with resolved links.');
+console.log('Syntax_Index.md migrated to docs/syntax-index.md with resolved links.');

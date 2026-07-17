@@ -40,7 +40,7 @@
                 <ComponentRef Id="AppSettings" />
             </Feature>
 
-            <Feature Id="Feature_Portal" Title="Report Portal" Level="1" Absent="allow" AllowAdvertise="no"
+            <Feature Id="Feature_Portal" Title="Portal" Level="1" Absent="allow" AllowAdvertise="no"
                      Description="Web-based dashboard and report management portal, installed as a Windows Service (http://localhost:5002).">
                 <Condition Level="0"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
                 <ComponentRef Id="Portal_EXE" />
@@ -106,13 +106,13 @@
                 <ServiceControl Id="StartService_Orchestrator" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Orchestrator" Wait="yes" />
             </Component>
 
-            <!-- Report Portal service (pinned to port 5002 via the urls argument) -->
+            <!-- Portal service (pinned to port 5002 via the urls argument) -->
             <Component Id="Portal_EXE" Guid="*" Win64="yes">
                 <File Source="$(var.PublishDir)\ETL-SQL-Portal.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Portal"
                                 Type="ownProcess"
                                 Name="ETL-SQL-Portal"
-                                DisplayName="ETL-SQL Report Portal"
+                                DisplayName="ETL-SQL Portal"
                                 Description="Web interface for ETL-SQL reports."
                                 Start="auto"
                                 Account="LocalSystem"
@@ -159,7 +159,7 @@
 
         <!-- Connection hint shown on the final installer page -->
         <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
-                  Value="Once the services start, the components are reachable at:&#13;&#10;&#13;&#10;Report Portal:        http://localhost:5002&#13;&#10;Orchestrator API:   http://localhost:5001" />
+                  Value="Once the services start, the components are reachable at:&#13;&#10;&#13;&#10;Portal:        http://localhost:5002&#13;&#10;Orchestrator API:   http://localhost:5001" />
 
         <!-- UI: standard WiX feature-tree flow, but the icon-tree CustomizeDlg is replaced with a
              checkbox dialog (ChooseFeaturesDlg) inserted right after the license page. -->
@@ -178,7 +178,7 @@
                 <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="105" Width="335" Height="17" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
                 <Control Id="OrchestratorDesc" Type="Text" X="34" Y="122" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
 
-                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Report Portal" />
+                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Portal" />
                 <Control Id="PortalDesc" Type="Text" X="34" Y="167" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Web dashboard — Windows Service — http://localhost:5002" />
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />

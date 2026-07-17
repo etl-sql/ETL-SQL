@@ -668,6 +668,6 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 ## 13. Related Subsystem Architecture
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
-- **Report Portal:** [ReportPortal.md](ReportPortal.md) explains REST APIs, authentication policies, and portal-proxied scheduler endpoints.
+- **Portal:** [Portal.md](Portal.md) explains REST APIs, authentication policies, and portal-proxied scheduler endpoints.
 - **Reporting Engine:** [Reporting.md](Reporting.md) covers visual manifest structures and report file generation layers.
 - **Portal UI & Designer:** [PortalUI.md](PortalUI.md) documents visual script editing, designer parsing, and DAG graph modeling.

@@ -362,7 +362,7 @@ The extension provides a native notebook interface (`.etlnb`) for writing and ru
 **File:** [portalPublishCommand.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts)  
 **Function:** [publishToPortal](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts#L111)
 
-The publish command allows direct publication of report scripts from the local workspace to the ETL-SQL Report Portal.
+The publish command allows direct publication of report scripts from the local workspace to the ETL-SQL Portal.
 
 - **Authentication:** Prompts for portal credentials, performs login at `/api/auth/login`, and caches the JWT access token in `ExtensionContext.globalState` for 55 minutes.
 - **Upload:** Uploads the raw script content to `/api/scripts/upload` to place it in the portal's storage area.
@@ -399,7 +399,7 @@ Both `.etlsql` and `.rptsql` use the same language ID (`etlsql`) and grammar, so
 | `etlsql.executable.path` | `ETL-SQL.exe` | Path to the ETL-SQL CLI executable used for running scripts. |
 | `etlsql.server.path` | *(empty)* | Path to `ETL-SQL-LSP.exe` / `ETL-SQL.LanguageServer`. Auto-discovered if empty. |
 | `etlsql.report.executable.path` | `ETL-SQL-Report.exe` | Path to the report CLI used by the preview/export/publish workflows. |
-| `etlsql.portal.url` | *(empty)* | Base URL of the ETL-SQL Report Portal used by report publishing. |
+| `etlsql.portal.url` | *(empty)* | Base URL of the ETL-SQL Portal used by report publishing. |
 | `etlsql.report.autoOpenPreview` | `false` | Automatically open preview panel when a `.rptsql` file is opened. |
 
 ---

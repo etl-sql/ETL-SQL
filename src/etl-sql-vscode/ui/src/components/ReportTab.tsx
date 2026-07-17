@@ -1219,7 +1219,7 @@ const ReportMapPlaceholder: React.FC<{ visual: VisualManifest }> = ({ visual }) 
             <p className="text-sm font-semibold">Map preview unavailable</p>
             <p className="text-xs max-w-[320px] leading-relaxed">
                 {mapKey ? `${mapKey} · ${mode}` : 'MAP'} charts require the HTTP server to load GeoJSON.
-                Open the report in <span className="font-mono text-[var(--text)]">Report Portal</span> or run the
+                Open the report in <span className="font-mono text-[var(--text)]">Portal</span> or run the
                 script with <span className="font-mono text-[var(--text)]">--ui</span> to see the live map.
             </p>
         </div>

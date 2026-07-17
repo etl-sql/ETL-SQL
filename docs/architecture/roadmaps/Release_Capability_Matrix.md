@@ -40,7 +40,7 @@ Status meanings:
 | Multi-step lineage source metadata | Green | Scenario proves external source-table metadata survives stage-to-publish lineage. | `tests/etl_scenarios/lineage_multistep_source_tags_survive_publish` |
 | SQL logic compatibility | Green | SLT corpus passes on the release branch. | `.\scripts\test-lane.ps1 -Lane slt -NoRestore` passed on 2026-06-01: 7 passed, 0 failed, 0 skipped. |
 | Connector integration boundaries | Green | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\test-lane.ps1 -Lane integration -NoRestore` passed on 2026-06-01: 97 passed, 0 failed, 0 skipped. |
-| Report Portal behavior | Green | Portal tests are part of the fast lane and dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
+| Portal behavior | Green | Portal tests are part of the fast lane and dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
 | Published samples | Green | Sample runner passes in pre-release validation. | `.\scripts\Test-AllSamples.ps1`; pre-release script |
 | Scale certification | Green | Smoke certification passes locally; standard tier passes before public release claims about scale. | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` passed on 2026-06-01: 13 scenarios passed at 10x row scale. |
 | Installers and packaged artifacts | Green | Installer build requested and validated for each platform being released. | `.\scripts\publish_release.ps1 -Platforms win-x64` passed on 2026-06-01 and produced ZIP/VSIX assets. `.\scripts\build_msi.ps1` passed on 2026-06-01 with local WiX Toolset v3.14 and produced `ETL-SQL-Enterprise-v0.9.0.msi`. |

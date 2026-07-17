@@ -114,7 +114,7 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
 
     if (!portalUrl) {
         const entered = await vscode.window.showInputBox({
-            prompt: 'Enter the Report Portal URL (e.g. http://localhost:5001)',
+            prompt: 'Enter the Portal URL (e.g. http://localhost:5001)',
             ignoreFocusOut: true
         });
         if (!entered) {

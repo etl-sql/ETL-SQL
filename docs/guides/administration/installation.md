@@ -8,9 +8,9 @@ ETL-SQL can be deployed as workstation tooling, server services, or both.
 | :--- | :--- | :--- |
 | Workstation | `ETL-SQL` CLI, terminal IDE, language server, and report tooling for script authors | Developer workstations, CI runners |
 | Orchestrator Service | Background scheduler and job execution service | Application server |
-| Report Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
+| Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
 
-The Orchestrator and Report Portal may run on the same host, on separate hosts, or as multiple
+The Orchestrator and Portal may run on the same host, on separate hosts, or as multiple
 load-balanced nodes. Single-node deployments use SQLite by default. Practical High Availability
 deployments use shared PostgreSQL state plus shared Portal artifact roots; configure the portal with
 the orchestrator API URL and shared API key when the services are split. Use
@@ -46,7 +46,7 @@ For RPM-based systems, use the matching `.rpm` package and the same `systemctl` 
 
 ### Docker / Containerized
 
-ETL-SQL provides pre-configured Docker Compose configurations to run containerized instances of the Orchestrator and Report Portal services.
+ETL-SQL provides pre-configured Docker Compose configurations to run containerized instances of the Orchestrator and Portal services.
 
 1. **Pull-Based Deployments (Operator Workflow)**:
    The central [docker-compose.yml](../../../docker-compose.yml) file is structured for container registry pulls. It references pre-built images:

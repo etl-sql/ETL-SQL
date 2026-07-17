@@ -37,7 +37,7 @@ The integration-folder audit is complete as of 2026-06-01. Metadata-only connect
 .\scripts\test-lane.ps1 -Lane fast -NoRestore
 ```
 
-Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
+Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; portal 70 passed; lineage UI smoke passed.
 
 ## Enterprise Certification Lane
 
@@ -105,7 +105,7 @@ The lanes use xUnit traits:
 | Core language behavior | `Category=Smoke.Core` | `tests\ETL-SQL.Tests` |
 | Security and path guardrails | `Category=Smoke.Security` | `tests\ETL-SQL.Tests`, selected portal path checks |
 | Reporting manifest/runtime behavior | `Category=Smoke.Reporting` | `tests\ETL-SQL.Tests` |
-| Report Portal publish/execute/snapshot basics | `Category=Smoke.Portal` | `tests\ETL-SQL.ReportPortal.Tests` |
+| Portal publish/execute/snapshot basics | `Category=Smoke.Portal` | `tests\ETL-SQL.ReportPortal.Tests` |
 
 Each lane should stay small enough for quick local runs. Keep the full suite as the release and CI validation path.
 
@@ -130,9 +130,9 @@ Lane intent:
 | Lane | Scope |
 | :--- | :--- |
 | `smoke` | Hand-picked core/security/reporting/portal smoke tests |
-| `fast` | Engine, Language Server, and Report Portal tests excluding explicit integration/performance/scale categories |
+| `fast` | Engine, Language Server, and Portal tests excluding explicit integration/performance/scale categories |
 | `engine` | `ETL-SQL.Tests` only, with the fast filter |
-| `portal` | Report Portal tests only |
+| `portal` | Portal tests only |
 | `integration` | External-boundary tests tagged `Category=Integration` |
 | `perf` | Performance tests tagged `Category=Performance` in `tests\ETL-SQL.Tests` and `tests\ETL-SQL.PerfTests` |
 | `release` | Smoke + fast + SLT, without benchmarks or installer packaging |
@@ -251,7 +251,7 @@ Use scenario tests for cross-feature release claims that are easy to miss with i
 | :--- | :---: | :---: | :--- |
 | *(no tag)* | No | Yes | Default — most unit and functional tests |
 | `Smoke.*` | No | Yes | Hand-picked fast confidence checks |
-| `Portal` | No | Yes | Report Portal `WebApplicationFactory` tests backed by SQLite |
+| `Portal` | No | Yes | Portal `WebApplicationFactory` tests backed by SQLite |
 | `Integration` | **Yes** | No | Tests that need a real external service (Docker SFTP, real DB, cloud) |
 | `Performance` | No | No | Timing-sensitive assertions with scale data |
 | `SLT` | No | No | SQL Logic Test corpus — run explicitly only |

@@ -54,7 +54,7 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 
 - [ ] **Report Preview Pane** Having a report preview pane, using the VS Code preview pane allows the user to do a more WYSIWYG approach to creating reports
       - How do we do a serve command?  You already have everything you need can we just build a preview without calling that?
-- [ ] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Report Portal so we can have a better debug/preview experience for developers
+- [ ] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Portal so we can have a better debug/preview experience for developers
 - [ ] **Query with Alias not running**  Using CREATE CONNECTION m AS MOCKDB();  SELECT u.* FROM m.Users AS u;  Did not run in the ui-sandbox
 - [ ] **Expand * command** I'm pretty sure this is available, but ctrl+space does not work.  If its a different key combo we need to know.
 - [ ] **Separate Save from Git Commit/Push** — `Save` updates the Portal script and catalog only.

@@ -43,7 +43,7 @@ When a report is published, the portal computes a SHA-256 hash of the `.rptsql` 
 
 At every execution (snapshot build), the portal computes a fresh hash of the file and records it as `ScriptHashAtRunTime` in the `ReportSnapshots` table, along with a `HashMatched` flag. If the file has changed since publishing, `HashMatched = false` and the portal logs a warning. The `GET /api/reports/{id}` response includes a `scriptChanged` field that is `true` when the current file hash differs from the published hash.
 
-> **Note:** the hash is advisory — execution is not blocked by a mismatch in the Report Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
+> **Note:** the hash is advisory — execution is not blocked by a mismatch in the Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
 
 Use `SHOW REPORT HISTORY 'Report Name'` or `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
 

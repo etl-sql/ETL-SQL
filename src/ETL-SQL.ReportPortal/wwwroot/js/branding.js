@@ -11,7 +11,7 @@ export async function applyPortalBranding() {
     document.querySelectorAll('.portal-brand-name').forEach(el => {
       el.textContent = name || 'ETL-SQL Portal';
     });
-    if (name) document.title = document.title.replace('ETL-SQL Report Portal', name).replace('ETL-SQL Portal', name);
+    if (name) document.title = document.title.replace('ETL-SQL Portal', name).replace('ETL-SQL Portal', name);
 
     document.querySelectorAll('.portal-brand-footer').forEach(el => { el.textContent = footer || ''; });
 

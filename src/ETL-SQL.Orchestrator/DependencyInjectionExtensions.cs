@@ -44,7 +44,7 @@ namespace ETL_SQL.Orchestrator
     {
         /// <summary>
         /// Maps the Governance:Secrets (fallback Secrets) configuration section to secret provider
-        /// options. Shared with hosts (e.g. the Report Portal) that override the provider at
+        /// options. Shared with hosts (e.g. the Portal) that override the provider at
         /// resolve time but fall back to the factory-based default for non-host-specific kinds.
         /// </summary>
         public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) => new()

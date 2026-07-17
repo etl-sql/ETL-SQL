@@ -82,7 +82,7 @@ Lineage tracking and automatic exports to OpenLineage endpoints or files can be 
 * **Namespace**: The default namespace name representing the running job (defaults to `"etl-sql"`). Can be overridden ad-hoc in scripts using `SET LINEAGE_NAMESPACE = '...'`.
 * **OpenLineageFile**: Optional file path to append OpenLineage events to.
 * **OpenLineageEndpoint**: Optional HTTP endpoint to post OpenLineage events to.
-* **ImportCatalogMetadata**: Reads native column metadata — comments/descriptions, data type, nullability, primary-key status — from the SQL Server, PostgreSQL, and MySQL catalog providers and folds it into lineage. A column's database comment becomes the column's **lineage description**, so it **inherits onto derived columns** (e.g. `SUM(Amount) AS total` carries Amount's comment) and surfaces in the report portal's structure/lineage views.
+* **ImportCatalogMetadata**: Reads native column metadata — comments/descriptions, data type, nullability, primary-key status — from the SQL Server, PostgreSQL, and MySQL catalog providers and folds it into lineage. A column's database comment becomes the column's **lineage description**, so it **inherits onto derived columns** (e.g. `SUM(Amount) AS total` carries Amount's comment) and surfaces in the portal's structure/lineage views.
 
 > **⚠ Off by default to minimize latency.** When enabled, the engine issues catalog queries (`sys.extended_properties`, `pg_catalog.col_description`, `information_schema … COLUMN_COMMENT`) against each distinct source table the first time it is read. That adds round-trips and requires catalog read permission, so it is **disabled by default**. Enable it only where you want database comments in lineage.
 >

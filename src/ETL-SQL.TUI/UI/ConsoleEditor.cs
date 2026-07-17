@@ -482,7 +482,7 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        /// <summary>Publishes the current report to the Report Portal (mirrors the VS Code flow).</summary>
+        /// <summary>Publishes the current report to the Portal (mirrors the VS Code flow).</summary>
         public async Task PublishToPortal()
         {
             if (string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
@@ -496,7 +496,7 @@ namespace ETL_SQL.TUI.UI
             string? url = cfg.Url;
             if (string.IsNullOrWhiteSpace(url))
             {
-                url = await ShowPrompt("Report Portal URL (e.g. http://localhost:5001)", "");
+                url = await ShowPrompt("Portal URL (e.g. http://localhost:5001)", "");
                 if (string.IsNullOrWhiteSpace(url)) { _renderer.ShowStatus("Publish cancelled."); return; }
                 url = url.Trim().TrimEnd('/');
                 cfg.Url = url; cfg.Save();

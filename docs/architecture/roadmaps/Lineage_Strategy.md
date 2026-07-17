@@ -525,9 +525,9 @@ Once `@pii: true` is a recognized standard tag, the engine can do things with it
 
 ### 3. Portal Data Access Lineage
 
-When a user views a report in the Report Portal, that is a data access event — potentially relevant for GDPR access logging and SOX audit trails. Should the portal log "user X viewed report Y at time T, which read from tables A, B, C"? This is different from data flow lineage (it's access lineage) but the OpenLineage format supports it via `DatasetAccessEvent`. Should this be connected to the lineage system or kept separate in the portal's own audit log?
+When a user views a report in the Portal, that is a data access event — potentially relevant for GDPR access logging and SOX audit trails. Should the portal log "user X viewed report Y at time T, which read from tables A, B, C"? This is different from data flow lineage (it's access lineage) but the OpenLineage format supports it via `DatasetAccessEvent`. Should this be connected to the lineage system or kept separate in the portal's own audit log?
 
-### 4. Lineage in the Report Portal UI
+### 4. Lineage in the Portal UI
 
 The Portal currently has no lineage UI. A "Data Lineage" tab on the report detail page — showing a visual lineage graph from database sources through to the report's visuals — would be a compelling selling feature. The data is all there after Phase 4; it's a front-end rendering question. Worth planning alongside Phase 4.
 

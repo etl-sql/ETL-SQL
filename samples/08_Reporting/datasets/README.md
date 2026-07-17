@@ -11,7 +11,7 @@ cannot truthfully exercise these authorization cases across separate runs.
 ## Setup
 
 1. Configure and back up the portal dataset at-rest key as described in the
-   [Report Portal Administrator Guide](../../../docs/guides/report-portal-admin.md).
+   [Portal Administrator Guide](../../../docs/guides/portal-admin.md).
 2. Create portal folders `/Dataset Deck/Producer`, `/Dataset Deck/Consumers`,
    and `/Dataset Deck/Imports`.
 3. Create two non-admin test users: `dataset-owner` and `dataset-viewer`.

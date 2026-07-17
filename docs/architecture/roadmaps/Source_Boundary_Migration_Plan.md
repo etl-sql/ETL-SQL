@@ -35,7 +35,7 @@ Engine code may expose execution services to hosts, but hosts should not reimple
 - SQL, file, API, SFTP/FTP, object storage, and other connector implementations.
 - Provider exception wrapping, connector authentication handling, connection options, read/write adapters, and source-specific type mapping.
 
-Connector code should not know about Report Portal, VS Code, the TUI, or host UI concepts.
+Connector code should not know about Portal, VS Code, the TUI, or host UI concepts.
 
 ### Analysis
 

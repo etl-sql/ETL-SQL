@@ -11,7 +11,7 @@ DATE_PART(datepart, date)
 ## Parameters
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `datepart` | `KEYWORD` | The part to extract — see [§3.1 Keyword Parameter Enumerations](../../../../../Docs/Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
+| `datepart` | `KEYWORD` | The part to extract — see [§3.1 Keyword Parameter Enumerations](../../../../../docs/syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
 | `date` | `DATE` / `DATETIME` | The date to extract from |
 
 ## Returns

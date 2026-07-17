@@ -1,7 +1,7 @@
-# ETL-SQL Report Portal — Development Strategy
+# ETL-SQL Portal — Development Strategy
 
 > [!IMPORTANT]
-> **Historical roadmap.** The Report Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `docs/guides/report-portal-user.md`, `docs/guides/report-portal-admin.md`, and `Docs/Architecture/ReportPortal.md`.
+> **Historical roadmap.** The Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `docs/guides/portal-user.md`, `docs/guides/portal-admin.md`, and `Docs/Architecture/Portal.md`.
 
 **Status:** Historical roadmap — reconcile before using for implementation
 **Date:** 2026-04-24
@@ -10,7 +10,7 @@
 
 ## Vision
 
-A self-hosted, cross-platform report portal for small-to-medium enterprises.
+A self-hosted, cross-platform portal for small-to-medium enterprises.
 Comparable role to **SSRS**: organizations run the server internally, authors publish
 `.rptsql` reports to folders, and end users log in via a browser to view, filter,
 and subscribe to those reports.
@@ -26,7 +26,7 @@ statements.
 
 ## Comparison: Current vs. Target
 
-| Capability | Today (ReportPlayer) | Target (Report Portal) |
+| Capability | Today (ReportPlayer) | Target (Portal) |
 | :--- | :--- | :--- |
 | Report execution | One script per server process | Many reports in a catalog |
 | Access control | None (open HTTP) | Login + role-based folder permissions |
@@ -141,7 +141,7 @@ statements.
    is deferred to v1.1.
 
    ```sql
-   CREATE CONNECTION portal AS REPORTPORTAL(
+   CREATE CONNECTION portal AS PORTAL(
        HOST = 'report-server.company.com',
        PORT = 5000,
        USER = 'admin',
@@ -255,7 +255,7 @@ available both via the web UI and via ETL-SQL admin scripts.
 - JWT stored in browser `sessionStorage` (see Decision 12)
 
 ### 1.2 Folder Management
-Report Portal folders are organizational containers — distinct from filesystem
+Portal folders are organizational containers — distinct from filesystem
 directories (`CREATE DIRECTORY`). Folders exist only in the portal SQLite DB and
 carry ACL entries. File paths are never exposed to end users.
 
@@ -264,13 +264,13 @@ carry ACL entries. File paths are never exposed to end users.
 
 ### 1.3 Portal Admin Script Language
 All portal administration is scriptable by executing an ETL-SQL script against a
-`REPORTPORTAL` connection. Every admin statement executes inside an
+`PORTAL` connection. Every admin statement executes inside an
 `EXECUTE portal BEGIN...END` block.
 
 Full syntax reference: **Grammar.md Appendix B**.
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL(
+CREATE CONNECTION portal AS PORTAL(
     HOST = 'report-server.company.com',
     PORT = 5001,
     USER = 'admin',

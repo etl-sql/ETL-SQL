@@ -7,7 +7,7 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 
 ## What Makes ETL-SQL Different
 
-ETL-SQL is script-first data orchestration. Pipelines, reports, schedules, validation, and governance metadata live in plain-text `.etlsql` and `.rptsql` files that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code, notebooks, Report Portal, Orchestrator, or CI/CD.
+ETL-SQL is script-first data orchestration. Pipelines, reports, schedules, validation, and governance metadata live in plain-text `.etlsql` and `.rptsql` files that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code, notebooks, Portal, Orchestrator, or CI/CD.
 
 The engine puts the **T** back in the middle of ETL. Instead of loading everything first and hoping every downstream transformation fits one warehouse dialect, ETL-SQL stages data in engine-managed `#temp` tables where validation, masking, enrichment, fuzzy matching, lineage tags, and quality gates can run before rows are written to their destination. Compatible database work can still be pushed down, but cross-source work stays portable and explicit.
 
@@ -33,7 +33,7 @@ Lineage is part of the workflow rather than an after-the-fact reconstruction. Ta
 15. [Interactive TUI Editor](#15-interactive-tui-editor) — layout, results, compare, keyboard reference, snippet templates
 16. [VS Code Authoring](#16-vs-code-authoring)
 17. [Report-SQL Dashboards](#17-report-sql-dashboards)
-18. [Report Portal Workflow](#18-report-portal-workflow)
+18. [Portal Workflow](#18-report-portal-workflow)
 19. [Next Steps](#next-steps)
 
 ---
@@ -303,7 +303,7 @@ Common expressions:
 | `'N-2H'` | Exactly 2 hours before execution |
 | `'2026-01-01'` | Fixed date (never changes) |
 
-`RELDATE` variables are most useful when combined with `INPUT`, so callers (CLI, parent scripts, or Report Portal subscriptions) can override them at run time without editing the script.
+`RELDATE` variables are most useful when combined with `INPUT`, so callers (CLI, parent scripts, or Portal subscriptions) can override them at run time without editing the script.
 
 ```sql
 -- Override at CLI
@@ -1180,7 +1180,7 @@ FROM LINEAGE(#TaggedUsers)
 WHERE TargetColumn = 'Email';
 ```
 
-> **Pulling descriptions from the database (optional — off by default).** Instead of tagging every column by hand, ETL-SQL can read native column comments from **SQL Server, PostgreSQL, and MySQL** and use them as the column's lineage description — which then **inherits onto derived columns** automatically (a `SUM(Amount) AS total` carries `Amount`'s comment forward, and it shows in the report portal's structure view).
+> **Pulling descriptions from the database (optional — off by default).** Instead of tagging every column by hand, ETL-SQL can read native column comments from **SQL Server, PostgreSQL, and MySQL** and use them as the column's lineage description — which then **inherits onto derived columns** automatically (a `SUM(Amount) AS total` carries `Amount`'s comment forward, and it shows in the portal's structure view).
 >
 > It is **off by default** because it issues catalog queries against each source table the first time it's read (extra latency + needs catalog read permission). Turn it on per script:
 >
@@ -1819,9 +1819,9 @@ For the complete language surface, use [Report_SQL_Guide.md](report-sql.md). For
 
 ---
 
-## 18. Report Portal Workflow
+## 18. Portal Workflow
 
-The Report Portal hosts `.rptsql` reports for browser users. It adds catalog folders, snapshots, permissions, favorites, subscriptions, saved views, alerts, share links, embed tokens, and operational history.
+The Portal hosts `.rptsql` reports for browser users. It adds catalog folders, snapshots, permissions, favorites, subscriptions, saved views, alerts, share links, embed tokens, and operational history.
 
 The normal lifecycle is:
 
@@ -1858,7 +1858,7 @@ Common portal commands include:
 | Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS`, `SHOW PORTAL OPERATIONAL METRICS` |
 | Security review | `SHOW EFFECTIVE PERMISSIONS`, `VALIDATE REPORT SCRIPT` |
 
-For browser usage, see [Report Portal User Guide](report-portal-user.md). For deployment and administration, see [Report Portal Admin Guide](report-portal-admin.md).
+For browser usage, see [Portal User Guide](portal-user.md). For deployment and administration, see [Portal Admin Guide](portal-admin.md).
 
 ---
 
@@ -1875,8 +1875,8 @@ For browser usage, see [Report Portal User Guide](report-portal-user.md). For de
 | 55+ sample scripts inventory | **[Sample_Guide.md](sample-guide.md)** |
 | Reporting & dashboards | **[Report_SQL_Guide.md](report-sql.md)** |
 | Report examples | **[Report_Cookbook.md](../cookbooks/report-recipes.md)** |
-| Portal users | **[ReportPortal_User_Guide.md](report-portal-user.md)** |
-| Portal administrators | **[Report Portal Admin Guide](report-portal-admin.md)** |
+| Portal users | **[ReportPortal_User_Guide.md](portal-user.md)** |
+| Portal administrators | **[Portal Admin Guide](portal-admin.md)** |
 | Local and release test lanes | **[Testing.md](../../Testing.md)** |
 | Documentation map | **[Docs README](../../README.md)** |
 | Security policy | **[SECURITY.md](../../src/etl-sql-vscode/.vscode-test/vscode-win32-x64-archive-1.125.1/fcf604774b/resources/app/extensions/ms-vscode.js-debug-companion/SECURITY.md)** |

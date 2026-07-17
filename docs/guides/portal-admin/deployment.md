@@ -2,7 +2,7 @@
 
 ## 1. Deployment
 
-The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses **SQLite** by
+The Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses **SQLite** by
 default for single-node deployments and **PostgreSQL** for load-balanced HA deployments. It serves
 both the REST API and the static web UI from the same process.
 
@@ -29,7 +29,7 @@ nssm start ETL-SQL-Portal
 
 ```ini
 [Unit]
-Description=ETL-SQL Report Portal
+Description=ETL-SQL Portal
 After=network.target
 
 [Service]

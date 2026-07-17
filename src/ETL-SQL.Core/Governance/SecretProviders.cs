@@ -250,7 +250,7 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
                 httpClient,
                 options.VaultBearerToken),
             "PORTALSTORE" => throw new InvalidOperationException(
-                "The PortalStore secret provider is only available inside the Report Portal host. " +
+                "The PortalStore secret provider is only available inside the Portal host. " +
                 "Standalone and CLI deployments should use OsSecretStore, Environment, or HttpsVault."),
             _ => throw new InvalidOperationException($"Secret provider '{options.Provider}' is not supported.")
         };

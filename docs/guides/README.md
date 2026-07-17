@@ -20,8 +20,8 @@ Guides explain workflows end to end. Use them when you know what you want to acc
 ## Reporting And Portal Guides
 
 - [Report SQL](report-sql.md) - `.rptsql` authoring, visuals, pages, datasets, interactions, and styling.
-- [Report Portal User Guide](report-portal-user.md) - browsing, running, filtering, exporting, and subscribing to reports.
-- [Report Portal Administration](report-portal-admin.md) - users, groups, folders, permissions, datasets, subscriptions, SMTP, HA, and governance.
+- [Portal User Guide](portal-user.md) - browsing, running, filtering, exporting, and subscribing to reports.
+- [Portal Administration](portal-admin.md) - users, groups, folders, permissions, datasets, subscriptions, SMTP, HA, and governance.
 
 ## Operations
 

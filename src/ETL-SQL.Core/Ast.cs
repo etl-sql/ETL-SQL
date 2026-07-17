@@ -2477,7 +2477,7 @@ public sealed record SetSecurityOverrideStatement(SecurityOverride Override, boo
 
 // ── Portal admin statements (Phase 10) ────────────────────────────────────
 // These are only valid inside an EXECUTE portal BEGIN…END block targeting a
-// REPORTPORTAL connection. The PortalConnector translates them into REST calls.
+// PORTAL connection. The PortalConnector translates them into REST calls.
 
 public sealed record CreatePortalUserStatement(
     string Username, string Email, Expression? Password,

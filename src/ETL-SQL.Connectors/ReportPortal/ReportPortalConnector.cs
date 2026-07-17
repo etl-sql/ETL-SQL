@@ -9,10 +9,10 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Connectors.ReportPortal
 {
     /// <summary>
-    /// Connector type for connecting to a remote ETL-SQL Report Portal.
+    /// Connector type for connecting to a remote ETL-SQL Portal.
     /// Usage inside an ETL-SQL script:
     /// <code>
-    /// CREATE CONNECTION portal AS REPORTPORTAL(
+    /// CREATE CONNECTION portal AS PORTAL(
     ///     HOST = 'http://report-server:5000',
     ///     USER = 'admin',
     ///     PASSWORD = ENC:...
@@ -32,11 +32,11 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         public ReportPortalConnector(ILogger logger) => _logger = logger;
 
-        public string Name => "REPORTPORTAL";
-        public IReadOnlyList<string> Aliases => ["REPORT_PORTAL"];
+        public string Name => "PORTAL";
+        public IReadOnlyList<string> Aliases => [];
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) =>
-            Task.FromResult("Report Portal");
+            Task.FromResult("Portal");
 
         public HashSet<string> GetSupportedFunctions() => [];
         public HashSet<string> GetSupportedKeywords() => [];
@@ -49,8 +49,8 @@ namespace ETL_SQL.Connectors.ReportPortal
         };
         public Dictionary<string, string[]> GetOptionValues() => [];
         public string GetHelp() =>
-            "REPORTPORTAL — connects to an ETL-SQL Report Portal for remote administration.\n" +
-            "Usage: CREATE CONNECTION <alias> AS REPORTPORTAL(HOST='http://...', USER='admin', PASSWORD=ENC:...);\n" +
+            "PORTAL — connects to an ETL-SQL Portal for remote administration.\n" +
+            "Usage: CREATE CONNECTION <alias> AS PORTAL(HOST='http://...', USER='admin', PASSWORD=ENC:...);\n" +
             "Then: EXECUTE <alias> BEGIN ... END";
 
         public IDataSource CreateDataSource(

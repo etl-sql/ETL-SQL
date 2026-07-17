@@ -33,10 +33,10 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Demonstrates extract -> stage -> validate -> report visuals -> publish -> execute -> interact -> export.
 - Extracts from `MOCKDB`, reads flat-file targets, writes a staged CSV, and reports from the reloaded export.
 - Runs without external services or machine-specific credentials.
-- Shares one script across VS Code preview, standalone serve, Report Portal, and automated tests.
+- Shares one script across VS Code preview, standalone serve, Portal, and automated tests.
 
 ### [report_portal_deployment/portal_promotion.etlsql](../../samples/report_portal_deployment/portal_promotion.etlsql)
-**Purpose**: Script-first Report Portal promotion pattern for dev/prod deployments.
+**Purpose**: Script-first Portal promotion pattern for dev/prod deployments.
 - Uses `CREATE SETS` and `USE SETS` as the environment boundary.
 - Publishes and updates reports with canonical `PUBLISH REPORT` and `ALTER REPORT` syntax.
 - Grants folder permissions, creates refresh jobs, and refreshes the report after promotion.

@@ -1,5 +1,5 @@
 # Portal Report Subscriptions
-Schedule report delivery through a `REPORTPORTAL` connection.
+Schedule report delivery through a `PORTAL` connection.
 
 ## Syntax
 ```sql

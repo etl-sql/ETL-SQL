@@ -987,13 +987,13 @@ END;
 
 ---
 
-## 24. Publishing and Operating a Report Portal Catalog
-Portal administration is script-first: connect with `REPORTPORTAL`, then send catalog commands inside an `EXECUTE <portal> BEGIN ... END` block. This makes report deployment repeatable across environments and keeps validation, publication, refresh, and catalog inspection in one reviewable script.
+## 24. Publishing and Operating a Portal Catalog
+Portal administration is script-first: connect with `PORTAL`, then send catalog commands inside an `EXECUTE <portal> BEGIN ... END` block. This makes report deployment repeatable across environments and keeps validation, publication, refresh, and catalog inspection in one reviewable script.
 
 **Pattern Scenario:** Validate and publish a finance report, trigger its first refresh, and capture the resulting catalog metadata.
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL(
+CREATE CONNECTION portal AS PORTAL(
     HOST = 'http://report-server.company.com:5000',
     USER = 'admin',
     PASSWORD = 'ENC:U2FsdGVkX1+...'

@@ -2,7 +2,7 @@
 
 ## 14. Production Readiness Checklist
 
-Use this checklist before promoting the Report Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, security exposure, or service failure if skipped. Items marked **Recommended** reduce operational risk.
+Use this checklist before promoting the Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, security exposure, or service failure if skipped. Items marked **Recommended** reduce operational risk.
 
 ### Security
 
@@ -23,7 +23,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 
 ### Reliability
 
-- [ ] **Required** — For single-node SQLite deployments, run one active Report Portal process per portal database. For HA deployments, configure every Portal node to use the same PostgreSQL database and shared artifact storage roots; startup singleton work is coordinated through the database-backed cluster lock.
+- [ ] **Required** — For single-node SQLite deployments, run one active Portal process per portal database. For HA deployments, configure every Portal node to use the same PostgreSQL database and shared artifact storage roots; startup singleton work is coordinated through the database-backed cluster lock.
 - [ ] **Required** — For load-balanced HA deployments, configure sticky sessions using the portal affinity cookie (`ETLSQL_PORTAL_AFFINITY` by default). Interactive report sessions are cached in memory on the node that created them.
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
 - [ ] **Required** — Treat a restart or node heartbeat lease loss as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.

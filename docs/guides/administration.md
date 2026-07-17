@@ -2,8 +2,8 @@
 
 This guide is for operators who install, configure, back up, and monitor ETL-SQL in production or
 shared test environments. For day-to-day portal administration, see
-[Report Portal Administration](report-portal-admin.md). For command-line job operations, see
-[Job Orchestration](job-orchestration.md). For Report Portal and Orchestrator server sizing, see
+[Portal Administration](portal-admin.md). For command-line job operations, see
+[Job Orchestration](job-orchestration.md). For Portal and Orchestrator server sizing, see
 [Capacity Planning](../architecture/decisions/Capacity_Planning.md).
 
 ## Topics
@@ -29,6 +29,6 @@ shared test environments. For day-to-day portal administration, see
 
 - [CLI Reference](../reference/cli/README.md) - every `etl-sql` command, generated from the command
   tree (the atomic reference for the operator commands narrated above).
-- [Report Portal Administration](report-portal-admin.md) - user, permission, publishing, and
+- [Portal Administration](portal-admin.md) - user, permission, publishing, and
   subscription administration.
 - [Job Orchestration](job-orchestration.md) - scheduling, DAGs, and command-line job operations.

@@ -1,5 +1,5 @@
 # Portal Report Alerts
-Create portal alert definitions through a `REPORTPORTAL` connection.
+Create portal alert definitions through a `PORTAL` connection.
 
 ## Syntax
 ```sql

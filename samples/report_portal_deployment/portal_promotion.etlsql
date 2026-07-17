@@ -1,4 +1,4 @@
--- Report Portal promotion script
+-- Portal promotion script
 -- @requires: portal
 -- Update the literal paths/folders for each environment, then run with the
 -- desired USE SETS statement active. Portal object names intentionally remain

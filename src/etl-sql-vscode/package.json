@@ -164,7 +164,7 @@
         "etlsql.portal.url": {
           "type": "string",
           "default": "",
-          "markdownDescription": "The base URL of your hosted **ETL-SQL Report Portal** (e.g. `http://localhost:5001`). Used to publish dashboards directly from VS Code."
+          "markdownDescription": "The base URL of your hosted **ETL-SQL Portal** (e.g. `http://localhost:5001`). Used to publish dashboards directly from VS Code."
         },
         "etlsql.format.keywordCasing": {
           "type": "string",
@@ -293,7 +293,7 @@
       },
       {
         "command": "etlsql.publishToPortal",
-        "title": "ETL-SQL: Publish to Report Portal"
+        "title": "ETL-SQL: Publish to Portal"
       },
       {
         "command": "etlsql.exportMarkdown",

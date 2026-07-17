@@ -199,7 +199,7 @@ public class Lexer
         dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
         dict["REFRESH_VISUALS"] = TokenType.REFRESH_VISUALS;
 
-        // ── Report Portal admin command keywords ──────────────────────
+        // ── Portal admin command keywords ──────────────────────
         dict["USER"] = TokenType.USER;
         dict["FOLDER"] = TokenType.FOLDER;
         dict["GRANT"] = TokenType.GRANT;
@@ -211,7 +211,6 @@ public class Lexer
         dict["RESTART"] = TokenType.RESTART;
         dict["SHUTDOWN"] = TokenType.SHUTDOWN;
         dict["PORTAL"] = TokenType.PORTAL;
-        dict["REPORTPORTAL"] = TokenType.REPORTPORTAL;
         dict["FAVORITE"] = TokenType.FAVORITE;
         dict["UNFAVORITE"] = TokenType.UNFAVORITE;
         dict["CATALOG"] = TokenType.CATALOG;

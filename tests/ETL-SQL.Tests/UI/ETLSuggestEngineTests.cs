@@ -21,7 +21,7 @@ namespace ETL_SQL.Tests.UI
         [Fact]
         public void HighlightLine_EncryptedPassword_ShouldBeMasked()
         {
-            string line = "CREATE CONNECTION portal AS REPORTPORTAL(PASSWORD='ENC:AcXpkzRv...');";
+            string line = "CREATE CONNECTION portal AS PORTAL(PASSWORD='ENC:AcXpkzRv...');";
             bool endsInMultiline;
             string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 100, false, out endsInMultiline);
 

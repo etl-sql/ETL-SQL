@@ -107,7 +107,7 @@ ASPNETCORE_URLS / Kestrel endpoints
 
 The standalone single-node defaults stay SQLite + local storage; set `Provider=Postgres` and
 `Storage:Provider=Smb`/`Unc` only for HA. See the
-[Report Portal Administrators Guide](../../guides/report-portal-admin.md) for the full key
+[Portal Administrators Guide](../../guides/portal-admin.md) for the full key
 reference and the [Administrator's Guide](../../guides/administration.md) for HA requirements.
 
 ---
@@ -182,7 +182,7 @@ ETL-SQL supports this without weakening isolation, under a strict trust boundary
 | `storage` | Whether shared artifact storage is reachable (`ok` / `unavailable`). |
 | `securityEvents` | Local security-event queue/collector health: pending/failed counts, oldest pending time, stored bytes, drops, and collector reachability. |
 | `inventory.environment`, `inventory.nodeId` | Environment id and Portal node id for operations routing and HA affinity diagnosis. |
-| `inventory.installedVersion` | Report Portal assembly version running on the node. |
+| `inventory.installedVersion` | Portal assembly version running on the node. |
 | `inventory.schemaVersions` | Supported enrollment, policy-envelope, policy-payload, security-event schema versions plus Portal migration counts and last applied migration id. |
 | `inventory.policy` | Enrollment/policy availability, policy version/hash, issuance/expiry/load timestamps, signing/client-certificate configured flags, optional client-certificate expiry, and governed-key count. |
 | `inventory.providers` | Portal database provider and artifact-storage provider names only; no connection strings or paths. |

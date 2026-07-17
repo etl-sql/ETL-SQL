@@ -49,7 +49,7 @@ public class PortalSourceControlConfig
 }
 
 /// <summary>
-/// Feature flags for functional layers inside the Report Portal binary. Defaults preserve the
+/// Feature flags for functional layers inside the Portal binary. Defaults preserve the
 /// existing all-in-one Portal behavior; route and worker fences consume these values as they land.
 /// </summary>
 public class PortalModuleConfig

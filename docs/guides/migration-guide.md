@@ -25,7 +25,7 @@ For security hardening, `.tmp` files have been removed from the default path whi
 
 ### High Availability State (PostgreSQL Provider)
 
-Report Portal and Orchestrator now support a shared PostgreSQL state store instead of local SQLite database files.
+Portal and Orchestrator now support a shared PostgreSQL state store instead of local SQLite database files.
 To migrate an existing SQLite database to PostgreSQL, run the admin migration CLI:
 
 ```bash
@@ -72,7 +72,7 @@ Do not use typed button aliases or older layout-specific button forms in new scr
 
 ### Portal JWT Secret Enforcement
 
-The Report Portal refuses to start if `Portal:Jwt:Secret` is missing or shorter than 32 characters.
+The Portal refuses to start if `Portal:Jwt:Secret` is missing or shorter than 32 characters.
 
 Generate and install a portal secret with the CLI:
 

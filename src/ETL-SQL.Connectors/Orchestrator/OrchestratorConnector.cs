@@ -60,7 +60,7 @@ namespace ETL_SQL.Connectors.Orchestrator
 
             string host = GetOption(options, "HOST", connectionString);
             // API_KEY takes precedence; PASSWORD is accepted as a convenience alias matching
-            // the REPORTPORTAL connection syntax that users already know.
+            // the PORTAL connection syntax that users already know.
             string apiKey = GetOption(options, "API_KEY",
                             GetOption(options, "PASSWORD", ""));
 

@@ -27,6 +27,6 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 ## Reporting And Operations
 
 - [Report-SQL Reference](visuals-reporting/README.md) - report objects, visual types, actions, layouts, and styles.
-- [Portal Admin Commands](portal-admin/README.md) - script-first Report Portal administration.
+- [Portal Admin Commands](portal-admin/README.md) - script-first Portal administration.
 - [Orchestrator Jobs](orchestrator-jobs/README.md) - job, export, publish, validate, kill, and subscription commands.
 - [CLI](cli/README.md) - command-line interface reference.

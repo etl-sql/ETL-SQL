@@ -38,11 +38,11 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
                   └───────────────────────┘           └──────────────────────┘
 ```
 
-A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `.etlsnap` package — an encrypted zip file containing the layout JSON (`layout.json`) and high-performance Arrow IPC files (`.arrow`) for large visuals. This is consumed by the Report Portal and local viewers to serve data instantly.
+A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `.etlsnap` package — an encrypted zip file containing the layout JSON (`layout.json`) and high-performance Arrow IPC files (`.arrow`) for large visuals. This is consumed by the Portal and local viewers to serve data instantly.
 
 ### The Report Designer (Visual WYSIWYG)
 
-For developers who prefer a visual approach to layouts, ETL-SQL includes a **Report Designer** integrated directly into the Report Portal (under `/designer`) and as a webview panel in the VS Code extension. The designer allows you to drag-and-drop visuals onto a 12-column grid, bind them to datasets, and configure styles. Behind the scenes, the designer parses and generates standard, clean `.rptsql` source code, ensuring that your reports remain fully source-controlled and git-diffable.
+For developers who prefer a visual approach to layouts, ETL-SQL includes a **Report Designer** integrated directly into the Portal (under `/designer`) and as a webview panel in the VS Code extension. The designer allows you to drag-and-drop visuals onto a 12-column grid, bind them to datasets, and configure styles. Behind the scenes, the designer parses and generates standard, clean `.rptsql` source code, ensuring that your reports remain fully source-controlled and git-diffable.
 
 ### The Three-Tier Logic Model
 
@@ -122,7 +122,7 @@ etl-sql-report serve report.rptsql        # → opens http://localhost:5200
 
 ## Report Parameters (INPUT Variables)
 
-Report-SQL uses standard ETL-SQL `@variables` for all parameters. Declare them with `DECLARE` at the top of your script — any variable marked `INPUT` can be overridden by the Report Portal at runtime (when running on-demand or via a subscription).
+Report-SQL uses standard ETL-SQL `@variables` for all parameters. Declare them with `DECLARE` at the top of your script — any variable marked `INPUT` can be overridden by the Portal at runtime (when running on-demand or via a subscription).
 
 ```sql
 -- Basic text/number parameters
@@ -191,7 +191,7 @@ CREATE VISUAL SalesChart AS BAR (
 
 ## Row-Level Security in Reports (RLS)
 
-Report Portal executes report scripts securely using the logged-in viewer's identity. Within your report SQL, you can use built-in identity variables and predicate functions to dynamically filter datasets so users only see data they are authorized to view.
+Portal executes report scripts securely using the logged-in viewer's identity. Within your report SQL, you can use built-in identity variables and predicate functions to dynamically filter datasets so users only see data they are authorized to view.
 
 ### Identity Variables
 
@@ -1340,7 +1340,7 @@ Navigates to a completely different report. This is the preferred way to impleme
 
 > [!TIP]
 > Always use the logical `REPORT` name when working with manifests. This makes your drill links resilient to file renames or moves, as long as the manifest name remains stable.
-  - In the **Report Portal**, the browser navigates to the target report URL.
+  - In the **Portal**, the browser navigates to the target report URL.
   - In the **Standalone Player**, the browser navigates to the sibling report on the same server.
 
 #### SET_PARAMETER

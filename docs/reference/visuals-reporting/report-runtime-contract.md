@@ -1,6 +1,6 @@
 # Report Runtime Contract
 
-The report canvas is shared infrastructure. ReportPlayer, Report Portal, and the VS Code preview may provide different host chrome, authentication, routing, and surrounding controls, but the report canvas must render from the same manifest contract and the same runtime assets.
+The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code preview may provide different host chrome, authentication, routing, and surrounding controls, but the report canvas must render from the same manifest contract and the same runtime assets.
 
 ## Canonical Assets
 
@@ -14,7 +14,7 @@ The canonical browser runtime files live in `src/ETL-SQL.ReportRuntime/Resources
 Host copies are generated artifacts:
 
 - ReportPlayer: `src/ETL-SQL.ReportPlayer/wwwroot/`
-- Report Portal: `src/ETL-SQL.ReportPortal/wwwroot/js/` and `src/ETL-SQL.ReportPortal/wwwroot/css/`
+- Portal: `src/ETL-SQL.ReportPortal/wwwroot/js/` and `src/ETL-SQL.ReportPortal/wwwroot/css/`
 - VS Code: `src/etl-sql-vscode/media/`
 
 Edit the canonical files first, then run:

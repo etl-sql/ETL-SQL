@@ -250,7 +250,7 @@ public static class ConnectionCatalogProviderFactory
             "LOCAL" => new LocalConnectionCatalogProvider(
                 options.LocalRoot ?? throw new InvalidOperationException("Connection catalog local root is required.")),
             "PORTAL" => throw new InvalidOperationException(
-                "The Portal connection catalog provider is only available inside the Report Portal host."),
+                "The Portal connection catalog provider is only available inside the Portal host."),
             _ => throw new InvalidOperationException($"Connection catalog provider '{options.Provider}' is not supported.")
         };
     }

@@ -11,7 +11,7 @@ DATEDIFF(datepart, start_date, end_date)
 ## Parameters
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `datepart` | `KEYWORD` | The unit to measure — see [§3.1 Keyword Parameter Enumerations](../../../../../Docs/Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
+| `datepart` | `KEYWORD` | The unit to measure — see [§3.1 Keyword Parameter Enumerations](../../../../../docs/syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
 | `start_date` | `DATE` / `DATETIME` | The starting date |
 | `end_date` | `DATE` / `DATETIME` | The ending date |
 
@@ -30,5 +30,5 @@ SELECT DATEDIFF(SECOND, start_time, end_time) AS duration_sec FROM #jobs;
 
 ## See Also
 - [Standard Library — §4. Date & Time Functions](../../../../../Docs/Reference/Standard_Library.md#4-date--time-functions)
-- [Syntax Index §3.1 — datepart values](../../../../../Docs/Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Syntax Index §3.1 — datepart values](../../../../../docs/syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - Related: [`DATEADD`](DATEADD.md), [`DATEPART`](DATEPART.md)

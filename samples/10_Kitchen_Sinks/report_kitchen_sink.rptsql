@@ -1,4 +1,4 @@
-﻿-- ============================================================================
+-- ============================================================================
 -- ETL-SQL KITCHEN SINK REPORT  v2.0
 -- A reference-quality demonstration of EVERY visual type, filter control,
 -- container layout, named style, dataset, button, navigation, and styling
@@ -1128,7 +1128,7 @@ CREATE VISUAL MatrixRevenue AS MATRIX (
 CREATE VISUAL GanttMilestones AS GANTT (
     SOURCE   = #gantt_data,
     TITLE    = 'Project Timeline',
-    SUBTITLE = 'ETL-SQL Report Portal delivery milestones · Hover a bar to see dates',
+    SUBTITLE = 'ETL-SQL Portal delivery milestones · Hover a bar to see dates',
     MAPPINGS (
         Y     = TaskName,
         START = StartDate,

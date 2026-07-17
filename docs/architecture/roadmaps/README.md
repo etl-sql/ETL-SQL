@@ -27,7 +27,7 @@ This folder contains design records, implementation plans, and historical roadma
 | [Presentation_Layer_Strategy.md](Presentation_Layer_Strategy.md) | Mixed specification and unresolved presentation backlog | Header now warns readers; reconcile current facts into presentation/TUI/VS Code architecture docs |
 | [Engine_Upgrade_Strategy.md](Engine_Upgrade_Strategy.md) | Historical roadmap | Archive or rewrite as a short design note; current architecture belongs in `Docs/Architecture` |
 | [Report_SQL_Strategy.md](Report_SQL_Strategy.md) | Historical roadmap/backlog | Header now warns readers; use Report-SQL guide/cookbook/syntax index for current behavior |
-| [ReportPortal_Strategy.md](ReportPortal_Strategy.md) | Historical roadmap | Header now warns readers; use portal user/admin guides and architecture for current behavior |
+| [Portal_Strategy.md](Portal_Strategy.md) | Historical roadmap | Header now warns readers; use portal user/admin guides and architecture for current behavior |
 | [SubscriptionParameters_Strategy.md](SubscriptionParameters_Strategy.md) | Historical feature plan | Header now warns readers; current behavior belongs in relative date, Report-SQL, and portal docs |
 | [Lineage_Strategy.md](Lineage_Strategy.md) | Active or partially stale strategy | Header now warns readers; audit against current lineage implementation before treating as roadmap |
 | [Test_Strategy.md](Test_Strategy.md) | Active operational strategy | Keep; pair with `docs/guides/testing.md` |

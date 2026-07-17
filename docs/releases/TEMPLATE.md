@@ -80,7 +80,7 @@
 ### Language & Engine
 - 
 
-### Report Portal & Visualization
+### Portal & Visualization
 - 
 
 ### VS Code Extension & IDE

@@ -2,7 +2,7 @@
 
 ## 12. Quick Start: Required Steps
 
-To get the Report Portal running in under 5 minutes:
+To get the Portal running in under 5 minutes:
 
 1. **Standardize Naming**: Ensure you are using the `ETL-SQL-Portal` executable.
 2. **Set JWT Secret**: Open `appsettings.json` or set an environment variable `Portal__Jwt__Secret` to a 32-character random string.

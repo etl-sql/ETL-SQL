@@ -19,7 +19,7 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Connectors.ReportPortal
 {
     /// <summary>
-    /// Live HTTP connection to a remote ETL-SQL Report Portal.
+    /// Live HTTP connection to a remote ETL-SQL Portal.
     /// Acquires a JWT on first use and dispatches portal admin statements to the portal REST API.
     /// </summary>
     public sealed class ReportPortalDataSource : IPortalAdminConnection
@@ -39,7 +39,7 @@ namespace ETL_SQL.Connectors.ReportPortal
         };
 
         public string Path => _baseUrl;
-        public string ConnectorType => "REPORTPORTAL";
+        public string ConnectorType => "PORTAL";
         public Dictionary<string, string>? Options { get; }
 
         public ReportPortalDataSource(string baseUrl, string username, string password, ILogger logger)
@@ -80,10 +80,10 @@ namespace ETL_SQL.Connectors.ReportPortal
         // ── IDataSource (stub — portal connections don't support read/write) ───────
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            throw new NotSupportedException("REPORTPORTAL connections do not support SELECT.");
+            throw new NotSupportedException("PORTAL connections do not support SELECT.");
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
-            throw new NotSupportedException("REPORTPORTAL connections do not support INSERT.");
+            throw new NotSupportedException("PORTAL connections do not support INSERT.");
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
         public object? Snapshot() => null;
@@ -194,7 +194,7 @@ namespace ETL_SQL.Connectors.ReportPortal
 
                 default:
                     throw new ExecutionException(
-                        $"Statement type '{statement.GetType().Name}' is not supported inside a REPORTPORTAL block. " +
+                        $"Statement type '{statement.GetType().Name}' is not supported inside a PORTAL block. " +
                         "Check TODO.md for planned v1.1 statements.");
             }
         }

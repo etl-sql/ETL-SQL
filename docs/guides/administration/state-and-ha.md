@@ -2,7 +2,7 @@
 
 ## 6. Portal State and Data Roots
 
-The Report Portal constrains filesystem access to configured roots. Set these to service-owned directories rather than broad user folders:
+The Portal constrains filesystem access to configured roots. Set these to service-owned directories rather than broad user folders:
 
 | Setting | Purpose | Default in code |
 | :--- | :--- | :--- |
@@ -120,7 +120,7 @@ The HA container configuration utilizes:
 - **Shared PostgreSQL Database**: Centralized PostgreSQL container (configured via `docker-compose.ha.yml`) that replaces local SQLite database files. Both Portal and Orchestrator nodes communicate with this shared instance.
 - **Shared Host Volume Binding**: Mapped to `ENV_DATA_ROOT`. This directory hosts the reports, snapshots, datasets, maps, and the `.portal-keys` Data Protection key ring. Since all scaled Portal containers mount this same directory structure, they automatically share the Data Protection keys needed to decrypt and validate session tokens and cookies.
 - **Dynamic Load Balancing**: An HAProxy load balancer handles ingress routing on host ports `5000` (Portal) and `5001` (Orchestrator API).
-- **Session Affinity**: Because Report Portal interactive sessions are stored in process-local memory caches, the load balancer routes client requests stickily based on the `ETLSQL_PORTAL_AFFINITY` cookie. Stateless Orchestrator jobs are round-robin balanced.
+- **Session Affinity**: Because Portal interactive sessions are stored in process-local memory caches, the load balancer routes client requests stickily based on the `ETLSQL_PORTAL_AFFINITY` cookie. Stateless Orchestrator jobs are round-robin balanced.
 
 #### Deploying and Scaling the HA Stack
 

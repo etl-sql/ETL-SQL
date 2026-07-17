@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
-/// P1.9 deterministic import: replaying the bootstrap admin statements through the REPORTPORTAL
+/// P1.9 deterministic import: replaying the bootstrap admin statements through the PORTAL
 /// connector is idempotent (create-or-skip — safe to rerun), fails closed on a missing reference
 /// or unsubstituted secret placeholder before any mutation, and offers a read-only validating
 /// dry-run under <c>SET WHAT_IF ON</c>. Driven against the in-memory portal via the connector's

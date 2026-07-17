@@ -1,6 +1,6 @@
 # HA Topology and Failure Certification
 
-This guide defines the supported Report Portal and Orchestrator deployment topologies, the readiness
+This guide defines the supported Portal and Orchestrator deployment topologies, the readiness
 contract exposed to load balancers, and the failure scenarios that must be certified before an HA
 environment is treated as production-ready.
 

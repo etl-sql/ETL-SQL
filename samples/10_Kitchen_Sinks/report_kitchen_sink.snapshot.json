@@ -5807,7 +5807,7 @@
       ],
       "options": {
         "title": "Project Timeline",
-        "subtitle": "ETL-SQL Report Portal delivery milestones \u00B7 Hover a bar to see dates",
+        "subtitle": "ETL-SQL Portal delivery milestones \u00B7 Hover a bar to see dates",
         "mapping:y": "TaskName",
         "mapping:start": "StartDate",
         "mapping:end": "EndDate",

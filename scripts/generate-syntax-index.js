@@ -4,7 +4,7 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const languageMetadataPath = path.join(repoRoot, 'src', 'ETL-SQL.Core', 'Common', 'LanguageMetadata.cs');
-const syntaxIndexPath = path.join(repoRoot, 'docs', 'Syntax_Index.md');
+const syntaxIndexPath = path.join(repoRoot, 'docs', 'syntax-index.md');
 
 const beginMarker = '<!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->';
 const endMarker = '<!-- END GENERATED CANONICAL TOKEN INDEX -->';
@@ -248,7 +248,7 @@ function main() {
 
   if (checkOnly) {
     if (current !== updated) {
-      console.error('Docs/Syntax_Index.md is out of sync with LanguageMetadata.cs');
+      console.error('docs/syntax-index.md is out of sync with LanguageMetadata.cs');
       process.exitCode = 1;
     }
     return;

@@ -1,6 +1,6 @@
 # ETL-SQL Samples
 
-This directory contains runnable `.etlsql` and `.rptsql` examples for learning, demos, regression checks, and release-readiness coverage. The samples are intentionally source-controlled because they are script-first product artifacts: they document supported syntax, exercise cross-source orchestration, and provide reviewable examples for CLI, VS Code, Report Portal, Orchestrator, and CI/CD workflows.
+This directory contains runnable `.etlsql` and `.rptsql` examples for learning, demos, regression checks, and release-readiness coverage. The samples are intentionally source-controlled because they are script-first product artifacts: they document supported syntax, exercise cross-source orchestration, and provide reviewable examples for CLI, VS Code, Portal, Orchestrator, and CI/CD workflows.
 
 For the detailed walkthrough and highlighted scripts, see [`../docs/guides/sample-guide.md`](../docs/guides/sample-guide.md).
 
@@ -37,7 +37,7 @@ Do not check in ad hoc local output, temporary portal state, generated logs, or 
 | `logs/` | Sample log artifacts when needed by examples or tests. |
 | `output/` | Sample output artifacts when needed by examples or tests. |
 | `paginated/` | Multi-report and paginated hosting examples. |
-| `report_portal_deployment/` | Script-first Report Portal promotion pattern. |
+| `report_portal_deployment/` | Script-first Portal promotion pattern. |
 
 ## Running samples safely
 

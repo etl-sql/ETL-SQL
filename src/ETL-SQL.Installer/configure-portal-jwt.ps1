@@ -1,6 +1,6 @@
 # Post-install configuration applied to the appsettings.json next to this script (the install folder).
 # Runs as a deferred MSI custom action (LocalSystem) before the services start. Three jobs:
-#   1. Generate a plaintext base64 JWT signing secret for the Report Portal if one is not set, so
+#   1. Generate a plaintext base64 JWT signing secret for the Portal if one is not set, so
 #      JwtSecretValidationService passes on first start (idempotent: existing secret is preserved).
 #   2. Generate a base64 Orchestrator API key (and mirror it to Portal:Orchestrator:ApiKey) if not set.
 #      The Orchestrator binds to a network address and refuses to start without a key, so this must be

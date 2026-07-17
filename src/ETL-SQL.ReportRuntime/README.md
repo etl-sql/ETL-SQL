@@ -1,6 +1,6 @@
 # ETL-SQL.ReportRuntime
 
-This source area owns the canonical browser runtime assets shared by ReportPlayer, Report Portal, and the VS Code report preview.
+This source area owns the canonical browser runtime assets shared by ReportPlayer, Portal, and the VS Code report preview.
 
 Edit files under `Resources/Shared/`, then run:
 

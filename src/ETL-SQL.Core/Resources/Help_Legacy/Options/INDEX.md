@@ -98,4 +98,4 @@ SET JOIN_SPILL_THRESHOLD = 500000;
 ```
 
 References:
-- [Syntax Index](../../../../../Docs/Syntax_Index.md)
+- [Syntax Index](../../../../../docs/syntax-index.md)

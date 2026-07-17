@@ -87,7 +87,7 @@ public class ConnectionCatalogTests
 
         var portal = Assert.Throws<InvalidOperationException>(() =>
             ConnectionCatalogProviderFactory.Create(new ConnectionCatalogOptions { Provider = "Portal" }));
-        Assert.Contains("Report Portal", portal.Message);
+        Assert.Contains("Portal", portal.Message);
     }
 
     private static string TempRoot() =>

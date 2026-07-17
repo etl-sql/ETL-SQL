@@ -72,7 +72,7 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void SyntaxIndexAndHelp_SqlBlocks_ParseWithoutSyntaxError()
         {
-            var syntaxIndexPath = RepoFile("docs/Syntax_Index.md");
+            var syntaxIndexPath = RepoFile("docs/syntax-index.md");
             var helpDir = RepoFile("docs/reference");
             Assert.True(File.Exists(syntaxIndexPath), $"Missing: {syntaxIndexPath}");
             Assert.True(Directory.Exists(helpDir), $"Missing help dir: {helpDir}");
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Docs
             var failures = FindSqlBlockParseFailures(markdownFiles);
 
             Assert.True(failures.Count == 0,
-                $"Syntax_Index.md/help SQL blocks that failed to parse ({failures.Count}):\n" +
+                $"syntax-index.md/help SQL blocks that failed to parse ({failures.Count}):\n" +
                 string.Join("\n\n", failures));
         }
 
@@ -198,7 +198,7 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void SyntaxIndex_HelpLinksExistOrUseExplicitNoHelpMarker()
         {
-            var syntaxIndexPath = RepoFile("docs/Syntax_Index.md");
+            var syntaxIndexPath = RepoFile("docs/syntax-index.md");
             Assert.True(File.Exists(syntaxIndexPath), $"Missing: {syntaxIndexPath}");
 
             var missing = new List<string>();
@@ -247,7 +247,7 @@ namespace ETL_SQL.Tests.Docs
             }
 
             Assert.True(missing.Count == 0,
-                $"Syntax_Index.md help links missing on disk ({missing.Count}):\n" +
+                $"syntax-index.md help links missing on disk ({missing.Count}):\n" +
                 string.Join("\n", missing));
         }
 
@@ -301,9 +301,9 @@ namespace ETL_SQL.Tests.Docs
                 "docs/guides/getting-started.md",
                 "docs/guides/administration.md",
                 "docs/guides/report-sql.md",
-                "docs/guides/report-portal-admin.md",
+                "docs/guides/portal-admin.md",
                 "docs/guides/job-orchestration.md",
-                "docs/Syntax_Index.md",
+                "docs/syntax-index.md",
                 "docs/reference/functions/standard-library.md",
                 "docs/reference/connectors/data-connectors.md",
                 "docs/reference/statements/grammar.md",

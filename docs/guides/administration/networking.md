@@ -6,7 +6,7 @@ Both the Orchestrator and Portal use Kestrel. The production templates define th
 
 | Service | HTTP | HTTPS |
 | :--- | :--- | :--- |
-| Report Portal | `5000` | `5002` |
+| Portal | `5000` | `5002` |
 | Orchestrator Service | `5001` | `5003` |
 
 Configure certificates directly in Kestrel or terminate TLS at a reverse proxy:

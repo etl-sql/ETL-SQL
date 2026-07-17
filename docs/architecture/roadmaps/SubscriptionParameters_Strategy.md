@@ -1,7 +1,7 @@
 # Subscription Parameters Strategy
 
 > [!IMPORTANT]
-> **Historical feature plan.** Relative date parameters and subscription parameter behavior are now documented in current reference/user docs. Use this file for rationale and implementation history only; use `docs/reference/dates-times/reldate.md`, `docs/guides/report-sql.md`, and `docs/guides/report-portal-admin.md` for current behavior.
+> **Historical feature plan.** Relative date parameters and subscription parameter behavior are now documented in current reference/user docs. Use this file for rationale and implementation history only; use `docs/reference/dates-times/reldate.md`, `docs/guides/report-sql.md`, and `docs/guides/portal-admin.md` for current behavior.
 
 **Status:** Implemented (Relative date parameters, multi-value lists, and parameterized subscriptions are fully functional in the engine and portal)
 
@@ -470,8 +470,8 @@ All UI changes are in the static web files served by `ETL-SQL.ReportPortal/wwwro
 
 - [ ] `docs/reference/dates-times/reldate.md` — already written. Add a cross-reference section: "See also: CREATE SUBSCRIPTION syntax, Portal Subscribe form."
 - [ ] `docs/guides/report-sql.md` — add `RELDATE` and `LIST` to the parameter type table. Add `INPUT` modifier documentation with a section explaining the subscription lifecycle.
-- [ ] `docs/guides/report-portal-user.md` — update Section 6 (Subscribe) with parameter controls. Update Section 7 (Manage Subscriptions) with Edit Parameters.
-- [ ] `docs/guides/report-portal-admin.md` — update Section 8 (Subscriptions) with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` syntax and PARAMETERS clause.
+- [ ] `docs/guides/portal-user.md` — update Section 6 (Subscribe) with parameter controls. Update Section 7 (Manage Subscriptions) with Edit Parameters.
+- [ ] `docs/guides/portal-admin.md` — update Section 8 (Subscriptions) with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` syntax and PARAMETERS clause.
 - [ ] `Docs/User_Manual.md` — add `SET WEEK_START_DAY` to the SET statement reference, and `Engine.StartOfWeek` to the configuration reference.
 - [ ] `docs/guides/getting-started.md` — add productions for new statements and types.
 

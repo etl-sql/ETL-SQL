@@ -13,7 +13,7 @@ END;
 ```
 
 Notes:
-- Without `FOR USER`, the favorite applies to the account used by the REPORTPORTAL connection.
+- Without `FOR USER`, the favorite applies to the account used by the PORTAL connection.
 - `FOR USER` requires an admin connection because it writes another user's favorites.
 
 References:

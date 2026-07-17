@@ -123,7 +123,7 @@ Parameter values are stored as strings and must be single-quoted. Use the report
 New subscriptions are enabled by default. Add `DISABLE` when reconstructing a paused subscription;
 `ENABLE` is accepted when an explicit active state is useful in generated configuration.
 
-When these statements are executed remotely through a `REPORTPORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` are valid ETL-SQL syntax but are not yet supported by the portal connector — the remote call will fail at runtime. Use a single format and a named recipient address until portal support for multi-format delivery and group expansion ships.
+When these statements are executed remotely through a `PORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` are valid ETL-SQL syntax but are not yet supported by the portal connector — the remote call will fail at runtime. Use a single format and a named recipient address until portal support for multi-format delivery and group expansion ships.
 
 **Examples:**
 

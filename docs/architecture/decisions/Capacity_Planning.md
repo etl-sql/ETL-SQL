@@ -1,7 +1,7 @@
 # Portal and Orchestrator Capacity Planning
 
 Use this guide to turn an expected user base and job schedule into a starter server plan for
-Report Portal and Orchestrator. The numbers below are planning anchors, not universal limits.
+Portal and Orchestrator. The numbers below are planning anchors, not universal limits.
 Validate the final shape on the target hardware with the capacity test harness in
 [Capacity_Testing.md](Capacity_Testing.md).
 

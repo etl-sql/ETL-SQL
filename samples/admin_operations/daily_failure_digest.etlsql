@@ -59,7 +59,7 @@ BEGIN
         BODY CONCAT(
             'The following scheduled jobs did not complete successfully in the last 24 hours:', CHAR(10), CHAR(10),
             @detail, CHAR(10), CHAR(10),
-            'Review them in the orchestrator (SHOW JOB HISTORY) or the Report Portal.')
+            'Review them in the orchestrator (SHOW JOB HISTORY) or the Portal.')
         AT Mailer;
 
     PRINT 'Failure digest sent.';

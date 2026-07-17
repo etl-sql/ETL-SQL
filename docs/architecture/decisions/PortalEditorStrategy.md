@@ -1,4 +1,4 @@
-# Design Strategy: First-Class Web Script Editing in the Report Portal
+# Design Strategy: First-Class Web Script Editing in the Portal
 
 As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant
 models, the developer profile shifts. Local developers keep VS Code and the TUI, but centralized
@@ -234,5 +234,5 @@ and Monaco stay on the shelf unless evidence pulls them forward.
 ### References
 - [Language Server Architecture](../LanguageServer.md)
 - [Portal UI — Lite Editor & technology choices](../PortalUI.md#5-technology-choices)
-- [Report Portal architecture (auth, API, middleware)](../ReportPortal.md)
+- [Portal architecture (auth, API, middleware)](../Portal.md)
 - [Zero-Trust Operations & Security](../standards/Connectors_Standards.md)

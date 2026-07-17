@@ -1,6 +1,6 @@
 # Test Strategy
 
-ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration, reporting, the Report Portal, language tooling, and performance. The suite should make those signals explicit so local development and CI can run the right amount of validation for the moment.
+ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration, reporting, the Portal, language tooling, and performance. The suite should make those signals explicit so local development and CI can run the right amount of validation for the moment.
 
 **Status:** Implemented (Test lanes, smoke tests, performance category tags, and no-Docker UI test sandbox are active in the test framework)
 
@@ -18,7 +18,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Smoke | `.\scripts\test-lane.ps1 -Lane smoke` | Hand-picked checks for the product's main shape: core language, security/path guardrails, reporting runtime, portal publish/execute/snapshot. | First check after a local change; first CI test step. |
 | Fast | `.\scripts\test-lane.ps1 -Lane fast` | Main correctness lane excluding explicit integration and performance categories. | Default PR validation and local pre-push check. |
 | Engine | `.\scripts\test-lane.ps1 -Lane engine` | Main engine/parser/evaluator behavior in `ETL-SQL.Tests`. | Focused engine work. |
-| Portal | `.\scripts\test-lane.ps1 -Lane portal` | Report Portal integration behavior. | Portal/API work. |
+| Portal | `.\scripts\test-lane.ps1 -Lane portal` | Portal integration behavior. | Portal/API work. |
 | Integration | `.\scripts\test-lane.ps1 -Lane integration` | Tests that need real-ish external boundaries, hosted portal infrastructure, or connector integration setup. | Scheduled, release, or targeted connector work. |
 | Perf | `.\scripts\test-lane.ps1 -Lane perf` | Performance assertions in `ETL-SQL.Tests` hardening coverage and `ETL-SQL.PerfTests`. | Scheduled, release, or perf-sensitive work. |
 | Release | `.\scripts\test-lane.ps1 -Lane release` | Smoke + fast + SLT, without benchmarks, installer packaging, Docker, or scale certification. | Local release candidate confidence when packaging is not needed. |
@@ -30,7 +30,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Project | Current Role | Lane Treatment |
 | :--- | :--- | :--- |
 | `tests\ETL-SQL.Tests` | Main parser, engine, function, statement, reporting, hardening, integration, and regression tests. | Included in Fast/Engine; filtered by category for Integration and Perf. |
-| `tests\ETL-SQL.ReportPortal.Tests` | Hosted Report Portal API tests via `WebApplicationFactory` + SQLite. Tagged `Category=Portal`. | Included in Fast, Portal, Full, and selected Smoke checks. No Docker required. |
+| `tests\ETL-SQL.ReportPortal.Tests` | Hosted Portal API tests via `WebApplicationFactory` + SQLite. Tagged `Category=Portal`. | Included in Fast, Portal, Full, and selected Smoke checks. No Docker required. |
 | `tests\ETL-SQL.LanguageServer.Tests` | LSP metadata and smoke checks. | Included in Fast and Full. |
 | `tests\ETL-SQL.PerfTests` | xUnit performance tests. | Included only in Perf and Full. |
 | `tests\ETL-SQL.Benchmarks` | BenchmarkDotNet executable. | Run with the Benchmarks lane, not `dotnet test`. |
@@ -48,7 +48,7 @@ Use `Category` traits for lane routing:
 | `Smoke.Security` | Small security and path-boundary checks. |
 | `Smoke.Reporting` | Small report parser/runtime/manifest checks. |
 | `Smoke.Portal` | Small portal publish/execute/snapshot checks. |
-| `Portal` | Report Portal `WebApplicationFactory` tests. No external dependencies — use SQLite in-process. Included in the standard fast/coverage run. |
+| `Portal` | Portal `WebApplicationFactory` tests. No external dependencies — use SQLite in-process. Included in the standard fast/coverage run. |
 | `Integration` | Tests that require external infrastructure (Docker containers, real SFTP/database/cloud endpoints). Excluded from the default fast lane and coverage run; run in nightly or release CI. |
 | `Performance` | Tests with performance timing/scale expectations. |
 | `SLT` | SQL Logic Test corpus tests — slow by nature, excluded from all standard lanes. Run manually with `--filter "Category=SLT"`. |

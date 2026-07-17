@@ -72,9 +72,9 @@ Move to reference (atomic, several already have homes):
 - `etl-sql doctor`, **Operator CLI Commands** (§10–11: init, support-bundle, backup/
   restore, upgrade, migrate-database, ha-soak) → **generated `reference/cli/**`** (section 6).
 
-### 4b. Report Portal Admin (`guides/report-portal-admin.md`, 1,871 ln) — PRIORITY
-Hub: `guides/report-portal-admin.md` → overview + links.
-- Deployment (Windows/systemd/reverse proxy) → `guides/report-portal-admin/deployment.md`.
+### 4b. Portal Admin (`guides/portal-admin.md`, 1,871 ln) — PRIORITY
+Hub: `guides/portal-admin.md` → overview + links.
+- Deployment (Windows/systemd/reverse proxy) → `guides/portal-admin/deployment.md`.
 - Configuration Reference (§2, huge) → `reference/portal-admin/configuration.md`.
 - User management, roles, enterprise identity/LDAP lifecycle → `reference/portal-admin/users-and-identity.md`.
 - Groups & folder ACLs, effective permissions → `reference/portal-admin/permissions.md`.
@@ -123,7 +123,7 @@ reference/cookbook page. Seed groups (derived from guide/cookbook headings):
 - **Orchestrate**: schedule a job, retry policy, DAG fan-out/gating, session state, capacity.
 - **Secure**: encrypt a connection string, `SECRET:`/`ENC:`, JWT/orchestrator keys, RLS.
 - **Operate the server**: install, HA, backup/restore drill, doctor, support bundle, migrate SQLite→Postgres.
-- **Report Portal admin**: add a user, groups/ACLs, publish a report, subscriptions, share/embed, audit.
+- **Portal admin**: add a user, groups/ACLs, publish a report, subscriptions, share/embed, audit.
 - **Author reports**: first `.rptsql`, visuals, layout, filters, datasets, publish.
 Generation option (later): lint that every task row resolves to an existing page.
 

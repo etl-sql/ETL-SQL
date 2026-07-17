@@ -24,7 +24,7 @@ Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/archi
 
 ## Visual Reporting & Dashboard Designer
 
-*Improves interactive visual editing, page-level auto-interactions, and compiled snapshot formatting in the Report Portal and VS Code extension.*
+*Improves interactive visual editing, page-level auto-interactions, and compiled snapshot formatting in the Portal and VS Code extension.*
 
 ### Future Candidate Phases
 
@@ -36,7 +36,7 @@ Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/archi
 
 ## Developer Experience (IDE & Tooling)
 
-*Enhances authoring efficiency, visual design, and code generation within the Report Portal, VS Code Extension, and Terminal UI (TUI).*
+*Enhances authoring efficiency, visual design, and code generation within the Portal, VS Code Extension, and Terminal UI (TUI).*
 
 > **Shared dependency:** the Portal script editor's schema autocomplete and the schema-aware parts of
 > `TEST CONNECTION` rely on the same capability — **schema introspection**.

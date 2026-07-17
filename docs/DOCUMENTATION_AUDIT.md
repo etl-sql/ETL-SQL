@@ -29,7 +29,7 @@ Completed in the first cleanup pass:
 - Normalized encoding artifacts in `docs/reference/statements/grammar.md`.
 - Normalized old typography markers in `docs/reference/functions/standard-library.md` plus representative statement and visual reference pages.
 - Normalized marker/style artifacts across visual reference pages and smaller statement reference pages.
-- Renamed `docs/Syntax_Index.md` to `docs/syntax-index.md` and started demoting the legacy grammar monolith from active navigation.
+- Standardized the syntax index on `docs/syntax-index.md` and started demoting the legacy grammar monolith from active navigation.
 
 ## P0: Navigation And Entry Points
 
@@ -277,8 +277,8 @@ These exact duplicates were consolidated into one canonical page per topic. Non-
 
 - `docs/guides/pipelines-and-dags.md`
 - `docs/guides/pipelines-dags.md`
-- `docs/guides/report-portal-user-guide.md`
-- `docs/guides/report-portal-user.md`
+- `docs/guides/portal-user-guide.md`
+- `docs/guides/portal-user.md`
 - `docs/guides/testing-guide.md`
 - `docs/guides/testing.md`
 - `docs/assets/data_spec_parser_instructions.md`
@@ -328,7 +328,7 @@ Do the taxonomy move as a dedicated pass with automated link rewriting and docs 
 The reconfigure goal was smaller and more concise documents. Several new files remain monolithic:
 
 - `docs/guides/report-sql.md` is about 2,600 lines.
-- `docs/guides/report-portal-admin.md` is about 1,870 lines.
+- `docs/guides/portal-admin.md` is about 1,870 lines.
 - `docs/guides/administration.md` is about 1,800 lines.
 - `docs/guides/getting-started.md` is about 1,880 lines.
 - `docs/guides/job-orchestration.md` is about 1,200 lines.

@@ -397,9 +397,9 @@ public sealed class ConfigurationExportService(PortalDbContext db)
     {
         var sb = new StringBuilder();
         sb.AppendLine("-- ============================================================================");
-        sb.AppendLine("-- ETL-SQL Report Portal configuration bootstrap (EXPORT PORTAL CONFIGURATION)");
+        sb.AppendLine("-- ETL-SQL Portal configuration bootstrap (EXPORT PORTAL CONFIGURATION)");
         sb.AppendLine($"-- Generated: {DateTime.UtcNow:o}   Format: 1");
-        sb.AppendLine("-- Replays through an admin REPORTPORTAL connection. Review before executing.");
+        sb.AppendLine("-- Replays through an admin PORTAL connection. Review before executing.");
         sb.AppendLine("-- This script reconstructs configuration only — report scripts, dataset caches,");
         sb.AppendLine("-- and snapshots are content, not configuration (copy/publish them separately).");
         sb.AppendLine("-- ============================================================================");
@@ -417,7 +417,7 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 sb.AppendLine($"--   ${{{secret}}}");
         }
         sb.AppendLine();
-        sb.AppendLine("-- CREATE CONNECTION portal AS REPORTPORTAL (");
+        sb.AppendLine("-- CREATE CONNECTION portal AS PORTAL (");
         sb.AppendLine("--     HOST = '<portal-url>', USERNAME = '<admin>', PASSWORD = ENC:...");
         sb.AppendLine("-- );");
         sb.AppendLine();

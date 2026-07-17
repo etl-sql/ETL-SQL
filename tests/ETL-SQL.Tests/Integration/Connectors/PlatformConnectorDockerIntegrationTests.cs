@@ -97,10 +97,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
     }
 
-    [Trait("Connector", "REPORTPORTAL")]
+    [Trait("Connector", "PORTAL")]
     [Trait("CertificationClass", "DockerRealIntegration")]
     [Trait("Category", "Integration")]
-    [Collection("Report portal collection")]
+    [Collection("Portal collection")]
     public class ReportPortalDockerIntegrationTests
     {
         private readonly ReportPortalFixture _fixture;
@@ -369,7 +369,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
     [CollectionDefinition("Orchestrator service collection")]
     public class OrchestratorServiceCollection : ICollectionFixture<OrchestratorServiceFixture> { }
 
-    [CollectionDefinition("Report portal collection")]
+    [CollectionDefinition("Portal collection")]
     public class ReportPortalCollection : ICollectionFixture<ReportPortalFixture> { }
 
     internal static class PlatformConnectorContextLock

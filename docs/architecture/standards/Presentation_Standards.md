@@ -286,9 +286,9 @@ entirely at the sink and rendering level.
 formatting. No ANSI escape codes, no HTML, no Spectre markup. Each platform formats
 the text for its own rendering target.
 
-### Rule C4: Report Portal UI Uses Shared Operational Primitives
+### Rule C4: Portal UI Uses Shared Operational Primitives
 
-The Report Portal front-end is an operational analytics workspace, not a marketing
+The Portal front-end is an operational analytics workspace, not a marketing
 site. Portal pages must use the shared primitives in `wwwroot/css/portal.css` for
 tokens, buttons, cards, tables, modals, loading states, empty states, and status
 badges. New portal UI should extend those primitives instead of adding one-off
@@ -308,7 +308,7 @@ Portal surfaces must remain dense but readable:
 
 ---
 
-## Part VI — Report Portal Front-End Review Checklist
+## Part VI — Portal Front-End Review Checklist
 
 - [ ] New portal controls use `portal.css` tokens and shared classes.
 - [ ] Modals declare `role="dialog"`, `aria-modal="true"`, and close on Escape.

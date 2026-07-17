@@ -1,6 +1,6 @@
 # Service Accounts
 
-Service accounts are non-interactive Report Portal identities for unattended API and CLI work. An
+Service accounts are non-interactive Portal identities for unattended API and CLI work. An
 administrator provisions each account under an active portal user. The owner supplies the existing
 resource permissions, while the account's stored role cap and explicit scopes can only reduce access.
 

@@ -50,7 +50,7 @@ public static class LanguageMetadata
         "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "AVRO", "PARQUET",
         "MSSQL", "ORACLE", "POSTGRES", "MOCKDB", "ODBC",
         "SFTP", "FTP", "FTP_CONN", "AZURE_BLOB", "SMTP", "DOCKER", "DIRECTORY",
-        "REPORTPORTAL", "REPORT_PORTAL", "ORCHESTRATOR", "ORCH",
+        "PORTAL", "ORCHESTRATOR", "ORCH",
         "SHAREPOINT", "ACTIVE_DIRECTORY", "SQLITE", "S3", "MONGODB", "KAFKA"
     };
 

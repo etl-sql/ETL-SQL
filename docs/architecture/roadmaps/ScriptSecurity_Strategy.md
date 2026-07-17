@@ -69,7 +69,7 @@ In practice, the concern that motivates "script signing" is almost always one of
 
 1. **Scheduled job runs a stale or accidentally modified version of a script** — someone edited the file after the job was configured, and the next run silently executes different code.
 
-2. **Report Portal runs a script that has changed since it was published** — the portal already shows a "stale" indicator, but there is no hard block.
+2. **Portal runs a script that has changed since it was published** — the portal already shows a "stale" indicator, but there is no hard block.
 
 3. **Audit trail gap** — when investigating a data incident, you cannot prove what exact code ran.
 
@@ -81,7 +81,7 @@ None of these require cryptographic signing. They all require **knowing when the
 
 ### What it is
 
-At the time a script is scheduled (Orchestrator) or published (Report Portal), compute `SHA-256(file content)` and store it alongside the job or report record. At execution time, recompute the hash and compare.
+At the time a script is scheduled (Orchestrator) or published (Portal), compute `SHA-256(file content)` and store it alongside the job or report record. At execution time, recompute the hash and compare.
 
 - **Match**: proceed normally.
 - **Mismatch**: warn in the log and optionally block execution (configurable).
@@ -134,7 +134,7 @@ At run time, `JobRunner` computes the current hash, logs both, and applies the p
 
 ---
 
-## Report Portal Integration
+## Portal Integration
 
 The portal already tracks a "stale" indicator (script modified since last snapshot). Extend this:
 
@@ -174,7 +174,7 @@ These are real scenarios. They are not the typical ETL-SQL deployment.
 - [ ] `SET SCRIPT_HASH_POLICY` statement: Parse and apply per-script override.
 - [ ] Tests: hash match → runs; hash mismatch + Warn → runs with log entry; hash mismatch + Block → `ExecutionException`.
 
-### Phase 2 — Hash pinning in Report Portal
+### Phase 2 — Hash pinning in Portal
 
 - [ ] `Report` entity: Add `PublishedScriptHash` (TEXT).
 - [ ] Portal publish flow: Compute and store hash.
@@ -185,7 +185,7 @@ These are real scenarios. They are not the typical ETL-SQL deployment.
 ### Phase 3 — Documentation
 
 - [ ] `docs/guides/administration.md`: Add `Engine.ScriptHashPolicy` to configuration reference.
-- [ ] `docs/guides/report-portal-admin.md`: Document hash tracking in the publishing and execution sections.
+- [ ] `docs/guides/portal-admin.md`: Document hash tracking in the publishing and execution sections.
 - [ ] `Docs/Architecture/Orchestrator.md`: Document hash fields on job and execution history entities.
 
 ---

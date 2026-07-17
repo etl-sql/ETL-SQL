@@ -329,6 +329,6 @@ All existing portal APIs (`/api/catalog/lineage`, `/api/reports`, etc.) are cons
 ## 9. Related Subsystem Architecture
 
 For detailed information about adjacent subsystems, refer to the following architecture references:
-- **Report Portal Host:** [ReportPortal.md](ReportPortal.md) details database entities, authorization schemas, and hosting APIs.
+- **Portal Host:** [Portal.md](Portal.md) details database entities, authorization schemas, and hosting APIs.
 - **Reporting Engine:** [Reporting.md](Reporting.md) explains layout manifests, ECharts options compilation, and PDF export pipelines.
 - **Orchestrator:** [Orchestrator.md](Orchestrator.md) governs DAG parsing for job step monitoring and execution.

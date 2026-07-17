@@ -1,4 +1,4 @@
-SUBSCRIPTION — Portal subscription management statements (requires a REPORTPORTAL connection).
+SUBSCRIPTION — Portal subscription management statements (requires a PORTAL connection).
 
 CREATE SUBSCRIPTION ['<name>']
   FOR REPORT '<script-path>'
@@ -16,7 +16,7 @@ DROP SUBSCRIPTION <id>;
 
 SHOW SUBSCRIPTIONS [FOR REPORT '<path>'] [INTO #temp];
 
-Remote REPORTPORTAL execution currently supports PDF and CSV delivery. `FORMAT BOTH`
+Remote PORTAL execution currently supports PDF and CSV delivery. `FORMAT BOTH`
 is parsed by the language but remote portal creation rejects it until the portal
 delivery API can generate both attachments in one subscription.
 

@@ -1,4 +1,4 @@
-# Report Portal User Permission Matrix
+# Portal User Permission Matrix
 
 This matrix is the expected result source for `UserPermissionIntegrationTests` and manual login verification.
 

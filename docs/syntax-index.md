@@ -190,7 +190,7 @@ Connectors define how to communicate with external data sources.
 | `KAFKA` | Streaming | [KAFKA.md](reference/connectors/services/kafka.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
-| `REPORTPORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
+| `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/data-connectors.md) | HOST, PORT, API_KEY |
 | `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/active_directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
@@ -605,7 +605,7 @@ Used in `DECLARE` to define behavior.
 | `RELDATE` | Relative date expression (e.g. 'D-7') | [RelativeDate_Parameters.md](reference/functions/datetime/reldate.md) |
 | `SENSITIVE` | Masked in output, auto-decrypts `ENC:` | [Grammar.md#L195] |
 | `SECRET` | Same as SENSITIVE, purged at session end | [Grammar.md#L213] |
-| `MARKDOWN` | Hint for Report Portal rendering | [Grammar.md#L125] |
+| `MARKDOWN` | Hint for Portal rendering | [Grammar.md#L125] |
 
 ---
 
@@ -1836,9 +1836,8 @@ See [Getting Started](guides/getting-started.md) and [Administration](guides/adm
 | `ORCH` | Connector | Canonical connector token |
 | `ORCHESTRATOR` | Connector | Canonical connector token |
 | `PARQUET` | Connector | Canonical connector token |
+| `PORTAL` | Connector | Canonical connector token |
 | `POSTGRES` | Connector | Canonical connector token |
-| `REPORT_PORTAL` | Connector | Canonical connector token |
-| `REPORTPORTAL` | Connector | Canonical connector token |
 | `S3` | Connector | Canonical connector token |
 | `SFTP` | Connector | Canonical connector token |
 | `SHAREPOINT` | Connector | Canonical connector token |

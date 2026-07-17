@@ -45,7 +45,7 @@ Build output names:
 - `ETL-SQL-TUI` — the terminal IDE
 - `ETL-SQL-LSP` — the Language Server
 - `ETL-SQL-Report` — the report compiler CLI
-- `ETL-SQL-Portal` — the report portal player (web host)
+- `ETL-SQL-Portal` — the portal player (web host)
 - `ETL-SQL-Service` — the Windows Service / systemd host (Orchestrator)
 
 ---

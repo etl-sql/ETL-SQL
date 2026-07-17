@@ -1,6 +1,6 @@
 # Portal Admin Commands
 
-Portal admin commands run inside `EXECUTE portal BEGIN ... END` blocks and manage Report Portal resources from scripts.
+Portal admin commands run inside `EXECUTE portal BEGIN ... END` blocks and manage Portal resources from scripts.
 
 ## Commands
 
@@ -22,5 +22,5 @@ Portal admin commands run inside `EXECUTE portal BEGIN ... END` blocks and manag
 - [REVOKE](revoke.md)
 - [Service Accounts](service-accounts.md)
 
-For operational workflows, see [Report Portal Administration](../../guides/report-portal-admin.md).
+For operational workflows, see [Portal Administration](../../guides/portal-admin.md).
 

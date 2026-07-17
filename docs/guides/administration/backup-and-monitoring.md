@@ -78,7 +78,7 @@ After installation or upgrade:
 5. Publish and execute a small report, then confirm the snapshot is written under `Portal:SnapshotDirectory`.
 6. Confirm logs, backup jobs, and monitoring checks are collecting the expected files.
 
-For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [Report Portal Admin Guide](../report-portal-admin.md).
+For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [Portal Admin Guide](../portal-admin.md).
 
 ### 9.1 External monitoring and alerting
 
@@ -168,7 +168,7 @@ Adds smoke tests and optional endpoint probes that take a few seconds but exerci
 - Verifies the security path guardrail
 - Builds a small Report-SQL manifest and PDF payload
 - Checks optional Graphviz/browser capability, shared asset drift, Node.js, and portal DB configuration
-- Probes configured Report Portal `/health`, Orchestrator `/health`, SMTP, SFTP, and Azure Blob endpoints
+- Probes configured Portal `/health`, Orchestrator `/health`, SMTP, SFTP, and Azure Blob endpoints
 
 ### CI and monitoring integration
 
@@ -187,7 +187,7 @@ etl-sql doctor --profile full --strict --json
 - Run `etl-sql doctor` as the first step of any new host setup or post-upgrade verification.
 - Add `etl-sql doctor --strict` to the service startup validation in your CI/CD pipeline.
 - Use `etl-sql doctor --json` to feed a monitoring system that alerts on WARN/FAIL status.
-- See the [Production Readiness Checklist](../report-portal-admin/production-readiness.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
+- See the [Production Readiness Checklist](../portal-admin/production-readiness.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
 
 ---
 

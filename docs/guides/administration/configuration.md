@@ -7,7 +7,7 @@ The published services read `appsettings.json`, environment variables, and encry
 | Service | Template |
 | :--- | :--- |
 | Orchestrator | `src/ETL-SQL.Orchestrator.Service/appsettings.Production.json.template` |
-| Report Portal | `src/ETL-SQL.ReportPortal/appsettings.Production.json.template` |
+| Portal | `src/ETL-SQL.ReportPortal/appsettings.Production.json.template` |
 
 Common environment-variable overrides use .NET's double-underscore convention:
 

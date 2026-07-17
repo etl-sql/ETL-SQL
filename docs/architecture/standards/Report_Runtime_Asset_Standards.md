@@ -22,7 +22,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 The canonical shared assets are compiled and synchronized into these specific host directories:
 
 - **Report Player**: `src/ETL-SQL.ReportPlayer/wwwroot/`
-- **Report Portal**: `src/ETL-SQL.ReportPortal/wwwroot/js/` and `src/ETL-SQL.ReportPortal/wwwroot/css/`
+- **Portal**: `src/ETL-SQL.ReportPortal/wwwroot/js/` and `src/ETL-SQL.ReportPortal/wwwroot/css/`
 - **VS Code Extension**: `src/etl-sql-vscode/media/`
 
 ---

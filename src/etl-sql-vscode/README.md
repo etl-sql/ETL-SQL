@@ -270,7 +270,7 @@ Mix and match any of these freely within a single script.
 | **Graph & Document** | MongoDB · Neo4j |
 | **Directory Services** | Active Directory / LDAP |
 | **Notifications** | SMTP (email) |
-| **ETL-SQL Platform** | Report Portal · Orchestrator |
+| **ETL-SQL Platform** | Portal · Orchestrator |
 | **Development & Testing** | `MOCKDB()` — zero-config in-memory mock, no setup required |
 
 ---
@@ -284,7 +284,7 @@ Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everyth
 **Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
 - **Terminal IDE** (`ETL-SQL-TUI.exe`) — full-featured TUI editor with autocomplete and results grid for headless environments
 - **Orchestrator** — always-on job runner with scheduling, history, and dependency management
-- **Report Portal** — multi-report hosting, permissions, subscriptions, alerts, and usage metrics
+- **Portal** — multi-report hosting, permissions, subscriptions, alerts, and usage metrics
 
 **2. Open a Folder and Create a Script**
 
@@ -315,7 +315,7 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | `etlsql.server.path` | `""` | Override path to `ETL-SQL-LSP.exe`. Leave blank to auto-detect. |
 | `etlsql.report.executable.path` | `""` | Override path to `ETL-SQL-Report.exe`. Leave blank to auto-detect. |
 | `etlsql.report.autoOpenPreview` | `false` | Auto-open the Report Preview pane when opening a `.rptsql` file. |
-| `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Report Portal (for publishing). |
+| `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Portal (for publishing). |
 | `etlsql.format.keywordCasing` | `"upper"` | SQL keyword casing: `"upper"`, `"lower"`, `"pascal"`, `"preserve"`. |
 | `etlsql.format.indentSize` | `4` | Spaces per indentation level. |
 | `etlsql.format.commaPlacement` | `"leading"` | Comma placement: `"leading"` or `"trailing"`. |

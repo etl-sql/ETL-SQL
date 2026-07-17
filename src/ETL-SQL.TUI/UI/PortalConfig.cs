@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 namespace ETL_SQL.TUI.UI
 {
     /// <summary>
-    /// Stored Report Portal connection: the URL and a cached session token (mirrors the VS
+    /// Stored Portal connection: the URL and a cached session token (mirrors the VS
     /// Code extension's per-portal token cache). Persisted as plain JSON under the user
     /// profile; the token is short-lived (~55 min), the password is never stored.
     /// </summary>

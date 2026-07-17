@@ -1186,12 +1186,12 @@ CREATE PAGE Main AS DASHBOARD (
 
                 // 22. Optional service endpoint checks. These only probe configured endpoints.
                 checks.Add(await ProbeHttpEndpointAsync(
-                    "Report Portal /health",
+                    "Portal /health",
                     ResolveHealthUrl(
                         config["Doctor:ReportPortalHealthUrl"],
                         config["Portal:HealthUrl"],
                         config["Portal:BaseUrl"]),
-                    "Report Portal health URL not configured"));
+                    "Portal health URL not configured"));
 
                 checks.Add(await ProbeHttpEndpointAsync(
                     "Orchestrator /health",

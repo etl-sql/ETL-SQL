@@ -26,7 +26,7 @@ security expectations:
 | :--- | :--- | :--- | :--- |
 | Enrolled client runtime | Signed policy validation, local cache, enforced organization rules | Local administrators, alternate executables, host OS policy | Enterprise hardening certification and OS-boundary documentation. |
 | Policy authority | Policy validation, versioning, signing, activation, rollback | Certificate custody, administrator identity provider, network ingress | Policy-authority tests, audit trail, certificate-expiry alerting. |
-| Report Portal HA | Portal nodes, shared artifact root, shared database, shared key ring | Load balancer, DNS, PostgreSQL failover, file/object storage | Topology readiness checks and HA failure certification. |
+| Portal HA | Portal nodes, shared artifact root, shared database, shared key ring | Load balancer, DNS, PostgreSQL failover, file/object storage | Topology readiness checks and HA failure certification. |
 | Orchestrator HA | Scheduler leadership, leases, job execution, audit/outbox delivery | PostgreSQL availability, service supervision, external connectors | Lease/fencing tests and recovery drill evidence. |
 | Backup and restore | Archive metadata, catalog data, artifact references, key backups | Offline media, immutable retention, operator custody | Restore validation report and clone-safety operator actions. |
 | Fleet aggregation | Read-only status polling | Remote mutation, upgrade, restart, policy push, secret rotation | Fleet containment tests and separate threat model for any mutation proposal. |

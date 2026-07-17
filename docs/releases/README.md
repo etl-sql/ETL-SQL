@@ -87,7 +87,7 @@ Before a release notes file is committed, verify it meets these standards:
 | `scripts/invoke-release.sh` | Same resolution for POSIX environments |
 | GitHub Release page | Body text comes from this file |
 | VS Code extension | Links to the release notes URL in the "What's New" notification |
-| Report Portal `/about` | Displays the current version's release summary |
+| Portal `/about` | Displays the current version's release summary |
 | `docs/guides/release-checklist.md` | Phase 1 requires authoring this file before tagging |
 
 ---

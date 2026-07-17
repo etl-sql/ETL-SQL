@@ -16,7 +16,7 @@ The CLI also supports machine-bound encryption when no password is supplied. Tha
 
 ### 4.2 Portal JWT Secret
 
-The Report Portal requires a strong JWT secret. Generate one during deployment:
+The Portal requires a strong JWT secret. Generate one during deployment:
 
 ```bash
 ETL-SQL config setup-jwt --update
@@ -365,7 +365,7 @@ never receive or return private-key material.
 
 ##### Policy authority deployment and operator runbook
 
-Deploy the policy authority as part of the Report Portal control plane. In single-node deployments,
+Deploy the policy authority as part of the Portal control plane. In single-node deployments,
 the same Portal instance may host user administration, catalog administration, and policy authority
 operations. In HA deployments, every Portal node must use the same PostgreSQL Portal database, the
 same Data Protection key ring, and the same policy-signing certificate identity; otherwise one node
@@ -571,7 +571,7 @@ Use this order for rolling enterprise upgrades:
    or policies that use new schema versions or new policy keys. In HA deployments, let the normal
    migration/lease ownership path run once; do not start two incompatible Portal builds against the
    same database.
-4. Upgrade Orchestrator, Report Portal workers, Report Player, CLI, TUI, language-server, and CI
+4. Upgrade Orchestrator, Portal workers, Report Player, CLI, TUI, language-server, and CI
    runner hosts that consume enterprise policy. Keep the active policy within the oldest supported
    bootstrap, envelope, and policy-payload schema until those hosts report healthy status.
 5. Publish a staged or canary policy that still uses the shared supported schema. Verify

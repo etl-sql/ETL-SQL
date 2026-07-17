@@ -71,7 +71,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`Test-PreRelease.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PreRelease.ps1)** / **[`test-pre-release.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
 | **[`Test-VulnerablePackages.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sync-assets.ps1)** / **[`sync-assets.js`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
-| **[`generate-syntax-index.js`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `Docs/Syntax_Index.md` from `LanguageMetadata.cs`. |
+| **[`generate-syntax-index.js`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |
 | **[`install.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/install.ps1)** / **[`install.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/install.sh)** | PowerShell / Bash | Cross-platform | Boostrapping workstation installers that download, unpack, and register the ETL-SQL SDK to the user's `PATH`. |
 | **[`Master-Release.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Master-Release.ps1)** | PowerShell | Windows | Orchestrator script to validate tools, compile release binaries, execute smoke tests, build the UI, bundle cross-platform packages, and construct installer setups. |
 | **[`publish_release.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/publish_release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
@@ -205,7 +205,7 @@ Runs the SQLite Logic test suite, generating timestamped output folders with sta
 *   **TRX Summarizer:** You can run `.\scripts\Parse-SltResults.ps1` in Windows PowerShell afterward to parse the resulting TRX file and print execution metrics directly to your shell.
 
 ### 2.6 Regenerating the Syntax Index Token Inventory
-To refresh the generated appendix in `Docs/Syntax_Index.md` after changing `LanguageMetadata.cs`:
+To refresh the generated appendix in `docs/syntax-index.md` after changing `LanguageMetadata.cs`:
 
 * **Cross-platform:**
   ```bash

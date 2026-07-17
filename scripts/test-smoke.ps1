@@ -47,7 +47,7 @@ $lanes = [ordered]@{
         )
     }
     portal = @{
-        Label = "Report Portal publish, execute, and snapshot basics"
+        Label = "Portal publish, execute, and snapshot basics"
         Tests = @(
             @{
                 Project = "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"

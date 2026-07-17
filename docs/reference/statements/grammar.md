@@ -51,7 +51,7 @@ Specialty types carry semantic meaning beyond a plain string or number. They inf
 | `PATH` | String | At file I/O - normalizes separators, resolves relative paths, validates security boundaries |
 | `JSON` | String | At assignment - validates well-formedness immediately; enables `JSON_VALUE`, `JSON_QUERY`, etc. |
 | `XML` | String | At assignment - validates well-formedness immediately; enables `XMLVALUE`, `XMLQUERY`, etc. |
-| `MARKDOWN` | String | At render time - Report Portal renders as rich text; CLI treats as plain string |
+| `MARKDOWN` | String | At render time - Portal renders as rich text; CLI treats as plain string |
 | `LIST` | Collection | At iteration - can be strictly typed, e.g. `LIST(INT)` |
 | `MINMAX` | Struct | At declaration - gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
 | `ENCRYPTED` | String | At runtime - masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
@@ -134,13 +134,13 @@ SELECT XMLVALUE(@doc, '//item[@id=1]') AS name;
 
 #### `MARKDOWN`
 
-Stored as a plain string. No validation is performed at assignment (any string is technically valid markdown). In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text - headers, bold, lists, tables, and code blocks are all interpreted.
+Stored as a plain string. No validation is performed at assignment (any string is technically valid markdown). In script execution (CLI, headless), it is treated identically to `STRING`. In the **Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text - headers, bold, lists, tables, and code blocks are all interpreted.
 
 ```sql
 DECLARE @summary MARKDOWN = '## Run Complete\n- Records: 1000\n- Errors: 0';
 ```
 
-Use `MARKDOWN` as a rendering hint for the Report Portal. It has no runtime overhead and signals intent to both the engine and AI agents building dashboards.
+Use `MARKDOWN` as a rendering hint for the Portal. It has no runtime overhead and signals intent to both the engine and AI agents building dashboards.
 
 ---
 
@@ -740,8 +740,8 @@ CREATE CONNECTION logs_dir AS DIRECTORY('C:\Logs\');
 
 **Service Connectors**
 ```sql
--- Report Portal
-CREATE CONNECTION portal AS REPORTPORTAL(
+-- Portal
+CREATE CONNECTION portal AS PORTAL(
     HOST = 'report-server.company.com',
     PORT = 5000,
     USER = 'admin',
@@ -1922,7 +1922,7 @@ EXEC ArchiveSales '2025-01-01';
 ```
 
 #### Service Admin Blocks
-Sends a block of admin statements to a `REPORTPORTAL` or `ORCHESTRATOR` connection.
+Sends a block of admin statements to a `PORTAL` or `ORCHESTRATOR` connection.
 
 ```sql
 -- Using EXECUTE
@@ -2289,7 +2289,7 @@ END;
 ```
 
 ### 15.3 Portal Refresh Jobs (Cron Scheduling)
-Portal Refresh Jobs are distinct administrative tasks for updating report portal datasets and are defined inside `EXECUTE portal BEGIN ... END` blocks using standard cron strings:
+Portal Refresh Jobs are distinct administrative tasks for updating portal datasets and are defined inside `EXECUTE portal BEGIN ... END` blocks using standard cron strings:
 
 ```sql
 EXECUTE portal_conn BEGIN
@@ -3026,14 +3026,14 @@ CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... );
 
 ---
 
-## Appendix B: Report Portal Admin Language
+## Appendix B: Portal Admin Language
 
-Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `AS REPORTPORTAL(...)`.
+Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `AS PORTAL(...)`.
 
 Portal catalog names, user names, group names, recipients, report names, and paths are string literals. Local aliases such as `portal`, `orch`, and `smtp` are identifiers. Secret-bearing fields such as `PASSWORD` remain expression positions so `ENC:` values and variables are accepted.
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL(
+CREATE CONNECTION portal AS PORTAL(
     HOST = 'report-server.company.com',
     PORT = 5000,
     USER = 'admin',
@@ -3245,7 +3245,7 @@ EXECUTE portal BEGIN
         [ENABLE | DISABLE];
 
     -- Note: DELIVER TO GROUP and FORMAT BOTH are valid syntax and parse correctly,
-    -- but the REPORTPORTAL connector currently rejects them at runtime. Use
+    -- but the PORTAL connector currently rejects them at runtime. Use
     -- DELIVER TO '<username>' and FORMAT PDF or FORMAT CSV until portal support ships.
     CREATE SUBSCRIPTION 'MonthlyExec'
         FOR REPORT '/Finance/MonthlySales'
@@ -3453,7 +3453,7 @@ DECRYPT FILE 'secrets.enc' TO 'secrets.csv'
 ```
 
 ### 20.4 `GENERATE JWT_SECRET`
-Generates a cryptographically strong random string for use as a JWT signing key in the Report Portal. The generated secret is 256 bits (32 bytes) encoded as a Base64 string.
+Generates a cryptographically strong random string for use as a JWT signing key in the Portal. The generated secret is 256 bits (32 bytes) encoded as a Base64 string.
 
 ```sql
 GENERATE JWT_SECRET;                -- Prints to message log

@@ -1299,10 +1299,10 @@ HELP CONNECTION FLATFILE;
 
 Admin service connectors do not transfer data — they control remote services. Statements inside `EXECUTE <alias> BEGIN...END` blocks are dispatched to the service's REST API rather than compiled to SQL.
 
-### 8.1 Report Portal (`REPORTPORTAL`)
-Alias: `REPORT_PORTAL`
+### 8.1 Portal (`PORTAL`)
+Alias: none
 
-Connects to an ETL-SQL Report Portal service for scripted administration: user/group management, folder ACL, report publishing, dataset refresh, snapshots, and more.
+Connects to an ETL-SQL Portal service for scripted administration: user/group management, folder ACL, report publishing, dataset refresh, snapshots, and more.
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
@@ -1312,7 +1312,7 @@ Connects to an ETL-SQL Report Portal service for scripted administration: user/g
 | `PASSWORD` | Portal admin password (use `ENC:` in production) | Yes |
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL(HOST     = 'http://portal.corp.example:5000',
+CREATE CONNECTION portal AS PORTAL(HOST     = 'http://portal.corp.example:5000',
          USER     = 'admin',
          PASSWORD = ENC:U2FsdGVkX1+...);
 
@@ -1480,7 +1480,7 @@ WHERE sAMAccountName = 'jdoe';
 | `KAFKA` | — | Protocol | — | — |
 | `SMTP` | `EMAIL` | Protocol | — | — |
 | `SHAREPOINT` | `SP` | Protocol | — | — |
-| `REPORTPORTAL` | `REPORT_PORTAL` | Admin Service | — | — |
+| `PORTAL` | — | Admin Service | — | — |
 | `ORCHESTRATOR` | `ORCH` | Admin Service | — | — |
 | `ACTIVE_DIRECTORY` | `AD`, `LDAP` | Admin Service | — | — |
 | `DIRECTORY` | — | File | — | — |

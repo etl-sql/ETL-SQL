@@ -11,7 +11,7 @@ DATEADD(datepart, number, date)
 ## Parameters
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `datepart` | `KEYWORD` | The unit to add — see [§3.1 Keyword Parameter Enumerations](../../../../../Docs/Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
+| `datepart` | `KEYWORD` | The unit to add — see [§3.1 Keyword Parameter Enumerations](../../../../../docs/syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
 | `number` | `INT` | Number of units to add. Use a negative value to subtract |
 | `date` | `DATE` / `DATETIME` | The base date or datetime value |
 
@@ -27,5 +27,5 @@ SELECT DATEADD(YEAR, 1, order_date) AS warranty_expires FROM #orders;
 
 ## See Also
 - [Standard Library — §4. Date & Time Functions](../../../../../Docs/Reference/Standard_Library.md#4-date--time-functions)
-- [Syntax Index §3.1 — datepart values](../../../../../Docs/Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Syntax Index §3.1 — datepart values](../../../../../docs/syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - Related: [`DATEDIFF`](DATEDIFF.md), [`DATEPART`](DATEPART.md), [`DATENAME`](DATENAME.md)

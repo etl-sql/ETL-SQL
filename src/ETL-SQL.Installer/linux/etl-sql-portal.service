@@ -1,5 +1,5 @@
 [Unit]
-Description=ETL-SQL Report Portal
+Description=ETL-SQL Portal
 After=network.target etl-sql-orchestrator.service
 
 [Service]

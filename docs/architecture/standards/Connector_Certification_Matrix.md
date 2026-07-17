@@ -17,7 +17,7 @@ Use these classes when interpreting the matrix and when tagging new connector te
 | Metadata only | Verifies connector registration, supported options, aliases, and dialect declarations without provider I/O. | Connector metadata tests |
 | Mocked integration | Exercises connector behavior with mocked provider clients or fake remote file systems. | SFTP constructor/factory tests, provider exception wrapping tests |
 | Local real integration | Uses local files, loopback services, or in-process stores with real connector code. | FLATFILE, JSON, XML, PARQUET, AVRO, DIRECTORY, API loopback server, MOCKDB |
-| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, FTP via `delfer/alpine-ftp-server`, SMTP via MailPit, AZURE_BLOB via Azurite, SNOWFLAKE via `ghcr.io/nnnkkk7/snowflake-emulator`, Report Portal and Orchestrator via repository-owned Dockerfiles |
+| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, FTP via `delfer/alpine-ftp-server`, SMTP via MailPit, AZURE_BLOB via Azurite, SNOWFLAKE via `ghcr.io/nnnkkk7/snowflake-emulator`, Portal and Orchestrator via repository-owned Dockerfiles |
 | External/provider real integration | Requires a real cloud or database account outside local CI. | Snowflake cloud auth |
 
 Connector certification tests now carry connector-specific traits such as `Connector=SFTP` and coverage-class traits such as `CertificationClass=DockerRealIntegration`, `CertificationClass=LocalRealIntegration`, `CertificationClass=MockedIntegration`, and `CertificationClass=MetadataOnly`. Use these traits with the existing `Category=Integration` tags to select exact release-gate coverage.
@@ -180,7 +180,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ## Platform Connectors
 
-| Requirement | REPORTPORTAL | ORCHESTRATOR |
+| Requirement | PORTAL | ORCHESTRATOR |
 | :--- | :---: | :---: |
 | **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ |
 | **Rule 2** — All I/O via async overloads | ✓ | ✓ |
@@ -201,11 +201,11 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Overall** | **✓ GA** | **✓ GA** |
 
 ### Platform Connector Notes
-- Docker-backed smoke coverage uses repository-owned Report Portal and Orchestrator Service images built from `src/ETL-SQL.ReportPortal/Dockerfile` and `src/ETL-SQL.Orchestrator.Service/Dockerfile`.
+- Docker-backed smoke coverage uses repository-owned Portal and Orchestrator Service images built from `src/ETL-SQL.ReportPortal/Dockerfile` and `src/ETL-SQL.Orchestrator.Service/Dockerfile`.
 - Build the images before running the platform smoke tests:
   - `docker build -f src/ETL-SQL.ReportPortal/Dockerfile -t etl-sql-reportportal-test:latest .`
   - `docker build -f src/ETL-SQL.Orchestrator.Service/Dockerfile -t etl-sql-orchestrator-service-test:latest .`
-- Report Portal smoke coverage verifies connector authentication against a real containerized portal and executes `SHOW PORTAL USERS`.
+- Portal smoke coverage verifies connector authentication against a real containerized portal and executes `SHOW PORTAL USERS`.
 - Orchestrator smoke coverage verifies API-key authentication against a real containerized orchestrator and executes create/list scheduled-job operations through the connector.
 
 ---

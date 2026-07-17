@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Reporting
             yield return Path.Combine(root, "docs", "guides", "report-sql.md");
             yield return Path.Combine(root, "docs", "guides", "getting-started.md");
             yield return Path.Combine(root, "docs", "guides", "sample-guide.md");
-            yield return Path.Combine(root, "docs", "architecture", "roadmaps", "ReportPortal_Strategy.md");
+            yield return Path.Combine(root, "docs", "architecture", "roadmaps", "Portal_Strategy.md");
 
             var reportDir = Path.Combine(root, "docs", "reference", "visuals-reporting", "report");
             if (Directory.Exists(reportDir))

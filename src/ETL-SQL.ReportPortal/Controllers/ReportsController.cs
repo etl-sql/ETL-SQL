@@ -297,9 +297,12 @@ public class ReportsController : ControllerBase
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+        await using var tx = await db.Database.BeginTransactionAsync();
         db.Reports.Add(report);
-        audit.Stage(CurrentUserId, "PUBLISH_REPORT", "Report", detail: report.Name);
         await db.SaveChangesAsync();
+        audit.Stage(CurrentUserId, "PUBLISH_REPORT", "Report", report.Id.ToString(), report.Name);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = report.Id }, ToDto(report, null));
     }

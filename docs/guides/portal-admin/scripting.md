@@ -2,10 +2,10 @@
 
 ## 9. Extended Admin Scripting
 
-The Report Portal connector supports script-first administration inside a remote block:
+The Portal connector supports script-first administration inside a remote block:
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL (
+CREATE CONNECTION portal AS PORTAL (
     HOST = 'http://localhost:5000',
     USERNAME = 'admin',
     PASSWORD = ENC:...
@@ -66,11 +66,11 @@ Notes:
 
 #### Importing (replaying the bootstrap)
 
-The bootstrap is replayed by running it as a normal script through an admin `REPORTPORTAL`
+The bootstrap is replayed by running it as a normal script through an admin `PORTAL`
 connection — substitute the `${...}` placeholders, then:
 
 ```sql
-CREATE CONNECTION portal AS REPORTPORTAL (HOST = '...', USERNAME = 'admin', PASSWORD = ENC:...);
+CREATE CONNECTION portal AS PORTAL (HOST = '...', USERNAME = 'admin', PASSWORD = ENC:...);
 -- Preview first — no mutations, validates references and secrets:
 SET WHAT_IF ON;
 -- run the EXECUTE portal BEGIN … END block; the portal reports a create/skip plan per statement
