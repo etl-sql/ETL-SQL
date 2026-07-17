@@ -18,15 +18,14 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [RequirePortalModule("Reporting")]
 public class DatasetController(
     PortalDbContext db,
-    IDatasetRegistry registry,
-    AuditService audit,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
     DatasetExportService exports,
     DatasetRefreshService refreshes,
     DatasetMoveService moves,
     DatasetAclService acls,
-    DatasetUpdateService updates) : ControllerBase
+    DatasetUpdateService updates,
+    DatasetDeleteService deletes) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -312,21 +311,12 @@ public class DatasetController(
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
-        // Staged on the shared scoped context, so it commits inside the registry's delete save.
-        audit.Stage(CurrentUserId, "DELETE_DATASET", "Dataset", id.ToString(), dataset.Name);
-        try
-        {
-            await registry.Delete(dataset.Name);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            db.ChangeTracker.Clear();
-            var current = await LoadDataset(id);
-            return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToDto(current));
-        }
+        var result = await deletes.DeleteAsync(dataset, expectedVersion.Value, CurrentUserId);
+        if (result.Kind == DatasetDeleteResultKind.NotFound)
+            return NotFound();
+        if (result.Kind == DatasetDeleteResultKind.Conflict)
+            return OptimisticConcurrency.Conflict(this, ToDto(result.Current!));
 
         return NoContent();
     }
