@@ -296,21 +296,31 @@ namespace ETL_SQL.Tests.Docs
             var helpDir = RepoFile("docs/reference");
             Assert.True(Directory.Exists(helpDir), $"Missing help dir: {helpDir}");
 
+            // Canonical navigation targets. Post-restructure the "canonical guide" a help page links
+            // back to is its folder README or one of the top-level indexes (README-as-index model),
+            // not the retired monolith docs (standard-library.md, grammar.md).
             var canonicalReferences = new[]
             {
-                "docs/guides/getting-started.md",
-                "docs/guides/administration.md",
-                "docs/guides/report-sql.md",
-                "docs/guides/portal-admin.md",
-                "docs/guides/job-orchestration.md",
                 "docs/syntax-index.md",
-                "docs/reference/functions/standard-library.md",
+                "docs/task-index.md",
+                "docs/reference/README.md",
+                "docs/reference/functions/README.md",
+                "docs/reference/statements/README.md",
+                "docs/reference/connectors/README.md",
                 "docs/reference/connectors/data-connectors.md",
-                "docs/reference/statements/grammar.md",
-                "docs/reference/file-operations/specialized-operations.md",
+                "docs/reference/cli/README.md",
+                "docs/reference/file-operations/README.md",
                 "docs/reference/performance/performance.md",
                 "docs/reference/configuration/settings.md",
-                "docs/reference/portal-admin/service-accounts.md"
+                "docs/reference/portal-admin/README.md",
+                "docs/reference/portal-admin/service-accounts.md",
+                "docs/reference/visuals-reporting/README.md",
+                "docs/reference/data-types.md",
+                "docs/administration/platform/README.md",
+                "docs/administration/portal/README.md",
+                "docs/administration/orchestration/README.md",
+                "docs/guides/getting-started.md",
+                "docs/guides/report-sql.md"
             };
 
             var missing = new List<string>();
@@ -333,6 +343,15 @@ namespace ETL_SQL.Tests.Docs
                         hasLink = true;
                         break;
                     }
+                }
+
+                // A link to the page's folder README/index (or any *-index) also counts as linking
+                // back to a canonical navigation doc — the README-as-index navigation model.
+                if (!hasLink &&
+                    (content.Contains("README.md)", StringComparison.OrdinalIgnoreCase) ||
+                     content.Contains("index.md)", StringComparison.OrdinalIgnoreCase)))
+                {
+                    hasLink = true;
                 }
 
                 if (!hasLink)

@@ -52,5 +52,8 @@ INSERT INTO target_db.public.customers SELECT * FROM #tmp;
 CLOSE_DOCKER;
 ```
 
----
+## References
+
+- [Statement Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
 

@@ -8,6 +8,11 @@ Show third-party notices and dependency credits
 etl-sql notices
 ```
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

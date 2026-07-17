@@ -17,7 +17,8 @@ public sealed class SecurityBoundaryDocTests
     // Collapse whitespace so assertions are robust to markdown line-wrapping.
     private static string AdminGuide() =>
         System.Text.RegularExpressions.Regex.Replace(
-            System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "docs", "guides", "administration.md")),
+            System.IO.File.ReadAllText(System.IO.Path.Combine(
+                RepoRoot, "docs", "administration", "platform", "native-admin-services.md")),
             @"\s+", " ");
 
     private static string EnterpriseReleaseGates() =>

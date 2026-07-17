@@ -16,6 +16,11 @@ etl-sql admin migrate-database [options]
 | `--from` | Source database provider (only 'sqlite' is supported). |
 | `--to` | Target database provider (only 'postgres' is supported). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

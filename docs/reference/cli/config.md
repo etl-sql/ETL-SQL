@@ -14,6 +14,11 @@ etl-sql config <subcommand>
 | :--- | :--- |
 | [`setup-jwt`](config-setup-jwt.md) | Generate a secure JWT secret and update appsettings.json |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

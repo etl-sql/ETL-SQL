@@ -22,6 +22,11 @@ etl-sql serve [script] [options]
 | `--no-browser` | Do not automatically open the browser on start |
 | `--port, -p` | Port to listen on (default: auto-assigned ephemeral port) |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

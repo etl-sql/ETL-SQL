@@ -8,6 +8,11 @@ List shared connection catalog entries and their status
 etl-sql admin list-connections
 ```
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

@@ -14,6 +14,11 @@ etl-sql admin backup [options]
 | :--- | :--- |
 | `--output-dir, -o` | Directory to write the backup archives into (default: current directory). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

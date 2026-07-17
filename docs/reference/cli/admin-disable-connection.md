@@ -14,6 +14,11 @@ etl-sql admin disable-connection [options]
 | :--- | :--- |
 | `--alias, -a` | Catalog alias scripts reference as SHARED:alias (letters, numbers, period, underscore, hyphen). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

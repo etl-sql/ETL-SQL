@@ -8,6 +8,11 @@ Inspect machine enterprise enrollment
 etl-sql enterprise status
 ```
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

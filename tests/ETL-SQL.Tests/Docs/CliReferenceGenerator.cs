@@ -124,6 +124,12 @@ public static class CliReferenceGenerator
             sb.AppendLine();
         }
 
+        sb.AppendLine("## References");
+        sb.AppendLine();
+        sb.AppendLine("- [CLI Reference](README.md)");
+        sb.AppendLine("- [Syntax Index](../../syntax-index.md)");
+        sb.AppendLine();
+
         AppendGeneratedMarker(sb);
         return sb.ToString();
     }

@@ -17,6 +17,11 @@ etl-sql admin ha-soak evidence [options]
 | `--run-root, -r` | Path to a generated HA soak topology run root. |
 | `--workload` | Path to the materialized sustained-workload JSON. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

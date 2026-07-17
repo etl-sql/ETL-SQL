@@ -123,5 +123,8 @@ SELECT SYSDATE AT TIME ZONE @tz;
 > [!NOTE]
 > Timezone IDs are OS-dependent. On Windows, they follow the *Registry Time Zone* names. On Linux/macOS, the engine automatically attempts to map these to *IANA* names (e.g., `America/New_York`), but using the native OS names is recommended for maximum reliability.
 
----
+## References
+
+- [Statement Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
 

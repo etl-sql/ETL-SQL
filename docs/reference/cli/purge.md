@@ -15,6 +15,11 @@ etl-sql purge [options]
 | `--dry-run` | List the data that would be removed without deleting anything. |
 | `--yes, -y` | Skip the confirmation prompt (for scripts and installers). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

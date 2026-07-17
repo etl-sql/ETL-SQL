@@ -27,6 +27,11 @@ etl-sql admin ha-soak prepare [options]
 | `--start` | Start the generated Docker topology after writing the environment files. |
 | `--validate-only` | Validate the topology/script contract without writing runtime artifacts. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

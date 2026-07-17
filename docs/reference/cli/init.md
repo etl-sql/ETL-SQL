@@ -20,6 +20,11 @@ etl-sql init [directory] [options]
 | :--- | :--- |
 | `--force, -f` | Overwrite existing files if they are already present. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

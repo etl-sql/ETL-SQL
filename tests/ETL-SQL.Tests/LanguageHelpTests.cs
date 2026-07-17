@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests
 
         private static IEnumerable<(string DisplayName, string Script)> GetParseableReportHelpExamples()
         {
-            var reportHelpDir = Path.Combine(FindRepoRoot(), "src", "ETL-SQL.Core", "Resources", "Help", "Report");
+            var reportHelpDir = Path.Combine(FindRepoRoot(), "docs", "reference", "visuals-reporting", "report");
             foreach (var file in Directory.GetFiles(reportHelpDir, "*.md").OrderBy(path => path))
             {
                 var markdown = File.ReadAllText(file);

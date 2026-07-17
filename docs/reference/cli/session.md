@@ -14,6 +14,11 @@ etl-sql session <subcommand>
 | :--- | :--- |
 | [`clear`](session-clear.md) | Clear a session state |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

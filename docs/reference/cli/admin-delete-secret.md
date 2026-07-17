@@ -14,6 +14,11 @@ etl-sql admin delete-secret [options]
 | :--- | :--- |
 | `--name, -n` | Name of the secret (letters, numbers, period, underscore, hyphen). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

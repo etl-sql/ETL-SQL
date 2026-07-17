@@ -119,5 +119,8 @@ SELECT * FROM #temp;
 GO
 ```
 
----
+## References
+
+- [Statement Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
 

@@ -318,7 +318,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | :--- | :--- |
 | [Syntax Index](docs/syntax-index.md) | Searchable map of commands, functions, options, visual types, and syntax forms. |
 | [Statement Reference](docs/reference/statements/README.md) | Focused pages for DDL, DML, query syntax, control flow, and session commands. |
-| [Standard Library](docs/reference/functions/standard-library.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
+| [Standard Library](docs/reference/functions/README.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
 | [Data Connectors](docs/reference/connectors/data-connectors.md) | Connector types, options, authentication patterns, and examples. |
 | [Specialized Operations](docs/reference/file-operations/specialized-operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
 | [Performance](docs/reference/performance/performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |

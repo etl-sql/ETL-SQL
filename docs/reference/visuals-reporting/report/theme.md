@@ -45,5 +45,8 @@ DROP THEME corporate IF EXISTS;
 
 Removes the theme from memory and deletes the `.json` file from disk.
 
----
+## References
+
+- [Report-SQL Reference](../README.md)
+- [Syntax Index](../../../syntax-index.md)
 

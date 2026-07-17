@@ -14,6 +14,11 @@ etl-sql enterprise unenroll [options]
 | :--- | :--- |
 | `--yes, -y` | Confirm the destructive enterprise unenrollment operation. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

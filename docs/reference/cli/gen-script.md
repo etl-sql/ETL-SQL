@@ -15,6 +15,11 @@ etl-sql gen-script [options]
 | `--output, -o` | Destination path for the generated ETL-SQL script. |
 | `--schema, -s` | Path to the input JSON schema specification file. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

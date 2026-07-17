@@ -65,5 +65,8 @@ Rules:
 - CTEs and local statement sources can shadow view names inside a statement.
 - Direct or indirect recursive view references fail at execution time.
 
----
+## References
+
+- [Statement Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
 

@@ -16,6 +16,11 @@ etl-sql enterprise <subcommand>
 | [`status`](enterprise-status.md) | Inspect machine enterprise enrollment |
 | [`unenroll`](enterprise-unenroll.md) | Remove machine enterprise enrollment |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

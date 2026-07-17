@@ -16,6 +16,11 @@ etl-sql doctor [options]
 | `--profile` | Check depth: 'quick' (fast local checks) or 'full' (adds engine, report, asset, runtime, and configured service probes). |
 | `--strict` | Exit with code 1 if any check produces a WARN or FAIL result. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

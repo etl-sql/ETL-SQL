@@ -14,6 +14,11 @@ etl-sql generate [options]
 | :--- | :--- |
 | `--estimate, -e` | Estimated total rows for progress UI. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

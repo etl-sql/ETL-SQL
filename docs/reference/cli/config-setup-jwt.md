@@ -14,6 +14,11 @@ etl-sql config setup-jwt [options]
 | :--- | :--- |
 | `--update` | Update the local appsettings.json file with the new secret. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

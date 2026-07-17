@@ -15,6 +15,11 @@ etl-sql admin set-secret [options]
 | `--name, -n` | Name of the secret (letters, numbers, period, underscore, hyphen). |
 | `--value` | Secret value. Omit to enter it at a masked prompt or pipe it via stdin; --value can persist in shell history. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

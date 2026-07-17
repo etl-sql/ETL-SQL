@@ -147,7 +147,7 @@ See [docs/architecture/standards/Connectors_Standards.md](docs/architecture/stan
 1. Implement `IConnector` and `IDataSource` (or `IDatabaseSource` for SQL engines)
 2. Register in `DependencyInjectionSetup.cs`
 3. Add a `GetSupportedOptions()` implementation documenting every `WITH()` key
-4. Add connector documentation to [docs/guides/administration.md](docs/guides/administration.md)
+4. Add connector documentation to [docs/administration/platform/README.md](docs/administration/platform/README.md)
 5. Write integration tests with Testcontainers (SQL) or temp files (file connectors)
 
 ### Presentation / TUI
@@ -219,8 +219,8 @@ When your change affects user-facing behavior, update the relevant docs:
 | :--- | :--- |
 | New syntax / keyword | [docs/guides/getting-started.md](docs/guides/getting-started.md) |
 | New built-in function | [docs/guides/getting-started.md](docs/guides/getting-started.md) — signature, return type, and copy-pasteable example required |
-| New connector or new `WITH()` option | [docs/guides/administration.md](docs/guides/administration.md) |
-| New file/email/Docker operation | [docs/guides/administration.md](docs/guides/administration.md) |
+| New connector or new `WITH()` option | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
+| New file/email/Docker operation | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
 | New connector implementation | [Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
 | Breaking syntax change | [docs/guides/migration-guide.md](docs/guides/migration-guide.md) |

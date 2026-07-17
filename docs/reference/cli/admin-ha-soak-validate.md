@@ -18,6 +18,11 @@ etl-sql admin ha-soak validate [options]
 | `--required-gate` | Evidence gate to validate: Sustained, LargeJob, FaultInjection, or All. |
 | `--run-root, -r` | Path to a generated HA soak topology run root. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

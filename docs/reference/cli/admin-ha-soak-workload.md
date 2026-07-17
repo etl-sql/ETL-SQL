@@ -17,6 +17,11 @@ etl-sql admin ha-soak workload [options]
 | `--output, -o` | Destination file path for the generated HA soak artifact. |
 | `--run-root, -r` | Path to a generated HA soak topology run root. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

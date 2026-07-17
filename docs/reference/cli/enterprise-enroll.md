@@ -20,6 +20,11 @@ etl-sql enterprise enroll [options]
 | `--signing-key` | Path to the organization's RSA policy-signing public key in PEM format. |
 | `--tenant` | Enterprise tenant or environment identifier. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

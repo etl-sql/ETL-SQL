@@ -24,6 +24,11 @@ etl-sql admin ha-soak <subcommand>
 | [`validate`](admin-ha-soak-validate.md) | Validate completed HA soak evidence before citing it |
 | [`workload`](admin-ha-soak-workload.md) | Materialize the sustained-load workload config for a topology run |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

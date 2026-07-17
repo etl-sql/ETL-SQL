@@ -14,6 +14,11 @@ etl-sql test [testVal]
 | :--- | :--- | :--- |
 | `testVal` | no | Test category: unit, integration, etc. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

@@ -14,6 +14,11 @@ etl-sql session clear <id>
 | :--- | :--- | :--- |
 | `id` | yes | The session ID to clear |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

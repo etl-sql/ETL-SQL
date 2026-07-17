@@ -21,6 +21,11 @@ etl-sql ui old [file] [options]
 | `--batch-size, -b` | The size of data chunks to process in memory. |
 | `--verbose, -v` | Print detailed execution tracking. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

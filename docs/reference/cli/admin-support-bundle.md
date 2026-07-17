@@ -14,6 +14,11 @@ etl-sql admin support-bundle [options]
 | :--- | :--- |
 | `--output, -o` | Destination path for the support bundle archive (default: timestamped .zip in the working directory). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

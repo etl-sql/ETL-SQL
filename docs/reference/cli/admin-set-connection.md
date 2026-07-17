@@ -18,6 +18,11 @@ etl-sql admin set-connection [options]
 | `--target` | Optional connection-string target. Credential fields must reference SECRET:name, never raw values. |
 | `--type, -t` | Connector type of the shared connection (MSSQL, POSTGRES, S3, ...). |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

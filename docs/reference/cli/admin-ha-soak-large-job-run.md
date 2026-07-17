@@ -18,6 +18,11 @@ etl-sql admin ha-soak large-job-run [options]
 | `--plan` | Existing HA soak plan path to execute. |
 | `--run-root, -r` | Path to a generated HA soak topology run root. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

@@ -33,5 +33,8 @@ UNION ALL BY NAME
 SELECT 3 AS a;                    -- (1,2), (3, NULL)
 ```
 
----
+## References
+
+- [Statement Reference](../README.md)
+- [Syntax Index](../../../syntax-index.md)
 

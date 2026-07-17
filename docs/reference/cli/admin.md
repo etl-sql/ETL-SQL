@@ -31,6 +31,11 @@ etl-sql admin <subcommand>
 | [`verify-connection`](admin-verify-connection.md) | Prove a shared connection's definition and secret references resolve, without printing values |
 | [`verify-secret`](admin-verify-secret.md) | Resolve a named secret to prove it is readable, without printing the value |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

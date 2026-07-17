@@ -17,6 +17,11 @@ etl-sql admin ha-soak metrics [options]
 | `--run-root, -r` | Path to a generated HA soak topology run root. |
 | `--validate-only` | Validate the topology/script contract without writing runtime artifacts. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

@@ -20,6 +20,11 @@ etl-sql encrypt <value> [options]
 | :--- | :--- |
 | `--pass` | Master password for encryption. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

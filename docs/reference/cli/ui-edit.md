@@ -22,6 +22,11 @@ etl-sql ui edit [file] [options]
 | `--session` | Enable session persistence with the specified session ID. |
 | `--verbose, -v` | Print detailed execution tracking. |
 
+## References
+
+- [CLI Reference](README.md)
+- [Syntax Index](../../syntax-index.md)
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.
