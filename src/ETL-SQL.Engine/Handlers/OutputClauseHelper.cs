@@ -70,7 +70,7 @@ public static class OutputClauseHelper
             if (output.IntoTable != null)
             {
                 var intoDest = await context.ResolveDataSourceAsync(output.IntoTable);
-                var targetCols = (await intoDest.GetColumnsAsync()).ToList();
+                var targetCols = (await intoDest.GetColumnsAsync(context.CancellationToken)).ToList();
                 IAsyncEnumerable<DataTable> alignedBatches = new[] { outputTable }.ToAsyncEnumerable();
                 if (targetCols.Count > 0)
                 {

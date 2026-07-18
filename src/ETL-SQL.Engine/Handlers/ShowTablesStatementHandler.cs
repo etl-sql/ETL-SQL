@@ -41,7 +41,7 @@ public class ShowTablesStatementHandler : IStatementHandler
 
         foreach (var source in sourcesToQuery)
         {
-            var tables = await source.GetTablesAsync();
+            var tables = await source.GetTablesAsync(context.CancellationToken);
             foreach (var t in tables)
             {
                 var row = new Row();

@@ -100,7 +100,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
         List<ColumnDefinition>? destColumnDefs = null;
         try
         {
-            var destCols = await destination.GetColumnsAsync();
+            var destCols = await destination.GetColumnsAsync(context.CancellationToken);
             destColumnDefs = destCols.Select(c => new ColumnDefinition(c, "VARCHAR", false)).ToList();
         }
         catch (Exception ex)
@@ -132,7 +132,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
 
             // Get destination columns for metadata validation
-            var destColumns = (await destination.GetColumnsAsync()).ToList();
+            var destColumns = (await destination.GetColumnsAsync(context.CancellationToken)).ToList();
 
             // Determine mapping: use explicit columns if provided, otherwise positional mapping to destination columns
             var mapping = stmt.Columns ?? destColumns;

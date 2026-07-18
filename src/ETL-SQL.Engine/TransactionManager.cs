@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 
@@ -15,8 +16,15 @@ public class TransactionManager
     public int TranCount => _trancount;
 
     /// <summary>Starts a new transaction by creating a snapshot of current variables and in-memory data.</summary>
-    public async Task BeginTransaction(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections)
+    public Task BeginTransaction(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections) =>
+        BeginTransaction(variables, connections, CancellationToken.None);
+
+    public async Task BeginTransaction(
+        IDictionary<string, object?> variables,
+        IDictionary<string, IDataSource> connections,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var snapshot = new TransactionSnapshot
         {
             Variables = new Dictionary<string, object?>(variables),
@@ -27,13 +35,14 @@ public class TransactionManager
         {
             foreach (var kvp in connections)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (kvp.Value is InMemoryDataSource imds)
                 {
                     snapshot.DataSnapshots[kvp.Key] = imds.Snapshot();
                 }
                 else if (kvp.Value is AppendOnlyColumnDataSource columnar)
                 {
-                    await columnar.BeginTransactionAsync();
+                    await columnar.BeginTransactionAsync(cancellationToken);
                     snapshot.EnlistedDataSources.Add(columnar);
                 }
             }
@@ -41,7 +50,7 @@ public class TransactionManager
         catch
         {
             for (var index = snapshot.EnlistedDataSources.Count - 1; index >= 0; index--)
-                await snapshot.EnlistedDataSources[index].RollbackAsync();
+                await snapshot.EnlistedDataSources[index].RollbackAsync(cancellationToken);
             throw;
         }
 
@@ -51,15 +60,19 @@ public class TransactionManager
     }
 
     /// <summary>Enlists a data source into the current transaction scope if it supports transactions.</summary>
-    public async Task EnlistDataSource(IDataSource ds)
+    public Task EnlistDataSource(IDataSource ds) =>
+        EnlistDataSource(ds, CancellationToken.None);
+
+    public async Task EnlistDataSource(IDataSource ds, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_trancount == 0 || _snapshots.Count == 0) return;
         if (ds is ITransactionalDataSource tds)
         {
             var current = _snapshots.Peek();
             if (!current.EnlistedDataSources.Contains(tds))
             {
-                await tds.BeginTransactionAsync();
+                await tds.BeginTransactionAsync(cancellationToken);
                 current.EnlistedDataSources.Add(tds);
             }
         }
@@ -89,8 +102,11 @@ public class TransactionManager
     }
 
     /// <summary>Commits the current transaction level. If it's the root transaction, clears snapshots.</summary>
-    public async Task CommitTransaction()
+    public Task CommitTransaction() => CommitTransaction(CancellationToken.None);
+
+    public async Task CommitTransaction(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_trancount > 0)
         {
             var snapshot = _snapshots.Count > 0 ? _snapshots.Peek() : null;
@@ -98,7 +114,7 @@ public class TransactionManager
             {
                 foreach (var tds in snapshot.EnlistedDataSources)
                 {
-                    await tds.CommitAsync();
+                    await tds.CommitAsync(cancellationToken);
                 }
             }
 
@@ -117,18 +133,32 @@ public class TransactionManager
     }
 
     /// <summary>Rolls back the current transaction level (defaults to full rollback in this implementation).</summary>
-    public async Task RollbackTransaction(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections)
+    public Task RollbackTransaction(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections) =>
+        RollbackTransaction(variables, connections, CancellationToken.None);
+
+    public async Task RollbackTransaction(
+        IDictionary<string, object?> variables,
+        IDictionary<string, IDataSource> connections,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_trancount > 0)
         {
             // Full rollback by default (standard SQL)
-            await RollbackAll(variables, connections);
+            await RollbackAll(variables, connections, cancellationToken);
         }
     }
 
     /// <summary>Rolls back all nested transactions and restores variables and data to the initial state.</summary>
-    public async Task RollbackAll(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections)
+    public Task RollbackAll(IDictionary<string, object?> variables, IDictionary<string, IDataSource> connections) =>
+        RollbackAll(variables, connections, CancellationToken.None);
+
+    public async Task RollbackAll(
+        IDictionary<string, object?> variables,
+        IDictionary<string, IDataSource> connections,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_snapshots.Count > 0)
         {
             // Rollback all external transactions in reverse order of snapshots
@@ -137,7 +167,8 @@ public class TransactionManager
             {
                 foreach (var tds in snapshot.EnlistedDataSources)
                 {
-                    await tds.RollbackAsync();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await tds.RollbackAsync(cancellationToken);
                 }
             }
 

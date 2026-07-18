@@ -68,8 +68,25 @@ public interface IDataValidator
 public interface ITransactionalDataSource : IDataSource
 {
     Task BeginTransactionAsync();
+    Task BeginTransactionAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return BeginTransactionAsync();
+    }
+
     Task CommitAsync();
+    Task CommitAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return CommitAsync();
+    }
+
     Task RollbackAsync();
+    Task RollbackAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return RollbackAsync();
+    }
 }
 
 /// <summary>
@@ -96,6 +113,12 @@ public interface IDataSource : IAsyncDisposable
     Task TruncateAsync() => throw new NotSupportedException($"TRUNCATE is not supported for {GetType().Name}");
     /// <summary>Returns the list of column names in the data source.</summary>
     Task<IEnumerable<string>> GetColumnsAsync();
+    /// <summary>Returns the list of column names and observes cancellation before schema resolution.</summary>
+    Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetColumnsAsync();
+    }
     /// <summary>Creates a state snapshot of the data source for transaction support.</summary>
     object? Snapshot();
     /// <summary>Restores the data source to a previous state snapshot.</summary>
@@ -112,6 +135,12 @@ public interface IDataSource : IAsyncDisposable
     string ConnectorType { get; }
     /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
     Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
+    /// <summary>Returns table names and observes cancellation before schema resolution.</summary>
+    Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetTablesAsync();
+    }
     /// <summary>Returns the options used to create this data source, with sensitive values masked.</summary>
     IReadOnlyDictionary<string, string> GetConfig()
     {
@@ -132,6 +161,11 @@ public interface IDataSource : IAsyncDisposable
 
     /// <summary>Checks if a row with matching column values exists in the data source.</summary>
     Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
+    Task<bool> ExistsAsync(List<string> columns, List<object?> values, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ExistsAsync(columns, values);
+    }
 
     private static async IAsyncEnumerable<DataTable> ApplyCancellation(
         IAsyncEnumerable<DataTable> batches,
@@ -208,7 +242,18 @@ public interface IDatabaseSource : IDataSource
     string ConnectionString { get; }
     string Dialect { get; }
     Task<IEnumerable<string>> GetViewsAsync();
+    Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetViewsAsync();
+    }
+
     Task<IEnumerable<string>> GetColumnsAsync(string tableName);
+    Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GetColumnsAsync(tableName);
+    }
     /// <summary>
     /// True when this connector can execute arbitrary SQL natively (SQL Server, Postgres, etc.).
     /// False for file-based connectors (FlatFile, JSON, XML) that only support full-table reads.

@@ -468,10 +468,16 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
 
     public async Task BeginTransactionAsync()
     {
+        await BeginTransactionAsync(CancellationToken.None);
+    }
+
+    public async Task BeginTransactionAsync(CancellationToken cancellationToken)
+    {
         ThrowIfDisposed();
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             FreezeHead();
             ColumnBatch[] retained;
@@ -488,10 +494,16 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
 
     public async Task CommitAsync()
     {
+        await CommitAsync(CancellationToken.None);
+    }
+
+    public async Task CommitAsync(CancellationToken cancellationToken)
+    {
         ThrowIfDisposed();
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             if (_transactionSnapshots.Count == 0)
                 throw new InvalidOperationException("No append-store transaction is active.");
@@ -505,10 +517,16 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
 
     public async Task RollbackAsync()
     {
+        await RollbackAsync(CancellationToken.None);
+    }
+
+    public async Task RollbackAsync(CancellationToken cancellationToken)
+    {
         ThrowIfDisposed();
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             if (_transactionSnapshots.Count == 0)
                 throw new InvalidOperationException("No append-store transaction is active.");
@@ -524,7 +542,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                 }
                 RebaseTombstoneGrant(tombstones.Sum(bitmap => (long)(bitmap?.LongLength ?? 0)));
                 Interlocked.Exchange(ref _rowCount, snapshot.RowCount);
-                RebuildConstraintsFromLiveRows(CancellationToken.None);
+                RebuildConstraintsFromLiveRows(cancellationToken);
             }
             catch
             {

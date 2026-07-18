@@ -18,7 +18,7 @@ internal static class ShowBundleTableWriter
             throw new ExecutionException($"Connection '{at}' not found in current session.");
         if (conn is not IPortalAdminConnection adminConn)
             throw new ExecutionException($"Connection '{at}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
-        await adminConn.ExecuteAdminStatementAsync(statement, context);
+        await adminConn.ExecuteAdminStatementAsync(statement, context, context.CancellationToken);
         return true;
     }
 

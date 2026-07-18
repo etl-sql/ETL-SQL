@@ -204,6 +204,15 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: audit and extend schema/introspection, transaction, and admin-operation methods
       where cancellation tokens are still absent or not propagated.
+      Additional progress on 2026-07-18: added token-aware contract overloads for schema/introspection,
+      existence checks, transaction boundaries, and Portal/Orchestrator admin plan/execute operations;
+      routed evaluator transaction management, data-source enlistment, admin delegation, SHOW TABLES/
+      COLUMNS, and DML schema lookups through the active execution token. `AppendOnlyColumnDataSource`
+      transaction checkpoints now use cancellable semaphore waits and rollback constraint rebuilds.
+      Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: provider-native schema/introspection overrides where remote catalog APIs still use
+      compatibility defaults instead of direct cancellation tokens.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

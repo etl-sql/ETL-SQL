@@ -55,7 +55,7 @@ internal static class IdentifierQualifier
         try
         {
             var ds = await context.ResolveDataSourceAsync(table);
-            columns = await ds.GetColumnsAsync();
+            columns = await ds.GetColumnsAsync(context.CancellationToken);
         }
         catch
         {

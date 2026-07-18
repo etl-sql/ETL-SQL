@@ -25,6 +25,7 @@ using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Snowflake;
 using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Storage;
 using Xunit;
@@ -53,6 +54,34 @@ public class DataSourceCancellationTests
             {
             }
         });
+    }
+
+    [Fact]
+    public void DataSourceContracts_ExposeCancellationOverloadsForSchemaTransactionsAndAdmin()
+    {
+        Assert.NotNull(typeof(IDataSource).GetMethod(nameof(IDataSource.GetColumnsAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(IDataSource).GetMethod(nameof(IDataSource.GetTablesAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(IDatabaseSource).GetMethod(nameof(IDatabaseSource.GetViewsAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(IDatabaseSource).GetMethod(nameof(IDatabaseSource.GetColumnsAsync), new[] { typeof(string), typeof(CancellationToken) }));
+        Assert.NotNull(typeof(ITransactionalDataSource).GetMethod(nameof(ITransactionalDataSource.BeginTransactionAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(ITransactionalDataSource).GetMethod(nameof(ITransactionalDataSource.CommitAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(ITransactionalDataSource).GetMethod(nameof(ITransactionalDataSource.RollbackAsync), new[] { typeof(CancellationToken) }));
+        Assert.NotNull(typeof(IPortalAdminConnection).GetMethod(nameof(IPortalAdminConnection.ExecuteAdminStatementAsync), new[] { typeof(Statement), typeof(IExecutionContext), typeof(CancellationToken) }));
+        Assert.NotNull(typeof(IPortalAdminConnection).GetMethod(nameof(IPortalAdminConnection.PlanAdminStatementAsync), new[] { typeof(Statement), typeof(IExecutionContext), typeof(CancellationToken) }));
+    }
+
+    [Fact]
+    public async Task TransactionManager_BeginTransaction_ObservesExplicitCancellation()
+    {
+        var manager = new ETL_SQL.Engine.TransactionManager();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            manager.BeginTransaction(
+                new Dictionary<string, object?>(),
+                new Dictionary<string, IDataSource>(),
+                cancellation.Token));
     }
 
     [Fact]

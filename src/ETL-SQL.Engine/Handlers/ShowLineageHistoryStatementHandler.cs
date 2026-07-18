@@ -153,7 +153,7 @@ internal static class LineageHistoryRouting
         if (conn is not IPortalAdminConnection adminConn)
             throw new ExecutionException($"Connection '{atConn}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
 
-        await adminConn.ExecuteAdminStatementAsync(stmt, context);
+        await adminConn.ExecuteAdminStatementAsync(stmt, context, context.CancellationToken);
     }
 
     internal static async Task<DataTable> BuildTable(IEnumerable<LineageHistoryEntry> entries)

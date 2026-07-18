@@ -185,7 +185,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
 
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
-        if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source);
+        if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source, _evaluator.CancellationToken);
 
         if (table.ConnectionName != null) return source.WithTable(table.TableName);
         return source;

@@ -69,7 +69,7 @@ public class MergeStatementHandler : IStatementHandler
         {
             if (clause.ActionType == MergeActionType.INSERT)
             {
-                var targetCols = (await targetSource.GetColumnsAsync()).ToList();
+                var targetCols = (await targetSource.GetColumnsAsync(context.CancellationToken)).ToList();
                 var colNames = (clause.InsertColumns != null && clause.InsertColumns.Count > 0) ? clause.InsertColumns : targetCols;
                 for (int i = 0; i < colNames.Count && i < clause.InsertValues!.Count; i++)
                 {
@@ -241,12 +241,12 @@ public class MergeStatementHandler : IStatementHandler
 
             if (target is InMemoryDataSource mem)
             {
-                mem.Restore(new List<DataTable> { await CreateDataTable(targetRows, await target.GetColumnsAsync()) });
+                mem.Restore(new List<DataTable> { await CreateDataTable(targetRows, await target.GetColumnsAsync(context.CancellationToken)) });
             }
             else
             {
                 _logger.Debug("Finalizing MERGE by overwriting {TargetType}", target.GetType().Name);
-                var finalBatch = await CreateDataTable(targetRows, await target.GetColumnsAsync());
+                var finalBatch = await CreateDataTable(targetRows, await target.GetColumnsAsync(context.CancellationToken));
                 await target.WriteBatches(new[] { finalBatch }.ToAsyncEnumerable());
             }
         }
@@ -319,7 +319,7 @@ public class MergeStatementHandler : IStatementHandler
             if (clause.Condition == null || await context.EvaluateCondition(clause.Condition, sEvalRow))
             {
                 var newRow = new Row();
-                var targetCols = (await target.GetColumnsAsync()).ToList();
+                var targetCols = (await target.GetColumnsAsync(context.CancellationToken)).ToList();
                 var colNames = (clause.InsertColumns != null && clause.InsertColumns.Count > 0) ? clause.InsertColumns : targetCols;
                 for (int i = 0; i < colNames.Count && i < clause.InsertValues!.Count; i++)
                     newRow[colNames[i]] = await context.EvaluateValue(clause.InsertValues[i], sEvalRow);

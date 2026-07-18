@@ -92,7 +92,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 batches = EvaluateQuery(statement, context);
             }
 
-            var targetCols = (await destination.GetColumnsAsync()).ToList();
+            var targetCols = (await destination.GetColumnsAsync(context.CancellationToken)).ToList();
             if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);
             if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
 
@@ -224,7 +224,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 var source = await context.ResolveDataSourceAsync(stmt.FromTable);
                 if (source is IColumnarDataSource columnarSource)
                 {
-                    var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                    var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
                     var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
                     var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
@@ -327,7 +327,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             var source = await context.ResolveDataSourceAsync(stmt.FromTable);
             if (source is IColumnarDataSource columnarSource)
             {
-                var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
                 var (aggregateColumns, aggregateNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
                 var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                     .GetAsyncEnumerator(context.CancellationToken);
@@ -424,7 +424,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             var source = await context.ResolveDataSourceAsync(stmt.FromTable);
             if (source is IColumnarDataSource columnarSource)
             {
-                var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
                 var (nativeColumns, nativeNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
                 // Open the native source once. Unsupported projection shapes replay the already-read
                 // batch through the established row evaluator without restarting the source.
@@ -622,8 +622,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         if (ReferenceEquals(source, destination) || source is not IColumnarDataSource columnarSource)
             return null;
 
-        var sourceColumns = (await source.GetColumnsAsync()).ToArray();
-        var targetColumns = (await destination.GetColumnsAsync()).ToArray();
+        var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToArray();
+        var targetColumns = (await destination.GetColumnsAsync(context.CancellationToken)).ToArray();
         string[] projectedColumns = Array.Empty<string>();
         string[] outputColumns;
         IReadOnlyList<ColumnBatchField>? expressionOutputFields = null;

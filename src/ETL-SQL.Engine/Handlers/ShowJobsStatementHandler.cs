@@ -46,7 +46,7 @@ public class ShowJobsStatementHandler : IStatementHandler
             if (conn is not IPortalAdminConnection adminConn)
                 throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Connection '{stmt.At}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
 
-            await adminConn.ExecuteAdminStatementAsync(stmt, context);
+            await adminConn.ExecuteAdminStatementAsync(stmt, context, context.CancellationToken);
             return;
         }
 

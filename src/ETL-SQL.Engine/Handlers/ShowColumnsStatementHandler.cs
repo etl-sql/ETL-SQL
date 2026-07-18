@@ -23,7 +23,7 @@ public class ShowColumnsStatementHandler : IStatementHandler
         if (source == null)
             throw new ExecutionException($"Table '{stmt.Table.ToSql()}' not found.");
 
-        var columns = await source.GetColumnsAsync();
+        var columns = await source.GetColumnsAsync(context.CancellationToken);
 
         var table = new DataTable();
         table.AddColumn("ColumnName");

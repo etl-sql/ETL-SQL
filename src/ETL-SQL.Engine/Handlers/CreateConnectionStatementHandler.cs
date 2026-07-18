@@ -213,7 +213,7 @@ public class CreateConnectionStatementHandler(
         _logger.Debug("CREATE CONNECTION: Fetching columns for {ConnectionName}...", connectionName);
         context.CancellationToken.ThrowIfCancellationRequested();
         var preview = new DataTable();
-        var cols = (await ds.GetColumnsAsync()).ToList();
+        var cols = (await ds.GetColumnsAsync(context.CancellationToken)).ToList();
         _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, connectionName);
         if (cols.Any())
         {

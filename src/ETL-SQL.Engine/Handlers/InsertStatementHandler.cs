@@ -208,7 +208,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
             var forClause = context.GetForClause(stmt.SelectQuery);
             if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
 
-            var targetCols = stmt.Columns ?? (forClause == null ? (await destination.GetColumnsAsync()).ToList() : stmt.Columns ?? new List<string>());
+            var targetCols = stmt.Columns ?? (forClause == null ? (await destination.GetColumnsAsync(context.CancellationToken)).ToList() : stmt.Columns ?? new List<string>());
             if (targetCols.Count > 0)
             {
                 batches = context.AlignColumns(batches, targetCols);
@@ -256,7 +256,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         }
         else if (stmt.Values != null)
         {
-            var destinationCols = (await destination.GetColumnsAsync()).ToList();
+            var destinationCols = (await destination.GetColumnsAsync(context.CancellationToken)).ToList();
             if (destinationCols.Count == 0 && stmt.Values.Count > 0)
             {
                 if (stmt.Columns != null) destinationCols.AddRange(stmt.Columns);

@@ -33,7 +33,7 @@ internal static class JobRoutingHelper
         if (conn is not IPortalAdminConnection adminConn)
             throw new ExecutionException($"Connection '{atConn}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
 
-        await adminConn.ExecuteAdminStatementAsync(stmt, context);
+        await adminConn.ExecuteAdminStatementAsync(stmt, context, context.CancellationToken);
         return true;
     }
 }

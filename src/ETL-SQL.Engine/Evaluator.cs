@@ -1452,10 +1452,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         return null;
     }
 
-    public async Task BeginTransaction() => await _transactionManager.BeginTransaction(_variableScopeManager.Variables, _connections);
-    public async Task CommitTransaction() => await _transactionManager.CommitTransaction();
-    public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
-    public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+    public async Task BeginTransaction() => await _transactionManager.BeginTransaction(_variableScopeManager.Variables, _connections, CancellationToken);
+    public async Task CommitTransaction() => await _transactionManager.CommitTransaction(CancellationToken);
+    public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections, CancellationToken);
+    public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections, CancellationToken);
     internal void ReplaceDataSourceForTransaction(string connectionName, IDataSource original, IDataSource replacement)
         => _transactionManager.ReplaceDataSource(connectionName, original, replacement, _connections);
 
@@ -1602,7 +1602,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         if (_transactionManager.TranCount > 0)
         {
             _logger.Warning("[Evaluator] Rolling back {TranCount} dangling transactions during session reset.", _transactionManager.TranCount);
-            await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+            await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections, CancellationToken);
         }
 
         // 2. Reset Variables, Procedures, and Functions

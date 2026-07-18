@@ -144,13 +144,13 @@ public class ExecutePushdownStatementHandler(ILogger logger) : IStatementHandler
             if (context.IsWhatIf)
             {
                 // Read-only validating dry-run (see ExecuteRemoteBlockStatementHandler).
-                var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context);
+                var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context, context.CancellationToken);
                 _logger.WriteLine(
                     plan ?? $"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}",
                     ConsoleColor.Yellow);
                 continue;
             }
-            await adminConn.ExecuteAdminStatementAsync(innerStmt, context);
+            await adminConn.ExecuteAdminStatementAsync(innerStmt, context, context.CancellationToken);
         }
     }
 

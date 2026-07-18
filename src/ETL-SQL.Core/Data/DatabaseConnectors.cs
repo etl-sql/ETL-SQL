@@ -150,6 +150,11 @@ public interface IConnectorRegistry
 public interface IPortalAdminConnection : IDataSource
 {
     Task ExecuteAdminStatementAsync(Statement statement, IExecutionContext context);
+    Task ExecuteAdminStatementAsync(Statement statement, IExecutionContext context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ExecuteAdminStatementAsync(statement, context);
+    }
 
     /// <summary>
     /// Read-only dry-run for <c>SET WHAT_IF ON</c>: returns a human-readable plan line
@@ -161,6 +166,11 @@ public interface IPortalAdminConnection : IDataSource
     /// </summary>
     Task<string?> PlanAdminStatementAsync(Statement statement, IExecutionContext context) =>
         Task.FromResult<string?>(null);
+    Task<string?> PlanAdminStatementAsync(Statement statement, IExecutionContext context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return PlanAdminStatementAsync(statement, context);
+    }
 }
 
 public class ConnectorRegistry : IConnectorRegistry
