@@ -2,8 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -309,12 +311,21 @@ namespace ETL_SQL.Connectors.Neo4j
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Neo4j", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "Neo4j",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Neo4j data source read.");
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
 
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
@@ -334,9 +345,11 @@ namespace ETL_SQL.Connectors.Neo4j
                     var labelIdentifier = QuoteCypherIdentifier(actualLabel);
                     var query = $"MATCH (n:{labelIdentifier}) RETURN n";
 
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var result = await session.RunAsync(query);
                     while (await result.FetchAsync())
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var node = result.Current["n"] as INode;
                         if (node == null) continue;
 
@@ -374,9 +387,11 @@ namespace ETL_SQL.Connectors.Neo4j
                     var typeIdentifier = QuoteCypherIdentifier(actualType);
                     var query = $"MATCH (from)-[r:{typeIdentifier}]->(to) RETURN r, elementId(from) AS _from_id, labels(from) AS _from_labels, elementId(to) AS _to_id, labels(to) AS _to_labels";
 
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var result = await session.RunAsync(query);
                     while (await result.FetchAsync())
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var rel = result.Current["r"] as IRelationship;
                         if (rel == null) continue;
 
@@ -423,8 +438,12 @@ namespace ETL_SQL.Connectors.Neo4j
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
@@ -452,11 +471,13 @@ namespace ETL_SQL.Connectors.Neo4j
                     {
                         if (!append)
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             await tx.RunAsync($"MATCH (n:{labelIdentifier}) DETACH DELETE n");
                         }
 
-                        await foreach (var batch in batches)
+                        await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             if (batch.Rows.Count == 0) continue;
 
                             var rowsList = new List<Dictionary<string, object?>>();
@@ -478,6 +499,7 @@ namespace ETL_SQL.Connectors.Neo4j
                                 rowsList.Add(propDict);
                             }
 
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             await tx.RunAsync(writeCypher, new { rows = rowsList });
                         }
                     }
@@ -515,11 +537,13 @@ namespace ETL_SQL.Connectors.Neo4j
                     {
                         if (!append)
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             await tx.RunAsync($"MATCH ()-[r:{typeIdentifier}]->() DELETE r");
                         }
 
-                        await foreach (var batch in batches)
+                        await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             if (batch.Rows.Count == 0) continue;
 
                             var rowsList = new List<object>();
@@ -568,6 +592,7 @@ namespace ETL_SQL.Connectors.Neo4j
 
                             if (canResolveByKey)
                             {
+                                effectiveCancellationToken.ThrowIfCancellationRequested();
                                 var cursor = await tx.RunAsync($@"
                                 UNWIND $rows AS row
                                 MATCH (from:{QuoteCypherIdentifier(fromLabel!)}) WHERE from.{QuoteCypherIdentifier(fromKeyColumn)} = row.fromKey
@@ -575,10 +600,11 @@ namespace ETL_SQL.Connectors.Neo4j
                                 {edgeMergeCypher}
                                 SET r += row.properties
                                 RETURN count(r) AS written", new { rows = rowsList });
-                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints);
+                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints, effectiveCancellationToken);
                             }
                             else
                             {
+                                effectiveCancellationToken.ThrowIfCancellationRequested();
                                 var cursor = await tx.RunAsync($@"
                                 UNWIND $rows AS row
                                 MATCH (from) WHERE elementId(from) = row.fromId
@@ -586,7 +612,7 @@ namespace ETL_SQL.Connectors.Neo4j
                                 {edgeMergeCypher}
                                 SET r += row.properties
                                 RETURN count(r) AS written", new { rows = rowsList });
-                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints);
+                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints, effectiveCancellationToken);
                             }
                         }
                     }
@@ -665,10 +691,23 @@ namespace ETL_SQL.Connectors.Neo4j
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "Neo4j", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "Neo4j",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf && IsMutatingCypher(sql))
             {
                 yield break;
@@ -719,8 +758,10 @@ namespace ETL_SQL.Connectors.Neo4j
 
             if (_activeTransaction != null)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var resultCursor = await _activeTransaction.RunAsync(cypherQuery, paramDict);
-                await foreach (var batch in ReadResultCursorAsync(resultCursor))
+                await foreach (var batch in ReadResultCursorAsync(resultCursor, effectiveCancellationToken)
+                    .WithCancellation(effectiveCancellationToken))
                 {
                     yield return batch;
                 }
@@ -730,22 +771,28 @@ namespace ETL_SQL.Connectors.Neo4j
             var session = driver.AsyncSession(o => o.WithDatabase(database));
             await using (session)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var resultCursor = await session.RunAsync(cypherQuery, paramDict);
-                await foreach (var batch in ReadResultCursorAsync(resultCursor))
+                await foreach (var batch in ReadResultCursorAsync(resultCursor, effectiveCancellationToken)
+                    .WithCancellation(effectiveCancellationToken))
                 {
                     yield return batch;
                 }
             }
         }
 
-        private async IAsyncEnumerable<DataTable> ReadResultCursorAsync(IResultCursor resultCursor)
+        private async IAsyncEnumerable<DataTable> ReadResultCursorAsync(
+            IResultCursor resultCursor,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var keys = (await resultCursor.KeysAsync()).ToList();
             var currentBatch = new DataTable();
             currentBatch.SetColumns(keys);
 
             while (await resultCursor.FetchAsync())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var row = currentBatch.NewRow();
                 foreach (var key in keys)
                 {
@@ -797,9 +844,15 @@ namespace ETL_SQL.Connectors.Neo4j
             return val;
         }
 
-        private static async Task ValidateEdgeWriteCountAsync(IResultCursor cursor, int expectedRows, bool skipMissingEndpoints)
+        private static async Task ValidateEdgeWriteCountAsync(
+            IResultCursor cursor,
+            int expectedRows,
+            bool skipMissingEndpoints,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!await cursor.FetchAsync()) return;
+            cancellationToken.ThrowIfCancellationRequested();
 
             var written = Convert.ToInt64(cursor.Current["written"]);
             if (!skipMissingEndpoints && written != expectedRows)
@@ -1085,5 +1138,8 @@ namespace ETL_SQL.Connectors.Neo4j
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is Neo4jException or InvalidOperationException;
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

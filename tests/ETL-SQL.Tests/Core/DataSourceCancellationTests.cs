@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading;
 using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
@@ -76,6 +77,24 @@ public class DataSourceCancellationTests
             nameof(IDataSource.WriteBatches),
             typeof(IAsyncEnumerable<DataTable>),
             typeof(bool),
+            typeof(CancellationToken));
+    }
+
+    [Fact]
+    public void GraphDataSources_DeclareNativeCancellationOverloads()
+    {
+        AssertDeclares(typeof(Neo4jDataSource), nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+        AssertDeclares(
+            typeof(Neo4jDataSource),
+            nameof(IDataSource.WriteBatches),
+            typeof(IAsyncEnumerable<DataTable>),
+            typeof(bool),
+            typeof(CancellationToken));
+        AssertDeclares(
+            typeof(Neo4jDataSource),
+            nameof(IDatabaseSource.ExecuteRawSql),
+            typeof(string),
+            typeof(IEnumerable<object?>),
             typeof(CancellationToken));
     }
 
