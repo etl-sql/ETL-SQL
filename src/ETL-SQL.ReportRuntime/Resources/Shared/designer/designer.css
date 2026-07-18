@@ -678,6 +678,108 @@ body.vscode-high-contrast .btn-primary:hover {
     font-size: 0.78rem;
 }
 
+.cm-tooltip.cm-tooltip-autocomplete,
+.cm-tooltip-autocomplete .cm-completionInfo {
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    border-color: var(--portal-border, #d9e0ea);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+}
+
+.cm-tooltip-autocomplete ul li {
+    color: var(--portal-text, #172033);
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+    background: var(--portal-accent, #2563eb);
+    color: #ffffff;
+}
+
+.cm-tooltip-autocomplete .cm-completionLabel,
+.cm-tooltip-autocomplete .cm-completionDetail,
+.cm-tooltip-autocomplete .cm-completionInfo,
+.cm-tooltip-autocomplete .cm-completionInfo * {
+    color: inherit;
+}
+
+.etlsql-editor-hover {
+    position: fixed;
+    z-index: 9999;
+    max-width: min(520px, calc(100vw - 32px));
+    max-height: min(360px, calc(100vh - 32px));
+    overflow: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius-sm, 5px);
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.etlsql-editor-hover-heading {
+    margin: 8px 0 4px;
+    font-weight: 700;
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-editor-hover-heading:first-child {
+    margin-top: 0;
+}
+
+.etlsql-editor-hover-heading-1,
+.etlsql-editor-hover-heading-2,
+.etlsql-editor-hover-heading-3 {
+    font-size: 0.96rem;
+}
+
+.etlsql-editor-hover-heading-4,
+.etlsql-editor-hover-heading-5,
+.etlsql-editor-hover-heading-6 {
+    font-size: 0.88rem;
+}
+
+.etlsql-editor-hover-line {
+    margin: 2px 0;
+}
+
+.etlsql-editor-hover-gap {
+    height: 8px;
+}
+
+.etlsql-editor-hover-bullet {
+    position: relative;
+    margin: 3px 0;
+    padding-left: 14px;
+}
+
+.etlsql-editor-hover-bullet::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 0.68em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--portal-text-muted, #64748b);
+}
+
+.etlsql-editor-hover pre {
+    margin: 6px 0;
+    padding: 8px;
+    overflow: auto;
+    background: var(--portal-surface-subtle, #f8fafc);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: var(--portal-radius-sm, 5px);
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+}
+
+.etlsql-editor-hover code {
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+}
+
 /* ── Phase 4: Full designer shell ───────────────────────────────────────── */
 
 .etlsql-designer {
@@ -899,6 +1001,39 @@ body.vscode-high-contrast .btn-primary:hover {
     margin-left: auto;
     color: var(--portal-muted, #5b677a);
     font-size: 0.8125rem;
+}
+
+.etlsql-script-results-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.etlsql-script-results-tools[hidden] {
+    display: none;
+}
+
+.etlsql-script-results-tools input {
+    width: min(220px, 24vw);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 4px;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    padding: 4px 7px;
+    font: inherit;
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-results-tools button {
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 4px;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text-soft, #46556c);
+    padding: 4px 7px;
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
 }
 
 .etlsql-script-results-body {

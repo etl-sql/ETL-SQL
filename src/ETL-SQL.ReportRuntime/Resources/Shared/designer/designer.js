@@ -875,8 +875,9 @@ function _getRptsqlLang(cm) {
  * @param {Function}    [opts.onChange]        Called with the full new value on each change.
  * @param {string}      [opts.analyzeUrl]      Optional endpoint for real parser/linter diagnostics.
  * @param {string}      [opts.completeUrl]     Optional endpoint for context-aware completions.
+ * @param {string}      [opts.hoverUrl]        Optional endpoint for hover documentation.
  * @param {string}      [opts.connectionRef]   Optional shared connection alias for schema completions.
- * @param {Function}    [opts.authFetch]       Optional fetch wrapper used for analyzeUrl/completeUrl.
+ * @param {Function}    [opts.authFetch]       Optional fetch wrapper used for analyzeUrl/completeUrl/hoverUrl.
  * @param {Function}    [opts.onDiagnostics]   Called with returned diagnostics.
  * @returns {Promise<{ getValue: Function, setValue: Function, dispose: Function }>}
  *   Returns a promise so callers can await the dynamic bundle load.
@@ -895,8 +896,10 @@ export async function createScriptEditor(container, opts = {}) {
 
     const analyzeUrl = opts.analyzeUrl || null;
     const completeUrl = opts.completeUrl || null;
+    const hoverUrl = opts.hoverUrl || null;
     const analyzeFetch = opts.authFetch ?? ((url, init) => fetch(url, init));
     const completeFetch = opts.authFetch ?? ((url, init) => fetch(url, init));
+    const hoverFetch = opts.authFetch ?? ((url, init) => fetch(url, init));
     const debounceMs = Number.isFinite(opts.analyzeDebounceMs) ? opts.analyzeDebounceMs : 450;
     const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
     const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
@@ -935,6 +938,11 @@ export async function createScriptEditor(container, opts = {}) {
     let analyzeRequestScript = null;
     let view = null;
     let diagPanel = null;
+    let hoverTimer = null;
+    let hoverHideTimer = null;
+    let hoverAbort = null;
+    let hoverTip = null;
+    let hoverKey = '';
 
     function completionKind(kind) {
         switch (String(kind ?? '').toLowerCase()) {
@@ -959,6 +967,12 @@ export async function createScriptEditor(container, opts = {}) {
         return { line: line.number - 1, column: pos - line.from };
     }
 
+    function currentDocumentUri() {
+        return typeof opts.documentUri === 'function'
+            ? opts.documentUri()
+            : (opts.documentUri || 'portal-designer');
+    }
+
     function currentStatement() {
         if (!view) return '';
         const script = view.state.doc.toString();
@@ -973,8 +987,11 @@ export async function createScriptEditor(container, opts = {}) {
     function createCompletionSource() {
         if (!completeUrl || typeof autocompletion !== 'function') return null;
         return async (context) => {
-            const word = context.matchBefore(/[\w@#&$.*]+/);
+            let word = context.matchBefore(/[\w@#&$.*]+/);
             const previous = context.state.sliceDoc(Math.max(0, context.pos - 1), context.pos);
+            if (!word && context.explicit && (previous === '*' || previous === '.')) {
+                word = { from: context.pos - 1, to: context.pos, text: previous };
+            }
             if (!word && !context.explicit) {
                 return null;
             }
@@ -991,7 +1008,7 @@ export async function createScriptEditor(container, opts = {}) {
                     line,
                     column,
                     connectionRef: opts.connectionRef || null,
-                    documentUri: opts.documentUri || 'portal-designer',
+                    documentUri: currentDocumentUri(),
                 }),
             });
             if (!res?.ok) return null;
@@ -1019,9 +1036,173 @@ export async function createScriptEditor(container, opts = {}) {
                     type: completionKind(item.kind),
                     detail: item.detail || item.kind || '',
                     info: item.documentation || undefined,
+                    boost: item.label === 'Expand columns' ? 99 : 0,
                 })),
             };
         };
+    }
+
+    function markdownToTooltipHtml(markdown) {
+        const lines = String(markdown || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+        const html = [];
+        let inCode = false;
+        let codeLines = [];
+
+        const renderInline = value => escapeHtml(value)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        const flushCode = () => {
+            html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+            codeLines = [];
+        };
+
+        for (const line of lines) {
+            if (line.trimStart().startsWith('```')) {
+                if (inCode) {
+                    flushCode();
+                    inCode = false;
+                } else {
+                    inCode = true;
+                    codeLines = [];
+                }
+                continue;
+            }
+
+            if (inCode) {
+                codeLines.push(line);
+                continue;
+            }
+
+            const heading = line.match(/^(#{1,6})\s+(.+)$/);
+            if (heading) {
+                const level = Math.min(6, heading[1].length);
+                html.push(`<div class="etlsql-editor-hover-heading etlsql-editor-hover-heading-${level}">${renderInline(heading[2].trim())}</div>`);
+                continue;
+            }
+
+            const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+            if (bullet) {
+                html.push(`<div class="etlsql-editor-hover-bullet">${renderInline(bullet[1].trim())}</div>`);
+                continue;
+            }
+
+            if (!line.trim()) {
+                html.push('<div class="etlsql-editor-hover-gap"></div>');
+                continue;
+            }
+
+            html.push(`<div class="etlsql-editor-hover-line">${renderInline(line.trim())}</div>`);
+        }
+
+        if (inCode) flushCode();
+        return html.join('');
+    }
+
+    function wordAtPosition(state, pos) {
+        const line = state.doc.lineAt(pos);
+        const text = line.text;
+        let offset = Math.max(0, Math.min(text.length, pos - line.from));
+        const isWord = ch => /[\w@#&$]/.test(ch || '');
+        if (!isWord(text[offset]) && offset > 0 && isWord(text[offset - 1])) offset--;
+        if (!isWord(text[offset])) return null;
+
+        let start = offset;
+        let end = offset + 1;
+        while (start > 0 && isWord(text[start - 1])) start--;
+        while (end < text.length && isWord(text[end])) end++;
+
+        return {
+            word: text.slice(start, end),
+            line: line.number - 1,
+            column: start,
+        };
+    }
+
+    function hideHover() {
+        clearTimeout(hoverHideTimer);
+        hoverTip?.remove();
+        hoverTip = null;
+        hoverKey = '';
+    }
+
+    function scheduleHideHover(delay = 180) {
+        clearTimeout(hoverHideTimer);
+        hoverHideTimer = setTimeout(() => hideHover(), delay);
+    }
+
+    async function showHover(evt) {
+        if (!hoverUrl || !view) return;
+        const pos = view.posAtCoords({ x: evt.clientX, y: evt.clientY });
+        if (pos == null) {
+            hideHover();
+            return;
+        }
+
+        const word = wordAtPosition(view.state, pos);
+        if (!word) {
+            hideHover();
+            return;
+        }
+
+        const nextKey = `${word.word}:${word.line}:${word.column}`;
+        if (nextKey === hoverKey) return;
+        hoverKey = nextKey;
+        hoverAbort?.abort();
+        hoverAbort = new AbortController();
+
+        try {
+            const res = await hoverFetch(hoverUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    word: word.word,
+                    script: view.state.doc.toString(),
+                    line: word.line,
+                    column: word.column,
+                    documentUri: currentDocumentUri(),
+                }),
+                signal: hoverAbort.signal,
+            });
+            if (!res?.ok) {
+                hideHover();
+                return;
+            }
+
+            const data = await res.json();
+            if (!data?.markdown) {
+                hideHover();
+                return;
+            }
+
+            if (!hoverTip) {
+                hoverTip = document.createElement('div');
+                hoverTip.addEventListener('mouseenter', () => clearTimeout(hoverHideTimer));
+                hoverTip.addEventListener('mouseleave', () => scheduleHideHover(120));
+            }
+            hoverTip.className = 'etlsql-editor-hover';
+            hoverTip.innerHTML = markdownToTooltipHtml(data.markdown);
+            document.body.appendChild(hoverTip);
+            const left = Math.min(window.innerWidth - 24, evt.clientX + 14);
+            const top = Math.min(window.innerHeight - 24, evt.clientY + 18);
+            hoverTip.style.left = `${left}px`;
+            hoverTip.style.top = `${top}px`;
+        } catch (err) {
+            if (err?.name !== 'AbortError') hideHover();
+        }
+    }
+
+    function attachHover() {
+        if (!hoverUrl) return;
+        container.addEventListener('mousemove', evt => {
+            clearTimeout(hoverTimer);
+            hoverTimer = setTimeout(() => showHover(evt), 450);
+        });
+        container.addEventListener('mouseleave', () => {
+            clearTimeout(hoverTimer);
+            hoverAbort?.abort();
+            scheduleHideHover();
+        });
     }
 
     function setDiagnosticsStatus(text, kind = 'neutral') {
@@ -1102,7 +1283,7 @@ export async function createScriptEditor(container, opts = {}) {
             const res = await analyzeFetch(analyzeUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script, documentUri: opts.documentUri || 'portal-designer' }),
+                body: JSON.stringify({ script, documentUri: currentDocumentUri() }),
                 signal: controller.signal,
             });
             if (!res?.ok) throw new Error(res?.statusText || 'Analyze request failed');
@@ -1196,6 +1377,7 @@ export async function createScriptEditor(container, opts = {}) {
         container.appendChild(diagPanel);
         if (opts.analyzeOnLoad !== false) scheduleAnalysis(opts.value ?? '');
     }
+    attachHover();
 
     return {
         getValue: () => view.state.doc.toString(),
@@ -1218,7 +1400,11 @@ export async function createScriptEditor(container, opts = {}) {
         analyze: () => runAnalysis(view.state.doc.toString()),
         dispose: () => {
             clearTimeout(analyzeTimer);
+            clearTimeout(hoverTimer);
+            clearTimeout(hoverHideTimer);
             analyzeAbort?.abort();
+            hoverAbort?.abort();
+            hideHover();
             view.destroy();
             diagPanel?.remove();
         },
@@ -1251,13 +1437,14 @@ function normalizeRunTrace(result, script) {
     ];
 }
 
-function createScriptResultsPanel(container) {
+export function createScriptResultsPanel(container) {
     let messages = [];
     let progress = [];
     let resultSets = [];
     let performance = null;
     let activeTab = 'results';
     let status = 'idle';
+    let resultFilter = '';
 
     container.className = 'etlsql-script-results';
     container.innerHTML = `
@@ -1266,12 +1453,19 @@ function createScriptResultsPanel(container) {
             <button type="button" data-tab="messages">Messages</button>
             <button type="button" data-tab="pipeline">Pipeline</button>
             <button type="button" data-tab="performance">Performance</button>
+            <span class="etlsql-script-results-tools" data-result-tools>
+                <input type="search" data-result-filter placeholder="Filter results" autocomplete="off">
+                <button type="button" data-export="csv">CSV</button>
+                <button type="button" data-export="json">JSON</button>
+            </span>
             <span class="etlsql-script-results-status" data-status>Idle</span>
         </div>
         <div class="etlsql-script-results-body" data-body></div>`;
 
     const body = container.querySelector('[data-body]');
     const statusEl = container.querySelector('[data-status]');
+    const filterEl = container.querySelector('[data-result-filter]');
+    const toolsEl = container.querySelector('[data-result-tools]');
 
     function setTab(tab) {
         activeTab = tab;
@@ -1288,9 +1482,13 @@ function createScriptResultsPanel(container) {
         const columns = Array.isArray(latest.columns) ? latest.columns : [];
         const rows = Array.isArray(latest.rows) ? latest.rows : [];
         if (!columns.length) return '<div class="etlsql-script-results-empty">No result grid.</div>';
+        const filteredRows = filterRows(rows, columns, resultFilter);
         const head = columns.map(c => `<th>${escape(c)}</th>`).join('');
-        const dataRows = rows.map(row => `<tr>${columns.map(c => `<td>${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
-        return `<div class="etlsql-script-results-count">${rows.length} row${rows.length === 1 ? '' : 's'}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
+        const dataRows = filteredRows.map(row => `<tr>${columns.map(c => `<td>${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
+        const count = resultFilter
+            ? `${filteredRows.length} of ${rows.length} row${rows.length === 1 ? '' : 's'}`
+            : `${rows.length} row${rows.length === 1 ? '' : 's'}`;
+        return `<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
 
     function renderMessages() {
@@ -1330,6 +1528,7 @@ function createScriptResultsPanel(container) {
     function render() {
         container.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
         statusEl.textContent = status;
+        if (toolsEl) toolsEl.hidden = activeTab !== 'results';
         if (activeTab === 'messages') body.innerHTML = renderMessages();
         else if (activeTab === 'pipeline') body.innerHTML = renderPipeline();
         else if (activeTab === 'performance') body.innerHTML = renderPerformance();
@@ -1341,8 +1540,36 @@ function createScriptResultsPanel(container) {
         progress = [];
         resultSets = [];
         performance = null;
+        resultFilter = '';
+        if (filterEl) filterEl.value = '';
         status = 'Idle';
         render();
+    }
+
+    function latestResults() {
+        const latest = resultSets[resultSets.length - 1];
+        const columns = Array.isArray(latest?.columns) ? latest.columns : [];
+        const rows = Array.isArray(latest?.rows) ? latest.rows : [];
+        return { columns, rows: filterRows(rows, columns, resultFilter) };
+    }
+
+    function exportResults(format) {
+        const { columns, rows } = latestResults();
+        if (!columns.length) return;
+        const text = format === 'json'
+            ? JSON.stringify(rows, null, 2)
+            : toCsv(columns, rows);
+        const mime = format === 'json' ? 'application/json' : 'text/csv';
+        const ext = format === 'json' ? 'json' : 'csv';
+        const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `etl-sql-results.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
     }
 
     function post(message) {
@@ -1376,6 +1603,11 @@ function createScriptResultsPanel(container) {
     }
 
     container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
+    filterEl?.addEventListener('input', () => {
+        resultFilter = filterEl.value || '';
+        render();
+    });
+    container.querySelectorAll('[data-export]').forEach(btn => btn.addEventListener('click', () => exportResults(btn.dataset.export)));
     clear();
     return {
         replay(trace) {
@@ -1386,6 +1618,23 @@ function createScriptResultsPanel(container) {
             container.replaceChildren();
         },
     };
+}
+
+function filterRows(rows, columns, filter) {
+    const term = String(filter || '').trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter(row => columns.some(c => formatResultCell(row?.[c]).toLowerCase().includes(term)));
+}
+
+function toCsv(columns, rows) {
+    const escapeCsv = value => {
+        const text = formatResultCell(value);
+        return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    return [
+        columns.map(escapeCsv).join(','),
+        ...rows.map(row => columns.map(c => escapeCsv(row?.[c])).join(',')),
+    ].join('\r\n');
 }
 
 function formatResultCell(value) {
