@@ -8,6 +8,7 @@ using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Data;
@@ -92,6 +93,24 @@ public class DataSourceCancellationTests
             typeof(CancellationToken));
         AssertDeclares(
             typeof(Neo4jDataSource),
+            nameof(IDatabaseSource.ExecuteRawSql),
+            typeof(string),
+            typeof(IEnumerable<object?>),
+            typeof(CancellationToken));
+    }
+
+    [Fact]
+    public void RestDataSource_DeclaresNativeCancellationOverloads()
+    {
+        AssertDeclares(typeof(RestDataSource), nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+        AssertDeclares(
+            typeof(RestDataSource),
+            nameof(IDataSource.WriteBatches),
+            typeof(IAsyncEnumerable<DataTable>),
+            typeof(bool),
+            typeof(CancellationToken));
+        AssertDeclares(
+            typeof(RestDataSource),
             nameof(IDatabaseSource.ExecuteRawSql),
             typeof(string),
             typeof(IEnumerable<object?>),

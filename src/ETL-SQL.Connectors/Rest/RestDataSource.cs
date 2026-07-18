@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -69,7 +70,13 @@ namespace ETL_SQL.Connectors.Rest
         public IDataSource WithTable(string tableName) => this;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "REST", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "REST",
+                ShouldWrapProviderException);
 
         private static string UpdateQueryParameter(string url, string key, string value)
         {
@@ -215,14 +222,15 @@ namespace ETL_SQL.Connectors.Rest
             return delayMs;
         }
 
-        private async Task<string> GetOAuthTokenAsync()
+        private async Task<string> GetOAuthTokenAsync(CancellationToken cancellationToken = default)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_cachedToken != null && _tokenExpiry.HasValue && _tokenExpiry.Value > DateTime.UtcNow.AddSeconds(5))
             {
                 return _cachedToken;
             }
 
-            await _tokenSemaphore.WaitAsync();
+            await _tokenSemaphore.WaitAsync(effectiveCancellationToken);
             try
             {
                 if (_cachedToken != null && _tokenExpiry.HasValue && _tokenExpiry.Value > DateTime.UtcNow.AddSeconds(5))
@@ -262,17 +270,17 @@ namespace ETL_SQL.Connectors.Rest
                     Content = new FormUrlEncodedContent(postParams)
                 };
 
-                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                using var cts = CreateTimeoutCts(effectiveCancellationToken);
                 using var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var errorContent = await response.Content.ReadAsStringAsync();
+                    var errorContent = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
                     errorContent = SanitizeForDiagnostics(errorContent);
                     throw new ExecutionException($"OAuth2 token request failed with status {response.StatusCode}: {errorContent}");
                 }
 
-                var responseBody = await response.Content.ReadAsStringAsync();
+                var responseBody = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
                 using var doc = JsonDocument.Parse(responseBody);
                 var root = doc.RootElement;
 
@@ -313,8 +321,11 @@ namespace ETL_SQL.Connectors.Rest
             }
         }
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             string paginationMode = "NONE";
             if (_options != null && _options.TryGetValue("PAGINATION_MODE", out var pm))
             {
@@ -409,10 +420,11 @@ namespace ETL_SQL.Connectors.Rest
                 int attempts = 0;
                 while (true)
                 {
-                    var request = await BuildRequestAsync();
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
                     try
                     {
-                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                        using var cts = CreateTimeoutCts(effectiveCancellationToken);
                         response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
 
                         if (response.IsSuccessStatusCode)
@@ -425,11 +437,11 @@ namespace ETL_SQL.Connectors.Rest
                         {
                             attempts++;
                             int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
                             continue;
                         }
 
-                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
+                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
                         throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
                     // A blocked redirect target (SecurityException) or redirect loop (ExecutionException)
@@ -440,15 +452,16 @@ namespace ETL_SQL.Connectors.Rest
                         {
                             attempts++;
                             int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
                             continue;
                         }
                         throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
                     }
                 }
 
-                using var stream = await response.Content.ReadAsStreamAsync();
-                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize))
+                using var stream = await response.Content.ReadAsStreamAsync(effectiveCancellationToken);
+                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize)
+                    .WithCancellation(effectiveCancellationToken))
                 {
                     yield return batch;
                 }
@@ -499,16 +512,17 @@ namespace ETL_SQL.Connectors.Rest
 
                 while (true)
                 {
-                    var request = await BuildRequestAsync(requestUrl);
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    var request = await BuildRequestAsync(requestUrl, effectiveCancellationToken);
                     try
                     {
-                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                        using var cts = CreateTimeoutCts(effectiveCancellationToken);
                         response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
 
                         int statusCode = (int)response.StatusCode;
                         if (response.IsSuccessStatusCode)
                         {
-                            responseBodyText = await response.Content.ReadAsStringAsync();
+                            responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
                             break;
                         }
 
@@ -516,11 +530,11 @@ namespace ETL_SQL.Connectors.Rest
                         {
                             attempts++;
                             int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
                             continue;
                         }
 
-                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
+                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
                         throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
                     catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException)
@@ -529,7 +543,7 @@ namespace ETL_SQL.Connectors.Rest
                         {
                             attempts++;
                             int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
                             continue;
                         }
                         throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
@@ -539,7 +553,8 @@ namespace ETL_SQL.Connectors.Rest
                 int rowsInPage = 0;
                 using (var doc = JsonDocument.Parse(responseBodyText))
                 {
-                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize))
+                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize)
+                        .WithCancellation(effectiveCancellationToken))
                     {
                         rowsInPage += batch.Rows.Count;
                         yield return batch;
@@ -650,8 +665,12 @@ namespace ETL_SQL.Connectors.Rest
             public int RequestIndex { get; set; }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             // Parse options
             string? bodyModeStr = null;
             _options?.TryGetValue("BODY_MODE", out bodyModeStr);
@@ -785,7 +804,7 @@ namespace ETL_SQL.Connectors.Rest
                 _logger.WriteLine($"  Error Mode: {errorMode}", ConsoleColor.Yellow);
 
                 long totalRows = 0;
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     totalRows += batch.Rows.Count;
                     if (idempotencyKeyCol != null && !batch.Schema.Contains(idempotencyKeyCol))
@@ -844,7 +863,7 @@ namespace ETL_SQL.Connectors.Rest
             int nextSourceRowIndex = 0;
             int rowBufferStartIndex = 0;
 
-            await foreach (var batch in batches)
+            await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
             {
                 if (columnNames.Count == 0)
                 {
@@ -872,7 +891,7 @@ namespace ETL_SQL.Connectors.Rest
                     nextSourceRowIndex++;
                     if (rowBuffer.Count >= batchSizeVal)
                     {
-                        await ProcessChunkAsync(rowBuffer, columnNames, batchIndex, rowBufferStartIndex, stats, successStatuses, errorMode, methodStr, retryCount, retryBackoffMs, retryStatuses, idempotencyKeyCol, idempotencyHeader, urlTemplate, bodyTemplate, bodyMode, batchRoot, errorBodyMaxChars, respTableDs, correlationCols);
+                        await ProcessChunkAsync(rowBuffer, columnNames, batchIndex, rowBufferStartIndex, stats, successStatuses, errorMode, methodStr, retryCount, retryBackoffMs, retryStatuses, idempotencyKeyCol, idempotencyHeader, urlTemplate, bodyTemplate, bodyMode, batchRoot, errorBodyMaxChars, respTableDs, correlationCols, effectiveCancellationToken);
                         rowBuffer.Clear();
                     }
                 }
@@ -881,7 +900,7 @@ namespace ETL_SQL.Connectors.Rest
 
             if (rowBuffer.Count > 0)
             {
-                await ProcessChunkAsync(rowBuffer, columnNames, batchIndex, rowBufferStartIndex, stats, successStatuses, errorMode, methodStr, retryCount, retryBackoffMs, retryStatuses, idempotencyKeyCol, idempotencyHeader, urlTemplate, bodyTemplate, bodyMode, batchRoot, errorBodyMaxChars, respTableDs, correlationCols);
+                await ProcessChunkAsync(rowBuffer, columnNames, batchIndex, rowBufferStartIndex, stats, successStatuses, errorMode, methodStr, retryCount, retryBackoffMs, retryStatuses, idempotencyKeyCol, idempotencyHeader, urlTemplate, bodyTemplate, bodyMode, batchRoot, errorBodyMaxChars, respTableDs, correlationCols, effectiveCancellationToken);
             }
         }
 
@@ -905,13 +924,16 @@ namespace ETL_SQL.Connectors.Rest
             string? batchRoot,
             int errorBodyMaxChars,
             InMemoryDataSource? respTableDs,
-            string[] correlationCols)
+            string[] correlationCols,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (bodyMode == "ROW_OBJECT" || bodyMode == "TEMPLATE")
             {
                 int rowIdx = 0;
                 foreach (var row in rows)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     string url = _url;
                     if (!string.IsNullOrEmpty(urlTemplate))
                     {
@@ -958,7 +980,8 @@ namespace ETL_SQL.Connectors.Rest
                         columnNames,
                         errorBodyMaxChars,
                         respTableDs,
-                        correlationCols);
+                        correlationCols,
+                        cancellationToken);
 
                     rowIdx++;
                 }
@@ -1013,7 +1036,8 @@ namespace ETL_SQL.Connectors.Rest
                     columnNames,
                     errorBodyMaxChars,
                     respTableDs,
-                    correlationCols);
+                    correlationCols,
+                    cancellationToken);
             }
         }
 
@@ -1036,8 +1060,10 @@ namespace ETL_SQL.Connectors.Rest
             List<string> columnNames,
             int errorBodyMaxChars,
             InMemoryDataSource? respTableDs,
-            string[] correlationCols)
+            string[] correlationCols,
+            CancellationToken cancellationToken = default)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             bool validateJsonBody = true;
             if (_options != null && _options.TryGetValue("VALIDATE_JSON_BODY", out var vjbStr) && bool.TryParse(vjbStr, out var vjb))
             {
@@ -1071,23 +1097,24 @@ namespace ETL_SQL.Connectors.Rest
 
             while (true)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 using var request = new HttpRequestMessage(new HttpMethod(method), url);
                 if (content != null)
                 {
                     request.Content = new StringContent(content, System.Text.Encoding.UTF8, GetBodyContentType());
                 }
 
-                await ApplyHeadersAsync(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames);
+                await ApplyHeadersAsync(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames, effectiveCancellationToken);
 
                 try
                 {
-                    using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                    using var cts = CreateTimeoutCts(effectiveCancellationToken);
                     response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
                     statusCode = (int)response.StatusCode;
 
                     if (successStatuses.Contains(statusCode.Value))
                     {
-                        responseBodyText = await response.Content.ReadAsStringAsync();
+                        responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
                         errorMessage = null;
                         break;
                     }
@@ -1096,11 +1123,11 @@ namespace ETL_SQL.Connectors.Rest
                     {
                         attempts++;
                         int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                        await Task.Delay(delayMs);
+                        await Task.Delay(delayMs, effectiveCancellationToken);
                         continue;
                     }
 
-                    var errorContent = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
+                    var errorContent = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
                     responseBodyText = errorContent;
                     if (errorContent.Length > errorBodyMaxChars)
                     {
@@ -1121,7 +1148,7 @@ namespace ETL_SQL.Connectors.Rest
                     {
                         attempts++;
                         int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                        await Task.Delay(delayMs);
+                        await Task.Delay(delayMs, effectiveCancellationToken);
                         continue;
                     }
 
@@ -1263,7 +1290,10 @@ namespace ETL_SQL.Connectors.Rest
                     await responseBatch.AddRowAsync(respRow);
                 }
 
-                await respTableDs.WriteBatches(ToAsyncEnumerable(responseBatch), append: true);
+                await respTableDs.WriteBatches(
+                    ToAsyncEnumerable(responseBatch),
+                    append: true,
+                    cancellationToken: effectiveCancellationToken);
             }
 
             if (!success && errorMode == "FAIL_FAST")
@@ -1327,7 +1357,7 @@ namespace ETL_SQL.Connectors.Rest
             string? contentType = null;
             if (request.Content != null)
             {
-                bodyBytes = await request.Content.ReadAsByteArrayAsync();
+                bodyBytes = await request.Content.ReadAsByteArrayAsync(ct);
                 contentType = request.Content.Headers.ContentType?.ToString();
             }
 
@@ -1527,7 +1557,13 @@ namespace ETL_SQL.Connectors.Rest
             }
         }
 
-        private async Task ApplyHeadersAsync(HttpRequestMessage request, Row? row, string? idempotencyKeyCol, string idempotencyHeader, List<string>? columnNames)
+        private async Task ApplyHeadersAsync(
+            HttpRequestMessage request,
+            Row? row,
+            string? idempotencyKeyCol,
+            string idempotencyHeader,
+            List<string>? columnNames,
+            CancellationToken cancellationToken = default)
         {
             if (_options != null && _options.TryGetValue("AUTH_TYPE", out var authType))
             {
@@ -1556,7 +1592,7 @@ namespace ETL_SQL.Connectors.Rest
                         }
                         break;
                     case "OAUTH2_CLIENT_CREDENTIALS":
-                        var oauthToken = await GetOAuthTokenAsync();
+                        var oauthToken = await GetOAuthTokenAsync(cancellationToken);
                         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
                         break;
                 }
@@ -1737,11 +1773,12 @@ namespace ETL_SQL.Connectors.Rest
                     return Enumerable.Empty<string>();
                 }
 
-                var request = await BuildRequestAsync();
-                var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
+                var effectiveCancellationToken = EffectiveCancellationToken(CancellationToken.None);
+                var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
+                var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveCancellationToken);
                 if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
-                using var stream = await response.Content.ReadAsStreamAsync();
+                using var stream = await response.Content.ReadAsStreamAsync(effectiveCancellationToken);
 
                 string? rootPath = null;
                 if (_options != null && _options.TryGetValue("ROOT_PATH", out rootPath))
@@ -1776,13 +1813,26 @@ namespace ETL_SQL.Connectors.Rest
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "REST", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "REST",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (sql.Trim().ToUpperInvariant() == "SELECT * FROM ENDPOINT")
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -1792,7 +1842,9 @@ namespace ETL_SQL.Connectors.Rest
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 
-        private async Task<HttpRequestMessage> BuildRequestAsync(string? url = null)
+        private async Task<HttpRequestMessage> BuildRequestAsync(
+            string? url = null,
+            CancellationToken cancellationToken = default)
         {
             string? methodStr = "GET";
             _options?.TryGetValue("METHOD", out methodStr);
@@ -1825,7 +1877,7 @@ namespace ETL_SQL.Connectors.Rest
                         }
                         break;
                     case "OAUTH2_CLIENT_CREDENTIALS":
-                        var oauthToken = await GetOAuthTokenAsync();
+                        var oauthToken = await GetOAuthTokenAsync(cancellationToken);
                         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
                         break;
                 }
@@ -1879,5 +1931,21 @@ namespace ETL_SQL.Connectors.Rest
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException;
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
+
+        private CancellationTokenSource CreateTimeoutCts(CancellationToken cancellationToken)
+        {
+            var timeout = TimeSpan.FromSeconds(_timeoutSeconds);
+            if (cancellationToken.CanBeCanceled)
+            {
+                var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                linked.CancelAfter(timeout);
+                return linked;
+            }
+
+            return new CancellationTokenSource(timeout);
+        }
     }
 }
