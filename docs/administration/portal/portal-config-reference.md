@@ -171,7 +171,8 @@ node heartbeat services remain active in both profiles.
 | `Identity.Ldap.ServicePassword` | *(empty)* | Optional password for the service account. |
 | `Identity.Ldap.RoleMappings` | *(empty)* | Key-value pairs mapping Active Directory groups (full DNs or short CNs) to Portal Roles (`Admin`, `Publisher`, `Viewer`). |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
-| `FirstRun.MustChangePassword` | `true` | Forces the seeded first-run admin to change the initial password before using API routes. Keep enabled for production; disposable automation topologies may set it to `false` only when they generate a strong per-run password. |
+| `FirstRun.AdminPassword` | *(empty)* | Required bootstrap password for the first-run admin account when the Portal database has no users. Prefer setting it through `Portal__FirstRun__AdminPassword`; remove it after the initial password change. |
+| `FirstRun.MustChangePassword` | `true` | Forces the seeded first-run admin to change the initial password before using API routes. Keep enabled for production; disposable automation topologies may set it to `false` only with a strong per-run bootstrap password. |
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). |
 | `Orchestrator.ApiUrl` | *(empty)* | Base URL of the Orchestrator Service HTTP API. |
 | `Orchestrator.ApiKey` | *(empty)* | Shared secret API key used for authenticating Orchestrator HTTP calls. |
@@ -204,4 +205,3 @@ For a load-balanced Portal fleet:
 The full HA setup and SQLite-to-PostgreSQL migration procedure is in
 [Administration: Practical High Availability Configuration](../platform/state-and-ha.md#61-practical-high-availability-configuration)
 and [§11.5](../platform/operator-cli.md#115-migrating-from-sqlite-to-postgresql--etl-sql-admin-migrate-database).
-

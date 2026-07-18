@@ -146,6 +146,49 @@ public sealed class DatasetViewerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Export_ReadsBeyondPreviewLimit()
+    {
+        var parquet = WriteParquet("ds_export.parquet", encryptOptions: null, 10, 20, 30);
+
+        await using var db = NewDb(out var config, atRestKey: null);
+        config.MaxPreviewRows = 1;
+        var id = AddDataset(db, "#export", parquet, DatasetEncryptionMode.None, rowCount: 3);
+        var viewer = NewViewer(db, config);
+
+        var preview = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
+        Assert.Single(preview.Rows);
+
+        var (rows, _) = await viewer.PrepareExportAsync(id, null, null, null, []);
+
+        Assert.Equal([10L, 20L, 30L], rows.Select(row => Convert.ToInt64(row["v"])).ToList());
+    }
+
+    [Fact]
+    public async Task Query_CacheKeyChangesWhenDatasetContentIdentityChanges()
+    {
+        var firstParquet = WriteParquet("ds_cache_v1.parquet", encryptOptions: null, 10);
+        var secondParquet = WriteParquet("ds_cache_v2.parquet", encryptOptions: null, 99);
+
+        await using var db = NewDb(out var config, atRestKey: null);
+        var id = AddDataset(db, "#cache", firstParquet, DatasetEncryptionMode.None, rowCount: 1);
+        var viewer = NewViewer(db, config);
+
+        var first = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
+        Assert.Equal(10L, first.Rows.Single()["v"]);
+
+        var dataset = await db.Datasets.SingleAsync(d => d.Id == id);
+        dataset.ParquetFilePath = secondParquet;
+        dataset.RowCount = 1;
+        dataset.Version++;
+        dataset.UpdatedAt = DateTime.UtcNow.AddSeconds(1);
+        await db.SaveChangesAsync();
+
+        var second = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
+
+        Assert.Equal(99L, second.Rows.Single()["v"]);
+    }
+
+    [Fact]
     public async Task Stats_AndColumnValues_PreserveDatasetViewerSemantics()
     {
         var parquet = WriteParquet("ds_stats.parquet", encryptOptions: null);
@@ -174,18 +217,22 @@ public sealed class DatasetViewerServiceTests : IDisposable
     }
 
     // Writes a 2-row parquet (v = 10, 20) to <_root>/<fileName>, encrypted with encryptOptions when given.
-    private string WriteParquet(string fileName, Dictionary<string, string>? encryptOptions)
+    private string WriteParquet(string fileName, Dictionary<string, string>? encryptOptions, params long[] values)
     {
+        if (values.Length == 0)
+            values = [10, 20];
+
         var dest = Path.Combine(_root, fileName);
         var plain = Path.Combine(_root, "_plain_" + fileName);
 
         var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(SystemExecutionContext.Instance, plain);
         var batch = new ETL_SQL.Data.DataTable();
         batch.ColumnNames.AddRange(new[] { "v" });
-        var r1 = new ETL_SQL.Data.Row(); r1["v"] = 10L;
-        var r2 = new ETL_SQL.Data.Row(); r2["v"] = 20L;
-        batch.AddRowAsync(r1).GetAwaiter().GetResult();
-        batch.AddRowAsync(r2).GetAwaiter().GetResult();
+        foreach (var value in values)
+        {
+            var row = new ETL_SQL.Data.Row(); row["v"] = value;
+            batch.AddRowAsync(row).GetAwaiter().GetResult();
+        }
         ds.WriteBatches(new[] { batch }.ToAsyncEnumerable()).GetAwaiter().GetResult();
 
         if (encryptOptions is null)
@@ -216,7 +263,12 @@ public sealed class DatasetViewerServiceTests : IDisposable
         return db;
     }
 
-    private static int AddDataset(PortalDbContext db, string name, string parquetPath, DatasetEncryptionMode mode)
+    private static int AddDataset(
+        PortalDbContext db,
+        string name,
+        string parquetPath,
+        DatasetEncryptionMode mode,
+        long rowCount = 2)
     {
         var d = new Dataset
         {
@@ -227,7 +279,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
             AccessLevel = ETL_SQL.Core.Data.DatasetAccessLevel.Public,
             EncryptionMode = mode,
             ColumnSchema = """[{"name":"v","type":"INT"}]""",
-            RowCount = 2,
+            RowCount = rowCount,
             LastRefresh = DateTime.UtcNow
         };
         db.Datasets.Add(d);

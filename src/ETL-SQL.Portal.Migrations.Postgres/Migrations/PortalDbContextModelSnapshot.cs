@@ -885,6 +885,9 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Token")
+                        .IsUnique();
+
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");

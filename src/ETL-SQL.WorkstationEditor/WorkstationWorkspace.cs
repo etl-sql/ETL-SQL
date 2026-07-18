@@ -1,3 +1,5 @@
+using ETL_SQL.Services;
+
 namespace ETL_SQL.WorkstationEditor;
 
 public sealed class WorkstationWorkspace
@@ -10,7 +12,7 @@ public sealed class WorkstationWorkspace
 
     public WorkstationWorkspace(string workspaceRoot, bool readOnly)
     {
-        Root = Path.GetFullPath(workspaceRoot);
+        Root = SecurityService.ResolvePathSymlinks(Path.GetFullPath(workspaceRoot));
         ReadOnly = readOnly;
     }
 
@@ -22,7 +24,11 @@ public sealed class WorkstationWorkspace
         if (!Directory.Exists(Root))
             return [];
 
-        return Directory.EnumerateFiles(Root, "*.*", SearchOption.AllDirectories)
+        return Directory.EnumerateFiles(Root, "*.*", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            })
             .Where(IsEditableScript)
             .Select(path => new WorkspaceFileDto(ToRelativePath(path), new FileInfo(path).Length))
             .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
@@ -61,7 +67,7 @@ public sealed class WorkstationWorkspace
             throw new UnauthorizedAccessException("Absolute paths are not allowed.");
 
         var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.GetFullPath(Path.Combine(Root, normalized));
+        var fullPath = SecurityService.ResolvePathSymlinks(Path.GetFullPath(Path.Combine(Root, normalized)));
         var rootWithSeparator = Root.EndsWith(Path.DirectorySeparatorChar)
             ? Root
             : Root + Path.DirectorySeparatorChar;

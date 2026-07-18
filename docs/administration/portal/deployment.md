@@ -59,10 +59,9 @@ On first start the portal:
 3. If no `admin` user exists, creates one with username `admin`; by default it sets
    `MustChangePassword = true`. The
    temporary password comes from `Portal:FirstRun:AdminPassword` (or the `Portal__FirstRun__AdminPassword`
-   environment variable); when unset, a random password is generated and written once to the startup log
-   under the `Portal.FirstRun` category — there is no well-known default password.
+   environment variable). When unset, startup fails closed before creating the account; the Portal never
+   writes a generated administrator password to application logs.
 
 **You must log in as `admin` immediately and change the password.** The portal enforces this by default — no API calls will succeed until the password has been changed. `Portal:FirstRun:MustChangePassword=false` is intended only for disposable automation environments that generate a strong per-run admin password.
 
 ---
-

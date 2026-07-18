@@ -244,7 +244,8 @@ public class DockerContainerManager : IDockerManager
         if (alias != null && _activeContainers.TryGetValue(alias, out var container))
         {
             _logger.Warning("Pausing Docker container {Alias}.", alias);
-            await container.StopAsync(cancellationToken);
+            using var client = await CreateDockerClient(cancellationToken);
+            await client.Containers.PauseContainerAsync(container.Id, cancellationToken);
         }
     }
 
@@ -254,8 +255,17 @@ public class DockerContainerManager : IDockerManager
         if (alias != null && _activeContainers.TryGetValue(alias, out var container))
         {
             _logger.Info("Resuming Docker container {Alias}.", alias);
-            await container.StartAsync(cancellationToken);
+            using var client = await CreateDockerClient(cancellationToken);
+            await client.Containers.UnpauseContainerAsync(container.Id, cancellationToken);
         }
+    }
+
+    private async Task<DockerClient> CreateDockerClient(CancellationToken cancellationToken)
+    {
+        var uri = await GetValidDockerUri(cancellationToken);
+        return new DockerClientBuilder()
+            .WithEndpoint(uri)
+            .Build();
     }
 
     /// <summary>

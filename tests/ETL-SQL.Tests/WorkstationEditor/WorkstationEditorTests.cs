@@ -30,6 +30,31 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task Workspace_RejectsDirectorySymlinkEscape()
+    {
+        using var temp = new TempWorkspace();
+        var outside = Path.Combine(Path.GetTempPath(), $"etlsql-editor-outside-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var link = Path.Combine(temp.Root, "linked");
+            if (!TryCreateDirectorySymlink(link, outside))
+                return;
+
+            var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
+
+            Assert.Throws<UnauthorizedAccessException>(() => workspace.ResolveEditablePath("linked/escape.etlsql"));
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                workspace.WriteTextAsync("linked/escape.etlsql", "SELECT 1;", CancellationToken.None));
+            Assert.False(File.Exists(Path.Combine(outside, "escape.etlsql")));
+        }
+        finally
+        {
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task Api_RequiresSessionToken()
     {
         using var temp = new TempWorkspace();
@@ -236,6 +261,22 @@ public sealed class WorkstationEditorTests
         Assert.Empty(result!.Diagnostics);
         Assert.Contains("CREATE CONNECTION", result.Script);
         Assert.Contains("\nSELECT", result.Script);
+    }
+
+    private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+            return true;
+        }
+        catch (Exception ex) when (
+            ex is IOException ||
+            ex is UnauthorizedAccessException ||
+            ex is PlatformNotSupportedException)
+        {
+            return false;
+        }
     }
 
     [Fact]

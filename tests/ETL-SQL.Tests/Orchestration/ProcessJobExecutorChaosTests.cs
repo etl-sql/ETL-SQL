@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -19,8 +20,7 @@ public class ProcessJobExecutorChaosTests
         var tempDir = NewTempDir();
         var pidStore = Path.Combine(tempDir, "child-pids.json");
         var tracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
-        var exePath = Path.Combine(AppContext.BaseDirectory,
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL");
+        var exePath = FindAppHost();
 
         Assert.True(File.Exists(exePath), $"Expected ETL-SQL apphost at {exePath}");
 
@@ -193,7 +193,44 @@ public class ProcessJobExecutorChaosTests
             return (exe, $"/c ping -n {seconds + 1} 127.0.0.1 > nul");
         }
 
-        return ("/bin/sh", $"-c \"sleep {seconds}\"");
+        return ("/bin/sleep", seconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static string FindAppHost()
+    {
+        foreach (var dir in CandidateAppHostDirectories())
+        {
+            foreach (var name in new[] { "ETL-SQL.exe", "ETL-SQL" })
+            {
+                var candidate = Path.Combine(dir, name);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return Path.Combine(AppContext.BaseDirectory,
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL");
+    }
+
+    private static IEnumerable<string> CandidateAppHostDirectories()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            var appOutput = Path.Combine(
+                current.FullName,
+                "src",
+                "ETL-SQL.App",
+                "bin",
+                "Debug",
+                "net10.0");
+            if (Directory.Exists(appOutput))
+                yield return appOutput;
+
+            current = current.Parent;
+        }
+
+        yield return AppContext.BaseDirectory;
     }
 
     private static async Task WaitForExitAsync(Process process, int timeoutSeconds)

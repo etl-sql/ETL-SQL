@@ -283,15 +283,31 @@ public class AuthController(
         if (token.ExpiresAt <= DateTime.UtcNow)
             return Unauthorized(new { error = "Invalid or expired refresh token" });
 
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
         if (token.User is null || !token.User.IsActive)
         {
-            token.RevokedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
+            var disabledRevokedAt = DateTime.UtcNow;
+            await db.RefreshTokens
+                .Where(t => t.Id == token.Id && t.Token == tokenHash && t.RevokedAt == null)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, disabledRevokedAt));
+            await transaction.CommitAsync();
             return Unauthorized(new { error = "User account is disabled" });
         }
 
-        // Rotate: revoke old, issue new
-        token.RevokedAt = DateTime.UtcNow;
+        var revokedAt = DateTime.UtcNow;
+        var consumed = await db.RefreshTokens
+            .Where(t => t.Id == token.Id &&
+                        t.Token == tokenHash &&
+                        t.RevokedAt == null &&
+                        t.ExpiresAt > revokedAt)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, revokedAt));
+        if (consumed != 1)
+        {
+            await transaction.RollbackAsync();
+            return Unauthorized(new { error = "Invalid or expired refresh token" });
+        }
+
         var newRaw = tokenService.GenerateRefreshToken();
         db.RefreshTokens.Add(new RefreshToken
         {
@@ -300,6 +316,7 @@ public class AuthController(
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
         });
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         var user = token.User;
         var roles = await userManager.GetRolesAsync(user);

@@ -61,7 +61,9 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     public async Task<(IEnumerable<Dictionary<string, object?>> rows, List<DatasetColumnDto> columns)> PrepareExportAsync(
         int id, string? sort, string? dir, string? search, IEnumerable<DatasetColumnFilterDto> filters)
     {
-        var (rows, columns) = await LoadCachedAsync(id);
+        var dataset = await LoadDatasetAsync(id);
+        var columns = ParseColumnSchema(dataset.ColumnSchema);
+        var rows = await LoadRowsAsync(dataset, columns, maxRows: null);
         var filtered = Apply(rows, columns, search, filters);
 
         if (!string.IsNullOrWhiteSpace(sort) && columns.Any(c => c.Name.Equals(sort, StringComparison.OrdinalIgnoreCase)))
@@ -143,23 +145,35 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
     private async Task<(List<Dictionary<string, object?>> rows, List<DatasetColumnDto> columns)> LoadCachedAsync(int id)
     {
-        string cacheKey = $"dsv:{id}";
+        var dataset = await LoadDatasetAsync(id);
+        var columns = ParseColumnSchema(dataset.ColumnSchema);
+        string cacheKey = DatasetCacheKey(dataset);
 
-        if (cache.TryGetValue(cacheKey, out (List<Dictionary<string, object?>> rows, List<DatasetColumnDto> columns) cached))
+        if (cache.TryGetValue(cacheKey, out (List<Dictionary<string, object?>> Rows, List<DatasetColumnDto> Columns) cached))
             return cached;
 
+        var previewRows = await LoadRowsAsync(dataset, columns, config.MaxPreviewRows);
+        var result = (previewRows, columns);
+        cache.Set(cacheKey, result, CacheOptions);
+        return result;
+    }
+
+    private async Task<Dataset> LoadDatasetAsync(int id)
+    {
         var dataset = await db.Datasets.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
             ?? throw new InvalidOperationException($"Dataset {id} not found.");
 
         if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath) || !File.Exists(dataset.ParquetFilePath))
             throw new InvalidOperationException($"Parquet file for dataset '{dataset.Name}' is not available.");
 
-        var columns = ParseColumnSchema(dataset.ColumnSchema);
+        return dataset;
+    }
 
-        // How the at-rest cache is encrypted is decided by config (the same authority the engine writes
-        // by), NOT by Dataset.EncryptionMode — that field records the CREATE transport clause, which 1e/2c
-        // made irrelevant at rest. When a portal at-rest key is configured every cache is encrypted with
-        // it; otherwise the stored mode applies (MachineBound → MACHINE, None → plaintext).
+    private async Task<List<Dictionary<string, object?>>> LoadRowsAsync(
+        Dataset dataset,
+        List<DatasetColumnDto> columns,
+        int? maxRows)
+    {
         var atRestDecryptOptions = ResolveAtRestDecryptOptions(dataset);
 
         string effectivePath = dataset.ParquetFilePath;
@@ -184,7 +198,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         List<Dictionary<string, object?>> rows;
         try
         {
-            rows = await ReadParquetAsync(effectivePath, columns, config.MaxPreviewRows);
+            rows = await ReadParquetAsync(effectivePath, columns, maxRows);
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
@@ -195,9 +209,21 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
         }
 
-        var result = (rows, columns);
-        cache.Set(cacheKey, result, CacheOptions);
-        return result;
+        return rows;
+    }
+
+    private static string DatasetCacheKey(Dataset dataset)
+    {
+        var identity = string.Join(
+            "|",
+            dataset.Id,
+            dataset.Version,
+            dataset.RowCount,
+            dataset.UpdatedAt.Ticks,
+            dataset.LastRefresh?.Ticks ?? 0,
+            dataset.AtRestKeyVersion ?? string.Empty,
+            dataset.ParquetFilePath);
+        return $"dsv:{Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(identity)))}";
     }
 
     // Returns the EncryptionOptions dictionary needed to decrypt the at-rest cache, or null when the
@@ -237,7 +263,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     }
 
     private static async Task<List<Dictionary<string, object?>>> ReadParquetAsync(
-        string filePath, List<DatasetColumnDto> columns, int maxRows)
+        string filePath, List<DatasetColumnDto> columns, int? maxRows)
     {
         var rows = new List<Dictionary<string, object?>>();
 
@@ -267,7 +293,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
             for (int r = 0; r < rowCount; r++)
             {
-                if (rows.Count >= maxRows)
+                if (maxRows is { } limit && rows.Count >= limit)
                     break;
 
                 var row = new Dictionary<string, object?>(dataFields.Length, StringComparer.OrdinalIgnoreCase);
@@ -278,7 +304,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
                 rows.Add(row);
             }
 
-            if (rows.Count >= maxRows)
+            if (maxRows is { } rowLimit && rows.Count >= rowLimit)
                 break;
         }
 

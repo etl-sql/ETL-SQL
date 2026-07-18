@@ -11,10 +11,9 @@ To get the Portal running in under 5 minutes:
 5. **Admin Login**:
    - URL: `http://localhost:5000`
    - User: `admin`
-   - Temp Password: the value of `Portal__FirstRun__AdminPassword` if you configured one; otherwise a
-     randomly generated password printed once to the startup log (look for the `Portal.FirstRun` category).
+   - Temp Password: the value of `Portal__FirstRun__AdminPassword`. The Portal will not create the
+     first-run admin account until this bootstrap secret is configured.
 6. **Secure Account**: Change the admin password immediately upon first login.
 7. **Publish**: Go to **Admin -> Folders**, click **Publish Report**, and point to a `.rptsql` file.
 
 ---
-

@@ -942,36 +942,25 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
             IsActive = true,
             MustChangePassword = config.FirstRun.MustChangePassword
         };
-        // Temporary password — must be changed on first login. No hardcoded default: either the
-        // operator supplies Portal:FirstRun:AdminPassword or a random one is generated and logged once.
         var password = config.FirstRun.AdminPassword;
-        var generated = string.IsNullOrWhiteSpace(password);
-        if (generated)
-            password = GenerateInitialAdminPassword();
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException(
+                "Portal first-run admin password is not configured. Set Portal:FirstRun:AdminPassword " +
+                "or Portal__FirstRun__AdminPassword before starting an empty Portal database.");
+        }
 
-        var result = await userMgr.CreateAsync(admin, password!);
+        var result = await userMgr.CreateAsync(admin, password);
         if (result.Succeeded)
         {
             await userMgr.AddToRoleAsync(admin, "Admin");
-            if (generated)
-            {
-                services.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("Portal.FirstRun")
-                    .LogWarning(
-                        "First-run admin account '{User}' created with generated password: {Password} — " +
-                        "log in and change it now, or set Portal:FirstRun:AdminPassword before first start.",
-                        adminUsername, password);
-            }
+            services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Portal.FirstRun")
+                .LogWarning(
+                    "First-run admin account '{User}' created. Log in with the configured bootstrap password and change it now.",
+                    adminUsername);
         }
     }
-}
-
-static string GenerateInitialAdminPassword()
-{
-    // Fixed prefix deterministically satisfies the Identity policy (upper/lower/digit/length);
-    // all entropy lives in the random suffix.
-    return "Aa1!" + Convert.ToBase64String(
-        System.Security.Cryptography.RandomNumberGenerator.GetBytes(18));
 }
 
 static string? FindRepoFile(string fileName)

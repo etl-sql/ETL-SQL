@@ -31,10 +31,8 @@ the remaining gap is infrastructure coverage.
 Collect release-suite evidence before publishing v0.16.0. The detailed evidence packet template is
 [`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
 
-- [ ] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
-      An earlier run passed on 2026-07-18, but the fresh-eyes review rerun failed consistently in
-      `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`;
-      see the P1 warm-runner finding below.
+- [x] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
+      Passed on 2026-07-18 after the warm-runner apphost fix: 5,164 passed, 5 skipped, 0 failed.
 - [ ] Full pre-release lane:
       `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
 - [ ] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
@@ -89,48 +87,70 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
 
 ### Security and correctness
 
-- [ ] **P1 - Close symlink and reparse-point escapes in artifact and workstation roots.**
+- [x] **P1 - Close symlink and reparse-point escapes in artifact and workstation roots.**
       `FileSystemArtifactStorage.Resolve` and `WorkstationWorkspace.ResolveEditablePath` enforce only
       lexical `GetFullPath` containment, so a symlink or junction below an allowed root can redirect
       reads, writes, deletes, moves, or editor saves outside that root. Reuse canonical-path and
       handle-verification protection from the engine filesystem policy, reject unsafe recursive
       traversal, and add Linux symlink plus Windows junction/reparse tests.
-- [ ] **P1 - Make refresh-token consumption atomic and index token hashes.**
+      Fixed on 2026-07-18 by canonicalizing storage/workstation roots and resolved paths through
+      `SecurityService.ResolvePathSymlinks`, skipping reparse points during workstation recursion, and
+      adding directory-symlink escape regressions. Validated with
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedName~FileSystemArtifactStorageTests|FullyQualifiedName~WorkstationEditorTests" --no-restore -m:1`.
+- [x] **P1 - Make refresh-token consumption atomic and index token hashes.**
       `AuthController.Refresh` reads an unrevoked token, revokes it, and inserts its successor without
       a transaction, concurrency token, or conditional update. Concurrent requests can therefore mint
       multiple valid successors. Add a unique token-hash index and an atomic compare-and-set rotation;
       prove one-time use with concurrent SQLite and PostgreSQL tests.
-- [ ] **P1 - Stop writing generated first-run administrator passwords to persistent logs.**
+      Fixed on 2026-07-18 with conditional database update rotation, SQLite/PostgreSQL unique token-hash
+      migrations, and concurrent refresh-token reuse coverage. Validated with
+      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter "FullyQualifiedName~AuthSessionInvalidationTests" --no-restore -m:1`.
+- [x] **P1 - Stop writing generated first-run administrator passwords to persistent logs.**
       `ETL-SQL.Portal/Program.cs` sends the plaintext generated password through structured
       `LogWarning`, exposing a live credential to file sinks and log collectors. Replace this with an
       explicit bootstrap secret or a protected one-time handoff that never enters application logs,
       and update the quick-start documentation.
-- [ ] **P1 - Export complete datasets instead of exporting the preview cache.**
+      Fixed on 2026-07-18 by requiring the explicit first-run bootstrap password and failing closed when
+      it is absent; startup now logs only that the account was created. Quick-start, deployment,
+      production-readiness, and config-reference docs were updated.
+- [x] **P1 - Export complete datasets instead of exporting the preview cache.**
       `DatasetViewerService.PrepareExportAsync` calls `LoadCachedAsync`, which reads only
       `Portal:MaxPreviewRows`; CSV and XLSX exports are silently truncated at the preview limit. Stream
       all Parquet row groups through a cancellation-aware export path and add coverage with more rows
       than the configured preview maximum.
+      Fixed on 2026-07-18 by making exports read all dataset rows outside the preview cache and adding
+      coverage with more rows than `Portal:MaxPreviewRows`. Validated with
+      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter "FullyQualifiedName~DatasetViewerServiceTests" --no-restore -m:1`.
 - [ ] **P1 - Bound and invalidate the dataset preview cache.** `DatasetViewerService` caches as many as
       50,000 row dictionaries per dataset in an application-wide `IMemoryCache` with sliding expiry,
       no size accounting, and no invalidation on refresh or replacement. Add a global memory budget and
       entry weights, use dataset version/content identity in keys, and invalidate mutations so active
       users cannot receive stale rows indefinitely.
+      Content-identity invalidation was added on 2026-07-18 using dataset version, row count, timestamps,
+      at-rest key version, and parquet path in preview cache keys. Remaining work: add explicit cache
+      size accounting/global memory budget.
 - [ ] **P1 - Restore actual Docker pause/resume semantics.**
       `DockerContainerManager.PauseContainer` calls `StopAsync` and `ResumeContainer` calls
       `StartAsync`, contradicting the documented CPU-suspension behavior and changing container state.
       Use the provider's pause/unpause API and add integration tests that distinguish paused from
       stopped containers.
+      Implementation switched to Docker pause/unpause APIs on 2026-07-18 and builds cleanly. Remaining
+      work: add Docker integration coverage that asserts paused vs stopped container state.
 - [ ] **P1 - Propagate cancellation through data-source contracts and provider I/O.** Core
       `IDataSource`/`IDatabaseSource` batch, schema, transaction, and raw-SQL methods lack cancellation
       tokens, and SQL/MongoDB implementations call async open/read/write APIs without tokens. Extend the
       contracts and async enumerators, pass execution cancellation to every provider call, and add
       cancellation tests for each connector family so timeout and shutdown requests stop remote I/O.
-- [ ] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
+- [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because
       `Microsoft.Extensions.DependencyInjection.Abstractions` is missing. Run the test against a
       complete app build/publish output, and include sanitized captured stderr in
       `ProcessJobExecutor` failure results instead of returning only stdout.
+      Fixed on 2026-07-18 by resolving the complete app build output for the warm-runner test and
+      including sanitized stderr in process failure results. Validated with
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedName~ProcessJobExecutorChaosTests" --no-restore -m:1`
+      and the passing fast lane above.
 
 ### Performance, observability, and quality gates
 
@@ -174,3 +194,8 @@ Moved from `ROADMAP.md` Phase 2 on 2026-07-18.
       the shared CodeMirror completion flow.
 - [ ] **Browser smoke coverage:** add a browser-level test for opening a workspace, editing text, seeing
       diagnostics, saving, and previewing a simple report.
+- [ ] **When the query is ran:**  The screen jumps down about 100 lines and prints off all the results rather than just showing them in batches.
+      The results should stay on the screen and not cause the big jump, and should only render what fits on the screen.  Then the user scrolls to see
+      the results with the scrollbar.
+- [ ] **Tooltip too big:**  The tooltip is rendering the Markup exactly as it is which is fine but it would be better if it was smaller.
+      Can it have a more command line document feel with colors and keep the font small so more of the document fits the tooltip window.

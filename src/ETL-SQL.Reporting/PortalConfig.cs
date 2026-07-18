@@ -587,8 +587,8 @@ public class FirstRunConfig
     public bool MustChangePassword { get; set; } = true;
 
     /// <summary>
-    /// Initial password for the seeded admin account. When unset, a random password is generated
-    /// at first run and written once to the startup log — there is no well-known default.
+    /// Initial password for the seeded admin account. Required before first startup when the
+    /// Portal database has no users; remove it from configuration after changing the password.
     /// </summary>
     public string? AdminPassword { get; set; }
 }

@@ -151,6 +151,31 @@ public class AuthSessionInvalidationTests
     }
 
     [Fact]
+    public async Task RefreshToken_ConcurrentReuse_MintsAtMostOneSuccessor()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var (userId, _, _, refreshToken) = await CreateReadyUserAsync(
+            client, adminToken, role: "Viewer");
+
+        var attempts = Enumerable.Range(0, 8)
+            .Select(_ => client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken }))
+            .ToArray();
+        var responses = await Task.WhenAll(attempts);
+
+        Assert.Equal(1, responses.Count(response => response.StatusCode == HttpStatusCode.OK));
+        Assert.Equal(7, responses.Count(response => response.StatusCode == HttpStatusCode.Unauthorized));
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var activeTokens = await db.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAt == null)
+            .CountAsync();
+        Assert.InRange(activeTokens, 0, 1);
+    }
+
+    [Fact]
     public async Task Logout_InvalidatesAllIssuedTokensForCurrentUser()
     {
         using var factory = new PortalWebFactory();

@@ -94,6 +94,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<RefreshToken>(e =>
         {
+            e.HasIndex(x => x.Token).IsUnique();
             e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
         });
 

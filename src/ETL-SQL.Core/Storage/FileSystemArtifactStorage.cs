@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Core.Storage;
 
@@ -29,7 +30,8 @@ public class FileSystemArtifactStorage : IArtifactStorage
         {
             if (string.IsNullOrWhiteSpace(root))
                 throw new ArgumentException($"Root for area '{area}' must not be empty.", nameof(roots));
-            resolved[area] = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            resolved[area] = Path.TrimEndingDirectorySeparator(
+                SecurityService.ResolvePathSymlinks(Path.GetFullPath(root)));
         }
         _roots = resolved;
     }
@@ -153,7 +155,7 @@ public class FileSystemArtifactStorage : IArtifactStorage
     {
         var root = Root(area);
         var normalized = ArtifactPath.Normalize(path);
-        var full = Path.GetFullPath(Path.Combine(root, normalized));
+        var full = SecurityService.ResolvePathSymlinks(Path.GetFullPath(Path.Combine(root, normalized)));
         // Defense in depth: ArtifactPath already rejected traversal, but re-verify the resolved path so
         // a symlink or odd normalization can never land outside the area root.
         if (!SafePath.IsWithinRoot(root, full))

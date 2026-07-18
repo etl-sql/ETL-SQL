@@ -209,7 +209,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     _logger.LogInformation("Job process PID={Pid} stderr (exit 0): {Stderr}", process.Id, stderr.ToString().Trim());
             }
 
-            return ParseResult(exitCode, stdout.ToString(), peakMemory, cpuSeconds);
+            return ParseResult(exitCode, stdout.ToString(), stderr.ToString(), peakMemory, cpuSeconds);
         }
 
         private async Task<ScriptExecutionResult> RunWarmProcessAsync(
@@ -250,7 +250,7 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private ScriptExecutionResult ParseResult(int exitCode, string stdout, long peakMemory, double cpuSeconds)
+        private ScriptExecutionResult ParseResult(int exitCode, string stdout, string stderr, long peakMemory, double cpuSeconds)
         {
             // ETL-SQL.exe with --json writes a JSON envelope as the LAST non-empty line
             var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -293,9 +293,18 @@ namespace ETL_SQL.Orchestrator.Execution
             }
 
             // No parseable JSON envelope — fall back to exit code
-            return exitCode == 0
-                ? new ScriptExecutionResult(true, 0, null, peakMemory, cpuSeconds)
-                : new ScriptExecutionResult(false, 0, $"Process exited with code {exitCode}. Stdout: {stdout.Trim()}", peakMemory, cpuSeconds);
+            if (exitCode == 0)
+                return new ScriptExecutionResult(true, 0, null, peakMemory, cpuSeconds);
+
+            var stdoutText = LogSanitizer.Clean(stdout.Trim());
+            var stderrText = LogSanitizer.Clean(stderr.Trim());
+            var message = new StringBuilder($"Process exited with code {exitCode}.");
+            if (!string.IsNullOrWhiteSpace(stdoutText))
+                message.Append(" Stdout: ").Append(stdoutText);
+            if (!string.IsNullOrWhiteSpace(stderrText))
+                message.Append(" Stderr: ").Append(stderrText);
+
+            return new ScriptExecutionResult(false, 0, message.ToString(), peakMemory, cpuSeconds);
         }
 
         private string ResolveExecutablePath()
@@ -479,12 +488,15 @@ namespace ETL_SQL.Orchestrator.Execution
 
         private readonly Process _process;
         private readonly ILogger _logger;
+        private readonly StringBuilder _stderr = new();
         private bool _killed;
 
-        private WarmRunnerClient(Process process, ILogger logger)
+        private WarmRunnerClient(Process process, ILogger logger, StringBuilder? stderr = null)
         {
             _process = process;
             _logger = logger;
+            if (stderr != null)
+                _stderr.Append(stderr.ToString());
         }
 
         public int ProcessId => _process.Id;
@@ -504,10 +516,15 @@ namespace ETL_SQL.Orchestrator.Execution
             psi.ArgumentList.Add("runner");
 
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            var stderr = new StringBuilder();
             process.ErrorDataReceived += (_, e) =>
             {
-                if (!string.IsNullOrWhiteSpace(e.Data))
-                    logger.LogDebug("Warm runner PID={Pid} stderr: {Line}", SafeProcessId(process), LogSanitizer.Clean(e.Data));
+                if (string.IsNullOrWhiteSpace(e.Data))
+                    return;
+
+                var clean = LogSanitizer.Clean(e.Data);
+                stderr.AppendLine(clean);
+                logger.LogDebug("Warm runner PID={Pid} stderr: {Line}", SafeProcessId(process), clean);
             };
 
             process.Start();
@@ -519,7 +536,12 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 var line = await process.StandardOutput.ReadLineAsync(startupCts.Token);
                 if (line == null)
-                    throw new InvalidOperationException("Warm runner exited before ready handshake.");
+                {
+                    var detail = stderr.Length == 0
+                        ? string.Empty
+                        : $" Stderr: {stderr.ToString().Trim()}";
+                    throw new InvalidOperationException($"Warm runner exited before ready handshake.{detail}");
+                }
 
                 using var doc = JsonDocument.Parse(line);
                 var root = doc.RootElement;
@@ -527,7 +549,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     string.Equals(type.GetString(), "ready", StringComparison.OrdinalIgnoreCase))
                 {
                     logger.LogInformation("Warm job runner PID={Pid} is ready.", process.Id);
-                    return new WarmRunnerClient(process, logger);
+                    return new WarmRunnerClient(process, logger, stderr);
                 }
             }
         }
@@ -545,7 +567,12 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 var line = await _process.StandardOutput.ReadLineAsync(ct);
                 if (line == null)
-                    throw new InvalidOperationException("Warm runner exited before returning a result.");
+                {
+                    var detail = _stderr.Length == 0
+                        ? string.Empty
+                        : $" Stderr: {_stderr.ToString().Trim()}";
+                    throw new InvalidOperationException($"Warm runner exited before returning a result.{detail}");
+                }
 
                 WarmRunnerResponse? response;
                 try
