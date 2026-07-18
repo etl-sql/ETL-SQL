@@ -120,7 +120,10 @@ public class DataSourceCancellationTests
         {
             typeof(SqliteDataSource),
             typeof(SqlServerDataSource),
-            typeof(PostgresDataSource)
+            typeof(PostgresDataSource),
+            typeof(MySqlDataSource),
+            typeof(OdbcDataSource),
+            typeof(OracleDataSource)
         })
         {
             AssertDeclares(providerType, nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));

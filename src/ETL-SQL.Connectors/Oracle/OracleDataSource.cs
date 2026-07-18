@@ -285,20 +285,27 @@ namespace ETL_SQL.Connectors.Oracle
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName)) return Task.FromResult(Enumerable.Empty<string>());
-            return GetColumnsAsync(_tableName);
+            return GetColumnsAsync(_tableName, cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
-                using var conn = await OpenConnectionAsync();
+                using var conn = await OpenConnectionAsync(effectiveCancellationToken);
                 using var cmd = CreateCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var tables = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var owner = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -312,15 +319,19 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
-                using var conn = await OpenConnectionAsync();
+                using var conn = await OpenConnectionAsync(effectiveCancellationToken);
                 using var cmd = CreateCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var views = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var owner = reader.GetString(0);
                     var view = reader.GetString(1);
@@ -334,13 +345,17 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
-                using var conn = await OpenConnectionAsync();
+                using var conn = await OpenConnectionAsync(effectiveCancellationToken);
                 using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {

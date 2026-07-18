@@ -283,22 +283,31 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
-            return await GetColumnsAsync(_tableName);
+            return await GetColumnsAsync(_tableName, cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var tables = new List<string>();
                 using var schemaTable = conn.GetSchema("Tables");
                 foreach (System.Data.DataRow row in schemaTable.Rows)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var table = row["TABLE_NAME"].ToString();
                     if (!string.IsNullOrEmpty(table)) tables.Add(table);
                 }
@@ -314,16 +323,22 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var views = new List<string>();
                 using var schemaTable = conn.GetSchema("Views");
                 foreach (System.Data.DataRow row in schemaTable.Rows)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var view = row["TABLE_NAME"].ToString();
                     if (!string.IsNullOrEmpty(view)) views.Add(view);
                 }
@@ -339,15 +354,19 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 var columns = new List<string>();
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(tableName)} WHERE 1=0", conn);
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
                     columns.Add(reader.GetName(i));

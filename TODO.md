@@ -219,6 +219,13 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: provider-native schema/introspection overrides for the other database, warehouse,
       graph, document, and file connector families.
+      Additional progress on 2026-07-18: added native cancellation-aware schema/introspection overrides
+      for MySQL/MariaDB, ODBC, and Oracle. MySQL and Oracle pass tokens through async open, execute,
+      and reader loops; ODBC uses token-aware connection/query paths where available and explicit
+      checkpoints around synchronous driver schema APIs. Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1`
+      and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: provider-native schema/introspection overrides for warehouse, graph, document,
+      and file connector families.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

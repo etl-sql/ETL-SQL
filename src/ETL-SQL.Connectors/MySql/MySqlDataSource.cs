@@ -297,16 +297,20 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
 
             try
             {
                 await using var conn = new MySqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
@@ -320,19 +324,23 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 var connBuilder = new MySqlConnectionStringBuilder(_connectionString);
                 var defaultDb = connBuilder.Database;
 
                 await using var conn = new MySqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') AND TABLE_TYPE = 'BASE TABLE'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var tables = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -346,19 +354,23 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 var connBuilder = new MySqlConnectionStringBuilder(_connectionString);
                 var defaultDb = connBuilder.Database;
 
                 await using var conn = new MySqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys') AND TABLE_TYPE = 'VIEW'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var views = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -372,14 +384,18 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 await using var conn = new MySqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
