@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.BigQuery;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.MySql;
@@ -16,6 +17,7 @@ using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Connectors.Snowflake;
 using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Data;
 using Xunit;
@@ -121,6 +123,31 @@ public class DataSourceCancellationTests
             typeof(string),
             typeof(IEnumerable<object?>),
             typeof(CancellationToken));
+    }
+
+    [Fact]
+    public void WarehouseDataSources_DeclareNativeCancellationOverloads()
+    {
+        foreach (var providerType in new[]
+        {
+            typeof(BigQueryDataSource),
+            typeof(SnowflakeDataSource)
+        })
+        {
+            AssertDeclares(providerType, nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+            AssertDeclares(
+                providerType,
+                nameof(IDataSource.WriteBatches),
+                typeof(IAsyncEnumerable<DataTable>),
+                typeof(bool),
+                typeof(CancellationToken));
+            AssertDeclares(
+                providerType,
+                nameof(IDatabaseSource.ExecuteRawSql),
+                typeof(string),
+                typeof(IEnumerable<object?>),
+                typeof(CancellationToken));
+        }
     }
 
     [Fact]

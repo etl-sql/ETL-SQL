@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -85,8 +87,14 @@ namespace ETL_SQL.Connectors.BigQuery
 
         public HashSet<string> GetSupportedFunctions() => BigQuerySyntax.Functions;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for BigQuery data source read.");
 
@@ -100,7 +108,7 @@ namespace ETL_SQL.Connectors.BigQuery
                         results = await client.ExecuteQueryAsync(
                             $"SELECT * FROM {QuoteIdentifier(_tableName)}",
                             null, BuildQueryOptions(), BuildResultsOptions(), ct);
-                    });
+                    }, effectiveCancellationToken);
             }
             catch (Google.GoogleApiException ex)
             {
@@ -113,6 +121,7 @@ namespace ETL_SQL.Connectors.BigQuery
 
             foreach (BigQueryRow row in results)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var r = batch.NewRow();
                 for (int i = 0; i < fieldNames.Count; i++)
                     r[i] = row[fieldNames[i]];
@@ -128,14 +137,18 @@ namespace ETL_SQL.Connectors.BigQuery
             if (batch.Rows.Count > 0) yield return batch;
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for BigQuery data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
             var (_, ds, table) = ParseTableName(_tableName);
             var datasetId = ds ?? _dataset
@@ -144,8 +157,9 @@ namespace ETL_SQL.Connectors.BigQuery
             var client = await CreateClientAsync();
             try
             {
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (batch.Rows.Count == 0) continue;
 
                     var rows = batch.Rows.Select(row =>
@@ -163,7 +177,7 @@ namespace ETL_SQL.Connectors.BigQuery
                         .ExecuteAsync(async ct =>
                         {
                             await client.InsertRowsAsync(datasetId, table, rows, null, ct);
-                        });
+                        }, effectiveCancellationToken);
                 }
             }
             catch (Google.GoogleApiException ex)
@@ -172,8 +186,15 @@ namespace ETL_SQL.Connectors.BigQuery
             }
         }
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var client = await CreateClientAsync();
             var bqParams = BuildParameters(parameters);
 
@@ -184,7 +205,7 @@ namespace ETL_SQL.Connectors.BigQuery
                     .ExecuteAsync(async ct =>
                     {
                         results = await client.ExecuteQueryAsync(sql, bqParams, BuildQueryOptions(), BuildResultsOptions(), ct);
-                    });
+                    }, effectiveCancellationToken);
             }
             catch (Google.GoogleApiException ex)
             {
@@ -197,6 +218,7 @@ namespace ETL_SQL.Connectors.BigQuery
 
             foreach (BigQueryRow row in results)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var r = batch.NewRow();
                 for (int i = 0; i < fieldNames.Count; i++)
                     r[i] = row[fieldNames[i]];
@@ -340,10 +362,10 @@ namespace ETL_SQL.Connectors.BigQuery
 
         private GetQueryResultsOptions BuildResultsOptions() => new() { Timeout = TimeSpan.FromSeconds(_commandTimeout) };
 
-        private async Task TruncateAsync()
+        private async Task TruncateAsync(CancellationToken cancellationToken = default)
         {
             if (_context.IsWhatIf) return;
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName!)}")) { }
+            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName!)}", null, cancellationToken).WithCancellation(cancellationToken)) { }
         }
 
         private static IEnumerable<BigQueryParameter>? BuildParameters(IEnumerable<object?>? parameters)
@@ -420,5 +442,8 @@ namespace ETL_SQL.Connectors.BigQuery
                 return $"`{p.Replace("`", "\\`")}`";
             }));
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;
     }
 }

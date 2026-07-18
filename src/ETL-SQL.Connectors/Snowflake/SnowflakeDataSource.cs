@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -126,24 +128,30 @@ namespace ETL_SQL.Connectors.Snowflake
 
         public HashSet<string> GetSupportedFunctions() => SnowflakeSyntax.Functions;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Snowflake data source read.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText = $"SELECT * FROM {QuoteIdentifier(_tableName)}";
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
                 var batch = new DataTable();
                 batch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var row = batch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -165,20 +173,25 @@ namespace ETL_SQL.Connectors.Snowflake
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Snowflake data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (batch.Rows.Count == 0) continue;
 
                     var cols = string.Join(", ", batch.ColumnNames.Select(QuoteIdentifier));
@@ -187,6 +200,7 @@ namespace ETL_SQL.Connectors.Snowflake
 
                     foreach (var row in batch.Rows)
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         using var cmd = CreateCommand(conn);
                         cmd.CommandText = sql;
                         if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
@@ -197,7 +211,7 @@ namespace ETL_SQL.Connectors.Snowflake
                             p.Value = row[batch.ColumnNames[i]] ?? DBNull.Value;
                             cmd.Parameters.Add(p);
                         }
-                        await cmd.ExecuteNonQueryAsync();
+                        await cmd.ExecuteNonQueryAsync(effectiveCancellationToken);
                     }
                 }
             }
@@ -212,14 +226,24 @@ namespace ETL_SQL.Connectors.Snowflake
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
             ConnectorExceptionWrapper.WrapAsync(
-                ExecuteRawSqlCore(sql, parameters),
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
                 "Snowflake",
                 IsSnowflakeProviderException);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
@@ -238,7 +262,7 @@ namespace ETL_SQL.Connectors.Snowflake
                     }
                 }
 
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 int resultSetIndex = 0;
                 do
@@ -247,7 +271,7 @@ namespace ETL_SQL.Connectors.Snowflake
                     var batch = new DataTable { ResultSetIndex = resultSetIndex };
                     batch.SetColumns(columns);
 
-                    while (await reader.ReadAsync())
+                    while (await reader.ReadAsync(effectiveCancellationToken))
                     {
                         var row = batch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
@@ -266,7 +290,7 @@ namespace ETL_SQL.Connectors.Snowflake
                     yield return batch;
                     resultSetIndex++;
                 }
-                while (await reader.NextResultAsync());
+                while (await reader.NextResultAsync(effectiveCancellationToken));
             }
             finally
             {
@@ -402,19 +426,19 @@ namespace ETL_SQL.Connectors.Snowflake
             _transactionalConnection = null;
         }
 
-        private async Task<(SnowflakeDbConnection conn, bool isShared)> GetConnectionAsync()
+        private async Task<(SnowflakeDbConnection conn, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             var conn = new SnowflakeDbConnection { ConnectionString = _connectionString };
             await ConnectorRetryPolicy.ForSnowflake(_logger)
-                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                .ExecuteAsync(async ct => await conn.OpenAsync(ct), cancellationToken);
             return (conn, false);
         }
 
-        private async Task TruncateAsync()
+        private async Task TruncateAsync(CancellationToken cancellationToken = default)
         {
             if (_context != null && _context.IsWhatIf) return;
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName!)}")) { }
+            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName!)}", null, cancellationToken).WithCancellation(cancellationToken)) { }
         }
 
         private System.Data.Common.DbCommand CreateCommand(SnowflakeDbConnection conn)
@@ -463,5 +487,8 @@ namespace ETL_SQL.Connectors.Snowflake
             return targetNamespace?.StartsWith("Snowflake.", StringComparison.Ordinal) == true
                 || ex.StackTrace?.Contains("Snowflake.Data.", StringComparison.Ordinal) == true;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }
