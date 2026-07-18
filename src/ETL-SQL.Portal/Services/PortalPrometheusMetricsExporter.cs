@@ -52,6 +52,21 @@ public sealed class PortalPrometheusMetricsExporter(
             "Bytes currently used by Portal dataset storage.", metrics.DatasetStorageBytes, labels);
         AppendGauge(sb, "etlsql_portal_snapshot_storage_bytes",
             "Bytes currently used by Portal snapshot storage.", metrics.SnapshotStorageBytes, labels);
+        AppendGauge(sb, "etlsql_portal_storage_usage_sample_stale",
+            "Whether the latest Portal storage usage sample is missing or older than the freshness window.",
+            metrics.StorageUsageSampleStale ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_storage_usage_last_success_age_seconds",
+            "Seconds since the last successful Portal storage usage sample; -1 means no successful sample is known.",
+            metrics.StorageUsageLastSuccessfulSampleUtc is null
+                ? -1
+                : Math.Max(0, Math.Floor((DateTimeOffset.UtcNow - metrics.StorageUsageLastSuccessfulSampleUtc.Value).TotalSeconds)),
+            labels);
+        AppendGauge(sb, "etlsql_portal_storage_usage_last_failure_age_seconds",
+            "Seconds since the last failed Portal storage usage sample; -1 means no failed sample is known.",
+            metrics.StorageUsageLastFailureUtc is null
+                ? -1
+                : Math.Max(0, Math.Floor((DateTimeOffset.UtcNow - metrics.StorageUsageLastFailureUtc.Value).TotalSeconds)),
+            labels);
         AppendGauge(sb, "etlsql_portal_stale_snapshots",
             "Report snapshots older than the configured operational freshness objective.",
             metrics.StaleSnapshots, labels);

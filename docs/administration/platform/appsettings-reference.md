@@ -251,6 +251,9 @@ Certified topology profiles include:
 - `SessionCacheTtlMinutes` (default: `30`): TTL duration for cached interactive sessions.
 - `PersistAdHocInteractions` (default: `true`): Saves dashboard parameters on close.
 - `SnapshotRetentionPerReport` (default: `20`): Maximum history snapshots retained per visual.
+- `StorageUsageSampleIntervalSeconds` (default: `30`): Background cadence for dataset/snapshot storage usage samples.
+- `StorageUsageSampleTimeoutSeconds` (default: `10`): Per-sample timeout before retaining the previous successful storage usage values and surfacing failure telemetry.
+- `StorageUsageSampleMaxFiles` (default: `100000`): Maximum files visited per storage root sample before retaining the previous successful values and surfacing failure telemetry.
 
 ### Portal Load Balancer (`Portal:LoadBalancer`)
 - `SessionAffinityEnabled` (default: `true`): Emits a cookie indicating target node.

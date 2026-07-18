@@ -215,6 +215,9 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(2, m.RecentDeliveryFailures);    // Failed + Denied
         Assert.Equal(1024, m.DatasetStorageBytes);
         Assert.Equal(256, m.SnapshotStorageBytes);
+        Assert.False(m.StorageUsageSampleStale);
+        Assert.Null(m.StorageUsageLastSuccessfulSampleUtc);
+        Assert.Null(m.StorageUsageLastFailureUtc);
         Assert.Equal(1, m.StaleSnapshots);
         Assert.Equal(1, m.StaleDatasets);
         Assert.Equal(1, m.ActivePolicyVersionsExpiring);
@@ -241,6 +244,9 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("# TYPE etlsql_portal_execution_active gauge", prometheus);
         Assert.Contains("etlsql_portal_execution_queued", prometheus);
         Assert.Contains("etlsql_portal_dataset_storage_bytes", prometheus);
+        Assert.Contains("etlsql_portal_storage_usage_sample_stale", prometheus);
+        Assert.Contains("etlsql_portal_storage_usage_last_success_age_seconds", prometheus);
+        Assert.Contains("etlsql_portal_storage_usage_last_failure_age_seconds", prometheus);
         Assert.Contains("etlsql_portal_stale_snapshots", prometheus);
         Assert.Contains("etlsql_portal_stale_datasets", prometheus);
         Assert.Contains("etlsql_portal_policy_versions_expiring", prometheus);
@@ -262,6 +268,72 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains($"node=\"{node.NodeId}\"", prometheus);
         Assert.DoesNotContain(datasetDir, prometheus);
         Assert.DoesNotContain(snapshotDir, prometheus);
+    }
+
+    [Fact]
+    public async Task StorageUsageSampler_RetainsLastSuccessfulValuesAfterBoundedFailure()
+    {
+        var datasetDir = Path.Combine(_root, "sample-datasets");
+        var snapshotDir = Path.Combine(_root, "sample-snapshots");
+        Directory.CreateDirectory(datasetDir);
+        Directory.CreateDirectory(snapshotDir);
+        await File.WriteAllBytesAsync(Path.Combine(datasetDir, "a.bin"), new byte[128]);
+        await File.WriteAllBytesAsync(Path.Combine(datasetDir, "b.bin"), new byte[256]);
+        await File.WriteAllBytesAsync(Path.Combine(snapshotDir, "snapshot.bin"), new byte[64]);
+
+        var config = new PortalConfig
+        {
+            DatasetRootPath = datasetDir,
+            SnapshotDirectory = snapshotDir,
+            Resources = new ResourcesConfig
+            {
+                StorageUsageSampleIntervalSeconds = 30,
+                StorageUsageSampleTimeoutSeconds = 5,
+                StorageUsageSampleMaxFiles = 10
+            }
+        };
+        var sampler = new PortalStorageUsageSampler(config, NullLogger<PortalStorageUsageSampler>.Instance);
+
+        await sampler.SampleOnceAsync(CancellationToken.None);
+
+        Assert.Equal(384, sampler.DatasetStorageBytes);
+        Assert.Equal(64, sampler.SnapshotStorageBytes);
+        Assert.NotNull(sampler.LastSuccessfulSampleUtc);
+        Assert.Null(sampler.LastFailureUtc);
+        Assert.False(sampler.IsStale);
+
+        config.Resources.StorageUsageSampleMaxFiles = 1;
+        await sampler.SampleOnceAsync(CancellationToken.None);
+
+        Assert.Equal(384, sampler.DatasetStorageBytes);
+        Assert.Equal(64, sampler.SnapshotStorageBytes);
+        Assert.NotNull(sampler.LastFailureUtc);
+        Assert.Contains("file limit", sampler.LastFailureMessage);
+    }
+
+    [Fact]
+    public async Task StorageUsageMeasurement_HonorsFileLimitAndCancellation()
+    {
+        var dir = Path.Combine(_root, "measurement");
+        Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(Path.Combine(dir, "one.bin"), new byte[10]);
+        await File.WriteAllBytesAsync(Path.Combine(dir, "two.bin"), new byte[20]);
+
+        var complete = PortalStorageUsageSampler.MeasureDirectoryDetailed(dir, maxFiles: 10, CancellationToken.None);
+        Assert.True(complete.IsComplete);
+        Assert.Equal(30, complete.Bytes);
+        Assert.Equal(2, complete.FilesVisited);
+        Assert.Null(complete.Error);
+
+        var bounded = PortalStorageUsageSampler.MeasureDirectoryDetailed(dir, maxFiles: 1, CancellationToken.None);
+        Assert.False(bounded.IsComplete);
+        Assert.Equal(1, bounded.FilesVisited);
+        Assert.Contains("file limit", bounded.Error);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        Assert.Throws<OperationCanceledException>(() =>
+            PortalStorageUsageSampler.MeasureDirectoryDetailed(dir, maxFiles: 10, cts.Token));
     }
 
     [Fact]

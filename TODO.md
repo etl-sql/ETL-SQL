@@ -161,11 +161,16 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
 
 ### Performance, observability, and quality gates
 
-- [ ] **P2 - Make shared-storage usage sampling bounded and observable.**
+- [x] **P2 - Make shared-storage usage sampling bounded and observable.**
       `PortalStorageUsageSampler` recursively enumerates every dataset and snapshot file every 30
       seconds on every Portal node, cannot cancel an in-progress enumeration, and converts all failures
       to a false zero-byte reading without logging. Use incremental or leader-only sampling with a
       configurable cadence, retain the last successful value, and expose failure/staleness telemetry.
+      Completed on 2026-07-18 by adding configurable cadence, timeout, and file-count limits; retaining
+      the last successful byte counts on bounded failures; logging sampler failures; and exposing
+      staleness plus last-success/last-failure telemetry in admin and Prometheus metrics.
+      Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter FullyQualifiedName~OperationalObservabilityTests --no-restore -m:1`.
 - [ ] **P2 - Close frontend build and lint gaps in CI and pre-release scripts.** The extension lint
       currently reports 50 warnings while still succeeding, and automation installs/builds only
       `src/etl-sql-vscode`; the separate `ui` package is audited but never installed, built, linted, or

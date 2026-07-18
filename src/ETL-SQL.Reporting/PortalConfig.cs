@@ -568,6 +568,15 @@ public class ResourcesConfig
     /// <summary>Newest snapshots kept per report; older rows and their manifest files are
     /// pruned after each successful execution. Minimum effective value is 1.</summary>
     public int SnapshotRetentionPerReport { get; set; } = 20;
+
+    /// <summary>Seconds between Portal dataset/snapshot storage usage samples. Minimum effective value is 1.</summary>
+    public int StorageUsageSampleIntervalSeconds { get; set; } = 30;
+
+    /// <summary>Maximum seconds spent sampling each storage root before the previous successful value is retained. Minimum effective value is 1.</summary>
+    public int StorageUsageSampleTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>Maximum files visited per storage root sample before the previous successful value is retained. Minimum effective value is 1.</summary>
+    public int StorageUsageSampleMaxFiles { get; set; } = 100000;
 }
 
 public class JwtConfig

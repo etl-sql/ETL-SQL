@@ -38,7 +38,10 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "ExecutionTimeoutSeconds":       300,
       "SessionCacheMaxSize":           50,
       "SessionCacheTtlMinutes":        30,
-      "SnapshotRetentionPerReport":    20
+      "SnapshotRetentionPerReport":    20,
+      "StorageUsageSampleIntervalSeconds": 30,
+      "StorageUsageSampleTimeoutSeconds": 10,
+      "StorageUsageSampleMaxFiles": 100000
     },
     "LoadBalancer": {
       "SessionAffinityEnabled":       true,
@@ -144,6 +147,9 @@ node heartbeat services remain active in both profiles.
 | `Resources.SessionCacheMaxSize` | `50` | Maximum number of in-memory execution sessions cached for result streaming. |
 | `Resources.SessionCacheTtlMinutes` | `30` | How long an idle session is kept before eviction. |
 | `Resources.SnapshotRetentionPerReport` | `20` | Newest snapshots kept per report. After each successful execution, older snapshot rows and their manifest files are pruned (minimum effective value is 1). |
+| `Resources.StorageUsageSampleIntervalSeconds` | `30` | Background cadence for dataset/snapshot storage usage samples. Minimum effective value is 1 second. |
+| `Resources.StorageUsageSampleTimeoutSeconds` | `10` | Per-sample timeout before the previous successful storage usage values are retained and failure telemetry is exposed. Minimum effective value is 1 second. |
+| `Resources.StorageUsageSampleMaxFiles` | `100000` | Maximum files visited per storage root sample before the previous successful values are retained and failure telemetry is exposed. Minimum effective value is 1 file. |
 | `LoadBalancer.SessionAffinityEnabled` | `true` | Emits a sticky-session cookie for load balancers. Keep enabled for multi-node deployments because interactive report sessions are process-local. |
 | `LoadBalancer.SessionAffinityCookieName` | `ETLSQL_PORTAL_AFFINITY` | Cookie name load balancers should use for Portal node affinity. |
 | `LoadBalancer.SessionAffinityCookieMinutes` | `480` | Sticky-session cookie lifetime in minutes. |
