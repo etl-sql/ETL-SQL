@@ -56,29 +56,6 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 
 ---
 
-## v0.16.0 Sprint Code Review
-
-Findings from the 2026-07-15 review of `v0.15.0..HEAD` and the in-progress Portal editor work.
-Resolve release blockers before publishing v0.16.0; schedule the remaining hardening and boundary
-work by priority.
-
-### Layering and maintainability
-
-- [ ] **P1 — Split connector implementations into independently deployable projects.** Create a small
-      connector contracts/registry layer and provider-specific projects or coherent provider groups so
-      hosts do not load every database, cloud, messaging, and native dependency.
-- [x] **P1 — Enforce source boundaries in tests.** Add/update architecture tests for allowed project
-      references and banned namespaces/packages so documented layering rules fail during CI when violated.
-      Validated on 2026-07-18 with
-      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~ArchitectureBoundaryTests --no-restore`.
-- [ ] **P2 — Thin Portal controllers.** Move parsing, AST/DTO conversion, lint orchestration, schema
-      registration, and save workflows into application services; keep controllers focused on
-      authorization, transport mapping, and HTTP results.
-- [ ] **Review architecture documentation** The layering changes likely made some of the architecture documentation in /docs/architecture go stale
-      let's review them all and update them with the latest information.
-
----
-
 ## v0.16.0 Fresh-Eyes Repository Review
 
 Findings from a repository-wide build, static-analysis pass, test run, and targeted review of
@@ -267,34 +244,3 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       role memberships with users/groups in a fixed number of database queries.
       Fixed on 2026-07-18 by capping `/api/admin/users` with page/pageSize parameters and batch-loading
       role and group membership rows for both user-list endpoints.
-
----
-
-## Developer Experience — Local Browser Script Editor
-
-Moved from `ROADMAP.md` Phase 2 on 2026-07-18.
-
-- [x] **Foundation host:** add `ETL-SQL.WorkstationEditor`, a local-only browser script editor host
-      that binds to loopback, generates/requires a per-process API token, serves the first editor
-      workspace screen, reuses canonical shared designer assets from `ETL-SQL.ReportRuntime`, exposes
-      workspace list/open/save APIs bounded to a single root, supports readonly mode, and runs parser/linter
-      diagnostics through `ETL-SQL.Analysis` without referencing `ETL-SQL.Portal`.
-- [x] **Editor assist/run MVP:** wire the workstation host into shared CodeMirror diagnostics,
-      completion, hover-help, and a local `ExecutionSession` run endpoint with result-table rendering.
-      Validated on 2026-07-18 with
-      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~WorkstationEditorTests --no-restore`.
-- [ ] **CLI integration:** add an `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`
-      command that launches the workstation editor executable or equivalent host path.
-- [ ] **Interactive run hardening:** add cancellable runs, memory/time guard configuration, bounded
-      request/result sizes and concurrent executions, and local run history.
-- [ ] **Report preview:** add manual `.rptsql` preview using ReportHosting/Reporting runtime construction
-      without Portal snapshots or catalog dependencies.
-- [ ] **Local schema autocomplete:** add local profile-backed schema snapshot/cache support and wire it into
-      the shared CodeMirror completion flow.
-- [ ] **Browser smoke coverage:** add a browser-level test for opening a workspace, editing text, seeing
-      diagnostics, saving, and previewing a simple report.
-- [ ] **When the query is ran:**  The screen jumps down about 100 lines and prints off all the results rather than just showing them in batches.
-      The results should stay on the screen and not cause the big jump, and should only render what fits on the screen.  Then the user scrolls to see
-      the results with the scrollbar.
-- [ ] **Tooltip too big:**  The tooltip is rendering the Markup exactly as it is which is fine but it would be better if it was smaller.
-      Can it have a more command line document feel with colors and keep the font small so more of the document fits the tooltip window.

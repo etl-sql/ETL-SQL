@@ -22,6 +22,22 @@ Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/archi
 
 ---
 
+## Architecture & Maintainability
+
+*Tracks larger structural refactors that improve long-term ownership, packaging, and testability without blocking the immediate release checklist unless promoted back into `TODO.md`.*
+
+### Future Candidate Phases
+
+#### Phase 1: Layering and Maintainability
+- [x] **Source-boundary enforcement:** Add/update architecture tests that assert Core/Engine/Connectors/Portal/Orchestrator dependencies remain one-way, with report runtime shared assets flowing only from the canonical source.
+      Completed on 2026-07-18 and validated with
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~ArchitectureBoundaryTests --no-restore`.
+- [ ] **Split connector implementations into independently deployable projects:** Create a small connector contracts/registry layer if needed, move provider-specific code out of monolithic assemblies, and keep host dependency graphs explicit.
+- [ ] **Thin Portal controllers:** Move parsing, AST/DTO conversion, validation orchestration, and report/workflow service composition out of MVC controller methods into application services that can be tested without HTTP plumbing.
+- [ ] **Review architecture documentation:** After layering changes settle, refresh `/docs/architecture` and source-boundary docs so the documented module ownership and dependency rules match the code.
+
+---
+
 ## Visual Reporting & Dashboard Designer
 
 *Improves interactive visual editing, page-level auto-interactions, and compiled snapshot formatting in the Portal and VS Code extension.*
@@ -55,7 +71,16 @@ Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/archi
   - **Optional git write-back:** when a git backend is configured, save commits on behalf of the user to preserve the source-controlled-report promise.
 
 #### Phase 2: Local Browser Script Editor Host
-- [ ] **Standalone Workstation Script Editor:** Active implementation moved to `TODO.md` on 2026-07-18. Add a local, single-user browser editor that launches like `ReportPlayer` but hosts the script-authoring surface instead of a report dashboard. This is for users who want the Portal editor experience on a workstation without installing or running the full Portal backend. Product framing: **Local Script Editor**, **not Portal Lite**.
+- [ ] **Standalone Workstation Script Editor:** Roadmap implementation track restored from `TODO.md` on 2026-07-18 after the foundation host and editor assist/run MVP were completed. Add a local, single-user browser editor that launches like `ReportPlayer` but hosts the script-authoring surface instead of a report dashboard. This is for users who want the Portal editor experience on a workstation without installing or running the full Portal backend. Product framing: **Local Script Editor**, **not Portal Lite**.
+  - **Completed on 2026-07-18:** Foundation host with `ETL-SQL.WorkstationEditor`, workspace-bound file APIs, token-protected local browser surface, shared editor assets, CLI `edit` forwarding, and browser smoke coverage for open/save/diagnostics/run flows.
+  - **Completed on 2026-07-18:** Editor assist/run MVP with CodeMirror language integration, diagnostics gutter/panel, hover help, snippets, autocomplete wiring, bounded run endpoint, and run-result rendering.
+  - **Remaining CLI integration:** Finish the installed CLI command shape and packaging polish for `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
+  - **Remaining interactive run hardening:** Strengthen cancellable runs, visible elapsed time, timeout/memory ceilings, destructive-statement guardrails, local audit history, and result/export limits.
+  - **Remaining report preview:** Add `.rptsql` split editor/preview using the same manifest and runtime rendering as `ReportPlayer`/Portal, initially with manual refresh.
+  - **Remaining local schema autocomplete:** Back the shared schema snapshot contracts with local connection profiles, local cache invalidation, and stale-while-revalidate behavior.
+  - **Remaining browser smoke coverage:** Extend smoke tests for installed CLI launch, selection execution, `.rptsql` preview, schema autocomplete, cancellation, and result-grid interaction.
+  - **Remaining result rendering UX:** Keep the query editor and result area stable after a run, jump/focus directly to the results, and virtualize large result sets so the page does not shift or become sluggish.
+  - **Remaining compact hover tooltips:** Render command-line-document style hover content in a compact, scrollable, editor-friendly layout so help panes do not dominate the browser viewport.
   - **User promise:** a user can run one command, open a browser tab on `localhost`, edit local `.etlsql` and `.rptsql` files, get the same parse/lint/help/autocomplete behavior as the other authoring surfaces, run bounded local previews, and keep the files source-control friendly on disk.
   - **Likely command shape:** add a command such as `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`. Accept a single script file, a folder/workspace root, or no path (new untitled script). Pick an available loopback port when omitted, print the URL, and optionally open the browser when `--open` is set.  This should be its own executable like TUI so it can be optionally installed.
   - **Host shape:** create a small ASP.NET Core/Kestrel host, probably `ETL-SQL.ScriptEditor` or `ETL-SQL.WorkstationEditor`. It should be a thin shell like `ReportPlayer`: static asset hosting, local workspace/file APIs, local analysis endpoints, bounded execution endpoints, and shutdown/session plumbing. It should not reference or depend on `ETL-SQL.Portal`.
