@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using ETL_SQL.Connectors.MySql;
+using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Odbc;
@@ -11,6 +12,7 @@ using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Data;
 using Xunit;
 
@@ -115,6 +117,31 @@ public class DataSourceCancellationTests
             typeof(string),
             typeof(IEnumerable<object?>),
             typeof(CancellationToken));
+    }
+
+    [Fact]
+    public void StructuredFileDataSources_DeclareNativeCancellationOverloads()
+    {
+        foreach (var providerType in new[]
+        {
+            typeof(JsonDataSource),
+            typeof(XmlDataSource)
+        })
+        {
+            AssertDeclares(providerType, nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+            AssertDeclares(
+                providerType,
+                nameof(IDataSource.WriteBatches),
+                typeof(IAsyncEnumerable<DataTable>),
+                typeof(bool),
+                typeof(CancellationToken));
+            AssertDeclares(
+                providerType,
+                nameof(IDatabaseSource.ExecuteRawSql),
+                typeof(string),
+                typeof(IEnumerable<object?>),
+                typeof(CancellationToken));
+        }
     }
 
     private static void AssertDeclares(Type type, string methodName, params Type[] parameterTypes)

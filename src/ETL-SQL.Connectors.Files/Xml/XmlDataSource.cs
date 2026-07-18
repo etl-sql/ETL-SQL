@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Xml;
 using System.Xml.Linq;
 using ETL_SQL.Common;
@@ -69,8 +71,14 @@ namespace ETL_SQL.Connectors.Xml
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
@@ -79,7 +87,7 @@ namespace ETL_SQL.Connectors.Xml
             try
             {
                 // Pass 1 — stream through once to discover column names (no data retained)
-                var columnNames = await DiscoverColumnsAsync(opener);
+                var columnNames = await DiscoverColumnsAsync(opener, effectiveCancellationToken);
                 if (columnNames.Count == 0) yield break;
 
                 var schema = new TableSchema();
@@ -90,7 +98,8 @@ namespace ETL_SQL.Connectors.Xml
                 currentBatch.SetColumns(schema.ColumnNames);
                 var activeSchema = currentBatch.Schema;
 
-                await foreach (var record in StreamRecordsAsync(opener))
+                await foreach (var record in StreamRecordsAsync(opener, effectiveCancellationToken)
+                    .WithCancellation(effectiveCancellationToken))
                 {
                     var row = currentBatch.NewRow();
                     foreach (var (name, value) in record.Attributes)
@@ -127,10 +136,13 @@ namespace ETL_SQL.Connectors.Xml
             List<(string Name, string Value)> Attributes,
             List<(string Name, string Value)> Children);
 
-        private async Task<List<string>> DiscoverColumnsAsync(Func<Stream> streamOpener)
+        private async Task<List<string>> DiscoverColumnsAsync(
+            Func<Stream> streamOpener,
+            CancellationToken cancellationToken = default)
         {
             var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await foreach (var record in StreamRecordsAsync(streamOpener))
+            await foreach (var record in StreamRecordsAsync(streamOpener, cancellationToken)
+                .WithCancellation(cancellationToken))
             {
                 foreach (var (name, _) in record.Attributes) columns.Add(name);
                 foreach (var (name, _) in record.Children) columns.Add(name);
@@ -144,18 +156,21 @@ namespace ETL_SQL.Connectors.Xml
         /// text values are captured; nested elements are skipped (same behaviour as
         /// the previous XDocument implementation).
         /// </summary>
-        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(Func<Stream> streamOpener)
+        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(
+            Func<Stream> streamOpener,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var settings = new XmlReaderSettings { Async = true };
             using var fileStream = streamOpener();
             using var textReader = new StreamReader(fileStream, _encoding);
             using var reader = XmlReader.Create(textReader, settings);
 
-            int containerDepth = await NavigateToContainerAsync(reader);
+            int containerDepth = await NavigateToContainerAsync(reader, cancellationToken);
             if (containerDepth < 0) yield break;
 
             while (await reader.ReadAsync())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 // Back past the container — done
                 if (reader.Depth <= containerDepth) break;
 
@@ -184,6 +199,7 @@ namespace ETL_SQL.Connectors.Xml
 
                     while (await sub.ReadAsync())
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         switch (sub.NodeType)
                         {
                             case XmlNodeType.Element when sub.Depth == 1:
@@ -224,11 +240,12 @@ namespace ETL_SQL.Connectors.Xml
         /// children are the repeating record elements, honoring <see cref="_rootPath"/>.
         /// Returns the depth of that container, or -1 if navigation fails.
         /// </summary>
-        private async Task<int> NavigateToContainerAsync(XmlReader reader)
+        private async Task<int> NavigateToContainerAsync(XmlReader reader, CancellationToken cancellationToken = default)
         {
             // Advance to the document root element
             while (await reader.ReadAsync())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (reader.NodeType == XmlNodeType.Element) break;
             }
             if (reader.EOF) return -1;
@@ -249,6 +266,7 @@ namespace ETL_SQL.Connectors.Xml
                 bool found = false;
                 while (await reader.ReadAsync())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (reader.NodeType == XmlNodeType.Element &&
                         reader.LocalName.Equals(target, StringComparison.OrdinalIgnoreCase))
                     {
@@ -302,13 +320,17 @@ namespace ETL_SQL.Connectors.Xml
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             bool alreadyXml = false;
             string? singleXml = null;
 
-            await foreach (var b in batches)
+            await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
             {
                 if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "XML_F52E2B61")
                 {
@@ -327,7 +349,7 @@ namespace ETL_SQL.Connectors.Xml
             {
                 if (alreadyXml && singleXml != null)
                 {
-                    await System.IO.File.WriteAllTextAsync(tempFile, singleXml);
+                    await System.IO.File.WriteAllTextAsync(tempFile, singleXml, effectiveCancellationToken);
                 }
                 else
                 {
@@ -352,8 +374,9 @@ namespace ETL_SQL.Connectors.Xml
                         }
                     }
 
-                    await foreach (var b in batches)
+                    await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var columnNames = b.ColumnNames;
                         foreach (var r in b.Rows)
                         {
@@ -381,7 +404,7 @@ namespace ETL_SQL.Connectors.Xml
                             deepRoot.Add(rowElem);
                         }
                     }
-                    await System.IO.File.WriteAllTextAsync(tempFile, root.ToString());
+                    await System.IO.File.WriteAllTextAsync(tempFile, root.ToString(), effectiveCancellationToken);
                 }
 
                 string fileToEncrypt = tempFile;
@@ -389,6 +412,7 @@ namespace ETL_SQL.Connectors.Xml
 
                 if (_compress)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
                     using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
                     {
@@ -405,6 +429,7 @@ namespace ETL_SQL.Connectors.Xml
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
@@ -464,11 +489,18 @@ namespace ETL_SQL.Connectors.Xml
         public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
         public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM ROOT"))
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -482,5 +514,8 @@ namespace ETL_SQL.Connectors.Xml
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ROOT" });
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

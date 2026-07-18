@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
@@ -70,26 +72,37 @@ namespace ETL_SQL.Connectors.Json
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
-            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
+            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim)
+                .WithCancellation(effectiveCancellationToken))
             {
                 yield return batch;
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             var allRows = new List<IDictionary<string, object?>>();
             bool alreadyJson = false;
             string? singleJson = null;
 
-            await foreach (var b in batches)
+            await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
             {
                 if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "JSON_F52E2B61")
                 {
@@ -111,12 +124,12 @@ namespace ETL_SQL.Connectors.Json
             {
                 if (alreadyJson && singleJson != null)
                 {
-                    await System.IO.File.WriteAllTextAsync(tempFile, singleJson);
+                    await System.IO.File.WriteAllTextAsync(tempFile, singleJson, effectiveCancellationToken);
                 }
                 else
                 {
                     var options = new JsonSerializerOptions { WriteIndented = true };
-                    await System.IO.File.WriteAllTextAsync(tempFile, JsonSerializer.Serialize(allRows, options));
+                    await System.IO.File.WriteAllTextAsync(tempFile, JsonSerializer.Serialize(allRows, options), effectiveCancellationToken);
                 }
 
                 string fileToEncrypt = tempFile;
@@ -124,6 +137,7 @@ namespace ETL_SQL.Connectors.Json
 
                 if (_compress)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
                     using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
                     {
@@ -140,6 +154,7 @@ namespace ETL_SQL.Connectors.Json
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
@@ -231,11 +246,18 @@ namespace ETL_SQL.Connectors.Json
         public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
         public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -250,5 +272,8 @@ namespace ETL_SQL.Connectors.Json
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;
     }
 }
