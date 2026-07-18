@@ -213,6 +213,12 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: provider-native schema/introspection overrides where remote catalog APIs still use
       compatibility defaults instead of direct cancellation tokens.
+      Additional progress on 2026-07-18: added native cancellation-aware schema/introspection overrides
+      for SQLite, SQL Server, and PostgreSQL, passing tokens through provider open, execute, and reader
+      loops for table, view, and column discovery. Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1`
+      and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: provider-native schema/introspection overrides for the other database, warehouse,
+      graph, document, and file connector families.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

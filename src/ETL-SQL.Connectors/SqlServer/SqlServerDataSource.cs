@@ -317,22 +317,29 @@ namespace ETL_SQL.Connectors.SqlServer
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName)) return Task.FromResult(Enumerable.Empty<string>());
-            return GetColumnsAsync(_tableName);
+            return GetColumnsAsync(_tableName, cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             try
             {
                 await using var conn = new SqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var tables = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -346,17 +353,21 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             try
             {
                 await using var conn = new SqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var views = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -370,15 +381,19 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             try
             {
                 await using var conn = new SqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {

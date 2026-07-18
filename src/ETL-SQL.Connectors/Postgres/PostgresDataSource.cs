@@ -335,16 +335,20 @@ namespace ETL_SQL.Connectors.Postgres
 
         private static DateTime NormalizeDateTimeOffset(DateTimeOffset value) => value.UtcDateTime;
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
 
             try
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
@@ -358,16 +362,20 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'BASE TABLE'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var tables = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -381,16 +389,20 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'VIEW'", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var views = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -404,14 +416,18 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             try
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
-                await conn.OpenAsync();
+                await conn.OpenAsync(effectiveCancellationToken);
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {

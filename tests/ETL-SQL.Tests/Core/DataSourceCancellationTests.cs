@@ -114,6 +114,23 @@ public class DataSourceCancellationTests
     }
 
     [Fact]
+    public void SqlProviderSchemaDataSources_DeclareNativeCancellationOverloads()
+    {
+        foreach (var providerType in new[]
+        {
+            typeof(SqliteDataSource),
+            typeof(SqlServerDataSource),
+            typeof(PostgresDataSource)
+        })
+        {
+            AssertDeclares(providerType, nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDatabaseSource.GetViewsAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDatabaseSource.GetColumnsAsync), typeof(string), typeof(CancellationToken));
+        }
+    }
+
+    [Fact]
     public void MongoDataSource_DeclaresNativeCancellationOverloads()
     {
         AssertDeclares(typeof(MongodbDataSource), nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));

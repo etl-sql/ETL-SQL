@@ -284,24 +284,31 @@ namespace ETL_SQL.Connectors.Sqlite
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite columns lookup.");
-            return await GetColumnsAsync(_tableName);
+            return await GetColumnsAsync(_tableName, cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 // PRAGMA table_info returns columns: cid, name, type, notnull, dflt_value, pk
                 using var cmd = CreateCommand($"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")", conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
-                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
-                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     columns.Add(reader.GetString(1)); // name is the second column
                 }
@@ -317,16 +324,20 @@ namespace ETL_SQL.Connectors.Sqlite
             }
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
-                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var tables = new List<string>();
-                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     tables.Add(reader.GetString(0));
                 }
@@ -342,16 +353,20 @@ namespace ETL_SQL.Connectors.Sqlite
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand("SELECT name FROM sqlite_master WHERE type = 'view'", conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
-                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var views = new List<string>();
-                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     views.Add(reader.GetString(0));
                 }
