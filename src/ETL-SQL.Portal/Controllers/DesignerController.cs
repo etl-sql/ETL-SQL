@@ -22,6 +22,7 @@ public class DesignerController : ControllerBase
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> DesignerGates = new();
     private readonly PortalDesignerSchemaService? _schemaService;
     private readonly PortalDesignerRunService? _runService;
+    private readonly PortalDesignerPreviewService? _previewService;
     private readonly ReportScriptSaveService? _scriptSave;
     private readonly ILanguageService? _languageService;
     private readonly DesignerAnalysisService _analysisService;
@@ -35,10 +36,12 @@ public class DesignerController : ControllerBase
         ILanguageService? languageService = null,
         DesignerAnalysisService? analysisService = null,
         DesignerScriptGenerationService? scriptGenerationService = null,
-        PortalConfig? portalConfig = null)
+        PortalConfig? portalConfig = null,
+        PortalDesignerPreviewService? previewService = null)
     {
         _schemaService = schemaService;
         _runService = runService;
+        _previewService = previewService;
         _scriptSave = scriptSave;
         _languageService = languageService;
         _analysisService = analysisService ?? new DesignerAnalysisService();
@@ -261,6 +264,48 @@ public class DesignerController : ControllerBase
         catch (OperationCanceledException)
         {
             return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Designer run exceeded the 15 second timeout." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/preview ────────────────────────────────────────────
+
+    [HttpPost("preview")]
+    [Authorize(Roles = "Admin,Publisher")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Preview([FromBody] PreviewDesignerRequest req, CancellationToken cancellationToken)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } scriptLimit)
+            return scriptLimit;
+        if (_previewService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer preview service is not configured." });
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var manifest = await _previewService.BuildPreviewAsync(req.Script, req.Page, User, cancellationToken);
+            return Ok(manifest);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Preview access denied." });
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Preview exceeded the 30 second timeout." });
         }
         catch (InvalidOperationException ex)
         {

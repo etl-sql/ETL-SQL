@@ -409,6 +409,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerAnalysisService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerScriptGenerationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerSchemaService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerRunService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalDesignerPreviewService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalScriptSourceControlService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportScriptSaveService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReferenceImpactService>();

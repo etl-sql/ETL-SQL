@@ -1078,17 +1078,6 @@ body.vscode-high-contrast .btn-primary:hover {
 }
 
 /* Preview-disabled badge */
-.etlsql-preview-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    background: var(--portal-warning-soft, #fff4d6);
-    color: var(--portal-warning, #a05a00);
-    cursor: default;
-}
 
 /* ── Phase 4: Component styles ──────────────────────────────────────────── */
 

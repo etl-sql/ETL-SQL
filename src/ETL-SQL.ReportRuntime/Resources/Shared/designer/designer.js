@@ -1625,6 +1625,7 @@ export function createDesigner(container, opts = {}) {
     const folderId  = opts.folderId   ?? null;
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
+    const previewUrl = opts.previewUrl ?? '/designer-preview.html';
 
     // ── Visual type registry ──────────────────────────────────────────────────
     const VCATEGORIES = [
@@ -1702,7 +1703,7 @@ export function createDesigner(container, opts = {}) {
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
-        <span class="etlsql-preview-badge">Preview: VS Code only</span>
+        <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
         <button class="btn btn-sm" id="dsgn-commit" title="Commit the saved script to source control (Git)" style="display:none">Commit</button>
         <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
@@ -1774,6 +1775,21 @@ export function createDesigner(container, opts = {}) {
     scriptOverlay.className = 'etlsql-designer-script-overlay';
     scriptOverlay.innerHTML = '<div class="etlsql-designer-script-body" id="dsgn-script-workbench-host"></div>';
     root.appendChild(scriptOverlay);
+
+    // Report preview overlay: reuses the script overlay's positioning/visibility, hosts a
+    // sandboxed iframe that renders the compiled report manifest via report-runtime.js.
+    const previewOverlay = document.createElement('div');
+    previewOverlay.className = 'etlsql-designer-script-overlay';
+    previewOverlay.innerHTML = `
+        <div class="etlsql-designer-script-toolbar">
+            <strong>Preview</strong>
+            <span id="dsgn-preview-status" style="font-size:12px;color:#64748b"></span>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn-sm" id="dsgn-preview-refresh" title="Re-run the report and refresh the preview">↻ Refresh</button>
+            <button type="button" class="btn btn-sm" id="dsgn-preview-close">Close</button>
+        </div>
+        <iframe id="dsgn-preview-frame" title="Report preview" sandbox="allow-scripts allow-same-origin" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
+    root.appendChild(previewOverlay);
 
     // Save-as modal
     const saveModal = document.createElement('div');
@@ -2110,6 +2126,58 @@ export function createDesigner(container, opts = {}) {
         scriptEditor = null;
     }
 
+    // ── Report preview ──────────────────────────────────────────────────────────
+    const previewFrame   = previewOverlay.querySelector('#dsgn-preview-frame');
+    const previewStatusEl = previewOverlay.querySelector('#dsgn-preview-status');
+    let _pendingManifest = null;
+
+    function setPreviewStatus(text, kind) {
+        if (!previewStatusEl) return;
+        previewStatusEl.textContent = text || '';
+        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        previewStatusEl.style.color = colors[kind] || colors.neutral;
+    }
+
+    // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
+    window.addEventListener('message', (event) => {
+        if (event.source !== previewFrame?.contentWindow) return;
+        if (event.data?.type !== 'previewReady') return;
+        if (_pendingManifest) {
+            previewFrame.contentWindow.postMessage({
+                type: 'reportManifest',
+                manifest: _pendingManifest,
+                dark: document.body.classList.contains('theme-dark'),
+            }, '*');
+        }
+    });
+
+    async function refreshPreview() {
+        setPreviewStatus('Building preview…', 'pending');
+        try {
+            const gen = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const script = gen?.script ?? '';
+            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
+            const manifest = await apiJson('/api/designer/preview', 'POST', { script });
+            _pendingManifest = manifest;
+            // Reload the host page so report-runtime.js boots fresh with the new manifest.
+            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const pages = manifest?.pages?.length ?? 0;
+            const visuals = manifest?.visuals?.length ?? 0;
+            setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
+        } catch (e) {
+            setPreviewStatus('Preview failed: ' + e.message, 'error');
+        }
+    }
+
+    function openPreview() {
+        previewOverlay.classList.add('active');
+        refreshPreview();
+    }
+
+    function closePreview() {
+        previewOverlay.classList.remove('active');
+    }
+
     async function applyScript() {
         if (!scriptEditor) return;
         await applyScriptText(scriptEditor.getValue());
@@ -2220,6 +2288,10 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
         scriptOverlay.classList.contains('active') ? closeScript() : openScript());
+    topbar.querySelector('#dsgn-preview-toggle')?.addEventListener('click', () =>
+        previewOverlay.classList.contains('active') ? closePreview() : openPreview());
+    previewOverlay.querySelector('#dsgn-preview-refresh')?.addEventListener('click', refreshPreview);
+    previewOverlay.querySelector('#dsgn-preview-close')?.addEventListener('click', closePreview);
 
     topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
         const tab = e.target.closest('.etlsql-designer-page-tab');

@@ -52,8 +52,18 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 
 ## Portal Script Editor
 
-- [ ] **Report Preview Pane** Having a report preview pane, using the VS Code preview pane allows the user to do a more WYSIWYG approach to creating reports
+- [x] **Report Preview Pane** Having a report preview pane, using the VS Code preview pane allows the user to do a more WYSIWYG approach to creating reports
       - How do we do a serve command?  You already have everything you need can we just build a preview without calling that?
+      - Answer: no serve command needed. Reused the VS Code preview path (static manifest). New
+        `POST /api/designer/preview` → `PortalDesignerPreviewService` fully evaluates the report script
+        under the user's identity (like `/run`, with memory/timeout caps, rate limit, designer gate, secret
+        redaction) and `ManifestBuilder.BuildAsync` materialises a self-contained `ReportManifest`. The
+        designer's "Preview: VS Code only" badge became a **👁 Preview** toggle opening an overlay whose
+        sandboxed iframe (`designer-preview.html`) renders that manifest with the shared `report-runtime.js`
+        in manifest mode (`window.__MANIFEST__`) — no live session, no `/manifest` fetch. Manual **↻ Refresh**
+        re-runs on demand. Verified end-to-end in the ui-sandbox (mock preview endpoint serving
+        `samples/paginated/manifest.json` + a sandbox preview host): Preview renders the report's filter
+        panel, status shows "Rendered 1 page, 3 visuals."
 - [ ] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Portal so we can have a better debug/preview experience for developers
 - [x] **Query with Alias not running**  Using CREATE CONNECTION m AS MOCKDB();  SELECT u.* FROM m.Users AS u;  Did not run in the ui-sandbox
       - Fixed in `tools/ui-sandbox/mockApi.js`: `runMockScript` rejected any text not starting with `SELECT`

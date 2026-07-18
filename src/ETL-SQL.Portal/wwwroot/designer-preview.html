@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/css/report-runtime.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  #root { min-height: 100%; }
+  .preview-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; padding: 24px; box-sizing: border-box;
+    font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: #64748b;
+    text-align: center;
+  }
+</style>
+<script>
+  // Static report preview host for the portal designer. It renders a self-contained
+  // ReportManifest (posted by the parent designer) with the shared report-runtime.js in
+  // manifest mode — no live session, no server fetch. Mirrors the VS Code webview preview.
+  window.__IS_PREVIEW__ = true;
+  (function () {
+    var runtimeInjected = false;
+
+    function injectRuntimeOnce() {
+      if (runtimeInjected) return;
+      runtimeInjected = true;
+      // report-runtime.js boots on load and reads window.__MANIFEST__, so it must be present first.
+      var echarts = document.createElement('script');
+      echarts.src = '/js/echarts.min.js';
+      echarts.onload = function () {
+        var rt = document.createElement('script');
+        rt.src = '/js/report-runtime.js';
+        document.body.appendChild(rt);
+      };
+      echarts.onerror = showError;
+      document.body.appendChild(echarts);
+    }
+
+    function showError() {
+      var root = document.getElementById('root');
+      if (root) root.innerHTML = '<div class="preview-placeholder">Failed to load the preview runtime.</div>';
+    }
+
+    window.addEventListener('message', function (e) {
+      var data = e.data;
+      if (!data || data.type !== 'reportManifest') return;
+      window.__MANIFEST__ = data.manifest;
+      if (data.dark) document.body.classList.add('theme-dark');
+      else document.body.classList.remove('theme-dark');
+      if (runtimeInjected) {
+        // Runtime already loaded on a previous refresh — re-render in place.
+        if (window.__reportRuntimeRender__) window.__reportRuntimeRender__(data.manifest);
+      } else {
+        injectRuntimeOnce();
+      }
+    });
+
+    function announceReady() {
+      (window.parent || window).postMessage({ type: 'previewReady' }, '*');
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', announceReady);
+    } else {
+      announceReady();
+    }
+  })();
+</script>
+</head>
+<body style="margin:0">
+<div id="root"><div class="preview-placeholder">Run a preview to render the report here.</div></div>
+</body>
+</html>

@@ -34,6 +34,9 @@ export function makeMockApi(seedState) {
       data = commitCount === 1
         ? { sourceRevision: 'sandboxc0ffee1', committed: true }
         : { sourceRevision: 'sandboxc0ffee1', committed: false };
+    } else if (path.endsWith('/api/designer/preview')) {
+      // Return a real sample manifest so the preview iframe renders with report-runtime.js.
+      data = await fetch('/samples/paginated/manifest.json').then(r => r.json()).catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
     } else if (path.endsWith('/api/designer/run')) {
       data = runMockScript(body.selection || body.script || '');
     } else if (path.endsWith('/api/designer/schema')) {

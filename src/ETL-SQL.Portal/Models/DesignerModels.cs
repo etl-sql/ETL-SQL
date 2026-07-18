@@ -51,6 +51,10 @@ public record SaveDesignerRequest(
     string ScriptText,
     string? BaseRevision = null);
 
+public record PreviewDesignerRequest(
+    string Script,
+    string? Page = null);
+
 public record SaveDesignerResponse(
     long Version,
     string? SourceRevision = null);

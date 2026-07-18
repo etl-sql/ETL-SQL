@@ -39,6 +39,7 @@ export default {
       designState: ds,
       reportName: 'Sandbox Report',
       authFetch: makeMockApi(ds),
+      previewUrl: '/tools/ui-sandbox/designer-preview.html',
     };
     if (scm) {
       // Exercise the Portal save+commit path: reportId routes Save through /api/designer/save
