@@ -441,6 +441,12 @@ public class DatasetConfig
     /// dev/standalone, where host-bound (non-portable) dataset caches are acceptable.
     /// </summary>
     public bool AllowMachineFallback { get; set; }
+
+    /// <summary>
+    /// Global row-weight budget for in-memory dataset preview cache entries. Each cached dataset
+    /// preview is weighted by its loaded preview row count. Minimum effective value is 1.
+    /// </summary>
+    public int PreviewCacheMaxRows { get; set; } = 250000;
 }
 
 public class IdentityConfig

@@ -428,6 +428,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetMoveService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAclService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetUpdateService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetDeleteService>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.DatasetPreviewCache>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ILdapService, ETL_SQL.Portal.Services.LdapService>();
 

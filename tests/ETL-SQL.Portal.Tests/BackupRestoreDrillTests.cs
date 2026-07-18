@@ -10,7 +10,6 @@ using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
@@ -251,7 +250,7 @@ public sealed class BackupRestoreDrillTests : IDisposable
         db.Datasets.Add(dataset);
         await db.SaveChangesAsync();
 
-        var viewer = new DatasetViewerService(db, new MemoryCache(new MemoryCacheOptions()), config);
+        var viewer = new DatasetViewerService(db, new DatasetPreviewCache(config), config);
         var rows = (await viewer.QueryAsync(dataset.Id, 1, 100, null, null, null, [])).Rows.ToList();
 
         // The restored cache decrypts under the restored key version.

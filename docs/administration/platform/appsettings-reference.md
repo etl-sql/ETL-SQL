@@ -217,6 +217,7 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | `Portal:Modules:Operations` | boolean | `true` | — | Enables operational digest and native admin digest worker loops. Route fencing lands in a later modularization slice. |
 | `Portal:Modules:Documentation` | boolean | `true` | — | Enables Portal-hosted documentation surfaces module flag. Route fencing lands in a later modularization slice. |
 | `Portal:MaxPreviewRows` | integer | `50000` | — | Maximum preview lines displayed in GUI tables. |
+| `Portal:Dataset:PreviewCacheMaxRows` | integer | `250000` | — | Global row-weight budget for in-memory dataset preview cache entries. |
 
 ### Portal Modules (`Portal:Modules`)
 - `Reporting` (default: `true`): Report catalog, report player, datasets, and subscriptions.
@@ -276,6 +277,7 @@ Certified topology profiles include:
 - `AtRestKeyVersion` (default: `v1`): Current encryption key version identifier.
 - `PreviousAtRestKeys` (default: `{}`): Map of older keys to decrypt existing historical datasets.
 - `AllowMachineFallback` (default: `false`): Permits OS-level machine key fallbacks. Disable in multi-host HA clusters.
+- `PreviewCacheMaxRows` (default: `250000`): Global row-weight budget for cached dataset previews. Each cache entry is weighted by the number of preview rows loaded.
 
 ### Portal Identity Providers (`Portal:Identity`)
 
@@ -338,4 +340,3 @@ Standard ASP.NET Core connection configurations.
 - [Portal Administration](../portal/README.md)
 - [Orchestration](../orchestration/README.md)
 - [SET Commands](../../reference/set-commands/README.md)
-

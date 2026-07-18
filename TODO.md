@@ -121,14 +121,15 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       Fixed on 2026-07-18 by making exports read all dataset rows outside the preview cache and adding
       coverage with more rows than `Portal:MaxPreviewRows`. Validated with
       `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter "FullyQualifiedName~DatasetViewerServiceTests" --no-restore -m:1`.
-- [ ] **P1 - Bound and invalidate the dataset preview cache.** `DatasetViewerService` caches as many as
+- [x] **P1 - Bound and invalidate the dataset preview cache.** `DatasetViewerService` caches as many as
       50,000 row dictionaries per dataset in an application-wide `IMemoryCache` with sliding expiry,
       no size accounting, and no invalidation on refresh or replacement. Add a global memory budget and
       entry weights, use dataset version/content identity in keys, and invalidate mutations so active
       users cannot receive stale rows indefinitely.
       Content-identity invalidation was added on 2026-07-18 using dataset version, row count, timestamps,
-      at-rest key version, and parquet path in preview cache keys. Remaining work: add explicit cache
-      size accounting/global memory budget.
+      at-rest key version, and parquet path in preview cache keys. Completed on 2026-07-18 by moving
+      previews into a dedicated size-limited cache with `Portal:Dataset:PreviewCacheMaxRows`, row-count
+      entry weights, config docs, and eviction coverage.
 - [ ] **P1 - Restore actual Docker pause/resume semantics.**
       `DockerContainerManager.PauseContainer` calls `StopAsync` and `ResumeContainer` calls
       `StartAsync`, contradicting the documented CPU-suspension behavior and changing container state.

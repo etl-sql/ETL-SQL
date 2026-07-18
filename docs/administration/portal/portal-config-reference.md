@@ -84,6 +84,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "AdminUsername": "admin",
       "MustChangePassword": true
     },
+    "Dataset": {
+      "PreviewCacheMaxRows": 250000
+    },
     "Engine": {
       "StartOfWeek": "Monday"
     },
@@ -105,6 +108,8 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `ScriptRootPath` | `./Reports` | Root directory for `.rptsql` script files. All script paths are validated to stay within this directory. |
 | `SnapshotDirectory` | `./Snapshots` | Where report snapshot files are stored. |
 | `DatasetRootPath` | `./data/datasets` | Root for Portal-managed cached dataset files. |
+| `MaxPreviewRows` | `50000` | Maximum dataset preview rows loaded for an interactive table view. |
+| `Dataset.PreviewCacheMaxRows` | `250000` | Global row-weight budget for in-memory dataset preview cache entries. Each cached preview is weighted by its loaded preview row count. |
 | `MapRootPath` | `./data/maps` | Root for map assets used by reports. |
 | `Storage.Provider` | `Local` | Artifact provider. Use `Smb`/`Unc` with UNC roots for shared HA storage. |
 | `Storage.KeyRingPath` | `.portal-keys` beside the database | Data Protection key-ring path. In HA, every Portal node must share the same path. |

@@ -10,7 +10,6 @@ using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -174,7 +173,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
         var viewer = NewViewer(db, config);
 
         var first = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
-        Assert.Equal(10L, first.Rows.Single()["v"]);
+        Assert.Equal(10L, Convert.ToInt64(first.Rows.Single()["v"]));
 
         var dataset = await db.Datasets.SingleAsync(d => d.Id == id);
         dataset.ParquetFilePath = secondParquet;
@@ -185,7 +184,32 @@ public sealed class DatasetViewerServiceTests : IDisposable
 
         var second = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
 
-        Assert.Equal(99L, second.Rows.Single()["v"]);
+        Assert.Equal(99L, Convert.ToInt64(second.Rows.Single()["v"]));
+    }
+
+    [Fact]
+    public async Task Query_PreviewCacheEvictsEntriesWhenRowBudgetIsExceeded()
+    {
+        var firstParquet = WriteParquet("ds_budget_a.parquet", encryptOptions: null, 10);
+        var secondParquet = WriteParquet("ds_budget_b.parquet", encryptOptions: null, 20);
+
+        await using var db = NewDb(out var config, atRestKey: null);
+        config.Dataset.PreviewCacheMaxRows = 1;
+        var firstId = AddDataset(db, "#budget_a", firstParquet, DatasetEncryptionMode.None, rowCount: 1);
+        var secondId = AddDataset(db, "#budget_b", secondParquet, DatasetEncryptionMode.None, rowCount: 1);
+        var cache = new DatasetPreviewCache(config);
+        var viewer = new DatasetViewerService(db, cache, config);
+
+        var first = await viewer.QueryAsync(firstId, 1, 100, null, null, null, []);
+        Assert.Equal(10L, Convert.ToInt64(first.Rows.Single()["v"]));
+
+        WriteParquet("ds_budget_a.parquet", encryptOptions: null, 99);
+        var second = await viewer.QueryAsync(secondId, 1, 100, null, null, null, []);
+        Assert.Equal(20L, Convert.ToInt64(second.Rows.Single()["v"]));
+
+        var reloaded = await viewer.QueryAsync(firstId, 1, 100, null, null, null, []);
+
+        Assert.Equal(99L, Convert.ToInt64(reloaded.Rows.Single()["v"]));
     }
 
     [Fact]
@@ -288,5 +312,5 @@ public sealed class DatasetViewerServiceTests : IDisposable
     }
 
     private static DatasetViewerService NewViewer(PortalDbContext db, PortalConfig config) =>
-        new(db, new MemoryCache(new MemoryCacheOptions()), config);
+        new(db, new DatasetPreviewCache(config), config);
 }

@@ -12,11 +12,107 @@ using Parquet;
 
 namespace ETL_SQL.Portal.Services;
 
-public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, PortalConfig config)
+public sealed class DatasetPreviewCache : IDisposable
 {
-    private static readonly MemoryCacheEntryOptions CacheOptions =
-        new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(5));
+    private readonly object _gate = new();
+    private readonly MemoryCache _cache;
+    private readonly Dictionary<string, CacheEntry> _entries = new(StringComparer.Ordinal);
+    private readonly int _maxRows;
+    private int _currentRows;
 
+    public DatasetPreviewCache(PortalConfig config)
+    {
+        _maxRows = Math.Max(1, config.Dataset.PreviewCacheMaxRows);
+        _cache = new MemoryCache(new MemoryCacheOptions
+        {
+            SizeLimit = _maxRows
+        });
+    }
+
+    public bool TryGetValue(
+        string key,
+        out (List<Dictionary<string, object?>> Rows, List<DatasetColumnDto> Columns) value)
+    {
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(key, out value))
+            {
+                if (_entries.TryGetValue(key, out var entry))
+                    entry.LastAccessUtc = DateTime.UtcNow;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    public void Set(
+        string key,
+        (List<Dictionary<string, object?>> Rows, List<DatasetColumnDto> Columns) value,
+        int rowWeight)
+    {
+        var weight = Math.Max(1, rowWeight);
+        lock (_gate)
+        {
+            EvictKey(key);
+            if (weight > _maxRows)
+                return;
+
+            while (_currentRows + weight > _maxRows && _entries.Count > 0)
+            {
+                var oldest = _entries
+                    .OrderBy(pair => pair.Value.LastAccessUtc)
+                    .First()
+                    .Key;
+                EvictKey(oldest);
+            }
+
+            var entry = new CacheEntry(weight);
+            _entries[key] = entry;
+            _currentRows += weight;
+
+            var options = new MemoryCacheEntryOptions()
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetSize(weight)
+                .RegisterPostEvictionCallback((evictedKey, _, _, state) =>
+                {
+                    if (evictedKey is string removedKey && state is CacheEntry removedEntry)
+                        RemoveEntry(removedKey, removedEntry);
+                }, entry);
+            _cache.Set(key, value, options);
+        }
+    }
+
+    public void Dispose() => _cache.Dispose();
+
+    private void EvictKey(string key)
+    {
+        if (_entries.Remove(key, out var entry))
+            _currentRows -= entry.Weight;
+        _cache.Remove(key);
+    }
+
+    private void RemoveEntry(string key, CacheEntry entry)
+    {
+        lock (_gate)
+        {
+            if (_entries.TryGetValue(key, out var current) && ReferenceEquals(current, entry))
+            {
+                _entries.Remove(key);
+                _currentRows -= entry.Weight;
+            }
+        }
+    }
+
+    private sealed class CacheEntry(int weight)
+    {
+        public int Weight { get; } = weight;
+        public DateTime LastAccessUtc { get; set; } = DateTime.UtcNow;
+    }
+}
+
+public class DatasetViewerService(PortalDbContext db, DatasetPreviewCache cache, PortalConfig config)
+{
     // ── Public API ────────────────────────────────────────────────────────────
 
     public async Task<DatasetRowsDto> QueryAsync(
@@ -154,7 +250,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
         var previewRows = await LoadRowsAsync(dataset, columns, config.MaxPreviewRows);
         var result = (previewRows, columns);
-        cache.Set(cacheKey, result, CacheOptions);
+        cache.Set(cacheKey, result, previewRows.Count);
         return result;
     }
 
