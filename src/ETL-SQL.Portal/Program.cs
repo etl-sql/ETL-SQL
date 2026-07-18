@@ -414,6 +414,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalScriptSourceControlServ
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportScriptSaveService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReferenceImpactService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportScriptInspectionService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportStructureService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<IDatasetRegistry>(sp =>
