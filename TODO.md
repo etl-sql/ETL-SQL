@@ -64,7 +64,18 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
         re-runs on demand. Verified end-to-end in the ui-sandbox (mock preview endpoint serving
         `samples/paginated/manifest.json` + a sandbox preview host): Preview renders the report's filter
         panel, status shows "Rendered 1 page, 3 visuals."
-- [ ] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Portal so we can have a better debug/preview experience for developers
+- [x] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Portal so we can have a better debug/preview experience for developers
+      - The sandbox imports the same canonical `designer.js` as the portal, so the UI + client logic are
+        identical; `mockApi.js` now mirrors every `DesignerController` endpoint (parse/generate/analyze/
+        complete/run/schema/save/script-source/commit/preview). The one inherent boundary: no engine/catalog,
+        so run/preview **data** is fixtures. Documented the faithful-vs-mocked boundary + a per-feature
+        how-to-test guide in `tools/ui-sandbox/README.md`.
+      - Real preview test report: `/api/designer/preview` serves a real CLI-built manifest
+        (`fixtures/sandbox-report.rptsql` → `sandbox-report.manifest.json`, self-contained via
+        `testdata/test_sales.csv`) so the Preview pane renders populated KPI cards + bar/pie/line charts +
+        a table. The `Sales + source control` designer fixture exercises the full portal path (reportId save,
+        Commit, Preview) in one place. Verified in-browser: "Rendered 1 page, 7 visuals", 3 chart canvases,
+        no empty cards.
 - [x] **Query with Alias not running**  Using CREATE CONNECTION m AS MOCKDB();  SELECT u.* FROM m.Users AS u;  Did not run in the ui-sandbox
       - Fixed in `tools/ui-sandbox/mockApi.js`: `runMockScript` rejected any text not starting with `SELECT`
         (so a full `CREATE CONNECTION …; SELECT …` script — what you get when the cursor is past the trailing

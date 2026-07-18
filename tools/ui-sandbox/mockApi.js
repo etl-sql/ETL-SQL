@@ -35,8 +35,11 @@ export function makeMockApi(seedState) {
         ? { sourceRevision: 'sandboxc0ffee1', committed: true }
         : { sourceRevision: 'sandboxc0ffee1', committed: false };
     } else if (path.endsWith('/api/designer/preview')) {
-      // Return a real sample manifest so the preview iframe renders with report-runtime.js.
-      data = await fetch('/samples/paginated/manifest.json').then(r => r.json()).catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
+      // Return a real, chart-rich manifest (built from tools/ui-sandbox/fixtures/sandbox-report.rptsql
+      // via the report CLI) so the preview iframe renders KPI cards + bar/pie/line charts + a table.
+      data = await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
+        .then(r => r.json())
+        .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
     } else if (path.endsWith('/api/designer/run')) {
       data = runMockScript(body.selection || body.script || '');
     } else if (path.endsWith('/api/designer/schema')) {

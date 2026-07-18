@@ -1,0 +1,1846 @@
+{
+  "source": "tools/ui-sandbox/fixtures/sandbox-report.rptsql",
+  "builtAt": "2026-07-18T01:31:27.6626847Z",
+  "title": "Sandbox Sales Dashboard",
+  "description": "Test report for the ui-sandbox designer preview pane.",
+  "visuals": [
+    {
+      "name": "KpiNorth",
+      "visualType": "CARD",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "Revenue2025"
+      ],
+      "rows": [
+        [
+          "252985.01"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Revenue2025"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "North Revenue",
+        "FORMAT": "$#,##0",
+        "COLOR": "#3498db",
+        "SUBTITLE": "FY2025"
+      }
+    },
+    {
+      "name": "KpiSouth",
+      "visualType": "CARD",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "Revenue2025"
+      ],
+      "rows": [
+        [
+          "322964.99"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Revenue2025"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "South Revenue",
+        "FORMAT": "$#,##0",
+        "COLOR": "#e67e22",
+        "SUBTITLE": "FY2025"
+      }
+    },
+    {
+      "name": "KpiWest",
+      "visualType": "CARD",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "Revenue2025"
+      ],
+      "rows": [
+        [
+          "319438.37"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Revenue2025"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "West Revenue",
+        "FORMAT": "$#,##0",
+        "COLOR": "#e74c3c",
+        "SUBTITLE": "FY2025"
+      }
+    },
+    {
+      "name": "RevenueByRegion",
+      "visualType": "BAR",
+      "fetch": "AUTO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022RevenueByRegion\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Central\u0022,\u0022East\u0022,\u0022North\u0022,\u0022South\u0022,\u0022West\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022TotalRevenue\u0022,\u0022data\u0022:[1471227.67,1429997.64,1341607.62,1558528.32,1543829.62]}]}",
+      "columns": [
+        "region",
+        "TotalRevenue",
+        "TotalUnits"
+      ],
+      "rows": [
+        [
+          "South",
+          "1558528.32",
+          "51896"
+        ],
+        [
+          "West",
+          "1543829.62",
+          "51833"
+        ],
+        [
+          "Central",
+          "1471227.67",
+          "48870"
+        ],
+        [
+          "East",
+          "1429997.64",
+          "48764"
+        ],
+        [
+          "North",
+          "1341607.62",
+          "45107"
+        ]
+      ],
+      "options": {
+        "mapping:x": "region",
+        "mapping:y": "TotalRevenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "Total Revenue by Region"
+      }
+    },
+    {
+      "name": "UnitsByProduct",
+      "visualType": "PIE",
+      "fetch": "AUTO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022UnitsByProduct\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022UnitsByProduct\u0022,\u0022radius\u0022:\u002260%\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Widget B\u0022,\u0022value\u0022:63478},{\u0022name\u0022:\u0022Widget A\u0022,\u0022value\u0022:61776},{\u0022name\u0022:\u0022Widget D\u0022,\u0022value\u0022:61340},{\u0022name\u0022:\u0022Widget C\u0022,\u0022value\u0022:59876}]}]}",
+      "columns": [
+        "product",
+        "Units"
+      ],
+      "rows": [
+        [
+          "Widget B",
+          "63478"
+        ],
+        [
+          "Widget A",
+          "61776"
+        ],
+        [
+          "Widget D",
+          "61340"
+        ],
+        [
+          "Widget C",
+          "59876"
+        ]
+      ],
+      "options": {
+        "mapping:category": "product",
+        "mapping:value": "Units"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "Units by Product"
+      }
+    },
+    {
+      "name": "SalesTrend",
+      "visualType": "LINE",
+      "fetch": "AUTO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022SalesTrend\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221/1/2024 12:00:00 AM\u0022,\u00222/1/2024 12:00:00 AM\u0022,\u00223/1/2024 12:00:00 AM\u0022,\u00224/1/2024 12:00:00 AM\u0022,\u00225/1/2024 12:00:00 AM\u0022,\u00226/1/2024 12:00:00 AM\u0022,\u00227/1/2024 12:00:00 AM\u0022,\u00228/1/2024 12:00:00 AM\u0022,\u00229/1/2024 12:00:00 AM\u0022,\u002210/1/2024 12:00:00 AM\u0022,\u002211/1/2024 12:00:00 AM\u0022,\u002212/1/2024 12:00:00 AM\u0022,\u00221/1/2025 12:00:00 AM\u0022,\u00222/1/2025 12:00:00 AM\u0022,\u00223/1/2025 12:00:00 AM\u0022,\u00224/1/2025 12:00:00 AM\u0022,\u00225/1/2025 12:00:00 AM\u0022,\u00226/1/2025 12:00:00 AM\u0022,\u00227/1/2025 12:00:00 AM\u0022,\u00228/1/2025 12:00:00 AM\u0022,\u00229/1/2025 12:00:00 AM\u0022,\u002210/1/2025 12:00:00 AM\u0022,\u002211/1/2025 12:00:00 AM\u0022,\u002212/1/2025 12:00:00 AM\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022East\u0022,\u0022data\u0022:[21270.55,14486.66,21930.76,22948.33,21263.41,33288.95,34770.66,31759.16,30863.59,12373.37,18572.16,30474.38,18924.08,24984.63,25473.17,23499.47,17165.71,39347.07,11455.52,13236.72,17743.16,37450.58,19743.66,23197.66]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022West\u0022,\u0022data\u0022:[39287.97,36761.6,20179.52,28864.71,31014.77,26301.17,19555.86,40053.21,30963.49,24014.02,19870.87,28513.47,41001.32,15935.35,23943.56,24860.79,27591.13,29009.38,37764.87,32416.99,21400.54,23255.08,15886.28,26373.08]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Central\u0022,\u0022data\u0022:[36453.9,16205.78,20020.38,20946.26,33596.59,20831.64,22430.81,15310.08,17826.9,26126.13,13736.59,11528.04,27092.39,16268.67,18557.79,20023.97,31677.62,36207.98,24661.84,39448.94,43543.62,29102.74,18019.48,12130.23]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[31217.19,24530.98,22470.87,29810.35,26635.45,24321.91,36528.37,24901.43,26553.09,10600.5,8358.41,22962.61,19147.69,18784.89,11008.05,20359.81,24300.3,24636.55,24151.76,33828.51,20405.49,20890,19078.3,16393.66]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[37213.64,15018.78,24513.33,26107.05,27296.21,31557.79,20473.97,21513.02,30697.94,28300.44,22188.94,30640.76,17180.13,18166.27,20801.17,44623.72,17069.44,21677.24,30972.17,17814.75,34937.07,36568.13,33479.86,29675.04]}]}",
+      "columns": [
+        "month",
+        "region",
+        "MonthlyRevenue"
+      ],
+      "rows": [
+        [
+          "1/1/2024 12:00:00 AM",
+          "East",
+          "21270.55"
+        ],
+        [
+          "1/1/2024 12:00:00 AM",
+          "West",
+          "39287.97"
+        ],
+        [
+          "1/1/2024 12:00:00 AM",
+          "Central",
+          "36453.90"
+        ],
+        [
+          "1/1/2024 12:00:00 AM",
+          "North",
+          "31217.19"
+        ],
+        [
+          "1/1/2024 12:00:00 AM",
+          "South",
+          "37213.64"
+        ],
+        [
+          "2/1/2024 12:00:00 AM",
+          "South",
+          "15018.78"
+        ],
+        [
+          "2/1/2024 12:00:00 AM",
+          "West",
+          "36761.60"
+        ],
+        [
+          "2/1/2024 12:00:00 AM",
+          "Central",
+          "16205.78"
+        ],
+        [
+          "2/1/2024 12:00:00 AM",
+          "East",
+          "14486.66"
+        ],
+        [
+          "2/1/2024 12:00:00 AM",
+          "North",
+          "24530.98"
+        ],
+        [
+          "3/1/2024 12:00:00 AM",
+          "Central",
+          "20020.38"
+        ],
+        [
+          "3/1/2024 12:00:00 AM",
+          "West",
+          "20179.52"
+        ],
+        [
+          "3/1/2024 12:00:00 AM",
+          "North",
+          "22470.87"
+        ],
+        [
+          "3/1/2024 12:00:00 AM",
+          "South",
+          "24513.33"
+        ],
+        [
+          "3/1/2024 12:00:00 AM",
+          "East",
+          "21930.76"
+        ],
+        [
+          "4/1/2024 12:00:00 AM",
+          "North",
+          "29810.35"
+        ],
+        [
+          "4/1/2024 12:00:00 AM",
+          "South",
+          "26107.05"
+        ],
+        [
+          "4/1/2024 12:00:00 AM",
+          "West",
+          "28864.71"
+        ],
+        [
+          "4/1/2024 12:00:00 AM",
+          "Central",
+          "20946.26"
+        ],
+        [
+          "4/1/2024 12:00:00 AM",
+          "East",
+          "22948.33"
+        ],
+        [
+          "5/1/2024 12:00:00 AM",
+          "North",
+          "26635.45"
+        ],
+        [
+          "5/1/2024 12:00:00 AM",
+          "Central",
+          "33596.59"
+        ],
+        [
+          "5/1/2024 12:00:00 AM",
+          "East",
+          "21263.41"
+        ],
+        [
+          "5/1/2024 12:00:00 AM",
+          "West",
+          "31014.77"
+        ],
+        [
+          "5/1/2024 12:00:00 AM",
+          "South",
+          "27296.21"
+        ],
+        [
+          "6/1/2024 12:00:00 AM",
+          "North",
+          "24321.91"
+        ],
+        [
+          "6/1/2024 12:00:00 AM",
+          "Central",
+          "20831.64"
+        ],
+        [
+          "6/1/2024 12:00:00 AM",
+          "South",
+          "31557.79"
+        ],
+        [
+          "6/1/2024 12:00:00 AM",
+          "East",
+          "33288.95"
+        ],
+        [
+          "6/1/2024 12:00:00 AM",
+          "West",
+          "26301.17"
+        ],
+        [
+          "7/1/2024 12:00:00 AM",
+          "South",
+          "20473.97"
+        ],
+        [
+          "7/1/2024 12:00:00 AM",
+          "North",
+          "36528.37"
+        ],
+        [
+          "7/1/2024 12:00:00 AM",
+          "East",
+          "34770.66"
+        ],
+        [
+          "7/1/2024 12:00:00 AM",
+          "Central",
+          "22430.81"
+        ],
+        [
+          "7/1/2024 12:00:00 AM",
+          "West",
+          "19555.86"
+        ],
+        [
+          "8/1/2024 12:00:00 AM",
+          "North",
+          "24901.43"
+        ],
+        [
+          "8/1/2024 12:00:00 AM",
+          "South",
+          "21513.02"
+        ],
+        [
+          "8/1/2024 12:00:00 AM",
+          "Central",
+          "15310.08"
+        ],
+        [
+          "8/1/2024 12:00:00 AM",
+          "West",
+          "40053.21"
+        ],
+        [
+          "8/1/2024 12:00:00 AM",
+          "East",
+          "31759.16"
+        ],
+        [
+          "9/1/2024 12:00:00 AM",
+          "Central",
+          "17826.90"
+        ],
+        [
+          "9/1/2024 12:00:00 AM",
+          "North",
+          "26553.09"
+        ],
+        [
+          "9/1/2024 12:00:00 AM",
+          "East",
+          "30863.59"
+        ],
+        [
+          "9/1/2024 12:00:00 AM",
+          "South",
+          "30697.94"
+        ],
+        [
+          "9/1/2024 12:00:00 AM",
+          "West",
+          "30963.49"
+        ],
+        [
+          "10/1/2024 12:00:00 AM",
+          "South",
+          "28300.44"
+        ],
+        [
+          "10/1/2024 12:00:00 AM",
+          "East",
+          "12373.37"
+        ],
+        [
+          "10/1/2024 12:00:00 AM",
+          "North",
+          "10600.50"
+        ],
+        [
+          "10/1/2024 12:00:00 AM",
+          "West",
+          "24014.02"
+        ],
+        [
+          "10/1/2024 12:00:00 AM",
+          "Central",
+          "26126.13"
+        ],
+        [
+          "11/1/2024 12:00:00 AM",
+          "East",
+          "18572.16"
+        ],
+        [
+          "11/1/2024 12:00:00 AM",
+          "South",
+          "22188.94"
+        ],
+        [
+          "11/1/2024 12:00:00 AM",
+          "North",
+          "8358.41"
+        ],
+        [
+          "11/1/2024 12:00:00 AM",
+          "West",
+          "19870.87"
+        ],
+        [
+          "11/1/2024 12:00:00 AM",
+          "Central",
+          "13736.59"
+        ],
+        [
+          "12/1/2024 12:00:00 AM",
+          "South",
+          "30640.76"
+        ],
+        [
+          "12/1/2024 12:00:00 AM",
+          "Central",
+          "11528.04"
+        ],
+        [
+          "12/1/2024 12:00:00 AM",
+          "West",
+          "28513.47"
+        ],
+        [
+          "12/1/2024 12:00:00 AM",
+          "North",
+          "22962.61"
+        ],
+        [
+          "12/1/2024 12:00:00 AM",
+          "East",
+          "30474.38"
+        ],
+        [
+          "1/1/2025 12:00:00 AM",
+          "North",
+          "19147.69"
+        ],
+        [
+          "1/1/2025 12:00:00 AM",
+          "East",
+          "18924.08"
+        ],
+        [
+          "1/1/2025 12:00:00 AM",
+          "West",
+          "41001.32"
+        ],
+        [
+          "1/1/2025 12:00:00 AM",
+          "Central",
+          "27092.39"
+        ],
+        [
+          "1/1/2025 12:00:00 AM",
+          "South",
+          "17180.13"
+        ],
+        [
+          "2/1/2025 12:00:00 AM",
+          "South",
+          "18166.27"
+        ],
+        [
+          "2/1/2025 12:00:00 AM",
+          "North",
+          "18784.89"
+        ],
+        [
+          "2/1/2025 12:00:00 AM",
+          "Central",
+          "16268.67"
+        ],
+        [
+          "2/1/2025 12:00:00 AM",
+          "East",
+          "24984.63"
+        ],
+        [
+          "2/1/2025 12:00:00 AM",
+          "West",
+          "15935.35"
+        ],
+        [
+          "3/1/2025 12:00:00 AM",
+          "East",
+          "25473.17"
+        ],
+        [
+          "3/1/2025 12:00:00 AM",
+          "West",
+          "23943.56"
+        ],
+        [
+          "3/1/2025 12:00:00 AM",
+          "South",
+          "20801.17"
+        ],
+        [
+          "3/1/2025 12:00:00 AM",
+          "North",
+          "11008.05"
+        ],
+        [
+          "3/1/2025 12:00:00 AM",
+          "Central",
+          "18557.79"
+        ],
+        [
+          "4/1/2025 12:00:00 AM",
+          "North",
+          "20359.81"
+        ],
+        [
+          "4/1/2025 12:00:00 AM",
+          "West",
+          "24860.79"
+        ],
+        [
+          "4/1/2025 12:00:00 AM",
+          "East",
+          "23499.47"
+        ],
+        [
+          "4/1/2025 12:00:00 AM",
+          "Central",
+          "20023.97"
+        ],
+        [
+          "4/1/2025 12:00:00 AM",
+          "South",
+          "44623.72"
+        ],
+        [
+          "5/1/2025 12:00:00 AM",
+          "South",
+          "17069.44"
+        ],
+        [
+          "5/1/2025 12:00:00 AM",
+          "East",
+          "17165.71"
+        ],
+        [
+          "5/1/2025 12:00:00 AM",
+          "West",
+          "27591.13"
+        ],
+        [
+          "5/1/2025 12:00:00 AM",
+          "North",
+          "24300.30"
+        ],
+        [
+          "5/1/2025 12:00:00 AM",
+          "Central",
+          "31677.62"
+        ],
+        [
+          "6/1/2025 12:00:00 AM",
+          "West",
+          "29009.38"
+        ],
+        [
+          "6/1/2025 12:00:00 AM",
+          "East",
+          "39347.07"
+        ],
+        [
+          "6/1/2025 12:00:00 AM",
+          "North",
+          "24636.55"
+        ],
+        [
+          "6/1/2025 12:00:00 AM",
+          "Central",
+          "36207.98"
+        ],
+        [
+          "6/1/2025 12:00:00 AM",
+          "South",
+          "21677.24"
+        ],
+        [
+          "7/1/2025 12:00:00 AM",
+          "North",
+          "24151.76"
+        ],
+        [
+          "7/1/2025 12:00:00 AM",
+          "West",
+          "37764.87"
+        ],
+        [
+          "7/1/2025 12:00:00 AM",
+          "Central",
+          "24661.84"
+        ],
+        [
+          "7/1/2025 12:00:00 AM",
+          "East",
+          "11455.52"
+        ],
+        [
+          "7/1/2025 12:00:00 AM",
+          "South",
+          "30972.17"
+        ],
+        [
+          "8/1/2025 12:00:00 AM",
+          "North",
+          "33828.51"
+        ],
+        [
+          "8/1/2025 12:00:00 AM",
+          "South",
+          "17814.75"
+        ],
+        [
+          "8/1/2025 12:00:00 AM",
+          "West",
+          "32416.99"
+        ],
+        [
+          "8/1/2025 12:00:00 AM",
+          "Central",
+          "39448.94"
+        ],
+        [
+          "8/1/2025 12:00:00 AM",
+          "East",
+          "13236.72"
+        ],
+        [
+          "9/1/2025 12:00:00 AM",
+          "South",
+          "34937.07"
+        ],
+        [
+          "9/1/2025 12:00:00 AM",
+          "Central",
+          "43543.62"
+        ],
+        [
+          "9/1/2025 12:00:00 AM",
+          "West",
+          "21400.54"
+        ],
+        [
+          "9/1/2025 12:00:00 AM",
+          "East",
+          "17743.16"
+        ],
+        [
+          "9/1/2025 12:00:00 AM",
+          "North",
+          "20405.49"
+        ],
+        [
+          "10/1/2025 12:00:00 AM",
+          "East",
+          "37450.58"
+        ],
+        [
+          "10/1/2025 12:00:00 AM",
+          "North",
+          "20890.00"
+        ],
+        [
+          "10/1/2025 12:00:00 AM",
+          "Central",
+          "29102.74"
+        ],
+        [
+          "10/1/2025 12:00:00 AM",
+          "West",
+          "23255.08"
+        ],
+        [
+          "10/1/2025 12:00:00 AM",
+          "South",
+          "36568.13"
+        ],
+        [
+          "11/1/2025 12:00:00 AM",
+          "Central",
+          "18019.48"
+        ],
+        [
+          "11/1/2025 12:00:00 AM",
+          "West",
+          "15886.28"
+        ],
+        [
+          "11/1/2025 12:00:00 AM",
+          "South",
+          "33479.86"
+        ],
+        [
+          "11/1/2025 12:00:00 AM",
+          "North",
+          "19078.30"
+        ],
+        [
+          "11/1/2025 12:00:00 AM",
+          "East",
+          "19743.66"
+        ],
+        [
+          "12/1/2025 12:00:00 AM",
+          "Central",
+          "12130.23"
+        ],
+        [
+          "12/1/2025 12:00:00 AM",
+          "South",
+          "29675.04"
+        ],
+        [
+          "12/1/2025 12:00:00 AM",
+          "West",
+          "26373.08"
+        ],
+        [
+          "12/1/2025 12:00:00 AM",
+          "North",
+          "16393.66"
+        ],
+        [
+          "12/1/2025 12:00:00 AM",
+          "East",
+          "23197.66"
+        ]
+      ],
+      "options": {
+        "mapping:x": "month",
+        "mapping:y": "MonthlyRevenue",
+        "mapping:series": "region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "Monthly Revenue Trend",
+        "SMOOTH": "TRUE"
+      }
+    },
+    {
+      "name": "DetailsTable",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "region",
+        "product",
+        "units",
+        "revenue",
+        "date"
+      ],
+      "rows": [
+        [
+          "Central",
+          "Widget D",
+          "65",
+          "2298.57",
+          "2025-12-30"
+        ],
+        [
+          "East",
+          "Widget D",
+          "95",
+          "2403.21",
+          "2025-12-29"
+        ],
+        [
+          "South",
+          "Widget D",
+          "89",
+          "3309.69",
+          "2025-12-28"
+        ],
+        [
+          "East",
+          "Widget C",
+          "12",
+          "599.27",
+          "2025-12-28"
+        ],
+        [
+          "South",
+          "Widget C",
+          "53",
+          "2057.32",
+          "2025-12-28"
+        ],
+        [
+          "South",
+          "Widget C",
+          "77",
+          "1822.7",
+          "2025-12-28"
+        ],
+        [
+          "Central",
+          "Widget B",
+          "86",
+          "1052.64",
+          "2025-12-28"
+        ],
+        [
+          "South",
+          "Widget D",
+          "89",
+          "2645.28",
+          "2025-12-27"
+        ],
+        [
+          "West",
+          "Widget D",
+          "43",
+          "1412.44",
+          "2025-12-26"
+        ],
+        [
+          "West",
+          "Widget D",
+          "48",
+          "1352.76",
+          "2025-12-26"
+        ],
+        [
+          "West",
+          "Widget A",
+          "69",
+          "1491.26",
+          "2025-12-26"
+        ],
+        [
+          "East",
+          "Widget B",
+          "22",
+          "755.44",
+          "2025-12-26"
+        ],
+        [
+          "East",
+          "Widget C",
+          "45",
+          "1015.9",
+          "2025-12-25"
+        ],
+        [
+          "Central",
+          "Widget B",
+          "62",
+          "1868.25",
+          "2025-12-25"
+        ],
+        [
+          "North",
+          "Widget C",
+          "61",
+          "1961.95",
+          "2025-12-25"
+        ],
+        [
+          "West",
+          "Widget C",
+          "31",
+          "1237.92",
+          "2025-12-24"
+        ],
+        [
+          "North",
+          "Widget A",
+          "97",
+          "1793.25",
+          "2025-12-23"
+        ],
+        [
+          "Central",
+          "Widget A",
+          "45",
+          "1485.16",
+          "2025-12-23"
+        ],
+        [
+          "North",
+          "Widget A",
+          "51",
+          "1559.21",
+          "2025-12-23"
+        ],
+        [
+          "West",
+          "Widget D",
+          "41",
+          "826.47",
+          "2025-12-22"
+        ],
+        [
+          "South",
+          "Widget A",
+          "92",
+          "4362.82",
+          "2025-12-22"
+        ],
+        [
+          "West",
+          "Widget C",
+          "60",
+          "2092.46",
+          "2025-12-21"
+        ],
+        [
+          "West",
+          "Widget C",
+          "38",
+          "1119.73",
+          "2025-12-20"
+        ],
+        [
+          "South",
+          "Widget A",
+          "33",
+          "559.05",
+          "2025-12-19"
+        ],
+        [
+          "East",
+          "Widget A",
+          "17",
+          "207.5",
+          "2025-12-18"
+        ],
+        [
+          "West",
+          "Widget D",
+          "94",
+          "3179.32",
+          "2025-12-18"
+        ],
+        [
+          "East",
+          "Widget A",
+          "16",
+          "626.79",
+          "2025-12-18"
+        ],
+        [
+          "West",
+          "Widget A",
+          "50",
+          "1641.9",
+          "2025-12-17"
+        ],
+        [
+          "South",
+          "Widget B",
+          "55",
+          "2739.08",
+          "2025-12-17"
+        ],
+        [
+          "South",
+          "Widget D",
+          "19",
+          "582.99",
+          "2025-12-17"
+        ],
+        [
+          "East",
+          "Widget C",
+          "87",
+          "3832.42",
+          "2025-12-17"
+        ],
+        [
+          "West",
+          "Widget B",
+          "18",
+          "492.95",
+          "2025-12-17"
+        ],
+        [
+          "West",
+          "Widget A",
+          "18",
+          "584.64",
+          "2025-12-17"
+        ],
+        [
+          "West",
+          "Widget B",
+          "25",
+          "1241.82",
+          "2025-12-16"
+        ],
+        [
+          "East",
+          "Widget D",
+          "91",
+          "3593.26",
+          "2025-12-16"
+        ],
+        [
+          "Central",
+          "Widget A",
+          "41",
+          "875.71",
+          "2025-12-16"
+        ],
+        [
+          "West",
+          "Widget B",
+          "9",
+          "129.88",
+          "2025-12-16"
+        ],
+        [
+          "South",
+          "Widget D",
+          "77",
+          "3884.58",
+          "2025-12-12"
+        ],
+        [
+          "North",
+          "Widget A",
+          "2",
+          "98.4",
+          "2025-12-12"
+        ],
+        [
+          "Central",
+          "Widget D",
+          "81",
+          "2241.55",
+          "2025-12-12"
+        ],
+        [
+          "East",
+          "Widget D",
+          "27",
+          "954.65",
+          "2025-12-11"
+        ],
+        [
+          "West",
+          "Widget C",
+          "51",
+          "2548.7",
+          "2025-12-11"
+        ],
+        [
+          "South",
+          "Widget A",
+          "15",
+          "642.28",
+          "2025-12-11"
+        ],
+        [
+          "North",
+          "Widget D",
+          "43",
+          "1753.21",
+          "2025-12-11"
+        ],
+        [
+          "West",
+          "Widget A",
+          "65",
+          "2776.99",
+          "2025-12-10"
+        ],
+        [
+          "Central",
+          "Widget B",
+          "18",
+          "751.01",
+          "2025-12-10"
+        ],
+        [
+          "East",
+          "Widget D",
+          "34",
+          "471.42",
+          "2025-12-09"
+        ],
+        [
+          "Central",
+          "Widget D",
+          "58",
+          "1557.34",
+          "2025-12-09"
+        ],
+        [
+          "North",
+          "Widget B",
+          "66",
+          "3257.3",
+          "2025-12-09"
+        ],
+        [
+          "North",
+          "Widget A",
+          "22",
+          "308.58",
+          "2025-12-08"
+        ],
+        [
+          "East",
+          "Widget C",
+          "93",
+          "1094.69",
+          "2025-12-08"
+        ],
+        [
+          "West",
+          "Widget B",
+          "39",
+          "1801.33",
+          "2025-12-08"
+        ],
+        [
+          "West",
+          "Widget B",
+          "15",
+          "615.93",
+          "2025-12-08"
+        ],
+        [
+          "East",
+          "Widget C",
+          "77",
+          "1575.75",
+          "2025-12-07"
+        ],
+        [
+          "East",
+          "Widget A",
+          "86",
+          "1178.62",
+          "2025-12-06"
+        ],
+        [
+          "South",
+          "Widget A",
+          "18",
+          "628.65",
+          "2025-12-05"
+        ],
+        [
+          "South",
+          "Widget B",
+          "22",
+          "756.3",
+          "2025-12-05"
+        ],
+        [
+          "South",
+          "Widget A",
+          "14",
+          "514.15",
+          "2025-12-04"
+        ],
+        [
+          "West",
+          "Widget C",
+          "5",
+          "164.99",
+          "2025-12-04"
+        ],
+        [
+          "South",
+          "Widget B",
+          "3",
+          "139.87",
+          "2025-12-04"
+        ],
+        [
+          "West",
+          "Widget B",
+          "90",
+          "1661.59",
+          "2025-12-03"
+        ],
+        [
+          "East",
+          "Widget C",
+          "55",
+          "1287.83",
+          "2025-12-03"
+        ],
+        [
+          "South",
+          "Widget C",
+          "75",
+          "3701.8",
+          "2025-12-03"
+        ],
+        [
+          "East",
+          "Widget B",
+          "28",
+          "957.57",
+          "2025-12-03"
+        ],
+        [
+          "South",
+          "Widget A",
+          "57",
+          "1274.69",
+          "2025-12-03"
+        ],
+        [
+          "East",
+          "Widget C",
+          "33",
+          "985.29",
+          "2025-12-02"
+        ],
+        [
+          "North",
+          "Widget D",
+          "81",
+          "3872.2",
+          "2025-12-02"
+        ],
+        [
+          "North",
+          "Widget C",
+          "87",
+          "1789.56",
+          "2025-12-01"
+        ],
+        [
+          "South",
+          "Widget A",
+          "4",
+          "53.79",
+          "2025-12-01"
+        ],
+        [
+          "East",
+          "Widget A",
+          "50",
+          "960.9",
+          "2025-12-01"
+        ],
+        [
+          "East",
+          "Widget D",
+          "14",
+          "697.15",
+          "2025-12-01"
+        ],
+        [
+          "South",
+          "Widget D",
+          "58",
+          "2017.71",
+          "2025-11-29"
+        ],
+        [
+          "North",
+          "Widget B",
+          "63",
+          "2483.01",
+          "2025-11-29"
+        ],
+        [
+          "North",
+          "Widget C",
+          "45",
+          "1497.53",
+          "2025-11-28"
+        ],
+        [
+          "West",
+          "Widget D",
+          "41",
+          "519.83",
+          "2025-11-28"
+        ],
+        [
+          "South",
+          "Widget A",
+          "40",
+          "1585.88",
+          "2025-11-27"
+        ],
+        [
+          "West",
+          "Widget C",
+          "69",
+          "3398.01",
+          "2025-11-27"
+        ],
+        [
+          "North",
+          "Widget D",
+          "33",
+          "1403.81",
+          "2025-11-25"
+        ],
+        [
+          "South",
+          "Widget A",
+          "79",
+          "2186.28",
+          "2025-11-25"
+        ],
+        [
+          "North",
+          "Widget D",
+          "57",
+          "1939.34",
+          "2025-11-24"
+        ],
+        [
+          "South",
+          "Widget D",
+          "96",
+          "2773.15",
+          "2025-11-24"
+        ],
+        [
+          "Central",
+          "Widget D",
+          "5",
+          "192.77",
+          "2025-11-24"
+        ],
+        [
+          "South",
+          "Widget B",
+          "92",
+          "3421",
+          "2025-11-24"
+        ],
+        [
+          "Central",
+          "Widget A",
+          "67",
+          "2445.04",
+          "2025-11-23"
+        ],
+        [
+          "South",
+          "Widget A",
+          "26",
+          "659.17",
+          "2025-11-23"
+        ],
+        [
+          "West",
+          "Widget D",
+          "78",
+          "2944.2",
+          "2025-11-22"
+        ],
+        [
+          "South",
+          "Widget A",
+          "85",
+          "2506.44",
+          "2025-11-21"
+        ],
+        [
+          "West",
+          "Widget A",
+          "5",
+          "130.86",
+          "2025-11-21"
+        ],
+        [
+          "South",
+          "Widget A",
+          "81",
+          "1886.01",
+          "2025-11-21"
+        ],
+        [
+          "East",
+          "Widget A",
+          "67",
+          "2084.57",
+          "2025-11-21"
+        ],
+        [
+          "South",
+          "Widget A",
+          "10",
+          "309.31",
+          "2025-11-20"
+        ],
+        [
+          "East",
+          "Widget A",
+          "13",
+          "628.33",
+          "2025-11-20"
+        ],
+        [
+          "South",
+          "Widget C",
+          "53",
+          "2256.64",
+          "2025-11-20"
+        ],
+        [
+          "Central",
+          "Widget D",
+          "80",
+          "3428.56",
+          "2025-11-19"
+        ],
+        [
+          "East",
+          "Widget D",
+          "44",
+          "1165.35",
+          "2025-11-19"
+        ],
+        [
+          "West",
+          "Widget A",
+          "11",
+          "460.72",
+          "2025-11-18"
+        ],
+        [
+          "East",
+          "Widget B",
+          "8",
+          "225.95",
+          "2025-11-18"
+        ],
+        [
+          "West",
+          "Widget A",
+          "45",
+          "565.93",
+          "2025-11-18"
+        ],
+        [
+          "North",
+          "Widget A",
+          "52",
+          "697.89",
+          "2025-11-17"
+        ],
+        [
+          "West",
+          "Widget A",
+          "1",
+          "27.38",
+          "2025-11-17"
+        ]
+      ],
+      "options": {},
+      "error": null,
+      "actions": [],
+      "styles": {
+        "TITLE": "Recent Transactions"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "N S W / B B P / T T T / D D D",
+      "mode": "DASHBOARD",
+      "slotMap": {
+        "N": "KpiNorth",
+        "S": "KpiSouth",
+        "W": "KpiWest",
+        "B": "RevenueByRegion",
+        "P": "UnitsByProduct",
+        "T": "SalesTrend",
+        "D": "DetailsTable"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 134,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[00ccedf5] Connection sales_data created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.4813046Z"
+    },
+    {
+      "message": "[00ccedf5] [SELECT] Executing SelectStatement. Session: 00ccedf5",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.4974856Z"
+    },
+    {
+      "message": "[00ccedf5] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.5818987Z"
+    },
+    {
+      "message": "[00ccedf5] [SELECT] Executing SelectStatement. Session: 00ccedf5",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.5820086Z"
+    },
+    {
+      "message": "[00ccedf5] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6070976Z"
+    },
+    {
+      "message": "[00ccedf5] [SELECT] Executing SelectStatement. Session: 00ccedf5",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6071813Z"
+    },
+    {
+      "message": "[00ccedf5] 120 rows affected.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6337004Z"
+    },
+    {
+      "message": "[00ccedf5] [SELECT] Executing SelectStatement. Session: 00ccedf5",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6337767Z"
+    },
+    {
+      "message": "[00ccedf5] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6528223Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027KpiNorth\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6547098Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027KpiSouth\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6548181Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027KpiWest\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6548562Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027RevenueByRegion\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6548945Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027UnitsByProduct\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6549269Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027SalesTrend\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6549579Z"
+    },
+    {
+      "message": "[00ccedf5] Visual \u0027DetailsTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6549893Z"
+    },
+    {
+      "message": "[00ccedf5] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.655945Z"
+    },
+    {
+      "message": "[00ccedf5] Style \u0027GLOBAL\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-07-18T01:31:27.6562806Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "a53d57a6-de17-42e6-9711-028f5ebf71d9",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 194.8216,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1fce06c1-8651-4d59-92b6-35df531a2c1f",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2628,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "cdff86fc-4cf9-4846-b1b4-14eae09f2756",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0299,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "bca7940d-6f7d-4f11-9dd3-b1f14d2ae65e",
+          "name": "CreateConnection",
+          "status": "Completed",
+          "rowsProcessed": 20,
+          "durationMs": 30.1039,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 664.3657466308352,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "073150cc-00ef-4f0c-bf80-70d38225c10b",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 5010,
+          "durationMs": 85.681,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 58472.70690117996,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "56fab4ba-bf60-4def-ad4b-f33556d97903",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 5010,
+          "durationMs": 25.1413,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 199273.7050192313,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6970fdaf-01cc-4c0b-83cd-a4372d53fba1",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 5240,
+          "durationMs": 26.5587,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 197298.8135714474,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "47f82cd9-9f7b-4410-9b51-d89c8525d2db",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 5008,
+          "durationMs": 19.0872,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 262374.78519636195,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a1cb634b-934d-4c32-9a3d-ca3b83526dac",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.8405,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "265ce1e2-470e-44b1-a9a4-658f7d5faad8",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0659,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ad13ea1f-d7d4-4e62-980e-7ae694f53adb",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0308,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "cc46bad8-31c1-4ed7-b2ae-00ceda7602e5",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.033,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "602e521c-6b46-4b60-a270-3a581e40fc35",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0287,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "dfee3ba9-0984-4c60-878b-d9bf018024a9",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0276,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "973cbc5f-d71f-4266-a773-d63d6d6be12a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.026,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7919b312-8e1e-4e20-9725-b13e58218b0d",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9517,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c7ecb9bb-2f77-450a-b803-bcf5b5c906fe",
+          "name": "CreateStyle",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3234,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}
