@@ -298,15 +298,19 @@ namespace ETL_SQL.Connectors.Snowflake
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText = $"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0";
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 return Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
             }
             catch (SnowflakeDbException ex)
@@ -316,9 +320,13 @@ namespace ETL_SQL.Connectors.Snowflake
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
@@ -326,9 +334,9 @@ namespace ETL_SQL.Connectors.Snowflake
                     "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES " +
                     "WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA <> 'INFORMATION_SCHEMA' " +
                     "ORDER BY TABLE_SCHEMA, TABLE_NAME";
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var result = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var table = reader.GetString(1);
@@ -343,18 +351,22 @@ namespace ETL_SQL.Connectors.Snowflake
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText =
                     "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS " +
                     "WHERE TABLE_SCHEMA <> 'INFORMATION_SCHEMA' ORDER BY TABLE_SCHEMA, TABLE_NAME";
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var result = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var schema = reader.GetString(0);
                     var view = reader.GetString(1);
@@ -369,14 +381,18 @@ namespace ETL_SQL.Connectors.Snowflake
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText = $"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0";
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 return Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
             }
             catch (SnowflakeDbException ex)

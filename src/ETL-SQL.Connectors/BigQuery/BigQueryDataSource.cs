@@ -236,14 +236,21 @@ namespace ETL_SQL.Connectors.BigQuery
             yield return batch;
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
-            return await GetColumnsAsync(_tableName);
+            return await GetColumnsAsync(_tableName, cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync()
+            => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var datasetId = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
             var client = await CreateClientAsync();
             try
@@ -251,6 +258,7 @@ namespace ETL_SQL.Connectors.BigQuery
                 var tables = new List<string>();
                 await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (string.Equals(t.Resource?.Type, "TABLE", StringComparison.OrdinalIgnoreCase) && t.Reference?.TableId != null)
                         tables.Add(t.Reference.TableId);
                 }
@@ -262,8 +270,12 @@ namespace ETL_SQL.Connectors.BigQuery
             }
         }
 
-        public async Task<IEnumerable<string>> GetViewsAsync()
+        public Task<IEnumerable<string>> GetViewsAsync()
+            => GetViewsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var datasetId = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
             var client = await CreateClientAsync();
             try
@@ -271,6 +283,7 @@ namespace ETL_SQL.Connectors.BigQuery
                 var views = new List<string>();
                 await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (string.Equals(t.Resource?.Type, "VIEW", StringComparison.OrdinalIgnoreCase) && t.Reference?.TableId != null)
                         views.Add(t.Reference.TableId);
                 }
@@ -282,8 +295,12 @@ namespace ETL_SQL.Connectors.BigQuery
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+            => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var (proj, ds, table) = ParseTableName(tableName);
             var projectId = proj ?? _projectId;
             var datasetId = ds ?? _dataset
@@ -295,8 +312,10 @@ namespace ETL_SQL.Connectors.BigQuery
                       "WHERE table_name = @tableName ORDER BY ordinal_position";
             try
             {
-                var results = await client.ExecuteQueryAsync(sql,
-                    new[] { new BigQueryParameter("tableName", BigQueryDbType.String, table) });
+                var results = await client.ExecuteQueryAsync(
+                    sql,
+                    new[] { new BigQueryParameter("tableName", BigQueryDbType.String, table) },
+                    cancellationToken: effectiveCancellationToken);
                 return results
                     .Select(r => r["column_name"]?.ToString() ?? "")
                     .Where(n => n.Length > 0)
