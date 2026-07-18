@@ -320,7 +320,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Statement Reference](docs/reference/statements/README.md) | Focused pages for DDL, DML, query syntax, control flow, and session commands. |
 | [Standard Library](docs/reference/functions/README.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
 | [Data Connectors](docs/reference/connectors/data-connectors.md) | Connector types, options, authentication patterns, and examples. |
-| [Specialized Operations](docs/reference/file-operations/specialized-operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
+| [File Operations](docs/reference/file-operations/README.md) | File operations, email, transfer, SSH/PGP keys, Docker, and advanced file ops. |
 | [Performance](docs/reference/performance/performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
 | [Spec-Driven Development](docs/spec-import/spec-driven-development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
 

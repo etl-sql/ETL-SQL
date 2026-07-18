@@ -62,6 +62,15 @@ END
 
 > **Error behavior:** Stop-on-first-error within each block. The block is not transactional - a failure mid-block leaves prior statements applied.
 
+#### Security and behavior
+
+- **`WHAT_IF` support** — When `SET WHAT_IF ON` is active, `EXEC`/`EXECUTE` against a remote connection
+  logs the SQL that *would* be executed without actually transmitting it.
+- **SQL injection** — Always prefer parameterized execution (`WITH`) or block pushdown over string
+  concatenation when building SQL with user-provided input.
+- **Transaction scope** — Remote `EXEC`/`EXECUTE` statements participate in the ambient ETL-SQL
+  transaction if `BEGIN TRANSACTION` has been called and the connector supports it.
+
 ### 11.2 `PARALLEL`
 ```sql
 PARALLEL

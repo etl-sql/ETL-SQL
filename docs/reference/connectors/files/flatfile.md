@@ -49,5 +49,30 @@ PRINT 'Orders loaded: ' + @@ROWCOUNT;
 
 When schema-resilience options change the accepted shape, FLATFILE emits a diagnostic with ignored extra-column count, null-filled missing-column count, and affected row count. Use `EXPECT SCHEMA` after staging when the accepted `#temp` shape is a downstream contract.
 
+## Fixed-width layouts (`FORMAT = 'FIXED'`)
+
+When `FORMAT = 'FIXED'`, the connector needs a character width for each column. Provide a `CREATE TABLE`
+layout template; the engine resolves each column's physical slot width as follows:
+
+| Form | Physical slot width | Use when |
+| :--- | :--- | :--- |
+| `CHAR(N)` / `VARCHAR(N)` | N characters | Character data — N is the exact field width |
+| `INT(N)` / `BIGINT(N)` etc. | N+1 characters | Integer data — N is the number of significant digit characters; the extra slot holds the sign, giving the range −(10ⁿ−1) to (10ⁿ−1) |
+| `/* @width: N */` | N characters (exact) | Any column where the type carries no natural length; N is the raw physical character count |
+
+```sql
+CREATE TABLE #Layout (
+    ID       INT(5),       -- 5 digits + 1 sign = 6-char slot; range -99999 to 99999
+    Amount   DECIMAL(9,2), -- 9-char slot (precision digits)
+    Code     CHAR(3),      -- 3-char slot (exact)
+    Name     VARCHAR(20),  -- 20-char slot (exact)
+    RawFlag  INT /* @width: 1 */  -- 1-char slot (explicit override, no sign padding)
+);
+```
+
+> [!NOTE]
+> `INT` without a precision parameter has no inherent length and raises a "Width not defined" error.
+> Use `INT(N)`, `CHAR(N)`, `VARCHAR(N)`, or `/* @width: N */` for every column in a `FORMAT=FIXED` layout.
+
 References:
 - [Data Connectors](../../../administration/platform/README.md)

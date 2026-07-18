@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Advanced File Operations](advanced-file-operations.md) | Advanced filesystem statements: `WAITFOR FILE UNLOCKED`, `CONVERT FILE ENCODING`, `SPLIT FILE`, `MERGE FILES`, `SYNC DIRECTORY`, `VERIFY FILE INTEGRITY`, and directory-connection path aliasing. |
 | [bulk-insert](bulk-insert.md) | BULK INSERT loads a flat file directly into a connection table in high-throughput batches, bypassing the #temp table staging step. |
 | [COMPRESS / DECOMPRESS](compress-file.md) | Compresses or decompresses files and directories using ZIP or GZIP format. |
 | [COPY](copy-file.md) | Copies a file or directory from one location to another, including across connections (local, SFTP, S3). |
@@ -16,5 +17,4 @@
 | [receive-file](receive-file.md) | Downloads a file from a remote server via an FTP or SFTP connection. |
 | [send-email](send-email.md) | Sends an email via an SMTP connection. |
 | [send-file](send-file.md) | Transfers a local file to a remote server via an FTP or SFTP connection. |
-| [ETL-SQL Specialized Operations & Automation](specialized-operations.md) | This document is the technical reference for ETL-SQL's non-query automation features: filesystem management, remote file transfer, email notificati... |
 | [TRANSFER Operations](transfer.md) | SEND FILE and RECEIVE FILE move files between the local file system and a remote server connection (SFTP, FTP, or Azure Blob). |
