@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using ETL_SQL.Connectors.MySql;
+using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
@@ -64,6 +65,18 @@ public class DataSourceCancellationTests
                 typeof(IEnumerable<object?>),
                 typeof(CancellationToken));
         }
+    }
+
+    [Fact]
+    public void MongoDataSource_DeclaresNativeCancellationOverloads()
+    {
+        AssertDeclares(typeof(MongodbDataSource), nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+        AssertDeclares(
+            typeof(MongodbDataSource),
+            nameof(IDataSource.WriteBatches),
+            typeof(IAsyncEnumerable<DataTable>),
+            typeof(bool),
+            typeof(CancellationToken));
     }
 
     private static void AssertDeclares(Type type, string methodName, params Type[] parameterTypes)

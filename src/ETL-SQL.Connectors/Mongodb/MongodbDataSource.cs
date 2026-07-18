@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -57,23 +59,35 @@ namespace ETL_SQL.Connectors.Mongodb
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "MongoDB", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "MongoDB",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No collection specified for MongoDB data source read.");
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
 
             var client = GetClient();
             var db = client.GetDatabase(_databaseName);
             var coll = db.GetCollection<BsonDocument>(_tableName);
 
-            var columnNames = (await GetColumnsInternalAsync()).ToList();
+            var columnNames = (await GetColumnsInternalAsync(effectiveCancellationToken)).ToList();
 
             IAsyncCursor<BsonDocument> cursor;
             try
             {
-                cursor = await coll.FindAsync(new BsonDocument());
+                cursor = await coll.FindAsync(
+                    new BsonDocument(),
+                    options: null,
+                    cancellationToken: effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -85,7 +99,7 @@ namespace ETL_SQL.Connectors.Mongodb
 
             using (cursor)
             {
-                while (await cursor.MoveNextAsync())
+                while (await cursor.MoveNextAsync(effectiveCancellationToken))
                 {
                     foreach (var doc in cursor.Current)
                     {
@@ -119,8 +133,12 @@ namespace ETL_SQL.Connectors.Mongodb
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
@@ -134,10 +152,10 @@ namespace ETL_SQL.Connectors.Mongodb
             {
                 if (!append)
                 {
-                    await db.DropCollectionAsync(_tableName);
+                    await db.DropCollectionAsync(_tableName, effectiveCancellationToken);
                 }
 
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -153,7 +171,7 @@ namespace ETL_SQL.Connectors.Mongodb
                         docs.Add(doc);
                     }
 
-                    await coll.InsertManyAsync(docs);
+                    await coll.InsertManyAsync(docs, options: null, cancellationToken: effectiveCancellationToken);
                 }
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -164,7 +182,7 @@ namespace ETL_SQL.Connectors.Mongodb
 
         public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsInternalAsync();
 
-        private async Task<IEnumerable<string>> GetColumnsInternalAsync()
+        private async Task<IEnumerable<string>> GetColumnsInternalAsync(CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
             try
@@ -172,7 +190,9 @@ namespace ETL_SQL.Connectors.Mongodb
                 var client = GetClient();
                 var db = client.GetDatabase(_databaseName);
                 var coll = db.GetCollection<BsonDocument>(_tableName);
-                var firstDoc = await coll.Find(new BsonDocument()).FirstOrDefaultAsync();
+                var firstDoc = await coll
+                    .Find(new BsonDocument())
+                    .FirstOrDefaultAsync(EffectiveCancellationToken(cancellationToken));
                 if (firstDoc != null)
                 {
                     return firstDoc.Names;
@@ -242,5 +262,8 @@ namespace ETL_SQL.Connectors.Mongodb
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is MongoException or InvalidOperationException;
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

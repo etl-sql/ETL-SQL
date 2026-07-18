@@ -155,6 +155,12 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: provider-native overrides and cancellation tests for MongoDB, file, REST/API,
       and graph connector families.
+      Additional progress on 2026-07-18: added native cancellation-aware read/write overrides for
+      MongoDB collection reads, schema sampling, collection drops, and inserts. Validated with
+      `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: provider-native overrides and cancellation tests for file, REST/API, and graph
+      connector families.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because
