@@ -1,7 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
+using Docker.DotNet;
+using Docker.DotNet.Models;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
@@ -37,6 +41,56 @@ namespace ETL_SQL.Tests.Integration
         {
             var lexer = new Lexer(sql);
             return new Parser(lexer.Tokenize()).Parse();
+        }
+
+        private static async Task<DockerClient> CreateDockerClient(CancellationToken cancellationToken = default)
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var pipes = new[]
+                {
+                    "npipe://./pipe/docker_engine",
+                    "npipe://./pipe/docker_desktop_linux",
+                    "npipe://./pipe/docker_desktop_windows"
+                };
+
+                foreach (var pipe in pipes)
+                {
+                    try
+                    {
+                        var client = new DockerClientBuilder()
+                            .WithEndpoint(new Uri(pipe))
+                            .Build();
+                        await client.System.PingAsync(cancellationToken);
+                        return client;
+                    }
+                    catch
+                    {
+                        // Try the next common Docker Desktop pipe.
+                    }
+                }
+            }
+
+            var unixClient = new DockerClientBuilder()
+                .WithEndpoint(new Uri("unix:///var/run/docker.sock"))
+                .Build();
+            await unixClient.System.PingAsync(cancellationToken);
+            return unixClient;
+        }
+
+        private static async Task<ContainerInspectResponse> InspectContainerByName(
+            DockerClient client,
+            string containerName,
+            CancellationToken cancellationToken = default)
+        {
+            var containers = await client.Containers.ListContainersAsync(
+                new ContainersListParameters { All = true },
+                cancellationToken);
+            var container = containers.SingleOrDefault(c =>
+                c.Names.Any(n => n.Equals("/" + containerName, StringComparison.OrdinalIgnoreCase)));
+
+            Assert.NotNull(container);
+            return await client.Containers.InspectContainerAsync(container!.ID, cancellationToken);
         }
 
         [Fact]
@@ -95,6 +149,45 @@ namespace ETL_SQL.Tests.Integration
             finally
             {
                 await evaluator.DisposeAsync();
+            }
+        }
+
+        [Fact]
+        public async Task PauseResumeContainer_UsesDockerPausedState_NotStoppedState()
+        {
+            var alias = "pause_state_" + Guid.NewGuid().ToString("N")[..8];
+            var containerName = "etlsql_" + alias;
+            var manager = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<IDockerManager>();
+            var paused = false;
+
+            using var client = await CreateDockerClient();
+            try
+            {
+                await manager.StartContainer("postgres:15-alpine", alias);
+
+                var beforePause = await InspectContainerByName(client, containerName);
+                Assert.True(beforePause.State.Running);
+                Assert.False(beforePause.State.Paused);
+
+                await manager.PauseContainer(alias);
+                paused = true;
+
+                var afterPause = await InspectContainerByName(client, containerName);
+                Assert.True(afterPause.State.Running);
+                Assert.True(afterPause.State.Paused);
+
+                await manager.ResumeContainer(alias);
+                paused = false;
+
+                var afterResume = await InspectContainerByName(client, containerName);
+                Assert.True(afterResume.State.Running);
+                Assert.False(afterResume.State.Paused);
+            }
+            finally
+            {
+                if (paused)
+                    await manager.ResumeContainer(alias);
+                await manager.CloseContainers(alias);
             }
         }
 

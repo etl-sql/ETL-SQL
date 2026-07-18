@@ -130,13 +130,13 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       at-rest key version, and parquet path in preview cache keys. Completed on 2026-07-18 by moving
       previews into a dedicated size-limited cache with `Portal:Dataset:PreviewCacheMaxRows`, row-count
       entry weights, config docs, and eviction coverage.
-- [ ] **P1 - Restore actual Docker pause/resume semantics.**
+- [x] **P1 - Restore actual Docker pause/resume semantics.**
       `DockerContainerManager.PauseContainer` calls `StopAsync` and `ResumeContainer` calls
       `StartAsync`, contradicting the documented CPU-suspension behavior and changing container state.
       Use the provider's pause/unpause API and add integration tests that distinguish paused from
       stopped containers.
-      Implementation switched to Docker pause/unpause APIs on 2026-07-18 and builds cleanly. Remaining
-      work: add Docker integration coverage that asserts paused vs stopped container state.
+      Completed on 2026-07-18 by switching to Docker pause/unpause APIs and adding integration coverage
+      that inspects Docker state before pause, after pause, and after resume.
 - [ ] **P1 - Propagate cancellation through data-source contracts and provider I/O.** Core
       `IDataSource`/`IDatabaseSource` batch, schema, transaction, and raw-SQL methods lack cancellation
       tokens, and SQL/MongoDB implementations call async open/read/write APIs without tokens. Extend the
