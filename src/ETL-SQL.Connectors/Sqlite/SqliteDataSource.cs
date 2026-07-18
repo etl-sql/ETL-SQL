@@ -80,7 +80,7 @@ namespace ETL_SQL.Connectors.Sqlite
                 _transactionState, ownsTransactionState: false);
         }
 
-        private async Task<(SqliteConnection Connection, bool IsShared)> GetConnectionAsync()
+        private async Task<(SqliteConnection Connection, bool IsShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
             if (_transactionState.Connection != null)
             {
@@ -89,7 +89,7 @@ namespace ETL_SQL.Connectors.Sqlite
             var connection = new SqliteConnection(_connectionString);
             try
             {
-                await connection.OpenAsync(_context?.CancellationToken ?? CancellationToken.None);
+                await connection.OpenAsync(EffectiveCancellationToken(cancellationToken));
                 return (connection, false);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -122,7 +122,13 @@ namespace ETL_SQL.Connectors.Sqlite
         public HashSet<string> GetSupportedFunctions() => SqliteSyntax.Functions;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "SQLite", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "SQLite",
+                ShouldWrapProviderException);
 
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -130,7 +136,8 @@ namespace ETL_SQL.Connectors.Sqlite
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite data source read.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand($"SELECT * FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
@@ -174,14 +181,18 @@ namespace ETL_SQL.Connectors.Sqlite
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite data source write.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             SqliteTransaction? trans = null;
             SqliteCommand? insertCmd = null;
 
@@ -195,11 +206,10 @@ namespace ETL_SQL.Connectors.Sqlite
                     using var truncCmd = CreateCommand($"DELETE FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
                     if (trans != null) truncCmd.Transaction = trans;
                     else if (_transactionState.Transaction != null) truncCmd.Transaction = _transactionState.Transaction;
-                    await truncCmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
+                    await truncCmd.ExecuteNonQueryAsync(effectiveCancellationToken);
                 }
 
-                await foreach (var batch in batches.WithCancellation(
-                    _context?.CancellationToken ?? CancellationToken.None))
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -225,7 +235,7 @@ namespace ETL_SQL.Connectors.Sqlite
                         {
                             insertCmd.Parameters[idx].Value = row[idx] ?? DBNull.Value;
                         }
-                        await insertCmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
+                        await insertCmd.ExecuteNonQueryAsync(effectiveCancellationToken);
                     }
                 }
 
@@ -358,7 +368,16 @@ namespace ETL_SQL.Connectors.Sqlite
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "SQLite", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "SQLite",
+                ShouldWrapProviderException);
 
         private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)

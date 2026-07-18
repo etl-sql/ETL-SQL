@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -47,13 +49,19 @@ namespace ETL_SQL.Connectors.Oracle
 
         public IDataSource WithTable(string tableName) => new OracleDataSource(_context!, _connectionString, tableName, _options);
 
-        private async Task<OracleConnection> OpenConnectionAsync()
+        private async Task<OracleConnection> OpenConnectionAsync(CancellationToken cancellationToken = default)
         {
             var conn = new OracleConnection(_connectionString);
             try
             {
                 await ConnectorRetryPolicy.ForOracle(_logger)
-                    .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                    .ExecuteAsync(async ct =>
+                    {
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                            ct,
+                            EffectiveCancellationToken(cancellationToken));
+                        await conn.OpenAsync(linked.Token);
+                    });
                 return conn;
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -81,16 +89,25 @@ namespace ETL_SQL.Connectors.Oracle
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.Functions;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Oracle", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "Oracle",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source read.");
 
-            using var conn = await OpenConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            using var conn = await OpenConnectionAsync(effectiveCancellationToken);
             using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
+            using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
             var columns = new List<string>();
             for (int i = 0; i < reader.FieldCount; i++)
@@ -101,7 +118,7 @@ namespace ETL_SQL.Connectors.Oracle
             var currentBatch = new DataTable();
             currentBatch.SetColumns(columns);
 
-            while (await reader.ReadAsync())
+            while (await reader.ReadAsync(effectiveCancellationToken))
             {
                 var row = new Row();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -124,16 +141,20 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
             try
             {
-                using var conn = await OpenConnectionAsync();
+                using var conn = await OpenConnectionAsync(effectiveCancellationToken);
 
                 using var bulkCopy = new OracleBulkCopy(conn);
                 bulkCopy.DestinationTableName = _tableName;
@@ -141,7 +162,7 @@ namespace ETL_SQL.Connectors.Oracle
                 var isFirstBatch = true;
                 System.Data.DataTable? dt = null;
 
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -167,6 +188,7 @@ namespace ETL_SQL.Connectors.Oracle
                         dt.Rows.Add(dataRow);
                     }
 
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     bulkCopy.WriteToServer(dt);
                 }
             }
@@ -177,11 +199,24 @@ namespace ETL_SQL.Connectors.Oracle
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "Oracle", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "Oracle",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            using var conn = await OpenConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            using var conn = await OpenConnectionAsync(effectiveCancellationToken);
 
             // Oracle ODP.NET does not support multi-statement batches. Split on ';' and execute individually.
             var statements = SplitOracleStatements(sql);
@@ -203,14 +238,14 @@ namespace ETL_SQL.Connectors.Oracle
                 if (paramCount > 0)
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
 
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                     columns.Add(reader.GetName(i));
 
                 var resultBatch = new DataTable();
                 resultBatch.SetColumns(columns);
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var row = new Row();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -323,11 +358,19 @@ namespace ETL_SQL.Connectors.Oracle
         public void Restore(object? snapshot) { }
 
         public async Task TruncateAsync()
+            => await TruncateAsync(CancellationToken.None);
+
+        private async Task TruncateAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName)}")) { }
+            await foreach (var _ in ExecuteRawSql(
+                $"TRUNCATE TABLE {QuoteIdentifier(_tableName)}",
+                null,
+                cancellationToken))
+            {
+            }
         }
 
         private static string QuoteIdentifier(string name)
@@ -350,6 +393,9 @@ namespace ETL_SQL.Connectors.Oracle
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
 
         private static object? MapOracleValue(object value)
         {

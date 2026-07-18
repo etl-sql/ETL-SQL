@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Data.Odbc;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -69,19 +71,28 @@ namespace ETL_SQL.Connectors.Odbc
         public HashSet<string> GetSupportedFunctions() => OdbcSyntax.Functions;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "ODBC", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "ODBC",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC data source read.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -92,7 +103,7 @@ namespace ETL_SQL.Connectors.Odbc
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -120,14 +131,18 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             OdbcTransaction? localTx = null;
             if (_activeTransaction == null) localTx = conn.BeginTransaction();
 
@@ -136,7 +151,7 @@ namespace ETL_SQL.Connectors.Odbc
                 var isFirstBatch = true;
                 OdbcCommand? insertCmd = null;
 
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -162,7 +177,7 @@ namespace ETL_SQL.Connectors.Odbc
                             var colName = batch.ColumnNames[i];
                             insertCmd!.Parameters[i].Value = row[colName] ?? DBNull.Value;
                         }
-                        await insertCmd!.ExecuteNonQueryAsync();
+                        await insertCmd!.ExecuteNonQueryAsync(effectiveCancellationToken);
                     }
                 }
                 localTx?.Commit();
@@ -185,11 +200,24 @@ namespace ETL_SQL.Connectors.Odbc
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "ODBC", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "ODBC",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 using var cmd = CreateCommand(sql, conn);
@@ -204,7 +232,7 @@ namespace ETL_SQL.Connectors.Odbc
                     }
                 }
 
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 int resultSetIndex = 0;
                 do
@@ -218,7 +246,7 @@ namespace ETL_SQL.Connectors.Odbc
                     var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
                     currentBatch.SetColumns(columns);
 
-                    while (await reader.ReadAsync())
+                    while (await reader.ReadAsync(effectiveCancellationToken))
                     {
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
@@ -247,7 +275,7 @@ namespace ETL_SQL.Connectors.Odbc
                         yield return currentBatch;
                         resultSetIndex++;
                     }
-                } while (await reader.NextResultAsync());
+                } while (await reader.NextResultAsync(effectiveCancellationToken));
             }
             finally
             {
@@ -398,7 +426,7 @@ namespace ETL_SQL.Connectors.Odbc
             return Task.CompletedTask;
         }
 
-        private async Task<(OdbcConnection, bool isShared)> GetConnectionAsync()
+        private async Task<(OdbcConnection, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             if (string.IsNullOrWhiteSpace(_connectionString))
@@ -410,7 +438,10 @@ namespace ETL_SQL.Connectors.Odbc
                 await ConnectorRetryPolicy.ForOdbc(_logger)
                     .ExecuteAsync(async ct =>
                     {
-                        await Task.Run(() => conn.Open(), ct);
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                            ct,
+                            EffectiveCancellationToken(cancellationToken));
+                        await Task.Run(() => conn.Open(), linked.Token);
                     });
                 return (conn, false);
             }
@@ -422,11 +453,19 @@ namespace ETL_SQL.Connectors.Odbc
         }
 
         public async Task TruncateAsync()
+            => await TruncateAsync(CancellationToken.None);
+
+        private async Task TruncateAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"DELETE FROM {OdbcSyntax.QuoteIdentifier(_tableName)}")) { }
+            await foreach (var _ in ExecuteRawSql(
+                $"DELETE FROM {OdbcSyntax.QuoteIdentifier(_tableName)}",
+                null,
+                cancellationToken))
+            {
+            }
         }
 
         public async ValueTask DisposeAsync()
@@ -444,6 +483,9 @@ namespace ETL_SQL.Connectors.Odbc
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is OdbcException or InvalidOperationException;

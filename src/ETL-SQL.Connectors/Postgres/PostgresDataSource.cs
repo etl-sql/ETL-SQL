@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
@@ -84,19 +86,28 @@ namespace ETL_SQL.Connectors.Postgres
         public HashSet<string> GetSupportedFunctions() => PostgresSyntax.Functions;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "PostgreSQL", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "PostgreSQL",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres data source read.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -107,7 +118,7 @@ namespace ETL_SQL.Connectors.Postgres
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -135,25 +146,31 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             System.IO.TextWriter? writer = null;
             try
             {
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
                     if (writer == null)
                     {
                         var cols = string.Join(", ", batch.ColumnNames.Select(c => $"\"{c}\""));
-                        writer = await conn.BeginTextImportAsync($"COPY {QuoteIdentifier(_tableName)} ({cols}) FROM STDIN");
+                        writer = await conn.BeginTextImportAsync(
+                            $"COPY {QuoteIdentifier(_tableName)} ({cols}) FROM STDIN",
+                            effectiveCancellationToken);
                     }
 
                     foreach (var row in batch.Rows)
@@ -165,7 +182,7 @@ namespace ETL_SQL.Connectors.Postgres
                             var s = FormatCopyValue(val);
                             return s.Replace("\t", " ").Replace("\n", " ").Replace("\r", " ");
                         });
-                        await writer.WriteLineAsync(string.Join("\t", values));
+                        await writer.WriteLineAsync(string.Join("\t", values).AsMemory(), effectiveCancellationToken);
                     }
                 }
             }
@@ -181,11 +198,24 @@ namespace ETL_SQL.Connectors.Postgres
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "PostgreSQL", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "PostgreSQL",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
 
             void NoticeHandler(object sender, NpgsqlNoticeEventArgs e)
             {
@@ -228,7 +258,7 @@ namespace ETL_SQL.Connectors.Postgres
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText);
                 }
 
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 int resultSetIndex = 0;
                 do
@@ -242,7 +272,7 @@ namespace ETL_SQL.Connectors.Postgres
                     var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
                     currentBatch.SetColumns(columns);
 
-                    while (await reader.ReadAsync())
+                    while (await reader.ReadAsync(effectiveCancellationToken))
                     {
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
@@ -270,7 +300,7 @@ namespace ETL_SQL.Connectors.Postgres
                         yield return currentBatch;
                     }
                     resultSetIndex++;
-                } while (await reader.NextResultAsync());
+                } while (await reader.NextResultAsync(effectiveCancellationToken));
             }
             finally
             {
@@ -456,14 +486,20 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        private async Task<(NpgsqlConnection, bool isShared)> GetConnectionAsync()
+        private async Task<(NpgsqlConnection, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             var conn = new NpgsqlConnection(_connectionString);
             try
             {
                 await ConnectorRetryPolicy.ForPostgres(_logger)
-                    .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                    .ExecuteAsync(async ct =>
+                    {
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                            ct,
+                            EffectiveCancellationToken(cancellationToken));
+                        await conn.OpenAsync(linked.Token);
+                    });
                 return (conn, false);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -474,11 +510,19 @@ namespace ETL_SQL.Connectors.Postgres
         }
 
         public async Task TruncateAsync()
+            => await TruncateAsync(CancellationToken.None);
+
+        private async Task TruncateAsync(CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName)}")) { }
+            await foreach (var _ in ExecuteRawSql(
+                $"TRUNCATE TABLE {QuoteIdentifier(_tableName)}",
+                null,
+                cancellationToken))
+            {
+            }
         }
 
         private static string QuoteIdentifier(string name)
@@ -514,6 +558,9 @@ namespace ETL_SQL.Connectors.Postgres
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is NpgsqlException or InvalidOperationException;

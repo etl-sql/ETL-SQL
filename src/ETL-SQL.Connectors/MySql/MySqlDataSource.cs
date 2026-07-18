@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -81,19 +83,28 @@ namespace ETL_SQL.Connectors.MySql
         public HashSet<string> GetSupportedFunctions() => MySqlSyntax.Functions;
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "MySql", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "MySql",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for MySql data source read.");
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -104,7 +115,7 @@ namespace ETL_SQL.Connectors.MySql
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(effectiveCancellationToken))
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -132,16 +143,20 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for MySql data source write.");
 
-            if (!append) await TruncateAsync();
+            if (!append) await TruncateAsync(effectiveCancellationToken);
 
-            var (conn, isShared) = await GetConnectionAsync();
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
                 var bulkCopy = _activeTransaction != null
@@ -153,7 +168,7 @@ namespace ETL_SQL.Connectors.MySql
                 var isFirstBatch = true;
                 System.Data.DataTable? dt = null;
 
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -180,7 +195,7 @@ namespace ETL_SQL.Connectors.MySql
                         dt.Rows.Add(dataRow);
                     }
 
-                    await bulkCopy.WriteToServerAsync(dt);
+                    await bulkCopy.WriteToServerAsync(dt, effectiveCancellationToken);
                 }
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -194,11 +209,24 @@ namespace ETL_SQL.Connectors.MySql
         }
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
-            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "MySql", ShouldWrapProviderException);
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters, cancellationToken),
+                "MySql",
+                ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
+            string sql,
+            IEnumerable<object?>? parameters = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var (conn, isShared) = await GetConnectionAsync();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
 
             try
             {
@@ -219,7 +247,7 @@ namespace ETL_SQL.Connectors.MySql
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText);
                 }
 
-                await using var reader = await cmd.ExecuteReaderAsync();
+                await using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 int resultSetIndex = 0;
                 do
@@ -233,7 +261,7 @@ namespace ETL_SQL.Connectors.MySql
                     var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
                     currentBatch.SetColumns(columns);
 
-                    while (await reader.ReadAsync())
+                    while (await reader.ReadAsync(effectiveCancellationToken))
                     {
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
@@ -261,7 +289,7 @@ namespace ETL_SQL.Connectors.MySql
                         yield return currentBatch;
                     }
                     resultSetIndex++;
-                } while (await reader.NextResultAsync());
+                } while (await reader.NextResultAsync(effectiveCancellationToken));
             }
             finally
             {
@@ -430,14 +458,20 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        private async Task<(MySqlConnection, bool isShared)> GetConnectionAsync()
+        private async Task<(MySqlConnection, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             var conn = new MySqlConnection(_connectionString);
             try
             {
                 await ConnectorRetryPolicy.ForMySql(_logger)
-                    .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                    .ExecuteAsync(async ct =>
+                    {
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                            ct,
+                            EffectiveCancellationToken(cancellationToken));
+                        await conn.OpenAsync(linked.Token);
+                    });
                 return (conn, false);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -448,13 +482,21 @@ namespace ETL_SQL.Connectors.MySql
         }
 
         public async Task TruncateAsync()
+            => await TruncateAsync(CancellationToken.None);
+
+        private async Task TruncateAsync(CancellationToken cancellationToken)
         {
             if (_context != null && _context.IsWhatIf) return;
 
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for MySql truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName)}")) { }
+            await foreach (var _ in ExecuteRawSql(
+                $"TRUNCATE TABLE {QuoteIdentifier(_tableName)}",
+                null,
+                cancellationToken))
+            {
+            }
         }
 
         private static string QuoteIdentifier(string name)
@@ -488,6 +530,9 @@ namespace ETL_SQL.Connectors.MySql
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is MySqlException or InvalidOperationException;
