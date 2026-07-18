@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Connectors.Shared;
 
-internal static class ConnectorTimeouts
+public static class ConnectorTimeouts
 {
     public static int ResolveCommandTimeoutSeconds(
         IExecutionContext? context,

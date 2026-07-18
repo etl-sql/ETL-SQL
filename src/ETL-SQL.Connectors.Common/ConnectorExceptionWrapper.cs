@@ -8,7 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.Shared
 {
-    internal static partial class ConnectorExceptionWrapper
+    public static partial class ConnectorExceptionWrapper
     {
         // Patterns that may reveal hostnames, credentials, or file paths in provider exception messages.
         // The full provider exception is preserved as the inner exception for Debug-level logging.
