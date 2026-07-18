@@ -53,7 +53,7 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Syntax Index](docs/syntax-index.md)** | Searchable map for statements, functions, connector options, visual types, variables, and CLI commands |
 | **[Statement Reference](docs/reference/statements/README.md)** | Focused pages for variables, control flow, query clauses, DML, DDL, execution, scheduling, and session commands |
 | **[Data Connectors](docs/reference/connectors/README.md)** | Connector tokens, options, authentication patterns, and quick-reference tables |
-| **[Standard Library](docs/reference/functions/standard-library.md)** | Data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with signatures and examples |
+| **[Standard Library](docs/reference/functions/README.md)** | Data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with signatures and examples |
 | **[File Operations](docs/reference/file-operations/README.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, SSH key generation, Docker integration, and advanced file ops |
 | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
 | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
@@ -231,7 +231,7 @@ Use this map to find the right document for any task.
 | Find syntax by keyword | **[Syntax Index](docs/syntax-index.md)** |
 | Statement syntax | **[Statement Reference](docs/reference/statements/README.md)** |
 | Connector options and authentication | **[Data Connectors](docs/reference/connectors/README.md)** |
-| Functions (string, date, math, regex, window) | **[Standard Library](docs/reference/functions/standard-library.md)** |
+| Functions (string, date, math, regex, window) | **[Standard Library](docs/reference/functions/README.md)** |
 | File ops, email, transfer, Docker, keys | **[File Operations](docs/reference/file-operations/README.md)** |
 | Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** |
 | Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** |
