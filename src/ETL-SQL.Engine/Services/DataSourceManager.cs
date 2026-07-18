@@ -107,7 +107,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                 mem.ExecutionContext = _evaluator;
                 mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
-                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
                 return mem;
             }
             else if (result is System.Collections.IEnumerable list && !(result is string))
@@ -120,7 +120,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                 var dtResult = new DataTable();
                 dtResult.SetColumns(new[] { "Value" });
                 foreach (var item in list) await dtResult.AddRowAsync(new Row { ["Value"] = item });
-                await mem.WriteBatches(new[] { dtResult }.ToAsyncEnumerable());
+                await mem.WriteBatches(new[] { dtResult }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
                 return mem;
             }
             throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
@@ -150,7 +150,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                 var dualTable = new DataTable();
                 dualTable.SetColumns(new[] { "DUMMY" });
                 await dualTable.AddRowAsync(new Row { ["DUMMY"] = "X" });
-                await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable());
+                await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
                 connections["DUAL"] = dual;
             }
             source = connections["DUAL"];
@@ -168,7 +168,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "Value" });
                 foreach (var item in list) await dt.AddRowAsync(new Row { ["Value"] = item });
-                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
                 return mem;
             }
 
@@ -261,7 +261,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         mem.Validator = _evaluator;
         mem.ExecutionContext = _evaluator;
         mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-        await mem.WriteBatches(new[] { result }.ToAsyncEnumerable());
+        await mem.WriteBatches(new[] { result }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
         return mem;
     }
 
@@ -304,7 +304,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         mem.Validator = _evaluator;
         mem.ExecutionContext = _evaluator;
         mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-        await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+        await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
         return mem;
     }
 
@@ -355,7 +355,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                         }
                         await dt.AddRowAsync(row);
                     }
-                    await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                    await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
                     _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
                 }
             }
@@ -441,7 +441,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
     public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
     {
         var source = await ResolveDataSourceAsync(table, connections, transactionManager);
-        var batches = source.ReadBatches(batchSize);
+        var batches = source.ReadBatches(batchSize, _evaluator.CancellationToken);
 
         if (table.TableOperators.Count == 0)
         {

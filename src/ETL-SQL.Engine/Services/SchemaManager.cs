@@ -35,7 +35,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
         // replaced by the overwrite below, so they need no explicit drop.)
         if (stmt.OrReplace && !isTemp && connections.TryGetValue(connName, out var toReplace) && toReplace is IDatabaseSource replaceSql)
         {
-            await foreach (var _ in replaceSql.ExecuteRawSql($"DROP TABLE IF EXISTS {_evaluator.GetSqlTableName(stmt.TargetTable, replaceSql.Dialect)};")) { }
+            await foreach (var _ in replaceSql.ExecuteRawSql($"DROP TABLE IF EXISTS {_evaluator.GetSqlTableName(stmt.TargetTable, replaceSql.Dialect)};", null, _evaluator.CancellationToken)) { }
         }
 
         if (isTemp || !connections.ContainsKey(connName))
@@ -63,7 +63,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             if (connections.TryGetValue(connName, out var conn) && conn is IDatabaseSource sqlConn)
             {
                 var cols = stmt.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.IsIdentity ? " IDENTITY" : "")}{(c.DefaultExpression != null ? $" DEFAULT {c.DefaultExpression.ToSql()}" : "")}");
-                await foreach (var _ in sqlConn.ExecuteRawSql($"CREATE TABLE {_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} (\n  {string.Join(",\n  ", cols)}\n);")) { }
+                await foreach (var _ in sqlConn.ExecuteRawSql($"CREATE TABLE {_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} (\n  {string.Join(",\n  ", cols)}\n);", null, _evaluator.CancellationToken)) { }
             }
         }
     }
@@ -114,7 +114,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             if (conn is IDatabaseSource sqlConn)
             {
                 var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                await foreach (var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};")) { }
+                await foreach (var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};", null, _evaluator.CancellationToken)) { }
             }
             else
             {
@@ -194,7 +194,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             else if (connection is IDatabaseSource sqlConn)
             {
                 var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName} ON {_evaluator.GetSqlTableName(stmt.Table, sqlConn.Dialect)};")) { }
+                await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName} ON {_evaluator.GetSqlTableName(stmt.Table, sqlConn.Dialect)};", null, _evaluator.CancellationToken)) { }
             }
         }
         else
@@ -216,7 +216,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
                         continue;
                     }
                     var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                    await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName};")) { }
+                    await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName};", null, _evaluator.CancellationToken)) { }
                     executedAny = true;
                 }
             }

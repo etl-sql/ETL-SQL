@@ -128,7 +128,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
             if (options.TryGetValue("MAXERRORS", out var me) && int.TryParse(me, out var mev))
                 maxErrors = mev;
 
-            var batches = context.InterceptProgress(source.ReadBatches(batchSize));
+            var batches = context.InterceptProgress(source.ReadBatches(batchSize, context.CancellationToken));
 
 
             // Get destination columns for metadata validation
@@ -141,7 +141,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
             int errorCount = 0;
             int batchIndex = 0;
 
-            await foreach (var batch in batches)
+            await foreach (var batch in batches.WithCancellation(context.CancellationToken))
             {
                 batchIndex++;
                 // Map columns by position from source to destination
@@ -174,7 +174,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
                             context.SecurityService.ValidateWriteAccess(destination.Path);
                         }
 
-                        await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable(), append: true);
+                        await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable(), append: true, cancellationToken: context.CancellationToken);
                     }
                     count += mappedBatch.Rows.Count;
                 }
@@ -195,10 +195,10 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
                         // vs. O(N) for the old row-by-row loop (M = number of bad rows).
                         var mid = mappedBatch.Rows.Count / 2;
                         var (w1, e1) = await WriteBisect(
-                            mappedBatch.Rows.Take(mid).ToList(), destColumns, destination,
+                            mappedBatch.Rows.Take(mid).ToList(), destColumns, destination, context.CancellationToken,
                             batchIndex, stmt.TargetTable.TableName, maxErrors, errorCount);
                         var (w2, e2) = await WriteBisect(
-                            mappedBatch.Rows.Skip(mid).ToList(), destColumns, destination,
+                            mappedBatch.Rows.Skip(mid).ToList(), destColumns, destination, context.CancellationToken,
                             batchIndex, stmt.TargetTable.TableName, maxErrors, errorCount + e1);
                         count += w1 + w2;
                         errorCount += e1 + e2;
@@ -221,6 +221,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
     private async Task<(int written, int errors)> WriteBisect(
         IReadOnlyList<Row> rows, IReadOnlyList<string> destColumns, IDataSource destination,
+        System.Threading.CancellationToken cancellationToken,
         int batchIndex, string targetTable, int maxErrors, int currentErrors)
     {
         if (rows.Count == 0) return (0, 0);
@@ -231,7 +232,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
         try
         {
-            await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
+            await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true, cancellationToken: cancellationToken);
             return (rows.Count, 0);
         }
         catch (Exception ex) when (rows.Count == 1)
@@ -247,10 +248,10 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
         {
             var mid = rows.Count / 2;
             var (w1, e1) = await WriteBisect(
-                rows.Take(mid).ToList(), destColumns, destination,
+                rows.Take(mid).ToList(), destColumns, destination, cancellationToken,
                 batchIndex, targetTable, maxErrors, currentErrors);
             var (w2, e2) = await WriteBisect(
-                rows.Skip(mid).ToList(), destColumns, destination,
+                rows.Skip(mid).ToList(), destColumns, destination, cancellationToken,
                 batchIndex, targetTable, maxErrors, currentErrors + e1);
             return (w1 + w2, e1 + e2);
         }

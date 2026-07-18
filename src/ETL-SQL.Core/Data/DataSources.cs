@@ -79,8 +79,19 @@ public interface IDataSource : IAsyncDisposable
 {
     /// <summary>Streams the data source content in batches.</summary>
     IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000);
+    /// <summary>Streams the data source content in batches and observes cancellation during enumeration.</summary>
+    async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var batch in ReadBatches(batchSize).WithCancellation(cancellationToken))
+            yield return batch;
+    }
     /// <summary>Writes batches of data into the data source. If append is true, existing data is preserved.</summary>
     Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false);
+    /// <summary>Writes batches of data and observes cancellation while consuming the source stream.</summary>
+    Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        WriteBatches(ApplyCancellation(batches, cancellationToken), append);
     /// <summary>Removes all data from the data source.</summary>
     Task TruncateAsync() => throw new NotSupportedException($"TRUNCATE is not supported for {GetType().Name}");
     /// <summary>Returns the list of column names in the data source.</summary>
@@ -121,6 +132,14 @@ public interface IDataSource : IAsyncDisposable
 
     /// <summary>Checks if a row with matching column values exists in the data source.</summary>
     Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
+
+    private static async IAsyncEnumerable<DataTable> ApplyCancellation(
+        IAsyncEnumerable<DataTable> batches,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var batch in batches.WithCancellation(cancellationToken))
+            yield return batch;
+    }
 }
 
 /// <summary>Optional row-count estimate used to choose bounded operators before consuming a source.</summary>
@@ -178,6 +197,14 @@ public interface IDatabaseSource : IDataSource
     Task<string> GetVersionAsync();
     HashSet<string> GetSupportedFunctions();
     IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null);
+    async IAsyncEnumerable<DataTable> ExecuteRawSql(
+        string sql,
+        IEnumerable<object?>? parameters,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var batch in ExecuteRawSql(sql, parameters).WithCancellation(cancellationToken))
+            yield return batch;
+    }
     string ConnectionString { get; }
     string Dialect { get; }
     Task<IEnumerable<string>> GetViewsAsync();
@@ -711,12 +738,17 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         return physicalCount;
     }
 
-    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, ExecutionContext?.CancellationToken ?? CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         // 1. Yield from disk spill first (if any)
         List<string> chunks;
         List<DataTable> memoryCopy;
-        await _lock.WaitAsync();
+        await _lock.WaitAsync(cancellationToken);
         try
         {
             chunks = _spillChunkNames.ToList();
@@ -728,6 +760,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         {
             foreach (var spillName in chunks)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (ExecutionContext.SpillStore == null)
                     throw new ExecutionException("Spill-to-disk operation failed: IExecutionContext.SpillStore is null but spilled data exists.");
 
@@ -735,7 +768,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 var batch = new DataTable();
                 batch.SetColumns(_columnOrder);
 
-                await foreach (var row in reader.AsEnumerableAsync())
+                await foreach (var row in reader.AsEnumerableAsync().WithCancellation(cancellationToken))
                 {
                     await batch.AddRowAsync(row);
                     if (batch.Rows.Count >= batchSize)
@@ -754,20 +787,31 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         }
 
         // 2. Yield from memory buffer
-        foreach (var b in memoryCopy) yield return b;
+        foreach (var b in memoryCopy)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return b;
+        }
     }
 
     public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
-        => await WriteBatchesCore(batches, append, takeOwnership: false);
+        => await WriteBatchesCore(batches, append, takeOwnership: false, ExecutionContext?.CancellationToken ?? CancellationToken.None);
+
+    public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
+        => await WriteBatchesCore(batches, append, takeOwnership: false, cancellationToken);
 
     /// <summary>
     /// Writes engine-owned batches without cloning each row. The caller must not read or mutate a
     /// yielded batch after ownership transfers to this data source.
     /// </summary>
     public async Task WriteOwnedBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
-        => await WriteBatchesCore(batches, append, takeOwnership: true);
+        => await WriteBatchesCore(batches, append, takeOwnership: true, ExecutionContext?.CancellationToken ?? CancellationToken.None);
 
-    private async Task WriteBatchesCore(IAsyncEnumerable<DataTable> batches, bool append, bool takeOwnership)
+    private async Task WriteBatchesCore(
+        IAsyncEnumerable<DataTable> batches,
+        bool append,
+        bool takeOwnership,
+        CancellationToken cancellationToken)
     {
         if (!append) await TruncateAsync();
         ISpillWriter? extentWriter = null;
@@ -775,11 +819,10 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         long extentEstimatedBytes = 0;
         Task? pendingSpillWrite = null;
         var currentExtentIndexedBatches = new List<DataTable>();
-        var cancellationToken = ExecutionContext?.CancellationToken ?? CancellationToken.None;
 
         try
         {
-            await foreach (var b in batches)
+            await foreach (var b in batches.WithCancellation(cancellationToken))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_columnOrder.Count == 0)

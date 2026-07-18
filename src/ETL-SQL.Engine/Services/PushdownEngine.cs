@@ -199,7 +199,7 @@ public class PushdownEngine(ILogger logger)
         _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", connectionName);
         var conn = (IDatabaseSource)context.Connections[connectionName];
         var compiled = context.CompileQuery(stmt, conn.Dialect);
-        var pushdownBatches = conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values);
+        var pushdownBatches = conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values, context.CancellationToken);
 
         var result = new DataTable();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -207,7 +207,7 @@ public class PushdownEngine(ILogger logger)
         long totalRows = 0;
         bool capped = false;
 
-        await foreach (var batch in pushdownBatches)
+        await foreach (var batch in pushdownBatches.WithCancellation(context.CancellationToken))
         {
             if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
 
@@ -270,7 +270,8 @@ public class PushdownEngine(ILogger logger)
         _logger.Debug("[SELECT] Pushing down query (possibly paged) to remote: {ConnName}", connectionName);
         var conn = (IDatabaseSource)context.Connections[connectionName];
         var compiled = context.CompileQuery(stmt, conn.Dialect);
-        await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
+        await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values, context.CancellationToken)
+            .WithCancellation(context.CancellationToken))
         {
             yield return batch;
         }

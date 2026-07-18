@@ -44,10 +44,10 @@ public class ExecStatementHandler : IStatementHandler
 
                 context.LastResultSets.Clear();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var batches = db.ExecuteRawSql(sql, parameters);
+                var batches = db.ExecuteRawSql(sql, parameters, context.CancellationToken);
 
                 var results = new List<DataTable>();
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(context.CancellationToken))
                 {
                     results.Add(batch);
                 }
@@ -114,7 +114,7 @@ public class ExecStatementHandler : IStatementHandler
                 await Task.CompletedTask;
             }
 
-            await targetSource.WriteBatches(GetBatches());
+            await targetSource.WriteBatches(GetBatches(), append: false, cancellationToken: context.CancellationToken);
             int totalRows = results.Sum(r => r.Rows.Count);
             context.Log($"Loaded {totalRows} rows into {tableName}.");
         }

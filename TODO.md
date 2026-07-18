@@ -142,6 +142,12 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       tokens, and SQL/MongoDB implementations call async open/read/write APIs without tokens. Extend the
       contracts and async enumerators, pass execution cancellation to every provider call, and add
       cancellation tests for each connector family so timeout and shutdown requests stop remote I/O.
+      Progress on 2026-07-18: added cancellation-aware `IDataSource.ReadBatches`,
+      `IDataSource.WriteBatches`, and `IDatabaseSource.ExecuteRawSql` overloads, routed central
+      engine source resolution, pushdown, schema DDL, bulk insert, and dynamic EXEC paths through the
+      execution token, and added direct `InMemoryDataSource` cancellation coverage. Remaining work:
+      provider-native overrides and cancellation tests for SQL, MongoDB, file, REST/API, and graph
+      connector families.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because
