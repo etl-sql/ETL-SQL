@@ -1,32 +1,29 @@
-﻿# AVRO
-Reads and writes Apache Avro binary files. The schema is either embedded in the file or supplied via SCHEMA_FILE.
+# AVRO
 
-Syntax:
-  CREATE CONNECTION <name> AS AVRO(
-    PATH        = 'file.avro',
-    SCHEMA_FILE = 'schema.avsc',
-    ENCRYPT     = ON | OFF,
-    PASSWORD    = '<passphrase>'
-  );
+Apache Avro format. The schema is embedded within the file; optionally reference an external `.avsc`
+schema file.
 
-Options:
-- **PATH** — file path to the Avro file (required)
-- **SCHEMA_FILE** — path to an .avsc JSON schema file; used when the file has no embedded schema
-- **ENCRYPT** — encrypt the output file (default OFF)
-- **PASSWORD** — passphrase for encryption
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `SCHEMA_FILE` | Path to an external `.avsc` Avro schema file | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+## Examples
 
 ```sql
-CREATE CONNECTION Events AS AVRO(
-  PATH = 'C:\data\events_2024.avro'
-);
-
-SELECT event_type, user_id, event_time
-  INTO #events
-  FROM Events
-  WHERE event_type = 'purchase';
-
-PRINT 'Events loaded: ' + @@ROWCOUNT;
+-- Read Avro with an external schema definition
+CREATE CONNECTION avro_src AS AVRO('C:\Data\events.avro', SCHEMA_FILE='C:\Schemas\events.avsc');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [File Connectors](README.md)
+- [Connectors](../README.md)
+- [Parquet](parquet.md)

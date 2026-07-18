@@ -1,36 +1,34 @@
-﻿# JSON
-Reads and writes JSON files. Use ROOT_PATH to navigate to the array node to unpack as rows.
+# JSON
 
-Syntax:
-  CREATE CONNECTION <name> AS JSON(
-    PATH      = 'data.json',
-    ROOT_PATH = '$.items',
-    ENCODING  = 'UTF-8',
-    COMPRESS  = ON | OFF,
-    ENCRYPT   = ON | OFF,
-    PASSWORD  = '<passphrase>'
-  );
+Document extraction with JSONPath addressing for nested data. When querying a `JSON` connection via
+`SELECT`, the table name is `FILE`. Use `ROOT_PATH` to navigate to the array node to unpack as rows.
 
-Options:
-- **PATH** — file path (required)
-- **ROOT_PATH** — JSONPath expression pointing to the array node (default '$' = root)
-- **ENCODING** — file character encoding (default UTF-8)
-- **COMPRESS** — gzip compress/decompress (default OFF)
-- **ENCRYPT** — AES encrypt/decrypt (default OFF)
-- **PASSWORD** — passphrase for encryption
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `ROOT_PATH` | JSONPath to the root data array (e.g. `$.data.orders`) | No |
+| `ENCODING` | Character encoding (default: `UTF8`) | No |
+| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+## Examples
 
 ```sql
-CREATE CONNECTION ApiDump AS JSON(
-  PATH      = 'C:\data\api_response.json',
-  ROOT_PATH = '$.data.orders'
-);
+-- Drill into a nested array
+CREATE CONNECTION json_src AS JSON('C:\Data\orders.json', ROOT_PATH='$.data.orders');
 
-SELECT id, customer_id, total, created_at
-  INTO #orders
-  FROM ApiDump;
-
-PRINT 'Orders loaded: ' + @@ROWCOUNT;
+-- Compressed JSON
+CREATE CONNECTION json_gz AS JSON(PATH='C:\Data\events.json.gz', COMPRESS=ON);
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [File Connectors](README.md)
+- [Connectors](../README.md)
+- [XML](xml.md)
