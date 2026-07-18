@@ -972,22 +972,7 @@ public class ReportsController : ControllerBase
             return Ok(Array.Empty<ReportParameterDto>());
 
         var scriptText = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
-        var tokens = new Lexer(scriptText).Tokenize();
-        var parser = new CoreParser(tokens, scriptText);
-        var script = parser.Parse();
-
-        var parameters = script.Statements
-            .OfType<DeclareStatement>()
-            .Where(d => d.IsInput)
-            .Select(d => new ReportParameterDto(
-                d.VariableName,
-                d.DataType,
-                d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
-                d.InitialValue is null,
-                d.Description))
-            .ToList();
-
-        return Ok(parameters);
+        return Ok(scriptInspection.ExtractInputParameters(scriptText));
     }
 
     private static string? FirstNonBlank(params string?[] values) =>

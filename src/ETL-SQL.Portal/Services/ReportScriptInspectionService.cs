@@ -34,6 +34,28 @@ public class ReportScriptInspectionService(
         return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Parse <paramref name="scriptText"/> and project its input <c>DECLARE</c> statements into the
+    /// report parameter DTOs surfaced by the parameters endpoint. Callers resolve and read the script
+    /// artifact; this is the pure parse/AST-to-DTO step.
+    /// </summary>
+    public List<ReportParameterDto> ExtractInputParameters(string scriptText)
+    {
+        var tokens = new Lexer(scriptText).Tokenize();
+        var script = new CoreParser(tokens, scriptText).Parse();
+
+        return script.Statements
+            .OfType<DeclareStatement>()
+            .Where(d => d.IsInput)
+            .Select(d => new ReportParameterDto(
+                d.VariableName,
+                d.DataType,
+                d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
+                d.InitialValue is null,
+                d.Description))
+            .ToList();
+    }
+
     public async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath)
     {
         if (!System.IO.File.Exists(resolvedScriptPath))
