@@ -49,7 +49,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PARALLEL` | Orchestration | [Statement Reference](reference/statements/README.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
 | `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
 | `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
-| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/expect_schema.md) |
+| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
 | `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
@@ -87,7 +87,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
 | `WITH RECURSIVE` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Statement Reference](reference/statements/README.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](reference/statements/query-syntax/match-recognize.md) |
 | `EXPORT REPORT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `EXPORT REPORT ... WITH (PDF_MODE = ...)` | Reporting / Export | `PDF_MODE = STATIC\|AUTO\|HOSTED\|BROWSER`, `HOST`, `BROWSER_PATH` | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `SUBSCRIPTION` | Orchestration | [Statement Reference](reference/statements/README.md) | [SUBSCRIPTION.md](reference/orchestrator-jobs/subscription.md) |
@@ -182,7 +182,7 @@ Connectors define how to communicate with external data sources.
 | `AVRO` | File | [AVRO.md](reference/connectors/files/avro.md) | PATH, ... |
 | `SFTP` | Transfer | [SFTP.md](reference/connectors/services/sftp.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
 | `FTP` | Transfer | [FTP.md](reference/connectors/services/ftp.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
-| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
+| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](reference/connectors/services/azure-blob.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
 | `S3` | Transfer | [S3.md](reference/connectors/services/s3.md) | BUCKET, ENDPOINT, ACCESS_KEY, SECRET_KEY, REGION, FORCE_PATH_STYLE |
 | `API` / `REST` | Service | [API.md](reference/connectors/services/api.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
 | `SMTP` | Service | [SMTP.md](reference/connectors/services/smtp.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
@@ -192,7 +192,7 @@ Connectors define how to communicate with external data sources.
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
 | `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/services/orchestrator.md) | HOST, PORT, API_KEY |
-| `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/active_directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
+| `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](reference/connectors/services/active-directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
 ### 2.1 File-Based Table Alias
 `FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
@@ -1094,15 +1094,15 @@ Standard clauses available within a `SELECT` statement.
 | `USING SAMPLE n PERCENT\|ROWS` | Random row sampling (`REPEATABLE (seed)` for determinism) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | - |
 | `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [SELECT](reference/statements/dml/select.md) | - |
 | `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
-| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [GROUP BY ALL](reference/statements/query-syntax/group-by-all.md) | [GROUP_BY_ALL.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
+| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [GROUP BY ALL](reference/statements/query-syntax/group-by-all.md) | [GROUP_BY_ALL.md](reference/statements/query-syntax/group-by-all.md) |
 | `HAVING` | Filters aggregated groups | [Statement Reference](reference/statements/README.md) | - |
 | `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
-| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `count()` | Shorthand for `COUNT(*)` | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `count()` | Shorthand for `COUNT(*)` | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
 | `ASC` / `DESC` | Sorting direction | [Statement Reference](reference/statements/README.md) | - |
 | `ROLLUP` | Grouping set extension for hierarchies | [Statement Reference](reference/statements/README.md) | - |
 | `CUBE` | Grouping set extension for all permutations| [Statement Reference](reference/statements/README.md) | - |
@@ -1130,7 +1130,7 @@ Operators that transform the shape of a table in the `FROM` clause.
 | `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
 | `PIVOT` (DuckDB) | `PIVOT src ON cols [IN (...)] USING aggs [GROUP BY cols]` | Statement form; dynamic values, multi-col/agg | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
 | `UNPIVOT` (DuckDB) | `UNPIVOT src ON cols\|COLUMNS(* EXCLUDE (...)) INTO NAME n VALUE v` | Statement form; supports `COLUMNS(* EXCLUDE)` | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](reference/statements/query-syntax/match-recognize.md) |
 
 ---
 

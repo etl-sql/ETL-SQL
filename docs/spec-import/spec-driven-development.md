@@ -123,7 +123,7 @@ The C# extraction engine uses heuristic analysis (scanning for database type key
 
 ### Step 1: Generate the Intermediate JSON
 
-1. Copy the contents of the prompt instructions in [data_spec_parser_instructions.md](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/resources/data_spec_parser_instructions.md).
+1. Copy the contents of the prompt instructions in [data_spec_parser_instructions.md](../../src/etl-sql-vscode/resources/data_spec_parser_instructions.md).
 2. Paste the prompt text into your AI assistant (e.g. Gemini, ChatGPT, or Claude) and upload the specification document (use the `trimmed_spec.pdf` if you ran Step 0).
 3. Save the resulting JSON block in your local repository as `my_spec.json`.
 4. (Optional) Review the JSON file. If the AI misunderstood any columns or custom types, edit them directly in the JSON file.
@@ -145,7 +145,7 @@ The command generates a pre-formatted ETL-SQL script containing:
 *   Outbound connection declarations (e.g. `CREATE CONNECTION ... AS FLATFILE`) mapped from the spec.
 *   Cleansing and casting statements (e.g. `TRY_CAST`, `SUBSTRING`) for every target column.
 *   Validation review tables for regex and allowed-value checks, with optional quarantine behavior when `source.reject_policy` is `quarantine`.
-*   Lineage tagging declarations using `TAG` (see [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/reference/statements/session-control/lineage.md)).
+*   Lineage tagging declarations using `TAG` (see [Lineage.md](../reference/statements/session-control/lineage.md)).
 *   An `EXPECT SCHEMA` constraint validator (see [EXPECT SCHEMA](../reference/statements/ddl/expect-schema.md)).
 
 ---
@@ -178,7 +178,7 @@ FROM src_db.public.customers c;
 
 If the JSON includes `confidence` or `source_evidence`, the generated placeholder includes AI extraction review notes. Treat low-confidence fields and evidence comments as a review checklist before running the pipeline. If the JSON includes `source` metadata, the generated placeholder also includes the inferred source connection and comments for the vendor layout. Confirm header rows, skipped rows, null tokens, fixed-width positions, date formats, allowed values, and duplicate rules before running the pipeline.
 
-For a complete worked example, see [Cookbook recipe 25](file:///C:/Users/chuck/scratch/ETL-SQL/docs/cookbooks/etl-recipes.md) and the runnable sample [realworld_12_spec_driven_customer_feed.etlsql](file:///C:/Users/chuck/scratch/ETL-SQL/samples/07_Real_World/realworld_12_spec_driven_customer_feed.etlsql).
+For a complete worked example, see [Cookbook recipe 25](../cookbooks/etl-recipes.md) and the runnable sample [realworld_12_spec_driven_customer_feed.etlsql](file:///C:/Users/chuck/scratch/ETL-SQL/samples/07_Real_World/realworld_12_spec_driven_customer_feed.etlsql).
 
 ---
 

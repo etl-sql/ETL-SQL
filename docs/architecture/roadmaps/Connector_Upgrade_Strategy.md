@@ -13,7 +13,7 @@ This document records the connector modernization standards used for ETL-SQL 0.7
 
 To maintain absolute technical consistency, all implementation work MUST adhere to the permanent architectural and engineering standards:
 
-- **[Connectors Architecture](../../../.worktrees/enterprise-policy-hardening/Docs/Architecture/Connectors.md)**: Details on the `IConnector`/`IDataSource` interfaces, operational **Archetypes** (Expansion vs. Creation), and the **IDatabaseSource** pushdown bridge.
+- **[Connectors Architecture](../Connectors.md)**: Details on the `IConnector`/`IDataSource` interfaces, operational **Archetypes** (Expansion vs. Creation), and the **IDatabaseSource** pushdown bridge.
 - **[Connectors Engineering Standards](../standards/Connectors_Standards.md)**: Mandatory rules for **Credential Masking**, **`ENC:` Support**, and **Pushdown Compliance**.
 
 ---
