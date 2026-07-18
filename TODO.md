@@ -32,21 +32,29 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 [`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
 
 - [ ] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
+      An earlier run passed on 2026-07-18, but the fresh-eyes review rerun failed consistently in
+      `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`;
+      see the P1 warm-runner finding below.
 - [ ] Full pre-release lane:
       `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
 - [ ] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
       plus N to N+1 upgrade-path evidence.
-- [ ] Enterprise hardening certification on Windows and Linux:
+- [x] Enterprise hardening certification on Windows and Linux:
       `.\scripts\Test-EnterpriseHardeningCertification.ps1`.
+      Windows passed on 2026-07-18 with run ID `enterprise-20260718-094727`
+      (engine 298/298, Portal 61/61); Linux passed on 2026-07-18 with run ID
+      `enterprise-20260718-125000` (engine and Portal enterprise slices passed).
 - [ ] Recovery drill evidence: `etl-sql admin restore --validate --report recovery-report.json`.
 - [ ] HA failure certification: `etl-sql admin ha-soak fault-run` and
       `etl-sql admin ha-soak validate`.
-- [ ] Scale and performance evidence: `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`;
-      run Standard tier when advertising scale claims.
-- [ ] Standalone regression:
-      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~StandaloneRegressionTests`.
-- [ ] Security boundary docs:
-      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~SecurityBoundaryDocTests`.
+- [x] Scale and performance evidence: `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`
+      passed 13/13 scenarios on 2026-07-18; run Standard tier when advertising scale claims.
+- [x] Standalone regression:
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~StandaloneRegressionTests --no-restore`
+      passed on 2026-07-18.
+- [x] Security boundary docs:
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~SecurityBoundaryDocTests --no-restore`
+      passed on 2026-07-18.
 
 ---
 
@@ -61,13 +69,108 @@ work by priority.
 - [ ] **P1 — Split connector implementations into independently deployable projects.** Create a small
       connector contracts/registry layer and provider-specific projects or coherent provider groups so
       hosts do not load every database, cloud, messaging, and native dependency.
-- [ ] **P1 — Enforce source boundaries in tests.** Add/update architecture tests for allowed project
+- [x] **P1 — Enforce source boundaries in tests.** Add/update architecture tests for allowed project
       references and banned namespaces/packages so documented layering rules fail during CI when violated.
-      Validation on 2026-07-18 found this is not closed yet:
-      `ArchitectureBoundaryTests.EveryProject_IsAssignedATier` fails because `Connectors.Common` is missing
-      from the tier map.
+      Validated on 2026-07-18 with
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~ArchitectureBoundaryTests --no-restore`.
 - [ ] **P2 — Thin Portal controllers.** Move parsing, AST/DTO conversion, lint orchestration, schema
       registration, and save workflows into application services; keep controllers focused on
       authorization, transport mapping, and HTTP results.
 - [ ] **Review architecture documentation** The layering changes likely made some of the architecture documentation in /docs/architecture go stale
       let's review them all and update them with the latest information.
+
+---
+
+## v0.16.0 Fresh-Eyes Repository Review
+
+Findings from a repository-wide build, static-analysis pass, test run, and targeted review of
+security boundaries, identity, execution, storage, connector, Portal, Docker, and frontend code on
+2026-07-18. Treat P1 items as v0.16.0 release blockers.
+
+### Security and correctness
+
+- [ ] **P1 - Close symlink and reparse-point escapes in artifact and workstation roots.**
+      `FileSystemArtifactStorage.Resolve` and `WorkstationWorkspace.ResolveEditablePath` enforce only
+      lexical `GetFullPath` containment, so a symlink or junction below an allowed root can redirect
+      reads, writes, deletes, moves, or editor saves outside that root. Reuse canonical-path and
+      handle-verification protection from the engine filesystem policy, reject unsafe recursive
+      traversal, and add Linux symlink plus Windows junction/reparse tests.
+- [ ] **P1 - Make refresh-token consumption atomic and index token hashes.**
+      `AuthController.Refresh` reads an unrevoked token, revokes it, and inserts its successor without
+      a transaction, concurrency token, or conditional update. Concurrent requests can therefore mint
+      multiple valid successors. Add a unique token-hash index and an atomic compare-and-set rotation;
+      prove one-time use with concurrent SQLite and PostgreSQL tests.
+- [ ] **P1 - Stop writing generated first-run administrator passwords to persistent logs.**
+      `ETL-SQL.Portal/Program.cs` sends the plaintext generated password through structured
+      `LogWarning`, exposing a live credential to file sinks and log collectors. Replace this with an
+      explicit bootstrap secret or a protected one-time handoff that never enters application logs,
+      and update the quick-start documentation.
+- [ ] **P1 - Export complete datasets instead of exporting the preview cache.**
+      `DatasetViewerService.PrepareExportAsync` calls `LoadCachedAsync`, which reads only
+      `Portal:MaxPreviewRows`; CSV and XLSX exports are silently truncated at the preview limit. Stream
+      all Parquet row groups through a cancellation-aware export path and add coverage with more rows
+      than the configured preview maximum.
+- [ ] **P1 - Bound and invalidate the dataset preview cache.** `DatasetViewerService` caches as many as
+      50,000 row dictionaries per dataset in an application-wide `IMemoryCache` with sliding expiry,
+      no size accounting, and no invalidation on refresh or replacement. Add a global memory budget and
+      entry weights, use dataset version/content identity in keys, and invalidate mutations so active
+      users cannot receive stale rows indefinitely.
+- [ ] **P1 - Restore actual Docker pause/resume semantics.**
+      `DockerContainerManager.PauseContainer` calls `StopAsync` and `ResumeContainer` calls
+      `StartAsync`, contradicting the documented CPU-suspension behavior and changing container state.
+      Use the provider's pause/unpause API and add integration tests that distinguish paused from
+      stopped containers.
+- [ ] **P1 - Propagate cancellation through data-source contracts and provider I/O.** Core
+      `IDataSource`/`IDatabaseSource` batch, schema, transaction, and raw-SQL methods lack cancellation
+      tokens, and SQL/MongoDB implementations call async open/read/write APIs without tokens. Extend the
+      contracts and async enumerators, pass execution cancellation to every provider call, and add
+      cancellation tests for each connector family so timeout and shutdown requests stop remote I/O.
+- [ ] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
+      reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
+      the apphost copied into the test output exits with CLR code `-532462766` because
+      `Microsoft.Extensions.DependencyInjection.Abstractions` is missing. Run the test against a
+      complete app build/publish output, and include sanitized captured stderr in
+      `ProcessJobExecutor` failure results instead of returning only stdout.
+
+### Performance, observability, and quality gates
+
+- [ ] **P2 - Make shared-storage usage sampling bounded and observable.**
+      `PortalStorageUsageSampler` recursively enumerates every dataset and snapshot file every 30
+      seconds on every Portal node, cannot cancel an in-progress enumeration, and converts all failures
+      to a false zero-byte reading without logging. Use incremental or leader-only sampling with a
+      configurable cadence, retain the last successful value, and expose failure/staleness telemetry.
+- [ ] **P2 - Close frontend build and lint gaps in CI and pre-release scripts.** The extension lint
+      currently reports 50 warnings while still succeeding, and automation installs/builds only
+      `src/etl-sql-vscode`; the separate `ui` package is audited but never installed, built, linted, or
+      tested. Add clean-install UI gates and make production-code lint warnings fail CI after clearing
+      the existing backlog.
+- [ ] **P2 - Remove role-query N+1 behavior from Portal user lists.** `AdminController.GetUsers` loads
+      the entire user table without pagination and both user-list endpoints call
+      `UserManager.GetRolesAsync` once per user. Require paging for the unbounded endpoint and batch-load
+      role memberships with users/groups in a fixed number of database queries.
+
+---
+
+## Developer Experience — Local Browser Script Editor
+
+Moved from `ROADMAP.md` Phase 2 on 2026-07-18.
+
+- [x] **Foundation host:** add `ETL-SQL.WorkstationEditor`, a local-only browser script editor host
+      that binds to loopback, generates/requires a per-process API token, serves the first editor
+      workspace screen, reuses canonical shared designer assets from `ETL-SQL.ReportRuntime`, exposes
+      workspace list/open/save APIs bounded to a single root, supports readonly mode, and runs parser/linter
+      diagnostics through `ETL-SQL.Analysis` without referencing `ETL-SQL.Portal`.
+- [x] **Editor assist/run MVP:** wire the workstation host into shared CodeMirror diagnostics,
+      completion, hover-help, and a local `ExecutionSession` run endpoint with result-table rendering.
+      Validated on 2026-07-18 with
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~WorkstationEditorTests --no-restore`.
+- [ ] **CLI integration:** add an `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`
+      command that launches the workstation editor executable or equivalent host path.
+- [ ] **Interactive run hardening:** add cancellable runs, memory/time guard configuration, bounded
+      request/result sizes and concurrent executions, and local run history.
+- [ ] **Report preview:** add manual `.rptsql` preview using ReportHosting/Reporting runtime construction
+      without Portal snapshots or catalog dependencies.
+- [ ] **Local schema autocomplete:** add local profile-backed schema snapshot/cache support and wire it into
+      the shared CodeMirror completion flow.
+- [ ] **Browser smoke coverage:** add a browser-level test for opening a workspace, editing text, seeing
+      diagnostics, saving, and previewing a simple report.
