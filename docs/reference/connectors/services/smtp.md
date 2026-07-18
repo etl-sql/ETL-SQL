@@ -1,41 +1,37 @@
-﻿# SMTP
-Connects to an SMTP mail server for sending email. Used with SEND EMAIL operations and report subscription delivery.
+# SMTP
 
-Syntax:
-  CREATE CONNECTION <name> AS SMTP(
-    HOST         = 'smtp.example.com',
-    PORT         = 587,
-    USERNAME     = 'user@example.com',
-    PASSWORD     = '<password>',
-    USE_SSL      = ON | OFF,
-    DEFAULT_FROM = 'noreply@example.com'
-  );
+Outbound-only email connector used with the `SEND EMAIL` statement and report subscription delivery.
 
-Options:
-- **HOST** — SMTP server hostname (required)
-- **PORT** — SMTP port (default 587 for STARTTLS; 465 for SSL)
-- **USERNAME** — authentication username
-- **PASSWORD** — authentication password
-- **USE_SSL** — use SSL/TLS (default ON)
-- **DEFAULT_FROM** — default From address when not specified in SEND EMAIL
+Aliases: `EMAIL`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PORT` | SMTP server port (default: `25`) | No |
+| `USERNAME` | Authentication username | No |
+| `PASSWORD` | Authentication password | No |
+| `USE_SSL` | Enable TLS/SSL (`TRUE`/`FALSE`, default: `FALSE`) | No |
+| `DEFAULT_FROM` | Default sender address when `FROM` is omitted in `SEND EMAIL` | No |
+
+The host is supplied as the traditional connection-string argument (e.g. `SMTP('smtp.example.com', …)`).
+
+## Examples
 
 ```sql
-CREATE CONNECTION MailServer AS SMTP(
-  HOST         = 'smtp.corp.local',
-  PORT         = 587,
-  USERNAME     = @smtp_user,
-  PASSWORD     = @smtp_pass,
-  USE_SSL      = ON,
-  DEFAULT_FROM = 'etl@corp.local'
-);
+-- Gmail with TLS
+CREATE CONNECTION mailer AS SMTP('smtp.gmail.com', PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword',
+         USE_SSL=TRUE, DEFAULT_FROM='alerts@example.com');
 
 SEND EMAIL
-  TO      = 'team@corp.local',
-  SUBJECT = 'Daily Report — ' + FORMAT(GETDATE(), 'yyyy-MM-dd'),
-  BODY    = 'Report attached.',
-  ATTACH  = 'C:\reports\daily.xlsx'
-  AT MailServer;
+    TO 'ops@example.com'
+    SUBJECT 'Nightly Load Complete'
+    BODY 'All records processed.'
+    AT mailer;
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [SEND EMAIL](../../file-operations/send-email.md)

@@ -1,33 +1,38 @@
-﻿# DIRECTORY
-Connects to a local or UNC file-system folder. SELECT returns a listing of files and subdirectories with their metadata.
+# DIRECTORY
 
-Syntax:
-  CREATE CONNECTION <name> AS DIRECTORY(
-    PATH    = 'C:\data\exports',
-    CREATE  = ON | OFF
-  );
+Treats a local or UNC filesystem folder as a data source for file-management operations (`COPY FILE`,
+`DELETE FILE`, etc.) and directory listing via `SELECT`.
 
-Options:
-- **PATH** — folder path (required)
-- **CREATE** — create the directory if it does not exist (default OFF)
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute directory path | Yes (structured) |
+| `CREATE` | `ON`/`OFF` — create the directory if it doesn't exist (default: `ON`) | No |
+
+## Result-set schema
+
+Querying a `DIRECTORY` connection via `SELECT` returns:
+
+- `FileName` (STRING) — filename with extension.
+- `Path` (STRING) — absolute path to the file.
+- `Extension` (STRING) — file extension (including dot).
+- `Size` (DECIMAL) — file size in bytes.
+- `LastModified` (DATETIME) — last write time.
+- `IsReadOnly` (BIT) — `TRUE` if the file is read-only.
+- `CreationTime` (DATETIME) — time the file was created.
+
+## Examples
 
 ```sql
-CREATE CONNECTION Exports AS DIRECTORY(
-  PATH    = 'C:\data\exports',
-  CREATE  = ON
-);
+CREATE CONNECTION data_dir AS DIRECTORY('C:\Data\Incoming', CREATE=ON);
 
--- List CSV files modified in the last day
-SELECT FileName, Size, LastModified
-  INTO #files
-  FROM Exports
-  WHERE Extension = '.csv'
-    AND LastModified >= DATEADD(DAY, -1, GETDATE());
-
-PRINT 'Files found: ' + @@ROWCOUNT;
+-- List all files in the directory as a result set
+SELECT FileName, Size, LastModified FROM data_dir;
 ```
 
-For file-level operations (copy, move, delete, compress, encrypt) use the FILE and DIRECTORY operation keywords rather than this connector.
+## References
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [DIRECTORY operations](../../file-operations/directory.md)

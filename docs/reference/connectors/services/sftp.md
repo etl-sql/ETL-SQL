@@ -1,46 +1,55 @@
-﻿# SFTP
-Connects to an SFTP (SSH File Transfer Protocol) server for secure file transfer. Use SEND FILE and RECEIVE FILE with this connection.
+# SFTP
 
-Syntax:
-  CREATE CONNECTION <name> AS SFTP(
-    HOST       = 'sftp.example.com',
-    PORT       = 22,
-    USER       = 'username',
-    PASSWORD   = '<password>',
-    KEYFILE    = 'path/to/key',
-    PASSPHRASE = '<key passphrase>'
-  );
+Secure File Transfer Protocol over SSH. Supports password and key-pair authentication (mutually
+exclusive). Use with `SEND FILE` / `RECEIVE FILE` and remote file operations.
 
-Options:
-- **HOST** — SFTP server hostname or IP (required)
-- **PORT** — SSH port (default 22)
-- **USER** — SSH username (required)
-- **PASSWORD** — password authentication
-- **KEYFILE** — path to a private key file (PEM or PPK format)
-- **PASSPHRASE** — passphrase protecting the private key
-- **TIMEOUT_SECONDS** — connection timeout in seconds (default 30)
-- **HOST_KEY_FINGERPRINT** — pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). When set, a mismatch **rejects** the connection, protecting outbound transfers against man-in-the-middle interception. When unset the connection proceeds (backward compatible) but logs a warning — **pin it for internet-facing / vendor transfers.** Get the value with `ssh-keygen -lf <server_host_key>`.
-- **ATOMIC_UPLOAD** — `true`/`false` (default `false`). When `true`, `SEND FILE` uploads to a temporary name and renames into place on completion, so a polling consumer never reads a partially written file. Requires **rename** permission on the target directory — leave off for write-only vendor drop boxes.
+Aliases: `SSH`
 
-Security note: for outbound vendor deliveries, pin `HOST_KEY_FINGERPRINT` and, where the vendor permits rename, enable `ATOMIC_UPLOAD`.
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server domain or IP address | Yes (structured) |
+| `PORT` | Listening port (default: `22`) | No |
+| `USER` | Login username | Yes |
+| `PASSWORD` | Login password — use for password auth only | No |
+| `KEYFILE` | Path to the private SSH key — use for key auth only | No |
+| `PASSPHRASE` | Passphrase for the private key (if set) | No |
+| `TIMEOUT_SECONDS` | Connection timeout in seconds (default: `30`) | No |
+| `HOST_KEY_FINGERPRINT` | Pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). When set, a mismatch **rejects** the connection (MITM protection). Unset = connect but warn. | No |
+| `ATOMIC_UPLOAD` | `true`/`false` (default: `false`). Upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory. | No |
+
+> [!CAUTION]
+> `PASSWORD` and `KEYFILE` are mutually exclusive. Providing both causes an authentication error.
+
+> [!IMPORTANT]
+> For internet-facing / vendor transfers, **pin `HOST_KEY_FINGERPRINT`**. Without it the client trusts
+> whatever server answers, leaving outbound transfers open to man-in-the-middle interception; the
+> connector logs a warning on every unpinned connection. Get the value with
+> `ssh-keygen -lf <server_host_key>` (the `SHA256:...` string it prints). Where the vendor grants rename
+> permission, also set `ATOMIC_UPLOAD=TRUE` so a polling consumer never picks up a half-written file.
+
+## Examples
 
 ```sql
+-- Password authentication
+CREATE CONNECTION sftp_pwd AS SFTP(HOST='sftp.example.com', USER='admin', PASSWORD='s3cr3t');
+
+-- Key-pair authentication (recommended for production)
+CREATE CONNECTION sftp_key AS SFTP('sftp.example.com', USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
+
 -- Hardened outbound vendor delivery: pinned host key + atomic upload
-CREATE CONNECTION PartnerSFTP AS SFTP(
+CREATE CONNECTION vendor_out AS SFTP(
   HOST                 = 'sftp.partner.com',
-  PORT                 = 22,
-  USER                 = @sftp_user,
-  KEYFILE              = 'C:\keys\partner_rsa',
+  USER                 = 'deploy',
+  KEYFILE              = '/home/etl/.ssh/partner_rsa',
   HOST_KEY_FINGERPRINT = 'SHA256:n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc',
   ATOMIC_UPLOAD        = 'TRUE'
 );
-
--- Download today's data file
-RECEIVE FILE 'incoming/orders_today.csv' TO 'C:\data\orders.csv' AT PartnerSFTP;
-
--- Process, then upload the result (written atomically: temp name, then rename)
-SEND FILE 'C:\data\summary.csv' TO 'outgoing/summary.csv' AT PartnerSFTP;
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [FTP](ftp.md) · [TRANSFER](../../file-operations/transfer.md)

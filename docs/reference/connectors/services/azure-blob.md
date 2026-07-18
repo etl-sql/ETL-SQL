@@ -1,39 +1,37 @@
-﻿# AZURE_BLOB
-Reads files stored in Azure Blob Storage. Use as a source in SELECT to list or read blobs, or as a target to write output files.
+# AZURE_BLOB
 
-Syntax:
-  CREATE CONNECTION <name> AS AZURE_BLOB(
-    ACCOUNT_NAME = 'storageaccount',
-    ACCOUNT_KEY  = '<key>',
-    CONTAINER    = 'container-name'
-  );
+Cloud storage connector for reading and writing files in Azure Blob Storage containers.
 
-  -- Or with a full SAS / connection string:
-  CREATE CONNECTION <name> AS AZURE_BLOB(
-    CONNECTION_STRING = 'DefaultEndpointsProtocol=https;...',
-    CONTAINER         = 'container-name'
-  );
+Aliases: `BLOB`
 
-Options:
-- **ACCOUNT_NAME** — Azure Storage account name
-- **ACCOUNT_KEY** — storage account key
-- **CONTAINER** — blob container name (required)
-- **CONNECTION_STRING** — full connection string (alternative to ACCOUNT_NAME + ACCOUNT_KEY)
-- **PREFIX** — blob name prefix filter when listing
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONTAINER` | Target blob container name | Yes |
+| `CONNECTION_STRING` | Full Azure Storage connection string | No |
+| `ACCOUNT_NAME` | Azure storage account name | No |
+| `ACCOUNT_KEY` | Azure storage account access key (supports `ENC:` prefix) | No |
+| `SAS_TOKEN` | Shared Access Signature token (supports `ENC:` prefix) | No |
+| `ENDPOINT_SUFFIX` | Custom endpoint suffix (default: `core.windows.net`) | No |
+| `BLOB_ENDPOINT` | Explicit blob service endpoint URL | No |
+
+> [!NOTE]
+> Provide a full connection string in the traditional syntax, or use property-based structured syntax
+> with `ACCOUNT_NAME` and `ACCOUNT_KEY` / `SAS_TOKEN`.
+
+## Examples
 
 ```sql
-CREATE CONNECTION ReportBlobs AS AZURE_BLOB(
-  ACCOUNT_NAME = 'mystorage',
-  ACCOUNT_KEY  = @blob_key,
-  CONTAINER    = 'reports'
-);
+-- Full connection string (SAS or AccountKey)
+CREATE CONNECTION cloud AS AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc...', CONTAINER='backup-archive');
 
--- List blobs in the container
-SELECT name, size, last_modified INTO #blobs FROM ReportBlobs;
-
--- Copy a local result to blob storage
-SELECT * FROM #output INTO ReportBlobs.'exports/summary_2024.csv';
+-- Structured with account credentials
+CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='ENC:U2FsdGVk...', CONTAINER='raw-data');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [Amazon S3](s3.md)
