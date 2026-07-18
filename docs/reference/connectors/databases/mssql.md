@@ -1,46 +1,58 @@
-﻿# MSSQL
-Connects to Microsoft SQL Server or Azure SQL Database. Supports transactions, stored procedure execution, and all SQL Server data types.
+# MSSQL
 
-Syntax:
-  CREATE CONNECTION <name> AS MSSQL(
-    SERVER             = 'hostname\instance',
-    DATABASE           = 'dbname',
-    USER               = 'username',
-    PASSWORD           = '<password>',
-    TRUSTED_CONNECTION = ON | OFF,
-    CONNECT_TIMEOUT    = 30,
-    USE_SSL            = ON | OFF
-  );
+Connects to Microsoft SQL Server or Azure SQL Database. Supports full SQL pushdown, transactions,
+stored procedure execution, and all SQL Server data types.
 
-Options:
-- **SERVER** — server hostname, IP, or hostname\instance (required)
-- **DATABASE** — target database name (required)
-- **USER** — SQL login username (for SQL auth)
-- **PASSWORD** — SQL login password
-- **TRUSTED_CONNECTION** — use Windows integrated authentication (default OFF)
-- **CONNECT_TIMEOUT** — connection timeout in seconds (default 30)
-- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
-- **USE_SSL** — encrypt the connection (default ON for Azure SQL)
-- **TABLE** — default table for unqualified INSERT/SELECT
+Aliases: `SQL`, `SQLSERVER`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `SERVER` | Server name or IP address | Yes (structured) |
+| `DATABASE` | Target database name | Yes (structured) |
+| `USER` | SQL authentication username | No |
+| `PASSWORD` | SQL authentication password | No |
+| `TRUSTED_CONNECTION` | Use Windows Integrated Security (`TRUE`/`FALSE`) | No |
+| `USE_SSL` | Enable SSL encryption for the connection (`TRUE`/`FALSE`) | No |
+| `TRUST_SERVER_CERTIFICATE` | Bypass SSL certificate validation (`TRUE`/`FALSE`) | No |
+| `APPLICATION_INTENT` | `READWRITE` or `READONLY` (for AG replicas) | No |
+| `MULTI_SUBNET_FAILOVER` | Optimize failover for multi-subnet clusters (`TRUE`/`FALSE`) | No |
+| `CONNECT_TIMEOUT` | Seconds to wait for a connection (default: `15`) | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
+| `POOLING` | Enable provider connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum connections kept in the pool | No |
+| `MAX_POOL_SIZE` | Maximum connections allowed in the pool | No |
+| `POOL_LIFETIME` | Seconds before a pooled connection is recycled | No |
+| `TABLE` | Default table context (e.g. `dbo.Employees`) | No |
+
+> [!NOTE]
+> Do not set `USER`/`PASSWORD` when using `TRUSTED_CONNECTION=TRUE`. They are mutually exclusive
+> authentication methods.
+
+## Examples
 
 ```sql
-CREATE CONNECTION SalesDB AS MSSQL(
-  SERVER             = 'sql.corp.local',
-  DATABASE           = 'SalesData',
-  TRUSTED_CONNECTION = ON
-);
+-- Standard SQL authentication
+CREATE CONNECTION m_sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
 
-SELECT order_id, customer, amount
-  INTO #orders
-  FROM SalesDB.dbo.Orders
-  WHERE order_date >= @start;
+-- Windows Integrated Security (traditional string)
+CREATE CONNECTION m_hr AS MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
 
-EXECUTE SalesDB.dbo.UpdateSummary;
+-- Read-only replica with SSL
+CREATE CONNECTION m_ro AS MSSQL(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,
+         APPLICATION_INTENT=READONLY, USE_SSL=TRUE, TRUST_SERVER_CERTIFICATE=TRUE);
+
+SELECT order_id, customer, amount INTO #orders FROM m_sales.dbo.Orders WHERE order_date >= @start;
+EXECUTE m_sales.dbo.UpdateSummary;
 
 BEGIN TRANSACTION;
-  INSERT INTO SalesDB.dbo.Staging SELECT * FROM #processed;
+  INSERT INTO m_sales.dbo.Staging SELECT * FROM #processed;
 COMMIT;
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)
+- [PostgreSQL](postgres.md) · [Oracle](oracle.md) · [ODBC](odbc.md)

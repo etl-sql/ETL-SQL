@@ -1,43 +1,39 @@
-﻿# POSTGRES
-Connects to PostgreSQL using the Npgsql driver. Supports schemas, PostgreSQL-specific types, and SSL.
+# POSTGRES
 
-Syntax:
-  CREATE CONNECTION <name> AS POSTGRES(
-    HOST     = 'localhost',
-    PORT     = 5432,
-    DATABASE = 'dbname',
-    USER     = 'username',
-    PASSWORD = '<password>',
-    SSL_MODE = 'Disable' | 'Require' | 'Prefer'
-  );
+Connects to PostgreSQL databases using the Npgsql driver. Supports full SQL pushdown, schema
+introspection, PostgreSQL-specific types, transactions, connection pooling, and SSL.
 
-Options:
-- **HOST** — server hostname or IP (required)
-- **PORT** — port number (default 5432)
-- **DATABASE** — database name (required)
-- **USER** — username (required)
-- **PASSWORD** — password
-- **SSL_MODE** — TLS mode (default Prefer)
-- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
-- **TABLE** — default table for unqualified SELECT/INSERT
+Aliases: `NPSQL`, `PG`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server name or IP address | Yes (structured) |
+| `DATABASE` | Target database name | Yes (structured) |
+| `USER` | Login username | Yes |
+| `PASSWORD` | Login password | Yes |
+| `PORT` | Listening port (default: `5432`) | No |
+| `TABLE` | Default table context | No |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum pool size | No |
+| `MAX_POOL_SIZE` | Maximum pool size | No |
+| `CONNECTION_IDLE_LIFETIME` | Seconds before an idle connection is pruned | No |
+| `SSL_MODE` | `DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL` | No |
+| `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation (`TRUE`/`FALSE`) | No |
+
+## Examples
 
 ```sql
-CREATE CONNECTION AppDB AS POSTGRES(
-  HOST     = 'pg.corp.local',
-  PORT     = 5432,
-  DATABASE = 'app',
-  USER     = @pg_user,
-  PASSWORD = @pg_pass,
-  SSL_MODE = 'Require'
-);
+-- Structured
+CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
 
-SELECT id, email, created_at
-  INTO #users
-  FROM AppDB.public.users
-  WHERE active = TRUE;
-
-PRINT 'Users loaded: ' + @@ROWCOUNT;
+-- Traditional string
+CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)
+- [SQL Server](mssql.md) · [MySQL & MariaDB](mysql.md)

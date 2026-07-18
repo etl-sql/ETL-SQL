@@ -1,41 +1,40 @@
-﻿# ORACLE
-Connects to Oracle Database using a host/service combination or a TNS alias.
+# ORACLE
 
-Syntax:
-  CREATE CONNECTION <name> AS ORACLE(
-    HOST         = 'oracle.corp.local',
-    PORT         = 1521,
-    SERVICE_NAME = 'ORCL',
-    USER         = 'username',
-    PASSWORD     = '<password>'
-  );
+Connects to Oracle Database using either an **Easy Connect** host/service combination or a
+pre-configured **TNS** alias. Supports full SQL pushdown, transactions, and connection pooling.
 
-Options:
-- **HOST** — Oracle server hostname or IP (required unless using TNS_NAME)
-- **PORT** — listener port (default 1521)
-- **SERVICE_NAME** — Oracle service name
-- **TNS_NAME** — TNS alias (alternative to HOST + PORT + SERVICE_NAME)
-- **USER** — schema/user (required)
-- **PASSWORD** — password (required)
-- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
-- **TABLE** — default table for unqualified SELECT/INSERT
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server name or IP | Yes (Service pattern) |
+| `PORT` | Listening port (default: `1521`) | No |
+| `SERVICE_NAME` | Oracle service name | Yes (Service pattern) |
+| `TNS_NAME` | Oracle TNS alias | Yes (TNS pattern) |
+| `USER` | Login username | Yes |
+| `PASSWORD` | Login password | Yes |
+| `TABLE` | Default table context (e.g. `SCHEMA.TABLE`) | No |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum connections in the pool | No |
+| `MAX_POOL_SIZE` | Maximum connections in the pool | No |
+| `CONNECTION_LIFETIME` | Seconds a connection stays alive in the pool | No |
+
+> [!CAUTION]
+> `TNS_NAME` and `SERVICE_NAME` are **mutually exclusive**. Using both in the same connection raises a
+> parse error.
+
+## Examples
 
 ```sql
-CREATE CONNECTION FinanceDB AS ORACLE(
-  HOST         = 'oracle.finance.corp',
-  PORT         = 1521,
-  SERVICE_NAME = 'FINPROD',
-  USER         = @ora_user,
-  PASSWORD     = @ora_pass
-);
+-- Service Name pattern (structured)
+CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='pwd');
 
-SELECT account_id, balance, last_updated
-  INTO #accounts
-  FROM FinanceDB.FINANCE.ACCOUNTS
-  WHERE status = 'ACTIVE';
-
-PRINT 'Accounts loaded: ' + @@ROWCOUNT;
+-- TNS Name pattern (traditional)
+CREATE CONNECTION o_prod AS ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)
+- [SQL Server](mssql.md) · [ODBC](odbc.md)
