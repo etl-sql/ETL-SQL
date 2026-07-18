@@ -264,7 +264,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)` | Date | [DATETIMEOFFSETSFROMPARTS.md](reference/functions/datetime/datetimeoffsetsfromparts.md) | Build DATETIMEOFFSET from components |
 | `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md](reference/functions/datetime/timefromparts.md) | Build TIME from components |
 | `TRUNC(date)` | Date | [TRUNC.md](reference/functions/datetime/trunc.md) | Truncates time portion |
-| `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](guides/getting-started.md#4-date--time-functions) | Converts to specified timezone |
+| `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](reference/dates-times/dates-times.md) | Converts to specified timezone |
 | `CURRENT_DATE()` | Date | [CURRENT_DATE.md](reference/functions/datetime/current_date.md) | Current date (no time) |
 | `CURRENT_TIME()` | Date | [CURRENT_TIME.md](reference/functions/datetime/current_time.md) | Current time |
 | `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md](reference/functions/datetime/current_timestamp.md) | Current datetime (UTC) |
@@ -388,9 +388,9 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](reference/functions/aggregate/varp.md) | Population variance |
 | `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](reference/functions/aggregate/stdev.md) / [STDDEV.md](reference/functions/aggregate/stddev.md) | Sample standard deviation |
 | `STDEVP(expression)` | Aggregate | [STDEVP.md](reference/functions/aggregate/stdevp.md) | Population standard deviation |
-| `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](guides/getting-started.md#6-statistical-aggregates) | Sample covariance |
-| `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](guides/getting-started.md#6-statistical-aggregates) | Population covariance |
-| `CORR(expr1, expr2)` | Aggregate | [CORR.md](guides/getting-started.md#6-statistical-aggregates) | Pearson correlation |
+| `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](reference/functions/aggregate/README.md) | Sample covariance |
+| `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](reference/functions/aggregate/README.md) | Population covariance |
+| `CORR(expr1, expr2)` | Aggregate | [CORR.md](reference/functions/aggregate/README.md) | Pearson correlation |
 | `LISTAGG(expression, separator)` | Aggregate | [LISTAGG.md](reference/functions/aggregate/listagg.md) | Concatenates values with separator |
 | `STRING_AGG(expression, separator)` | Aggregate | [STRING_AGG.md](reference/functions/aggregate/string_agg.md) | Concatenates strings with separator |
 | `ROW_NUMBER()` | Window | [ROW_NUMBER.md](reference/functions/window/row_number.md) | Sequential row number |
@@ -399,11 +399,11 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `LAG(expression, [offset], [default])` | Window | [LAG.md](reference/functions/window/lag.md) | Value from N rows before |
 | `LEAD(expression, [offset], [default])` | Window | [LEAD.md](reference/functions/window/lead.md) | Value from N rows after |
 | `NTILE(buckets)` | Window | [NTILE.md](reference/functions/window/ntile.md) | Bucket number 1-N |
-| `PERCENT_RANK()` | Window | [PERCENT_RANK.md](guides/getting-started.md#132-ranking-functions) | Relative rank (0-1) |
-| `CUME_DIST()` | Window | [CUME_DIST.md](guides/getting-started.md#13-window-functions) | Cumulative distribution |
+| `PERCENT_RANK()` | Window | [PERCENT_RANK.md](reference/functions/window/README.md) | Relative rank (0-1) |
+| `CUME_DIST()` | Window | [CUME_DIST.md](reference/functions/window/README.md) | Cumulative distribution |
 | `FIRST_VALUE(expression)` | Window | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in partition |
 | `LAST_VALUE(expression)` | Window | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in partition |
-| `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
+| `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md](reference/functions/window/README.md) | Nth value in window frame |
 | `PERCENTILE_CONT(fraction)` | Window | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
 | `PERCENTILE_DISC(fraction)` | Window | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
 | `REGEXP_LIKE(string, pattern)` | Regex | [REGEXP_LIKE.md](reference/functions/regex/regexp_like.md) | 1 if string matches regex |
@@ -546,14 +546,14 @@ FUNCTION_NAME(args) OVER (
 | `ROW_NUMBER()` | [ROW_NUMBER.md](reference/functions/window/row_number.md) | Sequential row number within partition |
 | `RANK()` | [RANK.md](reference/functions/window/rank.md) | Rank with gaps for ties |
 | `DENSE_RANK()` | [DENSE_RANK.md](reference/functions/window/dense_rank.md) | Rank without gaps for ties |
-| `PERCENT_RANK()` | [PERCENT_RANK.md](guides/getting-started.md#132-ranking-functions) | Relative rank (0 to 1) |
-| `CUME_DIST()` | [CUME_DIST.md](guides/getting-started.md#13-window-functions) | Cumulative distribution |
+| `PERCENT_RANK()` | [PERCENT_RANK.md](reference/functions/window/README.md) | Relative rank (0 to 1) |
+| `CUME_DIST()` | [CUME_DIST.md](reference/functions/window/README.md) | Cumulative distribution |
 | `NTILE(buckets)` | [NTILE.md](reference/functions/window/ntile.md) | Divide rows into N buckets |
 | `LAG(expression, [offset], [default])` | [LAG.md](reference/functions/window/lag.md) | Value from N rows before |
 | `LEAD(expression, [offset], [default])` | [LEAD.md](reference/functions/window/lead.md) | Value from N rows after |
 | `FIRST_VALUE(expression)` | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in window frame |
 | `LAST_VALUE(expression)` | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in window frame |
-| `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
+| `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](reference/functions/window/README.md) | Nth value in window frame |
 | `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
 | `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
 

@@ -165,7 +165,7 @@ DECLARE @end   RELDATE INPUT = 'D';    -- default: today
 SET WEEK_START_DAY = 'Sunday';
 ```
 
-See the [ETL-SQL Grammar Reference](getting-started.md#reldate) for the full expression syntax.
+See the [RELDATE reference](../reference/dates-times/reldate.md) for the full expression syntax.
 
 ### Connecting parameters to interactive filter visuals
 

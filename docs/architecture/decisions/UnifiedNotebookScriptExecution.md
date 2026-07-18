@@ -97,6 +97,6 @@ SEND FILE 'data/export.zip' TO '/inbox/' AT vendor_sftp;
 ---
 
 ### References
-- [Session Checkpointing Grammar Reference](../../guides/getting-started.md#413-labels-and-goto)
+- [Session Checkpointing Reference](../../administration/orchestration/sessions-and-variables.md)
 - [Language Server Protocol Handlers](../LanguageServer.md)
 - [ETL Notebook Guide](../../guides/notebook-guide.md)
