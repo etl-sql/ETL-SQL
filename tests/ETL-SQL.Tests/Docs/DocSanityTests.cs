@@ -563,6 +563,7 @@ namespace ETL_SQL.Tests.Docs
                            !parts.Contains("bin") &&
                            !parts.Contains("obj") &&
                            !parts.Contains("Help_Legacy") &&
+                           !parts.Contains(".claude") &&
                            !parts.Contains(".worktrees") &&
                            !parts.Contains(".vscode-test") &&
                            !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&

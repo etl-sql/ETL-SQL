@@ -45,9 +45,9 @@ public sealed class SubscriptionQueryService(PortalDbContext db)
         {
             var pattern = LikePattern(queryText.Trim());
             query = query.Where(s =>
-                (s.Name != null && EF.Functions.Like(s.Name, pattern, @"\")) ||
-                (s.Recipients != null && EF.Functions.Like(s.Recipients, pattern, @"\")) ||
-                EF.Functions.Like(s.Report.Name, pattern, @"\"));
+                (s.Name != null && EF.Functions.Like(s.Name, pattern)) ||
+                (s.Recipients != null && EF.Functions.Like(s.Recipients, pattern)) ||
+                EF.Functions.Like(s.Report.Name, pattern));
         }
 
         var total = await query.CountAsync();
@@ -93,6 +93,5 @@ public sealed class SubscriptionQueryService(PortalDbContext db)
             ? string.Join(", ", parameters.Select(kv => $"{kv.Key}={kv.Value}"))
             : null;
 
-    private static string LikePattern(string query) =>
-        $"%{query.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_")}%";
+    private static string LikePattern(string query) => $"%{query}%";
 }

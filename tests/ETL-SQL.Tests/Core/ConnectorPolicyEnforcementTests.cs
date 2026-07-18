@@ -9,6 +9,7 @@ using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.CompilerServices;
 
 namespace ETL_SQL.Tests.Core;
 
@@ -355,17 +356,22 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         return null;
     }
 
-    private static string FindRepositoryRoot()
+    private static string FindRepositoryRoot([CallerFilePath] string sourceFilePath = "")
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null)
+        foreach (var start in new[] { sourceFilePath, AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, "src"))
-                && Directory.Exists(Path.Combine(directory.FullName, "tests")))
+            var directory = new DirectoryInfo(File.Exists(start)
+                ? Path.GetDirectoryName(start)!
+                : start);
+            while (directory != null)
             {
-                return directory.FullName;
+                if (Directory.Exists(Path.Combine(directory.FullName, "src"))
+                    && Directory.Exists(Path.Combine(directory.FullName, "tests")))
+                {
+                    return directory.FullName;
+                }
+                directory = directory.Parent;
             }
-            directory = directory.Parent;
         }
 
         throw new DirectoryNotFoundException("Could not locate repository root from test base directory.");

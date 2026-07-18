@@ -163,7 +163,14 @@ public sealed class CertificatePolicyEnvelopeSigner : IPolicyEnvelopeSigner, IDi
         {
             using var store = new System.Security.Cryptography.X509Certificates.X509Store(
                 System.Security.Cryptography.X509Certificates.StoreName.My, location);
-            store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadOnly);
+            try
+            {
+                store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadOnly);
+            }
+            catch (Exception ex) when (IsUnsupportedStore(location, ex))
+            {
+                continue;
+            }
             foreach (var cert in store.Certificates)
             {
                 if (cert.HasPrivateKey && string.Equals(cert.Thumbprint, normalized, StringComparison.OrdinalIgnoreCase))
@@ -174,6 +181,12 @@ public sealed class CertificatePolicyEnvelopeSigner : IPolicyEnvelopeSigner, IDi
         throw new PolicyAuthorityException(
             $"Policy signing certificate '{normalized}' was not found with an accessible private key.");
     }
+
+    private static bool IsUnsupportedStore(
+        System.Security.Cryptography.X509Certificates.StoreLocation location,
+        Exception ex) =>
+        location == System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine
+        && (ex is PlatformNotSupportedException || ex.InnerException is PlatformNotSupportedException);
 
     public void Dispose() { _privateKey.Dispose(); _cert.Dispose(); }
 }

@@ -479,7 +479,8 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
 
     private PortalProcess StartPortal(SharedRoots shared, int port, string nodeName)
     {
-        var portalDll = typeof(PortalMarker).Assembly.Location;
+        var portalDll = Path.Combine(AppContext.BaseDirectory, $"{typeof(PortalMarker).Assembly.GetName().Name}.dll");
+        Assert.True(File.Exists(portalDll), $"Expected Portal assembly at {portalDll}");
         var psi = new ProcessStartInfo("dotnet", $"\"{portalDll}\"")
         {
             UseShellExecute = false,
