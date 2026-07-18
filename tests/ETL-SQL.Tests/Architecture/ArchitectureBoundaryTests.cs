@@ -35,18 +35,18 @@ public sealed class ArchitectureBoundaryTests
         ["Reporting"] = 2,
         ["ReportBuilder"] = 2,
         ["ReportRuntime"] = 2,
-        ["ReportPortal.Data"] = 2,
+        ["Portal.Data"] = 2,
         ["Connectors"] = 3,
         ["Infrastructure.Docker"] = 3,
         ["Infrastructure.Logging"] = 3,
         ["Infrastructure.Sqlite"] = 3,
         ["Orchestrator"] = 3,
         ["ReportHosting"] = 3,
-        ["ReportPortal.Migrations.Postgres"] = 3,
+        ["Portal.Migrations.Postgres"] = 3,
         ["LanguageServer"] = 4,
         ["Orchestrator.Service"] = 4,
         ["ReportPlayer"] = 4,
-        ["ReportPortal"] = 5,
+        ["Portal"] = 5,
         ["App"] = 6,
         ["TUI"] = 6,
         ["ReportBuilder.CLI"] = 7,
@@ -171,7 +171,7 @@ public sealed class ArchitectureBoundaryTests
         return result;
     }
 
-    // "ETL-SQL.ReportPortal.Data" -> "ReportPortal.Data"; "ETL-SQL.Core" -> "Core".
+    // "ETL-SQL.Portal.Data" -> "Portal.Data"; "ETL-SQL.Core" -> "Core".
     private static string StripName(string fileName) =>
         fileName.StartsWith("ETL-SQL.", StringComparison.Ordinal)
             ? fileName["ETL-SQL.".Length..]

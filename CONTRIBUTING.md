@@ -156,7 +156,7 @@ See [docs/architecture/standards/Presentation_Standards.md](docs/architecture/st
 
 ### Browser-side UI (portal / report runtime)
 
-The portal and report-runtime UI is plain ES-module JavaScript + CSS (no build step). Shared components live in `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/`; portal-specific UI modules live under `src/ETL-SQL.ReportPortal/wwwroot/`.
+The portal and report-runtime UI is plain ES-module JavaScript + CSS (no build step). Shared components live in `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/`; portal-specific UI modules live under `src/ETL-SQL.Portal/wwwroot/`.
 
 **Develop and test these without Docker or the full portal** using the UI sandbox:
 
@@ -170,7 +170,7 @@ It serves a Storybook-style harness (opens at `http://localhost:8099/tools/ui-sa
 
 - The sandbox is **dev-only** — it is not part of any build or shipped artifact (safe to delete).
 - After editing a **canonical** shared asset under `Resources/Shared/...`, run `scripts/sync-assets.ps1` so the host copies (`wwwroot`, VS Code `media`) match. CI fails if they drift — verify with `scripts/sync-assets.ps1 -Check`.
-- To run a change in the real portal, build/run the `ETL-SQL.ReportPortal` project as usual.
+- To run a change in the real portal, build/run the `ETL-SQL.Portal` project as usual.
 
 ---
 

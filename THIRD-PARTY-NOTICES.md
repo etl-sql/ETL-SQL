@@ -17,7 +17,7 @@ candidates for an About screen or small product footer credit:
 
 | Component | Used in | Credit text |
 | :--- | :--- | :--- |
-| Apache ECharts | Report Portal, Report Player, VS Code report preview | Visualizations powered by Apache ECharts. |
+| Apache ECharts | Portal, Report Player, VS Code report preview | Visualizations powered by Apache ECharts. |
 | Tabulator | Report table/grid views | Table views powered by Tabulator. |
 | Spectre.Console | CLI/TUI terminal rendering | Terminal experience powered by Spectre.Console. |
 | PDFsharp + MigraDoc | PDF report export | PDF export powered by PDFsharp and MigraDoc. |
@@ -41,7 +41,7 @@ license banners in the bundled files when updating them.
 Canonical source path:
 `src/ETL-SQL.ReportRuntime/Resources/Shared/`
 
-Generated sync outputs also appear under ReportPlayer, ReportPortal, and the
+Generated sync outputs also appear under ReportPlayer, Portal, and the
 VS Code extension media folder.
 
 ## Direct NuGet Runtime Dependencies
@@ -142,5 +142,5 @@ Before shipping a public release:
 5. Review packages with non-standard or file-based license metadata, especially
    Oracle.ManagedDataAccess.Core, Apache.Arrow, Apache.Avro,
    Docker.DotNet, and OmniSharp.Extensions.LanguageServer.
-6. Add an About or Third-Party Notices link in the Report Portal, Report Player,
+6. Add an About or Third-Party Notices link in the Portal, Report Player,
    TUI, CLI, and VS Code extension where practical.

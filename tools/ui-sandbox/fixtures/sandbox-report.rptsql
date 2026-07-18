@@ -1,0 +1,96 @@
+-- ETL-SQL UI sandbox test report.
+-- Self-contained via testdata/test_sales.csv (data spans 2021-2025), so it builds with no
+-- external connections. Compiled to sandbox-report.manifest.json and served by the sandbox
+-- mock /api/designer/preview so the designer's Preview pane renders a real, populated report.
+--
+-- Rebuild after editing:
+--   dotnet run --project src/ETL-SQL.ReportBuilder.CLI -- build \
+--     tools/ui-sandbox/fixtures/sandbox-report.rptsql \
+--     --output tools/ui-sandbox/fixtures/sandbox-report.manifest.json --format json
+SET REPORT TITLE = 'Sandbox Sales Dashboard';
+SET REPORT DESCRIPTION = 'Test report for the ui-sandbox designer preview pane.';
+
+CREATE CONNECTION sales_data AS FLATFILE('testdata/test_sales.csv', HEADER=TRUE);
+
+-- Region totals (all years) for the bar chart.
+SELECT region, SUM(revenue) AS TotalRevenue, SUM(units) AS TotalUnits
+INTO #region_totals
+FROM sales_data.FILE
+GROUP BY region
+ORDER BY TotalRevenue DESC;
+
+-- 2025 revenue per region for the KPI cards.
+SELECT region, SUM(revenue) AS Revenue2025
+INTO #region_2025
+FROM sales_data.FILE
+WHERE date >= '2025-01-01' AND date <= '2025-12-31'
+GROUP BY region;
+
+-- Monthly trend (2024 onward) for the line chart.
+SELECT month, region, SUM(revenue) AS MonthlyRevenue
+INTO #trends
+FROM sales_data.FILE
+WHERE date >= '2024-01-01'
+GROUP BY month, region
+ORDER BY month ASC;
+
+-- Units by product for the pie chart.
+SELECT product, SUM(units) AS Units
+INTO #by_product
+FROM sales_data.FILE
+GROUP BY product
+ORDER BY Units DESC;
+
+CREATE VISUAL KpiNorth AS CARD (
+    SOURCE = (SELECT Revenue2025 FROM #region_2025 WHERE region = 'North'),
+    MAPPINGS (VALUE = Revenue2025),
+    STYLE (TITLE = 'North Revenue', FORMAT = '$#,##0', COLOR = '#3498db', SUBTITLE = 'FY2025')
+);
+CREATE VISUAL KpiSouth AS CARD (
+    SOURCE = (SELECT Revenue2025 FROM #region_2025 WHERE region = 'South'),
+    MAPPINGS (VALUE = Revenue2025),
+    STYLE (TITLE = 'South Revenue', FORMAT = '$#,##0', COLOR = '#e67e22', SUBTITLE = 'FY2025')
+);
+CREATE VISUAL KpiWest AS CARD (
+    SOURCE = (SELECT Revenue2025 FROM #region_2025 WHERE region = 'West'),
+    MAPPINGS (VALUE = Revenue2025),
+    STYLE (TITLE = 'West Revenue', FORMAT = '$#,##0', COLOR = '#e74c3c', SUBTITLE = 'FY2025')
+);
+
+CREATE VISUAL RevenueByRegion AS BAR (
+    SOURCE = #region_totals,
+    MAPPINGS (X = region, Y = TotalRevenue),
+    STYLE (TITLE = 'Total Revenue by Region')
+);
+
+CREATE VISUAL UnitsByProduct AS PIE (
+    SOURCE = #by_product,
+    MAPPINGS (CATEGORY = product, VALUE = Units),
+    STYLE (TITLE = 'Units by Product')
+);
+
+CREATE VISUAL SalesTrend AS LINE (
+    SOURCE = #trends,
+    MAPPINGS (X = month, Y = MonthlyRevenue, SERIES = region),
+    STYLE (TITLE = 'Monthly Revenue Trend', SMOOTH = TRUE)
+);
+
+CREATE VISUAL DetailsTable AS TABLE (
+    SOURCE = (SELECT TOP 100 region, product, units, revenue, date FROM sales_data.FILE ORDER BY date DESC),
+    STYLE (TITLE = 'Recent Transactions')
+);
+
+CREATE PAGE Main AS DASHBOARD (
+    STRUCTURE = 'N S W / B B P / T T T / D D D',
+    MAP (
+        'N' = KpiNorth,
+        'S' = KpiSouth,
+        'W' = KpiWest,
+        'B' = RevenueByRegion,
+        'P' = UnitsByProduct,
+        'T' = SalesTrend,
+        'D' = DetailsTable
+    )
+);
+
+STYLE ( THEME = light, PRIMARY_COLOR = '#1abc9c', FONT_FAMILY = 'Inter, sans-serif' );

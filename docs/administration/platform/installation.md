@@ -51,7 +51,7 @@ ETL-SQL provides pre-configured Docker Compose configurations to run containeriz
 1. **Pull-Based Deployments (Operator Workflow)**:
    The central [docker-compose.yml](../../../docker-compose.yml) file is structured for container registry pulls. It references pre-built images:
    - `etl-sql/orchestrator:latest` (runs on port `5001`)
-   - `etl-sql/report-portal:latest` (runs on port `5000`)
+   - `etl-sql/portal:latest` (runs on port `5000`)
 
    Deploying this configuration only requires copying `docker-compose.yml` to your host server and running:
    ```bash

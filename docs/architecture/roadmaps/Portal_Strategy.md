@@ -42,7 +42,7 @@ statements.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  ETL-SQL.ReportPortal                   │
+│                  ETL-SQL.Portal                   │
 │        (new ASP.NET Core / Kestrel project)             │
 │                                                         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
@@ -527,7 +527,7 @@ cleanly into the published artifact. Upgrade to React/Vue in v2 if complexity de
 
 ### 3.3 Report Viewer Reuse
 `report-runtime.js`, CSS, and browser dependencies are synced from
-`src/ETL-SQL.ReportRuntime/Resources/Shared` into ReportPlayer, ReportPortal, and
+`src/ETL-SQL.ReportRuntime/Resources/Shared` into ReportPlayer, Portal, and
 the VS Code extension. This ensures every host ships the same report canvas.
 
 ### 3.4 Parameter Interaction

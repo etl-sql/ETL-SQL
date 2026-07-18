@@ -8,8 +8,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Storage;
-using ETL_SQL.ReportPortal;
-using ETL_SQL.ReportPortal.Services;
+using ETL_SQL.Portal;
+using ETL_SQL.Portal.Services;
 
 namespace ETL_SQL.Reporting
 {

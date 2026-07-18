@@ -417,7 +417,7 @@ WITH (
 |---|---|
 | `STATIC` | Default. Uses the built-in PDFsharp/MigraDoc exporter; no browser is required. |
 | `AUTO` | Uses a configured high-fidelity path when available, otherwise falls back to `STATIC` with a warning. |
-| `HOSTED` | Reserved for ReportPortal / `report serve` browser-backed export. Explicit mode fails if unavailable. |
+| `HOSTED` | Reserved for Portal / `report serve` browser-backed export. Explicit mode fails if unavailable. |
 | `BROWSER` | Uses an optional installed Chrome, Edge, or Chromium executable. No browser is bundled or required. |
 
 `HOST` and `BROWSER_PATH` are accepted only with `FORMAT PDF`. `HOSTED` and `BROWSER` are opt-in high-fidelity modes; `STATIC` remains the portable default.

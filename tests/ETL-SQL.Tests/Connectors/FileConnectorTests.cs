@@ -984,14 +984,14 @@ namespace ETL_SQL.Tests.Connectors
         [Fact]
         public void ConnectionStringBuilder_NullProps_ReturnsEmpty()
         {
-            var result = ConnectionStringBuilder.Build("MSSQL", null!);
+            var result = DatabaseConnectionStringBuilder.Build("MSSQL", null!);
             Assert.Equal(string.Empty, result);
         }
 
         [Fact]
         public void ConnectionStringBuilder_EmptyProps_ReturnsEmpty()
         {
-            var result = ConnectionStringBuilder.Build("MSSQL", new Dictionary<string, string>());
+            var result = DatabaseConnectionStringBuilder.Build("MSSQL", new Dictionary<string, string>());
             Assert.Equal(string.Empty, result);
         }
 
@@ -1004,7 +1004,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["DATABASE"] = "TestDB",
                 ["TRUSTED_CONNECTION"] = "TRUE"
             };
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             Assert.Contains("localhost", cs);
         }
 
@@ -1012,8 +1012,8 @@ namespace ETL_SQL.Tests.Connectors
         public void ConnectionStringBuilder_SqlServerAlias_WorksLikeMssql()
         {
             var props = new Dictionary<string, string> { ["SERVER"] = "myserver", ["DATABASE"] = "db" };
-            var cs1 = ConnectionStringBuilder.Build("MSSQL", props);
-            var cs2 = ConnectionStringBuilder.Build("SQLSERVER", props);
+            var cs1 = DatabaseConnectionStringBuilder.Build("MSSQL", props);
+            var cs2 = DatabaseConnectionStringBuilder.Build("SQLSERVER", props);
             Assert.False(string.IsNullOrEmpty(cs1));
             Assert.False(string.IsNullOrEmpty(cs2));
         }
@@ -1026,7 +1026,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["SERVER"] = "srv",
                 ["POOL_LIFETIME"] = "300"
             };
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             Assert.NotEmpty(cs);
         }
 
@@ -1039,7 +1039,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["ENCRYPT"] = "TRUE",
                 ["TRUST_SERVER_CERTIFICATE"] = "TRUE"
             };
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             Assert.Contains("srv", cs);
         }
 
@@ -1051,7 +1051,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["SERVER"] = "srv",
                 ["APPLICATION_INTENT"] = "READWRITE"
             };
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
             Assert.NotEmpty(cs);
         }
 
@@ -1064,7 +1064,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["DATABASE"] = "db",
                 ["CONNECTION_IDLE_LIFETIME"] = "60"
             };
-            var cs = ConnectionStringBuilder.Build("POSTGRES", props);
+            var cs = DatabaseConnectionStringBuilder.Build("POSTGRES", props);
             Assert.Contains("pghost", cs);
         }
 
@@ -1072,7 +1072,7 @@ namespace ETL_SQL.Tests.Connectors
         public void ConnectionStringBuilder_PostgresAlias_Works()
         {
             var props = new Dictionary<string, string> { ["HOST"] = "host", ["DATABASE"] = "db" };
-            var cs = ConnectionStringBuilder.Build("NPSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("NPSQL", props);
             Assert.NotEmpty(cs);
         }
 
@@ -1084,7 +1084,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["HOST"] = "orahost",
                 ["PORT"] = "1521"
             };
-            var cs = ConnectionStringBuilder.Build("ORACLE", props);
+            var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
             Assert.Contains("orahost", cs);
         }
 
@@ -1097,7 +1097,7 @@ namespace ETL_SQL.Tests.Connectors
                 ["SERVICE_NAME"] = "xe",
                 ["CONNECTION_LIFETIME"] = "300"
             };
-            var cs = ConnectionStringBuilder.Build("ORACLE", props);
+            var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
             Assert.NotEmpty(cs);
         }
 

@@ -147,7 +147,7 @@ export default {
     { id: 'empty', label: 'Empty catalog' },
   ],
   async mount(stage, fixtureId, ctx) {
-    const { createConnectionsAdmin } = await importFresh('/src/ETL-SQL.ReportPortal/wwwroot/js/connections-admin.js');
+    const { createConnectionsAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/connections-admin.js');
     stage.classList.add('portal-page');
 
     const connectionsApi =

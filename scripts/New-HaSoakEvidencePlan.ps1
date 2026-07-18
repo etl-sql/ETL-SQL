@@ -160,7 +160,7 @@ $plan = [ordered]@{
         [ordered]@{
             gateId = 'enterprise-hardening'
             state = 'Ready'
-            input = 'tests/ETL-SQL.Tests and tests/ETL-SQL.ReportPortal.Tests enterprise hardening slices'
+            input = 'tests/ETL-SQL.Tests and tests/ETL-SQL.Portal.Tests enterprise hardening slices'
             expectedOutputDirectory = $enterpriseOutDir
             command = "scripts/Test-EnterpriseHardeningCertification.ps1 -RunId $($metadata.runId)"
             requiredEvidence = @(

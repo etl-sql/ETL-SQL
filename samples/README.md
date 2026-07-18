@@ -37,7 +37,7 @@ Do not check in ad hoc local output, temporary portal state, generated logs, or 
 | `logs/` | Sample log artifacts when needed by examples or tests. |
 | `output/` | Sample output artifacts when needed by examples or tests. |
 | `paginated/` | Multi-report and paginated hosting examples. |
-| `report_portal_deployment/` | Script-first Portal promotion pattern. |
+| `portal_deployment/` | Script-first Portal promotion pattern. |
 
 ## Running samples safely
 

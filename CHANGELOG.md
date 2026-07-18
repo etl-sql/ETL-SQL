@@ -145,7 +145,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 **`SHOW PORTAL USAGE METRICS` and `SHOW PORTAL OPERATIONAL METRICS` Statements**
 - Added `SHOW PORTAL USAGE METRICS [INTO #t]` inside an `EXECUTE portal` block to return report view counts, unique viewers, refresh health, and subscription delivery failures for the requested period.
 - Added `SHOW PORTAL OPERATIONAL METRICS [INTO #t]` to return live queue depth, execution concurrency caps, recent failure counts, storage size, schema migration status, and last-24-hour execution load/resource buckets — complementing the existing `GET /health` endpoint with a scriptable, queryable form.
-- Wired both statements through the parser (`SystemParser`), AST (`ShowPortalUsageMetricsStatement`, `ShowPortalOperationalMetricsStatement`), and `ReportPortalDataSource`; updated `PORTAL_SHOW.md` help file, `Grammar.md`, and `Syntax_Index.md`.
+- Wired both statements through the parser (`SystemParser`), AST (`ShowPortalUsageMetricsStatement`, `ShowPortalOperationalMetricsStatement`), and `PortalDataSource`; updated `PORTAL_SHOW.md` help file, `Grammar.md`, and `Syntax_Index.md`.
 
 **`SHOW LOCKS` Statement**
 - Added `SHOW LOCKS` to display currently held engine-level and orchestrator-level resource locks, aiding live diagnosis of stalled pipelines and contention scenarios.
@@ -642,7 +642,7 @@ Hardening from the v0.10.0 release-readiness security review:
 
 ### Added
 
-- **Report Portal Subsystem (Phases 1–6):** Introduced the `ETL-SQL.ReportPortal` web application. Features include JWT authentication, role-based access control (RBAC), folder structure organization, report publishing, execution/snapshot tracking, and web-based ECharts/Markdown rendering.
+- **Report Portal Subsystem (Phases 1–6):** Introduced the `ETL-SQL.Portal` web application. Features include JWT authentication, role-based access control (RBAC), folder structure organization, report publishing, execution/snapshot tracking, and web-based ECharts/Markdown rendering.
 - **Automated Report Subscriptions:** Shipped report subscriptions allowing scheduled report exports via `EXPORT REPORT` sent as Link or Markdown emails, complete with SMTP connection management.
 - **Portal Observability & Administration:** Added a `/health` endpoint with JSON diagnostics of database and orchestrator status, audit logs CSV exports, and administrative endpoints.
 - **Portal Security Hardening:** Implemented JWT secret validation on startup via hosted service, a path traversal guard, and HSTS security configurations.

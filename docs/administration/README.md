@@ -7,7 +7,7 @@ area's README lists its pages.
 
 - [Platform Administration](platform/README.md) - install, configure, secure, scale, back up, and
   monitor the platform and services.
-- [Portal Administration](portal/README.md) - administer the Report Portal application: users,
+- [Portal Administration](portal/README.md) - administer the Portal application: users,
   permissions, publishing, subscriptions, and audit.
 - [Orchestration](orchestration/README.md) - schedule, run, and monitor jobs from the command line,
   including DAGs and CI/CD.

@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="ETL-SQL.ReportPortal.Tests, PublicKey=$(AssemblyPublicKey)" />
+    <InternalsVisibleTo Include="ETL-SQL.Portal.Tests, PublicKey=$(AssemblyPublicKey)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +31,7 @@
     <ProjectReference Include="..\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Connectors.Files\ETL-SQL.Connectors.Files.csproj" />
     <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
   </ItemGroup>

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Portal.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ETL-SQL.Portal\ETL-SQL.Portal.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Connectors.Files\ETL-SQL.Connectors.Files.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator.Service\ETL-SQL.Orchestrator.Service.csproj" Condition="'$(EnterpriseHardeningCertification)' != 'true'" />
+    <ProjectReference Include="..\..\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" Condition="'$(EnterpriseHardeningCertification)' != 'true'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnterpriseHardeningCertification)' == 'true'">
+    <Compile Remove="CrossHostConsistencyTests.cs" />
+    <Compile Remove="JobSchedulingIntegrationTests.cs" />
+    <Compile Remove="OrchestratorJobApiAuthTests.cs" />
+    <Compile Remove="OrchestratorStartupTests.cs" />
+    <Compile Remove="OrchestratorWebFactory.cs" />
+    <Compile Remove="PortalMultiProcessPostgresTests.cs" />
+    <Compile Remove="RuntimeSecretRotationTests.cs" />
+    <Compile Remove="SubscriptionIntegrationTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

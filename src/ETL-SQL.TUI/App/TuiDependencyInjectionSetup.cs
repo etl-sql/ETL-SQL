@@ -16,7 +16,7 @@ using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Postgres;
-using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.S3;
 using ETL_SQL.Connectors.Sqlite;
@@ -139,7 +139,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, SmtpConnector>();
             services.AddSingleton<IConnector, RestConnector>();
             services.AddSingleton<IConnector, OdbcConnector>();
-            services.AddSingleton<IConnector, ReportPortalConnector>();
+            services.AddSingleton<IConnector, PortalConnector>();
             services.AddSingleton<IConnector, OrchestratorConnector>();
 
             var ftpHost = configuration["Connectors:Ftp:Host"] ?? "localhost";

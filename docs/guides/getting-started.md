@@ -641,7 +641,7 @@ workspaces, and core `SELECT`. From here, each area has a focused home:
 | 55+ sample scripts inventory | **[Sample_Guide.md](sample-guide.md)** |
 | Reporting & dashboards | **[Report_SQL_Guide.md](report-sql.md)** |
 | Report examples | **[Report_Cookbook.md](../cookbooks/report-recipes.md)** |
-| Portal users | **[ReportPortal_User_Guide.md](portal-user.md)** |
+| Portal users | **[Portal_User_Guide.md](portal-user.md)** |
 | Portal administrators | **[Portal Admin Guide](../administration/portal/README.md)** |
 | Local and release test lanes | **[Testing.md](../../Testing.md)** |
 | Documentation map | **[Docs README](../../README.md)** |

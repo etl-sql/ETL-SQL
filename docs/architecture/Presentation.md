@@ -27,10 +27,10 @@ Script text
         ├─ ETL-SQL.Reporting builds manifests and static exports
         ├─ ETL-SQL.ReportHosting manages live report sessions
         ├─ ETL-SQL.ReportPlayer hosts local dashboards
-        └─ ETL-SQL.ReportPortal hosts authenticated dashboards and admin UI
+        └─ ETL-SQL.Portal hosts authenticated dashboards and admin UI
 ```
 
-There is no shared presentation-sink abstraction in the current source tree. Presentation is host-specific: CLI, TUI, VS Code, language server, ReportPlayer, and ReportPortal each own their own rendering or protocol boundary.
+There is no shared presentation-sink abstraction in the current source tree. Presentation is host-specific: CLI, TUI, VS Code, language server, ReportPlayer, and Portal each own their own rendering or protocol boundary.
 
 ---
 
@@ -138,7 +138,7 @@ Browser report presentation has a single canonical runtime source:
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-Host copies under ReportPlayer, ReportPortal, and VS Code media are generated sync outputs. Edit the shared runtime first, then run:
+Host copies under ReportPlayer, Portal, and VS Code media are generated sync outputs. Edit the shared runtime first, then run:
 
 ```powershell
 node .\scripts\sync-assets.js
@@ -152,7 +152,7 @@ Report presentation layers:
 | `ETL-SQL.Reporting` | Manifest building, chart option generation, Markdown/PDF/CSV/SVG export |
 | `ETL-SQL.ReportHosting` | Live dashboard sessions, parameters, selective refresh, drill state |
 | `ETL-SQL.ReportPlayer` | Local Kestrel host and static asset serving |
-| `ETL-SQL.ReportPortal` | Authenticated portal UI, report catalog, snapshots, subscriptions, sharing, embeds, saved views, alerts |
+| `ETL-SQL.Portal` | Authenticated portal UI, report catalog, snapshots, subscriptions, sharing, embeds, saved views, alerts |
 | `src/etl-sql-vscode/media` | Generated VS Code preview runtime assets |
 
 ---

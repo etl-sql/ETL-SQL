@@ -1,6 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Orchestrator;
-using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core;
@@ -301,11 +301,11 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
-    public async Task ReportPortal_RedirectToDeniedHost_IsNotFollowed()
+    public async Task Portal_RedirectToDeniedHost_IsNotFollowed()
     {
         var handler = new RedirectingHandler("http://169.254.169.254/latest/meta-data/");
         using var http = PolicyBoundHttp.CreateClient(handler, baseAddress: new Uri("https://portal.example.com/"));
-        await using var portal = new ReportPortalDataSource(http, "admin", "pass", NullLogger.Instance);
+        await using var portal = new PortalDataSource(http, "admin", "pass", NullLogger.Instance);
 
         var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
             portal.ExecuteAdminStatementAsync(new ShowPortalUsersStatement(), SystemExecutionContext.Instance));

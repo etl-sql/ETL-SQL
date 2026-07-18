@@ -29,17 +29,33 @@ export default {
   fixtures: [
     { id: 'sales', label: 'Sales dashboard' },
     { id: 'blank', label: 'Blank canvas' },
+    { id: 'scm',   label: 'Sales + source control' },
   ],
   async mount(stage, fixtureId, ctx) {
     const ds = fixtureId === 'blank' ? blankState() : sampleState();
     const mod = await importFresh(DESIGNER_JS);
-    const inst = mod.createDesigner(stage, {
+    const scm = fixtureId === 'scm';
+    const opts = {
       designState: ds,
       reportName: 'Sandbox Report',
       authFetch: makeMockApi(ds),
-      onSaveScript: async (script) => ctx.stat(`saved (mock) · ${script.length} chars`),
-    });
-    ctx.stat('drag visuals from the left · Script toggle uses the mock parse/generate');
+      previewUrl: '/tools/ui-sandbox/designer-preview.html',
+    };
+    if (scm) {
+      // Exercise the Portal save+commit path: reportId routes Save through /api/designer/save
+      // (mock), source control enabled reveals the separate Commit button.
+      opts.reportId = 1;
+      opts.reportVersion = 1;
+      opts.sourceRevision = 'sandbox0';
+      opts.sourceControlEnabled = true;
+      opts.onSave = () => ctx.stat('onSave (mock) — not called while source control is on');
+    } else {
+      opts.onSaveScript = async (script) => ctx.stat(`saved (mock) · ${script.length} chars`);
+    }
+    const inst = mod.createDesigner(stage, opts);
+    ctx.stat(scm
+      ? 'Save writes catalog only (stays on page); use the separate Commit button to record in Git (mock).'
+      : 'drag visuals from the left · Script toggle uses the mock parse/generate');
     return inst;
   },
 };

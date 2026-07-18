@@ -5,7 +5,7 @@
 
 import { importFresh, DESIGNER_JS } from '../util.js';
 
-const DATASETS_ADMIN_JS = '/src/ETL-SQL.ReportPortal/wwwroot/js/datasets-admin.js';
+const DATASETS_ADMIN_JS = '/src/ETL-SQL.Portal/wwwroot/js/datasets-admin.js';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Mock "cache" table behind the dataset viewer ─────────────────────────────

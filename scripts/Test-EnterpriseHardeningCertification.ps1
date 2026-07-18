@@ -157,7 +157,7 @@ Remove-Item -LiteralPath $engineArtifactsPath -Recurse -Force -ErrorAction Silen
 if (-not $SkipPortalTests) {
     $portalArgs = @(
         'test',
-        'tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj',
+        'tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj',
         '--filter',
         'FullyQualifiedName~AuditOutboxTransportTests|FullyQualifiedName~OidcAuthTests|FullyQualifiedName~PolicyDistributionApiTests|FullyQualifiedName~PolicyAuthorityApiTests|FullyQualifiedName~GovernanceRecoveryCertificationTests|FullyQualifiedName~FleetContainmentTests|FullyQualifiedName~FleetHealthAggregatorTests|FullyQualifiedName~AdminServicesTests',
         '--logger',

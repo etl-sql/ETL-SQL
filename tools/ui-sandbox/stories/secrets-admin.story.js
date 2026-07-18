@@ -56,7 +56,7 @@ export default {
     { id: 'empty', label: 'Empty store' },
   ],
   async mount(stage, fixtureId, ctx) {
-    const { createSecretsAdmin } = await importFresh('/src/ETL-SQL.ReportPortal/wwwroot/js/secrets-admin.js');
+    const { createSecretsAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/secrets-admin.js');
     stage.classList.add('portal-page');
 
     const secretsApi =

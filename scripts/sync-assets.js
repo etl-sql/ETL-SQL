@@ -6,7 +6,7 @@ const sharedDir = path.join(repoRoot, 'src', 'ETL-SQL.ReportRuntime', 'Resources
 
 const vsCodeMedia = path.join(repoRoot, 'src', 'etl-sql-vscode', 'media');
 const playerWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.ReportPlayer', 'wwwroot');
-const portalWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.ReportPortal', 'wwwroot');
+const portalWwwRoot = path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot');
 const portalJsDir = path.join(portalWwwRoot, 'js');
 const portalCssDir = path.join(portalWwwRoot, 'css');
 
@@ -128,21 +128,21 @@ async function run() {
         // 2. ReportPlayer
         await syncOrCheck(file, relativePath, playerWwwRoot, "ReportPlayer", fileContent);
 
-        // 3. ReportPortal
+        // 3. Portal
         if ((await existsAsync(portalJsDir)) && (await existsAsync(portalCssDir))) {
             const normalizedRel = relativePath.replace(/\\/g, '/');
             if (normalizedRel.startsWith('maps/')) {
-                await syncOrCheck(file, relativePath, portalWwwRoot, "ReportPortal (Maps)", fileContent);
+                await syncOrCheck(file, relativePath, portalWwwRoot, "Portal (Maps)", fileContent);
             } else if (normalizedRel.startsWith('designer/')) {
-                await syncOrCheck(file, relativePath, portalWwwRoot, "ReportPortal (Designer)", fileContent);
+                await syncOrCheck(file, relativePath, portalWwwRoot, "Portal (Designer)", fileContent);
             } else {
                 const ext = path.extname(file).toLowerCase();
                 if (ext === '.js') {
-                    await syncOrCheck(file, relativePath, portalJsDir, "ReportPortal (JS)", fileContent);
+                    await syncOrCheck(file, relativePath, portalJsDir, "Portal (JS)", fileContent);
                 } else if (ext === '.css') {
-                    await syncOrCheck(file, relativePath, portalCssDir, "ReportPortal (CSS)", fileContent);
+                    await syncOrCheck(file, relativePath, portalCssDir, "Portal (CSS)", fileContent);
                 } else {
-                    await syncOrCheck(file, relativePath, portalJsDir, "ReportPortal (Misc)", fileContent);
+                    await syncOrCheck(file, relativePath, portalJsDir, "Portal (Misc)", fileContent);
                 }
             }
         }

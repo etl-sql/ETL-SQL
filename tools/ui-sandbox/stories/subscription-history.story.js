@@ -1,6 +1,6 @@
 import { importFresh } from '../util.js';
 
-const HISTORY_UI_JS = '/src/ETL-SQL.ReportPortal/wwwroot/js/subscription-history-ui.js';
+const HISTORY_UI_JS = '/src/ETL-SQL.Portal/wwwroot/js/subscription-history-ui.js';
 
 const fixtures = {
   mixed: [

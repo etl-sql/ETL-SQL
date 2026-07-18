@@ -107,7 +107,7 @@ namespace ETL_SQL.Connectors.MySql
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties) =>
-            ConnectionStringBuilder.Build(Name, properties);
+            DatabaseConnectionStringBuilder.Build(Name, properties);
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
 

@@ -5,8 +5,8 @@
 
 import { importFresh, DESIGNER_JS } from '../util.js';
 
-const LINEAGE_CATALOG_JS = '/src/ETL-SQL.ReportPortal/wwwroot/js/lineage-catalog.js';
-const LINEAGE_UI_JS = '/src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js';
+const LINEAGE_CATALOG_JS = '/src/ETL-SQL.Portal/wwwroot/js/lineage-catalog.js';
+const LINEAGE_UI_JS = '/src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

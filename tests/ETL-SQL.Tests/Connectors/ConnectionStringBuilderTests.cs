@@ -18,7 +18,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "TRUSTED_CONNECTION", "TRUE" }
             };
 
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
 
             Assert.Contains("Data Source=localhost", cs);
             Assert.Contains("Initial Catalog=TestDB", cs);
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "PASSWORD", "password123" }
             };
 
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
 
             Assert.Contains("User ID=sa", cs);
             Assert.Contains("Password=password123", cs);
@@ -57,7 +57,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "CONNECT_TIMEOUT", "60" }
             };
 
-            var cs = ConnectionStringBuilder.Build("MSSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MSSQL", props);
 
             Assert.True(cs.Contains("Application Intent=ReadOnly", StringComparison.OrdinalIgnoreCase), $"Expected 'Application Intent=ReadOnly' in: {cs}");
             Assert.True(cs.Contains("Multi Subnet Failover=True", StringComparison.OrdinalIgnoreCase), $"Expected 'Multi Subnet Failover=True' in: {cs}");
@@ -79,7 +79,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "PORT", "5432" }
             };
 
-            var cs = ConnectionStringBuilder.Build("POSTGRES", props);
+            var cs = DatabaseConnectionStringBuilder.Build("POSTGRES", props);
 
             Assert.Contains("Host=localhost", cs);
             Assert.Contains("Database=mydb", cs);
@@ -101,7 +101,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "TRUST_SERVER_CERTIFICATE", "TRUE" }
             };
 
-            var cs = ConnectionStringBuilder.Build("POSTGRES", props);
+            var cs = DatabaseConnectionStringBuilder.Build("POSTGRES", props);
 
             Assert.Contains("Pooling=true", cs, System.StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Minimum Pool Size=5", cs, System.StringComparison.OrdinalIgnoreCase);
@@ -122,7 +122,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "PASSWORD", "tiger" }
             };
 
-            var cs = ConnectionStringBuilder.Build("ORACLE", props);
+            var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
 
             Assert.Contains("USER ID=scott", cs, System.StringComparison.OrdinalIgnoreCase);
             Assert.Contains("PASSWORD=tiger", cs, System.StringComparison.OrdinalIgnoreCase);
@@ -142,7 +142,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "CONNECTION_LIFETIME", "300" }
             };
 
-            var cs = ConnectionStringBuilder.Build("ORACLE", props);
+            var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
 
             Assert.Contains("Pooling=true", cs, System.StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Min Pool Size=2", cs, System.StringComparison.OrdinalIgnoreCase);
@@ -160,7 +160,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "PASSWORD", "tiger" }
             };
 
-            var cs = ConnectionStringBuilder.Build("ORACLE", props);
+            var cs = DatabaseConnectionStringBuilder.Build("ORACLE", props);
 
             Assert.Contains("DATA SOURCE=ORA_PRODUCTION", cs, System.StringComparison.OrdinalIgnoreCase);
             Assert.Contains("USER ID=scott", cs, System.StringComparison.OrdinalIgnoreCase);
@@ -205,7 +205,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "CONNECTION_LIFETIME", "300" }
             };
 
-            var cs = ConnectionStringBuilder.Build("MYSQL", props);
+            var cs = DatabaseConnectionStringBuilder.Build("MYSQL", props);
 
             Assert.Contains("Pooling=True", cs, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Minimum Pool Size=0", cs, StringComparison.OrdinalIgnoreCase);
@@ -225,7 +225,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "PASSWORD", "p@ssword" }
             };
 
-            var cs = ConnectionStringBuilder.BuildForDiagnostics("POSTGRES", props);
+            var cs = DatabaseConnectionStringBuilder.BuildForDiagnostics("POSTGRES", props);
 
             Assert.Contains("Password=<redacted>", cs, System.StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("p@ssword", cs);

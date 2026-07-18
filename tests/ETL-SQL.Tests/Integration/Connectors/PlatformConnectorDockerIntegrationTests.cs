@@ -13,7 +13,7 @@ using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Orchestrator;
-using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
@@ -101,19 +101,19 @@ namespace ETL_SQL.Tests.Integration.Connectors
     [Trait("CertificationClass", "DockerRealIntegration")]
     [Trait("Category", "Integration")]
     [Collection("Portal collection")]
-    public class ReportPortalDockerIntegrationTests
+    public class PortalDockerIntegrationTests
     {
-        private readonly ReportPortalFixture _fixture;
+        private readonly PortalFixture _fixture;
 
-        public ReportPortalDockerIntegrationTests(ReportPortalFixture fixture) => _fixture = fixture;
+        public PortalDockerIntegrationTests(PortalFixture fixture) => _fixture = fixture;
 
         [Fact]
         public async Task Connector_AuthenticatesAndShowsUsers_AgainstDockerPortal()
         {
-            var ds = new ReportPortalDataSource(
+            var ds = new PortalDataSource(
                 _fixture.BaseUrl,
-                ReportPortalFixture.AdminUser,
-                ReportPortalFixture.AdminPassword,
+                PortalFixture.AdminUser,
+                PortalFixture.AdminPassword,
                 NullLogger.Instance);
             var context = SystemExecutionContext.Instance;
             await PlatformConnectorContextLock.Semaphore.WaitAsync();
@@ -126,7 +126,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
                 Assert.NotNull(context.LastResult);
                 Assert.Contains(context.LastResult!.Rows, row =>
-                    string.Equals(row["Username"]?.ToString(), ReportPortalFixture.AdminUser, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(row["Username"]?.ToString(), PortalFixture.AdminUser, StringComparison.OrdinalIgnoreCase));
             }
             finally
             {
@@ -216,12 +216,12 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
     }
 
-    public sealed class ReportPortalFixture : IAsyncLifetime
+    public sealed class PortalFixture : IAsyncLifetime
     {
         public const string AdminUser = "admin";
         public const string AdminPassword = "Admin@123456!";
         private const string InitialAdminPassword = "Admin@12345!";
-        private const string ImageName = "etl-sql-reportportal-test:latest";
+        private const string ImageName = "etl-sql-portal-test:latest";
         private const int PortalPort = 5002;
 
         private IContainer? _container;
@@ -232,7 +232,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             await PlatformFixtureHelpers.BuildDockerImageAsync(
-                "src/ETL-SQL.ReportPortal/Dockerfile",
+                "src/ETL-SQL.Portal/Dockerfile",
                 ImageName);
 
             _container = new ContainerBuilder(ImageName)
@@ -370,7 +370,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
     public class OrchestratorServiceCollection : ICollectionFixture<OrchestratorServiceFixture> { }
 
     [CollectionDefinition("Portal collection")]
-    public class ReportPortalCollection : ICollectionFixture<ReportPortalFixture> { }
+    public class PortalCollection : ICollectionFixture<PortalFixture> { }
 
     internal static class PlatformConnectorContextLock
     {

@@ -100,7 +100,7 @@ VS Code extension handles design + preview. Portal is a convenience, not a requi
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Workstation │     │  Orchestrator│     │ ReportPortal │
+│  Workstation │     │  Orchestrator│     │ Portal │
 │              │     │              │     │              │
 │ VS Code      │────▶│ ETL pipeline │     │ Catalog      │
 │ TUI          │     │ job execution│     │ Permissions  │
@@ -136,7 +136,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/designer/
 
 | Host | Sync destination | Triggered by |
 |---|---|---|
-| ReportPortal | `src/ETL-SQL.ReportPortal/wwwroot/designer/` | `sync-assets.js` |
+| Portal | `src/ETL-SQL.Portal/wwwroot/designer/` | `sync-assets.js` |
 | VS Code extension | `src/etl-sql-vscode/media/designer/` | `sync-assets.js` |
 
 Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/` today. Generated copies carry the canonical-source banner. Never edit the sync destinations directly.

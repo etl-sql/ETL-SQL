@@ -1,6 +1,6 @@
 import { importFresh } from '../util.js';
 
-const CATALOG_UI_JS = '/src/ETL-SQL.ReportPortal/wwwroot/js/admin-catalog-ui.js';
+const CATALOG_UI_JS = '/src/ETL-SQL.Portal/wwwroot/js/admin-catalog-ui.js';
 
 const users = [
   { id: 1, userName: 'finance_read', email: 'finance_read@example.com', role: 'Viewer', active: true },

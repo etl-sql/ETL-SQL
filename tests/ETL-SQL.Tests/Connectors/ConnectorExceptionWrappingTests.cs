@@ -12,7 +12,7 @@ using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Parquet;
-using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -176,9 +176,9 @@ namespace ETL_SQL.Tests.Connectors
         // ── REPORT PORTAL ─────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ReportPortal_UnreachableServer_WrapsAsExecutionException()
+        public async Task Portal_UnreachableServer_WrapsAsExecutionException()
         {
-            var ds = new ReportPortalDataSource("http://127.0.0.1:1", "user", "pass", NullLogger.Instance);
+            var ds = new PortalDataSource("http://127.0.0.1:1", "user", "pass", NullLogger.Instance);
             var stmt = new ShowPortalUsersStatement();
             var ex = await Assert.ThrowsAsync<ExecutionException>(
                 () => ds.ExecuteAdminStatementAsync(stmt, Ctx));

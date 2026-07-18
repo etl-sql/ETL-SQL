@@ -64,7 +64,7 @@ jobs:
       if: matrix.language == 'csharp'
       run: |
         dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Release
-        dotnet build src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj --configuration Release
+        dotnet build src/ETL-SQL.Portal/ETL-SQL.Portal.csproj --configuration Release
         dotnet build src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj --configuration Release
         dotnet build src/ETL-SQL.TUI/ETL-SQL.TUI.csproj --configuration Release
 

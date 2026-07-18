@@ -10,7 +10,6 @@ $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.15.0" }
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"
-$DocsSource = Join-Path $RepoRoot "Docs"
 
 function Join-PathSegments {
     param([string[]]$Segments)
@@ -88,7 +87,7 @@ $Projects = @(
     ,@("..", "src", "ETL-SQL.LanguageServer", "ETL-SQL.LanguageServer.csproj")
     ,@("..", "src", "ETL-SQL.ReportBuilder.CLI", "ETL-SQL.ReportBuilder.CLI.csproj")
     ,@("..", "src", "ETL-SQL.ReportPlayer", "ETL-SQL.ReportPlayer.csproj")
-    ,@("..", "src", "ETL-SQL.ReportPortal", "ETL-SQL.ReportPortal.csproj")
+    ,@("..", "src", "ETL-SQL.Portal", "ETL-SQL.Portal.csproj")
     ,@("..", "src", "ETL-SQL.Orchestrator.Service", "ETL-SQL.Orchestrator.Service.csproj")
 )
 
@@ -128,9 +127,23 @@ foreach ($Platform in $Platforms) {
     Get-ChildItem $BinFolder -Filter "appsettings.Development.json" -Recurse | Remove-Item -Force
     Get-ChildItem $BinFolder -Filter "*.staticwebassets.endpoints.json" -Recurse | Remove-Item -Force
 
-    # 4. Copy Docs
-    Copy-Item (Join-Path $DocsSource "QUICKSTART.txt") $DocFolder
-    Copy-Item (Join-Path $DocsSource "ReportPortal_Administrators_Guide.md") (Join-Path $DocFolder "ReportPortal_Guide.txt")
+    # 4. Docs pointer + compliance files.
+    # Full guides/reference live on GitHub and evolve between releases, so we ship a
+    # version-pinned pointer here instead of bundling drift-prone doc copies. License,
+    # notice, third-party notices, and the changelog travel with the binaries.
+    $DocsUrl = "https://github.com/etl-sql/ETL-SQL/tree/v$Version/docs"
+    @(
+        "ETL-SQL v$Version - Documentation",
+        "",
+        "Full documentation is maintained online and versioned with each release:",
+        "",
+        "  Docs:            $DocsUrl",
+        "  Getting started: https://github.com/etl-sql/ETL-SQL/blob/v$Version/docs/guides/getting-started.md",
+        "  Repository:      https://github.com/etl-sql/ETL-SQL",
+        "  Issues:          https://github.com/etl-sql/ETL-SQL/issues",
+        "",
+        "This release bundles LICENSE, NOTICE, third-party notices, and the changelog (below)."
+    ) | Set-Content -Path (Join-Path $DocFolder "DOCS.txt") -Encoding utf8
     Copy-Item (Join-Path $RepoRoot "CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
     Copy-Item (Join-Path $RepoRoot "LICENSE.md") (Join-Path $DocFolder "LICENSE.md")
     Copy-Item (Join-Path $RepoRoot "NOTICE.md") (Join-Path $DocFolder "NOTICE.md")

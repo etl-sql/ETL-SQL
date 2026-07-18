@@ -105,7 +105,7 @@ The lanes use xUnit traits:
 | Core language behavior | `Category=Smoke.Core` | `tests\ETL-SQL.Tests` |
 | Security and path guardrails | `Category=Smoke.Security` | `tests\ETL-SQL.Tests`, selected portal path checks |
 | Reporting manifest/runtime behavior | `Category=Smoke.Reporting` | `tests\ETL-SQL.Tests` |
-| Portal publish/execute/snapshot basics | `Category=Smoke.Portal` | `tests\ETL-SQL.ReportPortal.Tests` |
+| Portal publish/execute/snapshot basics | `Category=Smoke.Portal` | `tests\ETL-SQL.Portal.Tests` |
 
 Each lane should stay small enough for quick local runs. Keep the full suite as the release and CI validation path.
 
@@ -274,7 +274,7 @@ The `SftpFixture` starts an `atmoz/sftp` container once per collection. Tests co
 
 ## Browser-side UI (sandbox, manual)
 
-The portal and report-runtime JavaScript components — `renderDag` (structure/lineage DAG), the report designer (`createDesigner`), the script editor (`createScriptEditor`), and the extracted lineage/dependencies render module (`src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js`) — have **no automated browser test lane yet**. Verify them **manually** in the no-Docker UI sandbox:
+The portal and report-runtime JavaScript components — `renderDag` (structure/lineage DAG), the report designer (`createDesigner`), the script editor (`createScriptEditor`), and the extracted lineage/dependencies render module (`src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`) — have **no automated browser test lane yet**. Verify them **manually** in the no-Docker UI sandbox:
 
 ```powershell
 pwsh -File tools\ui-sandbox\serve.ps1

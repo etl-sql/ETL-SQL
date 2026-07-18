@@ -32,7 +32,7 @@ $lanes = [ordered]@{
                 Filter = "Category=Smoke.Security"
             },
             @{
-                Project = "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+                Project = "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj"
                 Filter = "Category=Smoke.Security"
             }
         )
@@ -50,7 +50,7 @@ $lanes = [ordered]@{
         Label = "Portal publish, execute, and snapshot basics"
         Tests = @(
             @{
-                Project = "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+                Project = "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj"
                 Filter = "Category=Smoke.Portal"
             }
         )

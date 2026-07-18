@@ -10,7 +10,7 @@
  *   createDesigner()     Phase 4 — full WYSIWYG report designer
  *
  * Hosted in two places via sync-assets.ps1:
- *   Portal   → src/ETL-SQL.ReportPortal/wwwroot/designer/designer.js
+ *   Portal   → src/ETL-SQL.Portal/wwwroot/designer/designer.js
  *   VS Code  → src/etl-sql-vscode/media/designer/designer.js
  *
  * Both hosts load this as a plain ES module:
@@ -901,8 +901,13 @@ export async function createScriptEditor(container, opts = {}) {
     const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
     const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
     const acceptCompletionKey = completionKeys.find(binding => binding?.key === 'Enter' && typeof binding.run === 'function');
+    // Reuse the bundle's Ctrl-Space -> startCompletion binding so the toolbar button and an
+    // OS-safe alternate key can invoke completion without importing the minified internal.
+    // Windows commonly swallows Ctrl-Space for IME/input-language switching, so we also bind Ctrl-.
+    const startCompletionKey = completionKeys.find(binding => binding?.key === 'Ctrl-Space' && typeof binding.run === 'function');
     const keymaps = [
         ...(acceptCompletionKey ? [{ ...acceptCompletionKey, key: 'Tab' }] : []),
+        ...(startCompletionKey ? [{ ...startCompletionKey, key: 'Ctrl-.' }] : []),
         ...completionKeys,
         indentWithTab,
         ...(Array.isArray(defaultKeymap) ? defaultKeymap : []),
@@ -1201,6 +1206,12 @@ export async function createScriptEditor(container, opts = {}) {
             return ranges.join('\n');
         },
         getCurrentStatement: () => currentStatement(),
+        hasCompletion: Boolean(completeUrl),
+        triggerCompletion: () => {
+            if (!startCompletionKey || !view) return false;
+            view.focus();
+            return startCompletionKey.run(view);
+        },
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
@@ -1390,7 +1401,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 <strong>${escapeHtml(opts.title || 'Script')}</strong>
                 <span class="etlsql-script-workbench-spacer"></span>
                 <button type="button" class="btn btn-sm" data-command-palette title="Command Palette (Ctrl+Shift+P)">Commands</button>
+                ${opts.editor?.completeUrl ? '<button type="button" class="btn btn-sm" data-suggest title="Autocomplete suggestions (Ctrl+Space or Ctrl+.)">Suggest</button>' : ''}
                 <button type="button" class="btn btn-sm btn-primary" data-run>Run</button>
+                ${opts.previewApiUrl ? '<button type="button" class="btn btn-sm" data-preview title="Render a live WYSIWYG preview of this report">👁 Preview</button>' : ''}
                 ${opts.onApply ? '<button type="button" class="btn btn-sm btn-primary" data-apply>Update Designer</button>' : ''}
                 ${opts.onSave ? '<button type="button" class="btn btn-sm" data-save>Save</button>' : ''}
                 ${opts.onClose ? '<button type="button" class="btn btn-sm" data-close>Close</button>' : ''}
@@ -1398,6 +1411,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
             <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results"></div>
             <div class="etlsql-script-workbench-results" data-results></div>
+            ${opts.previewApiUrl ? `
+            <div class="etlsql-script-workbench-preview" data-preview-overlay>
+                <div class="etlsql-script-workbench-preview-toolbar">
+                    <strong>Preview</strong>
+                    <span class="etlsql-script-workbench-preview-status" data-preview-status></span>
+                    <span class="etlsql-script-workbench-spacer"></span>
+                    <button type="button" class="btn btn-sm" data-preview-refresh title="Re-run the report and refresh the preview">↻ Refresh</button>
+                    <button type="button" class="btn btn-sm" data-preview-close>Close</button>
+                </div>
+                <iframe data-preview-frame title="Report preview" sandbox="allow-scripts allow-same-origin"></iframe>
+            </div>` : ''}
             <div class="etlsql-script-command-palette" data-palette hidden>
                 <div class="etlsql-script-command-box">
                     <input type="search" data-palette-filter placeholder="Run command" autocomplete="off">
@@ -1477,9 +1501,81 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         await opts.onApply?.(editor.getValue());
     }
 
+    // ── Report preview ─────────────────────────────────────────────────────────
+    // Optional: when opts.previewApiUrl is set, the toolbar shows a 👁 Preview button
+    // that POSTs the current script for a compiled ReportManifest, then renders it in a
+    // sandboxed iframe (opts.previewUrl host) via report-runtime.js — the same
+    // manifest-mode handshake the report designer uses, so the standalone script editor
+    // gets a first-class WYSIWYG preview of its own.
+    const previewOverlay  = container.querySelector('[data-preview-overlay]');
+    const previewFrame    = container.querySelector('[data-preview-frame]');
+    const previewStatusEl = container.querySelector('[data-preview-status]');
+    const previewUrl = opts.previewUrl ?? '/designer-preview.html';
+    let _pendingManifest = null;
+    let _previewMessageHandler = null;
+
+    function setPreviewStatus(text, kind) {
+        if (!previewStatusEl) return;
+        previewStatusEl.textContent = text || '';
+        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        previewStatusEl.style.color = colors[kind] || colors.neutral;
+    }
+
+    if (previewFrame) {
+        // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
+        _previewMessageHandler = (event) => {
+            if (event.source !== previewFrame.contentWindow) return;
+            if (event.data?.type !== 'previewReady') return;
+            if (_pendingManifest) {
+                previewFrame.contentWindow.postMessage({
+                    type: 'reportManifest',
+                    manifest: _pendingManifest,
+                    dark: document.body.classList.contains('theme-dark'),
+                }, '*');
+            }
+        };
+        window.addEventListener('message', _previewMessageHandler);
+    }
+
+    async function refreshPreview() {
+        setPreviewStatus('Building preview…', 'pending');
+        try {
+            const script = editor.getValue();
+            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
+            const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
+            const res = await fetcher(opts.previewApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, connectionRef: opts.connectionRef || null }),
+            });
+            if (!res?.ok) throw new Error(await res.text());
+            const manifest = await res.json();
+            _pendingManifest = manifest;
+            // Reload the host page so report-runtime.js boots fresh with the new manifest.
+            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const pages = manifest?.pages?.length ?? 0;
+            const visuals = manifest?.visuals?.length ?? 0;
+            setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
+        } catch (e) {
+            setPreviewStatus('Preview failed: ' + (e?.message || e), 'error');
+        }
+    }
+
+    function openPreview() {
+        if (!previewOverlay) return;
+        previewOverlay.classList.add('active');
+        refreshPreview();
+    }
+
+    function closePreview() {
+        previewOverlay?.classList.remove('active');
+    }
+
     function commandItems() {
         return [
             { id: 'run', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: run },
+            { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
+            { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
             { id: 'apply', label: 'ETL-SQL: Update Designer from Script', enabled: Boolean(opts.onApply), action: apply },
             { id: 'save', label: 'ETL-SQL: Save Script', enabled: Boolean(opts.onSave), action: save },
@@ -1516,7 +1612,11 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
+    container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', run);
+    container.querySelector('[data-preview]')?.addEventListener('click', openPreview);
+    container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
+    container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
     container.querySelector('[data-apply]')?.addEventListener('click', apply);
     container.querySelector('[data-save]')?.addEventListener('click', save);
     container.querySelector('[data-close]')?.addEventListener('click', () => opts.onClose?.());
@@ -1558,6 +1658,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         run,
         dispose() {
             runAbort?.abort();
+            if (_previewMessageHandler) window.removeEventListener('message', _previewMessageHandler);
             editor.dispose();
             resultsPanel.dispose();
         },
@@ -1607,9 +1708,11 @@ export function createDesigner(container, opts = {}) {
     const reportId  = opts.reportId   ?? null;
     let reportVersion = opts.reportVersion ?? null;
     let sourceRevision = opts.sourceRevision ?? null;
+    const sourceControlEnabled = Boolean(opts.sourceControlEnabled);
     const folderId  = opts.folderId   ?? null;
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
+    const previewUrl = opts.previewUrl ?? '/designer-preview.html';
 
     // ── Visual type registry ──────────────────────────────────────────────────
     const VCATEGORIES = [
@@ -1687,12 +1790,26 @@ export function createDesigner(container, opts = {}) {
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
-        <span class="etlsql-preview-badge">Preview: VS Code only</span>
+        <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
+        <button class="btn btn-sm" id="dsgn-commit" title="Commit the saved script to source control (Git)" style="display:none">Commit</button>
+        <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
         <button class="btn btn-sm" id="dsgn-cancel">Cancel</button>
     `;
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
+    if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
+
+    function setScmStatus(text, kind) {
+        const el = topbar.querySelector('#dsgn-scm-status');
+        if (!el) return;
+        el.textContent = text || '';
+        const colors = { success: '#16a34a', error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        el.style.color = colors[kind] || colors.neutral;
+        el.style.marginLeft = '8px';
+        el.style.fontSize = '12px';
+    }
+    const shortRev = r => (r ? String(r).slice(0, 8) : '');
 
     // Sidebar
     const sidebar = document.createElement('div');
@@ -1745,6 +1862,21 @@ export function createDesigner(container, opts = {}) {
     scriptOverlay.className = 'etlsql-designer-script-overlay';
     scriptOverlay.innerHTML = '<div class="etlsql-designer-script-body" id="dsgn-script-workbench-host"></div>';
     root.appendChild(scriptOverlay);
+
+    // Report preview overlay: reuses the script overlay's positioning/visibility, hosts a
+    // sandboxed iframe that renders the compiled report manifest via report-runtime.js.
+    const previewOverlay = document.createElement('div');
+    previewOverlay.className = 'etlsql-designer-script-overlay';
+    previewOverlay.innerHTML = `
+        <div class="etlsql-designer-script-toolbar">
+            <strong>Preview</strong>
+            <span id="dsgn-preview-status" style="font-size:12px;color:#64748b"></span>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn-sm" id="dsgn-preview-refresh" title="Re-run the report and refresh the preview">↻ Refresh</button>
+            <button type="button" class="btn btn-sm" id="dsgn-preview-close">Close</button>
+        </div>
+        <iframe id="dsgn-preview-frame" title="Report preview" sandbox="allow-scripts allow-same-origin" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
+    root.appendChild(previewOverlay);
 
     // Save-as modal
     const saveModal = document.createElement('div');
@@ -2081,6 +2213,58 @@ export function createDesigner(container, opts = {}) {
         scriptEditor = null;
     }
 
+    // ── Report preview ──────────────────────────────────────────────────────────
+    const previewFrame   = previewOverlay.querySelector('#dsgn-preview-frame');
+    const previewStatusEl = previewOverlay.querySelector('#dsgn-preview-status');
+    let _pendingManifest = null;
+
+    function setPreviewStatus(text, kind) {
+        if (!previewStatusEl) return;
+        previewStatusEl.textContent = text || '';
+        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        previewStatusEl.style.color = colors[kind] || colors.neutral;
+    }
+
+    // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
+    window.addEventListener('message', (event) => {
+        if (event.source !== previewFrame?.contentWindow) return;
+        if (event.data?.type !== 'previewReady') return;
+        if (_pendingManifest) {
+            previewFrame.contentWindow.postMessage({
+                type: 'reportManifest',
+                manifest: _pendingManifest,
+                dark: document.body.classList.contains('theme-dark'),
+            }, '*');
+        }
+    });
+
+    async function refreshPreview() {
+        setPreviewStatus('Building preview…', 'pending');
+        try {
+            const gen = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const script = gen?.script ?? '';
+            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
+            const manifest = await apiJson('/api/designer/preview', 'POST', { script });
+            _pendingManifest = manifest;
+            // Reload the host page so report-runtime.js boots fresh with the new manifest.
+            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const pages = manifest?.pages?.length ?? 0;
+            const visuals = manifest?.visuals?.length ?? 0;
+            setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
+        } catch (e) {
+            setPreviewStatus('Preview failed: ' + e.message, 'error');
+        }
+    }
+
+    function openPreview() {
+        previewOverlay.classList.add('active');
+        refreshPreview();
+    }
+
+    function closePreview() {
+        previewOverlay.classList.remove('active');
+    }
+
     async function applyScript() {
         if (!scriptEditor) return;
         await applyScriptText(scriptEditor.getValue());
@@ -2122,7 +2306,16 @@ export function createDesigner(container, opts = {}) {
                     reportVersion);
                 reportVersion = saved?.version ?? reportVersion;
                 sourceRevision = saved?.sourceRevision ?? sourceRevision;
-                opts.onSave?.();
+                if (sourceControlEnabled) {
+                    // Save writes the catalog + script artifact only. Committing to Git is a
+                    // separate, explicit step, so stay on the page and surface the Commit action
+                    // instead of navigating away.
+                    setScmStatus(`Saved v${reportVersion} · not yet committed`, 'pending');
+                    const commitBtn = topbar.querySelector('#dsgn-commit');
+                    if (commitBtn) commitBtn.disabled = false;
+                } else {
+                    opts.onSave?.();
+                }
             } else {
                 saveModal.querySelector('#dsgn-modal-name').value   = reportName;
                 saveModal.querySelector('#dsgn-modal-folder').value = folderId ?? '';
@@ -2130,6 +2323,30 @@ export function createDesigner(container, opts = {}) {
                 saveModal.style.display = 'flex';
             }
         } catch (e) { alert('Save failed: ' + e.message); }
+    }
+
+    // Explicit, separately reported source-control step. Commits the last-saved script
+    // artifact to Git (and pushes if the server is configured to push on commit). This never
+    // holds a database transaction — the server stages/commits under its own repository lease.
+    async function commitScript() {
+        if (!reportId) return;
+        const commitBtn = topbar.querySelector('#dsgn-commit');
+        const prevLabel = commitBtn ? commitBtn.textContent : 'Commit';
+        if (commitBtn) { commitBtn.disabled = true; commitBtn.textContent = 'Committing…'; }
+        setScmStatus('Committing to source control…', 'pending');
+        try {
+            const res = await apiJson(`/api/reports/${reportId}/script-source/commit`, 'POST', {});
+            if (res?.committed) {
+                sourceRevision = res.sourceRevision ?? sourceRevision;
+                setScmStatus(`Committed ${shortRev(res.sourceRevision)}`, 'success');
+            } else {
+                setScmStatus(`Nothing to commit — working tree matches ${shortRev(res?.sourceRevision) || 'HEAD'}`, 'neutral');
+            }
+        } catch (e) {
+            setScmStatus(`Commit failed: ${e.message}`, 'error');
+        } finally {
+            if (commitBtn) { commitBtn.disabled = false; commitBtn.textContent = prevLabel || 'Commit'; }
+        }
     }
 
     async function saveAsNew() {
@@ -2153,10 +2370,15 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-back').addEventListener('click',    () => opts.onCancel?.());
     topbar.querySelector('#dsgn-cancel').addEventListener('click',  () => opts.onCancel?.());
     topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
+    topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
         scriptOverlay.classList.contains('active') ? closeScript() : openScript());
+    topbar.querySelector('#dsgn-preview-toggle')?.addEventListener('click', () =>
+        previewOverlay.classList.contains('active') ? closePreview() : openPreview());
+    previewOverlay.querySelector('#dsgn-preview-refresh')?.addEventListener('click', refreshPreview);
+    previewOverlay.querySelector('#dsgn-preview-close')?.addEventListener('click', closePreview);
 
     topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
         const tab = e.target.closest('.etlsql-designer-page-tab');

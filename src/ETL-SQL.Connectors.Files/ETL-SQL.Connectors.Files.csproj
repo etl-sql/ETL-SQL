@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Connectors</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Apache.Avro" />
+    <PackageReference Include="ExcelDataReader" />
+    <PackageReference Include="ExcelDataReader.DataSet" />
+    <PackageReference Include="MiniExcel" />
+    <PackageReference Include="Parquet.Net" />
+    <PackageReference Include="Snappier" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.Connectors.Common\ETL-SQL.Connectors.Common.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests, PublicKey=$(AssemblyPublicKey)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Parser" />
+  </ItemGroup>
+
+</Project>

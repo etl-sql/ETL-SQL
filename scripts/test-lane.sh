@@ -86,14 +86,14 @@ case "$LANE" in
     fast)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
-        invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
         invoke_lineage_ui_smoke
         ;;
     engine)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         ;;
     portal)
-        invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
         invoke_lineage_ui_smoke
         ;;
     integration)
@@ -106,7 +106,7 @@ case "$LANE" in
     full)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
-        invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
         invoke_lineage_ui_smoke
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" ""
         ;;

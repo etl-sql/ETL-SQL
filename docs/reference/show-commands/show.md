@@ -28,7 +28,7 @@ See the [SHOW Commands index](README.md) for the full list of subjects with link
 - **HOST METRICS ['\<nodeId\>']** — host-utilization time series for capacity planning.
 - **SUBSCRIPTIONS** — defined report subscriptions.
 
-### Report Portal
+### Portal
 - **REPORT '\<name\>'** — portal report metadata.
 - **REPORT HISTORY '\<name\>'** — portal report refresh/history rows.
 - **REPORT DEPENDENCIES '\<name\>'** — dependencies discovered for a portal report.

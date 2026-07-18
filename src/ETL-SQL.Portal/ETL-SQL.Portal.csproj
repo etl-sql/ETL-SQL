@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Portal</RootNamespace>
+    <AssemblyName>ETL-SQL-Portal</AssemblyName>
+    <!-- Disable automatic static web assets to prevent duplicate conflicts with referenced projects -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    <!-- Define WINDOWS when building on Windows so the portal can host as a Windows Service (matches ETL-SQL.Orchestrator.Service). -->
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('windows'))">$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Portal.Tests, PublicKey=$(AssemblyPublicKey)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\appsettings.json" Link="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.Portal.Data\ETL-SQL.Portal.Data.csproj" />
+    <!-- Postgres migration set loaded at runtime when the Postgres provider is selected. -->
+    <ProjectReference Include="..\ETL-SQL.Portal.Migrations.Postgres\ETL-SQL.Portal.Migrations.Postgres.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Infrastructure.Logging\ETL-SQL.Infrastructure.Logging.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
+    <ProjectReference Include="..\ETL-SQL.ReportHosting\ETL-SQL.ReportHosting.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices"
+                      Condition="$([MSBuild]::IsOSPlatform('windows'))" />
+  </ItemGroup>
+
+  <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <ItemGroup>
+      <_PortalRoot Include="wwwroot\**\*" />
+      <_SharedRuntimePub Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.js" />
+      <_SharedMapsPub Include="..\ETL-SQL.ReportRuntime\Resources\Shared\maps\*.geojson" />
+      <_SharedCssPub Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.css" />
+      <_SharedLibsPub Include="..\ETL-SQL.ReportRuntime\Resources\Shared\*.min.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PortalRoot)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedRuntimePub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedLibsPub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedMapsPub)" DestinationFolder="$(PublishDir)wwwroot\maps" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedCssPub)" DestinationFolder="$(PublishDir)wwwroot\css" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

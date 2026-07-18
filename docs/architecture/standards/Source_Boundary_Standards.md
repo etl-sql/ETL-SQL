@@ -11,7 +11,7 @@ The codebase is split into distinct dependency layers to maintain clean separati
 ```
 ┌────────────────────────────────────────────────────────┐
 │                      Host Shells                       │
-│    (ReportPortal, VS Code, TUI, CLI, Orchestrator)     │
+│    (Portal, VS Code, TUI, CLI, Orchestrator)     │
 └───────────┬──────────────┬──────────────┬──────────────┘
             │              │              │
             ▼              ▼              ▼
@@ -66,7 +66,7 @@ The codebase is split into distinct dependency layers to maintain clean separati
 - **Rules**: ReportHosting sits between the Engine execution layer and Report controllers.
 
 ### 2.7 Host Shells
-- **Role**: Runtimes, TUI/CLI tools, web portals, and extensions (e.g., `ReportPortal`, `ReportPlayer`, `etl-sql-vscode`, `TUI`, `App`).
+- **Role**: Runtimes, TUI/CLI tools, web portals, and extensions (e.g., `Portal`, `ReportPlayer`, `etl-sql-vscode`, `TUI`, `App`).
 - **Rules**: Host shells must remain thin. They must not implement parser syntax, custom query evaluation logic, or private reporting manifest behaviors. Instead, they must delegate all domain logic to the lower library boundaries.
 
 ---
@@ -74,7 +74,7 @@ The codebase is split into distinct dependency layers to maintain clean separati
 ## 3. Reference Diagram & Dependencies
 
 1. **No Circular References**: Dependencies must only flow downwards.
-2. **Horizontal Isolation**: Connectors cannot reference other connectors. Host shells cannot reference sibling host shells (e.g., `ReportPortal` cannot depend on `ReportPlayer` or vice versa).
+2. **Horizontal Isolation**: Connectors cannot reference other connectors. Host shells cannot reference sibling host shells (e.g., `Portal` cannot depend on `ReportPlayer` or vice versa).
 3. **Storage Access**: No host controller or service may write directly to the local filesystem using `System.IO.File`. All writes must route through the `IArtifactStorage` abstraction resolved from the engine core.
 
 ---

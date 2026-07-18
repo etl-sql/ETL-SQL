@@ -28,7 +28,7 @@ jobs:
       - name: Build platform connector images
         shell: pwsh
         run: |
-          docker build -f src/ETL-SQL.ReportPortal/Dockerfile -t etl-sql-reportportal-test:latest .
+          docker build -f src/ETL-SQL.Portal/Dockerfile -t etl-sql-portal-test:latest .
           docker build -f src/ETL-SQL.Orchestrator.Service/Dockerfile -t etl-sql-orchestrator-service-test:latest .
 
       - name: Integration lane

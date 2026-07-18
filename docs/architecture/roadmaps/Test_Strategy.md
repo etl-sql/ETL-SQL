@@ -30,7 +30,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Project | Current Role | Lane Treatment |
 | :--- | :--- | :--- |
 | `tests\ETL-SQL.Tests` | Main parser, engine, function, statement, reporting, hardening, integration, and regression tests. | Included in Fast/Engine; filtered by category for Integration and Perf. |
-| `tests\ETL-SQL.ReportPortal.Tests` | Hosted Portal API tests via `WebApplicationFactory` + SQLite. Tagged `Category=Portal`. | Included in Fast, Portal, Full, and selected Smoke checks. No Docker required. |
+| `tests\ETL-SQL.Portal.Tests` | Hosted Portal API tests via `WebApplicationFactory` + SQLite. Tagged `Category=Portal`. | Included in Fast, Portal, Full, and selected Smoke checks. No Docker required. |
 | `tests\ETL-SQL.LanguageServer.Tests` | LSP metadata and smoke checks. | Included in Fast and Full. |
 | `tests\ETL-SQL.PerfTests` | xUnit performance tests. | Included only in Perf and Full. |
 | `tests\ETL-SQL.Benchmarks` | BenchmarkDotNet executable. | Run with the Benchmarks lane, not `dotnet test`. |

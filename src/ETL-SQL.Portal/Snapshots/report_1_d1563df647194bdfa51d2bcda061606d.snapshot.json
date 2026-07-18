@@ -1,0 +1,154 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\src\\ETL-SQL.Portal\\Reports\\required_params_test.rptsql",
+  "builtAt": "2026-05-08T21:42:13.4218755Z",
+  "visuals": [
+    {
+      "name": "SalesCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Expr0"
+      ],
+      "rows": [
+        [
+          "0"
+        ]
+      ],
+      "options": {
+        "mapping:value": "column1"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "A",
+      "slotMap": {
+        "A": "SalesCard"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@Region": "",
+    "@Year": "2024"
+  },
+  "parameterMetadata": {
+    "@Region": {
+      "name": "@Region",
+      "type": "STRING",
+      "defaultValue": "",
+      "isRequired": true
+    },
+    "@Year": {
+      "name": "@Year",
+      "type": "INT",
+      "defaultValue": "2024",
+      "isRequired": true
+    }
+  },
+  "telemetry": {
+    "rowsProcessed": 3,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[abe41648] [SELECT] Executing SelectStatement. Session: abe41648",
+      "color": "white",
+      "timestamp": "2026-05-08T21:42:13.4206555Z"
+    },
+    {
+      "message": "[abe41648] Visual \u0027SalesCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T21:42:13.4216108Z"
+    },
+    {
+      "message": "[abe41648] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T21:42:13.4217671Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "bbf8b97a-186f-4145-b714-321a467c0eb4",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 2.0901,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1cf1f9f0-50d5-4310-b6a1-c15421a8c66a",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0911,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1ec88cf7-2497-40a9-8b83-e28172254bdf",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0249,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c0bb9380-3eb0-43ef-8a1b-d1e160dc20d4",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 9,
+          "durationMs": 1.0099,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 8911.77344291514,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5b331673-0d97-43fc-b247-606092cc4c6a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1926,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8a16884a-4593-499d-be0f-30e0ecafdf5a",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1215,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

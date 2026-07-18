@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sandbox mirror of src/ETL-SQL.Portal/wwwroot/designer-preview.html, pointing at the
+     canonical Shared runtime assets so the preview renders without the portal build. -->
+<link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  #root { min-height: 100%; }
+  .preview-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; padding: 24px; box-sizing: border-box;
+    font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: #64748b;
+  }
+</style>
+<script>
+  window.__IS_PREVIEW__ = true;
+  (function () {
+    var runtimeInjected = false;
+    var BASE = '/src/ETL-SQL.ReportRuntime/Resources/Shared/';
+
+    function injectRuntimeOnce() {
+      if (runtimeInjected) return;
+      runtimeInjected = true;
+      var echarts = document.createElement('script');
+      echarts.src = BASE + 'echarts.min.js';
+      echarts.onload = function () {
+        var rt = document.createElement('script');
+        rt.src = BASE + 'report-runtime.js';
+        document.body.appendChild(rt);
+      };
+      echarts.onerror = function () {
+        var root = document.getElementById('root');
+        if (root) root.innerHTML = '<div class="preview-placeholder">Failed to load the preview runtime.</div>';
+      };
+      document.body.appendChild(echarts);
+    }
+
+    window.addEventListener('message', function (e) {
+      var data = e.data;
+      if (!data || data.type !== 'reportManifest') return;
+      window.__MANIFEST__ = data.manifest;
+      if (data.dark) document.body.classList.add('theme-dark');
+      injectRuntimeOnce();
+    });
+
+    function announceReady() { (window.parent || window).postMessage({ type: 'previewReady' }, '*'); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announceReady);
+    else announceReady();
+  })();
+</script>
+</head>
+<body style="margin:0">
+<div id="root"><div class="preview-placeholder">Run a preview to render the report here.</div></div>
+</body>
+</html>

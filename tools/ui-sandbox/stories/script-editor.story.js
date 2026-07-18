@@ -55,6 +55,11 @@ export default {
     const workbench = await mod.createScriptEditorWorkbench(stage, {
       title: 'Script',
       runUrl: '/api/designer/run',
+      // Same manifest-mode preview the portal designer uses: POST the script for a compiled
+      // ReportManifest, render it in the sandboxed iframe host. mockApi serves the endpoint;
+      // the sandbox preview host mirrors the portal's designer-preview.html.
+      previewApiUrl: '/api/designer/preview',
+      previewUrl: '/tools/ui-sandbox/designer-preview.html',
       connectionRef: 'demo',
       authFetch: api,
       editor: {

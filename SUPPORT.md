@@ -19,7 +19,7 @@ If you have questions about using ETL-SQL, syntax, report design, or orchestrati
 
 ## 2. Reporting Bugs
 
-If you have found a bug in the engine, parser, CLI, TUI, or Report Portal:
+If you have found a bug in the engine, parser, CLI, TUI, or Portal:
 
 1. Search the **Issues** tab on GitHub to see if it has already been reported.
 2. If it is new, open a new **Bug Report** issue. Please use the bug template and provide a minimal reproducible example (including target schemas and a small script).

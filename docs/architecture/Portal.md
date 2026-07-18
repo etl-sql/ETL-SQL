@@ -217,7 +217,7 @@ pipeline and returns only database, artifact-storage, and node-registry lease-st
 
 ## 8. Integration Testing Strategy
 
-Tests live in `tests/ETL-SQL.ReportPortal.Tests` and use `Microsoft.AspNetCore.Mvc.Testing`.
+Tests live in `tests/ETL-SQL.Portal.Tests` and use `Microsoft.AspNetCore.Mvc.Testing`.
 
 ### PortalMarker
 

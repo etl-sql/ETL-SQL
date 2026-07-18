@@ -38,7 +38,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ETL-SQL.Tests, PublicKey=$(AssemblyPublicKey)" />
-    <InternalsVisibleTo Include="ETL-SQL.ReportPortal.Tests, PublicKey=$(AssemblyPublicKey)" />
+    <InternalsVisibleTo Include="ETL-SQL.Portal.Tests, PublicKey=$(AssemblyPublicKey)" />
   </ItemGroup>
 
 </Project>

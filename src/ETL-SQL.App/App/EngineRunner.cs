@@ -1188,7 +1188,7 @@ CREATE PAGE Main AS DASHBOARD (
                 checks.Add(await ProbeHttpEndpointAsync(
                     "Portal /health",
                     ResolveHealthUrl(
-                        config["Doctor:ReportPortalHealthUrl"],
+                        config["Doctor:PortalHealthUrl"],
                         config["Portal:HealthUrl"],
                         config["Portal:BaseUrl"]),
                     "Portal health URL not configured"));

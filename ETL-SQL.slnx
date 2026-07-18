@@ -10,6 +10,8 @@
     <Project Path="src/ETL-SQL.App/ETL-SQL.App.csproj" />
     <Project Path="src/ETL-SQL.Core/ETL-SQL.Core.csproj" />
     <Project Path="src/ETL-SQL.Engine/ETL-SQL.Engine.csproj" />
+    <Project Path="src/ETL-SQL.Connectors.Common/ETL-SQL.Connectors.Common.csproj" />
+    <Project Path="src/ETL-SQL.Connectors.Files/ETL-SQL.Connectors.Files.csproj" />
     <Project Path="src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj" />
     <Project Path="src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj" />
     <Project Path="src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj" />
@@ -17,16 +19,16 @@
     <Project Path="src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj" />
     <Project Path="src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj" />
     <Project Path="src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj" />
-    <Project Path="src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj" />
-    <Project Path="src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj" />
-    <Project Path="src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj" />
+    <Project Path="src/ETL-SQL.Portal.Data/ETL-SQL.Portal.Data.csproj" />
+    <Project Path="src/ETL-SQL.Portal.Migrations.Postgres/ETL-SQL.Portal.Migrations.Postgres.csproj" />
+    <Project Path="src/ETL-SQL.Portal/ETL-SQL.Portal.csproj" />
     <Project Path="src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj" />
     <Project Path="src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj" />
     <Project Path="src/ETL-SQL.TUI/ETL-SQL.TUI.csproj" />
     <Project Path="src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" />
+    <Project Path="tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" />
     <Project Path="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" />
     <Project Path="tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" />
     <Project Path="tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" />

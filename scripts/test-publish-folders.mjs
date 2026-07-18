@@ -1,11 +1,11 @@
-// Unit tests for the Admin publish-form folder helpers (src/ETL-SQL.ReportPortal/wwwroot/js/publish-folders.js).
+// Unit tests for the Admin publish-form folder helpers (src/ETL-SQL.Portal/wwwroot/js/publish-folders.js).
 // Covers the two reported bugs: nested folders weren't selectable / a new folder needed a page
 // reload to appear, and there was no inline "create folder" path.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const mod = await import(
-    pathToFileURL(path.resolve('src/ETL-SQL.ReportPortal/wwwroot/js/publish-folders.js')).href);
+    pathToFileURL(path.resolve('src/ETL-SQL.Portal/wwwroot/js/publish-folders.js')).href);
 const { flattenFolders, folderOptionsHtml, populateFolderSelects, createFolderInline } = mod;
 
 function assert(cond, msg) { if (!cond) throw new Error('FAIL: ' + msg); }

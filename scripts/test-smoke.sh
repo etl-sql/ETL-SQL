@@ -45,15 +45,15 @@ lane_projects[core]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 lane_filters[core]="Category=Smoke.Core"
 
 lane_labels[security]="Security and path guardrails"
-lane_projects[security]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj;tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj"
+lane_projects[security]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj;tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
 lane_filters[security]="Category=Smoke.Security;Category=Smoke.Security"
 
 lane_labels[reporting]="Reporting manifest and runtime behavior"
 lane_projects[reporting]="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 lane_filters[reporting]="Category=Smoke.Reporting"
 
-lane_labels[portal]="Report Portal publish, execute, and snapshot basics"
-lane_projects[portal]="tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj"
+lane_labels[portal]="Portal publish, execute, and snapshot basics"
+lane_projects[portal]="tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
 lane_filters[portal]="Category=Smoke.Portal"
 
 if [ "$LANE" = "all" ]; then

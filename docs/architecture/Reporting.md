@@ -518,7 +518,7 @@ Server-side SVG generation used by `PdfExporter`. Produces static SVG markup for
 |---|---|---|
 | `STATIC` | Default | Uses `PdfExporter` with PDFsharp/MigraDoc; no browser is required. |
 | `AUTO` | Selector mode | Uses a configured high-fidelity path when available, otherwise falls back to `STATIC` with a warning. |
-| `HOSTED` | Planned | Uses ReportPortal or `report serve` to render all report pages through the browser runtime. |
+| `HOSTED` | Planned | Uses Portal or `report serve` to render all report pages through the browser runtime. |
 | `BROWSER` | Planned | Uses an installed Chrome, Edge, or Chromium executable; no browser is bundled. |
 
 Explicit `HOSTED` and `BROWSER` modes fail clearly when unavailable. Only `AUTO` is allowed to fall back.
