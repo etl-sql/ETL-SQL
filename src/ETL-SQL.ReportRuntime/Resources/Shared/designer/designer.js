@@ -1403,6 +1403,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 <button type="button" class="btn btn-sm" data-command-palette title="Command Palette (Ctrl+Shift+P)">Commands</button>
                 ${opts.editor?.completeUrl ? '<button type="button" class="btn btn-sm" data-suggest title="Autocomplete suggestions (Ctrl+Space or Ctrl+.)">Suggest</button>' : ''}
                 <button type="button" class="btn btn-sm btn-primary" data-run>Run</button>
+                ${opts.previewApiUrl ? '<button type="button" class="btn btn-sm" data-preview title="Render a live WYSIWYG preview of this report">👁 Preview</button>' : ''}
                 ${opts.onApply ? '<button type="button" class="btn btn-sm btn-primary" data-apply>Update Designer</button>' : ''}
                 ${opts.onSave ? '<button type="button" class="btn btn-sm" data-save>Save</button>' : ''}
                 ${opts.onClose ? '<button type="button" class="btn btn-sm" data-close>Close</button>' : ''}
@@ -1410,6 +1411,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
             <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results"></div>
             <div class="etlsql-script-workbench-results" data-results></div>
+            ${opts.previewApiUrl ? `
+            <div class="etlsql-script-workbench-preview" data-preview-overlay>
+                <div class="etlsql-script-workbench-preview-toolbar">
+                    <strong>Preview</strong>
+                    <span class="etlsql-script-workbench-preview-status" data-preview-status></span>
+                    <span class="etlsql-script-workbench-spacer"></span>
+                    <button type="button" class="btn btn-sm" data-preview-refresh title="Re-run the report and refresh the preview">↻ Refresh</button>
+                    <button type="button" class="btn btn-sm" data-preview-close>Close</button>
+                </div>
+                <iframe data-preview-frame title="Report preview" sandbox="allow-scripts allow-same-origin"></iframe>
+            </div>` : ''}
             <div class="etlsql-script-command-palette" data-palette hidden>
                 <div class="etlsql-script-command-box">
                     <input type="search" data-palette-filter placeholder="Run command" autocomplete="off">
@@ -1489,9 +1501,80 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         await opts.onApply?.(editor.getValue());
     }
 
+    // ── Report preview ─────────────────────────────────────────────────────────
+    // Optional: when opts.previewApiUrl is set, the toolbar shows a 👁 Preview button
+    // that POSTs the current script for a compiled ReportManifest, then renders it in a
+    // sandboxed iframe (opts.previewUrl host) via report-runtime.js — the same
+    // manifest-mode handshake the report designer uses, so the standalone script editor
+    // gets a first-class WYSIWYG preview of its own.
+    const previewOverlay  = container.querySelector('[data-preview-overlay]');
+    const previewFrame    = container.querySelector('[data-preview-frame]');
+    const previewStatusEl = container.querySelector('[data-preview-status]');
+    const previewUrl = opts.previewUrl ?? '/designer-preview.html';
+    let _pendingManifest = null;
+    let _previewMessageHandler = null;
+
+    function setPreviewStatus(text, kind) {
+        if (!previewStatusEl) return;
+        previewStatusEl.textContent = text || '';
+        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        previewStatusEl.style.color = colors[kind] || colors.neutral;
+    }
+
+    if (previewFrame) {
+        // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
+        _previewMessageHandler = (event) => {
+            if (event.source !== previewFrame.contentWindow) return;
+            if (event.data?.type !== 'previewReady') return;
+            if (_pendingManifest) {
+                previewFrame.contentWindow.postMessage({
+                    type: 'reportManifest',
+                    manifest: _pendingManifest,
+                    dark: document.body.classList.contains('theme-dark'),
+                }, '*');
+            }
+        };
+        window.addEventListener('message', _previewMessageHandler);
+    }
+
+    async function refreshPreview() {
+        setPreviewStatus('Building preview…', 'pending');
+        try {
+            const script = editor.getValue();
+            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
+            const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
+            const res = await fetcher(opts.previewApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, connectionRef: opts.connectionRef || null }),
+            });
+            if (!res?.ok) throw new Error(await res.text());
+            const manifest = await res.json();
+            _pendingManifest = manifest;
+            // Reload the host page so report-runtime.js boots fresh with the new manifest.
+            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const pages = manifest?.pages?.length ?? 0;
+            const visuals = manifest?.visuals?.length ?? 0;
+            setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
+        } catch (e) {
+            setPreviewStatus('Preview failed: ' + (e?.message || e), 'error');
+        }
+    }
+
+    function openPreview() {
+        if (!previewOverlay) return;
+        previewOverlay.classList.add('active');
+        refreshPreview();
+    }
+
+    function closePreview() {
+        previewOverlay?.classList.remove('active');
+    }
+
     function commandItems() {
         return [
             { id: 'run', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: run },
+            { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
             { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
             { id: 'apply', label: 'ETL-SQL: Update Designer from Script', enabled: Boolean(opts.onApply), action: apply },
@@ -1531,6 +1614,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
     container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', run);
+    container.querySelector('[data-preview]')?.addEventListener('click', openPreview);
+    container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
+    container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
     container.querySelector('[data-apply]')?.addEventListener('click', apply);
     container.querySelector('[data-save]')?.addEventListener('click', save);
     container.querySelector('[data-close]')?.addEventListener('click', () => opts.onClose?.());
@@ -1572,6 +1658,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         run,
         dispose() {
             runAbort?.abort();
+            if (_previewMessageHandler) window.removeEventListener('message', _previewMessageHandler);
             editor.dispose();
             resultsPanel.dispose();
         },
