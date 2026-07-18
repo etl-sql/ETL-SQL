@@ -399,8 +399,8 @@ The TUI supports interactive mouse actions across all layout regions:
 ## 3. UI Abstraction & Sub-Panels
 
 ### `IUIComponent`
-**File:** [IUIComponent.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IUIComponent.cs)  
-**Interface:** [IUIComponent](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IUIComponent.cs#L5)
+**File:** [IUIComponent.cs](../../src/ETL-SQL.TUI/UI/IUIComponent.cs)  
+**Interface:** [IUIComponent](../../src/ETL-SQL.TUI/UI/IUIComponent.cs#L5)
 
 Defines the core rendering contract for TUI grid panels. Every display pane implements the single render method:
 ```csharp
@@ -408,114 +408,114 @@ void Render(IConsoleInterface console, int x, int y, int width, int height, int 
 ```
 
 ### `IConsoleInterface` & `PhysicalConsole`
-**File:** [IConsoleInterface.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs)  
-**Interface:** [IConsoleInterface](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L7)  
-**Class:** [PhysicalConsole](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L25)
+**File:** [IConsoleInterface.cs](../../src/ETL-SQL.TUI/UI/IConsoleInterface.cs)  
+**Interface:** [IConsoleInterface](../../src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L7)  
+**Class:** [PhysicalConsole](../../src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L25)
 
 - **IConsoleInterface:** An abstraction layers console operations (e.g. dimensions, cursor state, reading input, raw writing) to allow unit testing of drawing elements.
 - **PhysicalConsole:** The concrete implementation mapping rendering operations directly to Spectre.Console and `System.Console`.
 
 ### `EditorPanel`
-**File:** [EditorPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs)  
-**Class:** [EditorPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs#L9)
+**File:** [EditorPanel.cs](../../src/ETL-SQL.TUI/UI/EditorPanel.cs)  
+**Class:** [EditorPanel](../../src/ETL-SQL.TUI/UI/EditorPanel.cs#L9)
 
 Renders the primary editor workspace area, writing line numbering gutters and syntax-colored script lines. It evaluates active selection bounds and applies inverted contrast markers (`RenderLineWithSelection`). The gutter's far-left cell shows a colour-coded **diagnostic marker** (`✗`/`!`/`•`, worst-severity-wins per line) derived by `DiagnosticGutter` from the latest run/lint pass; matches of the active find term are highlighted inline.
 
 ### `MessageTreePanel`
-**File:** [MessageTreePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessageTreePanel.cs)
-**Class:** [MessageTreePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessageTreePanel.cs#L15)
+**File:** [MessageTreePanel.cs](../../src/ETL-SQL.TUI/UI/MessageTreePanel.cs)
+**Class:** [MessageTreePanel](../../src/ETL-SQL.TUI/UI/MessageTreePanel.cs#L15)
 
 Lower panel that shows the execution tree on the left and message log on the right. Manages independent scroll boundaries for the tree list and query log lines, parsing Spectre colors on text lines. Replaces the separate MessagePanel + TreePanel pair.
 
 ### `StatusBar`
-**File:** [StatusBar.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/StatusBar.cs)
-**Class:** [StatusBar](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/StatusBar.cs#L22)
+**File:** [StatusBar.cs](../../src/ETL-SQL.TUI/UI/StatusBar.cs)
+**Class:** [StatusBar](../../src/ETL-SQL.TUI/UI/StatusBar.cs#L22)
 
 Defines layout buttons for the bottom status/help bar (e.g. `F1:Help`, `F5:Run`, etc.). Shares button geometries and labels for rendering and mouse hit-testing, mapping clicks to keyboard dispatch events.
 
 ### `BottomTabStrip`
-**File:** [BottomTabStrip.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs)
-**Class:** [BottomTabStrip](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs#L14)
+**File:** [BottomTabStrip.cs](../../src/ETL-SQL.TUI/UI/BottomTabStrip.cs)
+**Class:** [BottomTabStrip](../../src/ETL-SQL.TUI/UI/BottomTabStrip.cs#L14)
 
 Coordinates tab selection drawn immediately above the lower panel, defining bounds for hitting tab options (Pipeline, Results, Performance, Output, Variables).
 
 ### `ResultSetNav`
-**File:** [ResultSetNav.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultSetNav.cs)
-**Class:** [ResultSetNav](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultSetNav.cs#L10)
+**File:** [ResultSetNav.cs](../../src/ETL-SQL.TUI/UI/ResultSetNav.cs)
+**Class:** [ResultSetNav](../../src/ETL-SQL.TUI/UI/ResultSetNav.cs#L10)
 
 Calculates geometry and hit boundaries for the result set pager arrows (`◀ index/count ▶`) drawn on the right side of the bottom tab strip.
 
 ### `TabBarLayout`
-**File:** [TabBarLayout.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TabBarLayout.cs)
-**Class:** [TabBarLayout](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TabBarLayout.cs#L12)
+**File:** [TabBarLayout.cs](../../src/ETL-SQL.TUI/UI/TabBarLayout.cs)
+**Class:** [TabBarLayout](../../src/ETL-SQL.TUI/UI/TabBarLayout.cs#L12)
 
 Computes tab sizes, title labeling, close button columns, and new-tab `+` button placement coordinates for the multi-tab layout at the top of the editor.
 
 ### `ReportLauncher`
-**File:** [ReportLauncher.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportLauncher.cs)
-**Class:** [ReportLauncher](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportLauncher.cs#L14)
+**File:** [ReportLauncher.cs](../../src/ETL-SQL.TUI/UI/ReportLauncher.cs)
+**Class:** [ReportLauncher](../../src/ETL-SQL.TUI/UI/ReportLauncher.cs#L14)
 
 Resolves local report player paths (`ETL-SQL.ReportPlayer`) in production or dev directories, spawning background processes, capturing served URLs, and opening web browsers.
 
 ### `SuggestionEngine`
-**File:** [SuggestionProviders.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
-**Class:** [SuggestionEngine](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
+**File:** [SuggestionProviders.cs](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
+**Class:** [SuggestionEngine](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
 
 Drives autocomplete keyword, function, and identifier scanning, managing snippet placeholder substitutions and parsing suggestion context maps.
 
 ### `CommandPalette`
-**File:** [CommandPalette.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/CommandPalette.cs)
-**Class:** [CommandPalette](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/CommandPalette.cs#L17)
+**File:** [CommandPalette.cs](../../src/ETL-SQL.TUI/UI/CommandPalette.cs)
+**Class:** [CommandPalette](../../src/ETL-SQL.TUI/UI/CommandPalette.cs#L17)
 
 Curates available TUI operations (like Save, Format, Theme, Serve) and performs substring/subsequence scoring to filter selections in the interactive Ctrl+Shift+P overlay.
 
 ### `OutputPanel`
-**File:** [OutputPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/OutputPanel.cs)
-**Class:** [OutputPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/OutputPanel.cs#L32)
+**File:** [OutputPanel.cs](../../src/ETL-SQL.TUI/UI/OutputPanel.cs)
+**Class:** [OutputPanel](../../src/ETL-SQL.TUI/UI/OutputPanel.cs#L32)
 
 Drawn in the bottom panel to manage persistent served URLs and exported paths, allowing users to scroll, copy, or open files using the default OS shell.
 
 ### `InfoAtCursor`
-**File:** [InfoAtCursor.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/InfoAtCursor.cs)
-**Class:** [InfoAtCursor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/InfoAtCursor.cs#L18)
+**File:** [InfoAtCursor.cs](../../src/ETL-SQL.TUI/UI/InfoAtCursor.cs)
+**Class:** [InfoAtCursor](../../src/ETL-SQL.TUI/UI/InfoAtCursor.cs#L18)
 
 Finds words under the text cursor to generate SQL help sheets (`Shift+F1`) or fetch transformation data lineage summaries (`Ctrl+L`) with matching ASCII dataflow diagrams.
 
 ### `VariablesPanel`
-**File:** [VariablesPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/VariablesPanel.cs)
-**Class:** [VariablesPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/VariablesPanel.cs#L14)
+**File:** [VariablesPanel.cs](../../src/ETL-SQL.TUI/UI/VariablesPanel.cs)
+**Class:** [VariablesPanel](../../src/ETL-SQL.TUI/UI/VariablesPanel.cs#L14)
 
 Lower-panel view (the fifth F4 stop) rendering `evaluator.VarContext.GetVariablesWithMetadata()` as a scrollable Name/Type/Value table. Secret/sensitive values are masked and `NULL` shows distinctly from an empty string.
 
 ### `ReportPreviewPanel`
-**File:** [ReportPreviewPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs)  
-**Class:** [ReportPreviewPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs#L16)
+**File:** [ReportPreviewPanel.cs](../../src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs)  
+**Class:** [ReportPreviewPanel](../../src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs#L16)
 
 Provides a graphical terminal layout preview of generated reports (supporting Research Paper format rendering) by loading page structures via `TerminalRenderer`. It slices Spectre segments to support vertical scroll shifts using `_renderer.ReportScrollRow`.
 
 ### `ResultViewer`
-**File:** [ResultViewer.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultViewer.cs)  
-**Class:** [ResultViewer](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultViewer.cs#L9)
+**File:** [ResultViewer.cs](../../src/ETL-SQL.TUI/UI/ResultViewer.cs)  
+**Class:** [ResultViewer](../../src/ETL-SQL.TUI/UI/ResultViewer.cs#L9)
 
 A fallback fullscreen table viewer utilizing Spectre grids. It is launched when evaluating outside of the full console editor layout, providing simple row-by-row navigation.
 
 ### `MetadataManager`
-**File:** [MetadataManager.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MetadataManager.cs)  
-**Class:** [MetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MetadataManager.cs#L13)
+**File:** [MetadataManager.cs](../../src/ETL-SQL.TUI/UI/MetadataManager.cs)  
+**Class:** [MetadataManager](../../src/ETL-SQL.TUI/UI/MetadataManager.cs#L13)
 
 Parses active scripts to extract schema declarations (`CREATE CONNECTION` and `CREATE TABLE #...`), seeding mock datasources or schemas locally to serve autocomplete catalog inspection.
 
 ### Autocomplete Providers
-**File:** [SuggestionProviders.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs)
+**File:** [SuggestionProviders.cs](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs)
 
 Contains helper classes bridging autocomplete tokenization to core services:
-- **[SuggestionContext](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L31):** Holds script snippets, cursor positions, and current connection states.
-- **[LanguageServiceBridgeProvider](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L51):** Converts autocomplete requests to query the core [LanguageService](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Services/LanguageService.cs) definitions.
-- **[TuiMetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L104):** Implements metadata querying against TUI active database sources.
+- **[SuggestionContext](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L31):** Holds script snippets, cursor positions, and current connection states.
+- **[LanguageServiceBridgeProvider](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L51):** Converts autocomplete requests to query the core [LanguageService](../../src/ETL-SQL.Core/Services/LanguageService.cs) definitions.
+- **[TuiMetadataManager](../../src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L104):** Implements metadata querying against TUI active database sources.
 
 ### `ExecuteTreeDemoRunner`
-**File:** [ExecuteTreeDemoRunner.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs)  
-**Class:** [ExecuteTreeDemoRunner](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs#L12)
+**File:** [ExecuteTreeDemoRunner.cs](../../src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs)  
+**Class:** [ExecuteTreeDemoRunner](../../src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs#L12)
 
 Simulates parallel branch executions on mock nodes, validating UI updates and progress indicator responsiveness.
 
@@ -524,31 +524,31 @@ Simulates parallel branch executions on mock nodes, validating UI updates and pr
 ## 4. UI Execution Modes (App Entry Points)
 
 ### `TuiRunner`
-**File:** [TuiRunner.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiRunner.cs)  
-**Class:** [TuiRunner](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiRunner.cs#L13)
+**File:** [TuiRunner.cs](../../src/ETL-SQL.TUI/App/TuiRunner.cs)  
+**Class:** [TuiRunner](../../src/ETL-SQL.TUI/App/TuiRunner.cs#L13)
 
 Processes execution arguments on start, setting console encodings (UTF-8) and buffer size ratios, then routing to the correct TUI mode:
-1. `repl`: Launches [ReplUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs#L28) background processing loops.
-2. `simple`: Loads [SimpleUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs#L12) menu lists.
-3. `ide` / default: Boots the main interactive screen editor [ConsoleEditor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L34).
+1. `repl`: Launches [ReplUi](../../src/ETL-SQL.TUI/UI/ReplUi.cs#L28) background processing loops.
+2. `simple`: Loads [SimpleUi](../../src/ETL-SQL.TUI/UI/SimpleUi.cs#L12) menu lists.
+3. `ide` / default: Boots the main interactive screen editor [ConsoleEditor](../../src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L34).
 
 ### `ReplUi`
-**File:** [ReplUi.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs)  
-**Class:** [ReplUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs#L28)
+**File:** [ReplUi.cs](../../src/ETL-SQL.TUI/UI/ReplUi.cs)  
+**Class:** [ReplUi](../../src/ETL-SQL.TUI/UI/ReplUi.cs#L28)
 
 Provides a persistent JSON-RPC background server over stdin/stdout. It allows integration with vscode or other client processes by streaming JSON messages:
 - **Inputs:** Receives command execution directives (`"run"`), cancellation request events (`"cancel"`), rollback commands (`"rollback"`), or export tasks (`"export"`).
 - **Outputs:** Streams diagnostic message events (`"message"`), execution states (`"progress"`), tabular query results (`"results"`), variable context listings (`"variables"`), and profiling performance numbers (`"performance"`).
 
 ### `SimpleUi`
-**File:** [SimpleUi.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs)  
-**Class:** [SimpleUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs#L12)
+**File:** [SimpleUi.cs](../../src/ETL-SQL.TUI/UI/SimpleUi.cs)  
+**Class:** [SimpleUi](../../src/ETL-SQL.TUI/UI/SimpleUi.cs#L12)
 
 A simplified console dialog loop using Spectre prompts that allows loading local scripts, executing them, and printing final tables directly without initializing keyboard handlers.
 
 ### `TuiDependencyInjectionSetup`
-**File:** [TuiDependencyInjectionSetup.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs)  
-**Class:** [TuiDependencyInjectionSetup](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs#L40)
+**File:** [TuiDependencyInjectionSetup.cs](../../src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs)  
+**Class:** [TuiDependencyInjectionSetup](../../src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs#L40)
 
 Configures the DI engine instance. It registers serilog file logging, function registry caches, system resource limits, database connectors, transaction context controllers, execution bundles, and statement execution handlers.
 

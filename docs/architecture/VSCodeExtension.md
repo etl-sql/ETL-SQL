@@ -261,7 +261,7 @@ The preview panel uses the **VS Code mode** of `report-runtime.js` — it pre-em
 
 ## 9. Connections Provider
 
-**File:** [connectionsProvider.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/connectionsProvider.ts)  
+**File:** [connectionsProvider.ts](../../src/etl-sql-vscode/src/connectionsProvider.ts)  
 **View ID:** `etlsql-connections`  
 **Implementation:** `vscode.TreeDataProvider<TreeItem>`
 
@@ -300,8 +300,8 @@ Connections are dynamically discovered within script documents and provided in-m
 
 ## 10. Report Designer Panel
 
-**File:** [reportDesignerPanel.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/reportDesignerPanel.ts)  
-**Class:** [ReportDesignerPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/reportDesignerPanel.ts#L15)  
+**File:** [reportDesignerPanel.ts](../../src/etl-sql-vscode/src/reportDesignerPanel.ts)  
+**Class:** [ReportDesignerPanel](../../src/etl-sql-vscode/src/reportDesignerPanel.ts#L15)  
 **View Type:** `etlsql.reportDesigner`
 
 The Report Designer Panel provides an offline graphical editor canvas for `.rptsql` files. It hosts the client-side report designer UI module via a `WebviewPanel`.
@@ -315,8 +315,8 @@ The Report Designer Panel provides an offline graphical editor canvas for `.rpts
 
 ## 11. Sidebar Provider
 
-**File:** [sidebarProvider.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/sidebarProvider.ts)  
-**Class:** [SidebarProvider](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/sidebarProvider.ts#L6)  
+**File:** [sidebarProvider.ts](../../src/etl-sql-vscode/src/sidebarProvider.ts)  
+**Class:** [SidebarProvider](../../src/etl-sql-vscode/src/sidebarProvider.ts#L6)  
 **View ID:** `etlsql-sidebar`
 
 The `SidebarProvider` implements `vscode.WebviewViewProvider` to render an interactive webview panel inside the side explorer view.
@@ -329,8 +329,8 @@ The `SidebarProvider` implements `vscode.WebviewViewProvider` to render an inter
 
 ## 12. Welcome View
 
-**File:** [WelcomeView.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/WelcomeView.ts)  
-**Class:** [WelcomeView](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/WelcomeView.ts#L5)
+**File:** [WelcomeView.ts](../../src/etl-sql-vscode/src/WelcomeView.ts)  
+**Class:** [WelcomeView](../../src/etl-sql-vscode/src/WelcomeView.ts#L5)
 
 The `WelcomeView` controller manages a static HTML panel (`welcome.html`) offering quick start links.
 
@@ -343,13 +343,13 @@ The `WelcomeView` controller manages a static HTML panel (`welcome.html`) offeri
 
 ## 13. Notebook Support
 
-**Files:** [notebookController.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts), [notebookSerializer.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts)  
-**Classes:** [ETLNotebookController](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts#L7), [ETLNotebookSerializer](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts#L13)
+**Files:** [notebookController.ts](../../src/etl-sql-vscode/src/notebookController.ts), [notebookSerializer.ts](../../src/etl-sql-vscode/src/notebookSerializer.ts)  
+**Classes:** [ETLNotebookController](../../src/etl-sql-vscode/src/notebookController.ts#L7), [ETLNotebookSerializer](../../src/etl-sql-vscode/src/notebookSerializer.ts#L13)
 
 The extension provides a native notebook interface (`.etlnb`) for writing and running multi-cell ETL-SQL scripts.
 
-- **Notebook Serializer:** [ETLNotebookSerializer](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts#L13) parses and serializes notebook cells to and from a JSON structure.
-- **Execution Kernel:** [ETLNotebookController](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts#L7) handles execution requests by sending scripts to a persistent background engine session.
+- **Notebook Serializer:** [ETLNotebookSerializer](../../src/etl-sql-vscode/src/notebookSerializer.ts#L13) parses and serializes notebook cells to and from a JSON structure.
+- **Execution Kernel:** [ETLNotebookController](../../src/etl-sql-vscode/src/notebookController.ts#L7) handles execution requests by sending scripts to a persistent background engine session.
 - **Rich Outputs:** It captures output stream events from the REPL engine session.
   - Data grids are formatted and rendered as HTML tables.
   - Lineage maps are embedded as collapsible Markdown sections enclosing Mermaid graphs.
@@ -359,8 +359,8 @@ The extension provides a native notebook interface (`.etlnb`) for writing and ru
 
 ## 14. Publish to Portal Command
 
-**File:** [portalPublishCommand.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts)  
-**Function:** [publishToPortal](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts#L111)
+**File:** [portalPublishCommand.ts](../../src/etl-sql-vscode/src/portalPublishCommand.ts)  
+**Function:** [publishToPortal](../../src/etl-sql-vscode/src/portalPublishCommand.ts#L111)
 
 The publish command allows direct publication of report scripts from the local workspace to the ETL-SQL Portal.
 
