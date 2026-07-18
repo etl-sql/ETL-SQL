@@ -5,7 +5,10 @@
 | Page | Description |
 | :--- | :--- |
 | [AVG](avg.md) | Returns the arithmetic mean of non-NULL values in a group or window. |
+| [CORR](corr.md) | Returns the Pearson correlation coefficient of two numeric expressions. |
 | [COUNT](count.md) | Returns the number of rows or non-NULL values in a group or window. |
+| [COVAR_POP](covar_pop.md) | Returns the population covariance of two numeric expressions. |
+| [COVAR_SAMP](covar_samp.md) | Returns the sample covariance of two numeric expressions. |
 | [LISTAGG](listagg.md) | Concatenates grouped values into a single string with a separator. `LISTAGG` is an alias for `STRING_AGG`. |
 | [MAX](max.md) | Returns the maximum (largest) non-NULL value in a group or window. |
 | [MEDIAN](median.md) | Returns the median (50th percentile) value of a numeric column. |
