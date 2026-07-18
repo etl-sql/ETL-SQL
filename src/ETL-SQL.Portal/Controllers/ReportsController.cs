@@ -36,8 +36,9 @@ public class ReportsController : ControllerBase
     private readonly IDatasetRegistry datasetRegistry;
     private readonly ETL_SQL.Core.Storage.IArtifactStorage artifacts;
     private readonly ReportStructureService reportStructure;
+    private readonly ReportDependencyService reportDependencies;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies)
     {
         this.db = db;
         this.audit = audit;
@@ -50,6 +51,7 @@ public class ReportsController : ControllerBase
         this.datasetRegistry = datasetRegistry;
         this.artifacts = artifacts;
         this.reportStructure = reportStructure;
+        this.reportDependencies = reportDependencies;
     }
 
     private int CurrentUserId =>
@@ -361,69 +363,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        var snapshot = await db.ReportSnapshots
-            .Where(s => s.ReportId == id)
-            .OrderByDescending(s => s.BuiltAt)
-            .FirstOrDefaultAsync();
-
-        var manifestDatasets = await scriptInspection.ReadManifestDatasetsAsync(snapshot);
-
-        List<int> datasetGroupIds = IsAdmin
-            ? []
-            : await db.UserGroups
-                .Where(ug => ug.UserId == CurrentUserId)
-                .Select(ug => ug.GroupId)
-                .ToListAsync();
-
-        var registeredDatasets = (await db.Datasets
-            .Include(d => d.OwningReport)
-            .Include(d => d.Acls)
-            .Where(d => d.OwningReportId == id)
-            .OrderBy(d => d.FolderPath)
-            .ThenBy(d => d.Name)
-            .ToListAsync())
-            .Where(d => CanReadDataset(d, datasetGroupIds))
-            .ToList();
-
-        var datasetDtos = registeredDatasets
-            .Select(d => new ReportDependencyDatasetDto(
-                d.Id,
-                d.Name,
-                d.FolderPath,
-                d.AccessLevel.ToString(),
-                d.RowCount,
-                d.LastRefresh,
-                d.RefreshInterval,
-                scriptInspection.BuildSourceDtos(scriptInspection.ParseSourceTables(d.SourceQuery), "DatasetSource")))
-            .ToList();
-
-        var jobs = await db.DatasetJobs
-            .Where(j => j.ReportId == id)
-            .OrderBy(j => j.OrchestratorJobName)
-            .Select(j => new ReportDependencyRefreshJobDto(
-                j.Id,
-                j.OrchestratorJobName,
-                j.RefreshInterval,
-                j.LastRefreshedAt))
-            .ToListAsync();
-
-        var sourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var source in await scriptInspection.ReadScriptSourceTablesAsync(report.ScriptPath))
-            sourceNames.Add(source);
-        foreach (var source in registeredDatasets.SelectMany(d => scriptInspection.ParseSourceTables(d.SourceQuery)))
-            sourceNames.Add(source);
-        var lineageEntries = await scriptInspection.ReadScriptLineageAsync(report.ScriptPath);
-
-        var dto = new ReportDependencyDto(
-            new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
-            snapshot is null ? null : new ReportDependencySnapshotDto(snapshot.Id, snapshot.ManifestPath, snapshot.BuiltAt),
-            manifestDatasets,
-            datasetDtos,
-            jobs,
-            scriptInspection.BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
-            lineageEntries);
-
-        return Ok(dto);
+        return Ok(await reportDependencies.BuildAsync(report, IsAdmin, CurrentUserId));
     }
 
     // ── GET /api/reports/{id}/structure ─────────────────────────────────────
@@ -1081,20 +1021,6 @@ public class ReportsController : ControllerBase
         {
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
-    }
-
-    private bool CanReadDataset(Dataset dataset, IReadOnlyCollection<int> groupIds)
-    {
-        if (IsAdmin) return true;
-        if (dataset.AccessLevel == DatasetAccessLevel.Public) return true;
-        if (dataset.OwningReport?.CreatedBy == CurrentUserId) return true;
-
-        return dataset.Acls.Any(a =>
-            groupIds.Contains(a.GroupId)
-            && a.Permission is DatasetPermission.Viewer
-                or DatasetPermission.Refresh
-                or DatasetPermission.Editor
-                or DatasetPermission.Owner);
     }
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
