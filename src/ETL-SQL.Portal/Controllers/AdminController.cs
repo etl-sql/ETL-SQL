@@ -32,18 +32,51 @@ public class AdminController(
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    private async Task<UserDto> ToUserDtoAsync(PortalUser user)
+    private async Task<UserDto> ToUserDtoAsync(PortalUser user, CancellationToken cancellationToken = default) =>
+        (await ToUserDtosAsync([user], cancellationToken)).Single();
+
+    private async Task<List<UserDto>> ToUserDtosAsync(
+        IReadOnlyCollection<PortalUser> users,
+        CancellationToken cancellationToken = default)
     {
-        var roles = await userManager.GetRolesAsync(user);
-        var groups = await db.UserGroups
-            .Where(ug => ug.UserId == user.Id)
-            .Select(ug => ug.Group.Name)
-            .OrderBy(name => name)
-            .ToListAsync();
-        return new UserDto(
-            user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-            user.IsActive, user.MustChangePassword, user.CreatedAt,
-            roles, groups, user.Provider, user.Version);
+        var userIds = users.Select(u => u.Id).ToArray();
+        if (userIds.Length == 0) return [];
+
+        var roleRows = await (from ur in db.UserRoles
+                              join r in db.Roles on ur.RoleId equals r.Id
+                              where userIds.Contains(ur.UserId)
+                              select new { ur.UserId, RoleName = r.Name! })
+            .AsNoTracking()
+            .OrderBy(row => row.RoleName)
+            .ToListAsync(cancellationToken);
+
+        var groupRows = await db.UserGroups
+            .AsNoTracking()
+            .Where(ug => userIds.Contains(ug.UserId))
+            .Select(ug => new { ug.UserId, GroupName = ug.Group.Name })
+            .OrderBy(row => row.GroupName)
+            .ToListAsync(cancellationToken);
+
+        var rolesByUser = roleRows
+            .GroupBy(row => row.UserId)
+            .ToDictionary(group => group.Key, group => (IList<string>)group.Select(row => row.RoleName).ToList());
+        var groupsByUser = groupRows
+            .GroupBy(row => row.UserId)
+            .ToDictionary(group => group.Key, group => (IList<string>)group.Select(row => row.GroupName).ToList());
+
+        return users.Select(user => new UserDto(
+            user.Id,
+            user.UserName!,
+            user.Email,
+            user.FirstName,
+            user.LastName,
+            user.IsActive,
+            user.MustChangePassword,
+            user.CreatedAt,
+            rolesByUser.GetValueOrDefault(user.Id, []),
+            groupsByUser.GetValueOrDefault(user.Id, []),
+            user.Provider,
+            user.Version)).ToList();
     }
 
     private static GroupDto ToGroupDto(Group group, int memberCount) =>
@@ -76,21 +109,27 @@ public class AdminController(
     // ── Users ─────────────────────────────────────────────────────────────────
 
     [HttpGet("users")]
-    public async Task<IActionResult> GetUsers()
+    public async Task<IActionResult> GetUsers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
+        CancellationToken cancellationToken = default)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = userManager.Users.AsNoTracking().OrderBy(u => u.UserName);
+        var total = await query.CountAsync(cancellationToken);
         var users = await userManager.Users
-            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-            .ToListAsync();
+            .AsNoTracking()
+            .OrderBy(u => u.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
 
-        var dtos = new List<UserDto>();
-        foreach (var u in users)
-        {
-            var roles = await userManager.GetRolesAsync(u);
-            var groups = u.UserGroups.Select(ug => ug.Group.Name).ToList();
-            dtos.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
-                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider, u.Version));
-        }
-        return Ok(dtos);
+        return Ok(new PagedResult<UserDto>(
+            await ToUserDtosAsync(users, cancellationToken),
+            total,
+            page,
+            pageSize));
     }
 
     [HttpGet("users/catalog")]
@@ -147,20 +186,12 @@ public class AdminController(
         total = await query.CountAsync();
         users = await query
             .AsNoTracking()
-            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
             .OrderBy(u => u.UserName)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
 
-        var items = new List<UserDto>();
-        foreach (var u in users)
-        {
-            var roles = await userManager.GetRolesAsync(u);
-            var groups = u.UserGroups.Select(ug => ug.Group.Name).OrderBy(name => name).ToList();
-            items.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
-                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider, u.Version));
-        }
+        var items = await ToUserDtosAsync(users);
         return Ok(new PagedResult<UserDto>(items, total, page, pageSize));
     }
 

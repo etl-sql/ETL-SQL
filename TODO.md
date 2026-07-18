@@ -171,10 +171,12 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `src/etl-sql-vscode`; the separate `ui` package is audited but never installed, built, linted, or
       tested. Add clean-install UI gates and make production-code lint warnings fail CI after clearing
       the existing backlog.
-- [ ] **P2 - Remove role-query N+1 behavior from Portal user lists.** `AdminController.GetUsers` loads
+- [x] **P2 - Remove role-query N+1 behavior from Portal user lists.** `AdminController.GetUsers` loads
       the entire user table without pagination and both user-list endpoints call
       `UserManager.GetRolesAsync` once per user. Require paging for the unbounded endpoint and batch-load
       role memberships with users/groups in a fixed number of database queries.
+      Fixed on 2026-07-18 by capping `/api/admin/users` with page/pageSize parameters and batch-loading
+      role and group membership rows for both user-list endpoints.
 
 ---
 
