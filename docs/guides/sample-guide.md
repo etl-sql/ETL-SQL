@@ -258,4 +258,4 @@ These advanced scripts demonstrate complex, production-grade business requiremen
 
 ---
 
-*Refer to [Getting Started](getting-started.md) for the pipeline mental model, [Cookbook](../cookbooks/etl-recipes.md) for production recipes, the [Syntax Index](../syntax-index.md) for syntax lookup, and [Data Connectors](../reference/connectors/data-connectors.md) for connector options.*
+*Refer to [Getting Started](getting-started.md) for the pipeline mental model, [Cookbook](../cookbooks/etl-recipes.md) for production recipes, the [Syntax Index](../syntax-index.md) for syntax lookup, and [Data Connectors](../reference/connectors/README.md) for connector options.*

@@ -191,7 +191,7 @@ Connectors define how to communicate with external data sources.
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
 | `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
-| `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/data-connectors.md) | HOST, PORT, API_KEY |
+| `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/services/orchestrator.md) | HOST, PORT, API_KEY |
 | `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/active_directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
 ### 2.1 File-Based Table Alias
@@ -674,20 +674,20 @@ CREATE CONNECTION name AS <Provider>( ... )
 ```
 | Option | Description | Documentation |
 | :--- | :--- | :--- |
-| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PORT` | Network port | [Data Connectors](reference/connectors/data-connectors.md) |
-| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/data-connectors.md) |
-| `DATABASE` | Database name | [Data Connectors](reference/connectors/data-connectors.md) |
-| `USER` / `UID` | Username | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/data-connectors.md) |
-| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/data-connectors.md) |
-| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/data-connectors.md) |
-| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/data-connectors.md) |
-| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/data-connectors.md) |
-| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/data-connectors.md) |
-| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/data-connectors.md) |
+| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/README.md) |
+| `PORT` | Network port | [Data Connectors](reference/connectors/README.md) |
+| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/README.md) |
+| `DATABASE` | Database name | [Data Connectors](reference/connectors/README.md) |
+| `USER` / `UID` | Username | [Data Connectors](reference/connectors/README.md) |
+| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/README.md) |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/README.md) |
+| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/README.md) |
+| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/README.md) |
+| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/README.md) |
+| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/README.md) |
+| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/README.md) |
+| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/README.md) |
+| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/README.md) |
 
 ### 7.2 CREATE TABLE
 ```sql

@@ -3,7 +3,7 @@
 Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" to "Multi-Context Data Flow." It is a **narrative onboarding** — the mental model, your first script, connections, and variables. When a topic turns into lookup (every option, every function, every flag), this guide links you to the exact reference page instead of restating it.
 
 > [!TIP]
-> **Looking for exact syntax?** Use the [Syntax Index](../syntax-index.md) (keyword map) or the [Task Index](../task-index.md) ("how do I…" locator). For connector options and auth, see [Data Connectors](../reference/connectors/data-connectors.md). For errors and gotchas, see the [FAQ](faq.md).
+> **Looking for exact syntax?** Use the [Syntax Index](../syntax-index.md) (keyword map) or the [Task Index](../task-index.md) ("how do I…" locator). For connector options and auth, see [Data Connectors](../reference/connectors/README.md). For errors and gotchas, see the [FAQ](faq.md).
 
 ## What Makes ETL-SQL Different
 
@@ -127,9 +127,9 @@ Connections accept either a **structured** option list (recommended — readable
 > [!TIP]
 > Use `HELP CONNECTION <type>` in the TUI (e.g. `HELP CONNECTION MSSQL`) to see every option and default for a connector.
 
-- **All connector options, auth patterns, and mutually exclusive settings** → [Data Connectors](../reference/connectors/data-connectors.md).
+- **All connector options, auth patterns, and mutually exclusive settings** → [Data Connectors](../reference/connectors/README.md).
 - **Encrypting credentials** — never commit plaintext passwords. `USE PASSWORD` plus `ENC:` strings let the engine auto-decrypt at connection time; the IDE/CLI can encrypt a script's plaintext strings on save. → [Secrets and Keys](../administration/platform/secrets.md).
-- **Mounting a directory as a connection** (`CREATE CONNECTION raw AS DIRECTORY('C:\Incoming\')`) so file metadata joins against other sources → [Data Connectors](../reference/connectors/data-connectors.md).
+- **Mounting a directory as a connection** (`CREATE CONNECTION raw AS DIRECTORY('C:\Incoming\')`) so file metadata joins against other sources → [Data Connectors](../reference/connectors/README.md).
 
 ### Running a script
 

@@ -6,10 +6,9 @@ Connector reference pages define `CREATE CONNECTION` syntax, options, authentica
 
 ## Connector Families
 
-- [Database connectors](databases/mssql.md) - MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC, Snowflake, BigQuery, MongoDB, and Neo4j.
-- [File connectors](files/flatfile.md) - flat files, Excel, JSON, XML, Parquet, and Avro.
-- [Service connectors](services/api.md) - API/REST, SFTP, FTP, Azure Blob, S3, SharePoint, SMTP, Kafka, Directory, Active Directory, and MockDB.
-- [All connector options](data-connectors.md) - consolidated connector reference.
+- [Database connectors](databases/README.md) - MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC, Snowflake, BigQuery, MongoDB, and Neo4j.
+- [File connectors](files/README.md) - flat files, Excel, JSON, XML, Parquet, and Avro.
+- [Service connectors](services/README.md) - API/REST, SFTP, FTP, Azure Blob, S3, SharePoint, SMTP, Kafka, Directory, Active Directory, MockDB, Portal, and Orchestrator.
 
 ## Page Standard
 
