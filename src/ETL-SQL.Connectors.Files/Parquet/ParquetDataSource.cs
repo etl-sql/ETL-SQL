@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -52,10 +54,16 @@ namespace ETL_SQL.Connectors.Parquet
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Parquet", ex => ex is not ExecutionException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Parquet", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
@@ -64,6 +72,7 @@ namespace ETL_SQL.Connectors.Parquet
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 _encryption.DecryptFile(_filePath, tempFile);
                 effectivePath = tempFile;
@@ -78,19 +87,21 @@ namespace ETL_SQL.Connectors.Parquet
 
                 for (int i = 0; i < reader.RowGroupCount; i++)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     using var rgReader = reader.OpenRowGroupReader(i);
                     int rowCount = (int)rgReader.RowCount;
 
                     var columns = new object?[dataFields.Length][];
                     for (int j = 0; j < dataFields.Length; j++)
                     {
-                        columns[j] = await ReadColumnAsObjectsAsync(rgReader, dataFields[j], rowCount);
+                        columns[j] = await ReadColumnAsObjectsAsync(rgReader, dataFields[j], rowCount, effectiveCancellationToken);
                     }
 
                     DataTable? currentBatch = null;
 
                     for (int r = 0; r < rowCount; r++)
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         if (currentBatch == null)
                         {
                             currentBatch = new DataTable();
@@ -123,10 +134,14 @@ namespace ETL_SQL.Connectors.Parquet
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
-            var enumerator = batches.GetAsyncEnumerator();
+            await using var enumerator = batches.GetAsyncEnumerator(effectiveCancellationToken);
             if (!await enumerator.MoveNextAsync())
             {
                 _logger.Debug("[ParquetDataSource.WriteBatches] Received empty batch stream for '{FilePath}'. No file will be created.", _filePath);
@@ -160,6 +175,7 @@ namespace ETL_SQL.Connectors.Parquet
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 targetPath = tempFile;
             }
@@ -183,12 +199,13 @@ namespace ETL_SQL.Connectors.Parquet
 
                     while (hasMore)
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         using (var rgWriter = writer.CreateRowGroup())
                         {
                             var dataFields = schema.GetDataFields();
                             for (int i = 0; i < dataFields.Length; i++)
                             {
-                                await WriteColumnToGroupAsync(rgWriter, dataFields[i], batch.Rows);
+                                await WriteColumnToGroupAsync(rgWriter, dataFields[i], batch.Rows, effectiveCancellationToken);
                             }
                         }
                         hasMore = await enumerator.MoveNextAsync();
@@ -198,6 +215,7 @@ namespace ETL_SQL.Connectors.Parquet
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(targetPath, _filePath);
                 }
             }
@@ -216,9 +234,13 @@ namespace ETL_SQL.Connectors.Parquet
             await Task.CompletedTask;
         }
 
-        private static async Task<object?[]> ReadColumnAsObjectsAsync(ParquetRowGroupReader rgReader, DataField field, int rowCount)
+        private static async Task<object?[]> ReadColumnAsObjectsAsync(
+            ParquetRowGroupReader rgReader,
+            DataField field,
+            int rowCount,
+            CancellationToken cancellationToken)
         {
-            var rawData = await rgReader.ReadRawColumnDataBaseAsync(field, default);
+            var rawData = await rgReader.ReadRawColumnDataBaseAsync(field, cancellationToken);
             var prop = rawData.GetType().GetProperty("NullableValues");
             if (prop != null)
             {
@@ -227,7 +249,12 @@ namespace ETL_SQL.Connectors.Parquet
                     var seq = (System.Collections.IEnumerable)prop.GetValue(rawData)!;
                     var result = new object?[rowCount];
                     int idx = 0;
-                    foreach (var v in seq) { if (idx >= rowCount) break; result[idx++] = v; }
+                    foreach (var v in seq)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (idx >= rowCount) break;
+                        result[idx++] = v;
+                    }
                     return result;
                 }
                 catch (InvalidOperationException)
@@ -235,80 +262,88 @@ namespace ETL_SQL.Connectors.Parquet
                     // Column has no definition levels (non-nullable); fall through to typed read
                 }
             }
-            return await ReadNonNullableColumnAsync(rgReader, field, rowCount);
+            return await ReadNonNullableColumnAsync(rgReader, field, rowCount, cancellationToken);
         }
 
-        private static async Task<object?[]> ReadNonNullableColumnAsync(ParquetRowGroupReader rgReader, DataField field, int rowCount)
+        private static async Task<object?[]> ReadNonNullableColumnAsync(
+            ParquetRowGroupReader rgReader,
+            DataField field,
+            int rowCount,
+            CancellationToken cancellationToken)
         {
             var clrType = field.ClrType;
             if (clrType == typeof(long) || clrType == typeof(long?))
             {
                 var buf = new long[rowCount];
-                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
             if (clrType == typeof(decimal) || clrType == typeof(decimal?))
             {
                 var buf = new decimal[rowCount];
-                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
             if (clrType == typeof(double) || clrType == typeof(double?))
             {
                 var buf = new double[rowCount];
-                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
             if (clrType == typeof(bool) || clrType == typeof(bool?))
             {
                 var buf = new bool[rowCount];
-                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
             if (clrType == typeof(DateTime) || clrType == typeof(DateTime?))
             {
                 var buf = new DateTime[rowCount];
-                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
             var sBuf = new string?[rowCount];
-            await rgReader.ReadAsync(field, sBuf.AsMemory(), null, default);
+            await rgReader.ReadAsync(field, sBuf.AsMemory(), null, cancellationToken);
             return Array.ConvertAll(sBuf, v => (object?)v);
         }
 
-        private static async Task WriteColumnToGroupAsync(ParquetRowGroupWriter rgWriter, DataField field, List<Row> rows)
+        private static async Task WriteColumnToGroupAsync(
+            ParquetRowGroupWriter rgWriter,
+            DataField field,
+            List<Row> rows,
+            CancellationToken cancellationToken)
         {
             int count = rows.Count;
             var clrType = field.ClrType;
             if (clrType == typeof(long))
             {
                 var buf = new long?[count];
-                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToInt64(v) : (long?)null; }
-                await rgWriter.WriteAsync(field, new ReadOnlyMemory<long?>(buf), null, null, default);
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToInt64(v) : (long?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<long?>(buf), null, null, cancellationToken);
             }
             else if (clrType == typeof(decimal))
             {
                 var buf = new decimal?[count];
-                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDecimal(v) : (decimal?)null; }
-                await rgWriter.WriteAsync(field, new ReadOnlyMemory<decimal?>(buf), null, null, default);
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDecimal(v) : (decimal?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<decimal?>(buf), null, null, cancellationToken);
             }
             else if (clrType == typeof(double))
             {
                 var buf = new double?[count];
-                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDouble(v) : (double?)null; }
-                await rgWriter.WriteAsync(field, new ReadOnlyMemory<double?>(buf), null, null, default);
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDouble(v) : (double?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<double?>(buf), null, null, cancellationToken);
             }
             else if (clrType == typeof(bool))
             {
                 var buf = new bool?[count];
-                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToBoolean(v) : (bool?)null; }
-                await rgWriter.WriteAsync(field, new ReadOnlyMemory<bool?>(buf), null, null, default);
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToBoolean(v) : (bool?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<bool?>(buf), null, null, cancellationToken);
             }
             else if (clrType == typeof(DateTime))
             {
                 var buf = new DateTime?[count];
-                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDateTime(v) : (DateTime?)null; }
-                await rgWriter.WriteAsync(field, new ReadOnlyMemory<DateTime?>(buf), null, null, default);
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDateTime(v) : (DateTime?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<DateTime?>(buf), null, null, cancellationToken);
             }
             else
             {
@@ -382,11 +417,18 @@ namespace ETL_SQL.Connectors.Parquet
         public async Task<string> GetVersionAsync() => await Task.FromResult("Parquet.Net 4.0");
         public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -400,5 +442,8 @@ namespace ETL_SQL.Connectors.Parquet
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

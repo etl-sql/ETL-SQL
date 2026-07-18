@@ -4,8 +4,10 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -414,8 +416,14 @@ namespace ETL_SQL.Connectors.FlatFile
             return $"{q}{escaped}{q}";
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath))
                 yield break;
@@ -426,25 +434,29 @@ namespace ETL_SQL.Connectors.FlatFile
             using var reader = new StreamReader(stream, _encoding);
             var recordReader = new RecordReader(reader, _rowDelimiter);
 
-            for (int i = 0; i < _startAtRows; i++) await recordReader.ReadRecordAsync();
+            for (int i = 0; i < _startAtRows; i++)
+            {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                await recordReader.ReadRecordAsync(effectiveCancellationToken);
+            }
 
             string? headerLine = null;
             if (_headerFile != null)
             {
                 if (System.IO.File.Exists(_headerFile))
                 {
-                    headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
                 }
                 else
                 {
                     headerLine = _headerFile;
                 }
 
-                if (_hasHeader) await recordReader.ReadRecordAsync();
+                if (_hasHeader) await recordReader.ReadRecordAsync(effectiveCancellationToken);
             }
             else
             {
-                headerLine = await recordReader.ReadRecordAsync();
+                headerLine = await recordReader.ReadRecordAsync(effectiveCancellationToken);
             }
 
             if (string.IsNullOrWhiteSpace(headerLine))
@@ -575,6 +587,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
             if (!_hasHeader)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 await currentBatch.AddRowAsync(CreateRow(headers, currentBatch, sourceMapping));
                 affectedRowCount++;
             }
@@ -583,13 +596,14 @@ namespace ETL_SQL.Connectors.FlatFile
 
             var lineQueue = new Queue<string>();
             string? line;
-            while ((line = await recordReader.ReadRecordAsync()) != null)
+            while ((line = await recordReader.ReadRecordAsync(effectiveCancellationToken)) != null)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 lineQueue.Enqueue(line);
                 if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
                 {
                     var dataLine = lineQueue.Dequeue();
-                    await ProcessDataLine(dataLine, currentBatch, actualHeaders, sourceMapping);
+                    await ProcessDataLine(dataLine, currentBatch, actualHeaders, sourceMapping, effectiveCancellationToken);
                     totalRowsRead++;
                     affectedRowCount++;
 
@@ -649,19 +663,20 @@ namespace ETL_SQL.Connectors.FlatFile
                 _rowDelimiter = rowDelimiter;
             }
 
-            public async Task<string?> ReadRecordAsync()
+            public async Task<string?> ReadRecordAsync(CancellationToken cancellationToken = default)
             {
                 if (_rowDelimiter == "\n" || _rowDelimiter == "\r\n" || _rowDelimiter == "\r")
-                    return await _reader.ReadLineAsync();
+                    return await _reader.ReadLineAsync(cancellationToken);
 
                 _record.Clear();
                 int delimIdx = 0;
 
                 while (true)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (_position >= _length)
                     {
-                        _length = await _reader.ReadAsync(_buffer, 0, _buffer.Length);
+                        _length = await _reader.ReadAsync(_buffer.AsMemory(0, _buffer.Length), cancellationToken);
                         _position = 0;
                         if (_length == 0) return _record.Length > 0 ? _record.ToString() : null;
                     }
@@ -689,8 +704,14 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        private async Task ProcessDataLine(string line, DataTable batch, List<string> actualHeaders, List<int> sourceMapping)
+        private async Task ProcessDataLine(
+            string line,
+            DataTable batch,
+            List<string> actualHeaders,
+            List<int> sourceMapping,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var values = _fixedColumns != null ? SplitFixedWidthLine(line) : SplitLine(line);
             await batch.AddRowAsync(CreateRow(values, batch, sourceMapping));
         }
@@ -744,8 +765,12 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             // Security Hardening: local write guardrail + enterprise policy re-check at the boundary.
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
@@ -754,6 +779,7 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 if (append && System.IO.File.Exists(_filePath) && !_compress && !_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     System.IO.File.Copy(_filePath, tempFile, true);
                 }
 
@@ -762,13 +788,16 @@ namespace ETL_SQL.Connectors.FlatFile
                     bool headersWritten = append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0;
                     int totalRows = 0;
 
-                    await foreach (var batch in batches)
+                    await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         if (!headersWritten && batch.ColumnNames.Count > 0)
                         {
                             if (!string.IsNullOrEmpty(_headerFile) && System.IO.File.Exists(_headerFile))
                             {
-                                await writer.WriteLineAsync(await System.IO.File.ReadAllTextAsync(_headerFile).ConfigureAwait(false));
+                                await writer.WriteLineAsync(
+                                    await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken).ConfigureAwait(false))
+                                    .ConfigureAwait(false);
                             }
                             else if (_hasHeader)
                             {
@@ -789,7 +818,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                 {
                                     headerLine = string.Join(_delimiter.ToString(), batch.ColumnNames.Select(n => FormatField(n)));
                                 }
-                                await writer.WriteLineAsync(headerLine).ConfigureAwait(false);
+                                await writer.WriteLineAsync(headerLine.AsMemory(), effectiveCancellationToken).ConfigureAwait(false);
                             }
                             headersWritten = true;
                         }
@@ -801,6 +830,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
                         foreach (var row in batch.Rows)
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             rowNum++;
                             string line;
                             if (_fixedColumns != null)
@@ -863,7 +893,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                     values.Add(FormatField(row[col]?.ToString() ?? ""));
                                 line = string.Join(_delimiter.ToString(), values);
                             }
-                            await writer.WriteLineAsync(line).ConfigureAwait(false);
+                            await writer.WriteLineAsync(line.AsMemory(), effectiveCancellationToken).ConfigureAwait(false);
                             totalRows++;
                         }
 
@@ -875,7 +905,9 @@ namespace ETL_SQL.Connectors.FlatFile
 
                     if (!string.IsNullOrEmpty(_countAtEndPattern))
                     {
-                        await writer.WriteLineAsync(_countAtEndPattern.Replace("COUNT", totalRows.ToString())).ConfigureAwait(false);
+                        await writer.WriteLineAsync(
+                            _countAtEndPattern.Replace("COUNT", totalRows.ToString()).AsMemory(),
+                            effectiveCancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -884,6 +916,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (_compress)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
                     using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
                     {
@@ -900,6 +933,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
@@ -1046,11 +1080,18 @@ namespace ETL_SQL.Connectors.FlatFile
         public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
         public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -1065,5 +1106,8 @@ namespace ETL_SQL.Connectors.FlatFile
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

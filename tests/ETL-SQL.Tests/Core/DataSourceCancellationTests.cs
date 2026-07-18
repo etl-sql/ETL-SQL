@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.Excel;
+using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Mongodb;
@@ -9,6 +12,7 @@ using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.SqlServer;
@@ -124,6 +128,9 @@ public class DataSourceCancellationTests
     {
         foreach (var providerType in new[]
         {
+            typeof(AvroDataSource),
+            typeof(FlatFileDataSource),
+            typeof(ParquetDataSource),
             typeof(JsonDataSource),
             typeof(XmlDataSource)
         })
@@ -142,6 +149,18 @@ public class DataSourceCancellationTests
                 typeof(IEnumerable<object?>),
                 typeof(CancellationToken));
         }
+    }
+
+    [Fact]
+    public void ExcelDataSource_DeclaresNativeCancellationOverloads()
+    {
+        AssertDeclares(typeof(ExcelDataSource), nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+        AssertDeclares(
+            typeof(ExcelDataSource),
+            nameof(IDataSource.WriteBatches),
+            typeof(IAsyncEnumerable<DataTable>),
+            typeof(bool),
+            typeof(CancellationToken));
     }
 
     private static void AssertDeclares(Type type, string methodName, params Type[] parameterTypes)

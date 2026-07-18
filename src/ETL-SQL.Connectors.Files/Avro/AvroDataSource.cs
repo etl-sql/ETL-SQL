@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using Avro;
 using Avro.File;
 using Avro.Generic;
@@ -55,16 +57,23 @@ namespace ETL_SQL.Connectors.Avro
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Avro", ex => ex is not ExecutionException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Avro", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             string effectivePath = _filePath;
             string? tempFile = null;
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 _encryption.DecryptFile(_filePath, tempFile);
                 effectivePath = tempFile;
@@ -73,7 +82,7 @@ namespace ETL_SQL.Connectors.Avro
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream));
+                using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream), effectiveCancellationToken);
 
                 var schema = (RecordSchema)reader.GetSchema();
                 var colNames = schema.Fields.Select(f => f.Name).ToList();
@@ -81,9 +90,10 @@ namespace ETL_SQL.Connectors.Avro
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(colNames);
 
-                while (await Task.Run(() => reader.HasNext()))
+                while (await Task.Run(() => reader.HasNext(), effectiveCancellationToken))
                 {
-                    var record = await Task.Run(() => reader.Next());
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    var record = await Task.Run(() => reader.Next(), effectiveCancellationToken);
                     var row = currentBatch.NewRow();
                     foreach (var field in schema.Fields)
                     {
@@ -110,10 +120,14 @@ namespace ETL_SQL.Connectors.Avro
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
-            var enumerator = batches.GetAsyncEnumerator();
+            await using var enumerator = batches.GetAsyncEnumerator(effectiveCancellationToken);
             if (!await enumerator.MoveNextAsync()) return;
 
             var firstBatch = enumerator.Current;
@@ -122,7 +136,7 @@ namespace ETL_SQL.Connectors.Avro
             RecordSchema schema;
             if (!string.IsNullOrEmpty(_schemaFile) && System.IO.File.Exists(_schemaFile))
             {
-                schema = (RecordSchema)Schema.Parse(await System.IO.File.ReadAllTextAsync(_schemaFile));
+                schema = (RecordSchema)Schema.Parse(await System.IO.File.ReadAllTextAsync(_schemaFile, effectiveCancellationToken));
             }
             else
             {
@@ -134,6 +148,7 @@ namespace ETL_SQL.Connectors.Avro
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 targetPath = tempFile;
             }
@@ -144,26 +159,29 @@ namespace ETL_SQL.Connectors.Avro
             try
             {
                 using (var stream = System.IO.File.Create(targetPath))
-                using (var writer = await Task.Run(() => DataFileWriter<GenericRecord>.OpenWriter(new GenericWriter<GenericRecord>(schema), stream)))
+                using (var writer = await Task.Run(() => DataFileWriter<GenericRecord>.OpenWriter(new GenericWriter<GenericRecord>(schema), stream), effectiveCancellationToken))
                 {
                     do
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var batch = enumerator.Current;
                         foreach (var r in batch.Rows)
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             var record = new GenericRecord(schema);
                             foreach (var field in schema.Fields)
                             {
                                 var val = r[field.Name];
                                 record.Add(field.Name, CastValue(val, field.Schema));
                             }
-                            await Task.Run(() => writer.Append(record));
+                            await Task.Run(() => writer.Append(record), effectiveCancellationToken);
                         }
                     } while (await enumerator.MoveNextAsync());
                 }
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(targetPath, _filePath);
                 }
             }
@@ -249,11 +267,18 @@ namespace ETL_SQL.Connectors.Avro
         public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
         public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
             {
-                await foreach (var batch in ReadBatches()) yield return batch;
+                await foreach (var batch in ReadBatches(10000, cancellationToken).WithCancellation(cancellationToken))
+                    yield return batch;
             }
             else
             {
@@ -268,5 +293,8 @@ namespace ETL_SQL.Connectors.Avro
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

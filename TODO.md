@@ -180,6 +180,14 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: provider-native overrides and cancellation tests for the remaining file connector
       families.
+      Additional progress on 2026-07-18: completed native cancellation-aware read/write/raw-SQL overrides
+      for Avro, FlatFile, Parquet, and Excel data sources, including custom record-reader cancellation,
+      cancellable file/schema reads and writes where supported, async-enumerator disposal, and checkpoints
+      around synchronous compression/encryption and workbook/Avro library calls. Validated with
+      `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: provider-native overrides and cancellation tests for warehouse, messaging, admin,
+      and lightweight engine storage connector families.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

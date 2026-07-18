@@ -4,6 +4,8 @@ using System.Data; // For DataSet
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core;
@@ -72,15 +74,22 @@ namespace ETL_SQL.Connectors.Excel
         }
 
         public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Excel", ex => ex is not ExecutionException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Excel", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
-            using var stream = await GetSeekableStreamAsync(baseStream);
+            using var stream = await GetSeekableStreamAsync(baseStream, effectiveCancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             using var reader = ExcelReaderFactory.CreateReader(stream);
 
             // Accepted exception (Rule 2): ExcelDataReader has no async read API.
@@ -93,6 +102,7 @@ namespace ETL_SQL.Connectors.Excel
                     UseHeaderRow = false
                 }
             });
+            effectiveCancellationToken.ThrowIfCancellationRequested();
 
             System.Data.DataTable? sheet = ResolveSheet(result);
 
@@ -244,6 +254,7 @@ namespace ETL_SQL.Connectors.Excel
 
             for (int r = dataStartRow; r <= endRow; r++)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var row = sheet.Rows[r];
                 var etlRow = etlBatch.NewRow();
                 for (int i = 0; i < actualHeaders.Count; i++)
@@ -297,8 +308,15 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(
+            IAsyncEnumerable<ETL_SQL.Data.DataTable> batches,
+            bool append,
+            CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
             var existingRows = new List<Dictionary<string, object?>>();
@@ -308,6 +326,7 @@ namespace ETL_SQL.Connectors.Excel
             {
                 try
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
                     using (var stream = GetSeekableStream(baseStream))
                     using (var reader = ExcelReaderFactory.CreateReader(stream))
@@ -316,6 +335,7 @@ namespace ETL_SQL.Connectors.Excel
                         {
                             ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
                         });
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
 
                         // Match the sheet we would have written to (the writer sanitizes the name);
                         // ResolveSheet tries the raw then sanitized name so append preserves rows.
@@ -351,6 +371,7 @@ namespace ETL_SQL.Connectors.Excel
 
                                 for (int r = dataStartRow; r <= endRow; r++)
                                 {
+                                    effectiveCancellationToken.ThrowIfCancellationRequested();
                                     var row = sheet.Rows[r];
                                     var rowDict = new Dictionary<string, object?>();
                                     for (int c = startCol; c <= endCol; c++)
@@ -373,7 +394,7 @@ namespace ETL_SQL.Connectors.Excel
             var newRows = new List<Dictionary<string, object?>>();
             var newColumns = new List<string>();
 
-            await foreach (var batch in batches)
+            await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
             {
                 if (newColumns.Count == 0 && batch.ColumnNames.Count > 0)
                 {
@@ -382,6 +403,7 @@ namespace ETL_SQL.Connectors.Excel
 
                 foreach (var row in batch.Rows)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                     foreach (var col in batch.ColumnNames)
                     {
@@ -404,6 +426,7 @@ namespace ETL_SQL.Connectors.Excel
             var materializedRows = new List<Dictionary<string, object?>>();
             foreach (var row in allRows)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var mapped = new Dictionary<string, object?>(columns.Count);
                 foreach (var col in columns)
                 {
@@ -424,7 +447,9 @@ namespace ETL_SQL.Connectors.Excel
             {
                 using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write))
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     await MiniExcel.SaveAsAsync(stream, book, printHeader: _hasHeader, excelType: ExcelType.XLSX);
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                 }
 
                 string fileToEncrypt = tempFile;
@@ -432,6 +457,7 @@ namespace ETL_SQL.Connectors.Excel
 
                 if (_compress)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
                     using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
                     {
@@ -448,6 +474,7 @@ namespace ETL_SQL.Connectors.Excel
 
                 if (_encryption.Enabled)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
@@ -576,6 +603,9 @@ namespace ETL_SQL.Connectors.Excel
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
+
         private string PrepareReadPath(List<string> tempFiles)
         {
             var effectivePath = _filePath;
@@ -676,11 +706,11 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
-        private async Task<Stream> GetSeekableStreamAsync(Stream stream)
+        private async Task<Stream> GetSeekableStreamAsync(Stream stream, CancellationToken cancellationToken = default)
         {
             if (stream.CanSeek) return stream;
             var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
+            await stream.CopyToAsync(ms, cancellationToken);
             ms.Position = 0;
             return new ChainedStream(ms, stream);
         }
