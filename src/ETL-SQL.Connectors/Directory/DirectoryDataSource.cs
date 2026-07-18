@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -44,17 +46,23 @@ namespace ETL_SQL.Connectors.Directory
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FileName", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (!System.IO.Directory.Exists(Path)) yield break;
 
-            var files = System.IO.Directory.GetFiles(Path);
             int count = 0;
             var currentBatch = new DataTable();
             currentBatch.SetColumns(await GetColumnsAsync());
 
-            foreach (var file in files)
+            foreach (var file in System.IO.Directory.EnumerateFiles(Path))
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var info = new FileInfo(file);
                 var row = currentBatch.NewRow();
                 row["FileName"] = info.Name;
@@ -83,12 +91,19 @@ namespace ETL_SQL.Connectors.Directory
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing to a DIRECTORY connection is not supported. Use file operations instead.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Writing to a DIRECTORY connection is not supported. Use file operations instead.");
         public object? Snapshot() => Path;
         public void Restore(object? snapshot) { }
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

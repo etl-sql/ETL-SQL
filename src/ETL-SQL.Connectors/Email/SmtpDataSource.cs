@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -45,28 +47,42 @@ namespace ETL_SQL.Connectors.Email
         }
 
         /// <summary>Reading batches is not supported for SMTP.</summary>
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             yield break; // Read not supported
         }
 
         /// <summary>Writes batches of data by sending each row as an email.</summary>
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (!append) await TruncateAsync();
-            await foreach (var batch in batches)
+            await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
             {
                 foreach (var row in batch.Rows)
                 {
-                    await SendEmail(row);
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    await SendEmail(row, effectiveCancellationToken);
                 }
             }
         }
 
         /// <summary>Sends a single email based on the data in the provided row.</summary>
         /// <param name="row">Row containing email fields (To, Cc, Subject, Body, etc.).</param>
-        public async Task SendEmail(Row row)
+        public Task SendEmail(Row row) => SendEmail(row, CancellationToken.None);
+
+        public async Task SendEmail(Row row, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             _context?.RecordSmtpEmailSend();
 
             var message = new MimeMessage();
@@ -125,7 +141,7 @@ namespace ETL_SQL.Connectors.Email
                         {
                             using var fs = System.IO.File.OpenRead(resolvedPath);
                             var ms = new System.IO.MemoryStream();
-                            await fs.CopyToAsync(ms);
+                            await fs.CopyToAsync(ms, effectiveCancellationToken);
                             ms.Position = 0;
 
                             // COMPAT_BREAK: 0.10
@@ -154,7 +170,7 @@ namespace ETL_SQL.Connectors.Email
 
             try
             {
-                await client.ConnectAsync(host, port, useSsl);
+                await client.ConnectAsync(host, port, useSsl, effectiveCancellationToken);
 
                 if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
                 {
@@ -162,11 +178,11 @@ namespace ETL_SQL.Connectors.Email
                     {
                         pass = _context.DecryptValue(pass) ?? "";
                     }
-                    await client.AuthenticateAsync(user, pass);
+                    await client.AuthenticateAsync(user, pass, effectiveCancellationToken);
                 }
 
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
+                await client.SendAsync(message, effectiveCancellationToken);
+                await client.DisconnectAsync(true, effectiveCancellationToken);
             }
             catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException
                                        && ex is not ETL_SQL.Services.SecurityException)
@@ -188,5 +204,8 @@ namespace ETL_SQL.Connectors.Email
         {
             await Task.CompletedTask;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

@@ -80,9 +80,15 @@ namespace ETL_SQL.Connectors.Portal
         // ── IDataSource (stub — portal connections don't support read/write) ───────
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
             throw new NotSupportedException("PORTAL connections do not support SELECT.");
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
             throw new NotSupportedException("PORTAL connections do not support INSERT.");
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
 using ETL_SQL.Common;
@@ -58,10 +60,16 @@ namespace ETL_SQL.Connectors.Kafka
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Kafka", ShouldWrapProviderException);
+            ReadBatches(batchSize, CancellationToken.None);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Kafka", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var config = GetConsumerConfig();
             var consumer = GetConsumer(config);
 
@@ -86,6 +94,7 @@ namespace ETL_SQL.Connectors.Kafka
 
             while (messageCount < maxMessages && (DateTime.UtcNow - startTime).TotalMilliseconds < timeoutMs)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 ConsumeResult<string, string>? result = null;
                 try
                 {
@@ -105,7 +114,7 @@ namespace ETL_SQL.Connectors.Kafka
                     }
                     if (result == null)
                     {
-                        await Task.Delay(50);
+                        await Task.Delay(50, effectiveCancellationToken);
                     }
                     continue;
                 }
@@ -143,8 +152,12 @@ namespace ETL_SQL.Connectors.Kafka
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             if (_context != null && _context.IsWhatIf) return;
 
             var config = GetProducerConfig();
@@ -152,10 +165,11 @@ namespace ETL_SQL.Connectors.Kafka
 
             try
             {
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
                 {
                     foreach (var row in batch.Rows)
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         string? key = null;
                         string value;
 
@@ -180,7 +194,7 @@ namespace ETL_SQL.Connectors.Kafka
                             Value = value
                         };
 
-                        await producer.ProduceAsync(_topic, message);
+                        await producer.ProduceAsync(_topic, message, effectiveCancellationToken);
                     }
                 }
             }
@@ -285,5 +299,8 @@ namespace ETL_SQL.Connectors.Kafka
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is KafkaException or InvalidOperationException;
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
     }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -55,9 +57,16 @@ namespace ETL_SQL.Connectors.MockDb
         public Task<string> GetVersionAsync() => Task.FromResult("Mock SQL Server 2022 v16.0");
         public HashSet<string> GetSupportedFunctions() => new();
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             await EnsureInitialized();
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!string.IsNullOrEmpty(_activeTable) && _mockTables.TryGetValue(_activeTable, out var table))
             {
                 yield return table;
@@ -74,8 +83,12 @@ namespace ETL_SQL.Connectors.MockDb
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
 
@@ -89,9 +102,17 @@ namespace ETL_SQL.Connectors.MockDb
             }
             return new List<string> { "ID", "Name" };
         }
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ExecuteRawSql(sql, parameters, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             await EnsureInitialized();
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             var trimmedSql = sql.Trim();
             var normSql = trimmedSql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
             DataTable? source = null;
@@ -109,7 +130,11 @@ namespace ETL_SQL.Connectors.MockDb
                 string processedSql = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(sql);
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "ParameterValue", "ProcessedSql" });
-                foreach (var p in parameters) await dt.AddRowAsync(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
+                foreach (var p in parameters)
+                {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    await dt.AddRowAsync(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
+                }
                 yield return dt;
                 yield break;
             }
@@ -137,6 +162,7 @@ namespace ETL_SQL.Connectors.MockDb
 
                         foreach (var row in source.Rows)
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             bool match = true;
                             if (whereMatch.Success)
                             {
@@ -221,5 +247,8 @@ namespace ETL_SQL.Connectors.MockDb
         {
             await Task.CompletedTask;
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;
     }
 }

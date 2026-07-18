@@ -4,14 +4,20 @@ using System.Reflection;
 using System.Threading;
 using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.BigQuery;
+using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Connectors.Email;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.Kafka;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Rest;
@@ -20,6 +26,7 @@ using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Snowflake;
 using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Storage;
 using Xunit;
 
 namespace ETL_SQL.Tests.Core;
@@ -188,6 +195,32 @@ public class DataSourceCancellationTests
             typeof(IAsyncEnumerable<DataTable>),
             typeof(bool),
             typeof(CancellationToken));
+    }
+
+    [Fact]
+    public void MessagingAndUtilityDataSources_DeclareNativeCancellationOverloads()
+    {
+        foreach (var providerType in new[]
+        {
+            typeof(DirectoryDataSource),
+            typeof(KafkaDataSource),
+            typeof(SmtpDataSource),
+            typeof(MockSqlDataSource),
+            typeof(OrchestratorDataSource),
+            typeof(PortalDataSource),
+            typeof(LineageDataSource),
+            typeof(LineageTagsDataSource),
+            typeof(VariableDataSource)
+        })
+        {
+            AssertDeclares(providerType, nameof(IDataSource.ReadBatches), typeof(int), typeof(CancellationToken));
+            AssertDeclares(
+                providerType,
+                nameof(IDataSource.WriteBatches),
+                typeof(IAsyncEnumerable<DataTable>),
+                typeof(bool),
+                typeof(CancellationToken));
+        }
     }
 
     private static void AssertDeclares(Type type, string methodName, params Type[] parameterTypes)

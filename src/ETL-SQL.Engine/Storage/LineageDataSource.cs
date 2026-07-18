@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -36,8 +38,14 @@ namespace ETL_SQL.Engine.Storage
             _targetColumn = targetColumn;
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             IEnumerable<LineageEntry> entries;
             if (!string.IsNullOrEmpty(_targetTable))
             {
@@ -51,6 +59,7 @@ namespace ETL_SQL.Engine.Storage
             var rows = new List<Row>();
             foreach (var entry in entries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
                 row["Timestamp"] = entry.Timestamp;
                 row["Operation"] = entry.Operation;
@@ -90,7 +99,11 @@ namespace ETL_SQL.Engine.Storage
             await Task.CompletedTask;
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Lineage data is read-only.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Lineage data is read-only.");
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)_columns);
 

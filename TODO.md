@@ -195,6 +195,15 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
       Remaining work: provider-native overrides and cancellation tests for messaging, admin, and
       lightweight engine storage connector families.
+      Additional progress on 2026-07-18: added native cancellation-aware read/write overrides for Kafka,
+      SMTP, DIRECTORY, MOCKDB, Portal/Orchestrator admin connection stubs, and lightweight engine
+      storage/lineage sources. Kafka now observes cancellation while polling and producing messages,
+      SMTP passes cancellation through attachment copies and MailKit calls, DIRECTORY streams enumeration
+      with checkpoints, and in-memory virtual sources avoid default wrapper fallbacks. Validated with
+      `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
+      Remaining work: audit and extend schema/introspection, transaction, and admin-operation methods
+      where cancellation tokens are still absent or not propagated.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

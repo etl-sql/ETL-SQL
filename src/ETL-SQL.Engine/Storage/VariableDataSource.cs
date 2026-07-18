@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -35,39 +37,50 @@ namespace ETL_SQL.Engine.Storage
         }
 
         private bool _loaded = false;
-        private async Task EnsureLoaded()
+        private async Task EnsureLoaded(CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_loaded) return;
             if (_context.VarContext.ContainsVariable(_variableName))
             {
                 var val = _context.VarContext.GetVariable(_variableName);
                 if (val is DataTable dt)
                 {
-                    await _inner.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                    await _inner.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken);
                 }
             }
             _loaded = true;
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(
+            int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            await EnsureLoaded();
-            await foreach (var batch in _inner.ReadBatches(batchSize))
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            await EnsureLoaded(effectiveCancellationToken);
+            await foreach (var batch in _inner.ReadBatches(batchSize, effectiveCancellationToken).WithCancellation(effectiveCancellationToken))
             {
                 yield return batch;
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            WriteBatches(batches, append, CancellationToken.None);
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
-            await _inner.WriteBatches(batches, append);
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            await _inner.WriteBatches(batches, append, effectiveCancellationToken);
 
             // Consolidate into a single DataTable for the variable.
             // This ensures that @Variables behave like standard DataTables for all other engine operations.
             var result = new DataTable();
             bool columnSet = false;
 
-            await foreach (var batch in _inner.ReadBatches())
+            await foreach (var batch in _inner.ReadBatches(10000, effectiveCancellationToken).WithCancellation(effectiveCancellationToken))
             {
                 if (!columnSet)
                 {
@@ -76,6 +89,7 @@ namespace ETL_SQL.Engine.Storage
                 }
                 foreach (var row in batch.Rows)
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     await result.AddRowAsync(row);
                 }
             }
@@ -105,6 +119,9 @@ namespace ETL_SQL.Engine.Storage
         {
             await _inner.DisposeAsync();
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
+            cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;
     }
 }
 
