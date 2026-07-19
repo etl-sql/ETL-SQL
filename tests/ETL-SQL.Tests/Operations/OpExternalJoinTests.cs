@@ -151,13 +151,18 @@ namespace ETL_SQL.Tests.Operations.Operations
             "INNER", new TableReference("right"),
             new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
 
-        private static IAsyncEnumerable<Row> JoinRows(int count, int distinctKeys, string valPrefix) =>
-            Build(count, distinctKeys, valPrefix).ToAsyncEnumerable();
+        private static IAsyncEnumerable<Row> JoinRows(int count, int distinctKeys, string valPrefix, int padChars = 0) =>
+            Build(count, distinctKeys, valPrefix, padChars).ToAsyncEnumerable();
 
-        private static IEnumerable<Row> Build(int count, int distinctKeys, string valPrefix)
+        private static IEnumerable<Row> Build(int count, int distinctKeys, string valPrefix, int padChars = 0)
         {
+            var pad = padChars > 0 ? new string('x', padChars) : null;
             for (int i = 0; i < count; i++)
-                yield return new Row { ["id"] = i % distinctKeys, [valPrefix] = $"{valPrefix}-{i}" };
+            {
+                var row = new Row { ["id"] = i % distinctKeys, [valPrefix] = $"{valPrefix}-{i}" };
+                if (pad != null) row["pad"] = pad;
+                yield return row;
+            }
         }
 
         [Fact]
@@ -194,8 +199,14 @@ namespace ETL_SQL.Tests.Operations.Operations
             // deliberately tight budget this test's native repartition path depends on.
             eval.MemoryArbiter = new MemoryGrantArbiter(16 * 1024);
 
+            // Force the columnar repartition path *deterministically*. The planner fans the build out
+            // to at most 1024 partitions (HashPartitionSizing maximumPartitions), so if total build
+            // bytes exceed 1024 × the 16 KB budget (= 16 MB) even the finest first-pass fan-out leaves
+            // the largest partition oversized, guaranteeing a second-pass repartition. Padding each of
+            // the 20 000 build rows to ~1 KB yields ~20 MB, past that bound — removing the sample-
+            // estimate borderline that previously made ColumnarRepartitionRows occasionally land at 0.
             var left = JoinRows(4000, 4000, "lval");
-            var right = JoinRows(20000, 4000, "rval");
+            var right = JoinRows(20000, 4000, "rval", padChars: 1024);
             var engine = new ExternalJoinEngine(eval, logger);
 
             var results = await engine.ApplyHashJoinExternal(
