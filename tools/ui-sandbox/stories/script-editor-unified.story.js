@@ -44,6 +44,18 @@ BEGIN CATCH
   THROW;
 END CATCH;`,
 
+  // What a Portal interactive run is allowed to be: read-only SELECTs plus SELECT ... INTO #temp.
+  // See PortalInteractiveRunPolicy — CREATE CONNECTION comes from the shared catalog, not the script.
+  portal: `SELECT id, product_id, quantity, amount, sale_date
+INTO #raw_sales
+FROM staging_db.sales_orders
+WHERE sale_date >= DATEADD(DAY, -7, GETDATE());
+
+SELECT product_id, SUM(amount) AS revenue
+FROM #raw_sales
+GROUP BY product_id
+ORDER BY revenue DESC;`,
+
   report: `SET REPORT TITLE = 'Weekly Revenue Fact Sheet';
 SET REPORT DESCRIPTION = 'Performance breakdown across product categories';
 
@@ -71,7 +83,8 @@ export default {
   subtitle: 'createScriptEditorWorkbench() + Stateful Sidebar',
   fixtures: [
     { id: 'etl', label: 'Stateful ETL Flow' },
-    { id: 'report', label: 'Report SQL Dashboard' }
+    { id: 'report', label: 'Report SQL Dashboard' },
+    { id: 'portal', label: 'Portal (schema + session only)' }
   ],
   async mount(stage, fixtureId, ctx) {
     const value = UNIFIED_SCRIPTS[fixtureId] ?? '';
@@ -95,8 +108,16 @@ export default {
       ]
     });
 
+    // The Portal hosts the same workbench with a narrower sidebar: it has no file workspace
+    // (its catalog is folders/reports) and git write-back is a separate roadmap item.
+    const isPortal = fixtureId === 'portal';
+    const sidebar = isPortal
+      ? { schema: true, session: true }
+      : { workspace: true, schema: true, session: true, git: true };
+
     const workbench = await mod.createScriptEditorWorkbench(stage, {
-      title: fixtureId === 'etl' ? 'etl/weekly_load.etlsql' : 'reports/sales_dashboard.rptsql',
+      title: fixtureId === 'etl' ? 'etl/weekly_load.etlsql'
+        : isPortal ? 'Script' : 'reports/sales_dashboard.rptsql',
       runUrl: '/api/designer/run',
       previewApiUrl: '/api/designer/preview',
       previewUrl: '/tools/ui-sandbox/designer-preview.html',
@@ -105,7 +126,7 @@ export default {
       
       // Configuration for stateful sidebars
       workspaceRoot: 'C:/Users/chuck/scratch/ETL-SQL',
-      showSidebar: true,
+      sidebar,
       gitStatus: {
         branch: 'main',
         modified: ['etl/weekly_load.etlsql'],

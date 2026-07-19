@@ -30,6 +30,8 @@ public sealed class PortalDesignerRunService(
     private const int RowCap = 100;
     private const int TimeoutSeconds = 15;
     private const int OperatorGrantMb = 64;
+    private const long SessionCeilingBytes = 128L * 1024 * 1024;
+    private const int MaxStatements = 25;
 
     public async Task<RunDesignerResponse> RunAsync(
         RunDesignerRequest request,
@@ -37,12 +39,12 @@ public sealed class PortalDesignerRunService(
         CancellationToken cancellationToken = default)
     {
         var selectedText = string.IsNullOrWhiteSpace(request.Selection) ? request.Script : request.Selection!;
-        var statement = ParseSingleReadOnlyStatement(selectedText);
+        var statements = ParseGovernedStatements(selectedText);
         var identity = await BuildIdentityAsync(user, cancellationToken);
         if (identity is null)
             throw new UnauthorizedAccessException("The current portal user could not be resolved for execution.");
 
-        var script = await BuildExecutionScriptAsync(statement, request.ConnectionRef, identity, cancellationToken);
+        var script = await BuildExecutionScriptAsync(statements, request.ConnectionRef, identity, cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
 
@@ -59,14 +61,20 @@ public sealed class PortalDesignerRunService(
         var result = await session.ExecuteAsync(script, timeout.Token, "portal-designer-run", executionIdentity: identity);
         var elapsedMs = (long)(DateTime.UtcNow - start).TotalMilliseconds;
         var table = session.LastEvaluator?.LastResult;
-        var queryFingerprint = FingerprintQuery(statement.ToSql());
 
-        await audit.LogAsync(
-            identity.EffectiveUserId,
-            "AD_HOC_RUN",
-            "Designer",
-            NormalizeResourceId(request.ConnectionRef),
-            $"Connection={NormalizeResourceId(request.ConnectionRef) ?? "(none)"}; Statement={statement.GetType().Name}; QueryHash={queryFingerprint}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}");
+        // Audit every statement, not just the run: an interactive run can now touch several
+        // tables, and each one needs to be independently attributable.
+        var resourceId = NormalizeResourceId(request.ConnectionRef);
+        for (var i = 0; i < statements.Count; i++)
+        {
+            await audit.LogAsync(
+                identity.EffectiveUserId,
+                "AD_HOC_RUN",
+                "Designer",
+                resourceId,
+                $"Connection={resourceId ?? "(none)"}; Statement[{i + 1}/{statements.Count}]={statements[i].GetType().Name}; "
+                    + $"QueryHash={FingerprintQuery(statements[i].ToSql())}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}");
+        }
 
         if (!result.Success)
         {
@@ -77,10 +85,14 @@ public sealed class PortalDesignerRunService(
         }
 
         table ??= new DataTable();
-        return ToResponse(table, elapsedMs);
+        return ToResponse(table, elapsedMs, result.ExecutionTree?.ToSnapshot());
     }
 
-    private static Statement ParseSingleReadOnlyStatement(string scriptText)
+    /// <summary>
+    /// Parses the submitted text and enforces <see cref="PortalInteractiveRunPolicy"/> on every
+    /// statement. Rejection is all-or-nothing: nothing runs unless the whole script is allowed.
+    /// </summary>
+    private static List<Statement> ParseGovernedStatements(string scriptText)
     {
         if (string.IsNullOrWhiteSpace(scriptText))
             throw new ArgumentException("Select a query to run.");
@@ -92,25 +104,32 @@ public sealed class PortalDesignerRunService(
             throw new ArgumentException(error.Message);
 
         var statements = script.Statements.Where(s => s is not NoOpStatement).ToList();
-        if (statements.Count != 1)
-            throw new ArgumentException("Run selection accepts exactly one SELECT statement.");
+        if (statements.Count == 0)
+            throw new ArgumentException("Select a query to run.");
+        if (statements.Count > MaxStatements)
+            throw new ArgumentException($"An interactive run is limited to {MaxStatements} statements; this script has {statements.Count}.");
 
-        var statement = statements[0];
-        if (ReadOnlyQueryPolicy.IsReadOnly(statement))
-            return statement;
+        for (var i = 0; i < statements.Count; i++)
+        {
+            if (PortalInteractiveRunPolicy.Reject(statements[i]) is { } reason)
+                throw new ArgumentException($"Statement {i + 1}: {reason}");
+        }
 
-        throw new ArgumentException("Run selection is limited to read-only SELECT queries.");
+        return statements;
     }
 
     private async Task<string> BuildExecutionScriptAsync(
-        Statement statement,
+        IReadOnlyList<Statement> statements,
         string? connectionRef,
         ExecutionIdentity identity,
         CancellationToken cancellationToken)
     {
         var builder = new StringBuilder();
+        // Governance preamble. PortalInteractiveRunPolicy refuses script-supplied SET, so these
+        // ceilings cannot be raised by the submitted statements.
         builder.AppendLine($"SET MAX_LAST_RESULT_ROWS = {RowCap};");
         builder.AppendLine($"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};");
+        builder.AppendLine($"SET MAX_SESSION_SIZE = {SessionCeilingBytes};");
 
         if (!string.IsNullOrWhiteSpace(connectionRef))
         {
@@ -125,7 +144,9 @@ public sealed class PortalDesignerRunService(
                 .AppendLine("');");
         }
 
-        builder.AppendLine(statement.ToSql().Trim().TrimEnd(';') + ";");
+        foreach (var statement in statements)
+            builder.AppendLine(statement.ToSql().Trim().TrimEnd(';') + ";");
+
         return builder.ToString();
     }
 
@@ -159,7 +180,7 @@ public sealed class PortalDesignerRunService(
         };
     }
 
-    private static RunDesignerResponse ToResponse(DataTable table, long elapsedMs)
+    private static RunDesignerResponse ToResponse(DataTable table, long elapsedMs, object? pipeline)
     {
         var columns = table.ColumnNames;
         var rows = table.Rows
@@ -176,7 +197,7 @@ public sealed class PortalDesignerRunService(
         var message = capped
             ? $"Showing first {RowCap} rows; result was capped."
             : $"Returned {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")}.";
-        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message);
+        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message, pipeline);
     }
 
     private static string? NormalizeResourceId(string? connectionRef)

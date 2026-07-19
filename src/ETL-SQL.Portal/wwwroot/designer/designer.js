@@ -1998,8 +1998,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         document.body.classList.remove('theme-dark');
     }
 
-    const hasSidebar = Boolean(opts.showSidebar);
-    
+    // Sections are opt-in per host: the Workstation has a real file workspace and git,
+    // the Portal has neither (its catalog is folders/reports, and git write-back is a
+    // separate roadmap item), so it enables only schema + session.
+    // `showSidebar: true` remains shorthand for "everything".
+    const sidebarOpts = opts.sidebar ?? (opts.showSidebar ? { workspace: true, schema: true, session: true, git: true } : null);
+    const hasSidebar = Boolean(sidebarOpts);
+    const showWorkspace = Boolean(sidebarOpts?.workspace);
+    const showSchema = Boolean(sidebarOpts?.schema);
+    const showSession = Boolean(sidebarOpts?.session);
+    const showGit = Boolean(sidebarOpts?.git);
+
     container.innerHTML = `
         <div class="etlsql-script-workbench ${hasSidebar ? 'etlsql-script-workbench-with-sidebar' : ''}">
             <div class="etlsql-script-workbench-toolbar">
@@ -2021,20 +2030,24 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             ${hasSidebar ? `
             <div class="etlsql-script-workbench-body" style="display:flex; height: calc(100% - 38px); overflow:hidden; position:relative; z-index: 10;">
                 <aside class="etlsql-script-workbench-sidebar" data-sidebar>
+                    ${showWorkspace ? `
                     <div class="etlsql-sidebar-section-header">
                         <span>Workspace</span>
                         <button type="button" class="etlsql-sidebar-action" data-open-directory>Open folder</button>
                     </div>
-                    <div class="etlsql-sidebar-section" data-sidebar-files>Loading workspace…</div>
+                    <div class="etlsql-sidebar-section" data-sidebar-files>Loading workspace…</div>` : ''}
 
+                    ${showSchema ? `
                     <div class="etlsql-sidebar-section-header"><span>Schema explorer</span></div>
-                    <div class="etlsql-sidebar-section" data-sidebar-schema>Loading connections…</div>
+                    <div class="etlsql-sidebar-section" data-sidebar-schema>Loading connections…</div>` : ''}
 
+                    ${showSession ? `
                     <div class="etlsql-sidebar-section-header"><span>Session</span></div>
-                    <div class="etlsql-sidebar-section" data-sidebar-variables>Loading session…</div>
+                    <div class="etlsql-sidebar-section" data-sidebar-variables>Loading session…</div>` : ''}
 
+                    ${showGit ? `
                     <div class="etlsql-sidebar-section-header" data-sidebar-git-header><span>Source control</span></div>
-                    <div class="etlsql-sidebar-section" data-sidebar-git>Loading git…</div>
+                    <div class="etlsql-sidebar-section" data-sidebar-git>Loading git…</div>` : ''}
                 </aside>
                 <div class="etlsql-script-workbench-content" style="flex:1; display:grid; grid-template-rows: minmax(100px, 1fr) 8px minmax(36px, 34%); min-width:0; height:100%; position:relative;">
                     <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
@@ -2198,7 +2211,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">No files.</div>';
             }
         } catch (err) {
-            filesEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72); padding:4px;">${err.message}</div>`;
+            filesEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -2254,7 +2267,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 filesEl.appendChild(item);
             });
         } catch (err) {
-            filesEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72); padding:4px;">${err.message}</div>`;
+            filesEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -2334,11 +2347,11 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     let sidebarRefreshTimer = null;
 
     function scheduleSidebarRefresh() {
-        if (!hasSidebar) return;
+        if (!showSchema && !showSession) return;
         clearTimeout(sidebarRefreshTimer);
         sidebarRefreshTimer = setTimeout(() => {
-            loadSchema();
-            loadSession();
+            if (showSchema) loadSchema();
+            if (showSession) loadSession();
         }, 200);
     }
 
@@ -2479,14 +2492,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             if (!res.ok) { hideGitSection(); return; }
             const data = await res.json();
             if (data) {
-                let gitHtml = `<div style="font-weight:bold; color:var(--portal-text-soft, #c9d1d9); margin-bottom:4px;">Branch: 🌿 ${data.branch}</div>`;
+                // Branch and path names are attacker-influenceable (a cloned repo can carry a
+                // branch or file named `<img src=x onerror=...>`), so every value is escaped.
+                let gitHtml = `<div class="etlsql-tree-row etlsql-tree-header">🌿 ${escapeHtml(data.branch ?? '')}</div>`;
                 if (data.modified && data.modified.length > 0) {
-                    gitHtml += '<div style="color:var(--portal-warning, #d29922); font-weight:bold; margin-top:4px;">Modified:</div>';
-                    gitHtml += data.modified.map(f => `<div style="padding-left:8px; color:var(--portal-warning, #d29922);">📝 ${f}</div>`).join('');
+                    gitHtml += '<div class="etlsql-tree-note">Modified</div>';
+                    gitHtml += data.modified.map(f => `<div class="etlsql-tree-row" style="color:var(--portal-warning, #a05a00);">📝 ${escapeHtml(f)}</div>`).join('');
                 }
                 if (data.untracked && data.untracked.length > 0) {
-                    gitHtml += '<div style="color:var(--portal-text-muted, #9da7b1); font-weight:bold; margin-top:4px;">Untracked:</div>';
-                    gitHtml += data.untracked.map(f => `<div style="padding-left:8px; color:var(--portal-text-muted, #9da7b1);">➕ ${f}</div>`).join('');
+                    gitHtml += '<div class="etlsql-tree-note">Untracked</div>';
+                    gitHtml += data.untracked.map(f => `<div class="etlsql-tree-row">➕ ${escapeHtml(f)}</div>`).join('');
                 }
                 gitHtml += `
                     <input type="text" data-git-comment placeholder="Commit message..." style="background:var(--portal-surface, #0f141b); color:var(--portal-text, #e6edf3); border:1px solid var(--portal-border, #30363d); padding:4px 6px; border-radius:4px; font-size:11px; margin-top:6px; outline:none;">
@@ -2554,12 +2569,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         }
     });
 
-    if (hasSidebar) {
-        loadFiles();
-        loadSchema();
-        loadSession();
-        loadGit();
-    }
+    if (showWorkspace) loadFiles();
+    if (showSchema) loadSchema();
+    if (showSession) loadSession();
+    if (showGit) loadGit();
 
     // scope: 'script' runs the whole file (Run); 'selection' runs the highlighted text
     // or the statement under the cursor (Run Selected) — see the roadmap's toolbar schema.
@@ -3361,6 +3374,9 @@ export function createDesigner(container, opts = {}) {
         scriptEditor = await createScriptEditorWorkbench(host, {
             title: 'Script',
             authFetch: _fetch,
+            // The Portal has no file workspace (its catalog is folders/reports) and git
+            // write-back is a separate roadmap item, so only schema + session are enabled.
+            sidebar: { schema: true, session: true },
             runUrl: apiBase + '/api/designer/run',
             connectionRef: opts.connectionRef || null,
             documentUri: opts.documentUri || 'portal-designer',

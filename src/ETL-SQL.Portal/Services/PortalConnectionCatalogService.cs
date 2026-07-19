@@ -86,6 +86,44 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
 
     public Task SaveAsync(CancellationToken cancellationToken = default) => db.SaveChangesAsync(cancellationToken);
 
+    /// <summary>
+    /// Lists the aliases this identity may actually use, applying the same rule as
+    /// <see cref="EnforceUseAclAsync"/>: ungranted entries are open to all, granted entries need
+    /// admin, ownership, or group membership. Used to populate the editor's schema explorer
+    /// without disclosing the existence of connections the caller cannot use.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListUsableAliasesAsync(
+        ExecutionIdentity? identity,
+        CancellationToken cancellationToken = default)
+    {
+        var entries = await db.PortalSharedConnections
+            .AsNoTracking()
+            .Include(c => c.Acls).ThenInclude(a => a.Group)
+            .Where(c => !c.Disabled)
+            .OrderBy(c => c.Alias)
+            .ToListAsync(cancellationToken);
+
+        var groupIds = identity?.EffectiveUserId is int userId
+            ? await db.UserGroups.AsNoTracking()
+                .Where(ug => ug.UserId == userId)
+                .Select(ug => ug.GroupId)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        return entries.Where(entry => CanUse(entry, identity, groupIds)).Select(entry => entry.Alias).ToList();
+    }
+
+    private static bool CanUse(PortalSharedConnection entity, ExecutionIdentity? identity, IReadOnlyCollection<int> groupIds)
+    {
+        if (entity.Acls.Count == 0) return true;
+        if (identity is null) return false;
+        if (identity.IsAdmin) return true;
+        if (entity.OwnerUserId != null && identity.EffectiveUserId == entity.OwnerUserId) return true;
+        if (identity.EffectiveUserId is int)
+            return entity.Acls.Any(a => groupIds.Contains(a.GroupId));
+        return entity.Acls.Any(a => identity.HasGroup(a.Group.Name));
+    }
+
     /// <summary>Resolution path for script execution; the last-used touch is best-effort.</summary>
     public async Task<SharedConnectionDefinition> ResolveDefinitionAsync(
         string alias,

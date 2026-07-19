@@ -3,7 +3,9 @@ using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 using ETL_SQL.Portal.Models;
+using Microsoft.Extensions.DependencyInjection;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.Portal.Services;
@@ -58,6 +60,15 @@ public sealed class DesignerAnalysisService
             };
             var lintResults = await linter.AnalyzeAsync(ast, lintContext);
             diagnostics.AddRange(AnalysisDiagnosticBuilder.FromLintResults(lintResults, lines));
+
+            // Register the temp tables this script declares so the editor's session explorer and
+            // autocomplete can see them. Connections are deliberately NOT registered here: in the
+            // Portal they come from the ACL-gated shared catalog, never from the script.
+            if (serviceProvider?.GetService<IMetadataManager>() is { } metadata)
+            {
+                var discovery = new ScriptMetadataDiscovery(metadata) { RegisterConnections = false };
+                await discovery.DiscoverAsync(ast, lintContext.DocumentUri);
+            }
         }
         catch (DesignerAstLimitExceededException)
         {

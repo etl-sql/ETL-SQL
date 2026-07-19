@@ -28,6 +28,8 @@ public class DesignerController : ControllerBase
     private readonly DesignerAnalysisService _analysisService;
     private readonly DesignerScriptGenerationService _scriptGenerationService;
     private readonly PortalConfig _portalConfig;
+    private readonly PortalConnectionCatalogService? _connectionCatalog;
+    private readonly IMetadataManager? _metadata;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -37,7 +39,9 @@ public class DesignerController : ControllerBase
         DesignerAnalysisService? analysisService = null,
         DesignerScriptGenerationService? scriptGenerationService = null,
         PortalConfig? portalConfig = null,
-        PortalDesignerPreviewService? previewService = null)
+        PortalDesignerPreviewService? previewService = null,
+        PortalConnectionCatalogService? connectionCatalog = null,
+        IMetadataManager? metadata = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -47,6 +51,38 @@ public class DesignerController : ControllerBase
         _analysisService = analysisService ?? new DesignerAnalysisService();
         _scriptGenerationService = scriptGenerationService ?? new DesignerScriptGenerationService();
         _portalConfig = portalConfig ?? new PortalConfig();
+        _connectionCatalog = connectionCatalog;
+        _metadata = metadata;
+    }
+
+    // ── GET /api/session/metadata ─────────────────────────────────────────────
+    // Feeds the editor's schema and session explorers. Connections are ACL-filtered so the
+    // explorer never reveals a connection the caller cannot use; temp tables come from the
+    // metadata the analyze pass registered for this document.
+
+    [HttpGet("/api/session/metadata")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> SessionMetadata([FromQuery] string? documentUri, CancellationToken cancellationToken)
+    {
+        var connections = _connectionCatalog is null
+            ? []
+            : await _connectionCatalog.ListUsableAliasesAsync(
+                PortalDesignerSchemaService.BuildIdentity(User), cancellationToken);
+
+        var tempTables = new List<object>();
+        if (_metadata is not null && !string.IsNullOrWhiteSpace(documentUri))
+        {
+            foreach (var name in await _metadata.GetTempTablesAsync(documentUri))
+            {
+                // Temp-table lookups are keyed by document; the connection name is ignored.
+                var columns = (await _metadata.GetColumnDetailsAsync(string.Empty, name, documentUri))
+                    .Select(c => new { name = c.Name, type = c.DataType })
+                    .ToList();
+                tempTables.Add(new { name, columns });
+            }
+        }
+
+        return Ok(new { connections, variables = Array.Empty<object>(), tempTables });
     }
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────

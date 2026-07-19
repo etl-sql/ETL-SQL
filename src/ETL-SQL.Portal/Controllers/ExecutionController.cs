@@ -41,22 +41,6 @@ public class ExecutionController(
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
-    [HttpGet("session/metadata")]
-    public async Task<IActionResult> GetSessionMetadata([FromQuery] string? documentUri)
-    {
-        var connections = await db.PortalSharedConnections
-            .Where(c => !c.Disabled)
-            .Select(c => c.Alias)
-            .ToListAsync();
-
-        return Ok(new
-        {
-            connections,
-            variables = new List<object>(),
-            tempTables = new List<object>()
-        });
-    }
-
     // ── 2.1  POST /api/reports/{id}/execute ──────────────────────────────────
 
     [HttpPost("reports/{id:int}/execute")]

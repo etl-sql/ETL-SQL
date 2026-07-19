@@ -44,7 +44,9 @@ public record RunDesignerResponse(
     int RowCount,
     bool Capped,
     long ElapsedMs,
-    string Message);
+    string Message,
+    /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
+    object? Pipeline = null);
 
 public record SaveDesignerRequest(
     int ReportId,
