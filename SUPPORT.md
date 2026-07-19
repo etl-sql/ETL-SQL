@@ -8,7 +8,7 @@ Thank you for using ETL-SQL! Whether you are seeking help, wanting to discuss fe
 
 If you have questions about using ETL-SQL, syntax, report design, or orchestration patterns, please check the following resources first:
 
-* **User Manual**: Refer to [Docs/User_Manual.md](.worktrees/enterprise-policy-hardening/Docs/User_Manual.md) for the language guide.
+* **User Manual**: Refer to [Getting Started](docs/guides/getting-started.md) for the language guide.
 * **Cookbooks**: 
   - For data pipelines and queries: [docs/cookbooks/etl-recipes.md](docs/cookbooks/etl-recipes.md)
   - For reporting and dashboards: [docs/cookbooks/report-recipes.md](docs/cookbooks/report-recipes.md)

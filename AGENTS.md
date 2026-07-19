@@ -117,7 +117,7 @@ The platform now includes shipped enterprise operations features. When generatin
 - **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
 - **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
 
-For production configuration details, use **[Administration](docs/guides/administration.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
+For production configuration details, use **[Administration](docs/guides/administration.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
 
 ---
 
@@ -143,7 +143,7 @@ SET WHAT_IF OFF;
 DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';
 ```
 
-For full security governance rules, see **[Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** (Part I — The Inviolable Rules).
+For full security governance rules, see **[Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** (Part I — The Inviolable Rules).
 
 ---
 
@@ -217,7 +217,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 26 production-grade complete recipes, see **[Cookbook.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/cookbooks/etl-recipes.md)**.
+For 26 production-grade complete recipes, see **[Cookbook.md](./docs/cookbooks/etl-recipes.md)**.
 
 ---
 
@@ -239,31 +239,31 @@ Use this map to find the right document for any task.
 | Pipeline mental model for new users | **[Getting Started](docs/guides/getting-started.md)** |
 | Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/sample-guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/report-sql.md)** |
-| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Script_Composition_Standards.md)** |
+| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
 | Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
 | Orchestrator job operations | **[Job Orchestration](docs/guides/job-orchestration.md)** |
-| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
+| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
 
 ### Contributing Engine Code
 | Need | Document |
 | :--- | :--- |
-| How connectors work internally | **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)** |
-| Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md)** |
-| Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
-| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md)** |
-| Portal auth, HA topology, API, health checks | **[Architecture/Portal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Portal.md)** |
-| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/GrammarStateEngine.md)** |
-| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Engine_Coding_Standards.md)** |
-| Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** |
-| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Language_Syntax_Standards.md)** |
-| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Breaking_Change_Standards.md)** |
-| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Third_Party_Dependency_Standards.md)** |
-| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Source_Boundary_Standards.md)** |
-| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Report_Runtime_Asset_Standards.md)** |
-| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Presentation_Standards.md)** |
-| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Help_and_Snippet_Standards.md)** |
-| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Engine_Upgrade_Strategy.md)** |
+| How connectors work internally | **[Architecture/Connectors.md](./Docs/Architecture/Connectors.md)** |
+| Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](./Docs/Architecture/Engine.md)** |
+| Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](./Docs/Architecture/Presentation.md)** |
+| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](./Docs/Architecture/Orchestrator.md)** |
+| Portal auth, HA topology, API, health checks | **[Architecture/Portal.md](./Docs/Architecture/Portal.md)** |
+| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](./Docs/Architecture/GrammarStateEngine.md)** |
+| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](./docs/architecture/standards/Engine_Coding_Standards.md)** |
+| Rules for writing a new connector | **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** |
+| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](./docs/architecture/standards/Language_Syntax_Standards.md)** |
+| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](./docs/architecture/standards/Breaking_Change_Standards.md)** |
+| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](./docs/architecture/standards/Third_Party_Dependency_Standards.md)** |
+| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](./docs/architecture/standards/Source_Boundary_Standards.md)** |
+| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](./docs/architecture/standards/Report_Runtime_Asset_Standards.md)** |
+| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](./docs/architecture/standards/Presentation_Standards.md)** |
+| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](./docs/architecture/standards/Help_and_Snippet_Standards.md)** |
+| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](./docs/architecture/roadmaps/Engine_Upgrade_Strategy.md)** |
 
 ---
 
@@ -333,7 +333,7 @@ CREATE CONNECTION sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_w
 CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
 ```
 
-For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)**.
+For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](./docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](./Docs/Architecture/Connectors.md)**.
 
 ---
 
@@ -406,7 +406,7 @@ Before changing a browser-side report/portal component, prototype and visually v
 
 ## 11. Source Boundary Rules for Agents
 
-Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Source_Boundary_Migration_Plan.md)**.
+Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](./docs/architecture/roadmaps/Source_Boundary_Migration_Plan.md)**.
 
 - Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
 - Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.
@@ -421,7 +421,7 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 
 To assist in local development, compiling, and executing test suites, the repository includes several core scripts under the `scripts/` folder. Both PowerShell (`.ps1` for Windows) and Bash (`.sh` for Linux/macOS) scripts are provided.
 
-For full usage and script details, refer to **[scripts/README.md](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/README.md)**.
+For full usage and script details, refer to **[scripts/README.md](./scripts/README.md)**.
 
 ### Key Scripts Reference:
 - **Build Debug Environment:** Compiles the .NET solution, Vite React UI components, and the VS Code TypeScript extension.

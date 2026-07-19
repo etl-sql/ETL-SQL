@@ -355,11 +355,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added `gen-script` CLI command to compile standardized JSON specification contracts into ETL-SQL starter scripts. Generated templates include source layout review notes, confidence/source-evidence comments, casting expressions, inline lineage tags, `EXPECT SCHEMA` gates, validation issue summaries, optional quarantine tables, and outbound load scaffolding.
 - Added `extract-spec` CLI command utilizing PDFsharp to automatically trim and extract data dictionary pages from large vendor PDF documents using heuristic keyword scoring.
 - Added workflow guide `Docs/Reference/Spec_Driven_Development.md`, prompt instruction guide `Docs/data_spec_parser_instructions.md`, machine-readable contract `Docs/Reference/spec_pipeline.schema.json`, and Cookbook recipe 25 with a runnable customer-feed example.
-- Added [PipelineGenerator](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.App/App/PipelineGenerator.cs#L14) and [SpecExtractor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.App/App/SpecExtractor.cs#L12) test suites under `tests/ETL-SQL.Tests/App/` covering contract validation, generated-script parsing, review metadata, validation gates, and PDF trimming scoring.
+- Added [PipelineGenerator](./src/ETL-SQL.App/App/PipelineGenerator.cs#L14) and [SpecExtractor](./src/ETL-SQL.App/App/SpecExtractor.cs#L12) test suites under `tests/ETL-SQL.Tests/App/` covering contract validation, generated-script parsing, review metadata, validation gates, and PDF trimming scoring.
 - *Note on limits*: This is a developer productivity feature, not an automated production-pipeline generator. LLM spec parsing and vendor formats are variable; generated scripts are intended as reviewed starting points. Developers must verify the JSON, complete the extraction query, review evidence/low-confidence fields, and test against real vendor files.
 
 **Terminal IDE (TUI) Modernization**
-- Implemented collapsible sidebar file explorer tree and tabbed multi-file support in [ConsoleEditor.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L29).
+- Implemented collapsible sidebar file explorer tree and tabbed multi-file support in [ConsoleEditor.cs](./src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L29).
 - Added support for multi-cursor editing, F1 help dialog shortcuts, and drag-to-select text in the editor.
 - Added in-editor text find/search with result highlighting and `F3`/`Shift+F3` navigation.
 - Added live query diagnostics while editing and visual gutter diagnostic markers.
@@ -379,13 +379,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added Publish to Portal support (matching VS Code publish features) and connection reset commands.
 
 **Connectors & Integrations**
-- Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jDataSource.cs)).
+- Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](./src/ETL-SQL.Connectors/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](./src/ETL-SQL.Connectors/Neo4j/Neo4jDataSource.cs)).
 - Added outbound writing support and completed production gaps for the REST API connector.
 - Enhanced Azure Blob, SFTP, S3, and local Directory connectors to include fallback decryption and structured path parsing.
 
 **Language, Lineage & Governance**
 - Added `CREATE TAG` and `CREATE LINEAGE FROM ...` syntax to support programmatic importing of curated lineage assets and metadata tags.
-- Added the `DIFFERENCE(s1, s2)` Soundex similarity scoring string function (see [FuzzyFunctions.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Functions/FuzzyFunctions.cs)).
+- Added the `DIFFERENCE(s1, s2)` Soundex similarity scoring string function (see [FuzzyFunctions.cs](./src/ETL-SQL.Engine/Functions/FuzzyFunctions.cs)).
 - Added a cross-platform CLI `etl-sql purge` command for cleaning up old data and session histories.
 - Expanded SQL Logic Test (SLT) coverage for index creation, table truncation, table alteration, `LEFT SEMI`/`LEFT ANTI` joins, and `QUALIFY` statements.
 
@@ -402,7 +402,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - **Cookbook Recipes:** Audited and fixed all 23 Cookbook recipes to ensure they compile and parse cleanly, fixing issues with `ENCRYPT`, `SEND EMAIL`, `EXEC`, `DECLARE`, and deprecated `WITH PARAMETERS` report options.
 - **TUI Editor:** Implemented file overwrite warnings when a file changes on disk, fixed sidebar layout wipeout during redraw by clearing partial line width, and resolved keyboard input lockups on Windows.
 - **TUI Autocomplete:** Fixed snippet triggers (`$mssql`) showing inside the autocomplete suggestions and prevented crashes when brackets appeared in prompt titles.
-- **TUI Metadata:** Restored temp table querying inside [TuiMetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L106).
+- **TUI Metadata:** Restored temp table querying inside [TuiMetadataManager](./src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L106).
 - **Report Preview:** Fixed report preview wrapping bugs, added rounding for Card/Table numbers, and added page navigation arrows via keyboard/mouse.
 - **Test Integrity:** Resolved parallel test conflicts in Neo4j tests, and excluded Docker LDAP portal tests from non-Docker lanes.
 
