@@ -23,6 +23,13 @@ Replace `x.y.z` with the target version (current target: **0.16.0**) throughout.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
+- [ ] **Release path is actually open** (these blocked v0.16.0 mid-release):
+      - The `refs/tags/v*` ruleset must permit **creation** (keep *deletion* / *update* / *non-fast-forward*
+        restricted so released tags stay immutable — an empty bypass list blocks creation for admins too).
+      - Know the merge route: a solo maintainer **cannot self-approve** their own PR, and org policy may
+        disable PRs entirely. With `enforce_admins` off, fast-forward the release branch into `main`
+        directly (`git push origin release/x.y.z:main`) — a push to `main` still runs CI **and** CodeQL.
+      - Commits must be signed (`required_signatures`); tag with `git tag -s vx.y.z`.
 
 ## Phase 1 — Version & changelog (hand-authored)
 
@@ -145,9 +152,22 @@ and the safeguards added:
 | `generate-sbom.js` mis-stamped the version (hardcoded `0.12.0`) | nothing checked generated-file versions | SBOM version now **derived from `Directory.Build.props`**; new **SBOM generation** phase asserts it |
 | CI asset-drift only on Windows (CRLF) | drift check passed on the dev's LF checkout | synced assets pinned to `text eol=lf` in `.gitattributes` (local == CI) |
 | Secret committed to a public repo | gate had no secret scan (only post-push GitGuardian) | new **secret scan** phase (`scripts/scan-secrets.js`) as an early local tripwire |
+| Enterprise-hardening cert lane failed only on CI (v0.16.0) | it is **not** one of the 30 gate phases, and it runs `dotnet test --artifacts-path`, which relocates the App that spawn-tests launch | `ProcessJobExecutorChaosTests.FindAppHost` resolves the complete App across Debug/Release/RID/`--artifacts-path`; **run `Test-EnterpriseHardeningCertification.ps1` (win+linux) before tagging — the local gate does not** |
+| VS Code lint passed on Windows, failed on Linux CI (v0.16.0) | unquoted `--ignore-pattern` globs are shell-expanded by POSIX `sh` but not `cmd` | eslint ignores moved into `eslint.config.js` (OS-agnostic) |
+| Doc link check passed locally, failed on CI (v0.16.0) | 101 `file:///` links used absolute paths that resolved only against the dev's own checkout | converted to repo-relative; `DocSanityTests` now catches any re-introduction on CI |
+| Flaky memory-governor test — passed one CI run, failed the next (v0.16.0) | the external-join repartition assertion rode a borderline partition-planner estimate | build data sized to exceed `maxPartitions × budget`, forcing the columnar-repartition path deterministically |
+| `Set-Version` silently skipped doc version baselines (v0.16.0) | its hardcoded `Docs/...` paths did not survive the docs IA restructure and it only **warned** (SKIP) | paths repointed to `docs/...` in `Set-Version.ps1`/`set-version.sh`; **TODO: make Set-Version fail, not warn, on a missing expected target** |
 
 Principle: any file that embeds the version should read it from `Directory.Build.props`, not hardcode
 it (`Set-Version.ps1` cannot find every hardcoded copy).
+
+**The local gate runs on Windows only and does not run the enterprise-hardening cert lane.** Four of
+v0.16.0's blockers were Windows-vs-Linux divergences (shell globbing, dev-absolute paths, a spawn-path
+that only breaks under `--artifacts-path`) that a green Windows gate cannot see. A green local gate is
+**necessary but not sufficient**: after pushing the release branch, confirm **every** CI job on **both**
+OSes — `Build & Test`, `Enterprise Certification (windows)` + `(linux)`, `Build VS Code Extension`, and
+both CodeQL `Analyze` jobs — is green **before** tagging. Consider running the lint/fast lanes under
+Linux (WSL/Docker) as part of the gate.
 
 ## Phase 4 — Build & package artifacts
 
