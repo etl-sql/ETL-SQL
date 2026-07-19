@@ -281,7 +281,7 @@ namespace ETL_SQL.Connectors.Portal
         {
             var resp = await _http.GetAsync("api/admin/users");
             resp.EnsureSuccessStatusCode();
-            var users = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
+            var users = await ReadJsonItemsAsync(resp);
             var table = new DataTable();
             table.SetColumns(["Id", "Username", "Email", "FirstName", "LastName", "IsActive", "Roles"]);
             foreach (var u in users)
@@ -1132,11 +1132,28 @@ namespace ETL_SQL.Connectors.Portal
         {
             var resp = await _http.GetAsync("api/admin/users");
             resp.EnsureSuccessStatusCode();
-            var users = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
+            var users = await ReadJsonItemsAsync(resp);
             var user = users.FirstOrDefault(u =>
                 u.TryGetProperty("username", out var v) &&
                 v.GetString()?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
             return user.ValueKind == JsonValueKind.Undefined ? null : user.GetProperty("id").GetInt32();
+        }
+
+        private static async Task<List<JsonElement>> ReadJsonItemsAsync(HttpResponseMessage response)
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var document = await JsonDocument.ParseAsync(stream);
+            var root = document.RootElement;
+            var items = root.ValueKind == JsonValueKind.Array
+                ? root
+                : root.ValueKind == JsonValueKind.Object && root.TryGetProperty("items", out var pagedItems)
+                    ? pagedItems
+                    : default;
+
+            if (items.ValueKind != JsonValueKind.Array)
+                return [];
+
+            return items.EnumerateArray().Select(item => item.Clone()).ToList();
         }
 
         private async Task<JsonElement?> TryLookupAlertAsync(int reportId, string name)
