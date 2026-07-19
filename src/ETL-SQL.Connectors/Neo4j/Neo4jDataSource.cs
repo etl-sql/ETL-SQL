@@ -135,20 +135,25 @@ namespace ETL_SQL.Connectors.Neo4j
 
         public HashSet<string> GetSupportedFunctions() => new();
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync() => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
 
             var tables = new List<string>();
             try
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var session = driver.AsyncSession(o => o.WithDatabase(database));
                 await using (session)
                 {
                     var labelResult = await session.RunAsync("CALL db.labels() YIELD label");
                     while (await labelResult.FetchAsync())
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var label = labelResult.Current["label"]?.ToString();
                         if (!string.IsNullOrEmpty(label))
                         {
@@ -159,6 +164,7 @@ namespace ETL_SQL.Connectors.Neo4j
                     var relResult = await session.RunAsync("CALL db.relationshipTypes() YIELD relationshipType");
                     while (await relResult.FetchAsync())
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         var relType = relResult.Current["relationshipType"]?.ToString();
                         if (!string.IsNullOrEmpty(relType))
                         {
@@ -176,13 +182,26 @@ namespace ETL_SQL.Connectors.Neo4j
 
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
 
-        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsInternalAsync(_tableName ?? "");
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
 
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsInternalAsync(tableName);
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
 
-        private async Task<IEnumerable<string>> GetColumnsInternalAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken) =>
+            GetColumnsInternalAsync(_tableName ?? "", cancellationToken);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            GetColumnsInternalAsync(tableName, cancellationToken);
+
+        private async Task<IEnumerable<string>> GetColumnsInternalAsync(string tableName, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(tableName)) return Enumerable.Empty<string>();
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
 
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
@@ -196,10 +215,11 @@ namespace ETL_SQL.Connectors.Neo4j
                 columns.Add("_labels");
 
                 var label = tableName.Substring(5);
-                var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
+                var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true, effectiveCancellationToken);
 
                 try
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var session = driver.AsyncSession(o => o.WithDatabase(database));
                     await using (session)
                     {
@@ -212,6 +232,7 @@ namespace ETL_SQL.Connectors.Neo4j
                             : await session.RunAsync(query, new { sampleSize = schemaSampleSize });
                         while (await result.FetchAsync())
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             var propName = result.Current["prop"]?.ToString();
                             if (propName != null && !columns.Contains(propName))
                             {
@@ -234,10 +255,11 @@ namespace ETL_SQL.Connectors.Neo4j
                 columns.Add("_to_label");
 
                 var relType = tableName.Substring(5);
-                var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
+                var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false, effectiveCancellationToken);
 
                 try
                 {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
                     var session = driver.AsyncSession(o => o.WithDatabase(database));
                     await using (session)
                     {
@@ -250,6 +272,7 @@ namespace ETL_SQL.Connectors.Neo4j
                             : await session.RunAsync(query, new { sampleSize = schemaSampleSize });
                         while (await result.FetchAsync())
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             var propName = result.Current["prop"]?.ToString();
                             if (propName != null && !columns.Contains(propName))
                             {
@@ -267,13 +290,18 @@ namespace ETL_SQL.Connectors.Neo4j
             return columns;
         }
 
-        private async Task<string> ResolveActualLabelOrTypeAsync(string name, bool isNode)
+        private async Task<string> ResolveActualLabelOrTypeAsync(
+            string name,
+            bool isNode,
+            CancellationToken cancellationToken = default)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
 
             try
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 var session = driver.AsyncSession(o => o.WithDatabase(database));
                 await using (session)
                 {
@@ -282,6 +310,7 @@ namespace ETL_SQL.Connectors.Neo4j
                         var result = await session.RunAsync("CALL db.labels() YIELD label");
                         while (await result.FetchAsync())
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             var label = result.Current["label"]?.ToString();
                             if (string.Equals(label, name, StringComparison.OrdinalIgnoreCase))
                             {
@@ -294,6 +323,7 @@ namespace ETL_SQL.Connectors.Neo4j
                         var result = await session.RunAsync("CALL db.relationshipTypes() YIELD relationshipType");
                         while (await result.FetchAsync())
                         {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
                             var relType = result.Current["relationshipType"]?.ToString();
                             if (string.Equals(relType, name, StringComparison.OrdinalIgnoreCase))
                             {
@@ -330,7 +360,7 @@ namespace ETL_SQL.Connectors.Neo4j
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
 
-            var columnNames = (await GetColumnsInternalAsync(_tableName)).ToList();
+            var columnNames = (await GetColumnsInternalAsync(_tableName, effectiveCancellationToken)).ToList();
 
             var currentBatch = new DataTable();
             currentBatch.SetColumns(columnNames);
@@ -341,7 +371,7 @@ namespace ETL_SQL.Connectors.Neo4j
                 if (_tableName.StartsWith("NODE_", StringComparison.OrdinalIgnoreCase))
                 {
                     var label = _tableName.Substring(5);
-                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
+                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true, effectiveCancellationToken);
                     var labelIdentifier = QuoteCypherIdentifier(actualLabel);
                     var query = $"MATCH (n:{labelIdentifier}) RETURN n";
 
@@ -383,7 +413,7 @@ namespace ETL_SQL.Connectors.Neo4j
                 else if (_tableName.StartsWith("EDGE_", StringComparison.OrdinalIgnoreCase))
                 {
                     var relType = _tableName.Substring(5);
-                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
+                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false, effectiveCancellationToken);
                     var typeIdentifier = QuoteCypherIdentifier(actualType);
                     var query = $"MATCH (from)-[r:{typeIdentifier}]->(to) RETURN r, elementId(from) AS _from_id, labels(from) AS _from_labels, elementId(to) AS _to_id, labels(to) AS _to_labels";
 
@@ -457,7 +487,7 @@ namespace ETL_SQL.Connectors.Neo4j
                 if (_tableName.StartsWith("NODE_", StringComparison.OrdinalIgnoreCase))
                 {
                     var label = _tableName.Substring(5);
-                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
+                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true, effectiveCancellationToken);
                     var labelIdentifier = QuoteCypherIdentifier(actualLabel);
                     var keyColumns = GetOptionList("KEY_COLUMNS");
                     var mergeKey = keyColumns.Count > 0
@@ -520,7 +550,7 @@ namespace ETL_SQL.Connectors.Neo4j
                 else if (_tableName.StartsWith("EDGE_", StringComparison.OrdinalIgnoreCase))
                 {
                     var relType = _tableName.Substring(5);
-                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
+                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false, effectiveCancellationToken);
                     var typeIdentifier = QuoteCypherIdentifier(actualType);
                     var edgeKeyColumns = GetOptionList("KEY_COLUMNS");
                     var fromLabel = GetOption("FROM_LABEL");

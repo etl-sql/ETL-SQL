@@ -170,11 +170,17 @@ public static class JsonExtractor
         return Enumerable.Empty<string>();
     }
 
-    public static async Task<IEnumerable<string>> GetColumnsAsync(Stream stream, string? rootPath)
+    public static Task<IEnumerable<string>> GetColumnsAsync(Stream stream, string? rootPath) =>
+        GetColumnsAsync(stream, rootPath, CancellationToken.None);
+
+    public static async Task<IEnumerable<string>> GetColumnsAsync(
+        Stream stream,
+        string? rootPath,
+        CancellationToken cancellationToken)
     {
         // For column inference, we only need a representative sample.
         // We use a small portion of the stream if possible, or parse doc for small files.
-        using (var doc = await JsonDocument.ParseAsync(stream))
+        using (var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken))
         {
             return GetColumns(doc, rootPath);
         }

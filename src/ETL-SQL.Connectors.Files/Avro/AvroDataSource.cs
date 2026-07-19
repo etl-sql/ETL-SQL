@@ -235,8 +235,12 @@ namespace ETL_SQL.Connectors.Avro
             catch { return val; }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
             string effectivePath = _filePath;
@@ -244,6 +248,7 @@ namespace ETL_SQL.Connectors.Avro
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
                 catch (Exception ex) { _logger.Debug("[AvroDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
@@ -252,7 +257,8 @@ namespace ETL_SQL.Connectors.Avro
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                using var reader = DataFileReader<GenericRecord>.OpenReader(stream);
+                using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream), effectiveCancellationToken);
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 return ((RecordSchema)reader.GetSchema()).Fields.Select(f => f.Name).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
@@ -291,8 +297,22 @@ namespace ETL_SQL.Connectors.Avro
         public string Dialect => "AVRO";
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.Equals(tableName, "FILE", StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : Task.FromResult(Enumerable.Empty<string>());
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);

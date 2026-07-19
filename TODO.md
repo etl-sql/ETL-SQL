@@ -114,7 +114,7 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       stopped containers.
       Completed on 2026-07-18 by switching to Docker pause/unpause APIs and adding integration coverage
       that inspects Docker state before pause, after pause, and after resume.
-- [ ] **P1 - Propagate cancellation through data-source contracts and provider I/O.** Core
+- [x] **P1 - Propagate cancellation through data-source contracts and provider I/O.** Core
       `IDataSource`/`IDatabaseSource` batch, schema, transaction, and raw-SQL methods lack cancellation
       tokens, and SQL/MongoDB implementations call async open/read/write APIs without tokens. Extend the
       contracts and async enumerators, pass execution cancellation to every provider call, and add
@@ -208,8 +208,11 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       loops; BigQuery passes tokens through column discovery queries and checks cancellation while
       materializing table/view listings. Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1`
       and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
-      Remaining work: provider-native schema/introspection overrides for graph, document, and file
-      connector families.
+      Completed on 2026-07-18 by adding provider-native schema/introspection cancellation overrides
+      for graph, document, REST/API, and file connector families, including Portal designer schema
+      discovery call-site propagation and cancellation-aware JSON schema parsing. Validated with
+      `dotnet build ETL-SQL.slnx --no-restore -m:1` and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~DataSourceCancellationTests --no-restore -m:1`.
 - [x] **P1 - Repair the warm-runner regression and its failure diagnostics.** The current fast lane
       reproducibly fails `ProcessJobExecutorChaosTests.WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking`:
       the apphost copied into the test output exits with CLR code `-532462766` because

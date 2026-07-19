@@ -961,8 +961,12 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
             ValidateFileAccess();
@@ -973,7 +977,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (_headerFile != null)
                 {
                     if (System.IO.File.Exists(_headerFile))
-                        headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                        headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile, effectiveCancellationToken)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
                     else
                         headerLine = _headerFile;
                 }
@@ -981,8 +985,12 @@ namespace ETL_SQL.Connectors.FlatFile
                 {
                     using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".csv");
                     using var reader = new StreamReader(stream, _encoding);
-                    for (int i = 0; i < _startAtRows; i++) await reader.ReadLineAsync();
-                    headerLine = await reader.ReadLineAsync();
+                    for (int i = 0; i < _startAtRows; i++)
+                    {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
+                        await reader.ReadLineAsync(effectiveCancellationToken);
+                    }
+                    headerLine = await reader.ReadLineAsync(effectiveCancellationToken);
                 }
 
                 if (string.IsNullOrWhiteSpace(headerLine)) return Enumerable.Empty<string>();
@@ -1104,8 +1112,22 @@ namespace ETL_SQL.Connectors.FlatFile
         public string Dialect => "FLATFILE";
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.Equals(tableName, "FILE", StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : Task.FromResult(Enumerable.Empty<string>());
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);

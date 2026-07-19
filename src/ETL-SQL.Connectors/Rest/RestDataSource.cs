@@ -1764,7 +1764,9 @@ namespace ETL_SQL.Connectors.Rest
             await Task.CompletedTask;
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
             try
             {
@@ -1773,7 +1775,7 @@ namespace ETL_SQL.Connectors.Rest
                     return Enumerable.Empty<string>();
                 }
 
-                var effectiveCancellationToken = EffectiveCancellationToken(CancellationToken.None);
+                var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
                 var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
                 var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveCancellationToken);
                 if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
@@ -1787,7 +1789,7 @@ namespace ETL_SQL.Connectors.Rest
                     else if (rootPath.StartsWith("$") && rootPath.Length > 1) rootPath = rootPath.Substring(1);
                 }
 
-                return await JsonExtractor.GetColumnsAsync(stream, rootPath);
+                return await JsonExtractor.GetColumnsAsync(stream, rootPath, effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -1803,8 +1805,22 @@ namespace ETL_SQL.Connectors.Rest
         }
 
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ENDPOINT" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.Equals(tableName, "ENDPOINT", StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : Task.FromResult(Enumerable.Empty<string>());
 
         public Task TruncateAsync() => throw new NotSupportedException();
         public object? Snapshot() => null;

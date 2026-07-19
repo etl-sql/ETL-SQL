@@ -183,14 +183,18 @@ namespace ETL_SQL.Connectors.Json
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
             try
             {
                 using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
-                return await JsonExtractor.GetColumnsAsync(stream, _rootPath);
+                return await JsonExtractor.GetColumnsAsync(stream, _rootPath, effectiveCancellationToken);
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
         }
@@ -270,8 +274,22 @@ namespace ETL_SQL.Connectors.Json
         public string Dialect => "JSON";
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.Equals(tableName, "FILE", StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : Task.FromResult(Enumerable.Empty<string>());
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;

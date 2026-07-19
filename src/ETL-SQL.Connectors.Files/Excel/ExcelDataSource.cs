@@ -540,19 +540,25 @@ namespace ETL_SQL.Connectors.Excel
             return s.Length > 31 ? s.Substring(0, 31) : s;
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
             try
             {
                 var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
-                using var stream = GetSeekableStream(baseStream);
+                await using var stream = await GetSeekableStreamAsync(baseStream, effectiveCancellationToken);
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 var result = reader.AsDataSet(new ExcelDataSetConfiguration()
                 {
                     ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
                 });
+                effectiveCancellationToken.ThrowIfCancellationRequested();
 
                 System.Data.DataTable? sheet = ResolveSheet(result);
 
@@ -574,6 +580,7 @@ namespace ETL_SQL.Connectors.Excel
                     var names = new List<string>();
                     for (int c = startCol; c <= endCol; c++)
                     {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
                         names.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
                     }
                     return names;
@@ -583,23 +590,38 @@ namespace ETL_SQL.Connectors.Excel
             return Enumerable.Empty<string>();
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync()
+        public Task<IEnumerable<string>> GetTablesAsync() => GetTablesAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
             try
             {
                 var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
-                using var stream = GetSeekableStream(baseStream);
+                await using var stream = await GetSeekableStreamAsync(baseStream, effectiveCancellationToken);
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 var result = reader.AsDataSet();
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 return result.Tables.Cast<System.Data.DataTable>().Select(t => t.TableName).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
         }
 
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.IsNullOrEmpty(tableName) || string.Equals(tableName, _sheetName, StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : GetColumnsAsync(cancellationToken);
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 

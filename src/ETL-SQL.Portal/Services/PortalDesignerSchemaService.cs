@@ -79,7 +79,7 @@ public sealed class PortalDesignerSchemaService(
         var tables = new ConcurrentBag<DesignerSchemaTableDto>();
         var metadataColumns = new Dictionary<string, IEnumerable<ColumnMetadata>>(StringComparer.OrdinalIgnoreCase);
         await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, target);
-        var tableNames = (await source.GetTablesAsync())
+        var tableNames = (await source.GetTablesAsync(cancellationToken))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
             .Take(Math.Max(1, Limits.MaxSchemaTables))
@@ -91,7 +91,7 @@ public sealed class PortalDesignerSchemaService(
             await columnGate.WaitAsync(cancellationToken);
             try
             {
-                var columns = (await GetColumnsAsync(source, table))
+                var columns = (await GetColumnsAsync(source, table, cancellationToken))
                     .Take(Math.Max(1, Limits.MaxSchemaColumnsPerTable))
                     .ToList();
                 lock (metadataColumns)
@@ -120,7 +120,10 @@ public sealed class PortalDesignerSchemaService(
         return new DesignerSchemaResponse(alias, tables.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static async Task<List<ColumnMetadata>> GetColumnsAsync(IDataSource source, string table)
+    private static async Task<List<ColumnMetadata>> GetColumnsAsync(
+        IDataSource source,
+        string table,
+        CancellationToken cancellationToken)
     {
         var catalogProvider = source.GetCatalogProvider();
         if (catalogProvider != null)
@@ -128,7 +131,7 @@ public sealed class PortalDesignerSchemaService(
             try
             {
                 var (schema, name) = SplitQualifiedName(table);
-                var catalogColumns = await catalogProvider.GetColumnMetadataAsync(schema, name);
+                var catalogColumns = await catalogProvider.GetColumnMetadataAsync(schema, name, cancellationToken);
                 if (catalogColumns.Count > 0)
                     return catalogColumns.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList();
             }
@@ -139,8 +142,8 @@ public sealed class PortalDesignerSchemaService(
         }
 
         var rawColumns = source is IDatabaseSource db
-            ? await db.GetColumnsAsync(table)
-            : await source.GetColumnsAsync();
+            ? await db.GetColumnsAsync(table, cancellationToken)
+            : await source.GetColumnsAsync(cancellationToken);
         return rawColumns.Select(c => new ColumnMetadata(c, "ANY")).ToList();
     }
 

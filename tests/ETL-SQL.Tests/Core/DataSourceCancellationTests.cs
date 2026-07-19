@@ -159,6 +159,8 @@ public class DataSourceCancellationTests
             typeof(IAsyncEnumerable<DataTable>),
             typeof(bool),
             typeof(CancellationToken));
+        AssertDeclares(typeof(MongodbDataSource), nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(MongodbDataSource), nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
     }
 
     [Fact]
@@ -177,6 +179,10 @@ public class DataSourceCancellationTests
             typeof(string),
             typeof(IEnumerable<object?>),
             typeof(CancellationToken));
+        AssertDeclares(typeof(Neo4jDataSource), nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(Neo4jDataSource), nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(Neo4jDataSource), nameof(IDatabaseSource.GetViewsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(Neo4jDataSource), nameof(IDatabaseSource.GetColumnsAsync), typeof(string), typeof(CancellationToken));
     }
 
     [Fact]
@@ -195,6 +201,10 @@ public class DataSourceCancellationTests
             typeof(string),
             typeof(IEnumerable<object?>),
             typeof(CancellationToken));
+        AssertDeclares(typeof(RestDataSource), nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(RestDataSource), nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(RestDataSource), nameof(IDatabaseSource.GetViewsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(RestDataSource), nameof(IDatabaseSource.GetColumnsAsync), typeof(string), typeof(CancellationToken));
     }
 
     [Fact]
@@ -219,6 +229,10 @@ public class DataSourceCancellationTests
                 typeof(string),
                 typeof(IEnumerable<object?>),
                 typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDatabaseSource.GetViewsAsync), typeof(CancellationToken));
+            AssertDeclares(providerType, nameof(IDatabaseSource.GetColumnsAsync), typeof(string), typeof(CancellationToken));
         }
     }
 
@@ -260,6 +274,8 @@ public class DataSourceCancellationTests
             typeof(IAsyncEnumerable<DataTable>),
             typeof(bool),
             typeof(CancellationToken));
+        AssertDeclares(typeof(ExcelDataSource), nameof(IDataSource.GetColumnsAsync), typeof(CancellationToken));
+        AssertDeclares(typeof(ExcelDataSource), nameof(IDataSource.GetTablesAsync), typeof(CancellationToken));
     }
 
     [Fact]

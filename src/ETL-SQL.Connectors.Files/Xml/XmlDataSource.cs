@@ -458,12 +458,16 @@ namespace ETL_SQL.Connectors.Xml
             }
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
             try
             {
-                await using var enumerator = ReadBatches(1).GetAsyncEnumerator();
+                await using var enumerator = ReadBatches(1, effectiveCancellationToken).GetAsyncEnumerator(effectiveCancellationToken);
                 if (await enumerator.MoveNextAsync())
                 {
                     return enumerator.Current.ColumnNames;
@@ -512,8 +516,22 @@ namespace ETL_SQL.Connectors.Xml
         public string Dialect => "XML";
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ROOT" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync(tableName, CancellationToken.None);
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken) =>
+            string.Equals(tableName, "ROOT", StringComparison.OrdinalIgnoreCase)
+                ? GetColumnsAsync(cancellationToken)
+                : Task.FromResult(Enumerable.Empty<string>());
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);

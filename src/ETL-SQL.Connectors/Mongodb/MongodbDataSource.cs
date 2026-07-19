@@ -180,7 +180,28 @@ namespace ETL_SQL.Connectors.Mongodb
             }
         }
 
-        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsInternalAsync();
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken) =>
+            GetColumnsInternalAsync(cancellationToken);
+
+        public async Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+                var client = GetClient();
+                var db = client.GetDatabase(_databaseName);
+                var cursor = await db.ListCollectionNamesAsync(cancellationToken: effectiveCancellationToken);
+                return await cursor.ToListAsync(effectiveCancellationToken);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("MongoDB", ex);
+            }
+        }
+
+        public Task<IEnumerable<string>> GetTablesAsync() => GetTablesAsync(CancellationToken.None);
 
         private async Task<IEnumerable<string>> GetColumnsInternalAsync(CancellationToken cancellationToken = default)
         {

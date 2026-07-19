@@ -352,18 +352,25 @@ namespace ETL_SQL.Connectors.Parquet
             }
         }
 
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) =>
+            GetColumnsAsync(tableName, CancellationToken.None);
+
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
         {
             if (!string.Equals(tableName, "FILE", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Debug("[PARQUET] GetColumnsAsync requested for unknown table '{TableName}'. Only 'FILE' is supported.", tableName);
                 return Task.FromResult(Enumerable.Empty<string>());
             }
-            return GetColumnsAsync();
+            return GetColumnsAsync(cancellationToken);
         }
 
-        public async Task<IEnumerable<string>> GetColumnsAsync()
+        public Task<IEnumerable<string>> GetColumnsAsync() => GetColumnsAsync(CancellationToken.None);
+
+        public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
             _logger.Debug("[PARQUET] GetColumnsAsync requested for {FilePath}", _filePath);
             if (!System.IO.File.Exists(_filePath))
             {
@@ -376,6 +383,7 @@ namespace ETL_SQL.Connectors.Parquet
 
             if (_encryption.Enabled)
             {
+                effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
                 try
                 {
@@ -392,8 +400,8 @@ namespace ETL_SQL.Connectors.Parquet
 
             try
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
-                await using var reader = await ParquetReader.CreateAsync(stream);
+                await using var stream = new FileStream(effectivePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var reader = await ParquetReader.CreateAsync(stream, cancellationToken: effectiveCancellationToken);
                 var cols = reader.Schema.Fields.Select(f => f.Name).ToList();
                 _logger.Debug("[PARQUET] Found {Count} columns: {Cols}", cols.Count, string.Join(", ", cols));
                 return cols;
@@ -441,7 +449,17 @@ namespace ETL_SQL.Connectors.Parquet
         public string Dialect => "PARQUET";
         public bool SupportsSqlPushdown => false;
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetTablesAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetTablesAsync();
+        }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(CancellationToken cancellationToken)
+        {
+            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
+            return GetViewsAsync();
+        }
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
