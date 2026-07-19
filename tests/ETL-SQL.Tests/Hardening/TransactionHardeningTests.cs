@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -77,8 +78,8 @@ namespace ETL_SQL.Tests.Hardening
             await mgr.CommitTransaction();
 
             // Assert
-            mockDs.Verify(m => m.BeginTransactionAsync(), Times.Once);
-            mockDs.Verify(m => m.CommitAsync(), Times.Once);
+            mockDs.Verify(m => m.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Once);
+            mockDs.Verify(m => m.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 }
