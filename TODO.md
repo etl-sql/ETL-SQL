@@ -33,8 +33,11 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 
 - [x] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
       Passed on 2026-07-18 after the warm-runner apphost fix: 5,164 passed, 5 skipped, 0 failed.
-- [ ] Full pre-release lane:
+- [x] Full pre-release lane:
       `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
+      Passed on 2026-07-18 with run `release-validation/20260718-215621/pre-release-report.md`.
+      The Standard scale certification passed 13/13 scenarios; `certification-results/baseline-standard.json`
+      was refreshed from that passed run before the resumed comparator gate.
 - [x] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
       plus N to N+1 upgrade-path evidence.
       Completed on 2026-07-18: the explained pre-release plan includes the SLT lane and
