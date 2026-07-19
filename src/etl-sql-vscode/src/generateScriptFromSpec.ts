@@ -5,6 +5,14 @@ import * as os from 'os';
 import * as cp from 'child_process';
 import { log } from './logger';
 
+type JsonObject = { [key: string]: unknown };
+
+interface AiApiResponse {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    content?: Array<{ text?: string }>;
+    choices?: Array<{ message?: { content?: string } }>;
+}
+
 /**
  * Maps file extensions to standard MIME types for file uploads/inline content.
  */
@@ -50,17 +58,17 @@ async function callAiApi(
     filePath: string,
     mimeType: string,
     isTextFile: boolean
-): Promise<any> {
+): Promise<AiApiResponse> {
     let url: string;
     let headers: Record<string, string>;
-    let body: any;
+    let body: JsonObject;
 
     if (provider === 'Gemini') {
         const geminiModel = model || 'gemini-1.5-flash';
         url = customEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
         headers = { 'Content-Type': 'application/json' };
 
-        let parts: any[] = [];
+        const parts: JsonObject[] = [];
         if (isTextFile) {
             const textContent = await fs.promises.readFile(filePath, 'utf8');
             parts.push({ text: `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${textContent}` });
@@ -95,7 +103,7 @@ async function callAiApi(
         };
 
         const anthropicModel = model || 'claude-3-5-sonnet-latest';
-        let content: any;
+        let content: string | JsonObject[];
 
         if (isTextFile) {
             const textContent = await fs.promises.readFile(filePath, 'utf8');
@@ -220,7 +228,7 @@ async function callAiApi(
         throw new Error(`API call failed (status ${response.status}): ${errText}`);
     }
 
-    return await response.json();
+    return await response.json() as AiApiResponse;
 }
 
 /**
@@ -306,25 +314,23 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         let prompt = '';
         try {
             prompt = await fs.promises.readFile(instructionsPath, 'utf8');
-        } catch (e) {
+        } catch {
             // fallback if not found in resources (e.g. during dev)
             try {
                 const fallbackPath = path.resolve(context.extensionPath, '../../Docs/data_spec_parser_instructions.md');
                 prompt = await fs.promises.readFile(fallbackPath, 'utf8');
-            } catch (fallbackErr) {
-                // eslint-disable-next-line preserve-caught-error
+            } catch {
                 throw new Error(`Could not load prompt instructions from resources/data_spec_parser_instructions.md or fallback Docs/data_spec_parser_instructions.md.`);
             }
         }
 
         // Call AI Endpoint
-        let responseData: any = null;
-        await vscode.window.withProgress({
+        const responseData = await vscode.window.withProgress<AiApiResponse>({
             location: vscode.ProgressLocation.Notification,
             title: `Sending spec to ${provider} API...`,
             cancellable: false
         }, async () => {
-            responseData = await callAiApi(
+            return await callAiApi(
                 provider,
                 apiKey,
                 model,
@@ -339,19 +345,19 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         // Parse Response
         let responseJsonText = '';
         if (provider === 'Gemini') {
-            const text = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+            const text = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!text) {
                 throw new Error('Invalid response structure from Gemini API');
             }
             responseJsonText = text;
         } else if (provider === 'Anthropic') {
-            const text = responseData.content?.[0]?.text;
+            const text = responseData?.content?.[0]?.text;
             if (!text) {
                 throw new Error('Invalid response structure from Anthropic API');
             }
             responseJsonText = text;
         } else {
-            const text = responseData.choices?.[0]?.message?.content;
+            const text = responseData?.choices?.[0]?.message?.content;
             if (!text) {
                 throw new Error(`Invalid response structure from ${provider} API`);
             }
@@ -363,13 +369,14 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         // Pre-validate JSON
         let defaultName = 'load_script.etlsql';
         try {
-            const parsed = JSON.parse(cleanedJson);
-            if (parsed.pipeline_name) {
+            const parsed = JSON.parse(cleanedJson) as { pipeline_name?: unknown };
+            if (typeof parsed.pipeline_name === 'string' && parsed.pipeline_name.length > 0) {
                 defaultName = `load_${parsed.pipeline_name}.etlsql`;
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
             // eslint-disable-next-line preserve-caught-error
-            throw new Error(`AI response was not valid JSON: ${e.message}\nRaw response:\n${responseJsonText}`);
+            throw new Error(`AI response was not valid JSON: ${message}\nRaw response:\n${responseJsonText}`);
         }
 
         // Choose save location
@@ -422,8 +429,9 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         await vscode.window.showTextDocument(doc);
         vscode.window.showInformationMessage(`Successfully generated ETL-SQL script: ${path.basename(saveUri.fsPath)}`);
 
-    } catch (err: any) {
-        const cleanMessage = (err?.message || String(err)).replace(/(key=)([^&]+)/gi, '$1[REDACTED]');
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        const cleanMessage = message.replace(/(key=)([^&]+)/gi, '$1[REDACTED]');
         log(`Failed to generate script: ${cleanMessage}`, 'error');
         vscode.window.showErrorMessage(`ETL-SQL Script Generation Failed: ${cleanMessage}`);
     }

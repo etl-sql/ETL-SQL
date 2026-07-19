@@ -109,6 +109,10 @@ jobs:
         working-directory: src/etl-sql-vscode
         run: npm ci
 
+      - name: Install UI dependencies
+        working-directory: src/etl-sql-vscode/ui
+        run: npm ci
+
       - name: Audit npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode
         run: npm audit
@@ -120,6 +124,22 @@ jobs:
       - name: Compile extension
         working-directory: src/etl-sql-vscode
         run: npm run compile
+
+      - name: Lint extension
+        working-directory: src/etl-sql-vscode
+        run: npm run lint
+
+      - name: Lint UI package
+        working-directory: src/etl-sql-vscode/ui
+        run: npm run lint
+
+      - name: Build UI package
+        working-directory: src/etl-sql-vscode/ui
+        run: npm run build
+
+      - name: Run UI vitest
+        working-directory: src/etl-sql-vscode/ui
+        run: npm run test:unit
 
       - name: Run vitest
         working-directory: src/etl-sql-vscode

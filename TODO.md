@@ -236,11 +236,16 @@ security boundaries, identity, execution, storage, connector, Portal, Docker, an
       staleness plus last-success/last-failure telemetry in admin and Prometheus metrics.
       Validated with `dotnet build ETL-SQL.slnx --no-restore -m:1` and
       `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter FullyQualifiedName~OperationalObservabilityTests --no-restore -m:1`.
-- [ ] **P2 - Close frontend build and lint gaps in CI and pre-release scripts.** The extension lint
+- [x] **P2 - Close frontend build and lint gaps in CI and pre-release scripts.** The extension lint
       currently reports 50 warnings while still succeeding, and automation installs/builds only
       `src/etl-sql-vscode`; the separate `ui` package is audited but never installed, built, linted, or
       tested. Add clean-install UI gates and make production-code lint warnings fail CI after clearing
       the existing backlog.
+      Completed on 2026-07-18 by making production extension lint warnings fail with
+      `--max-warnings=0`, clearing production lint warnings, adding UI `npm ci`, lint, and build gates
+      to CI plus Windows/Linux pre-release scripts, and making UI lint fail on warnings. Validated with
+      `npm run lint` and `npm run compile` in `src/etl-sql-vscode`, plus `npm ci`, `npm run lint`, and
+      `npm run build` in `src/etl-sql-vscode/ui`.
 - [x] **P2 - Remove role-query N+1 behavior from Portal user lists.** `AdminController.GetUsers` loads
       the entire user table without pagination and both user-list endpoints call
       `UserManager.GetRolesAsync` once per user. Require paging for the unbounded endpoint and batch-load

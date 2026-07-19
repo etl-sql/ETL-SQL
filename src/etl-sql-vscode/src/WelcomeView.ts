@@ -106,8 +106,9 @@ export class WelcomeView {
                 WelcomeView._htmlCache = await fs.promises.readFile(htmlPath, 'utf8');
             }
             this._panel.webview.html = WelcomeView._htmlCache;
-        } catch (err: any) {
-            this._panel.webview.html = `<!DOCTYPE html><html><body>Error loading Welcome View: ${err.message}</body></html>`;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            this._panel.webview.html = `<!DOCTYPE html><html><body>Error loading Welcome View: ${message}</body></html>`;
         }
     }
 }

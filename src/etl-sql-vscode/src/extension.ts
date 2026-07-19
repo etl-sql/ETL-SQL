@@ -1099,8 +1099,9 @@ async function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: s
         }
 
         return destPath;
-    } catch (err: any) {
-        outputChannel?.appendLine(`[Extension] Failed to shadow copy executable: ${err.message}. Using source path.`);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        outputChannel?.appendLine(`[Extension] Failed to shadow copy executable: ${message}. Using source path.`);
         return srcPath;
     }
 }
@@ -1121,8 +1122,8 @@ async function cleanupShadowDirectory(context: vscode.ExtensionContext) {
                 await fs.promises.rm(oldDir, { recursive: true, force: true });
             }
         }
-    } catch (err: any) {
-        // ignore errors
+    } catch {
+        // Best-effort cleanup.
     }
 }
 

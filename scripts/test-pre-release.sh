@@ -124,8 +124,13 @@ show_pre_release_plan() {
 
     if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         print_plan_phase "$i" "VS Code npm ci" "npm ci" "Extension dependencies install from lockfile."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code UI npm ci" "npm ci" "UI package dependencies install from lockfile."; i=$((i + 1))
         print_plan_phase "$i" "VS Code npm audit" "npm outdated / npm audit" "Extension dependency risk is visible before release."; i=$((i + 1))
         print_plan_phase "$i" "VS Code compile" "npm run compile" "TypeScript extension compiles."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code lint" "npm run lint" "Production extension lint warnings fail the release gate."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code UI lint" "npm run lint" "UI package lint warnings fail the release gate."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code UI build" "npm run build" "UI TypeScript and Vite bundle compile."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code UI unit tests" "npm run test:unit" "UI package unit tests pass before release."; i=$((i + 1))
         print_plan_phase "$i" "VS Code VSIX package" "npx @vscode/vsce package --target linux-x64" "VSIX packages cleanly — same vsce step release.yml runs; catches manifest/engine errors before the release build."; i=$((i + 1))
         print_plan_phase "$i" "VS Code unit tests" "npm run test:unit" "Extension unit tests pass."; i=$((i + 1))
     fi
@@ -675,6 +680,10 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         "npm ci (src/etl-sql-vscode)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm ci"
 
+    run_phase "VS Code UI npm ci" \
+        "npm ci (src/etl-sql-vscode/ui)" \
+        bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm ci"
+
     run_phase "VS Code npm audit" \
         "npm outdated / npm audit (src/etl-sql-vscode, src/etl-sql-vscode/ui)" \
         npm_dependency_audit_phase
@@ -682,6 +691,22 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
     run_phase "VS Code compile" \
         "npm run compile (src/etl-sql-vscode)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm run compile"
+
+    run_phase "VS Code lint" \
+        "npm run lint (src/etl-sql-vscode)" \
+        bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm run lint"
+
+    run_phase "VS Code UI lint" \
+        "npm run lint (src/etl-sql-vscode/ui)" \
+        bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm run lint"
+
+    run_phase "VS Code UI build" \
+        "npm run build (src/etl-sql-vscode/ui)" \
+        bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm run build"
+
+    run_phase "VS Code UI unit tests" \
+        "npm run test:unit (src/etl-sql-vscode/ui)" \
+        bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm run test:unit"
 
     # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
     # so packaging/manifest errors are caught locally instead of failing the release build.

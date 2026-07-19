@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
 import { ReplManager, EngineMessage } from './ReplManager';
-import * as path from 'path';
-import * as cp from 'child_process';
-import * as fs from 'fs';
 import { getExecutablePath } from './extension';
 
 export class ETLNotebookController {

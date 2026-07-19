@@ -108,8 +108,13 @@ function Get-PlannedPreReleasePhases {
 
     if (-not $EffectiveSkipNode) {
         $phases.Add([ordered]@{ Phase = "VS Code npm ci"; Command = "npm ci"; Reason = "Extension dependencies install from lockfile." })
+        $phases.Add([ordered]@{ Phase = "VS Code UI npm ci"; Command = "npm ci"; Reason = "UI package dependencies install from lockfile." })
         $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit"; Reason = "Extension dependency risk is visible before release." })
         $phases.Add([ordered]@{ Phase = "VS Code compile"; Command = "npm run compile"; Reason = "TypeScript extension compiles." })
+        $phases.Add([ordered]@{ Phase = "VS Code lint"; Command = "npm run lint"; Reason = "Production extension lint warnings fail the release gate." })
+        $phases.Add([ordered]@{ Phase = "VS Code UI lint"; Command = "npm run lint"; Reason = "UI package lint warnings fail the release gate." })
+        $phases.Add([ordered]@{ Phase = "VS Code UI build"; Command = "npm run build"; Reason = "UI TypeScript and Vite bundle compile." })
+        $phases.Add([ordered]@{ Phase = "VS Code UI unit tests"; Command = "npm run test:unit"; Reason = "UI package unit tests pass before release." })
         $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "npx @vscode/vsce package --target win32-x64"; Reason = "VSIX packages cleanly — same vsce step release.yml runs; catches manifest/engine errors before the release build." })
         $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
     }
@@ -669,6 +674,11 @@ try {
             { Push-Location "src\etl-sql-vscode"; try { & npm ci } finally { Pop-Location } } `
             $previousPhaseMap $fingerprint $results
 
+        Invoke-LoggedPhase "VS Code UI npm ci" `
+            "npm ci (src\etl-sql-vscode\ui)" `
+            { Push-Location "src\etl-sql-vscode\ui"; try { & npm ci } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
         Invoke-LoggedPhase "VS Code npm audit" `
             "npm outdated / npm audit (src\etl-sql-vscode, src\etl-sql-vscode\ui)" `
             {
@@ -714,6 +724,26 @@ try {
         Invoke-LoggedPhase "VS Code compile" `
             "npm run compile (src\etl-sql-vscode)" `
             { Push-Location "src\etl-sql-vscode"; try { & npm run compile } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "VS Code lint" `
+            "npm run lint (src\etl-sql-vscode)" `
+            { Push-Location "src\etl-sql-vscode"; try { & npm run lint } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "VS Code UI lint" `
+            "npm run lint (src\etl-sql-vscode\ui)" `
+            { Push-Location "src\etl-sql-vscode\ui"; try { & npm run lint } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "VS Code UI build" `
+            "npm run build (src\etl-sql-vscode\ui)" `
+            { Push-Location "src\etl-sql-vscode\ui"; try { & npm run build } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "VS Code UI unit tests" `
+            "npm run test:unit (src\etl-sql-vscode\ui)" `
+            { Push-Location "src\etl-sql-vscode\ui"; try { & npm run test:unit } finally { Pop-Location } } `
             $previousPhaseMap $fingerprint $results
 
         # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
