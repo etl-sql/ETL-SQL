@@ -223,6 +223,10 @@ jobs:
       attestations: write   # write the attestation to the repository
       contents: write       # required to read/download the still-draft release
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Download draft release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -235,6 +239,19 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'dist/*'
+      # The per-platform build jobs each run publish_release.ps1, which wipes release/, so the
+      # consolidated integrity assets never survived to upload. Generate them here — once, over the
+      # full set of published artifacts — and attach them (SBOM = contents, sha256sums = integrity;
+      # the attestation above is authenticity).
+      - name: Generate and upload checksums + SBOM
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ( cd dist && sha256sum -b * > ../sha256sums.txt )
+          mkdir -p release
+          node scripts/generate-sbom.js   # reads version from Directory.Build.props -> release/sbom.json
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+            sha256sums.txt release/sbom.json --clobber
 
   # 6. Publish the GitHub Release (un-draft) only after provenance is attached, so the artifacts are
   # never public without provenance.
