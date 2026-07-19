@@ -25,10 +25,10 @@ public sealed class WorkstationWorkspace
             return [];
 
         return Directory.EnumerateFiles(Root, "*.*", new EnumerationOptions
-            {
-                RecurseSubdirectories = true,
-                AttributesToSkip = FileAttributes.ReparsePoint
-            })
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        })
             .Where(IsEditableScript)
             .Select(path => new WorkspaceFileDto(ToRelativePath(path), new FileInfo(path).Length))
             .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)

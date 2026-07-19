@@ -139,7 +139,8 @@ namespace ETL_SQL.Tests.Docs
             var markdownFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
                 .Concat(Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(f => {
+                .Where(f =>
+                {
                     var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                     return !parts.Contains("architecture") && !parts.Contains("templates");
                 })
@@ -555,7 +556,8 @@ namespace ETL_SQL.Tests.Docs
         public void MarkdownLinks_AllResolveCleanly()
         {
             var mdFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.AllDirectories)
-                .Where(f => {
+                .Where(f =>
+                {
                     var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                     return !parts.Contains("Docs_Legacy") &&
                            !parts.Contains("node_modules") &&
@@ -645,8 +647,8 @@ namespace ETL_SQL.Tests.Docs
             foreach (var dir in Directory.GetDirectories(docsDir, "*", SearchOption.AllDirectories))
             {
                 var dirName = Path.GetFileName(dir);
-                if (dirName.Equals("assets", StringComparison.OrdinalIgnoreCase) || 
-                    dirName.Equals("bin", StringComparison.OrdinalIgnoreCase) || 
+                if (dirName.Equals("assets", StringComparison.OrdinalIgnoreCase) ||
+                    dirName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
                     dirName.Equals("obj", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;

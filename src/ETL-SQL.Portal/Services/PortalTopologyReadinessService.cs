@@ -150,12 +150,12 @@ public sealed class PortalTopologyReadinessService(
             .Replace("_", "", StringComparison.Ordinal)
             .Replace(" ", "", StringComparison.Ordinal)
             .ToLowerInvariant() switch
-            {
-                "ha" or "highavailability" => "HighAvailability",
-                "departmental" => "Departmental",
-                "standalone" => "Standalone",
-                _ => mode
-            };
+        {
+            "ha" or "highavailability" => "HighAvailability",
+            "departmental" => "Departmental",
+            "standalone" => "Standalone",
+            _ => mode
+        };
 
     private static async Task<string> RunCheckAsync(
         Func<CancellationToken, Task<string>> check,

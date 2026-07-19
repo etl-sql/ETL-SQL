@@ -4,9 +4,9 @@ using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Storage;
-using ETL_SQL.Reporting;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Reporting;
 using Microsoft.Extensions.Logging;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 

@@ -1,13 +1,13 @@
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Diagnostics;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;

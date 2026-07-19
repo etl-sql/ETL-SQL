@@ -7,8 +7,8 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Reporting;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Reporting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Services;

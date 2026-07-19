@@ -254,9 +254,13 @@ public class PolicyAuthorityApiTests
         // Publish a 25% canary; the fleet active stays on 1.0.0 and the cohort surfaces on the version.
         var canary = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
         {
-            tenant = "acme", environment = "prod", policyVersion = "1.1.0-canary",
-            policyJson = DocJson(withExtensions: true), reviewer = "bob",
-            expiresAtUtc = expires, canaryPercentage = 25
+            tenant = "acme",
+            environment = "prod",
+            policyVersion = "1.1.0-canary",
+            policyJson = DocJson(withExtensions: true),
+            reviewer = "bob",
+            expiresAtUtc = expires,
+            canaryPercentage = 25
         });
         Assert.Equal(HttpStatusCode.OK, canary.StatusCode);
         var canaryDto = await canary.Content.ReadFromJsonAsync<JsonObject>(Json);
@@ -276,15 +280,24 @@ public class PolicyAuthorityApiTests
 
         var second = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
         {
-            tenant = "acme", environment = "prod", policyVersion = "1.2.0-canary",
-            policyJson = DocJson(), expiresAtUtc = expires, canaryPercentage = 50
+            tenant = "acme",
+            environment = "prod",
+            policyVersion = "1.2.0-canary",
+            policyJson = DocJson(),
+            expiresAtUtc = expires,
+            canaryPercentage = 50
         });
         Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
 
         var bothSelectors = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
         {
-            tenant = "acme", environment = "prod", policyVersion = "1.3.0-canary",
-            policyJson = DocJson(), expiresAtUtc = expires, canaryGroup = "ring0", canaryPercentage = 50
+            tenant = "acme",
+            environment = "prod",
+            policyVersion = "1.3.0-canary",
+            policyJson = DocJson(),
+            expiresAtUtc = expires,
+            canaryGroup = "ring0",
+            canaryPercentage = 50
         });
         Assert.Equal(HttpStatusCode.BadRequest, bothSelectors.StatusCode);
 
@@ -302,8 +315,12 @@ public class PolicyAuthorityApiTests
         // Publish a group canary and halt it; halt re-issues the active document as a fresh active.
         await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
         {
-            tenant = "acme", environment = "prod", policyVersion = "1.4.0-canary",
-            policyJson = DocJson(), expiresAtUtc = expires, canaryGroup = "ring0"
+            tenant = "acme",
+            environment = "prod",
+            policyVersion = "1.4.0-canary",
+            policyJson = DocJson(),
+            expiresAtUtc = expires,
+            canaryGroup = "ring0"
         });
         var halt = await AuthPost(client, adminToken, "/api/admin/policy-authority/halt-canary",
             new { tenant = "acme", environment = "prod", policyVersion = "1.4.0-canary", reviewer = "bob" });
