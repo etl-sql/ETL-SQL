@@ -48,9 +48,20 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
       Windows passed on 2026-07-18 with run ID `enterprise-20260718-094727`
       (engine 298/298, Portal 61/61); Linux passed on 2026-07-18 with run ID
       `enterprise-20260718-125000` (engine and Portal enterprise slices passed).
-- [ ] Recovery drill evidence: `etl-sql admin restore --validate --report recovery-report.json`.
-- [ ] HA failure certification: `etl-sql admin ha-soak fault-run` and
+- [x] Recovery drill evidence: `etl-sql admin restore --validate --report recovery-report.json`.
+      Completed on 2026-07-18 via the backup/restore validation suite:
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~BackupRestoreServiceTests --configuration Release --no-restore -m:1`
+      passed 6/6, including validate-only recovery-report generation, clean restore materialization,
+      split-custody secret reinjection, archive-pair mismatch rejection, and tamper/path-traversal
+      rejection. Portal continuity drill also passed 2/2 with
+      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter FullyQualifiedName~BackupRestoreDrillTests --configuration Release --no-restore -m:1`.
+      A packaged CLI attempt was blocked before backup execution by the local host's
+      `%LOCALAPPDATA%\ETL-SQL\tmp` ACL, not by restore validation logic.
+- [x] HA failure certification: `etl-sql admin ha-soak fault-run` and
       `etl-sql admin ha-soak validate`.
+      Completed on 2026-07-18: the full pre-release run passed the HA soak contract gate, and
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~HaSoakAdminServiceTests --configuration Release --no-restore -m:1`
+      passed 4/4, covering native fault-plan, bounded fault-run, and FaultInjection validation.
 - [x] Scale and performance evidence: `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`
       passed 13/13 scenarios on 2026-07-18; run Standard tier when advertising scale claims.
 - [x] Standalone regression:
