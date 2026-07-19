@@ -190,10 +190,10 @@ The engine enforces configurable ceilings for operations that can destabilize a 
 | File operation count | 100 | `SET ALLOW_FILE_OPERATIONS = n` |
 | Recursive directory depth | 5 | `SET ALLOW_RECURSIVE_LAYERS = n` |
 | Parallel execution degree | 32 | `SET MAX_PARALLEL_DEGREE = n` |
-| String result size | 100 MiB | `SET ALLOW_LARGE_STRING_RESULTS ON` for guarded large results |
+| String result size | 100 MiB | `SET MAX_STRING_RESULT_SIZE = n` |
 | Regex timeout | 1000 ms | `SET REGEX_MATCH_TIMEOUT = n` |
 
-Overrides that increase risk are validated against safe-zone context where applicable and produce warning/audit entries. They should be treated as intentional exceptions, not normal script setup.
+Overrides that increase risk are validated against safe-zone context where applicable and produce warning/audit entries. They should be treated as intentional exceptions, not normal script setup. `SET ALLOW_LARGE_STRING_RESULTS ON` is separate from the byte ceiling: it permits guarded oversized string results only when the current script/path is inside an approved safe zone.
 
 `SET WHAT_IF ON` provides dry-run behavior for many side-effecting statements, including DML, file operations, email, Docker, and remote execution paths that explicitly check `IsWhatIf`. It is a safety preview, not a full transaction simulator.
 
@@ -225,18 +225,51 @@ Current `ENC:` encryption uses:
 
 The same plaintext encrypted twice produces different ciphertext because the salt and IV are random.
 
-### 7.2 Machine-Bound Protection
+### 7.2 Named Secret References
+
+For shared and production scripts, prefer `SECRET:name` references over embedded values or `ENC:` literals. A named secret is resolved at execution time through the configured secret provider and is masked in diagnostics, logs, metadata displays, support bundles, and audit payloads.
+
+Supported secret-provider paths include:
+
+- `Environment` — read-only resolution from process environment variables.
+- `OsSecretStore` — machine-scoped protected local storage for single-node and SME deployments.
+- Portal encrypted store — Portal database-backed secret records protected with the Portal key material and governed by Portal RBAC/audit.
+- `HttpsVault` — optional integration for organizations that already operate an external vault.
+
+Canonical script form uses quoted secret references:
+
+```sql
+CREATE CONNECTION sales AS MSSQL(
+  SERVER = 'sql01',
+  DATABASE = 'Sales',
+  USER = 'etl_worker',
+  PASSWORD = 'SECRET:sales_db_password'
+);
+```
+
+Secret references resolve only on credential fields by default, such as `PASSWORD`, `TOKEN`, `ACCESS_KEY`, `SECRET_KEY`, and similar connector options. Organization policy or catalog metadata can designate additional sensitive connection fields, such as `HOST`, `SERVER`, `DATABASE`, `BUCKET`, or `PATH`, as maskable and `SECRET:`-resolvable. Designating metadata as sensitive controls resolution and display masking; it does not automatically require every non-credential value to be stored as a secret.
+
+Missing, disabled, or unavailable secret providers fail closed for the operation that requires the secret. Resolved secret values must not be written back into scripts, manifests, exports, diagnostics, or user-visible APIs.
+
+### 7.3 Shared Connections and Sensitive Metadata
+
+The Connection Catalog lets administrators define shared connection metadata once and expose it to scripts through approved aliases. Catalog entries store credential-bearing values as `SECRET:name` references, never resolved secret material. Local catalog entries are machine-scoped; Portal catalog entries are governed by Portal RBAC, audit, environment/tenant scope, and optional sensitive-field classification.
+
+Catalog expansion happens at execution time under the current caller or service identity. After expansion, the connection still passes the normal connector, host allowlist, filesystem, policy, and audit checks. Audit and lineage records should include the alias, connector type, decision, and masked metadata, not resolved credentials.
+
+### 7.4 Machine-Bound Protection
 
 ETL-SQL has machine-bound protection utilities used by session and dataset-related storage paths.
 
-There are two relevant implementations:
+There are three relevant implementations:
 
 - `MachineBoundCrypto`: on Windows uses DPAPI `LocalMachine`; on Linux/macOS derives an AES-256 key from `/etc/machine-id` or hostname fallback.
 - `CryptoUtils.Protect()`: on Windows uses DPAPI `CurrentUser`; on non-Windows stores or creates a random key under the user local application data directory (`etl-sql/machine.key`) and can mix optional entropy.
+- `CryptoUtils.ProtectMachine()`: on Windows uses DPAPI `LocalMachine`; on non-Windows uses the `MACHINE:` AES-256-GCM protection path. It is used for administrator-written, service-read machine-scoped secrets and local shared connection catalog entries.
 
 Security implication: machine-bound data is intended to stay local to the deployment context, but the exact portability boundary depends on which utility wrote it, OS behavior, service account, and host configuration.
 
-### 7.3 File Encryption
+### 7.5 File Encryption
 
 ETL-SQL supports:
 
@@ -246,7 +279,7 @@ ETL-SQL supports:
 
 All key files and data files still need to pass path validation before script-level access.
 
-### 7.4 Masking, Redaction, and Leak Prevention
+### 7.6 Masking, Redaction, and Leak Prevention
 
 To protect credentials from accidental exposure in logs, trace files, exception dumps, operator consoles, and audit trails, ETL-SQL applies system-wide sanitization via the `SecretRedactor` utility. 
 
@@ -278,10 +311,16 @@ Report snapshots (`.etlsnap`) are packaged as compressed ZIP streams containing 
 - **AES-256-GCM Encryption**: The compiled package is encrypted at rest using AES-256-GCM (Authenticated Encryption with Associated Data).
 - **Key Derivation & Rotation**: Cryptographic keys are derived from the configured `Portal:Dataset:AtRestKey` and mixed with versioning headers. The `SnapshotPackageService` supports versioned key rotation, resolving legacy keys from a configured dictionary (`Portal:Dataset:PreviousAtRestKeys`) to decrypt older snapshots.
 
+Production portals must configure `Portal:Dataset:AtRestKey` as a base64 value that decodes to at least 32 bytes, along with a non-secret `Portal:Dataset:AtRestKeyVersion`. Startup fails closed when the current key, previous-key map, or legacy-key version is missing, invalid, too short, duplicated, or internally inconsistent. The only supported exception is `Portal:Dataset:AllowMachineFallback=true`, which is for deliberate development or standalone use and creates host-bound caches that cannot be restored on another machine.
+
+Backups must preserve the Portal database, Orchestrator database, `Portal:ScriptRootPath`, `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, Data Protection key ring, JWT secret, dataset at-rest key and versions, and Orchestrator API key as one coordinated set. Restoring dataset files or database rows without the matching key material makes cached datasets and snapshots unreadable.
+
 ### 8.2 Identity and Authentication (OIDC)
 The Portal supports federated identity via OpenID Connect (OIDC) to standardize access:
 - **Token Validation**: Strictly validates OIDC signatures, issuer authority, and token audience.
-- **Group Claim Synchronization**: Dynamically maps OIDC group claims to portal roles and ACL permissions (folder, report, and dataset authorization), ensuring membership revocation propagates automatically.
+- **Group Claim Synchronization**: Maps configured OIDC group claims to portal groups for folder, report, and dataset authorization. Membership is reconciled on login and token/session renewal according to the configured identity-provider and Portal JWT/refresh-token lifetimes; revocation is not an instantaneous push from the identity provider.
+
+ETL-SQL delegates MFA, conditional access, device trust, and risk-based authentication to the configured identity provider. The Portal validates the resulting token and bridges it into its own JWT/refresh-token session. Keep Portal token lifetimes aligned with the organization's identity-provider reauthentication policy.
 
 ### 8.3 Data Minimization & Memory Safety (Apache Arrow)
 ETL-SQL utilizes the Apache Arrow columnar format to govern large payloads and optimize resource safety:
@@ -318,7 +357,7 @@ Portal audit guarantees and boundaries:
 
 - **Transactional Audit Integrity**: Security-sensitive portal mutations (user/role/password/token lifecycle, ownership transfer, group membership, folder and dataset ACLs, SMTP definitions, capability revocations, subscription delivery outcomes) use transactional outbox patterns. The audit row commits in the same database transaction as the mutation—ensuring that a security policy modification cannot succeed without its corresponding audit record being durably written.
 - Audit retention is opt-in (`Portal:Audit:RetentionDays`; default keeps rows forever).
-- The audit table itself is mutable SQLite and is **not** tamper-proof. The supported enterprise posture is scheduled export/forwarding to external append-only storage; in-database tamper-evident hash chaining is an explicit non-goal for this release.
+- Local/shared audit tables in the application database, whether SQLite or PostgreSQL, are mutable database records and are **not** tamper-proof by themselves. The supported enterprise posture is scheduled export/forwarding to external append-only storage; in-database tamper-evident hash chaining is an explicit non-goal for this release.
 
 **Log hygiene (portal-wide rule):** credential material must never reach log output, persisted failure detail, or audit records — including when a downstream error echoes a secret back (e.g. an SMTP server returning the password in an authentication error). Credential-bearing error paths sanitize the secret out before it is logged, persisted, or audited; the subscription delivery executor is the canonical case and is enforced by an automated test that drives a failure whose error text contains the SMTP password and asserts it appears in neither the captured logs, the returned reason, the delivery ledger detail, nor the audit row. Operational metrics (`GET /api/admin/metrics/operational`) expose active/queued executions, recent execution/delivery failure rates, and dataset/snapshot disk usage without exposing any secret.
 
