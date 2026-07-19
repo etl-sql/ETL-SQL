@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-07-19
+
 ### Added
 
 **Central Security Events**
@@ -24,11 +26,43 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added retained malicious-input and policy-bypass drills; canonicalized connector aliases before policy enforcement and stripped log-forging characters from security events.
 - Certified unenrolled standalone startup with no enterprise HTTP clients or remote event collector, unchanged local configuration, and unrestricted local workflows.
 
+**Schema-resilient flat files**
+- Added schema-resilient CSV and Excel ingestion modes: map columns by header, ignore extra source columns, and null missing columns so upstream schema drift no longer fails a load.
+
+**Portal report editor**
+- Added an in-designer report preview pane to the standalone script editor so authors can render a report without running a separate serve command.
+- Separated **Save** from **Git commit** in the editor, each with its own action, so saving a draft no longer forces a commit.
+
+**Engine**
+- Added data-source cancellation hooks so long-running source reads observe cancellation and unwind promptly.
+
+### Changed
+
+- **Connector modularization.** Split the connector implementations into independently deployable projects — `ETL-SQL.Connectors.Common` (shared helpers) and `ETL-SQL.Connectors.Files` — and decoupled `ConnectionStringBuilder` from the database drivers so a host no longer loads every database, cloud, messaging, and native dependency to use one connector.
+- **Thinner Portal controllers.** Extracted `ReportScriptInspectionService`, `ReportDependencyService`, and `ReportStructureService` out of `ReportsController`, moving report-parameter parsing, dependency resolution, and structure/AST work into application services.
+- Renamed internal `ReportPortal` identities to `Portal` for a consistent namespace.
+- **Documentation restructure.** Reorganized the docs tree around single-responsibility sections (`guides/`, `reference/`, `architecture/`, `administration/`, `releases/`) with thin guide hubs and a task index; embedded runtime-help filenames were preserved so in-app help keeps resolving.
+- Enforced the documented source-tier layering with architecture boundary tests, so a new upward project reference or banned cross-layer package fails CI.
+
+### Performance
+
+- Bounded Portal storage sampling so usage reporting no longer scans unboundedly on large stores.
+- Batched Portal user-role lookups to remove per-user round trips when listing users.
+
+### Security
+
+- Canonicalized connector aliases before policy enforcement and stripped log-forging characters from emitted security events.
+- Corrected the Docker security-event outbox startup path so containerized hosts initialize delivery reliably.
+- Resolved the security and release findings raised in the v0.16.0 sprint code review.
+
 ### Fixed
 
 - Serialized enterprise policy initialization and ignored stale policy notifications so runtime configuration and security-event transport cannot regress during concurrent refreshes; disposed configuration roots now release their policy subscriptions.
 - Restored true Release builds for `ETL-SQL.Analysis`, redacted fatal CLI/TUI startup exceptions, and passed report-launch arguments without string concatenation.
 - Restored the repository format gate by correcting import ordering in enterprise security and fleet-policy files.
+- Propagated cancellation through warehouse and data-source schema resolution so cancelled jobs stop promptly instead of completing schema work.
+- Read Portal user lists using the paged API so large directories return complete, correct results.
+- Included the split connector projects in the Docker restore so container builds resolve every connector assembly.
 
 ## [0.15.0] — 2026-07-12
 

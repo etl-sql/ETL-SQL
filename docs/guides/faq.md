@@ -16,7 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.15.0**.
+> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.16.0**.
 
 **Q: Where do I start?**
 > Read [Getting Started](getting-started.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](../cookbooks/etl-recipes.md) for production-ready examples.

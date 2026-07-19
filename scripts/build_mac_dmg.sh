@@ -2,7 +2,7 @@
 # ETL-SQL macOS DMG Builder
 # Usage: ./build_mac_dmg.sh <version>
 
-VERSION=${1:-"0.15.0"}
+VERSION=${1:-"0.16.0"}
 PUBLISHED_BIN_DIR=${2:-"release/osx-x64/bin"}
 APP_NAME="ETL-SQL"
 BUILD_DIR="src/ETL-SQL.Installer/mac"

@@ -6,7 +6,7 @@ param(
     [switch]$SkipVsix
 )
 
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.15.0" }
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.16.0" }
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"

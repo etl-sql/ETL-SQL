@@ -13,6 +13,7 @@
 | [ETL-SQL v0.13.0](v0.13.0.md) | **Released:** 2026-06-28 |
 | [ETL-SQL v0.14.0](v0.14.0.md) | **Released:** 2026-07-05 |
 | [ETL-SQL v0.15.0](v0.15.0.md) | **Released:** 2026-07-12 |
+| [ETL-SQL v0.16.0](v0.16.0.md) | **Released:** 2026-07-19 |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |
 | [ETL-SQL v0.4.0 *(Unofficial)*](v0.4.0.md) | **Released:** 2026-04-20 |

@@ -1,6 +1,6 @@
 # ETL-SQL Connectors Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.15.0**
+**Applies to ETL-SQL 0.16.0**
 
 This document describes the internal mechanics of the ETL-SQL data access layer. It is the primary reference for understanding the connection lifecycle, the registry system, the batching pipeline, and the threading and security contracts that all connectors must honour. It is written for engineers who need to understand not just what the system does but why it is designed the way it is.
 
