@@ -67,7 +67,7 @@ namespace ETL_SQL.App
             return 0;
         }
 
-        private static async Task<WarmRunnerResponse> ExecuteRequestAsync(IServiceProvider services, WarmRunnerRequest request)
+        internal static async Task<WarmRunnerResponse> ExecuteRequestAsync(IServiceProvider services, WarmRunnerRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.ScriptFile) || !File.Exists(request.ScriptFile))
                 throw new FileNotFoundException("Runner script file not found.", request.ScriptFile);

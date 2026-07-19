@@ -8,15 +8,24 @@ namespace ETL_SQL.App;
 internal static class EnterpriseEnrollmentManager
 {
     public static async Task<int> RunAsync(CliContext context, ILogger logger)
+        => await RunAsync(context, logger, new EnterpriseEnrollmentStore());
+
+    internal static async Task<int> RunAsync(
+        CliContext context,
+        ILogger logger,
+        EnterpriseEnrollmentStore store,
+        Action? requireElevation = null,
+        Func<EnterpriseEnrollmentStore, Task<EffectiveEnterprisePolicy>>? initializePolicy = null)
     {
         try
         {
-            var store = new EnterpriseEnrollmentStore();
+            requireElevation ??= RequireElevation;
+            initializePolicy ??= store => EnterprisePolicyRuntime.InitializeFromMachineAsync(store);
             return context.Command switch
             {
-                "enterprise-enroll" => Enroll(context, store, logger),
-                "enterprise-status" => await StatusAsync(store, logger),
-                "enterprise-unenroll" => Unenroll(context, store, logger),
+                "enterprise-enroll" => Enroll(context, store, logger, requireElevation),
+                "enterprise-status" => await StatusAsync(store, logger, initializePolicy),
+                "enterprise-unenroll" => Unenroll(context, store, logger, requireElevation),
                 _ => throw new InvalidOperationException($"Unsupported enterprise command '{context.Command}'.")
             };
         }
@@ -27,9 +36,13 @@ internal static class EnterpriseEnrollmentManager
         }
     }
 
-    private static int Enroll(CliContext context, EnterpriseEnrollmentStore store, ILogger logger)
+    private static int Enroll(
+        CliContext context,
+        EnterpriseEnrollmentStore store,
+        ILogger logger,
+        Action requireElevation)
     {
-        RequireElevation();
+        requireElevation();
         if (string.IsNullOrWhiteSpace(context.EnterpriseTenant)
             || string.IsNullOrWhiteSpace(context.EnterprisePolicyEndpoint)
             || string.IsNullOrWhiteSpace(context.EnterpriseSigningKeyPath))
@@ -58,7 +71,10 @@ internal static class EnterpriseEnrollmentManager
         return 0;
     }
 
-    private static async Task<int> StatusAsync(EnterpriseEnrollmentStore store, ILogger logger)
+    private static async Task<int> StatusAsync(
+        EnterpriseEnrollmentStore store,
+        ILogger logger,
+        Func<EnterpriseEnrollmentStore, Task<EffectiveEnterprisePolicy>> initializePolicy)
     {
         var status = store.GetStatus();
         if (!status.IsEnrolled)
@@ -79,7 +95,7 @@ internal static class EnterpriseEnrollmentManager
         logger.WriteLine("Enterprise enrollment: active", ConsoleColor.Green);
         EffectiveEnterprisePolicy? policy = null;
         string? policyError = null;
-        try { policy = await EnterprisePolicyRuntime.InitializeFromMachineAsync(store); }
+        try { policy = await initializePolicy(store); }
         catch (Exception ex) { policyError = ex.Message; }
         logger.WriteLine(JsonSerializer.Serialize(new
         {
@@ -112,9 +128,13 @@ internal static class EnterpriseEnrollmentManager
         return policyError is null && policy?.IsAvailable == true ? 0 : 2;
     }
 
-    private static int Unenroll(CliContext context, EnterpriseEnrollmentStore store, ILogger logger)
+    private static int Unenroll(
+        CliContext context,
+        EnterpriseEnrollmentStore store,
+        ILogger logger,
+        Action requireElevation)
     {
-        RequireElevation();
+        requireElevation();
         if (!context.EnterpriseConfirm)
             throw new InvalidOperationException("Unenrollment requires --yes because it removes mandatory enterprise controls.");
         var removed = store.Unenroll();

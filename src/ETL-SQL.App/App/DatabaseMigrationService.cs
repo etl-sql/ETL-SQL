@@ -44,6 +44,18 @@ namespace ETL_SQL.App
 
         internal static async Task<int> RunAsync(CliContext ctx, ILogger logger, CancellationToken ct = default)
         {
+            var config = Program.ServiceProvider.GetService<IConfiguration>()
+                ?? new ConfigurationBuilder().Build();
+            return await RunAsync(ctx, logger, config, AppContext.BaseDirectory, ct);
+        }
+
+        internal static async Task<int> RunAsync(
+            CliContext ctx,
+            ILogger logger,
+            IConfiguration config,
+            string baseDir,
+            CancellationToken ct = default)
+        {
             var from = (ctx.MigrateFrom ?? "sqlite").Trim().ToLowerInvariant();
             var to = (ctx.MigrateTo ?? "postgres").Trim().ToLowerInvariant();
             if (from != "sqlite" || to != "postgres")
@@ -53,10 +65,6 @@ namespace ETL_SQL.App
                     ConsoleColor.Red);
                 return 1;
             }
-
-            var config = Program.ServiceProvider.GetService<IConfiguration>()
-                ?? new ConfigurationBuilder().Build();
-            var baseDir = AppContext.BaseDirectory;
 
             var portalSqlite = Resolve(config["Portal:DatabasePath"] ?? "./portal.db", baseDir);
             var orchSqlite = Resolve(
