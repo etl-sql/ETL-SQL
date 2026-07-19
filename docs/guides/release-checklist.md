@@ -46,11 +46,11 @@ Replace `x.y.z` with the target version (current target: **0.16.0**) throughout.
       (Set-Version intentionally does **not** touch the changelog). Move items out of `[Unreleased]`.
 - [ ] Group changelog entries under **Added / Changed / Fixed / Security** (Keep a Changelog).
 - [ ] Author the curated release notes in `docs/releases/vx.y.z.md`:
-      1. Copy [`docs/releases/TEMPLATE.md`](TEMPLATE.md) to `docs/releases/vx.y.z.md`.
+      1. Copy [`docs/releases/TEMPLATE.md`](../releases/TEMPLATE.md) to `docs/releases/vx.y.z.md`.
       2. Fill in every section following the inline guidance comments (delete them as you go).
       3. Cross-reference `docs/architecture/decisions/` and `docs/architecture/roadmaps/` for architectural context on highlights.
       4. Run `git diff --stat vLAST..HEAD -- src` and verify no shipped feature is missing.
-      5. See [`docs/releases/README.md`](README.md) for the full authoring guide and quality bar.
+      5. See [`docs/releases/README.md`](../releases/README.md) for the full authoring guide and quality bar.
 
       **Required sections** (do not skip even if the answer is "None"):
       - Release Summary (2-4 sentence theme)
