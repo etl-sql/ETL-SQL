@@ -224,37 +224,34 @@ public class ProcessJobExecutorChaosTests
 
     private static IEnumerable<string> CandidateAppHostDirectories()
     {
-        var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
+        // The App builds with the same config/rid/artifacts tail as this test project, so derive the
+        // App's output directory by swapping the project name in this assembly's path. One transform
+        // covers Debug/Release, RID subdirectories, and `dotnet test --artifacts-path`:
+        //   artifacts:    <root>/bin/ETL-SQL.Tests/<cfg>/     -> <root>/bin/ETL-SQL.App/<cfg>/
+        //   conventional: <root>/tests/ETL-SQL.Tests/bin/<Cfg>/net10.0[/<rid>]/
+        //                 -> <root>/src/ETL-SQL.App/bin/<Cfg>/net10.0[/<rid>]/
+        // (The apphost copied beside the test assembly is a stub whose transitive deps land under
+        // refs/, not beside the exe, so spawning it crashes the child — HasRuntimeDependencies and
+        // these App-output candidates steer FindAppHost to a complete deployment instead.)
+        var testDir = AppContext.BaseDirectory.Replace('\\', '/').TrimEnd('/');
+        var appDir = testDir.Replace("ETL-SQL.Tests", "ETL-SQL.App");
+        yield return appDir.Replace("/tests/", "/src/");
+        yield return appDir;
 
-        // Artifacts-path layout (`dotnet test --artifacts-path`, used by the enterprise-hardening
-        // lane): the test runs from <artifacts>/bin/ETL-SQL.Tests/<config>/ and the App is a sibling
-        // at <artifacts>/bin/ETL-SQL.App/<config>/ with its full dependency set, where <config> is
-        // e.g. "debug" or "debug_linux-x64". The apphost copied next to the test assembly is a stub
-        // (its transitive deps land under refs/, not beside it), so target the App sibling instead.
-        var configName = baseDir.Name;
-        var binDir = baseDir.Parent?.Parent;
-        if (binDir != null)
-            yield return Path.Combine(binDir.FullName, "ETL-SQL.App", configName);
-
-        // Conventional layout: src/ETL-SQL.App/bin/Debug/net10.0[/<rid>].
-        var current = baseDir;
+        // Fallback: walk up looking for the conventional App output under either configuration.
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current != null)
         {
-            var appOutput = Path.Combine(
-                current.FullName,
-                "src",
-                "ETL-SQL.App",
-                "bin",
-                "Debug",
-                "net10.0");
-            if (Directory.Exists(appOutput))
+            foreach (var cfg in new[] { "Debug", "Release" })
             {
-                // RID-specific outputs (net10.0/<rid>/) carry the complete dependency set when
-                // built with --runtime; prefer them, then fall back to the framework-dependent
-                // output. HasRuntimeDependencies filters out whichever ones are incomplete.
-                foreach (var ridDir in Directory.GetDirectories(appOutput))
-                    yield return ridDir;
-                yield return appOutput;
+                var appOutput = Path.Combine(
+                    current.FullName, "src", "ETL-SQL.App", "bin", cfg, "net10.0");
+                if (Directory.Exists(appOutput))
+                {
+                    foreach (var ridDir in Directory.GetDirectories(appOutput))
+                        yield return ridDir;
+                    yield return appOutput;
+                }
             }
 
             current = current.Parent;
