@@ -7,7 +7,11 @@ const globals = require('globals');
 /** @type {import('eslint').Linter.Config[]} */
 module.exports = [
     {
-        ignores: ['out/**', 'dist/**', '**/*.d.ts']
+        // Ignores live here (not as CLI --ignore-pattern globs) so they resolve
+        // identically on every OS. Unquoted CLI globs get shell-expanded by POSIX
+        // sh on Linux CI but not by cmd on Windows, which silently un-ignored the
+        // test files and failed CI while passing locally.
+        ignores: ['out/**', 'dist/**', '**/*.d.ts', 'src/test/**', 'src/__mocks__/**']
     },
     js.configs.recommended,
     {

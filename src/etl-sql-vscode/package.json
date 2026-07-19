@@ -466,7 +466,7 @@
     "sync-assets": "node ../../scripts/sync-assets.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --max-warnings=0 --ignore-pattern src/test/** --ignore-pattern src/__mocks__/**",
+    "lint": "eslint src --max-warnings=0",
     "test": "node ./out/test/runTest.js",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
