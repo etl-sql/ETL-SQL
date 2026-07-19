@@ -224,7 +224,20 @@ public class ProcessJobExecutorChaosTests
 
     private static IEnumerable<string> CandidateAppHostDirectories()
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        // Artifacts-path layout (`dotnet test --artifacts-path`, used by the enterprise-hardening
+        // lane): the test runs from <artifacts>/bin/ETL-SQL.Tests/<config>/ and the App is a sibling
+        // at <artifacts>/bin/ETL-SQL.App/<config>/ with its full dependency set, where <config> is
+        // e.g. "debug" or "debug_linux-x64". The apphost copied next to the test assembly is a stub
+        // (its transitive deps land under refs/, not beside it), so target the App sibling instead.
+        var configName = baseDir.Name;
+        var binDir = baseDir.Parent?.Parent;
+        if (binDir != null)
+            yield return Path.Combine(binDir.FullName, "ETL-SQL.App", configName);
+
+        // Conventional layout: src/ETL-SQL.App/bin/Debug/net10.0[/<rid>].
+        var current = baseDir;
         while (current != null)
         {
             var appOutput = Path.Combine(
