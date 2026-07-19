@@ -198,12 +198,18 @@ public class ProcessJobExecutorChaosTests
 
     private static string FindAppHost()
     {
+        // Only accept a host whose directory also carries the App's runtime dependencies.
+        // Since the App declares <RuntimeIdentifiers>, a `dotnet test --runtime <rid>` build
+        // (used by the enterprise-hardening lane) emits the full App under net10.0/<rid>/, and
+        // the apphost copied next to the test assembly is a framework-dependent stub missing
+        // transitive deps (e.g. Microsoft.Extensions.DependencyInjection.Abstractions). Spawning
+        // that stub crashes the child at startup, so skip incomplete deployments.
         foreach (var dir in CandidateAppHostDirectories())
         {
             foreach (var name in new[] { "ETL-SQL.exe", "ETL-SQL" })
             {
                 var candidate = Path.Combine(dir, name);
-                if (File.Exists(candidate))
+                if (File.Exists(candidate) && HasRuntimeDependencies(dir))
                     return candidate;
             }
         }
@@ -211,6 +217,10 @@ public class ProcessJobExecutorChaosTests
         return Path.Combine(AppContext.BaseDirectory,
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL");
     }
+
+    // A spawnable apphost must have its transitive framework deps sitting beside it.
+    private static bool HasRuntimeDependencies(string dir) =>
+        File.Exists(Path.Combine(dir, "Microsoft.Extensions.DependencyInjection.Abstractions.dll"));
 
     private static IEnumerable<string> CandidateAppHostDirectories()
     {
@@ -225,7 +235,14 @@ public class ProcessJobExecutorChaosTests
                 "Debug",
                 "net10.0");
             if (Directory.Exists(appOutput))
+            {
+                // RID-specific outputs (net10.0/<rid>/) carry the complete dependency set when
+                // built with --runtime; prefer them, then fall back to the framework-dependent
+                // output. HasRuntimeDependencies filters out whichever ones are incomplete.
+                foreach (var ridDir in Directory.GetDirectories(appOutput))
+                    yield return ridDir;
                 yield return appOutput;
+            }
 
             current = current.Parent;
         }
