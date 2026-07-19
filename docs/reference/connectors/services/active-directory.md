@@ -1,47 +1,51 @@
 # ACTIVE_DIRECTORY
-Connects to an Active Directory or LDAP server to perform user, group, and computer lookups. Automatically translates SQL WHERE clauses into raw LDAP filter queries.
 
-Syntax:
-  CREATE CONNECTION <name> AS ACTIVE_DIRECTORY(
-    HOST           = 'ldap.corp.com',
-    PORT           = 389,
-    USE_SSL        = FALSE,
-    AUTH_MODE      = 'NEGOTIATE', -- NEGOTIATE, SIMPLE, INTEGRATED
-    USER           = 'username',
-    PASSWORD       = '<password>',
-    DOMAIN         = 'CORP',
-    BASE_DN        = 'OU=Employees,DC=corp,DC=com',
-    FILTER_CONTEXT = 'users', -- users, groups, computers
-    ATTRIBUTES     = 'sAMAccountName,displayName,mail'
-  );
+Connects to an Active Directory or LDAP server to perform user, group, and computer lookups. Standard
+SQL `WHERE` clauses (e.g. `sAMAccountName = 'smith'`) are parsed and translated dynamically into native
+LDAP filter queries.
 
-Options:
-- **HOST** — LDAP/AD server hostname or IP (required)
-- **PORT** — Connection port (default 389, or 636 for SSL)
-- **USE_SSL** — Connect via secure LDAPS (default FALSE)
-- **AUTH_MODE** — Bind method: NEGOTIATE, SIMPLE, INTEGRATED (default INTEGRATED)
-- **USER** — User account name or bind DN (for SIMPLE / NEGOTIATE)
-- **PASSWORD** — Binding password (for SIMPLE / NEGOTIATE)
-- **DOMAIN** — Active Directory Domain name
-- **BASE_DN** — Search base Distinguished Name
-- **FILTER_CONTEXT** — Built-in search scope: 'users', 'groups', or 'computers' (default 'users')
-- **FILTER** — Raw LDAP filter override (bypasses automatic SQL parsing)
-- **ATTRIBUTES** — Comma-separated AD attributes list to retrieve
+Aliases: `AD`, `LDAP`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server host name or IP address (e.g. `ldap.corp.com`) | Yes (structured) |
+| `PORT` | Directory port (default: `389` for LDAP, `636` for LDAPS) | No |
+| `USE_SSL` | Enable SSL encryption / LDAPS connection (`TRUE`/`FALSE`) | No |
+| `AUTH_MODE` | Authentication mode: `INTEGRATED`, `SIMPLE` (basic auth over SSL), `NEGOTIATE` (default: `INTEGRATED`) | No |
+| `USER` | Login username / bind Distinguished Name (DN) | No |
+| `PASSWORD` | Login password (use `ENC:` prefix) | No |
+| `DOMAIN` | Domain name | No |
+| `BASE_DN` | LDAP search base Distinguished Name (e.g. `OU=Users,DC=corp,DC=com`) | No |
+| `FILTER_CONTEXT` | Scope context: `users`, `groups`, or `computers` (default: `users`) | No |
+| `FILTER` | Raw LDAP query filter (overrides `FILTER_CONTEXT` and standard AD parsing) | No |
+| `ATTRIBUTES` | Comma-separated list of attributes to query | No |
+
+> [!CAUTION]
+> `AUTH_MODE = 'SIMPLE'` transmits credentials in plaintext unless `USE_SSL=TRUE` (LDAPS) is active. Use
+> `USE_SSL=TRUE` with simple binding.
+
+## Examples
 
 ```sql
-CREATE CONNECTION ActiveDir AS ACTIVE_DIRECTORY(
-  HOST      = 'ldap.corp.company.com',
-  BASE_DN   = 'DC=corp,DC=company,DC=com',
-  AUTH_MODE = 'NEGOTIATE',
-  USER      = 'svc_etl',
-  PASSWORD  = ENC:U2FsdGVkX1+...
-);
+-- Search users with Negotiate auth over standard LDAP
+CREATE CONNECTION ad_corp AS ACTIVE_DIRECTORY(
+         HOST       = 'ldap.corp.example.com',
+         BASE_DN    = 'DC=corp,DC=example,DC=com',
+         AUTH_MODE  = 'NEGOTIATE',
+         USER       = 'domain_service',
+         PASSWORD   = ENC:U2FsdGVkX1+...,
+         DOMAIN     = 'CORP');
 
--- Search active users with smith in their name
+-- Query using the AD connection
 SELECT sAMAccountName, displayName, mail, memberOf
-FROM ActiveDir
-WHERE sAMAccountName = '*smith*';
+FROM ad_corp
+WHERE sAMAccountName = 'jdoe';
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [SharePoint](sharepoint.md)

@@ -755,4 +755,4 @@ services.AddSingleton<IConnector, SnowflakeConnector>();
 
 ---
 
-*Refer to [Connectors_Standards.md](standards/Connectors_Standards.md) for governance rules and [Data Connectors](../reference/connectors/data-connectors.md) for connector syntax.*
+*Refer to [Connectors_Standards.md](standards/Connectors_Standards.md) for governance rules and [Data Connectors](../reference/connectors/README.md) for connector syntax.*

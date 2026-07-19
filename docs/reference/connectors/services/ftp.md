@@ -1,38 +1,35 @@
-﻿# FTP
-Connects to an FTP or FTPS server for file transfer operations (SEND FILE, RECEIVE FILE). Not used for SELECT/INSERT — pair it with the TRANSFER operations.
+# FTP
 
-Syntax:
-  CREATE CONNECTION <name> AS FTP(
-    HOST    = 'ftp.example.com',
-    PORT    = 21,
-    USER    = 'username',
-    PASSWORD = '<password>',
-    USE_SSL  = ON | OFF
-  );
+Legacy File Transfer Protocol. Supports active and passive mode depending on the server. Used with
+`SEND FILE` / `RECEIVE FILE` and remote file operations, not `SELECT`/`INSERT`.
 
-Options:
-- **HOST** — FTP server hostname or IP (required)
-- **PORT** — port number (default 21; FTPS typically 990)
-- **USER** — login username (required)
-- **PASSWORD** — login password (required)
-- **USE_SSL** — use FTPS (FTP over TLS) (default OFF)
-- **PASSIVE** — use passive mode (default ON)
+Aliases: `FTP_CONN`
+
+> [!NOTE]
+> `FTPS` (FTP over SSL/TLS) is treated as an alias token at parse time but uses the same connector.
+> Provide `USE_SSL=TRUE` in the connection string if your server requires implicit FTPS.
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | FTP server address or IP | Yes (structured) |
+| `PORT` | Listening port (default: `21`) | No |
+| `USER` | Login username | No |
+| `PASSWORD` | Login password | No |
+
+## Examples
 
 ```sql
-CREATE CONNECTION DropzoneFTP AS FTP(
-  HOST     = 'ftp.supplier.com',
-  PORT     = 21,
-  USER     = @ftp_user,
-  PASSWORD = @ftp_password,
-  USE_SSL  = ON
-);
+-- Structured
+CREATE CONNECTION ftp_src AS FTP(HOST='ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
 
--- Download latest data file
-RECEIVE FILE 'incoming/orders_latest.csv' TO 'C:\data\orders.csv' AT DropzoneFTP;
-
--- Upload processed result
-SEND FILE 'C:\data\report.csv' TO 'outgoing/report.csv' AT DropzoneFTP;
+-- Traditional
+CREATE CONNECTION ftp_legacy AS FTP('ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [SFTP](sftp.md) · [TRANSFER](../../file-operations/transfer.md)

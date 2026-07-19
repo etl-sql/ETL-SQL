@@ -2,7 +2,7 @@
 
 ETL-SQL v0.15.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for repository maintainers, early testers, and anyone updating pre-release scripts from older branches.
 
-For current syntax, prefer [Getting Started](getting-started.md), the [Syntax Index](../syntax-index.md), [Statement Reference](../reference/statements/README.md), [Data Connectors](../reference/connectors/data-connectors.md), and [Report SQL](report-sql.md).
+For current syntax, prefer [Getting Started](getting-started.md), the [Syntax Index](../syntax-index.md), [Statement Reference](../reference/statements/README.md), [Data Connectors](../reference/connectors/README.md), and [Report SQL](report-sql.md).
 
 ---
 

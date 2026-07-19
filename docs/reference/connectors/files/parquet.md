@@ -1,34 +1,32 @@
-﻿# PARQUET
-Reads and writes Apache Parquet columnar files. Parquet is the preferred format for large analytical datasets — it compresses well and supports efficient columnar reads.
+# PARQUET
 
-Syntax:
-  CREATE CONNECTION <name> AS PARQUET(
-    PATH        = 'data.parquet',
-    COMPRESSION = 'SNAPPY' | 'GZIP' | 'ZSTD' | 'NONE',
-    ENCRYPT     = ON | OFF,
-    PASSWORD    = '<passphrase>'
-  );
+Apache Parquet columnar format. Ideal for high-throughput analytics and interoperability with Spark,
+Hive, and data-lake systems — it compresses well and supports efficient columnar reads.
 
-Options:
-- **PATH** — file path (required)
-- **COMPRESSION** — output compression codec (default SNAPPY)
-- **ENCRYPT** — AES encrypt/decrypt (default OFF)
-- **PASSWORD** — passphrase for encryption
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `COMPRESSION` | `SNAPPY` (default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED` | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+## Examples
 
 ```sql
-CREATE CONNECTION EventLog AS PARQUET(
-  PATH        = 'C:\data\events_2024.parquet',
-  COMPRESSION = 'SNAPPY'
-);
+-- Write a Snappy-compressed Parquet file (default)
+CREATE CONNECTION pq_out AS PARQUET(PATH='C:\Data\output.parquet');
 
-SELECT user_id, event_type, event_ts
-  INTO #events
-  FROM EventLog
-  WHERE event_type IN ('login', 'purchase');
-
--- Write a large result set to Parquet
-SELECT * INTO OutParquet FROM #analytics_result;
+-- Maximum compression for archival
+CREATE CONNECTION pq_archive AS PARQUET('C:\Archive\data.parquet', COMPRESSION=ZSTD);
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [File Connectors](README.md)
+- [Connectors](../README.md)
+- [Avro](avro.md)

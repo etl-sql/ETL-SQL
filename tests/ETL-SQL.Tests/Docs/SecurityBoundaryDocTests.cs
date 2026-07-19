@@ -15,10 +15,12 @@ public sealed class SecurityBoundaryDocTests
             System.AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     // Collapse whitespace so assertions are robust to markdown line-wrapping.
+    // The enrollment boundary language lives in enterprise-enrollment.md (split out of the former
+    // native-admin-services.md monolith).
     private static string AdminGuide() =>
         System.Text.RegularExpressions.Regex.Replace(
             System.IO.File.ReadAllText(System.IO.Path.Combine(
-                RepoRoot, "docs", "administration", "platform", "native-admin-services.md")),
+                RepoRoot, "docs", "administration", "platform", "enterprise-enrollment.md")),
             @"\s+", " ");
 
     private static string EnterpriseReleaseGates() =>

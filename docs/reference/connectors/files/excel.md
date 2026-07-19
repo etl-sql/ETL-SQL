@@ -1,45 +1,47 @@
-﻿# EXCEL
-Reads from and writes to Excel workbooks (.xlsx, .xls). Specify a worksheet name and optionally a named range or cell range.
+# EXCEL
 
-Syntax:
+Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`). When querying an `EXCEL`
+connection via `SELECT`, the table name is `FILE` and columns are named from the header row, or
+`Column1`, `Column2`, … when there is no header.
+
+Aliases: `XLSX`, `XLS`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the workbook | Yes (structured) |
+| `SHEET` | Target sheet name (default: first sheet) | No |
+| `HEADER` | `ON`/`OFF` — treat first row as column names (default: `ON`) | No |
+| `RANGE` | Explicit cell range to read (e.g. `'A1:F500'`) | No |
+| `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching when a template schema is supplied (default: `OFF`) | No |
+| `IGNORE_EXTRA_COLUMNS` | `ON`/`OFF` — omit source columns not present in the template schema | No |
+| `NULL_MISSING_COLUMNS` | `ON`/`OFF` — include template columns missing from the source and fill with `NULL` | No |
+| `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align by case-insensitive header name instead of position; requires unique source headers | No |
+| `COMPRESS` | `ON`/`OFF` — GZip the output file after writing | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+Excel uses the same schema-resilience contract as [FLATFILE](flatfile.md): `STRICT_SCHEMA=ON` fails on
+unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSING_COLUMNS=ON` fills
+absent template columns with `NULL`, and `MAP_BY_HEADER_NAME=ON` aligns by unique source header names.
+Use `EXPECT SCHEMA` after staging if the accepted temp-table shape is part of the pipeline contract.
+
+## Examples
+
 ```sql
-CREATE CONNECTION <name> AS EXCEL(
-  PATH     = 'file.xlsx',
-  SHEET    = 'Sheet1',
-  RANGE    = 'A1:D100',
-  HEADER   = ON | OFF,
-  ENCRYPT  = ON | OFF,
-  PASSWORD = '<passphrase>'
-);
+-- Specific sheet and range
+CREATE CONNECTION xl_src AS EXCEL('C:\Reports\Q4.xlsx', SHEET='Summary', HEADER=ON, RANGE='A1:F500');
+
+-- Write an encrypted workbook
+CREATE CONNECTION xl_out AS EXCEL(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PASSWORD='safe_pass');
 ```
 
-Options:
-- **PATH** — workbook path (required)
-- **SHEET** — worksheet name or index (default first sheet)
-- **RANGE** — cell range to read/write (e.g. 'A1:F50' or a named range)
-- **HEADER** — treat first row as column headers (default ON)
-- **STRICT_SCHEMA** — fail on unaccepted source/template schema drift
-- **IGNORE_EXTRA_COLUMNS** — ignore source columns not present in the template schema
-- **NULL_MISSING_COLUMNS** — fill missing template columns with NULL
-- **MAP_BY_HEADER_NAME** — align by case-insensitive unique source header names
-- **ENCRYPT** — encrypt the workbook on write (default OFF)
-- **PASSWORD** — workbook password
+## References
 
-```sql
-CREATE CONNECTION Budget AS EXCEL(
-  PATH   = 'C:\finance\budget_2024.xlsx',
-  SHEET  = 'Summary',
-  HEADER = ON
-);
-
-SELECT department, q1, q2, q3, q4
-  INTO #budget
-  FROM Budget;
-
-PRINT 'Budget rows loaded: ' + @@ROWCOUNT;
-```
-
-When schema-resilience options change the accepted shape, EXCEL emits a diagnostic with ignored extra-column count, null-filled missing-column count, and affected row count. Use `EXPECT SCHEMA` after staging when the accepted `#temp` shape is a downstream contract.
-
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+- [File Connectors](README.md)
+- [Connectors](../README.md)
+- [FLATFILE](flatfile.md)

@@ -1,65 +1,37 @@
 # SQLITE
-Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver. Supports local transactions, schema inspection, and data loading.
 
-## Syntax
+Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver.
+Supports local transactions, schema inspection, and data loading.
 
-```sql
-CREATE CONNECTION <name> AS SQLITE(
-  DATABASE        = 'C:\data\mydb.db',
-  TIMEOUT_SECONDS = 30
-);
-
--- Or in-memory database:
-CREATE CONNECTION <name> AS SQLITE(
-  DATABASE        = ':memory:'
-);
-```
+Aliases: `SQLITE3`
 
 ## Options
 
-- **Alias: SQLITE3** — accepted connector token for compatibility
-- **DATABASE = 'path'** — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
-- **TIMEOUT_SECONDS = n** — command/query execution timeout in seconds (default 30)
-- **TABLE = 'name'** — default table for unqualified SELECT/INSERT operations
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `DATABASE` | File path to the SQLite database or `:memory:` | Yes (structured form) |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
+| `TABLE` | Default table context for unqualified operations | No |
 
-SQLite files are not encrypted by this connector. Use filesystem or volume encryption for sensitive
-data. The shipped native SQLite library is not SQLCipher, so `PASSWORD` is not accepted.
+> [!IMPORTANT]
+> SQLite files are not encrypted by this connector. Protect sensitive databases with filesystem and
+> volume encryption. `PASSWORD` is intentionally unsupported because the shipped native SQLite library
+> is not SQLCipher.
 
 ## Examples
 
 ```sql
--- Create an in-memory SQLite database connection
-CREATE CONNECTION LocalCache AS SQLITE(
-  DATABASE = ':memory:'
-);
+-- Standard unencrypted in-memory database
+CREATE CONNECTION local_mem AS SQLITE(DATABASE=':memory:');
 
--- SQLite connector supports transactions and DDL/DML pushdown
-BEGIN TRANSACTION;
+-- Standard unencrypted file-based database
+CREATE CONNECTION local_db AS SQLITE(DATABASE='C:\Data\local.db', TIMEOUT_SECONDS=30);
 
--- Create table in SQLite
-EXECUTE LocalCache BEGIN
-  CREATE TABLE items (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    price REAL
-  );
-END;
-
--- Stage data in SQLite
-SELECT 1 AS id, 'Widget A' AS name, 19.99 AS price INTO #stage;
-SELECT 2 AS id, 'Widget B' AS name, 49.99 AS price INTO #stage;
-
--- Bulk copy staged data into SQLite table
-SELECT * FROM #stage INTO LocalCache.items;
-
-COMMIT;
-
--- Query SQLite database
-SELECT id, name, price 
-  INTO #results 
-  FROM LocalCache.items
-  WHERE price > 20.0;
+-- Traditional connection string form
+CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
 ```
 
 ## References
-- [Data Connectors](../../../administration/platform/README.md)
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)

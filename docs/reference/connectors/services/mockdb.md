@@ -1,27 +1,47 @@
-﻿# MOCKDB
-An in-memory test database for development and unit-testing scripts without connecting to a live database. MOCKDB accepts all DDL and DML operations and discards its data when the session ends.
+# MOCKDB
 
-Syntax:
-  CREATE CONNECTION <name> AS MOCKDB();
-
-No options are required.
+Built-in, zero-configuration in-memory database for script development and testing. No credentials, no
+server, no configuration required. Accepts all DDL and DML operations but discards its data when the
+session ends.
 
 ```sql
-CREATE CONNECTION TestDB AS MOCKDB();
-
--- Create a table on the mock DB
-CREATE TABLE TestDB.dbo.Orders (
-  id     INT,
-  amount DECIMAL(10,2)
-);
-
-INSERT INTO TestDB.dbo.Orders (id, amount) VALUES (1, 99.99), (2, 149.00);
-
-SELECT id, amount INTO #test FROM TestDB.dbo.Orders;
-PRINT 'Rows: ' + @@ROWCOUNT;
+CREATE CONNECTION <name> AS MOCKDB();
 ```
 
-Use MOCKDB during script development to avoid modifying real databases. Switch to the real connection when ready by changing the CREATE CONNECTION statement.
+## Pre-populated tables
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+| Table | Columns |
+| :--- | :--- |
+| `Users` | `UserID`, `UserName`, `Email`, `ExternalID`, `RegistrationDate`, `PreciseTime`, `LastLoginOffset` |
+| `Products` | `ProductID`, `ProductName`, `Category`, `Cost`, `Price`, `StockLevel`, `Discontinued`, `WeightGrams`, `SkidGuid` |
+| `Orders` / `Sales` | `SaleID`, `OrderDate`, `CustomerID`, `ProductID`, `Quantity`, `UnitPrice`, `Total`, `Region`, `ShipTimeOffset`, `ProcessDuration` |
+| `Employee` | `EmpID`, `FirstName`, `LastName`, `Name`, `DeptID`, `Salary`, `HireDate`, `ManagerID`, `Status`, `Active`, `GlobalID` |
+| `departments` | `DeptID`, `DeptName`, `Budget` |
+
+All tables are pre-seeded with sample rows. `INSERT`, `UPDATE`, and `DELETE` operations are accepted but
+**do not persist** between sessions.
+
+## Example
+
+```sql
+CREATE CONNECTION m AS MOCKDB();
+
+SELECT u.UserName, o.Total
+INTO #UserOrders
+FROM m.Users AS u
+JOIN m.Orders AS o ON u.UserID = o.CustomerID;
+
+-- Test an EXECUTE block
+EXECUTE m INTO #emp
+BEGIN
+    SELECT EmpID, Name FROM Employee WHERE Active = 1;
+END
+```
+
+> [!WARNING]
+> `MOCKDB` is strictly for development and testing. Do not use it in production scripts.
+
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)

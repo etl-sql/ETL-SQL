@@ -1,101 +1,81 @@
 # NEO4J
-Connects to Neo4j graph databases using the official Neo4j.Driver. Supports querying virtual node and relationship tables, dynamic schema discovery, native Cypher pass-through blocks via the `EXECUTE` statement, and database writes.
 
-Syntax:
-  CREATE CONNECTION <name> AS NEO4J(
-    CONNECTION_STRING = 'bolt://localhost:7687',
-    USER              = 'neo4j',
-    PASSWORD          = 'password',
-    DATABASE          = 'neo4j',
-    TIMEOUT_SECONDS   = 30,
-    KEY_COLUMNS       = 'customer_id'
-  );
+Graph database connector supporting property-graph ingestion and Cypher pass-through querying via the
+official Neo4j.Driver. Regular `SELECT` reads through a virtual node/relationship table layer; native
+Cypher runs through `EXECUTE graph BEGIN ... END`.
 
-Aliases:
-  NEO
+Aliases: `NEO`
 
-Options:
-- **CONNECTION_STRING** — Connection URI (e.g., bolt://localhost:7687 or neo4j://...) (required unless host/port specified)
-- **URI** — Alias for CONNECTION_STRING
-- **DATABASE** — Target database name (default: neo4j)
-- **TIMEOUT_SECONDS** — Connection and query timeout limit in seconds (default: 30)
-- **HOST** — Hostname for the Neo4j instance (alternative to CONNECTION_STRING)
-- **PORT** — Port for the Neo4j instance (default: 7687)
-- **PROTOCOL** — URI scheme when HOST/PORT are used (default: bolt)
-- **KEY_COLUMNS** — Comma-separated properties used to MERGE nodes or relationships instead of always CREATE
-- **FROM_LABEL** — Source node label for EDGE_<TYPE> writes that use _from_key
-- **TO_LABEL** — Target node label for EDGE_<TYPE> writes that use _to_key
-- **FROM_KEY_COLUMN** — Source node property matched against _from_key (default: id)
-- **TO_KEY_COLUMN** — Target node property matched against _to_key (default: id)
-- **SKIP_MISSING_ENDPOINTS** — TRUE to skip edge rows with missing/unmatched endpoints (default: FALSE)
-- **SCHEMA_SAMPLE_SIZE** — Rows sampled for virtual table schema discovery; 0 scans all rows (default: 1000)
-- **USER** — Database username
-- **PASSWORD** — Database password
+## Options
 
-Credentials supplied with USER/PASSWORD are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONNECTION_STRING` / `URI` | Bolt/Neo4j connection URI (e.g. `bolt://localhost:7687`) | Yes (structured) |
+| `USER` | Authentication username | No |
+| `PASSWORD` | Authentication password | No |
+| `DATABASE` | Target database name (default: `neo4j`) | No |
+| `TIMEOUT_SECONDS` | Connection and query timeout in seconds (default: `30`) | No |
+| `HOST` | Server host name (alternative to connection string) | No |
+| `PORT` | Server port (default: `7687`) | No |
+| `PROTOCOL` | URI scheme when `HOST`/`PORT` are used (default: `bolt`) | No |
+| `KEY_COLUMNS` | Comma-separated properties used to `MERGE` nodes or relationships instead of always `CREATE` | No |
+| `FROM_LABEL` / `TO_LABEL` | Source/target node labels for `EDGE_<TYPE>` writes that use `_from_key` and `_to_key` | No |
+| `FROM_KEY_COLUMN` / `TO_KEY_COLUMN` | Source/target node property names matched against `_from_key` and `_to_key` (default: `id`) | No |
+| `SKIP_MISSING_ENDPOINTS` | `TRUE` to skip edge rows with missing or unmatched endpoints instead of failing (default: `FALSE`) | No |
+| `SCHEMA_SAMPLE_SIZE` | Rows sampled for virtual-table schema discovery; `0` scans all rows (default: `1000`) | No |
 
-Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` use the virtual table reader. Use `EXECUTE graph BEGIN ... END` for native Cypher pass-through.
-Truncating a table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root connection deletes the whole graph.
-`BEGIN TRANSACTION` enlists the Neo4j connection for graph writes, table-scoped truncates, and native Cypher executed through the connection. `COMMIT` persists those graph changes; `ROLLBACK` discards them.
-Set `SCHEMA_SAMPLE_SIZE = 0` only when complete sparse-property discovery matters more than the cost of scanning every node or relationship of the requested virtual table.
+`USER` and `PASSWORD` are passed to the Neo4j driver as an auth token and are not embedded in the
+stored connection URI.
 
-### Virtual Tabular Schema Mapping
-To fit property graphs into the tabular `DataTable` model, the connector maps graph entities to "Virtual Tables":
+Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` read through the connector's
+virtual table layer. Use `EXECUTE graph BEGIN ... END` for native Cypher pass-through. Truncating a
+table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root
+connection deletes the whole graph. `BEGIN TRANSACTION` enlists the Neo4j connection for graph writes,
+table-scoped truncates, and native Cypher executed through the connection; `COMMIT` persists those
+graph changes and `ROLLBACK` discards them. Set `SCHEMA_SAMPLE_SIZE=0` only when complete sparse-property
+discovery matters more than the cost of scanning every node or relationship of the requested virtual
+table.
 
-1. **Virtual Node Tables (`NODE_<LABEL>`)**:
-   - Every node label (e.g., `Person`, `Company`) represents a virtual table.
-   - **System Columns**: `_id` (Neo4j element ID) and `_labels` (comma-separated labels on the node).
-   - **Properties**: All node properties (e.g., `name`, `age`) map directly to columns.
-   - **Keyed writes**: Set `KEY_COLUMNS` on the connection to use Cypher `MERGE` for stable upserts instead of duplicate `CREATE` operations.
+## Virtual schema mapping
 
-2. **Virtual Relationship Tables (`EDGE_<TYPE>`)**:
-   - Every relationship type (e.g., `FRIEND_OF`, `WORKS_FOR`) represents a virtual table.
-   - **System Columns**: `_id` (relationship ID), `_from_id` (source node ID), `_to_id` (target node ID), `_from_label` (source node label), and `_to_label` (target node label).
-   - **Keyed endpoints**: For portable ETL loads, provide `_from_key` and `_to_key` columns plus `FROM_LABEL`/`TO_LABEL` and optional `FROM_KEY_COLUMN`/`TO_KEY_COLUMN`; this avoids depending on Neo4j element IDs.
-   - **Endpoint validation**: Edge writes fail by default when endpoint identifiers are missing or no endpoint pair matches. Set `SKIP_MISSING_ENDPOINTS = TRUE` only when intentionally dropping those edge rows.
-   - **Properties**: All relationship properties map directly to columns.
+Graph entities are mapped to virtual tables:
 
-Write-side property values are normalized before they are sent to Neo4j: `DBNull.Value` becomes `NULL`, dates/times and GUIDs are stored as strings, and nested maps/rows are stored as JSON text because Neo4j node and relationship properties do not support nested map values.
+- **`NODE_<LABEL>`** — Virtual node table for the specified node label. Includes system columns `_id`
+  (element ID) and `_labels` (comma-separated labels). Set `KEY_COLUMNS` for stable upserts via Cypher
+  `MERGE`.
+- **`EDGE_<TYPE>`** — Virtual relationship table for the specified relationship type. Includes system
+  columns `_id` (relationship ID), `_from_id` (source element ID), `_to_id` (target element ID),
+  `_from_label`, and `_to_label`. For portable ETL loads, provide `_from_key` and `_to_key` plus
+  `FROM_LABEL`/`TO_LABEL` and optional key-column options.
 
-### Examples
+## Write behavior
+
+- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterized `UNWIND` Cypher templates.
+- If `KEY_COLUMNS` is set, writes use `MERGE` for idempotent upserts; otherwise writes use `CREATE`.
+- Edge writes fail by default when endpoint columns are missing or endpoint matches are not found. Set
+  `SKIP_MISSING_ENDPOINTS=TRUE` only when intentionally dropping those edge rows.
+- `DBNull.Value` is written as `NULL`; dates/times and GUIDs are stored as strings; nested maps/rows are
+  stored as JSON text.
+- If `APPEND=FALSE` (the default), the delete-and-load operation runs inside a single Neo4j write
+  transaction so failures roll back the replacement.
+- Inside an engine `BEGIN TRANSACTION`, writes/truncates/native Cypher use the enlisted Neo4j
+  transaction instead of their own per-operation transaction.
+- In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
+
+## Examples
 
 ```sql
--- Connect using connection parameters
+-- Ingest customers as graph nodes
 CREATE CONNECTION graph AS NEO4J(
-  HOST     = 'localhost',
-  PORT     = 7687,
-  USER     = 'neo4j',
-  PASSWORD = 'password',
-  KEY_COLUMNS = 'customer_id'
+    URI='bolt://localhost:7687',
+    USER='neo4j',
+    PASSWORD='password',
+    KEY_COLUMNS='customer_id'
 );
+INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city)
+SELECT customer_id, name, city FROM #staging;
 
--- Extract active customers to flat table
-SELECT _id, name, email
-  INTO #active_customers
-  FROM graph.NODE_CUSTOMER
-  WHERE status = 'Active';
-
--- Ingest customers back into the graph as keyed nodes (MERGE on customer_id)
-INSERT INTO graph.NODE_CUSTOMER (customer_id, name, email, status)
-SELECT customer_id, name, email, status FROM #staging;
-
--- Ingest relationships between customers by stable endpoint keys
-CREATE CONNECTION graph_edges AS NEO4J(
-  HOST = 'localhost',
-  PORT = 7687,
-  USER = 'neo4j',
-  PASSWORD = 'password',
-  FROM_LABEL = 'CUSTOMER',
-  TO_LABEL = 'CUSTOMER',
-  FROM_KEY_COLUMN = 'customer_id',
-  TO_KEY_COLUMN = 'customer_id',
-  KEY_COLUMNS = 'friendship_id'
-);
-
-INSERT INTO graph_edges.EDGE_FRIEND_OF (_from_key, _to_key, friendship_id, since)
-SELECT customer_a_id, customer_b_id, friendship_id, '2025' FROM #friends;
-
--- Native Cypher Pass-Through using EXECUTE
+-- Native Cypher pass-through
 DECLARE @minAge INT = 21;
 EXECUTE graph INTO #fof_network WITH (@minAge)
 BEGIN
@@ -105,5 +85,7 @@ BEGIN
 END;
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)

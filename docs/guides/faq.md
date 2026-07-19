@@ -267,7 +267,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > If the system is under memory pressure, the controller dynamically scales down parallel degree, batch sizes, and prefetch depth. If the system is idle, it dynamically scales them up to maximize throughput.
 
 **Q: How does ETL-SQL process datasets that exceed available physical RAM?**
-> The engine relies on an encrypted **Spill-to-Disk** architecture managed by the [MemoryArbiter](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/MemoryGovernor.cs) and [SpillStore](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs). 
+> The engine relies on an encrypted **Spill-to-Disk** architecture managed by the [MemoryArbiter](../../src/ETL-SQL.Engine/Engines/MemoryGovernor.cs) and [SpillStore](../../src/ETL-SQL.Engine/Spill/SpillStore.cs). 
 > When active query pipelines (like large sort, join, or aggregation operations) exceed their allocated memory grant, the engine writes intermediate data chunks to encrypted, compressed files on disk (AES-GCM + GZip). Once writing is complete, the engine merges the spilled files in a single pass. This prevents Out of Memory (OOM) crashes and guarantees job completion.
 
 

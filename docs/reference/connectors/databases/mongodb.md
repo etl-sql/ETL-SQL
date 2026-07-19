@@ -1,56 +1,50 @@
 # MONGODB
-Connects to MongoDB document databases using the official MongoDB.Driver. Supports querying collections, dynamic schema discovery, nested document/array flattening to JSON strings, and database writes.
 
-Syntax:
-  CREATE CONNECTION <name> AS MONGODB(
-    CONNECTION_STRING = 'mongodb://localhost:27017',
-    DATABASE       = 'dbname',
-    COLLECTION     = 'collection_name',
-    TIMEOUT_SECONDS = 30
-  );
+Connects to a MongoDB document database using the official MongoDB.Driver. Querying a `MONGODB`
+connection via `SELECT` retrieves documents from the specified database and collection; inserting
+writes new documents. Supports dynamic schema discovery and nested document/array flattening to JSON
+strings.
 
-Aliases:
-  MONGO
+Aliases: `MONGO`
 
-Options:
-- **CONNECTION_STRING** — Connection URI (e.g., mongodb://localhost:27017 or mongodb+srv://...) (required unless host/port specified)
-- **DATABASE** — target database name (required)
-- **COLLECTION** — target collection name
-- **TIMEOUT_SECONDS** — connection and query timeout limit in seconds (default: 30)
-- **HOST** — hostname for the MongoDB instance (alternative to CONNECTION_STRING)
-- **PORT** — port for the MongoDB instance (default: 27017)
-- **USER** — database username (alternative to CONNECTION_STRING authentication)
-- **PASSWORD** — database password (alternative to CONNECTION_STRING authentication)
+## Options
 
-### Nested Document and Array Flattening
-MongoDB allows rich, hierarchical structures. When queried, this connector flattens nested BSON documents and BSON arrays to valid JSON strings in the output table, allowing standard ETL-SQL string/JSON functions to be run downstream.
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONNECTION_STRING` | Full MongoDB connection URI (e.g. `mongodb://localhost:27017`) | Yes (if host/port not provided) |
+| `DATABASE` | Target database name | Yes |
+| `COLLECTION` | Target collection name context | No |
+| `HOST` | MongoDB hostname (alternative to connection string) | No |
+| `PORT` | MongoDB port (alternative to connection string, default: `27017`) | No |
+| `USER` | Username for authentication | No |
+| `PASSWORD` | Password for authentication (supports `ENC:`) | No |
+| `TIMEOUT_SECONDS` | Connection timeout limit in seconds (default: `30`) | No |
 
-### Examples
+## Examples
 
 ```sql
--- Connect using connection URI
-CREATE CONNECTION MongoProd AS MONGODB(
-  CONNECTION_STRING = 'mongodb://admin:secret@mongo.corp.local:27017',
-  DATABASE   = 'analytics',
-  COLLECTION = 'user_events'
+-- Connection using standard Mongo URI
+CREATE CONNECTION mongo_uri AS MONGODB('mongodb://localhost:27017', DATABASE='inventory', COLLECTION='products');
+
+-- Connection using structured host/credentials options
+CREATE CONNECTION mongo_struct AS MONGODB(
+    HOST = 'localhost',
+    PORT = '27017',
+    USER = 'db_admin',
+    PASSWORD = ENC:U2FsdGVkX1+...,
+    DATABASE = 'inventory',
+    COLLECTION = 'products',
+    TIMEOUT_SECONDS = 15
 );
 
--- Extract data into engine staging table
-SELECT id, event_type, metadata, timestamp
-  INTO #staging
-  FROM MongoProd.user_events
-  LIMIT 100;
+-- Query a collection
+SELECT name, price, category FROM mongo_uri;
 
--- Write data back to a MongoDB collection
-CREATE CONNECTION MongoDest AS MONGODB(
-  CONNECTION_STRING = 'mongodb://localhost:27017',
-  DATABASE   = 'archive'
-);
-
-SELECT * 
-  INTO MongoDest.archived_events
-  FROM #staging;
+-- Insert a new document
+INSERT INTO mongo_uri (name, price, category) VALUES ('Wireless Mouse', 29.99, 'Electronics');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Database Connectors](README.md)
+- [Connectors](../README.md)

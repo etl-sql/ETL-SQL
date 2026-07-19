@@ -49,7 +49,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PARALLEL` | Orchestration | [Statement Reference](reference/statements/README.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
 | `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
 | `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
-| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/expect_schema.md) |
+| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
 | `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
@@ -87,7 +87,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
 | `WITH RECURSIVE` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Statement Reference](reference/statements/README.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](reference/statements/query-syntax/match-recognize.md) |
 | `EXPORT REPORT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `EXPORT REPORT ... WITH (PDF_MODE = ...)` | Reporting / Export | `PDF_MODE = STATIC\|AUTO\|HOSTED\|BROWSER`, `HOST`, `BROWSER_PATH` | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `SUBSCRIPTION` | Orchestration | [Statement Reference](reference/statements/README.md) | [SUBSCRIPTION.md](reference/orchestrator-jobs/subscription.md) |
@@ -182,7 +182,7 @@ Connectors define how to communicate with external data sources.
 | `AVRO` | File | [AVRO.md](reference/connectors/files/avro.md) | PATH, ... |
 | `SFTP` | Transfer | [SFTP.md](reference/connectors/services/sftp.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
 | `FTP` | Transfer | [FTP.md](reference/connectors/services/ftp.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
-| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
+| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](reference/connectors/services/azure-blob.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
 | `S3` | Transfer | [S3.md](reference/connectors/services/s3.md) | BUCKET, ENDPOINT, ACCESS_KEY, SECRET_KEY, REGION, FORCE_PATH_STYLE |
 | `API` / `REST` | Service | [API.md](reference/connectors/services/api.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
 | `SMTP` | Service | [SMTP.md](reference/connectors/services/smtp.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
@@ -191,8 +191,8 @@ Connectors define how to communicate with external data sources.
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
 | `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
-| `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/data-connectors.md) | HOST, PORT, API_KEY |
-| `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/active_directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
+| `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/services/orchestrator.md) | HOST, PORT, API_KEY |
+| `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](reference/connectors/services/active-directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
 ### 2.1 File-Based Table Alias
 `FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
@@ -264,7 +264,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)` | Date | [DATETIMEOFFSETSFROMPARTS.md](reference/functions/datetime/datetimeoffsetsfromparts.md) | Build DATETIMEOFFSET from components |
 | `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md](reference/functions/datetime/timefromparts.md) | Build TIME from components |
 | `TRUNC(date)` | Date | [TRUNC.md](reference/functions/datetime/trunc.md) | Truncates time portion |
-| `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](guides/getting-started.md#4-date--time-functions) | Converts to specified timezone |
+| `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](reference/dates-times/dates-times.md) | Converts to specified timezone |
 | `CURRENT_DATE()` | Date | [CURRENT_DATE.md](reference/functions/datetime/current_date.md) | Current date (no time) |
 | `CURRENT_TIME()` | Date | [CURRENT_TIME.md](reference/functions/datetime/current_time.md) | Current time |
 | `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md](reference/functions/datetime/current_timestamp.md) | Current datetime (UTC) |
@@ -388,9 +388,9 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](reference/functions/aggregate/varp.md) | Population variance |
 | `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](reference/functions/aggregate/stdev.md) / [STDDEV.md](reference/functions/aggregate/stddev.md) | Sample standard deviation |
 | `STDEVP(expression)` | Aggregate | [STDEVP.md](reference/functions/aggregate/stdevp.md) | Population standard deviation |
-| `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](guides/getting-started.md#6-statistical-aggregates) | Sample covariance |
-| `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](guides/getting-started.md#6-statistical-aggregates) | Population covariance |
-| `CORR(expr1, expr2)` | Aggregate | [CORR.md](guides/getting-started.md#6-statistical-aggregates) | Pearson correlation |
+| `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](reference/functions/aggregate/covar_samp.md) | Sample covariance |
+| `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](reference/functions/aggregate/covar_pop.md) | Population covariance |
+| `CORR(expr1, expr2)` | Aggregate | [CORR.md](reference/functions/aggregate/corr.md) | Pearson correlation |
 | `LISTAGG(expression, separator)` | Aggregate | [LISTAGG.md](reference/functions/aggregate/listagg.md) | Concatenates values with separator |
 | `STRING_AGG(expression, separator)` | Aggregate | [STRING_AGG.md](reference/functions/aggregate/string_agg.md) | Concatenates strings with separator |
 | `ROW_NUMBER()` | Window | [ROW_NUMBER.md](reference/functions/window/row_number.md) | Sequential row number |
@@ -399,11 +399,11 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `LAG(expression, [offset], [default])` | Window | [LAG.md](reference/functions/window/lag.md) | Value from N rows before |
 | `LEAD(expression, [offset], [default])` | Window | [LEAD.md](reference/functions/window/lead.md) | Value from N rows after |
 | `NTILE(buckets)` | Window | [NTILE.md](reference/functions/window/ntile.md) | Bucket number 1-N |
-| `PERCENT_RANK()` | Window | [PERCENT_RANK.md](guides/getting-started.md#132-ranking-functions) | Relative rank (0-1) |
-| `CUME_DIST()` | Window | [CUME_DIST.md](guides/getting-started.md#13-window-functions) | Cumulative distribution |
+| `PERCENT_RANK()` | Window | [PERCENT_RANK.md](reference/functions/window/percent_rank.md) | Relative rank (0-1) |
+| `CUME_DIST()` | Window | [CUME_DIST.md](reference/functions/window/cume_dist.md) | Cumulative distribution |
 | `FIRST_VALUE(expression)` | Window | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in partition |
 | `LAST_VALUE(expression)` | Window | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in partition |
-| `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
+| `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md](reference/functions/window/nth_value.md) | Nth value in window frame |
 | `PERCENTILE_CONT(fraction)` | Window | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
 | `PERCENTILE_DISC(fraction)` | Window | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
 | `REGEXP_LIKE(string, pattern)` | Regex | [REGEXP_LIKE.md](reference/functions/regex/regexp_like.md) | 1 if string matches regex |
@@ -546,14 +546,14 @@ FUNCTION_NAME(args) OVER (
 | `ROW_NUMBER()` | [ROW_NUMBER.md](reference/functions/window/row_number.md) | Sequential row number within partition |
 | `RANK()` | [RANK.md](reference/functions/window/rank.md) | Rank with gaps for ties |
 | `DENSE_RANK()` | [DENSE_RANK.md](reference/functions/window/dense_rank.md) | Rank without gaps for ties |
-| `PERCENT_RANK()` | [PERCENT_RANK.md](guides/getting-started.md#132-ranking-functions) | Relative rank (0 to 1) |
-| `CUME_DIST()` | [CUME_DIST.md](guides/getting-started.md#13-window-functions) | Cumulative distribution |
+| `PERCENT_RANK()` | [PERCENT_RANK.md](reference/functions/window/percent_rank.md) | Relative rank (0 to 1) |
+| `CUME_DIST()` | [CUME_DIST.md](reference/functions/window/cume_dist.md) | Cumulative distribution |
 | `NTILE(buckets)` | [NTILE.md](reference/functions/window/ntile.md) | Divide rows into N buckets |
 | `LAG(expression, [offset], [default])` | [LAG.md](reference/functions/window/lag.md) | Value from N rows before |
 | `LEAD(expression, [offset], [default])` | [LEAD.md](reference/functions/window/lead.md) | Value from N rows after |
 | `FIRST_VALUE(expression)` | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in window frame |
 | `LAST_VALUE(expression)` | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in window frame |
-| `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
+| `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](reference/functions/window/nth_value.md) | Nth value in window frame |
 | `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
 | `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
 
@@ -674,20 +674,20 @@ CREATE CONNECTION name AS <Provider>( ... )
 ```
 | Option | Description | Documentation |
 | :--- | :--- | :--- |
-| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PORT` | Network port | [Data Connectors](reference/connectors/data-connectors.md) |
-| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/data-connectors.md) |
-| `DATABASE` | Database name | [Data Connectors](reference/connectors/data-connectors.md) |
-| `USER` / `UID` | Username | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/data-connectors.md) |
-| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/data-connectors.md) |
-| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/data-connectors.md) |
-| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/data-connectors.md) |
-| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/data-connectors.md) |
-| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/data-connectors.md) |
-| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/data-connectors.md) |
-| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/data-connectors.md) |
+| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/README.md) |
+| `PORT` | Network port | [Data Connectors](reference/connectors/README.md) |
+| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/README.md) |
+| `DATABASE` | Database name | [Data Connectors](reference/connectors/README.md) |
+| `USER` / `UID` | Username | [Data Connectors](reference/connectors/README.md) |
+| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/README.md) |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/README.md) |
+| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/README.md) |
+| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/README.md) |
+| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/README.md) |
+| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/README.md) |
+| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/README.md) |
+| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/README.md) |
+| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/README.md) |
 
 ### 7.2 CREATE TABLE
 ```sql
@@ -1094,15 +1094,15 @@ Standard clauses available within a `SELECT` statement.
 | `USING SAMPLE n PERCENT\|ROWS` | Random row sampling (`REPEATABLE (seed)` for determinism) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | - |
 | `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [SELECT](reference/statements/dml/select.md) | - |
 | `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
-| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [GROUP BY ALL](reference/statements/query-syntax/group-by-all.md) | [GROUP_BY_ALL.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
+| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [GROUP BY ALL](reference/statements/query-syntax/group-by-all.md) | [GROUP_BY_ALL.md](reference/statements/query-syntax/group-by-all.md) |
 | `HAVING` | Filters aggregated groups | [Statement Reference](reference/statements/README.md) | - |
 | `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
-| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `count()` | Shorthand for `COUNT(*)` | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| `count()` | Shorthand for `COUNT(*)` | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
+| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](reference/statements/query-syntax/select-modifiers.md) |
 | `ASC` / `DESC` | Sorting direction | [Statement Reference](reference/statements/README.md) | - |
 | `ROLLUP` | Grouping set extension for hierarchies | [Statement Reference](reference/statements/README.md) | - |
 | `CUBE` | Grouping set extension for all permutations| [Statement Reference](reference/statements/README.md) | - |
@@ -1130,7 +1130,7 @@ Operators that transform the shape of a table in the `FROM` clause.
 | `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
 | `PIVOT` (DuckDB) | `PIVOT src ON cols [IN (...)] USING aggs [GROUP BY cols]` | Statement form; dynamic values, multi-col/agg | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
 | `UNPIVOT` (DuckDB) | `UNPIVOT src ON cols\|COLUMNS(* EXCLUDE (...)) INTO NAME n VALUE v` | Statement form; supports `COLUMNS(* EXCLUDE)` | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](reference/statements/query-syntax/match-recognize.md) |
 
 ---
 

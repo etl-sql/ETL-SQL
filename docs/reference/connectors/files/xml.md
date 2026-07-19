@@ -1,36 +1,34 @@
-﻿# XML
-Reads and writes XML files. Use ROOT_PATH to specify the XPath expression selecting the repeating element to unpack as rows.
+# XML
 
-Syntax:
-  CREATE CONNECTION <name> AS XML(
-    PATH      = 'data.xml',
-    ROOT_PATH = '/root/items/item',
-    ENCODING  = 'UTF-8',
-    COMPRESS  = ON | OFF,
-    ENCRYPT   = ON | OFF,
-    PASSWORD  = '<passphrase>'
-  );
+Document extraction with XPath addressing for nested elements. When querying an `XML` connection via
+`SELECT`, the table name is `FILE`. Use `ROOT_PATH` to select the repeating element to unpack as rows.
 
-Options:
-- **PATH** — file path (required)
-- **ROOT_PATH** — XPath expression to the repeating row element (required for SELECT)
-- **ENCODING** — character encoding (default UTF-8)
-- **COMPRESS** — gzip compress/decompress (default OFF)
-- **ENCRYPT** — AES encrypt/decrypt (default OFF)
-- **PASSWORD** — passphrase for encryption
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `ROOT_PATH` | XPath to the repeating element (e.g. `/Catalog/Book`) | No |
+| `ENCODING` | Character encoding (default: `UTF8`) | No |
+| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+## Examples
 
 ```sql
-CREATE CONNECTION OrderFeed AS XML(
-  PATH      = 'C:\feeds\orders.xml',
-  ROOT_PATH = '/Orders/Order'
-);
+-- XPath root selector
+CREATE CONNECTION xml_src AS XML('C:\Data\catalog.xml', ROOT_PATH='/Catalog/Product');
 
-SELECT OrderID, CustomerID, Total, OrderDate
-  INTO #orders
-  FROM OrderFeed;
-
-PRINT 'Orders loaded: ' + @@ROWCOUNT;
+-- Encrypted XML archive
+CREATE CONNECTION xml_vault AS XML(PATH='C:\Vault\archive.xml', ENCRYPT=ON, PASSWORD='vault_pass');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [File Connectors](README.md)
+- [Connectors](../README.md)
+- [JSON](json.md)

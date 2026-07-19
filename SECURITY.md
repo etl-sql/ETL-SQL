@@ -197,6 +197,10 @@ Overrides that increase risk are validated against safe-zone context where appli
 
 `SET WHAT_IF ON` provides dry-run behavior for many side-effecting statements, including DML, file operations, email, Docker, and remote execution paths that explicitly check `IsWhatIf`. It is a safety preview, not a full transaction simulator.
 
+### 6.1 Enterprise Policy Enforcement
+
+Standalone (unenrolled) installations use only local configuration and their built-in guardrails. Under **enterprise enrollment**, an authoritative, signed organization policy can enforce these ceilings — parallelism, file/recursion operations, spill volume, SMTP sends, and maximum materialized string bytes — across the fleet. Verified policy values take final configuration precedence over `appsettings.json`, environment variables, and command-line configuration, and operation-boundary checks prevent scripts from weakening governed ceilings. Enrollment is stored outside ordinary configuration so lower-authority sources cannot disable it, and fail-closed enrollment stops startup or execution when policy is missing, tampered, or expired. See [Authoritative organization policy](docs/administration/platform/organization-policy.md) and [Enterprise machine enrollment](docs/administration/platform/enterprise-enrollment.md).
+
 ---
 
 ## 7. Credential and Secret Handling
@@ -320,6 +324,10 @@ Portal audit guarantees and boundaries:
 
 Recommended production posture: forward engine and portal logs to an external log sink with retention, access controls, and tamper-resistant storage.
 
+### 9.1 Security-Event Delivery and Remote Audit Outbox
+
+Beyond local logs, ETL-SQL emits a dedicated, versioned **security-event** stream (policy denials and boundary violations, carrying correlation/job/script/policy/tenant/node identifiers) to a configured SIEM collector over HTTPS, backed by a durable local outbox and deduplicated by event ID. Separately, Portal audit rows are written with a durable outbox row **in the same database transaction** as each protected mutation and can be forwarded to a remote collector under `Portal:Audit:*`. Both paths support **fail-closed** thresholds: when an enrolled organization's signed policy configures security-event thresholds, or when `Portal:Audit:RequireRemoteDelivery` is active (which turns on automatically for an enrolled deployment with a collector configured), security-sensitive mutations are blocked once remote delivery is judged unavailable rather than proceeding un-audited. A denial is always decided and enforced before reporting — an unavailable sink cannot turn a denial into an allow. See [Central security events and SIEM delivery](docs/administration/platform/security-events.md) and [Durable audit outbox and remote collectors](docs/administration/platform/audit-outbox.md).
+
 ---
 
 ## 10. Test and Development Mode
@@ -398,5 +406,5 @@ Where possible, include a minimal reproduction, the affected version, and an imp
 ---
 
 **Policy Version**: 0.15.0
-**Last Review Date**: 2026-06-26
+**Last Review Date**: 2026-07-18
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

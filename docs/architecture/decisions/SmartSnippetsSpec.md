@@ -137,5 +137,5 @@ To make the auto-mapping feel truly "smart," we should use these rules:
 
 ### References
 - [Language Server Autocomplete Protocol](../LanguageServer.md)
-- [Merge Statement Grammar](../../guides/getting-started.md#9-merge)
+- [Merge Statement Grammar](../../reference/statements/dml/merge.md)
 - [Standards - Language Casing and Layout](../standards/Script_Composition_Standards.md)

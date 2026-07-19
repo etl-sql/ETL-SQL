@@ -33,5 +33,5 @@ Call out settings that widen a trust boundary, expose a network surface, or hold
 
 ## References
 
-- [Configuration Reference](../reference/configuration/README.md)
+- [Configuration Reference](../reference/README.md)
 - [Administration](../administration/platform/README.md)

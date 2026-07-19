@@ -183,6 +183,6 @@ Portable engine functions include `GETDATE`, `GETUTCDATE`, `CURRENT_DATE`, `CURR
 `TO_DATE`, `TO_TIMESTAMP`, `DATEFROMPARTS`, `DATETIMEFROMPARTS`, `DATETIME2FROMPARTS`,
 `DATETIMEOFFSETSFROMPARTS`, `EOMONTH`, `ISDATE`, `RELDATE`, and `AT TIME ZONE`.
 
-See [Standard Library — Date & Time Functions](../../guides/getting-started.md#4-date--time-functions) for signatures
-and examples, and [Grammar — AT TIME ZONE](../../guides/getting-started.md#at-time-zone) for expression syntax.
+See [Date & Time Functions](../functions/datetime/README.md) for signatures
+and examples, and [AT TIME ZONE](../statements/expressions-and-operators.md) for expression syntax.
 

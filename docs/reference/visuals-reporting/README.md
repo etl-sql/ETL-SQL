@@ -15,6 +15,8 @@ This reference defines Report-SQL objects, visual types, mappings, options, acti
 - [STYLE](report/style.md)
 - [VISUAL](report/visual.md)
 - [Report Runtime Contract](report-runtime-contract.md)
+- [ReportManifest JSON Schema](report-manifest.md)
+- [Report CLI, Hosting, and Preview](report-cli.md)
 
 ## Visual Types
 

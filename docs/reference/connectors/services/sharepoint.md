@@ -1,47 +1,53 @@
 # SHAREPOINT
-Connects to a SharePoint site to perform file operations against Document Libraries and read/write queries against Lists.
 
-Syntax:
-  CREATE CONNECTION <name> AS SHAREPOINT(
-    URL               = 'https://company.sharepoint.com/sites/Finance',
-    AUTH_MODE         = 'ENTRA_ID', -- ENTRA_ID, AD_WINDOWS, INTEGRATED, ADFS
-    TENANT_ID         = '<tenant-id>',
-    CLIENT_ID         = '<client-id>',
-    CLIENT_SECRET     = '<client-secret>',
-    DOCUMENT_LIBRARY  = 'Shared Documents',
-    LIST_NAME         = '<list-name>'
-  );
+Manages files in SharePoint Document Libraries (remote file-system operations) and reads/writes
+SharePoint Lists.
 
-Options:
-- **URL** — SharePoint Site absolute URL (can also be passed as primary connection string)
-- **AUTH_MODE** — Authentication type: ENTRA_ID, AD_WINDOWS, INTEGRATED, ADFS (default: INTEGRATED)
-- **USER** — Domain username (for AD_WINDOWS / ADFS)
-- **PASSWORD** — Account password (for AD_WINDOWS / ADFS)
-- **DOMAIN** — Domain context (for AD_WINDOWS / ADFS)
-- **TENANT_ID** — Entra ID Directory/Tenant ID (for ENTRA_ID)
-- **CLIENT_ID** — Entra ID Application Client ID (for ENTRA_ID)
-- **CLIENT_SECRET** — Entra ID Application Client Secret (for ENTRA_ID)
-- **DOCUMENT_LIBRARY** — SharePoint Document Library name (default: 'Shared Documents')
-- **LIST_NAME** — SharePoint List to bind by default for data queries
+Aliases: `SP`
+
+## Options
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `AUTH_MODE` | Authentication mode: `INTEGRATED`, `AD_WINDOWS`, `ENTRA_ID`, `ADFS` (default: `INTEGRATED`) | No |
+| `USER` | Domain account username or service account (for `AD_WINDOWS` and `ADFS`) | No |
+| `PASSWORD` | Password (for `AD_WINDOWS` and `ADFS`) | No |
+| `DOMAIN` | Domain name (for `AD_WINDOWS` and `ADFS`) | No |
+| `CLIENT_ID` | Microsoft Entra ID application client ID (for `ENTRA_ID`) | No |
+| `CLIENT_SECRET` | Microsoft Entra ID application client secret (for `ENTRA_ID`) | No |
+| `TENANT_ID` | Microsoft Entra ID tenant/directory ID (for `ENTRA_ID`) | No |
+| `DOCUMENT_LIBRARY` | Target Document Library path/title (default: `Shared Documents`) | No |
+| `LIST_NAME` | Default list title for list queries | No |
+
+> [!IMPORTANT]
+> - `CLIENT_SECRET` and `PASSWORD` should always be encrypted using `ENC:` string values.
+> - Plaintext secrets in `CLIENT_SECRET` or `CLIENTSECRET` trigger a linter warning.
+> - When using `AUTH_MODE = 'ENTRA_ID'`, the options `TENANT_ID`, `CLIENT_ID`, and `CLIENT_SECRET` are
+>   mutually required.
+
+## Examples
 
 ```sql
--- Connect using Entra ID OAuth
-CREATE CONNECTION SpFinance AS SHAREPOINT('https://company.sharepoint.com/sites/Finance',
-  AUTH_MODE     = 'ENTRA_ID',
-  TENANT_ID     = '00000000-0000-0000-0000-000000000000',
-  CLIENT_ID     = '11111111-1111-1111-1111-111111111111',
-  CLIENT_SECRET = ENC:U2FsdGVkX1+...
-);
+-- Client credentials (Entra ID — recommended for cloud)
+CREATE CONNECTION sp_cloud AS SHAREPOINT('https://tenant.sharepoint.com/sites/Finance',
+         AUTH_MODE     = 'ENTRA_ID',
+         TENANT_ID     = '00000000-0000-0000-0000-000000000000',
+         CLIENT_ID     = '11111111-1111-1111-1111-111111111111',
+         CLIENT_SECRET = ENC:U2FsdGVkX1+...);
 
--- Copy local report to SharePoint
-SEND FILE 'C:\reports\QuarterlySummary.xlsx' TO 'Shared Documents/Finance/Summary.xlsx' AT SpFinance;
+-- Domain credentials (on-premises / AD_WINDOWS)
+CREATE CONNECTION sp_onprem AS SHAREPOINT('https://sharepoint.local/sites/HR',
+         AUTH_MODE = 'AD_WINDOWS',
+         USER      = 'sp_service',
+         PASSWORD  = ENC:U2FsdGVkX1+...,
+         DOMAIN    = 'CORP');
 
--- Read items from SharePoint List
-SELECT Title, Priority, PercentComplete
-INTO #temp_tasks
-FROM SpFinance
-WITH(LIST_NAME='Tasks');
+-- Integrated authentication
+CREATE CONNECTION sp_integrated AS SHAREPOINT('https://tenant.sharepoint.com/sites/IT', AUTH_MODE = 'INTEGRATED');
 ```
 
-References:
-- [Data Connectors](../../../administration/platform/README.md)
+## References
+
+- [Service Connectors](README.md)
+- [Connectors](../README.md)
+- [Active Directory](active-directory.md)
