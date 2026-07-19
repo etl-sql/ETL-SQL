@@ -236,7 +236,7 @@ jobs:
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
             --pattern '*.dmg' --pattern '*.vsix'
       - name: Attest draft artifacts
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/*'
       # The per-platform build jobs each run publish_release.ps1, which wipes release/, so the
