@@ -45,7 +45,10 @@ public sealed class WorkstationMetadataService(IMetadataManager metadata)
             var tableName = createTable.TargetTable.TableName;
             if (tableName.StartsWith("#", StringComparison.Ordinal))
             {
-                metadata.RegisterTempTable(documentUri, tableName, createTable.Columns.Select(c => c.ColumnName).ToList());
+                metadata.RegisterTempTable(
+                    documentUri,
+                    tableName,
+                    createTable.Columns.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList());
                 activeTempTables.Add(tableName);
             }
         }
@@ -54,21 +57,42 @@ public sealed class WorkstationMetadataService(IMetadataManager metadata)
             var tableName = select.IntoTable.TableName;
             if (tableName.StartsWith("#", StringComparison.Ordinal))
             {
-                var columns = new List<string>();
-                var hasStar = select.Columns.Any(c => c.Expression is IdentifierExpression id && id.Name == "*");
-                if (hasStar && select.FromTable != null)
+                // Resolve the source table's column types once so the projected columns carry
+                // real types into the session explorer instead of a wall of ANY.
+                var sourceTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (select.FromTable != null)
                 {
                     var connectionName = select.FromTable.ConnectionName
                         ?? metadata.GetConnections(documentUri).FirstOrDefault(c => c.IsDocument)?.Name
                         ?? "DEFAULT";
-                    columns.AddRange(await metadata.GetColumnsAsync(connectionName, select.FromTable.TableName, documentUri));
+                    foreach (var column in await metadata.GetColumnDetailsAsync(connectionName, select.FromTable.TableName, documentUri))
+                        sourceTypes[column.Name] = column.DataType;
+                }
+
+                var columns = new List<ColumnMetadata>();
+                var hasStar = select.Columns.Any(c => c.Expression is IdentifierExpression id && id.Name == "*");
+                if (hasStar && select.FromTable != null)
+                {
+                    columns.AddRange(sourceTypes.Select(kvp => new ColumnMetadata(kvp.Key, kvp.Value)));
                 }
                 else
                 {
-                    columns.AddRange(select.Columns.Select(c => c.Alias ?? c.Expression.ToSql().Split('.').Last().Trim('[', ']', '"', '\'')));
+                    foreach (var column in select.Columns)
+                    {
+                        var name = column.Alias ?? column.Expression.ToSql().Split('.').Last().Trim('[', ']', '"', '\'');
+                        // Only a bare column reference inherits the source type; computed
+                        // expressions stay ANY rather than claiming a type we haven't inferred.
+                        var isPlainReference = column.Alias is null && column.Expression is IdentifierExpression;
+                        columns.Add(new ColumnMetadata(
+                            name,
+                            isPlainReference && sourceTypes.TryGetValue(name, out var type) ? type : "ANY"));
+                    }
                 }
 
-                metadata.RegisterTempTable(documentUri, tableName, columns.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+                metadata.RegisterTempTable(
+                    documentUri,
+                    tableName,
+                    columns.DistinctBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList());
                 activeTempTables.Add(tableName);
             }
         }
@@ -85,7 +109,7 @@ public sealed class WorkstationMetadataService(IMetadataManager metadata)
         {
             if (pushdown.IntoTable != null && pushdown.IntoTable.TableName.StartsWith("#", StringComparison.Ordinal))
             {
-                metadata.RegisterTempTable(documentUri, pushdown.IntoTable.TableName, []);
+                metadata.RegisterTempTable(documentUri, pushdown.IntoTable.TableName, new List<ColumnMetadata>());
                 activeTempTables.Add(pushdown.IntoTable.TableName);
             }
         }

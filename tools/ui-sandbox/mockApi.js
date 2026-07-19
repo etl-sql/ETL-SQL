@@ -28,7 +28,7 @@ export function makeMockApi(seedState) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
       data = { items: completeMockScript(body.script ?? '', body.line ?? 0, body.column ?? 0, body.connectionRef ?? null) };
-    } else if (path.endsWith('/script-source/commit')) {
+    } else if (path.endsWith('/script-source/commit') || path.endsWith('/api/git/commit')) {
       // First commit records a new revision; a second (no changes) reports nothing to commit.
       commitCount += 1;
       data = commitCount === 1
@@ -43,13 +43,34 @@ export function makeMockApi(seedState) {
     } else if (path.endsWith('/api/designer/run')) {
       data = runMockScript(body.selection || body.script || '');
     } else if (path.endsWith('/api/designer/schema')) {
-      data = { connection: 'demo', tables: mockSchemaTables() };
+      const connParam = new URL(url, window.location.origin).searchParams.get('connection') || 'demo';
+      data = { connection: connParam, tables: mockSchemaTables() };
     } else if (path.endsWith('/api/scripts/upload')) {
       data = { path: 'sandbox/' + (body.fileName || 'report.rptsql') };
     } else if (path.endsWith('/api/designer/save')) {
       data = { version: 2, sourceRevision: 'sandbox-rev-2' };
     } else if (path.endsWith('/api/reports') || path.includes('/script-content')) {
       data = { id: 1, ok: true, version: 1, sourceRevision: 'sandbox-rev-1' };
+    } else if (path.endsWith('/api/workspace')) {
+      data = {
+        root: 'C:/Users/chuck/scratch/ETL-SQL',
+        files: seedState?.files || [
+          { path: 'etl/weekly_load.etlsql', size: 1024 },
+          { path: 'etl/staging_clean.etlsql', size: 450 }
+        ]
+      };
+    } else if (path.endsWith('/api/session/metadata')) {
+      data = {
+        connections: seedState?.connections || ['staging_db', 'analytics_dw'],
+        variables: seedState?.variables || [],
+        tempTables: seedState?.tempTables || []
+      };
+    } else if (path.endsWith('/api/git/status')) {
+      data = {
+        branch: 'main',
+        modified: ['etl/weekly_load.etlsql'],
+        untracked: ['etl/new_enrichment.etlsql']
+      };
     }
 
     return {
@@ -60,6 +81,7 @@ export function makeMockApi(seedState) {
     };
   };
 }
+
 
 function analyzeMockScript(script) {
   const diagnostics = [];

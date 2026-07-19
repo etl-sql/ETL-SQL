@@ -50,27 +50,36 @@ changes safer.
       Scope: reuse the canonical `renderDag`; the `sync-assets` pipeline already targets VS Code
       media. Start read-only with on-demand refresh; defer live sync.
 - [ ] **First-class Portal Script Editor.**
-      Upgrade the Portal's script editor from a basic text area to a high-fidelity development
-      interface for SaaS and large-farm environments. Follow
-      `docs/architecture/decisions/PortalEditorStrategy.md`: CodeMirror 6 plus stateless server-side
-      analysis and a schema API, not Monaco and not a per-session Language Server.
+      Upgrade the Portal's script editor to a high-fidelity development workbench sharing core design elements with the Workstation Editor. Follow the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md) and `docs/architecture/decisions/PortalEditorStrategy.md`.
 - [ ] **Portal editor real-engine diagnostics.**
       Add a debounced, stateless `POST /api/designer/analyze` endpoint that reuses the
       `ETL-SQL.Analysis` linter and renders results as CodeMirror squiggles.
 - [ ] **Portal editor schema autocomplete.**
       Feed CodeMirror autocomplete from the shared, cached, ACL-gated schema-snapshot service.
+- [ ] **Column data types in the schema and session explorers.**
+      The explorers render a type column per column, but it reads `ANY` for any source whose data
+      source has no catalog provider — `MetadataManager.GetColumnDetailsAsync` falls back to
+      `new ColumnMetadata(name, "ANY")` when `GetCatalogProvider()` is null or returns nothing.
+      MOCKDB is the visible case: `MockSqlDataSource` exposes column names only, so the whole dev
+      loop shows `ANY`. Give MockDb a catalog provider (declare types in `MockDataSeeder` rather
+      than inferring them from row values — every numeric is `decimal` at runtime, so inference
+      would misreport), then audit the real connectors for the same gap.
+      Downstream: `SELECT ... INTO #temp` already inherits source types for bare column references
+      (`WorkstationMetadataService`), so temp tables get real types for free once the source does.
 - [ ] **Portal governed interactive runs.**
       Add server-enforced `TOP 100`, short timeouts, and a memory ceiling. Execute under the logged-in
       user's RLS/identity context and audit every run as `AD_HOC_RUN`.
 - [ ] **Optional Portal git write-back.**
       When a git backend is configured, save commits on behalf of the user to preserve the
       source-controlled-report promise.
-
+      
 ### Developer Experience: Local Browser Script Editor
+> Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
 
 - [ ] **Installed CLI integration.**
       Finish the installed CLI command shape and packaging polish for
       `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
+
       Accept a script file, a folder/workspace root, or no path. Pick an available loopback port when
       omitted, print the URL, and optionally open the browser when `--open` is set.
 - [ ] **Interactive run hardening.**

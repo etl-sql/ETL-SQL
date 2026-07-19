@@ -1,4 +1,5 @@
 using System.Net;
+using System.Linq;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
 using ETL_SQL.Common;
@@ -85,7 +86,13 @@ public static class WorkstationEditorApp
             app.UseStaticFiles(new StaticFileOptions
             {
                 RequestPath = "/designer",
-                FileProvider = new PhysicalFileProvider(Path.Combine(sharedRoot, "designer"))
+                FileProvider = new PhysicalFileProvider(Path.Combine(sharedRoot, "designer")),
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+                    ctx.Context.Response.Headers.Pragma = "no-cache";
+                    ctx.Context.Response.Headers.Expires = "0";
+                }
             });
         }
 
@@ -100,6 +107,50 @@ public static class WorkstationEditorApp
                 initialFile = workspace.InitialRelativeFile(editorOptions.InitialFile),
                 files = workspace.ListFiles()
             }, JsonOptions));
+
+        app.MapGet("/api/session/metadata", async (string? documentUri, IMetadataManager metadata, CancellationToken cancellationToken) =>
+        {
+            var connections = metadata.GetConnections(documentUri).Select(c => c.Name).ToList();
+            var tempTables = await metadata.GetTempTablesAsync(documentUri);
+            var tempTableDtos = new List<object>();
+            foreach (var t in tempTables)
+            {
+                // Temp-table lookups are keyed by document, not connection — the connection
+                // name is ignored for '#' tables (see MetadataManager.GetColumnDetailsAsync).
+                var cols = (await metadata.GetColumnDetailsAsync(string.Empty, t, documentUri))
+                    .Select(c => new { name = c.Name, type = c.DataType })
+                    .ToList();
+                tempTableDtos.Add(new { name = t, columns = cols });
+            }
+            return Results.Json(new
+            {
+                connections,
+                variables = new List<object>(),
+                tempTables = tempTableDtos
+            }, JsonOptions);
+        });
+
+        app.MapGet("/api/designer/schema", async (string connection, string? documentUri, IMetadataManager metadata, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var tables = await metadata.GetTablesAsync(connection, documentUri);
+                var tableList = new List<object>();
+                foreach (var table in tables)
+                {
+                    var columns = await metadata.GetColumnDetailsAsync(connection, table, documentUri);
+                    tableList.Add(new {
+                        name = table,
+                        columns = columns.Select(c => new { name = c.Name, type = c.DataType }).ToList()
+                    });
+                }
+                return Results.Json(new { connection, tables = tableList }, JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
 
         app.MapGet("/api/files", async (string path, WorkstationWorkspace workspace, CancellationToken cancellationToken) =>
         {

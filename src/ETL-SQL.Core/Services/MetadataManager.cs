@@ -597,7 +597,10 @@ public class MetadataManager : IMetadataManager
         return Task.FromResult((IEnumerable<string>)result.Distinct());
     }
 
-    public void RegisterTempTable(string uri, string name, List<string> columns)
+    public void RegisterTempTable(string uri, string name, List<string> columns) =>
+        RegisterTempTable(uri, name, columns.Select(c => new ColumnMetadata(c, "ANY")).ToList());
+
+    public void RegisterTempTable(string uri, string name, List<ColumnMetadata> columns)
     {
         var normalizedUri = NormalizeUri(uri);
         var list = _docTempTables.GetOrAdd(normalizedUri, _ => new List<string>());
@@ -607,7 +610,7 @@ public class MetadataManager : IMetadataManager
         }
 
         var cacheKey = GetTempTableCacheKey(normalizedUri, name);
-        _columns[cacheKey] = columns.Select(c => new ColumnMetadata(c, "ANY")).ToList();
+        _columns[cacheKey] = columns.ToList();
         _logger.Info("Registered temp table {Name} for {Uri}", name, normalizedUri);
     }
 

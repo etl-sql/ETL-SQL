@@ -861,6 +861,34 @@ function _getRptsqlLang(cm) {
     return _rptsqlLang;
 }
 
+// Cached rptsql highlight style (shared across all editor instances).
+//
+// CodeMirror's `defaultHighlightStyle` bakes light-mode colours into generated
+// class names — its keyword purple (#708) is unreadable on a dark background and
+// cannot be overridden from CSS. We map each tag to a stable class instead so the
+// palette lives in designer.css and can follow the host's light/dark theme.
+let _rptsqlHighlight = null;
+function _getRptsqlHighlightStyle(cm) {
+    if (_rptsqlHighlight) return _rptsqlHighlight;
+    const { HighlightStyle, tags: t, defaultHighlightStyle } = cm;
+    if (typeof HighlightStyle?.define !== 'function') return defaultHighlightStyle;
+    _rptsqlHighlight = HighlightStyle.define([
+        { tag: t.keyword,                  class: 'etlsql-tok-keyword' },
+        { tag: t.typeName,                 class: 'etlsql-tok-type' },
+        { tag: t.function(t.variableName), class: 'etlsql-tok-function' },
+        { tag: t.string,                   class: 'etlsql-tok-string' },
+        { tag: t.number,                   class: 'etlsql-tok-number' },
+        { tag: t.operator,                 class: 'etlsql-tok-operator' },
+        { tag: t.special(t.variableName),  class: 'etlsql-tok-quoted-id' },
+        { tag: t.variableName,             class: 'etlsql-tok-variable' },
+        { tag: t.propertyName,             class: 'etlsql-tok-property' },
+        { tag: t.meta,                     class: 'etlsql-tok-meta' },
+        { tag: [t.bool, t.null],           class: 'etlsql-tok-atom' },
+        { tag: [t.comment, t.lineComment, t.blockComment], class: 'etlsql-tok-comment' },
+    ]);
+    return _rptsqlHighlight;
+}
+
 /**
  * Mount a CodeMirror 6 rptsql editor into `container`.
  *
@@ -888,7 +916,7 @@ export async function createScriptEditor(container, opts = {}) {
         EditorState,
         EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection,
         defaultKeymap, history, historyKeymap, indentWithTab,
-        syntaxHighlighting, defaultHighlightStyle, bracketMatching,
+        syntaxHighlighting, bracketMatching,
         searchKeymap, highlightSelectionMatches,
         autocompletion, completionKeymap,
         linter, lintGutter,
@@ -924,10 +952,33 @@ export async function createScriptEditor(container, opts = {}) {
         drawSelection(),
         history(),
         bracketMatching(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(_getRptsqlHighlightStyle(cm), { fallback: true }),
         highlightSelectionMatches(),
         keymap.of(keymaps),
         _getRptsqlLang(cm),
+        // Accept schema/session explorer drags. Scoped to our private MIME type so
+        // ordinary text drag-and-drop keeps CodeMirror's default behaviour.
+        EditorView.domEventHandlers({
+            dragover(event) {
+                if (!event.dataTransfer?.types?.includes('application/x-etlsql-snippet')) return false;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                return true;
+            },
+            drop(event, view) {
+                const snippet = event.dataTransfer?.getData('application/x-etlsql-snippet');
+                if (!snippet) return false;
+                event.preventDefault();
+                const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+                    ?? view.state.selection.main.head;
+                view.dispatch({
+                    changes: { from: pos, insert: snippet },
+                    selection: { anchor: pos + snippet.length },
+                });
+                view.focus();
+                return true;
+            },
+        }),
         EditorState.readOnly.of(opts.readOnly ?? false),
     ];
     if (hasCmLint && typeof lintGutter === 'function') extensions.push(lintGutter());
@@ -980,7 +1031,9 @@ export async function createScriptEditor(container, opts = {}) {
         let start = script.lastIndexOf(';', Math.max(0, pos - 1));
         let end = script.indexOf(';', pos);
         start = start < 0 ? 0 : start + 1;
-        end = end < 0 ? script.length : end;
+        // Keep the terminating ';' — the extracted text is parsed on its own and
+        // statements like CREATE CONNECTION require it.
+        end = end < 0 ? script.length : end + 1;
         return script.slice(start, end).trim();
     }
 
@@ -1369,14 +1422,27 @@ export async function createScriptEditor(container, opts = {}) {
     const state = EditorState.create({ doc: opts.value ?? '', extensions });
     view = new EditorView({ state, parent: container });
 
-    if (analyzeUrl) {
+    // The inline diagnostics list is for hosts with nowhere else to put diagnostics
+    // (e.g. orchestrator.html). Hosts that own a Messages surface pass
+    // `diagnosticsPanel: false` and consume opts.onDiagnostics instead — the lint
+    // gutter and inline underlines already mark the offending lines in the editor.
+    if (analyzeUrl && opts.diagnosticsPanel !== false) {
         container.classList.add('has-diagnostics');
         diagPanel = document.createElement('div');
         diagPanel.className = 'etlsql-editor-diagnostics';
-        diagPanel.innerHTML = '<div class="etlsql-editor-diagnostics-status" data-kind="neutral">Diagnostics pending</div><div class="etlsql-editor-diagnostics-list"></div>';
+        diagPanel.innerHTML = '<div class="etlsql-editor-diagnostics-status" data-kind="neutral" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;"><span>Diagnostics pending</span><span style="font-size:10px; color:var(--portal-text-muted, #9da7b1); padding-left:8px;">Toggle ▼</span></div><div class="etlsql-editor-diagnostics-list"></div>';
+        
+        const statusHeader = diagPanel.querySelector('.etlsql-editor-diagnostics-status');
+        statusHeader.addEventListener('click', () => {
+            const isCollapsed = diagPanel.classList.toggle('collapsed');
+            container.classList.toggle('diagnostics-collapsed', isCollapsed);
+            const arrow = statusHeader.querySelector('span:last-child');
+            if (arrow) arrow.textContent = isCollapsed ? 'Toggle ▶' : 'Toggle ▼';
+        });
+
         container.appendChild(diagPanel);
-        if (opts.analyzeOnLoad !== false) scheduleAnalysis(opts.value ?? '');
     }
+    if (analyzeUrl && opts.analyzeOnLoad !== false) scheduleAnalysis(opts.value ?? '');
     attachHover();
 
     return {
@@ -1413,34 +1479,192 @@ export async function createScriptEditor(container, opts = {}) {
 
 function normalizeRunTrace(result, script) {
     if (Array.isArray(result?.trace)) return result.trace;
+    const isSuccess = result?.success !== false;
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const columns = Array.isArray(result?.columns) ? result.columns : [];
     const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
     const message = result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.');
-    return [
+    
+    const trace = [
         { type: 'clear', resetHistory: true },
-        { type: 'status', status: 'running' },
-        { type: 'message', level: 'sys', text: 'Designer run started.' },
-        { type: 'progress', data: [
-            { id: '1', name: 'Execute current statement', status: 'Completed', rowsProcessed: rows.length, durationMs: elapsedMs, isParallelBlock: false, children: [] },
-        ] },
-        { type: 'message', level: rows.length ? 'info' : 'warn', text: message },
-        { type: 'message', level: 'sys', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 180) },
-        { type: 'results', columns, rows },
-        { type: 'performance', metrics: {
+        { type: 'status', status: isSuccess ? 'running' : 'failed' },
+        { type: 'message', level: 'sys', text: 'Designer run started.' }
+    ];
+    
+    if (Array.isArray(result?.messages)) {
+        result.messages.forEach(m => {
+            trace.push({ type: 'message', level: 'info', text: typeof m === 'string' ? m : (m.text || m.message || '') });
+        });
+    }
+    
+    if (Array.isArray(result?.diagnostics)) {
+        result.diagnostics.forEach(d => {
+            trace.push({ type: 'message', level: d.severity?.toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${d.message}` });
+        });
+    }
+
+    // Prefer the engine's real execution tree (ExecutionResult.ExecutionTree snapshot);
+    // fall back to a single summary node for hosts that don't return one yet.
+    const pipeline = Array.isArray(result?.pipeline) && result.pipeline.length
+        ? result.pipeline
+        : [{ id: '1', name: 'Execute script', status: isSuccess ? 'Completed' : 'Failed', rowsProcessed: rows.length, durationMs: elapsedMs, isParallelBlock: false, children: [] }];
+    trace.push({ type: 'progress', data: pipeline });
+
+    if (isSuccess) {
+        trace.push({ type: 'message', level: rows.length ? 'info' : 'warn', text: message });
+        trace.push({ type: 'message', level: 'sys', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 180) });
+        trace.push({ type: 'results', columns, rows });
+        trace.push({ type: 'performance', metrics: {
             executionMs: elapsedMs,
             rowsProcessed: rows.length,
             memoryMb: 0,
             statements: [{ type: 'SELECT', totalMs: elapsedMs }],
-        } },
-        { type: 'done', exitCode: 0 },
-    ];
+        } });
+        trace.push({ type: 'done', exitCode: 0 });
+    } else {
+        trace.push({ type: 'message', level: 'error', text: message });
+        trace.push({ type: 'done', exitCode: 1 });
+    }
+    return trace;
+}
+
+function toXlsxXml(columns, rows) {
+    let xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40"><Worksheet ss:Name="Sheet1"><Table>`;
+    // Header Row
+    xml += '<Row>';
+    columns.forEach(c => {
+        xml += `<Cell><ss:Data ss:Type="String">${escapeHtml(c)}</ss:Data></Cell>`;
+    });
+    xml += '</Row>';
+    // Data Rows
+    rows.forEach(r => {
+        xml += '<Row>';
+        columns.forEach(c => {
+            const val = r[c] == null ? '' : String(r[c]);
+            const type = typeof r[c] === 'number' ? 'Number' : 'String';
+            xml += `<Cell><ss:Data ss:Type="${type}">${escapeHtml(val)}</ss:Data></Cell>`;
+        });
+        xml += '</Row>';
+    });
+    xml += '</Table></Worksheet></Workbook>';
+    return xml;
+}
+
+// Flattens the execution tree into left-to-right swimlane columns: each sequential
+// step is its own column, a parallel block stacks its branches inside one column, and
+// a plain container (the script root) contributes its steps rather than itself.
+function flattenDagColumns(nodes, columns = []) {
+    for (const node of (nodes || [])) {
+        const children = Array.isArray(node.children) ? node.children : [];
+        if (node.isParallelBlock && children.length) {
+            columns.push({ type: 'parallel', nodes: children });
+        } else if (children.length) {
+            flattenDagColumns(children, columns);
+        } else {
+            columns.push({ type: 'single', node });
+        }
+    }
+    return columns;
+}
+
+function renderCompactDag(nodes) {
+    if (!nodes || !nodes.length) return '';
+    const columns = flattenDagColumns(nodes);
+    if (!columns.length) return '';
+
+    let html = `<div class="etlsql-compact-dag">`;
+    html += `<svg class="etlsql-compact-dag-svg" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;"></svg>`;
+    html += `<div class="etlsql-compact-dag-columns" style="display:flex; gap:60px; padding:20px; align-items:center; position:relative; z-index:1; height:100%;">`;
+    
+    columns.forEach((col, colIdx) => {
+        html += `<div class="etlsql-compact-dag-column" style="display:flex; flex-direction:column; gap:12px; justify-content:center;">`;
+        if (col.type === 'single') {
+            html += renderDagCapsule(col.node, colIdx, 0);
+        } else {
+            col.nodes.forEach((childNode, rowIdx) => {
+                html += renderDagCapsule(childNode, colIdx, rowIdx);
+            });
+        }
+        html += `</div>`;
+    });
+    
+    html += `</div></div>`;
+    return html;
+}
+
+function renderDagCapsule(node, col, row) {
+    const statusClass = (node.status || '').toLowerCase();
+    const rows = Number(node.rowsProcessed || 0).toLocaleString();
+    const duration = node.durationMs != null ? `${Math.round(node.durationMs).toLocaleString()} ms` : '';
+    
+    let statusIcon = '⚪';
+    if (statusClass === 'completed' || statusClass === 'success') statusIcon = '✅';
+    else if (statusClass === 'running') statusIcon = '🔄';
+    else if (statusClass === 'failed' || statusClass === 'error') statusIcon = '❌';
+
+    return `
+        <div class="etlsql-dag-capsule status-${statusClass}" data-col="${col}" data-row="${row}" title="${escapeHtml(node.name)}"
+             style="border: 1px solid var(--portal-border, #30363d); background: var(--portal-surface-subtle, #161b22); padding: 8px 12px; border-radius: 8px; width: 160px; font-size: 11px; z-index:2; position:relative; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <div style="font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; justify-content:between; align-items:center; margin-bottom:4px;">
+                <span>${statusIcon} ${escapeHtml(node.name)}</span>
+            </div>
+            <div style="color:var(--portal-text-muted, #9da7b1); display:flex; justify-content:space-between;">
+                <span>${rows} rows</span>
+                <span>${duration}</span>
+            </div>
+        </div>
+    `;
+}
+
+function updateDagLines(container) {
+    const svg = container.querySelector('.etlsql-compact-dag-svg');
+    if (!svg) return;
+    svg.innerHTML = '';
+    const containerRect = container.getBoundingClientRect();
+    
+    const capsules = Array.from(container.querySelectorAll('.etlsql-dag-capsule'));
+    const cols = {};
+    capsules.forEach(cap => {
+        const col = parseInt(cap.dataset.col, 10);
+        if (!cols[col]) cols[col] = [];
+        cols[col].push(cap);
+    });
+    
+    const sortedColKeys = Object.keys(cols).map(Number).sort((a,b)=>a-b);
+    for (let i = 0; i < sortedColKeys.length - 1; i++) {
+        const c1 = sortedColKeys[i];
+        const c2 = sortedColKeys[i+1];
+        const nodes1 = cols[c1];
+        const nodes2 = cols[c2];
+        
+        nodes1.forEach(n1 => {
+            const r1 = n1.getBoundingClientRect();
+            const x1 = r1.right - containerRect.left;
+            const y1 = (r1.top + r1.bottom) / 2 - containerRect.top;
+            
+            nodes2.forEach(n2 => {
+                const r2 = n2.getBoundingClientRect();
+                const x2 = r2.left - containerRect.left;
+                const y2 = (r2.top + r2.bottom) / 2 - containerRect.top;
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const cp1x = x1 + (x2 - x1) / 3;
+                const cp2x = x1 + 2 * (x2 - x1) / 3;
+                path.setAttribute('d', `M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`);
+                path.setAttribute('stroke', 'var(--portal-border, #30363d)');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('fill', 'none');
+                svg.appendChild(path);
+            });
+        });
+    }
 }
 
 export function createScriptResultsPanel(container) {
     let messages = [];
     let progress = [];
     let resultSets = [];
+    let diagnostics = [];
     let performance = null;
     let activeTab = 'results';
     let status = 'idle';
@@ -1456,6 +1680,7 @@ export function createScriptResultsPanel(container) {
             <span class="etlsql-script-results-tools" data-result-tools>
                 <input type="search" data-result-filter placeholder="Filter results" autocomplete="off">
                 <button type="button" data-export="csv">CSV</button>
+                <button type="button" data-export="xlsx">Excel</button>
                 <button type="button" data-export="json">JSON</button>
             </span>
             <span class="etlsql-script-results-status" data-status>Idle</span>
@@ -1470,6 +1695,12 @@ export function createScriptResultsPanel(container) {
     function setTab(tab) {
         activeTab = tab;
         render();
+        if (tab === 'pipeline') {
+            setTimeout(() => {
+                const dagCont = body.querySelector('.etlsql-compact-dag');
+                if (dagCont) updateDagLines(dagCont);
+            }, 50);
+        }
     }
 
     function escape(value) {
@@ -1491,9 +1722,28 @@ export function createScriptResultsPanel(container) {
         return `<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
 
+    function diagnosticLevel(d) {
+        const severity = String(d?.severity ?? '').toLowerCase();
+        return (severity.includes('error') || d?.severity === 0) ? 'error' : 'warn';
+    }
+
+    function renderDiagnosticsBlock() {
+        if (!diagnostics.length) return '';
+        const rows = diagnostics.map(d => {
+            // Analyzer positions are 0-based; the editor gutter shows them 1-based.
+            const line = (Number.isFinite(d.startLine) ? d.startLine : 0) + 1;
+            const column = (Number.isFinite(d.startColumn) ? d.startColumn : 0) + 1;
+            return `<div class="etlsql-script-message" data-level="${diagnosticLevel(d)}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
+        }).join('');
+        return `<div class="etlsql-script-message-group"><div class="etlsql-script-message-group-title">Diagnostics</div>${rows}</div>`;
+    }
+
     function renderMessages() {
-        if (!messages.length) return '<div class="etlsql-script-results-empty">No messages yet.</div>';
-        return `<div class="etlsql-script-message-list">${messages.map(m => `<div class="etlsql-script-message" data-level="${escape(m.level || 'info')}"><span>${escape(m.level || 'info')}</span>${escape(m.text || '')}</div>`).join('')}</div>`;
+        if (!messages.length && !diagnostics.length) return '<div class="etlsql-script-results-empty">No messages yet.</div>';
+        const runMessages = messages.length
+            ? `<div class="etlsql-script-message-list">${messages.map(m => `<div class="etlsql-script-message" data-level="${escape(m.level || 'info')}"><span>${escape(m.level || 'info')}</span>${escape(m.text || '')}</div>`).join('')}</div>`
+            : '';
+        return `${renderDiagnosticsBlock()}${runMessages}`;
     }
 
     function renderPipelineRows(nodes, depth = 0) {
@@ -1509,7 +1759,16 @@ export function createScriptResultsPanel(container) {
     function renderPipeline() {
         if (!progress.length) return '<div class="etlsql-script-results-empty">No pipeline events yet.</div>';
         const latest = progress[progress.length - 1] || [];
-        return `<table><thead><tr><th>Step</th><th>Status</th><th>Rows</th><th>Duration</th></tr></thead><tbody>${renderPipelineRows(latest)}</tbody></table>`;
+        const dagHtml = renderCompactDag(latest);
+        const tableHtml = `<table><thead><tr><th>Step</th><th>Status</th><th>Rows</th><th>Duration</th></tr></thead><tbody>${renderPipelineRows(latest)}</tbody></table>`;
+        return `
+            <div class="etlsql-pipeline-view" style="display:flex; flex-direction:column; height:100%; overflow:hidden;">
+                ${dagHtml}
+                <div class="etlsql-pipeline-table-container" style="flex:1; overflow:auto; padding-top:10px;">
+                    ${tableHtml}
+                </div>
+            </div>
+        `;
     }
 
     function renderPerformance() {
@@ -1525,8 +1784,17 @@ export function createScriptResultsPanel(container) {
             <table><thead><tr><th>Statement</th><th>Total</th></tr></thead><tbody>${statements.map(s => `<tr><td>${escape(s.type || 'Statement')}</td><td>${Number(s.totalMs || 0).toLocaleString()} ms</td></tr>`).join('')}</tbody></table>`;
     }
 
+    function renderMessagesTabLabel() {
+        const tab = container.querySelector('[data-tab="messages"]');
+        if (!tab) return;
+        const errors = diagnostics.filter(d => diagnosticLevel(d) === 'error').length;
+        tab.textContent = diagnostics.length ? `Messages (${diagnostics.length})` : 'Messages';
+        tab.dataset.badge = errors ? 'error' : (diagnostics.length ? 'warn' : '');
+    }
+
     function render() {
         container.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
+        renderMessagesTabLabel();
         statusEl.textContent = status;
         if (toolsEl) toolsEl.hidden = activeTab !== 'results';
         if (activeTab === 'messages') body.innerHTML = renderMessages();
@@ -1556,11 +1824,24 @@ export function createScriptResultsPanel(container) {
     function exportResults(format) {
         const { columns, rows } = latestResults();
         if (!columns.length) return;
-        const text = format === 'json'
-            ? JSON.stringify(rows, null, 2)
-            : toCsv(columns, rows);
-        const mime = format === 'json' ? 'application/json' : 'text/csv';
-        const ext = format === 'json' ? 'json' : 'csv';
+        let text = '';
+        let mime = '';
+        let ext = '';
+        
+        if (format === 'json') {
+            text = JSON.stringify(rows, null, 2);
+            mime = 'application/json';
+            ext = 'json';
+        } else if (format === 'xlsx') {
+            text = toXlsxXml(columns, rows);
+            mime = 'application/vnd.ms-excel';
+            ext = 'xls';
+        } else {
+            text = toCsv(columns, rows);
+            mime = 'text/csv';
+            ext = 'csv';
+        }
+
         const blob = new Blob([text], { type: `${mime};charset=utf-8` });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -1579,6 +1860,10 @@ export function createScriptResultsPanel(container) {
                 break;
             case 'status':
                 status = message.status || status;
+                // Auto switch tabs during running state
+                if (status === 'running') {
+                    activeTab = 'pipeline';
+                }
                 break;
             case 'message':
                 messages.push(message);
@@ -1588,6 +1873,7 @@ export function createScriptResultsPanel(container) {
                 break;
             case 'results':
                 resultSets.push({ columns: message.columns || [], rows: message.rows || [] });
+                // Focus results tab on success
                 activeTab = 'results';
                 break;
             case 'performance':
@@ -1595,11 +1881,21 @@ export function createScriptResultsPanel(container) {
                 break;
             case 'done':
                 status = message.exitCode === 0 ? 'Complete' : 'Failed';
+                // Switch to Messages if execution failed
+                if (message.exitCode !== 0) {
+                    activeTab = 'messages';
+                }
                 break;
             default:
                 break;
         }
         render();
+        if (activeTab === 'pipeline') {
+            setTimeout(() => {
+                const dagCont = body.querySelector('.etlsql-compact-dag');
+                if (dagCont) updateDagLines(dagCont);
+            }, 50);
+        }
     }
 
     container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
@@ -1608,16 +1904,34 @@ export function createScriptResultsPanel(container) {
         render();
     });
     container.querySelectorAll('[data-export]').forEach(btn => btn.addEventListener('click', () => exportResults(btn.dataset.export)));
+    
+    // Window resize handler for SVG updating
+    const onResize = () => {
+        if (activeTab === 'pipeline') {
+            const dagCont = body.querySelector('.etlsql-compact-dag');
+            if (dagCont) updateDagLines(dagCont);
+        }
+    };
+    window.addEventListener('resize', onResize);
+
     clear();
     return {
         replay(trace) {
             for (const message of (Array.isArray(trace) ? trace : [])) post(message);
         },
+        // Linter/parser diagnostics belong to the buffer, not to a run, so they are
+        // held separately from run messages and survive clear().
+        setDiagnostics(list) {
+            diagnostics = Array.isArray(list) ? list : [];
+            render();
+        },
         clear,
         dispose() {
+            window.removeEventListener('resize', onResize);
             container.replaceChildren();
         },
     };
+
 }
 
 function filterRows(rows, columns, filter) {
@@ -1643,23 +1957,92 @@ function formatResultCell(value) {
     return String(value);
 }
 
+// Toolbar iconography. Inline stroke SVGs (currentColor, 16px) keep the workbench
+// self-contained — no icon font or sprite sheet to ship to VS Code / Player / Portal.
+const _TOOLBAR_ICONS = {
+    sidebar: '<path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z"/><path d="M6.5 2v12"/>',
+    theme: '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/>',
+    commands: '<path d="m4 5 3 3-3 3"/><path d="M8.5 11h4"/>',
+    suggest: '<path d="m8 2 1.6 3.9L13.5 7.5 9.6 9.1 8 13l-1.6-3.9L2.5 7.5l3.9-1.6z"/>',
+    runSelected: '<path d="M2.5 3.5h3"/><path d="M2.5 12.5h3"/><path d="m7.5 3.5 6 4.5-6 4.5z"/>',
+    run: '<path d="m4 2.5 9 5.5-9 5.5z"/>',
+    preview: '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8"/><circle cx="8" cy="8" r="1.9"/>',
+    apply: '<path d="M2 3.5h12"/><path d="M2 8h12"/><path d="M2 12.5h7"/>',
+    save: '<path d="M3 2.5h7.5L13.5 5.5V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5"/><path d="M5 2.5v4h5v-4"/><path d="M5 13.5v-4h6v4"/>',
+    close: '<path d="m4 4 8 8"/><path d="m12 4-8 8"/>',
+};
+
+function toolbarIcon(name) {
+    return `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_TOOLBAR_ICONS[name] || ''}</svg>`;
+}
+
+// Icon-only by default; `label` is reserved for the primary action so the toolbar
+// still reads at a glance. Everything carries a title + aria-label for a11y.
+function toolbarButton({ attr, icon, title, label, primary, key }) {
+    const hint = key ? `${title} (${key})` : title;
+    return `<button type="button" class="etlsql-tool-btn${primary ? ' etlsql-tool-btn-primary' : ''}${label ? ' etlsql-tool-btn-labelled' : ''}"
+        ${attr} title="${escapeHtml(hint)}" aria-label="${escapeHtml(title)}">${toolbarIcon(icon)}${label ? `<span>${escapeHtml(label)}</span>` : ''}</button>`;
+}
+
 export async function createScriptEditorWorkbench(container, opts = {}) {
+    const savedTheme = localStorage.getItem('portal-theme') || 'dark';
+    if (savedTheme === 'dark') {
+        document.body.classList.add('theme-dark');
+    } else {
+        document.body.classList.remove('theme-dark');
+    }
+
+    const hasSidebar = Boolean(opts.showSidebar);
+    
     container.innerHTML = `
-        <div class="etlsql-script-workbench">
+        <div class="etlsql-script-workbench ${hasSidebar ? 'etlsql-script-workbench-with-sidebar' : ''}">
             <div class="etlsql-script-workbench-toolbar">
-                <strong>${escapeHtml(opts.title || 'Script')}</strong>
+                <strong class="etlsql-script-workbench-title">${escapeHtml(opts.title || 'Script')}</strong>
                 <span class="etlsql-script-workbench-spacer"></span>
-                <button type="button" class="btn btn-sm" data-command-palette title="Command Palette (Ctrl+Shift+P)">Commands</button>
-                ${opts.editor?.completeUrl ? '<button type="button" class="btn btn-sm" data-suggest title="Autocomplete suggestions (Ctrl+Space or Ctrl+.)">Suggest</button>' : ''}
-                <button type="button" class="btn btn-sm btn-primary" data-run>Run</button>
-                ${opts.previewApiUrl ? '<button type="button" class="btn btn-sm" data-preview title="Render a live WYSIWYG preview of this report">👁 Preview</button>' : ''}
-                ${opts.onApply ? '<button type="button" class="btn btn-sm btn-primary" data-apply>Update Designer</button>' : ''}
-                ${opts.onSave ? '<button type="button" class="btn btn-sm" data-save>Save</button>' : ''}
-                ${opts.onClose ? '<button type="button" class="btn btn-sm" data-close>Close</button>' : ''}
+                ${hasSidebar ? toolbarButton({ attr: 'data-toggle-sidebar', icon: 'sidebar', title: 'Toggle sidebar' }) : ''}
+                ${toolbarButton({ attr: 'data-toggle-theme', icon: 'theme', title: 'Toggle dark/light mode' })}
+                ${toolbarButton({ attr: 'data-command-palette', icon: 'commands', title: 'Command palette', key: 'Ctrl+Shift+P' })}
+                ${opts.editor?.completeUrl ? toolbarButton({ attr: 'data-suggest', icon: 'suggest', title: 'Suggest completions', key: 'Ctrl+Space' }) : ''}
+                ${opts.previewApiUrl ? toolbarButton({ attr: 'data-preview', icon: 'preview', title: 'Preview report' }) : ''}
+                ${opts.onApply ? toolbarButton({ attr: 'data-apply', icon: 'apply', title: 'Update designer from script' }) : ''}
+                ${opts.onSave ? toolbarButton({ attr: 'data-save', icon: 'save', title: 'Save', key: 'Ctrl+S' }) : ''}
+                ${opts.onClose ? toolbarButton({ attr: 'data-close', icon: 'close', title: 'Close editor' }) : ''}
+                <span class="etlsql-toolbar-divider"></span>
+                ${toolbarButton({ attr: 'data-run-selected', icon: 'runSelected', title: 'Run selection or statement under cursor', key: 'Ctrl+Enter' })}
+                ${toolbarButton({ attr: 'data-run', icon: 'run', title: 'Run script', key: 'Ctrl+Shift+Enter', label: 'Run', primary: true })}
             </div>
+            
+            ${hasSidebar ? `
+            <div class="etlsql-script-workbench-body" style="display:flex; height: calc(100% - 38px); overflow:hidden; position:relative; z-index: 10;">
+                <aside class="etlsql-script-workbench-sidebar" data-sidebar>
+                    <div class="etlsql-sidebar-section-header">
+                        <span>Workspace</span>
+                        <button type="button" class="etlsql-sidebar-action" data-open-directory>Open folder</button>
+                    </div>
+                    <div class="etlsql-sidebar-section" data-sidebar-files>Loading workspace…</div>
+
+                    <div class="etlsql-sidebar-section-header"><span>Schema explorer</span></div>
+                    <div class="etlsql-sidebar-section" data-sidebar-schema>Loading connections…</div>
+
+                    <div class="etlsql-sidebar-section-header"><span>Session</span></div>
+                    <div class="etlsql-sidebar-section" data-sidebar-variables>Loading session…</div>
+
+                    <div class="etlsql-sidebar-section-header" data-sidebar-git-header><span>Source control</span></div>
+                    <div class="etlsql-sidebar-section" data-sidebar-git>Loading git…</div>
+                </aside>
+                <div class="etlsql-script-workbench-content" style="flex:1; display:grid; grid-template-rows: minmax(100px, 1fr) 8px minmax(36px, 34%); min-width:0; height:100%; position:relative;">
+                    <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
+                    <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results" style="cursor:row-resize; height:8px; border-top:1px solid var(--portal-border, #30363d); border-bottom:1px solid var(--portal-border, #30363d); background:var(--portal-surface-subtle, #161b22);"></div>
+                    <div class="etlsql-script-workbench-results" data-results></div>
+                </div>
+            </div>
+            ` : `
             <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
             <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results"></div>
             <div class="etlsql-script-workbench-results" data-results></div>
+            `}
+            
             ${opts.previewApiUrl ? `
             <div class="etlsql-script-workbench-preview" data-preview-overlay>
                 <div class="etlsql-script-workbench-preview-toolbar">
@@ -1671,6 +2054,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 </div>
                 <iframe data-preview-frame title="Report preview" sandbox="allow-scripts allow-same-origin"></iframe>
             </div>` : ''}
+            
             <div class="etlsql-script-command-palette" data-palette hidden>
                 <div class="etlsql-script-command-box">
                     <input type="search" data-palette-filter placeholder="Run command" autocomplete="off">
@@ -1678,6 +2062,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 </div>
             </div>
         </div>`;
+
+    let currentFilePath = opts.title && opts.title !== 'Script' ? opts.title : '';
+    let activeDirectoryHandle = null;
+    let activeFileHandle = null;
+    const originalDocUri = opts.editor?.documentUri;
+    const getDocumentUri = () => {
+        if (currentFilePath) return currentFilePath;
+        if (typeof originalDocUri === 'function') return originalDocUri();
+        return originalDocUri || 'portal-designer';
+    };
 
     const root = container.querySelector('.etlsql-script-workbench');
     const editorHost = container.querySelector('[data-editor]');
@@ -1687,18 +2081,51 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     const paletteFilter = container.querySelector('[data-palette-filter]');
     const paletteList = container.querySelector('[data-palette-list]');
     const resultsPanel = createScriptResultsPanel(resultsHost);
-    const editor = await createScriptEditor(editorHost, opts.editor || {});
+
+    const editorOpts = {
+        ...(opts.editor || {}),
+        documentUri: getDocumentUri,
+        // The workbench owns a Messages tab, so the editor's own inline diagnostics
+        // list would be a third copy of the same information (gutter + underline).
+        diagnosticsPanel: false,
+        onDiagnostics: (list) => {
+            resultsPanel.setDiagnostics(list);
+            opts.editor?.onDiagnostics?.(list);
+            // Analysis is what registers CREATE CONNECTION / #temp metadata on the
+            // server, so this is the point where the sidebar has something new to show.
+            scheduleSidebarRefresh();
+        },
+    };
+    const editor = await createScriptEditor(editorHost, editorOpts);
     let runAbort = null;
+
+    const content = hasSidebar ? root.querySelector('.etlsql-script-workbench-content') : root;
 
     splitter.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         splitter.setPointerCapture(event.pointerId);
-        const rootRect = root.getBoundingClientRect();
+        const rect = content.getBoundingClientRect();
+        
+        const toolbar = root.querySelector('.etlsql-script-workbench-toolbar');
+        const toolbarHeight = (hasSidebar || !toolbar) ? 0 : toolbar.getBoundingClientRect().height;
+
         const onMove = (moveEvent) => {
-            const y = Math.max(rootRect.top + 220, Math.min(rootRect.bottom - 160, moveEvent.clientY));
-            const editorHeight = Math.max(180, y - rootRect.top - 42);
-            const resultHeight = Math.max(140, rootRect.bottom - y - 8);
-            root.style.gridTemplateRows = `auto ${editorHeight}px 8px ${resultHeight}px`;
+            const minEditor = 100;
+            const minResults = 36;
+            const splitterHeight = 8;
+            
+            const minY = rect.top + toolbarHeight + minEditor + (splitterHeight / 2);
+            const maxY = rect.bottom - minResults - (splitterHeight / 2);
+            const y = Math.max(minY, Math.min(maxY, moveEvent.clientY));
+            
+            const editorHeight = y - (rect.top + toolbarHeight) - (splitterHeight / 2);
+            const resultHeight = rect.bottom - y - (splitterHeight / 2);
+            
+            if (hasSidebar) {
+                content.style.gridTemplateRows = `${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
+            } else {
+                content.style.gridTemplateRows = `auto ${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
+            }
         };
         const onUp = () => {
             splitter.removeEventListener('pointermove', onMove);
@@ -1708,13 +2135,441 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         splitter.addEventListener('pointerup', onUp);
     });
 
-    async function run() {
+    async function loadFile(filePath) {
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const url = `/api/files?path=${encodeURIComponent(filePath)}`;
+            const res = await fetcher(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data && typeof data.content === 'string') {
+                editor.setValue(data.content);
+                currentFilePath = filePath;
+                const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
+                if (titleEl) {
+                    titleEl.textContent = filePath;
+                }
+                if (hasSidebar) {
+                    loadSchema();
+                    loadSession();
+                    loadGit();
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            alert(`Error loading file: ${err.message}`);
+        }
+    }
+
+    async function loadFiles() {
+        const filesEl = root.querySelector('[data-sidebar-files]');
+        if (!filesEl) return;
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const res = await fetcher(opts.workspaceUrl || '/api/workspace');
+            if (!res.ok) throw new Error(`Workspace listing unavailable (HTTP ${res.status})`);
+            const data = await res.json();
+            if (data && data.files) {
+                filesEl.innerHTML = '';
+                data.files.forEach(f => {
+                    const item = document.createElement('div');
+                    item.className = 'etlsql-sidebar-file';
+                    item.innerHTML = `<span class="etlsql-tree-label">${escapeHtml(f.path)}</span><span class="etlsql-tree-type">${Math.round(f.size / 10.24) / 100} KB</span>`;
+
+                    if (f.path === currentFilePath) item.classList.add('active');
+
+                    item.addEventListener('click', async () => {
+                        filesEl.querySelectorAll('.etlsql-sidebar-file').forEach(e => e.classList.remove('active'));
+                        item.classList.add('active');
+                        if (opts.onFileSelect) {
+                            await opts.onFileSelect(f.path);
+                        } else {
+                            await loadFile(f.path);
+                        }
+                    });
+                    filesEl.appendChild(item);
+                });
+            } else {
+                filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">No files.</div>';
+            }
+        } catch (err) {
+            filesEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72); padding:4px;">${err.message}</div>`;
+        }
+    }
+
+    async function renderDirectoryTree(dirHandle) {
+        const filesEl = root.querySelector('[data-sidebar-files]');
+        if (!filesEl) return;
+        filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">Loading...</div>';
+        try {
+            const files = [];
+            async function traverse(handle, relativePath = '') {
+                for await (const entry of handle.values()) {
+                    const fullPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+                    if (entry.kind === 'file') {
+                        if (entry.name.endsWith('.etlsql') || entry.name.endsWith('.rptsql') || entry.name.endsWith('.sql')) {
+                            files.push({
+                                path: fullPath,
+                                name: entry.name,
+                                handle: entry
+                            });
+                        }
+                    } else if (entry.kind === 'directory') {
+                        await traverse(entry, fullPath);
+                    }
+                }
+            }
+            await traverse(dirHandle);
+            files.sort((a, b) => a.path.localeCompare(b.path));
+            if (files.length === 0) {
+                filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">No script files.</div>';
+                return;
+            }
+            filesEl.innerHTML = '';
+            files.forEach(f => {
+                const item = document.createElement('div');
+                item.className = 'etlsql-sidebar-file';
+                item.innerHTML = `<span class="etlsql-tree-label">${escapeHtml(f.path)}</span>`;
+                if (f.path === currentFilePath) item.classList.add('active');
+                item.addEventListener('click', async () => {
+                    filesEl.querySelectorAll('.etlsql-sidebar-file').forEach(e => e.classList.remove('active'));
+                    item.classList.add('active');
+                    try {
+                        const file = await f.handle.getFile();
+                        const content = await file.text();
+                        editor.setValue(content);
+                        currentFilePath = f.path;
+                        activeFileHandle = f.handle;
+                        const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
+                        if (titleEl) titleEl.textContent = f.name;
+                    } catch (e) {
+                        alert('Failed to read file: ' + e.message);
+                    }
+                });
+                filesEl.appendChild(item);
+            });
+        } catch (err) {
+            filesEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72); padding:4px;">${err.message}</div>`;
+        }
+    }
+
+    function metadataApiBase() {
+        const runUrl = opts.runUrl || '';
+        return runUrl.includes('/api/designer/run') ? runUrl.split('/api/designer/run')[0] : '';
+    }
+
+    // ── Sidebar tree primitives ────────────────────────────────────────────────
+    // Shared by the schema explorer and the session explorer so connections, tables,
+    // temp tables and columns all expand and drag identically.
+
+    // A private MIME type keeps CodeMirror's own text drag/drop untouched — we only
+    // intercept drops that originated from one of these tree rows.
+    const SNIPPET_MIME = 'application/x-etlsql-snippet';
+
+    function makeDraggable(el, snippet) {
+        el.draggable = true;
+        el.title = `Drag into the editor to insert "${snippet}"`;
+        el.addEventListener('dragstart', (event) => {
+            event.stopPropagation();
+            event.dataTransfer.setData(SNIPPET_MIME, snippet);
+            event.dataTransfer.setData('text/plain', snippet);
+            event.dataTransfer.effectAllowed = 'copy';
+            el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    }
+
+    function makeColumnRow(column, snippet) {
+        const row = document.createElement('div');
+        row.className = 'etlsql-tree-row etlsql-tree-column';
+        const type = column.type ?? column.dataType ?? '';
+        row.innerHTML = `<span class="etlsql-tree-indent"></span><span class="etlsql-tree-label">${escapeHtml(column.name)}</span>`
+            + (type ? `<span class="etlsql-tree-type">${escapeHtml(type)}</span>` : '');
+        makeDraggable(row, snippet);
+        return row;
+    }
+
+    // Builds a collapsible node. `loadChildren` runs once, on first expand.
+    function makeTreeNode({ label, icon, className, snippet, loadChildren }) {
+        const node = document.createElement('div');
+        node.className = 'etlsql-tree-node';
+
+        const header = document.createElement('div');
+        header.className = `etlsql-tree-row etlsql-tree-header ${className || ''}`;
+        header.innerHTML = `<span class="etlsql-tree-caret">▶</span><span class="etlsql-tree-icon">${icon}</span><span class="etlsql-tree-label">${escapeHtml(label)}</span>`;
+
+        const children = document.createElement('div');
+        children.className = 'etlsql-tree-children';
+
+        let loaded = false;
+        header.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            const expanded = node.classList.toggle('expanded');
+            if (expanded && !loaded) {
+                loaded = true;
+                children.innerHTML = '<div class="etlsql-tree-note">Loading…</div>';
+                try {
+                    await loadChildren(children);
+                } catch (err) {
+                    children.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
+                    loaded = false;
+                }
+            }
+        });
+
+        if (snippet) makeDraggable(header, snippet);
+        node.append(header, children);
+        return node;
+    }
+
+    // Re-fetching metadata after every keystroke-triggered analysis would collapse any
+    // tree the user had expanded, so each section only re-renders when its data changed.
+    let schemaSignature = null;
+    let sessionSignature = null;
+    let sidebarRefreshTimer = null;
+
+    function scheduleSidebarRefresh() {
+        if (!hasSidebar) return;
+        clearTimeout(sidebarRefreshTimer);
+        sidebarRefreshTimer = setTimeout(() => {
+            loadSchema();
+            loadSession();
+        }, 200);
+    }
+
+    async function loadSchema() {
+        const schemaEl = root.querySelector('[data-sidebar-schema]');
+        if (!schemaEl) return;
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const apiBase = metadataApiBase();
+            const docUri = getDocumentUri();
+
+            const res = await fetcher(`${apiBase}/api/session/metadata?documentUri=${encodeURIComponent(docUri)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const signature = JSON.stringify(data?.connections ?? []);
+            if (signature === schemaSignature) return;
+            schemaSignature = signature;
+            if (data && data.connections && data.connections.length > 0) {
+                schemaEl.innerHTML = '';
+                data.connections.forEach(conn => {
+                    schemaEl.appendChild(makeTreeNode({
+                        label: conn,
+                        icon: '🔌',
+                        className: 'etlsql-tree-connection',
+                        loadChildren: async (host) => {
+                            const schemaRes = await fetcher(`${apiBase}/api/designer/schema?connection=${encodeURIComponent(conn)}&documentUri=${encodeURIComponent(docUri)}`);
+                            if (!schemaRes.ok) throw new Error(`HTTP ${schemaRes.status}`);
+                            const schemaData = await schemaRes.json();
+                            const tables = schemaData?.tables ?? [];
+                            if (!tables.length) {
+                                host.innerHTML = '<div class="etlsql-tree-note">No tables or views.</div>';
+                                return;
+                            }
+                            host.innerHTML = '';
+                            for (const table of tables) {
+                                host.appendChild(makeTreeNode({
+                                    label: table.name,
+                                    icon: '▤',
+                                    className: 'etlsql-tree-table',
+                                    snippet: `${conn}.${table.name}`,
+                                    loadChildren: (columnHost) => {
+                                        const columns = table.columns ?? [];
+                                        if (!columns.length) {
+                                            columnHost.innerHTML = '<div class="etlsql-tree-note">No columns</div>';
+                                            return;
+                                        }
+                                        columnHost.innerHTML = '';
+                                        for (const column of columns) {
+                                            columnHost.appendChild(makeColumnRow(column, column.name));
+                                        }
+                                    },
+                                }));
+                            }
+                        },
+                    }));
+                });
+            } else {
+                schemaEl.innerHTML = '<div class="etlsql-tree-note">No active connections.</div>';
+            }
+        } catch (err) {
+            schemaSignature = null;
+            schemaEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72);">${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    async function loadSession() {
+        const varsEl = root.querySelector('[data-sidebar-variables]');
+        if (!varsEl) return;
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const apiBase = metadataApiBase();
+            const docUri = getDocumentUri();
+
+            const res = await fetcher(`${apiBase}/api/session/metadata?documentUri=${encodeURIComponent(docUri)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const signature = JSON.stringify([data?.variables ?? [], data?.tempTables ?? []]);
+            if (signature === sessionSignature) return;
+            sessionSignature = signature;
+            const variables = data?.variables ?? [];
+            const tempTables = data?.tempTables ?? [];
+            varsEl.innerHTML = '';
+
+            for (const variable of variables) {
+                const row = document.createElement('div');
+                row.className = 'etlsql-tree-row etlsql-tree-variable';
+                row.innerHTML = `<span class="etlsql-tree-icon">@</span><span class="etlsql-tree-label">${escapeHtml(variable.name)}</span>`
+                    + `<span class="etlsql-tree-value">${escapeHtml(String(variable.value ?? ''))}</span>`
+                    + (variable.type ? `<span class="etlsql-tree-type">${escapeHtml(variable.type)}</span>` : '');
+                makeDraggable(row, variable.name);
+                varsEl.appendChild(row);
+            }
+
+            // Temp tables expand to their columns exactly like a schema table does.
+            for (const table of tempTables) {
+                varsEl.appendChild(makeTreeNode({
+                    label: table.name,
+                    icon: '▦',
+                    className: 'etlsql-tree-temp',
+                    snippet: table.name,
+                    loadChildren: (columnHost) => {
+                        const columns = (table.columns ?? []).map(c => (typeof c === 'string' ? { name: c, type: '' } : c));
+                        if (!columns.length) {
+                            columnHost.innerHTML = '<div class="etlsql-tree-note">No columns</div>';
+                            return;
+                        }
+                        columnHost.innerHTML = '';
+                        for (const column of columns) {
+                            columnHost.appendChild(makeColumnRow(column, column.name));
+                        }
+                    },
+                }));
+            }
+
+            if (!variables.length && !tempTables.length) {
+                varsEl.innerHTML = '<div class="etlsql-tree-note">No variables/temp tables.</div>';
+            }
+        } catch (err) {
+            sessionSignature = null;
+            varsEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    function hideGitSection() {
+        // Not every host exposes source control (see the Git Integration item in the
+        // Unified Script Editor Roadmap). Hide the section rather than parking a fetch
+        // error in the sidebar.
+        root.querySelector('[data-sidebar-git]')?.remove();
+        root.querySelector('[data-sidebar-git-header]')?.remove();
+    }
+
+    async function loadGit() {
+        const gitEl = root.querySelector('[data-sidebar-git]');
+        if (!gitEl) return;
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const res = await fetcher(opts.gitStatusUrl || '/api/git/status');
+            if (!res.ok) { hideGitSection(); return; }
+            const data = await res.json();
+            if (data) {
+                let gitHtml = `<div style="font-weight:bold; color:var(--portal-text-soft, #c9d1d9); margin-bottom:4px;">Branch: 🌿 ${data.branch}</div>`;
+                if (data.modified && data.modified.length > 0) {
+                    gitHtml += '<div style="color:var(--portal-warning, #d29922); font-weight:bold; margin-top:4px;">Modified:</div>';
+                    gitHtml += data.modified.map(f => `<div style="padding-left:8px; color:var(--portal-warning, #d29922);">📝 ${f}</div>`).join('');
+                }
+                if (data.untracked && data.untracked.length > 0) {
+                    gitHtml += '<div style="color:var(--portal-text-muted, #9da7b1); font-weight:bold; margin-top:4px;">Untracked:</div>';
+                    gitHtml += data.untracked.map(f => `<div style="padding-left:8px; color:var(--portal-text-muted, #9da7b1);">➕ ${f}</div>`).join('');
+                }
+                gitHtml += `
+                    <input type="text" data-git-comment placeholder="Commit message..." style="background:var(--portal-surface, #0f141b); color:var(--portal-text, #e6edf3); border:1px solid var(--portal-border, #30363d); padding:4px 6px; border-radius:4px; font-size:11px; margin-top:6px; outline:none;">
+                    <button type="button" class="btn btn-sm btn-primary" data-git-commit style="margin-top:4px; font-size:11px; font-weight:600; padding:4px;">Commit Changes</button>
+                `;
+                gitEl.innerHTML = gitHtml;
+                
+                const commitBtn = gitEl.querySelector('[data-git-commit]');
+                const commentInput = gitEl.querySelector('[data-git-comment]');
+                commitBtn?.addEventListener('click', async () => {
+                    const comment = commentInput.value || '';
+                    if (!comment.trim()) { alert('Please enter a commit message.'); return; }
+                    commitBtn.disabled = true;
+                    try {
+                        const cRes = await fetcher('/api/git/commit', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ comment })
+                        });
+                        const cData = await cRes.json();
+                        if (cData.committed) {
+                            alert(`Committed successfully! Rev: ${cData.sourceRevision}`);
+                            loadGit();
+                        } else {
+                            alert('Nothing to commit.');
+                        }
+                    } catch (e) {
+                        alert('Commit failed: ' + e.message);
+                    } finally {
+                        commitBtn.disabled = false;
+                    }
+                });
+            }
+        } catch {
+            hideGitSection();
+        }
+    }
+
+    const toggleBtn = container.querySelector('[data-toggle-sidebar]');
+    const sidebar = container.querySelector('[data-sidebar]');
+    toggleBtn?.classList.add('active'); // sidebar starts visible
+    toggleBtn?.addEventListener('click', () => {
+        if (sidebar.style.display === 'none') {
+            sidebar.style.display = 'flex';
+            toggleBtn.classList.add('active');
+        } else {
+            sidebar.style.display = 'none';
+            toggleBtn.classList.remove('active');
+        }
+    });
+
+    const toggleThemeBtn = container.querySelector('[data-toggle-theme]');
+    toggleThemeBtn?.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('theme-dark');
+        localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
+    });
+
+    const openDirBtn = container.querySelector('[data-open-directory]');
+    openDirBtn?.addEventListener('click', async () => {
+        try {
+            activeDirectoryHandle = await window.showDirectoryPicker();
+            await renderDirectoryTree(activeDirectoryHandle);
+        } catch (err) {
+            console.error('Failed to open directory:', err);
+        }
+    });
+
+    if (hasSidebar) {
+        loadFiles();
+        loadSchema();
+        loadSession();
+        loadGit();
+    }
+
+    // scope: 'script' runs the whole file (Run); 'selection' runs the highlighted text
+    // or the statement under the cursor (Run Selected) — see the roadmap's toolbar schema.
+    async function run(scope = 'script') {
         if (!opts.runUrl && !opts.onRun) return;
         const script = editor.getValue();
-        const selection = editor.getSelection?.() || '';
-        const statement = editor.getCurrentStatement?.() || '';
-        const runText = selection || statement || script;
-        resultsPanel.replay([{ type: 'clear', resetHistory: true }, { type: 'status', status: 'running' }, { type: 'message', level: 'sys', text: 'Running selected statement.' }]);
+        let runText = script;
+        if (scope === 'selection') {
+            runText = editor.getSelection?.() || editor.getCurrentStatement?.() || script;
+        }
+        resultsPanel.replay([
+            { type: 'clear', resetHistory: true },
+            { type: 'status', status: 'running' },
+            { type: 'message', level: 'sys', text: scope === 'selection' ? 'Running selected statement.' : 'Running script.' },
+        ]);
         try {
             runAbort?.abort();
             runAbort = new AbortController();
@@ -1725,9 +2580,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     const res = await fetcher(opts.runUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: opts.documentUri || 'portal-designer' }),
+                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri() }),
                         signal: runAbort.signal,
                     });
+
                     if (!res?.ok) throw new Error(await res.text());
                     return await res.json();
                 })();
@@ -1743,7 +2599,65 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     async function save() {
-        await opts.onSave?.(editor.getValue());
+        if (activeFileHandle) {
+            try {
+                const writable = await activeFileHandle.createWritable();
+                await writable.write(editor.getValue());
+                await writable.close();
+                alert('Saved successfully!');
+            } catch (err) {
+                alert('Browser save failed: ' + err.message);
+            }
+            return;
+        }
+        
+        if (activeDirectoryHandle) {
+            const requestedPath = prompt('Save new script as', currentFilePath || 'new-script.etlsql');
+            if (!requestedPath) return;
+            try {
+                activeFileHandle = await activeDirectoryHandle.getFileHandle(requestedPath, { create: true });
+                const writable = await activeFileHandle.createWritable();
+                await writable.write(editor.getValue());
+                await writable.close();
+                currentFilePath = requestedPath;
+                const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
+                if (titleEl) {
+                    titleEl.textContent = requestedPath;
+                }
+                await renderDirectoryTree(activeDirectoryHandle);
+                alert('Saved successfully!');
+            } catch (err) {
+                alert('Browser save failed: ' + err.message);
+            }
+            return;
+        }
+
+        if (opts.onSave) {
+            await opts.onSave?.(editor.getValue(), currentFilePath);
+        } else {
+            if (!currentFilePath) {
+                const requestedPath = prompt('Save new script as', 'new-script.etlsql');
+                if (!requestedPath) return;
+                currentFilePath = requestedPath;
+                const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
+                if (titleEl) {
+                    titleEl.textContent = currentFilePath;
+                }
+            }
+            try {
+                const fetcher = opts.authFetch ?? fetch;
+                const res = await fetcher('/api/files', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentFilePath, content: editor.getValue() })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                await loadFiles();
+            } catch (err) {
+                console.error(err);
+                alert(`Error saving file: ${err.message}`);
+            }
+        }
     }
 
     async function apply() {
@@ -1822,7 +2736,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
     function commandItems() {
         return [
-            { id: 'run', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: run },
+            { id: 'run', label: 'ETL-SQL: Run Script', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('script') },
+            { id: 'run-selected', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('selection') },
             { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
             { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
@@ -1862,7 +2777,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
     container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
-    container.querySelector('[data-run]')?.addEventListener('click', run);
+    container.querySelector('[data-run]')?.addEventListener('click', () => run('script'));
+    container.querySelector('[data-run-selected]')?.addEventListener('click', () => run('selection'));
     container.querySelector('[data-preview]')?.addEventListener('click', openPreview);
     container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
     container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
@@ -1893,7 +2809,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             openPalette();
         } else if (mod && key === 'enter') {
             event.preventDefault();
-            await run();
+            await run(event.shiftKey ? 'script' : 'selection');
         } else if (mod && key === 's' && opts.onSave) {
             event.preventDefault();
             await save();

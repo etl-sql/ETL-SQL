@@ -1,5 +1,6 @@
 // Story registry. Add a surface by writing a *.story.js module and listing it here.
 import scriptEditor from './script-editor.story.js';
+import scriptEditorUnified from './script-editor-unified.story.js';
 import designer from './designer.story.js';
 import lineageUi from './lineage-ui.story.js';
 import lineageCatalog from './lineage-catalog.story.js';
@@ -14,6 +15,7 @@ import lineageDag from './lineage-dag.story.js';
 
 export const stories = [
   scriptEditor,
+  scriptEditorUnified,
   designer,
   lineageUi,
   lineageCatalog,
@@ -26,3 +28,4 @@ export const stories = [
   policyAuthorityAdmin,
   lineageDag
 ];
+

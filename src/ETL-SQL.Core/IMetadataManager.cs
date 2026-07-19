@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 using ETL_SQL.Data;
@@ -41,6 +42,14 @@ public interface IMetadataManager
     Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null);
     Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null);
     void RegisterTempTable(string uri, string name, List<string> columns);
+
+    /// <summary>
+    /// Registers a temp table whose column types are known (declared by CREATE TABLE, or
+    /// resolved from the source table of a SELECT ... INTO). Implementations that do not
+    /// track types fall back to the name-only overload.
+    /// </summary>
+    void RegisterTempTable(string uri, string name, List<ColumnMetadata> columns) =>
+        RegisterTempTable(uri, name, columns.Select(c => c.Name).ToList());
     void ClearTempTables(string uri);
     Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null);
     Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null);

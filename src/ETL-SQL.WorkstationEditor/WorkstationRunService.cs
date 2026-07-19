@@ -52,7 +52,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 result.ExecutionTimeMs,
                 message,
                 diagnostics,
-                result.Messages.Select(m => m.Message).ToList());
+                result.Messages.Select(m => m.Message).ToList(),
+                result.ExecutionTree?.ToSnapshot());
         }
 
         var (columns, rows, rowCount, capped) = ToRows(table, rowLimit);
@@ -69,7 +70,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             result.ExecutionTimeMs,
             successMessage,
             diagnostics,
-            result.Messages.Select(m => m.Message).ToList());
+            result.Messages.Select(m => m.Message).ToList(),
+            result.ExecutionTree?.ToSnapshot());
     }
 
     private static IReadOnlyList<RunDiagnostic> ToRunDiagnostics(ExecutionResult result)
@@ -134,7 +136,9 @@ public sealed record RunResponse(
     long ElapsedMs,
     string Message,
     IReadOnlyList<RunDiagnostic> Diagnostics,
-    IReadOnlyList<string> Messages)
+    IReadOnlyList<string> Messages,
+    /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
+    object? Pipeline = null)
 {
     public static RunResponse Failed(string code, string message) =>
         new(false, [], [], 0, false, 0, message, [new RunDiagnostic(0, 0, "Error", message, code)], []);
