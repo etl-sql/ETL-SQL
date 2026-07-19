@@ -627,19 +627,33 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
         (HttpStatusCode StatusCode, HealthzResponse Body)? last = null;
+        Exception? lastException = null;
         while (DateTime.UtcNow < deadline)
         {
-            using var response = await client.GetAsync($"{process.BaseUrl}/healthz");
-            var body = (await response.Content.ReadFromJsonAsync<HealthzResponse>(Json))!;
-            last = (response.StatusCode, body);
-            if (response.StatusCode == expectedStatus)
-                return last.Value;
+            try
+            {
+                using var response = await client.GetAsync($"{process.BaseUrl}/healthz");
+                var body = (await response.Content.ReadFromJsonAsync<HealthzResponse>(Json))!;
+                last = (response.StatusCode, body);
+                lastException = null;
+                if (response.StatusCode == expectedStatus)
+                    return last.Value;
+            }
+            catch (HttpRequestException ex)
+            {
+                lastException = ex;
+            }
+            catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+            {
+                lastException = ex;
+            }
 
             await Task.Delay(250);
         }
 
         throw new TimeoutException(
-            $"Healthz did not reach {expectedStatus}. Last status: {last?.StatusCode.ToString() ?? "<none>"}");
+            $"Healthz did not reach {expectedStatus}. Last status: {last?.StatusCode.ToString() ?? "<none>"}",
+            lastException);
     }
 
     private static async Task<JobDto> WaitForJobStatusAsync(
