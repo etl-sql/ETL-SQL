@@ -35,8 +35,11 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
       Passed on 2026-07-18 after the warm-runner apphost fix: 5,164 passed, 5 skipped, 0 failed.
 - [ ] Full pre-release lane:
       `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
-- [ ] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
+- [x] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
       plus N to N+1 upgrade-path evidence.
+      Completed on 2026-07-18: the explained pre-release plan includes the SLT lane and
+      N->N+1 upgrade-path drill; `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --filter FullyQualifiedName~UpgradePathDrillTests --no-restore -m:1`
+      passed 2/2 upgrade drill tests.
 - [x] Enterprise hardening certification on Windows and Linux:
       `.\scripts\Test-EnterpriseHardeningCertification.ps1`.
       Windows passed on 2026-07-18 with run ID `enterprise-20260718-094727`
