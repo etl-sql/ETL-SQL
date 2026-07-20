@@ -45,12 +45,27 @@ namespace ETL_SQL.App
     {
         public static IServiceProvider BuildServiceProvider(Dictionary<string, string?>? configOverrides = null)
         {
+            var effectiveOverrides = configOverrides == null
+                ? new Dictionary<string, string?>()
+                : new Dictionary<string, string?>(configOverrides);
+
+            if (IsTruthy(Environment.GetEnvironmentVariable("ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB"))
+                && !effectiveOverrides.ContainsKey("Orchestrator:DatabasePath")
+                && !effectiveOverrides.ContainsKey("Orchestrator__DatabasePath"))
+            {
+                var testDbRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL.Tests", "orchestrator");
+                Directory.CreateDirectory(testDbRoot);
+                effectiveOverrides["Orchestrator:DatabasePath"] = Path.Combine(
+                    testDbRoot,
+                    $"etlsql-{Guid.NewGuid():N}.db");
+            }
+
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddEnvironmentVariables();
-            if (configOverrides != null)
-                builder.AddInMemoryCollection(configOverrides);
+            if (effectiveOverrides.Count > 0)
+                builder.AddInMemoryCollection(effectiveOverrides);
             builder.AddEnterprisePolicy();
             var configuration = builder.Build();
 
@@ -88,5 +103,10 @@ namespace ETL_SQL.App
 
             return services.BuildServiceProvider();
         }
+
+        private static bool IsTruthy(string? value) =>
+            !string.IsNullOrWhiteSpace(value)
+            && !string.Equals(value, "0", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
     }
 }

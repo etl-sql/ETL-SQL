@@ -21,6 +21,10 @@ namespace ETL_SQL.Tests.Core
         {
             try
             {
+                Environment.SetEnvironmentVariable(
+                    "ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB",
+                    Environment.GetEnvironmentVariable("ETLSQL_TEST_ISOLATE_DEFAULT_ORCHESTRATOR_DB") ?? "1");
+
                 // ── Test file logger ─────────────────────────────────────────────
                 // Use the centralized Logger for test output to ensure all engine 
                 // messages are captured in the logs/tests folder.
