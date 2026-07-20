@@ -153,6 +153,21 @@ namespace ETL_SQL.Tests.Connectors
             Assert.False((bool)atomicField!.GetValue(ds)!);
         }
 
+        [Fact]
+        public void CreateDataSource_ParsesAllowUnpinnedHostKey_DefaultsFalse()
+        {
+            var connector = new SftpConnector();
+            var allowField = typeof(SftpConnector).GetField("_allowUnpinnedHostKey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            var secureByDefault = connector.CreateDataSource(SystemExecutionContext.Instance, "sftp.example.com",
+                new Dictionary<string, string> { ["USER"] = "u" }) as SftpConnector;
+            Assert.False((bool)allowField!.GetValue(secureByDefault)!);
+
+            var optedOut = connector.CreateDataSource(SystemExecutionContext.Instance, "sftp.example.com",
+                new Dictionary<string, string> { ["USER"] = "u", ["ALLOW_UNPINNED_HOST_KEY"] = "true" }) as SftpConnector;
+            Assert.True((bool)allowField.GetValue(optedOut)!);
+        }
+
         [Theory]
         // SHA256: exact, with algorithm prefix, and tolerating base64 padding differences.
         [InlineData("n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc", true)]
@@ -202,6 +217,67 @@ namespace ETL_SQL.Tests.Connectors
             Assert.NotNull(method);
             var task = (Task<SftpClient>)method.Invoke(connector, null)!;
             await task;
+        }
+    }
+
+    /// <summary>
+    /// v0.17.0 compatibility break: SFTP host-key verification became closed by default.
+    ///
+    /// Old behaviour: an unset HOST_KEY_FINGERPRINT connected anyway, logging a warning — the client
+    /// trusted whatever server answered, leaving outbound transfers open to man-in-the-middle
+    /// interception. New behaviour: that connection is rejected unless ALLOW_UNPINNED_HOST_KEY opts
+    /// out explicitly, so an unverified transfer is a deliberate choice rather than the default.
+    ///
+    /// See BREAKING_CHANGES.md "v0.17.0 — Connector: SFTP rejects unpinned host keys by default".
+    /// </summary>
+    [Trait("CompatBreak", "0.17")]
+    [Trait("Category", "Connectors")]
+    public class SftpHostKeyPinningCompatTests
+    {
+        private const string ServerSha256 = "n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc";
+        private static readonly byte[] ServerMd5 = { 0xaa, 0xbb, 0xcc };
+
+        [Fact]
+        public void NewBehaviour_UnpinnedHostKeyWithNoOptOut_IsRejected()
+        {
+            // Previously this trusted the key and merely warned.
+            var decision = SftpConnector.EvaluateHostKey(pin: null, allowUnpinned: false, ServerSha256, ServerMd5);
+            Assert.Equal(SftpConnector.HostKeyDecision.RejectedUnpinned, decision);
+        }
+
+        [Fact]
+        public void OldBehaviour_RemainsAvailableBehindExplicitOptOut()
+        {
+            var decision = SftpConnector.EvaluateHostKey(pin: null, allowUnpinned: true, ServerSha256, ServerMd5);
+            Assert.Equal(SftpConnector.HostKeyDecision.UnpinnedAllowed, decision);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void BlankFingerprintIsNotAPin_IsRejected(string pin)
+        {
+            // A blank HOST_KEY_FINGERPRINT must not be mistaken for a configured pin, or the
+            // migration would appear to succeed while providing no protection at all.
+            var decision = SftpConnector.EvaluateHostKey(pin, allowUnpinned: false, ServerSha256, ServerMd5);
+            Assert.Equal(SftpConnector.HostKeyDecision.RejectedUnpinned, decision);
+        }
+
+        [Fact]
+        public void MatchingPin_IsTrusted_Unchanged()
+        {
+            var decision = SftpConnector.EvaluateHostKey($"SHA256:{ServerSha256}", allowUnpinned: false, ServerSha256, ServerMd5);
+            Assert.Equal(SftpConnector.HostKeyDecision.TrustedByPin, decision);
+        }
+
+        [Fact]
+        public void MismatchedPin_IsRejected_EvenWithOptOutSet()
+        {
+            // The opt-out covers only the "no pin configured" case. Once a pin is supplied a mismatch
+            // is a possible MITM and must still be rejected — the opt-out must not weaken this.
+            var decision = SftpConnector.EvaluateHostKey(
+                $"SHA256:{ServerSha256}", allowUnpinned: true, "a-completely-different-key", ServerMd5);
+            Assert.Equal(SftpConnector.HostKeyDecision.RejectedMismatch, decision);
         }
     }
 }

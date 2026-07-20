@@ -27,6 +27,7 @@ namespace ETL_SQL.Connectors
         private readonly string? _passphrase;
         private readonly int _timeoutSeconds = 30;
         private readonly string? _hostKeyFingerprint;
+        private readonly bool _allowUnpinnedHostKey;
         private readonly bool _atomicUpload;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
@@ -66,7 +67,7 @@ namespace ETL_SQL.Connectors
         {
         }
 
-        public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30, string? hostKeyFingerprint = null, bool atomicUpload = false)
+        public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30, string? hostKeyFingerprint = null, bool atomicUpload = false, bool allowUnpinnedHostKey = false)
             : this(context, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
                   (h, u, p, k, pp) =>
                   {
@@ -76,7 +77,7 @@ namespace ETL_SQL.Connectors
                       info.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
                       return new SftpClient(info);
                   },
-                  hostKeyFingerprint, atomicUpload)
+                  hostKeyFingerprint, atomicUpload, allowUnpinnedHostKey)
         {
         }
 
@@ -94,7 +95,7 @@ namespace ETL_SQL.Connectors
 
         internal SftpConnector(IExecutionContext? context, string host, int port, string username, string? password, string? keyFilePath, string? passphrase, int timeoutSeconds,
             Func<string, string, string?, string?, string?, SftpClient> clientFactory,
-            string? hostKeyFingerprint = null, bool atomicUpload = false)
+            string? hostKeyFingerprint = null, bool atomicUpload = false, bool allowUnpinnedHostKey = false)
         {
             _context = context;
             _host = host;
@@ -105,8 +106,9 @@ namespace ETL_SQL.Connectors
             _passphrase = passphrase;
             _timeoutSeconds = timeoutSeconds;
             _hostKeyFingerprint = string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : hostKeyFingerprint.Trim();
+            _allowUnpinnedHostKey = allowUnpinnedHostKey;
             _atomicUpload = atomicUpload;
-            _options = BuildOptions(host, port, username, password, _keyFilePath, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload);
+            _options = BuildOptions(host, port, username, password, _keyFilePath, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload, allowUnpinnedHostKey);
             _logger = context?.Logger ?? NullLogger.Instance;
             _clientFactory = (h, u, p, k, pp) => Task.Run(() => clientFactory(h, u, p, k, pp));
 
@@ -157,7 +159,8 @@ namespace ETL_SQL.Connectors
             ["PASSPHRASE"] = new[] { "Passphrase for the private key" },
             ["PORT"] = new[] { "SSH/SFTP Port (default 22)" },
             ["TIMEOUT_SECONDS"] = new[] { "Connection timeout in seconds (default 30)" },
-            ["HOST_KEY_FINGERPRINT"] = new[] { "Pinned server host-key fingerprint (SHA256:base64 or MD5 hex). When set, a mismatch rejects the connection (MITM protection). Strongly recommended for outbound/vendor transfers." },
+            ["HOST_KEY_FINGERPRINT"] = new[] { "Pinned server host-key fingerprint (SHA256:base64 or MD5 hex). Required unless ALLOW_UNPINNED_HOST_KEY is set: a mismatched or unpinned host key rejects the connection (MITM protection)." },
+            ["ALLOW_UNPINNED_HOST_KEY"] = new[] { "true", "false" },
             ["ATOMIC_UPLOAD"] = new[] { "true/false (default false): upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory." }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -189,6 +192,9 @@ namespace ETL_SQL.Connectors
             bool atomicUpload = options != null
                 && options.TryGetValue("ATOMIC_UPLOAD", out var atomicStr)
                 && bool.TryParse(atomicStr, out var parsedAtomic) && parsedAtomic;
+            bool allowUnpinnedHostKey = options != null
+                && options.TryGetValue("ALLOW_UNPINNED_HOST_KEY", out var allowUnpinnedStr)
+                && bool.TryParse(allowUnpinnedStr, out var parsedAllowUnpinned) && parsedAllowUnpinned;
 
             string host = connectionString;
             int port = 22;
@@ -210,7 +216,7 @@ namespace ETL_SQL.Connectors
                 }
             }
 
-            return new SftpConnector(context, host, port, user, pass, keyFile, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload);
+            return new SftpConnector(context, host, port, user, pass, keyFile, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload, allowUnpinnedHostKey);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -236,32 +242,73 @@ namespace ETL_SQL.Connectors
         }
 
         /// <summary>
-        /// Host-key verification. When a fingerprint is pinned (HOST_KEY_FINGERPRINT), a mismatch
-        /// rejects the connection (man-in-the-middle protection). When none is pinned, the connection
-        /// proceeds — preserving existing behaviour — but logs a warning, because an unpinned outbound
-        /// transfer trusts whatever server answers. See Docs/Design or the SFTP connector help.
+        /// Host-key verification, closed by default. A connection is trusted only when the server key
+        /// matches the pinned <c>HOST_KEY_FINGERPRINT</c>. With no pin there is no trust anchor — the
+        /// client would accept whatever server answers — so the connection is rejected unless the
+        /// caller has explicitly opted out with <c>ALLOW_UNPINNED_HOST_KEY = true</c>, which makes
+        /// running without man-in-the-middle protection a deliberate choice rather than the default.
         /// </summary>
         private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
         {
-            if (_hostKeyFingerprint is null)
+            var decision = EvaluateHostKey(_hostKeyFingerprint, _allowUnpinnedHostKey, e.FingerPrintSHA256, e.FingerPrint);
+            var host = _host ?? "(unknown)";
+
+            switch (decision)
             {
-                _logger.Warning(
-                    "SFTP host key for {Host} is not pinned (HOST_KEY_FINGERPRINT unset); the transfer trusts whatever server answers and is vulnerable to man-in-the-middle interception. Pin the fingerprint for outbound/vendor transfers.",
-                    _host ?? "(unknown)");
-                return; // e.CanTrust stays true — backward compatible.
+                case HostKeyDecision.TrustedByPin:
+                    return;
+
+                case HostKeyDecision.UnpinnedAllowed:
+                    _logger.Warning(
+                        "SFTP host key for {Host} is not pinned and ALLOW_UNPINNED_HOST_KEY is set; the transfer trusts whatever server answers and is vulnerable to man-in-the-middle interception. Pin HOST_KEY_FINGERPRINT for outbound/vendor transfers.",
+                        host);
+                    return;
+
+                case HostKeyDecision.RejectedUnpinned:
+                    e.CanTrust = false;
+                    _logger.Error(
+                        "SFTP host key for {Host} is not pinned; rejecting the connection. Set HOST_KEY_FINGERPRINT to the server's fingerprint (ssh-keygen -lf <server_host_key>), or set ALLOW_UNPINNED_HOST_KEY = true to accept any host key and its man-in-the-middle risk.",
+                        null, host);
+                    return;
+
+                default:
+                    e.CanTrust = false;
+                    _logger.Error(
+                        "SFTP host key for {Host} did not match the pinned HOST_KEY_FINGERPRINT; rejecting the connection (possible man-in-the-middle).",
+                        null, host);
+                    return;
             }
-
-            if (HostKeyMatchesPin(e))
-                return;
-
-            e.CanTrust = false;
-            _logger.Error(
-                "SFTP host key for {Host} did not match the pinned HOST_KEY_FINGERPRINT; rejecting the connection (possible man-in-the-middle).",
-                null, _host ?? "(unknown)");
         }
 
-        private bool HostKeyMatchesPin(HostKeyEventArgs e)
-            => FingerprintMatches(_hostKeyFingerprint!, e.FingerPrintSHA256, e.FingerPrint);
+        /// <summary>The outcome of host-key verification. Only the trusted outcomes leave the connection open.</summary>
+        internal enum HostKeyDecision
+        {
+            /// <summary>The server key matched the pinned fingerprint.</summary>
+            TrustedByPin,
+            /// <summary>No pin was configured, but the caller explicitly opted out of pinning.</summary>
+            UnpinnedAllowed,
+            /// <summary>No pin was configured and no opt-out was given — there is no trust anchor.</summary>
+            RejectedUnpinned,
+            /// <summary>A pin was configured and the server key did not match it.</summary>
+            RejectedMismatch
+        }
+
+        /// <summary>
+        /// Decides whether a server host key may be trusted. Closed by default: without a pin the only
+        /// way through is an explicit <paramref name="allowUnpinned"/> opt-out. Internal so the decision
+        /// can be unit tested without a live SSH server, matching <see cref="FingerprintMatches"/>.
+        /// </summary>
+        internal static HostKeyDecision EvaluateHostKey(string? pin, bool allowUnpinned, string? actualSha256, byte[]? actualMd5)
+        {
+            // COMPAT_BREAK: 0.17 — an unpinned host key used to be trusted with only a warning.
+            // It is now rejected unless ALLOW_UNPINNED_HOST_KEY opts out explicitly.
+            if (string.IsNullOrWhiteSpace(pin))
+                return allowUnpinned ? HostKeyDecision.UnpinnedAllowed : HostKeyDecision.RejectedUnpinned;
+
+            return FingerprintMatches(pin, actualSha256, actualMd5)
+                ? HostKeyDecision.TrustedByPin
+                : HostKeyDecision.RejectedMismatch;
+        }
 
         /// <summary>
         /// Compares a pinned host-key fingerprint against the server's actual SHA256 (base64) and MD5
@@ -761,7 +808,8 @@ namespace ETL_SQL.Connectors
             string? passphrase,
             int timeoutSeconds,
             string? hostKeyFingerprint,
-            bool atomicUpload)
+            bool atomicUpload,
+            bool allowUnpinnedHostKey)
         {
             var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -769,7 +817,8 @@ namespace ETL_SQL.Connectors
                 ["PORT"] = port.ToString(),
                 ["USER"] = username,
                 ["TIMEOUT_SECONDS"] = timeoutSeconds.ToString(),
-                ["ATOMIC_UPLOAD"] = atomicUpload.ToString()
+                ["ATOMIC_UPLOAD"] = atomicUpload.ToString(),
+                ["ALLOW_UNPINNED_HOST_KEY"] = allowUnpinnedHostKey.ToString()
             };
             if (!string.IsNullOrEmpty(password)) options["PASSWORD"] = password;
             if (!string.IsNullOrEmpty(keyFilePath)) options["KEYFILE"] = keyFilePath;

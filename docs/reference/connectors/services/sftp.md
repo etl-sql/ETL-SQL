@@ -16,18 +16,31 @@ Aliases: `SSH`
 | `KEYFILE` | Path to the private SSH key — use for key auth only | No |
 | `PASSPHRASE` | Passphrase for the private key (if set) | No |
 | `TIMEOUT_SECONDS` | Connection timeout in seconds (default: `30`) | No |
-| `HOST_KEY_FINGERPRINT` | Pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). When set, a mismatch **rejects** the connection (MITM protection). Unset = connect but warn. | No |
+| `HOST_KEY_FINGERPRINT` | Pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). Required unless `ALLOW_UNPINNED_HOST_KEY` is set: an unpinned **or** mismatched host key **rejects** the connection (MITM protection). | Yes (unless opted out) |
+| `ALLOW_UNPINNED_HOST_KEY` | `true`/`false` (default: `false`). Connect without a pinned host key, trusting whatever server answers. Logs a warning on every connection. **Not recommended** — see below. | No |
 | `ATOMIC_UPLOAD` | `true`/`false` (default: `false`). Upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory. | No |
 
 > [!CAUTION]
 > `PASSWORD` and `KEYFILE` are mutually exclusive. Providing both causes an authentication error.
 
 > [!IMPORTANT]
-> For internet-facing / vendor transfers, **pin `HOST_KEY_FINGERPRINT`**. Without it the client trusts
-> whatever server answers, leaving outbound transfers open to man-in-the-middle interception; the
-> connector logs a warning on every unpinned connection. Get the value with
-> `ssh-keygen -lf <server_host_key>` (the `SHA256:...` string it prints). Where the vendor grants rename
-> permission, also set `ATOMIC_UPLOAD=TRUE` so a polling consumer never picks up a half-written file.
+> **Host-key verification is closed by default.** A connection is trusted only when the server's key
+> matches `HOST_KEY_FINGERPRINT`. Get the value with `ssh-keygen -lf <server_host_key>` (the
+> `SHA256:...` string it prints). Where the vendor grants rename permission, also set
+> `ATOMIC_UPLOAD=TRUE` so a polling consumer never picks up a half-written file.
+>
+> If neither `HOST_KEY_FINGERPRINT` nor `ALLOW_UNPINNED_HOST_KEY` is set, the connection is **rejected**
+> — there is no trust anchor, so the client cannot tell the real server from an interceptor.
+> `ALLOW_UNPINNED_HOST_KEY = 'TRUE'` restores the permissive behaviour for trusted networks or
+> migration, but it accepts any host key and leaves the transfer open to man-in-the-middle
+> interception. Prefer pinning; treat the opt-out as temporary.
+
+> [!NOTE]
+> **Changed in v0.17.0.** Previously an unpinned connection proceeded with only a warning. It is now
+> rejected unless `ALLOW_UNPINNED_HOST_KEY` is set, so an unverified transfer is a deliberate choice
+> rather than the default. Existing scripts without `HOST_KEY_FINGERPRINT` will fail until you add
+> either the pin (preferred) or the opt-out. A pin that is set but does not match is still always
+> rejected — the opt-out does not weaken that.
 
 ## Examples
 
@@ -45,6 +58,14 @@ CREATE CONNECTION vendor_out AS SFTP(
   KEYFILE              = '/home/etl/.ssh/partner_rsa',
   HOST_KEY_FINGERPRINT = 'SHA256:n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc',
   ATOMIC_UPLOAD        = 'TRUE'
+);
+
+-- Explicitly accepting an unverified host key (discouraged; prefer pinning above)
+CREATE CONNECTION legacy_box AS SFTP(
+  HOST                    = 'sftp.internal.lan',
+  USER                    = 'etl',
+  PASSWORD                = 's3cr3t',
+  ALLOW_UNPINNED_HOST_KEY = 'TRUE'
 );
 ```
 

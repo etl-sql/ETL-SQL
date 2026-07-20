@@ -12,6 +12,29 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+**SFTP host-key verification is now closed by default**
+- The SFTP connector previously connected with only a logged warning when `HOST_KEY_FINGERPRINT` was
+  unset, trusting whatever server answered. With no trust anchor the client cannot distinguish the
+  real server from an interceptor, so an unpinned connection is now **rejected**.
+- Added `ALLOW_UNPINNED_HOST_KEY` (default `false`) to opt out explicitly where an unverified
+  connection is genuinely intended, making that an intentional choice rather than the default. A
+  fingerprint that is set but does not match is still always rejected; the opt-out does not weaken it.
+- **Breaking:** scripts using SFTP without `HOST_KEY_FINGERPRINT` now fail until they set either the
+  pin (preferred — `ssh-keygen -lf <server_host_key>`) or `ALLOW_UNPINNED_HOST_KEY = 'TRUE'`.
+  See [SFTP connector](docs/reference/connectors/services/sftp.md).
+
+### Changed
+
+**Connector assemblies**
+- Split the monolithic `ETL-SQL.Connectors` assembly into per-domain projects — `.Cloud` (S3, Azure
+  Blob, SharePoint), `.Messaging` (Kafka, SMTP), `.Remote` (FTP, SFTP, Directory, Active Directory)
+  and `.Databases` (the ten database connectors, plus `DatabaseConnectionStringBuilder` and
+  `ConnectorRetryPolicy`) — alongside the existing `.Common` and `.Files`. Hosts now reference only
+  the connector groups they register, so a host no longer drags in every provider SDK transitively.
+  Provider namespaces are unchanged, so scripts and connection syntax are unaffected.
+
 ## [0.16.0] — 2026-07-19
 
 ### Added

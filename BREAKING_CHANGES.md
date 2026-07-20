@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.17.0 — Connector: SFTP rejects unpinned host keys by default
+- **What changed**: The SFTP connector previously connected and logged a warning when `HOST_KEY_FINGERPRINT` was unset, trusting whatever host key the server presented. It now rejects the connection unless the new `ALLOW_UNPINNED_HOST_KEY` option is set to `TRUE`. A fingerprint that is set but does not match is still rejected, as before.
+- **Who is affected**: Scripts using the `SFTP` (or `SSH`) connector without `HOST_KEY_FINGERPRINT`.
+- **Migration**: Pin the server key — `HOST_KEY_FINGERPRINT = 'SHA256:...'`, obtained from `ssh-keygen -lf <server_host_key>` — which is the recommended fix and gives man-in-the-middle protection. Where an unverified connection is genuinely intended (trusted network, migration window), set `ALLOW_UNPINNED_HOST_KEY = 'TRUE'` to restore the previous behavior explicitly.
+- **Diagnostic**: Runtime connection failure logging that the host key is not pinned, naming both options.
+- **Earliest removal**: Immediate.
+
 ### v0.14.0 — Security: Removal of generic .tmp from whitelisted file extensions
 - **What changed**: The `.tmp` file extension has been removed from the whitelist of allowed extensions in `SecurityService`. Files with the `.tmp` extension are no longer readable or writable by default.
 - **Who is affected**: Scripts that explicitly read from or write to `.tmp` files.
