@@ -134,10 +134,14 @@ changes safer.
 - [ ] **Result rendering UX.**
       Keep the query editor and result area stable after a run, jump/focus directly to the results, and
       virtualize large result sets so the page does not shift or become sluggish.
-- [ ] **Compact hover tooltips.**
+- [x] **Compact hover tooltips.**
       Render command-line-document style hover content in a compact, scrollable, editor-friendly layout
       so help panes do not dominate the browser viewport.  Use color instead of text size for titles or 
       headings.
+      Done: the hover pane is capped at 420x240 (was 520x360) with tighter padding and leading, and
+      scrolls with `overscroll-behavior: contain` so it does not chain to the editor. Headings now
+      render at body size, distinguished by accent colour and weight — h1-h3 as small uppercase
+      labels, h4-h6 in muted text — rather than by scaling type up inside a short pane.
 - [x] **Workspace security model.**
       Keep the process bound to one workspace root or explicitly opened file. Require a random
       per-process session token on API calls, bind to `127.0.0.1`/`localhost` by default, and never

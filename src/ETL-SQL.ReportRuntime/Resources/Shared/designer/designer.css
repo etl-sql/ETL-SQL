@@ -769,27 +769,33 @@ body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
     color: inherit;
 }
 
+/* Hover help is reference material read at a glance, not a document. It stays small
+   enough to sit beside code rather than covering it, and scrolls past that. */
 .etlsql-editor-hover {
     position: fixed;
     z-index: 9999;
-    max-width: min(520px, calc(100vw - 32px));
-    max-height: min(360px, calc(100vh - 32px));
+    max-width: min(420px, calc(100vw - 32px));
+    max-height: min(240px, calc(100vh - 32px));
     overflow: auto;
-    padding: 10px 12px;
+    overscroll-behavior: contain;
+    padding: 7px 9px;
     border: 1px solid var(--portal-border, #d9e0ea);
     border-radius: var(--portal-radius-sm, 5px);
     background: var(--portal-surface, #ffffff);
     color: var(--portal-text, #172033);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+    box-shadow: var(--portal-shadow-md, 0 12px 30px rgba(15, 23, 42, 0.24));
     font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-    font-size: 0.82rem;
-    line-height: 1.45;
+    font-size: 0.78rem;
+    line-height: 1.4;
 }
 
+/* Headings are distinguished by colour and weight at body size. Scaling type up in a
+   240px-tall pane spends vertical space on emphasis that colour conveys for free. */
 .etlsql-editor-hover-heading {
-    margin: 8px 0 4px;
-    font-weight: 700;
-    color: var(--portal-text, #172033);
+    margin: 7px 0 2px;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--portal-accent, #2563eb);
 }
 
 .etlsql-editor-hover-heading:first-child {
@@ -799,21 +805,23 @@ body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
 .etlsql-editor-hover-heading-1,
 .etlsql-editor-hover-heading-2,
 .etlsql-editor-hover-heading-3 {
-    font-size: 0.96rem;
+    text-transform: uppercase;
+    letter-spacing: .045em;
+    font-size: 0.72rem;
 }
 
 .etlsql-editor-hover-heading-4,
 .etlsql-editor-hover-heading-5,
 .etlsql-editor-hover-heading-6 {
-    font-size: 0.88rem;
+    color: var(--portal-text-soft, #46556c);
 }
 
 .etlsql-editor-hover-line {
-    margin: 2px 0;
+    margin: 1px 0;
 }
 
 .etlsql-editor-hover-gap {
-    height: 8px;
+    height: 5px;
 }
 
 .etlsql-editor-hover-bullet {
@@ -834,17 +842,28 @@ body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
 }
 
 .etlsql-editor-hover pre {
-    margin: 6px 0;
-    padding: 8px;
+    margin: 4px 0;
+    padding: 6px 7px;
     overflow: auto;
     background: var(--portal-surface-subtle, #f8fafc);
     border: 1px solid var(--portal-border-soft, #e8edf4);
     border-radius: var(--portal-radius-sm, 5px);
     font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+    font-size: 0.72rem;
+    line-height: 1.35;
 }
 
 .etlsql-editor-hover code {
     font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+    font-size: 0.95em;
+}
+
+/* Inline code inside prose gets a subtle chip so it separates without a size change. */
+.etlsql-editor-hover-line code,
+.etlsql-editor-hover-bullet code {
+    padding: 0 3px;
+    border-radius: 3px;
+    background: var(--portal-surface-subtle, #f1f5f9);
 }
 
 /* ── Phase 4: Full designer shell ───────────────────────────────────────── */
