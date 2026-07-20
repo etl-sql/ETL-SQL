@@ -32,6 +32,7 @@
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors.Files\ETL-SQL.Connectors.Files.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Connectors.Remote\ETL-SQL.Connectors.Remote.csproj" />
     <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
   </ItemGroup>
