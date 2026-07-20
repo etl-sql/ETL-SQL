@@ -87,6 +87,9 @@ $Projects = @(
     ,@("..", "src", "ETL-SQL.LanguageServer", "ETL-SQL.LanguageServer.csproj")
     ,@("..", "src", "ETL-SQL.ReportBuilder.CLI", "ETL-SQL.ReportBuilder.CLI.csproj")
     ,@("..", "src", "ETL-SQL.ReportPlayer", "ETL-SQL.ReportPlayer.csproj")
+    # Workstation editor ships with the CLI/workstation set, not the Portal set: it runs on
+    # loopback with no IIS, Docker, PostgreSQL or Portal database.
+    ,@("..", "src", "ETL-SQL.WorkstationEditor", "ETL-SQL.WorkstationEditor.csproj")
     ,@("..", "src", "ETL-SQL.Portal", "ETL-SQL.Portal.csproj")
     ,@("..", "src", "ETL-SQL.Orchestrator.Service", "ETL-SQL.Orchestrator.Service.csproj")
 )

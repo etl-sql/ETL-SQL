@@ -151,9 +151,16 @@ changes safer.
       route, Kestrel bound to `IPAddress.Loopback`, and `SecretRedactor` on run lineage, schema
       errors and preview errors. `Run_DoesNotReturnScriptSecretsInResponse` pins the rule against
       the path that actually carries script text (a computed column's lineage expression).
-- [ ] **Packaging boundary.**
+- [x] **Packaging boundary.**
       Ship as part of the workstation/CLI install set, not as a Portal install component. The executable
       must work without IIS, Docker, PostgreSQL, or a Portal database.
+      Done: `ETL-SQL.WorkstationEditor` is in the `publish_release.ps1` project set (it references
+      only Analysis/Core/Orchestrator — no Portal). Fixed the packaging bug this exposed:
+      `FindSharedRuntimeRoot` only walked up for the repo's `Resources/Shared`, so a published
+      install served no designer assets. `sync-assets` now also writes the editor's `wwwroot`, and
+      resolution falls back to it when there is no repo tree.
+      Verified by publishing self-contained win-x64, running it from outside the checkout, and
+      confirming the shell, designer.js/css, the CodeMirror bundle and a MOCKDB run all work.
 - [x] **Host and API tests.**
       Add host-level API tests for workspace containment, token enforcement, file save/open behavior,
       diagnostics parity, bounded run cancellation, schema cache authorization, and report preview

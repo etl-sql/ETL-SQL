@@ -318,6 +318,15 @@ public static class WorkstationEditorApp
             string.Equals(queryToken.ToString(), expectedToken, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Locates the browser runtime assets (<c>designer/</c>, report runtime, maps).
+    /// </summary>
+    /// <remarks>
+    /// Prefers the canonical <c>Resources/Shared</c> folder when running from a checkout, so
+    /// editing a shared asset shows up on reload without re-running <c>sync-assets</c>. A
+    /// published install has no repo tree, so it falls back to the <c>wwwroot</c> copies that
+    /// <c>sync-assets</c> writes and the Web SDK includes in the publish output.
+    /// </remarks>
     private static string? FindSharedRuntimeRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -329,7 +338,8 @@ public static class WorkstationEditorApp
             current = current.Parent;
         }
 
-        return null;
+        var published = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        return Directory.Exists(Path.Combine(published, "designer")) ? published : null;
     }
 }
 

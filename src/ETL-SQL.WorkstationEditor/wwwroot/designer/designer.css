@@ -1,0 +1,2093 @@
+/* GENERATED FILE - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
+ */
+
+/*
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * ETL-SQL Designer — shared component styles
+ *
+ * Tokens follow the portal's --portal-* scheme so the designer inherits
+ * the active theme automatically when hosted in the portal.  VS Code host
+ * overrides these same properties with VS Code theme variables.
+ *
+ * Three layout areas, each activated by Phase:
+ *   .etlsql-dag-*       Phase 2 — DAG canvas wrapper
+ *   .etlsql-editor-*    Phase 3 — CodeMirror editor wrapper
+ *   .etlsql-designer-*  Phase 4 — full WYSIWYG designer shell
+ */
+
+/* ── VS Code Theme Overrides ─────────────────────────────────────────────── */
+
+body.vscode-light, body.vscode-dark, body.vscode-high-contrast {
+    --portal-bg: var(--vscode-editor-background);
+    --portal-bg-soft: var(--vscode-panel-background, var(--vscode-editor-background));
+    --portal-surface: var(--vscode-sideBar-background, var(--vscode-editorWidget-background, var(--vscode-editor-background)));
+    --portal-surface-subtle: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    --portal-text: var(--vscode-editor-foreground);
+    --portal-text-soft: var(--vscode-descriptionForeground, var(--vscode-editor-foreground));
+    --portal-text-muted: var(--vscode-disabledForeground, var(--vscode-editor-foreground));
+    --portal-muted: var(--vscode-disabledForeground, #7a8798);
+    --portal-border: var(--vscode-widget-border, var(--vscode-panel-border, var(--vscode-editorGroup-border, #d9e0ea)));
+    --portal-border-soft: var(--vscode-widget-border, var(--vscode-panel-border, var(--vscode-editorGroup-border, #e8edf4)));
+    --portal-accent: var(--vscode-button-background, var(--vscode-focusBorder, #2563eb));
+    --portal-accent-soft: var(--vscode-list-hoverBackground, rgba(37, 99, 235, 0.1));
+    --portal-focus: var(--vscode-focusBorder);
+    --portal-topbar: var(--vscode-titleBar-activeBackground, var(--vscode-editor-background));
+    --portal-topbar-active: var(--vscode-tab-activeBackground, rgba(255,255,255,0.1));
+    --portal-topbar-muted: var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.6));
+    --portal-font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    --portal-mono: var(--vscode-editor-font-family, monospace);
+}
+
+body.vscode-light .form-control,
+body.vscode-dark .form-control,
+body.vscode-high-contrast .form-control {
+    background: var(--vscode-input-background, #3c3c3c);
+    color: var(--vscode-input-foreground, #cccccc);
+    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, #3c3c3c));
+    border-radius: 2px;
+    padding: 4px 6px;
+    font-size: 0.8125rem;
+}
+body.vscode-light .form-control:focus,
+body.vscode-dark .form-control:focus,
+body.vscode-high-contrast .form-control:focus {
+    outline: 1px solid var(--vscode-focusBorder) !important;
+    border-color: var(--vscode-focusBorder) !important;
+}
+
+body.vscode-light .btn,
+body.vscode-dark .btn,
+body.vscode-high-contrast .btn {
+    background: var(--vscode-button-secondaryBackground, #3a3d3e);
+    color: var(--vscode-button-secondaryForeground, #ffffff);
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 2px;
+    padding: 4px 12px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.15s ease;
+}
+body.vscode-light .btn:hover,
+body.vscode-dark .btn:hover,
+body.vscode-high-contrast .btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground, #45494a);
+}
+body.vscode-light .btn-primary,
+body.vscode-dark .btn-primary,
+body.vscode-high-contrast .btn-primary {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #ffffff);
+    border: none;
+}
+body.vscode-light .btn-primary:hover,
+body.vscode-dark .btn-primary:hover,
+body.vscode-high-contrast .btn-primary:hover {
+    background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+/* ── Phase 2: DAG canvas ────────────────────────────────────────────────── */
+
+.etlsql-dag-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 320px;
+    background: var(--portal-surface, #ffffff);
+    border-radius: var(--portal-radius, 8px);
+    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.etlsql-dag-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.875rem;
+}
+
+/* Toolbar strip above the canvas: filter chips on the left, focus badge right. */
+.etlsql-dag-toolbar {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea) !important;
+    background: var(--portal-surface, #ffffff) !important;
+}
+
+.etlsql-dag-chips {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+}
+
+.etlsql-dag-chip {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 4px 10px !important;
+    border: 1px solid var(--portal-border-soft, #e8edf4) !important;
+    border-radius: 999px !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font: inherit !important;
+    font-size: 0.74rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.etlsql-dag-chip:hover {
+    border-color: var(--portal-accent, #2563eb) !important;
+    color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-accent-soft, #e8f0ff) !important;
+}
+
+.etlsql-dag-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+/* Toggled-off chip: muted + struck through to read as "hidden". */
+.etlsql-dag-chip.is-off {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+
+.etlsql-dag-chip.is-off .etlsql-dag-chip-dot {
+    background: var(--portal-muted, #5a6778) !important;
+}
+
+/* Action buttons (collapse/expand pages) sit between the chips and the badge. */
+.etlsql-dag-actions {
+    display: flex;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.etlsql-dag-btn {
+    padding: 4px 10px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font: inherit !important;
+    font-size: 0.76rem !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.etlsql-dag-btn:hover {
+    border-color: var(--portal-accent, #2563eb) !important;
+    color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+}
+
+/* Focus-mode badge — shown in the toolbar while a node's lineage is isolated. */
+.etlsql-dag-focusbadge {
+    margin-left: auto !important;
+    /* NOT !important: the component toggles visibility via inline style.display,
+       which an !important rule here would override (badge could never hide). */
+    display: flex;
+    align-items: center !important;
+    gap: 6px !important;
+    max-width: 50% !important;
+    padding: 4px 10px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font-size: 0.78rem !important;
+    line-height: 1.2 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.etlsql-dag-focusbadge strong {
+    color: var(--portal-text, #172033) !important;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600 !important;
+}
+
+.etlsql-dag-focusbadge-x {
+    color: var(--portal-danger, #b83535) !important;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Solo badge — same shape as the focus badge, purple accent (page drill-in). */
+.etlsql-dag-solobadge {
+    border-color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-accent-soft, #e8f0ff) !important;
+}
+
+.etlsql-dag-solobadge strong {
+    color: var(--portal-accent, #2563eb) !important;
+}
+
+.etlsql-dag-focusbadge:hover {
+    border-color: var(--portal-danger, #b83535) !important;
+    color: var(--portal-danger, #b83535) !important;
+}
+
+/* Search box in the toolbar. */
+.etlsql-dag-search {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex: 0 0 auto !important;
+}
+
+.etlsql-dag-search input {
+    width: 140px !important;
+    padding: 4px 8px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text, #172033) !important;
+    font: inherit !important;
+    font-size: 0.76rem !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.etlsql-dag-search input:focus {
+    outline: none !important;
+    border-color: var(--portal-accent, #2563eb) !important;
+    box-shadow: 0 0 0 3px var(--portal-focus, rgba(37, 99, 235, 0.18)) !important;
+}
+
+.etlsql-dag-search-count {
+    min-width: 28px;
+    color: var(--portal-muted, #5a6778);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.etlsql-dag-search-count.is-empty {
+    color: var(--portal-danger, #b83535);
+}
+
+/* Minimap Wrapper */
+.etlsql-dag-minimap-wrapper {
+    position: absolute !important;
+    right: 56px !important;
+    bottom: 12px !important;
+    z-index: 4 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 4px !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Minimap Toggle Button */
+.etlsql-dag-minimap-toggle {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    cursor: pointer !important;
+    font-size: 1rem !important;
+    box-shadow: var(--portal-shadow-sm, 0 2px 8px rgba(0,0,0,0.1)) !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+    user-select: none !important;
+}
+
+.etlsql-dag-minimap-toggle:hover {
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    border-color: var(--portal-border, #d9e0ea) !important;
+    color: var(--portal-accent, #2563eb) !important;
+}
+
+/* Minimap Canvas inside wrapper */
+.etlsql-dag-minimap {
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    box-shadow: var(--portal-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15)) !important;
+    cursor: pointer !important;
+    transition: opacity 0.2s ease, transform 0.2s ease !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+    transform-origin: bottom right !important;
+}
+
+/* Minimized State */
+.etlsql-dag-minimap-wrapper.is-minimized .etlsql-dag-minimap {
+    opacity: 0 !important;
+    transform: scale(0) !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    bottom: 32px !important;
+    right: 0 !important;
+}
+
+/* Floating Zoom Controls */
+.etlsql-dag-zoom-controls {
+    position: absolute !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    z-index: 5 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    background: var(--portal-surface, #ffffff) !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    padding: 4px !important;
+    box-shadow: var(--portal-shadow-sm, 0 2px 8px rgba(0,0,0,0.1)) !important;
+}
+
+.etlsql-dag-zoom-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: transparent !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font-size: 1.1em !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: background-color 0.15s ease, color 0.15s ease !important;
+    line-height: 1 !important;
+}
+
+.etlsql-dag-zoom-btn:hover {
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-accent, #2563eb) !important;
+}
+
+/* Body row: canvas fills, detail panel docks on the right. */
+.etlsql-dag-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+
+.etlsql-dag-canvas {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+}
+
+/* Detail panel — columns for tables, field mappings for charts. */
+.etlsql-dag-panel {
+    flex: 0 0 290px;
+    overflow-y: auto;
+    padding: 12px 14px 16px;
+    border-left: 1px solid var(--portal-border, #1e293b);
+    background: var(--portal-surface, #0f172a);
+    color: var(--portal-text, #e2e8f0);
+    font-size: 0.8rem;
+}
+
+.etlsql-dag-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.etlsql-dag-panel-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+
+.etlsql-dag-panel-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.92rem;
+}
+
+.etlsql-dag-panel-x {
+    flex: 0 0 auto;
+    border: none;
+    background: none;
+    color: var(--portal-muted, #94a3b8);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+.etlsql-dag-panel-x:hover { color: #f87171; }
+
+.etlsql-dag-panel-sub {
+    color: var(--portal-muted, #94a3b8);
+    font-size: 0.74rem;
+    margin-bottom: 12px;
+}
+
+.etlsql-dag-panel-h {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.68rem;
+    color: var(--portal-muted, #7a8798);
+    margin: 10px 0 5px;
+}
+
+.etlsql-dag-panel-empty {
+    color: var(--portal-muted, #7a8798);
+    font-style: italic;
+}
+
+.etlsql-dag-panel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.etlsql-dag-panel-li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 5px;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--portal-border, #1e293b);
+}
+
+.etlsql-dag-panel-k {
+    color: #94a3b8;
+    flex: 0 0 auto;
+}
+
+.etlsql-dag-panel-v {
+    color: var(--portal-text, #e2e8f0);
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.etlsql-dag-panel-from {
+    color: #64748b;
+    font-size: 0.72rem;
+    margin-left: auto;
+}
+
+/* Column-lineage chain (detail panel): a field's provenance, hop by hop. */
+.etlsql-dag-lin-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 8px;
+    padding-bottom: 2px;
+}
+
+.etlsql-dag-lin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 5px;
+    padding: 2px 0;
+}
+
+.etlsql-dag-lin-arrow {
+    color: #64748b;
+    flex: 0 0 auto;
+}
+
+.etlsql-dag-lin-col {
+    color: var(--portal-text, #e2e8f0);
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.etlsql-dag-lin-expr {
+    color: #10b981;
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.76rem;
+}
+
+.etlsql-dag-lin-tbl {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.etlsql-dag-lin-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 1px 0;
+}
+
+.etlsql-dag-lin-tag {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.etlsql-dag-lin-desc {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-style: italic;
+    padding: 1px 0 3px;
+    line-height: 1.35;
+}
+
+/* ── Phase 3: Script editor wrapper ────────────────────────────────────── */
+
+.etlsql-editor-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    overflow: hidden;
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius-sm, 5px);
+    background: var(--portal-surface, #ffffff);
+}
+
+/* CodeMirror host — fills the container */
+.etlsql-editor-container .cm-editor {
+    height: 100%;
+    font-size: 0.875rem;
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+}
+
+.etlsql-editor-container.has-diagnostics .cm-editor {
+    height: calc(100% - 112px);
+}
+
+.etlsql-editor-container .cm-editor.cm-focused {
+    outline: none;
+}
+
+.etlsql-editor-container .cm-gutters {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-editor-container .cm-activeLineGutter {
+    background: var(--portal-accent-soft, #eff6ff);
+}
+
+.etlsql-editor-container .cm-activeLine {
+    background: var(--portal-accent-soft, #eff6ff);
+}
+
+.etlsql-editor-diagnostics {
+    height: 112px;
+    border-top: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    overflow: hidden;
+    transition: height 0.15s ease-in-out;
+}
+
+/* Collapsible diagnostics panel */
+.etlsql-editor-diagnostics.collapsed {
+    height: 28px;
+}
+.etlsql-editor-diagnostics.collapsed .etlsql-editor-diagnostics-list {
+    display: none;
+}
+.etlsql-editor-container.has-diagnostics.diagnostics-collapsed .cm-editor {
+    height: calc(100% - 28px) !important;
+}
+
+/* ── rptsql syntax palette ────────────────────────────────────────────────────
+   Applied through the class-based HighlightStyle in designer.js
+   (_getRptsqlHighlightStyle) rather than CodeMirror's defaultHighlightStyle, so
+   the same tokens can be re-coloured per theme. Light values are the default;
+   dark hosts (portal theme toggle, VS Code dark/high-contrast) override below. */
+.cm-editor .etlsql-tok-keyword   { color: #7f00c4; font-weight: 600; }
+.cm-editor .etlsql-tok-type      { color: #1a7f7f; }
+.cm-editor .etlsql-tok-function  { color: #6f4d00; }
+.cm-editor .etlsql-tok-string    { color: #a31515; }
+.cm-editor .etlsql-tok-number    { color: #0a6b45; }
+.cm-editor .etlsql-tok-operator  { color: #7f00c4; }
+.cm-editor .etlsql-tok-quoted-id { color: #1f5fbf; }
+.cm-editor .etlsql-tok-variable  { color: #9a4a00; }
+.cm-editor .etlsql-tok-property  { color: #1f5fbf; }
+.cm-editor .etlsql-tok-meta      { color: #9a4a00; }
+.cm-editor .etlsql-tok-atom      { color: #0a6b45; }
+.cm-editor .etlsql-tok-comment   { color: #4f6b52; font-style: italic; }
+
+body.theme-dark .cm-editor .etlsql-tok-keyword,
+body.vscode-dark .cm-editor .etlsql-tok-keyword,
+body.vscode-high-contrast .cm-editor .etlsql-tok-keyword   { color: #ff7b72; }
+body.theme-dark .cm-editor .etlsql-tok-type,
+body.vscode-dark .cm-editor .etlsql-tok-type,
+body.vscode-high-contrast .cm-editor .etlsql-tok-type      { color: #7ee787; }
+body.theme-dark .cm-editor .etlsql-tok-function,
+body.vscode-dark .cm-editor .etlsql-tok-function,
+body.vscode-high-contrast .cm-editor .etlsql-tok-function  { color: #d2a8ff; }
+body.theme-dark .cm-editor .etlsql-tok-string,
+body.vscode-dark .cm-editor .etlsql-tok-string,
+body.vscode-high-contrast .cm-editor .etlsql-tok-string    { color: #a5d6ff; }
+body.theme-dark .cm-editor .etlsql-tok-number,
+body.vscode-dark .cm-editor .etlsql-tok-number,
+body.vscode-high-contrast .cm-editor .etlsql-tok-number    { color: #79c0ff; }
+body.theme-dark .cm-editor .etlsql-tok-operator,
+body.vscode-dark .cm-editor .etlsql-tok-operator,
+body.vscode-high-contrast .cm-editor .etlsql-tok-operator  { color: #ff7b72; }
+body.theme-dark .cm-editor .etlsql-tok-quoted-id,
+body.vscode-dark .cm-editor .etlsql-tok-quoted-id,
+body.vscode-high-contrast .cm-editor .etlsql-tok-quoted-id { color: #79c0ff; }
+body.theme-dark .cm-editor .etlsql-tok-variable,
+body.vscode-dark .cm-editor .etlsql-tok-variable,
+body.vscode-high-contrast .cm-editor .etlsql-tok-variable  { color: #ffa657; }
+body.theme-dark .cm-editor .etlsql-tok-property,
+body.vscode-dark .cm-editor .etlsql-tok-property,
+body.vscode-high-contrast .cm-editor .etlsql-tok-property  { color: #79c0ff; }
+body.theme-dark .cm-editor .etlsql-tok-meta,
+body.vscode-dark .cm-editor .etlsql-tok-meta,
+body.vscode-high-contrast .cm-editor .etlsql-tok-meta      { color: #ffa657; }
+body.theme-dark .cm-editor .etlsql-tok-atom,
+body.vscode-dark .cm-editor .etlsql-tok-atom,
+body.vscode-high-contrast .cm-editor .etlsql-tok-atom      { color: #79c0ff; }
+body.theme-dark .cm-editor .etlsql-tok-comment,
+body.vscode-dark .cm-editor .etlsql-tok-comment,
+body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
+
+.etlsql-editor-diagnostics-status {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+    color: var(--portal-text-muted, #64748b);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.etlsql-editor-diagnostics-status[data-kind="ok"] {
+    color: #047857;
+}
+
+.etlsql-editor-diagnostics-status[data-kind="warn"] {
+    color: #92400e;
+}
+
+.etlsql-editor-diagnostics-status[data-kind="error"] {
+    color: #b91c1c;
+}
+
+.etlsql-editor-diagnostics-list {
+    height: 84px;
+    overflow: auto;
+}
+
+.etlsql-editor-diagnostic {
+    display: grid;
+    grid-template-columns: minmax(92px, auto) 54px minmax(0, 1fr);
+    width: 100%;
+    gap: 8px;
+    align-items: start;
+    padding: 5px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+    background: transparent;
+    color: var(--portal-text, #172033);
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.etlsql-editor-diagnostic:hover,
+.etlsql-editor-diagnostic:focus {
+    background: var(--portal-accent-soft, #eff6ff);
+    outline: none;
+}
+
+.etlsql-editor-diagnostic-code,
+.etlsql-editor-diagnostic-pos {
+    color: var(--portal-text-muted, #64748b);
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.etlsql-editor-diagnostic-msg {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete,
+.cm-tooltip-autocomplete .cm-completionInfo {
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    border-color: var(--portal-border, #d9e0ea);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+}
+
+.cm-tooltip-autocomplete ul li {
+    color: var(--portal-text, #172033);
+}
+
+.cm-tooltip-autocomplete ul li[aria-selected] {
+    background: var(--portal-accent, #2563eb);
+    color: #ffffff;
+}
+
+.cm-tooltip-autocomplete .cm-completionLabel,
+.cm-tooltip-autocomplete .cm-completionDetail,
+.cm-tooltip-autocomplete .cm-completionInfo,
+.cm-tooltip-autocomplete .cm-completionInfo * {
+    color: inherit;
+}
+
+/* Hover help is reference material read at a glance, not a document. It stays small
+   enough to sit beside code rather than covering it, and scrolls past that. */
+.etlsql-editor-hover {
+    position: fixed;
+    z-index: 9999;
+    max-width: min(420px, calc(100vw - 32px));
+    max-height: min(240px, calc(100vh - 32px));
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 7px 9px;
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius-sm, 5px);
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    box-shadow: var(--portal-shadow-md, 0 12px 30px rgba(15, 23, 42, 0.24));
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+/* Headings are distinguished by colour and weight at body size. Scaling type up in a
+   240px-tall pane spends vertical space on emphasis that colour conveys for free. */
+.etlsql-editor-hover-heading {
+    margin: 7px 0 2px;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--portal-accent, #2563eb);
+}
+
+.etlsql-editor-hover-heading:first-child {
+    margin-top: 0;
+}
+
+.etlsql-editor-hover-heading-1,
+.etlsql-editor-hover-heading-2,
+.etlsql-editor-hover-heading-3 {
+    text-transform: uppercase;
+    letter-spacing: .045em;
+    font-size: 0.72rem;
+}
+
+.etlsql-editor-hover-heading-4,
+.etlsql-editor-hover-heading-5,
+.etlsql-editor-hover-heading-6 {
+    color: var(--portal-text-soft, #46556c);
+}
+
+.etlsql-editor-hover-line {
+    margin: 1px 0;
+}
+
+.etlsql-editor-hover-gap {
+    height: 5px;
+}
+
+.etlsql-editor-hover-bullet {
+    position: relative;
+    margin: 3px 0;
+    padding-left: 14px;
+}
+
+.etlsql-editor-hover-bullet::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 0.68em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--portal-text-muted, #64748b);
+}
+
+.etlsql-editor-hover pre {
+    margin: 4px 0;
+    padding: 6px 7px;
+    overflow: auto;
+    background: var(--portal-surface-subtle, #f8fafc);
+    border: 1px solid var(--portal-border-soft, #e8edf4);
+    border-radius: var(--portal-radius-sm, 5px);
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+.etlsql-editor-hover code {
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+    font-size: 0.95em;
+}
+
+/* Inline code inside prose gets a subtle chip so it separates without a size change. */
+.etlsql-editor-hover-line code,
+.etlsql-editor-hover-bullet code {
+    padding: 0 3px;
+    border-radius: 3px;
+    background: var(--portal-surface-subtle, #f1f5f9);
+}
+
+/* ── Phase 4: Full designer shell ───────────────────────────────────────── */
+
+.etlsql-designer {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 220px 1fr 280px;
+    grid-template-areas:
+        "topbar  topbar   topbar"
+        "sidebar canvas  props";
+    width: 100%;
+    height: 100%;
+    background: var(--portal-bg, #f3f5f8);
+    color: var(--portal-text, #172033);
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    font-size: 0.875rem;
+    overflow: hidden;
+}
+
+.etlsql-designer-topbar {
+    grid-area: topbar;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--portal-topbar, #182336);
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 10;
+}
+
+.etlsql-designer-sidebar {
+    grid-area: sidebar;
+    overflow-y: auto;
+    background: var(--portal-surface, #ffffff);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    padding: 8px 0;
+}
+
+.etlsql-designer-canvas {
+    grid-area: canvas;
+    overflow: auto;
+    position: relative;
+    background: var(--portal-bg-soft, #eef2f7);
+}
+
+.etlsql-designer-props {
+    grid-area: props;
+    overflow-y: auto;
+    background: var(--portal-surface, #ffffff);
+    border-left: 1px solid var(--portal-border, #d9e0ea);
+    padding: 12px;
+}
+
+/* Page tab strip (inside topbar) */
+.etlsql-designer-pages {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.etlsql-designer-page-tab {
+    padding: 4px 12px;
+    border-radius: var(--portal-radius-sm, 5px);
+    cursor: pointer;
+    color: var(--portal-topbar-muted, #b7c2d2);
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    border: none;
+    background: transparent;
+}
+.etlsql-designer-page-tab:hover,
+.etlsql-designer-page-tab.active {
+    background: var(--portal-topbar-active, rgba(255,255,255,0.12));
+    color: #ffffff;
+}
+
+/* Script toggle overlay */
+.etlsql-designer-script-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    flex-direction: column;
+    background: var(--portal-surface, #ffffff);
+}
+.etlsql-designer-script-overlay.active {
+    display: flex;
+}
+
+.etlsql-designer-script-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+    flex-shrink: 0;
+}
+
+.etlsql-designer-script-body {
+    flex: 1;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.etlsql-script-workbench {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(100px, 1fr) 8px minmax(36px, 34%);
+    background: var(--portal-surface, #ffffff);
+}
+
+.etlsql-script-workbench.etlsql-script-workbench-with-sidebar {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Report preview overlay for the standalone script editor (opts.previewApiUrl).
+   Mirrors the report designer's preview overlay: covers the workbench, hosts a
+   sandboxed iframe that renders the compiled manifest via report-runtime.js. */
+.etlsql-script-workbench-preview {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    flex-direction: column;
+    background: var(--portal-surface, #ffffff);
+}
+.etlsql-script-workbench-preview.active {
+    display: flex;
+}
+.etlsql-script-workbench-preview-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+    flex-shrink: 0;
+}
+.etlsql-script-workbench-preview-status {
+    font-size: 12px;
+    color: #64748b;
+}
+.etlsql-script-workbench-preview iframe {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: #ffffff;
+}
+
+.etlsql-script-workbench-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 34px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+}
+
+.etlsql-script-workbench-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--portal-text, #172033);
+    margin-right: 4px;
+}
+
+.etlsql-toolbar-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 6px;
+    background: var(--portal-border, #d9e0ea);
+}
+
+/* Ghost icon buttons, matching the Portal's soft-chrome toolbar language: no heavy
+   borders, hover fills instead of outlines, accent fill reserved for the primary run. */
+.etlsql-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 30px;
+    min-width: 30px;
+    padding: 0 7px;
+    border: 1px solid transparent;
+    border-radius: var(--portal-radius-sm, 6px);
+    background: transparent;
+    color: var(--portal-text-soft, #46556c);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color .13s ease, color .13s ease, border-color .13s ease;
+}
+
+.etlsql-tool-btn:hover {
+    background: var(--portal-surface-subtle, #f1f5f9);
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-tool-btn:active {
+    background: var(--portal-border-soft, #e8edf4);
+}
+
+.etlsql-tool-btn.active {
+    background: var(--portal-accent-soft, #e8f0ff);
+    color: var(--portal-accent, #2563eb);
+}
+
+.etlsql-tool-btn-labelled {
+    padding: 0 12px 0 10px;
+}
+
+.etlsql-tool-btn-primary {
+    background: var(--portal-accent, #2563eb);
+    border-color: var(--portal-accent, #2563eb);
+    color: #fff;
+    font-weight: 600;
+}
+
+.etlsql-tool-btn-primary:hover,
+.etlsql-tool-btn-primary:active {
+    background: var(--portal-accent-hover, #1d4ed8);
+    border-color: var(--portal-accent-hover, #1d4ed8);
+    color: #fff;
+}
+
+.etlsql-tool-btn svg {
+    flex: 0 0 16px;
+}
+
+.etlsql-tool-btn:focus-visible {
+    outline: 2px solid var(--portal-focus-ring, #1d4ed8);
+    outline-offset: 1px;
+}
+
+.etlsql-script-workbench-spacer {
+    flex: 1 1 auto;
+}
+
+.etlsql-script-workbench-editor {
+    min-height: 0;
+}
+
+.etlsql-script-workbench-splitter {
+    cursor: row-resize;
+    border-top: 1px solid var(--portal-border, #d9e0ea);
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+}
+
+.etlsql-script-workbench-results {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.etlsql-script-results {
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border-top: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+}
+
+.etlsql-script-results-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+}
+
+.etlsql-script-results-tabs button {
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--portal-text-soft, #46556c);
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.etlsql-script-results-tabs button.active {
+    border-color: var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-script-results-status {
+    margin-left: auto;
+    color: var(--portal-muted, #5b677a);
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-results-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.etlsql-script-results-tools[hidden] {
+    display: none;
+}
+
+.etlsql-script-results-tools input {
+    width: min(220px, 24vw);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 4px;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+    padding: 4px 7px;
+    font: inherit;
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-results-tools button {
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 4px;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text-soft, #46556c);
+    padding: 4px 7px;
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.etlsql-script-results-body {
+    min-height: 0;
+    overflow: auto;
+}
+
+.etlsql-script-results table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-results th,
+.etlsql-script-results td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.etlsql-script-results th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--portal-surface-subtle, #f8fafc);
+}
+
+.etlsql-script-results-count,
+.etlsql-script-results-empty {
+    padding: 8px 10px;
+    color: var(--portal-muted, #5b677a);
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-message-list {
+    display: grid;
+}
+
+.etlsql-script-message {
+    display: grid;
+    grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+    font-size: 0.8125rem;
+}
+
+.etlsql-script-message span {
+    color: var(--portal-muted, #5b677a);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Buffer diagnostics sit above the run log in the Messages tab — they belong to the
+   script rather than to any one run, so they survive a clear(). */
+.etlsql-script-message-group-title {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--portal-muted, #5b677a);
+    background: var(--portal-surface-subtle, #f8fafc);
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+}
+
+.etlsql-script-results-tabs button[data-badge="warn"] {
+    color: var(--portal-warning, #a05a00);
+}
+
+.etlsql-script-results-tabs button[data-badge="error"] {
+    color: var(--portal-danger, #b42318);
+}
+
+.etlsql-script-message[data-level="error"] {
+    color: var(--portal-danger, #b42318);
+}
+
+.etlsql-script-message[data-level="warn"] {
+    color: var(--portal-warning, #a05a00);
+}
+
+.etlsql-script-perf-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 1px;
+    background: var(--portal-border, #d9e0ea);
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+}
+
+.etlsql-script-perf-summary div {
+    background: var(--portal-surface, #ffffff);
+    padding: 10px;
+}
+
+.etlsql-script-perf-summary strong {
+    display: block;
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-script-perf-summary span {
+    color: var(--portal-muted, #5b677a);
+    font-size: 0.78rem;
+}
+
+.etlsql-script-command-palette {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 72px;
+    background: rgba(15, 23, 42, 0.28);
+}
+
+.etlsql-script-command-palette[hidden] {
+    display: none;
+}
+
+.etlsql-script-command-box {
+    width: min(560px, calc(100% - 32px));
+    max-height: min(520px, calc(100% - 96px));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--portal-surface, #ffffff);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22);
+}
+
+.etlsql-script-command-box input {
+    border: 0;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    padding: 10px 12px;
+    font: inherit;
+    background: var(--portal-surface, #ffffff);
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-script-command-box input:focus {
+    outline: 2px solid var(--portal-focus, #2563eb);
+    outline-offset: -2px;
+}
+
+.etlsql-script-command-box [data-palette-list] {
+    min-height: 0;
+    overflow: auto;
+}
+
+.etlsql-script-command-box [data-command] {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+    background: transparent;
+    color: var(--portal-text, #172033);
+    padding: 9px 12px;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.etlsql-script-command-box [data-command]:hover,
+.etlsql-script-command-box [data-command].active {
+    background: var(--portal-accent-soft, #e8f0ff);
+}
+
+.etlsql-designer-run-panel {
+    border-top: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+    max-height: 34vh;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.etlsql-designer-run-status {
+    padding: 6px 10px;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    color: var(--portal-muted, #5b677a);
+}
+
+.etlsql-designer-run-status[data-kind="ok"] {
+    color: var(--portal-success, #087443);
+}
+
+.etlsql-designer-run-status[data-kind="warn"] {
+    color: var(--portal-warning, #a05a00);
+}
+
+.etlsql-designer-run-status[data-kind="error"] {
+    color: var(--portal-danger, #b42318);
+}
+
+.etlsql-designer-run-grid {
+    overflow: auto;
+    min-height: 0;
+}
+
+.etlsql-designer-run-grid table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.8125rem;
+}
+
+.etlsql-designer-run-grid th,
+.etlsql-designer-run-grid td {
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    padding: 5px 8px;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.etlsql-designer-run-grid th {
+    position: sticky;
+    top: 0;
+    background: var(--portal-surface-subtle, #f8fafc);
+    z-index: 1;
+}
+
+.etlsql-designer-run-empty {
+    padding: 10px;
+    color: var(--portal-muted, #5b677a);
+}
+
+/* Preview-disabled badge */
+
+/* ── Phase 4: Component styles ──────────────────────────────────────────── */
+
+.etlsql-dsgn-name-input {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: var(--portal-radius-sm, 5px);
+    color: #fff;
+    padding: 3px 8px;
+    font-size: 0.875rem;
+    width: 200px;
+}
+.etlsql-dsgn-name-input:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+.etlsql-dsgn-name-input::placeholder { color: rgba(255,255,255,0.4); }
+
+.etlsql-dsgn-section {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+}
+.etlsql-dsgn-section:last-child { border-bottom: none; }
+
+.etlsql-dsgn-section-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--portal-muted, #7a8798);
+    letter-spacing: 0.04em;
+}
+
+.etlsql-dsgn-palette {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 6px 10px;
+}
+
+.etlsql-dsgn-palette-btn {
+    background: var(--vc, #64748b);
+    color: #fff;
+    border: none;
+    border-radius: var(--portal-radius-sm, 5px);
+    padding: 5px 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0.82;
+    transition: opacity 0.15s;
+}
+.etlsql-dsgn-palette-btn:hover { opacity: 1; }
+
+.etlsql-dsgn-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-auto-rows: 60px;
+    gap: 6px;
+    padding: 16px;
+    min-height: 100%;
+    align-content: start;
+}
+
+.etlsql-dsgn-canvas-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 180px;
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.875rem;
+    border: 2px dashed var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius, 8px);
+    margin: 24px 0;
+}
+
+.etlsql-dsgn-visual-card {
+    position: relative;
+    background: color-mix(in srgb, var(--vc, #64748b) 12%, var(--portal-surface, #ffffff));
+    border: 2px solid color-mix(in srgb, var(--vc, #64748b) 35%, transparent);
+    border-radius: var(--portal-radius-sm, 5px);
+    padding: 8px;
+    cursor: grab;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    user-select: none;
+}
+.etlsql-dsgn-visual-card:active {
+    cursor: grabbing;
+}
+.etlsql-dsgn-visual-card:hover {
+    border-color: var(--vc, #64748b);
+}
+.etlsql-dsgn-visual-card.selected {
+    border-color: var(--vc, #64748b);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc, #64748b) 35%, transparent);
+}
+
+.etlsql-dsgn-vcard-resize {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    cursor: se-resize;
+    background: linear-gradient(135deg, transparent 55%, var(--portal-text-soft, #46556c) 55%);
+    border-bottom-right-radius: var(--portal-radius-sm, 5px);
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-resize {
+    opacity: 1;
+}
+.etlsql-dsgn-vcard-resize:hover {
+    background: linear-gradient(135deg, transparent 55%, var(--portal-accent, #2563eb) 55%);
+}
+
+.etlsql-dsgn-vcard-badge {
+    display: inline-block;
+    background: var(--vc, #64748b);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+}
+
+.etlsql-dsgn-vcard-name {
+    margin-top: 4px;
+    font-size: 0.8125rem;
+    color: var(--portal-text, #172033);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-dsgn-vcard-del {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    font-size: 0.7rem;
+    color: var(--portal-muted, #7a8798);
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    line-height: 1;
+}
+.etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-del { opacity: 1; }
+.etlsql-dsgn-vcard-del:hover { background: var(--portal-border, #d9e0ea); color: #e11d48; }
+
+.etlsql-dsgn-tree-item {
+    padding: 4px 12px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    color: var(--portal-text, #172033);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 0;
+}
+.etlsql-dsgn-tree-item:hover  { background: var(--portal-bg, #f3f5f8); }
+.etlsql-dsgn-tree-item.selected { background: var(--portal-accent-soft, #eff6ff); color: var(--portal-accent, #2563eb); }
+
+.etlsql-dsgn-ds-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 12px;
+    font-size: 0.8125rem;
+    font-family: var(--portal-font-mono, monospace);
+}
+.etlsql-dsgn-ds-item button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.75rem;
+    padding: 0 3px;
+    line-height: 1;
+}
+.etlsql-dsgn-ds-item button:hover { color: #e11d48; }
+
+.etlsql-dsgn-props-empty {
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.8125rem;
+    text-align: center;
+    padding: 32px 12px;
+    line-height: 1.5;
+}
+
+.etlsql-dsgn-props-section { margin-bottom: 16px; }
+
+/* Inputs/selects fill their grid cell and shrink with the panel. Without
+   min-width:0 the input's intrinsic width keeps the 1fr tracks from shrinking,
+   forcing horizontal overflow that hides fields off the right edge (e.g. the
+   Grid Position "H" input). Keeps everything visible without a scrollbar. */
+.etlsql-designer-props .form-control {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.etlsql-dsgn-props-hdr {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--portal-muted, #7a8798);
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+}
+
+.etlsql-dsgn-label {
+    display: block;
+    font-size: 0.8125rem;
+    color: var(--portal-text-muted, #5a6a7e);
+    margin-bottom: 6px;
+}
+.etlsql-dsgn-label .form-control { margin-top: 3px; }
+
+.etlsql-dsgn-map-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-dsgn-grid4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.etlsql-dsgn-grid4 label { font-size: 0.75rem; color: var(--portal-muted, #7a8798); }
+.etlsql-dsgn-grid4 .form-control { margin-top: 2px; padding: 2px 4px; }
+
+.etlsql-dsgn-del-btn {
+    width: 100%;
+    background: none;
+    border: 1px solid #e11d48;
+    color: #e11d48;
+}
+.etlsql-dsgn-del-btn:hover { background: #fef2f5; }
+
+.etlsql-dsgn-modal-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.etlsql-dsgn-modal-card {
+    background: var(--portal-surface, #fff);
+    border-radius: var(--portal-radius, 8px);
+    padding: 20px 24px;
+    min-width: 340px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+.etlsql-dsgn-modal-hdr {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--portal-text, #172033);
+    margin-bottom: 14px;
+}
+
+.etlsql-dsgn-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.btn-xs {
+    padding: 1px 7px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    border-radius: var(--portal-radius-sm, 5px);
+}
+
+/* Card-based Lineage Canvas Styles */
+.etlsql-dag-viewport {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    width: 0;
+    height: 0;
+    transform-origin: center center;
+}
+
+.etlsql-dag-svg {
+    position: absolute;
+    left: -10000px;
+    top: -10000px;
+    width: 20000px;
+    height: 20000px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.etlsql-dag-badge-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.etlsql-dag-card {
+    position: absolute;
+    background: #111827;
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    color: #cbd5e1;
+    z-index: 10;
+    cursor: grab;
+    user-select: none;
+    transition: opacity 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+
+.etlsql-dag-card-header {
+    padding: 8px 12px;
+    background: #1f2937;
+    border-bottom: 1px solid #374151;
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.etlsql-dag-col-row {
+    padding: 6px 12px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    border-bottom: 1px solid #1f2937;
+    cursor: pointer;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.etlsql-dag-col-row:hover {
+    background: #1f2937;
+}
+
+.port-left, .port-right {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #475569;
+    border: 1px solid #0f172a;
+    transition: background-color 0.15s;
+}
+
+.port-left {
+    left: -4px;
+}
+
+.port-right {
+    right: -4px;
+}
+
+.card-port-left, .card-port-right {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid #0f172a;
+}
+
+.card-port-left {
+    left: -5px;
+}
+
+.card-port-right {
+    right: -5px;
+}
+
+.etlsql-dag-edge-badge {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 10px;
+    padding: 1px 6px;
+    font-size: 8px;
+    font-weight: bold;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 20;
+}
+
+/* ── Compact Horizontal DAG Visualizer Styles ─────────────────────── */
+.etlsql-compact-dag {
+    position: relative;
+    height: 140px;
+    background: var(--portal-surface, #101317);
+    border-bottom: 1px solid var(--portal-border, #30363d);
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+}
+.etlsql-compact-dag-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+.etlsql-dag-capsule {
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    user-select: none;
+    cursor: default;
+}
+.etlsql-dag-capsule:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
+    border-color: var(--portal-accent, #58a6ff) !important;
+}
+.etlsql-dag-capsule.status-running {
+    border-color: var(--portal-warning, #d29922) !important;
+    animation: etlsql-pulse-border 1.5s infinite ease-in-out;
+}
+.etlsql-dag-capsule.status-failed, .etlsql-dag-capsule.status-error {
+    border-color: var(--portal-danger, #ff7b72) !important;
+}
+.etlsql-dag-capsule.status-completed, .etlsql-dag-capsule.status-success {
+    border-color: var(--portal-success, #3fb950) !important;
+}
+
+@keyframes etlsql-pulse-border {
+    0% { box-shadow: 0 0 0 0 rgba(210, 153, 34, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(210, 153, 34, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(210, 153, 34, 0); }
+}
+
+
+/* ── Sidebar explorer trees ───────────────────────────────────────────────────
+   Shared by the schema explorer (connections → tables → columns) and the session
+   explorer (variables, temp tables → columns). Rows are drag sources; dropping one
+   on the editor inserts its snippet (see the drop handler in designer.js). */
+.etlsql-tree-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 22px;
+    padding: 2px 6px;
+    border-radius: var(--portal-radius-sm, 5px);
+    color: var(--portal-text-soft, #46556c);
+    font-size: 0.75rem;
+    cursor: grab;
+    user-select: none;
+}
+
+.etlsql-tree-row:hover {
+    background: var(--portal-surface-subtle, #f1f5f9);
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-tree-row.dragging {
+    opacity: .5;
+    cursor: grabbing;
+}
+
+.etlsql-tree-header {
+    font-weight: 600;
+}
+
+.etlsql-tree-connection {
+    color: var(--portal-accent, #2563eb);
+}
+
+.etlsql-tree-caret {
+    flex: 0 0 10px;
+    font-size: 8px;
+    line-height: 1;
+    color: var(--portal-muted, #5a6778);
+    transition: transform .12s ease;
+}
+
+.etlsql-tree-node.expanded > .etlsql-tree-header > .etlsql-tree-caret {
+    transform: rotate(90deg);
+}
+
+.etlsql-tree-icon {
+    flex: 0 0 auto;
+    opacity: .85;
+}
+
+.etlsql-tree-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-tree-column .etlsql-tree-label,
+.etlsql-tree-variable .etlsql-tree-label {
+    font-family: var(--portal-font-mono, ui-monospace, Consolas, monospace);
+}
+
+.etlsql-tree-type {
+    margin-left: auto;
+    padding-left: 8px;
+    color: var(--portal-muted, #5a6778);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.etlsql-tree-value {
+    color: var(--portal-muted, #5a6778);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-tree-indent {
+    flex: 0 0 10px;
+}
+
+.etlsql-tree-children {
+    display: none;
+    padding-left: 12px;
+}
+
+.etlsql-tree-node.expanded > .etlsql-tree-children {
+    display: block;
+}
+
+.etlsql-tree-note {
+    padding: 3px 6px;
+    color: var(--portal-muted, #5a6778);
+    font-size: 0.75rem;
+}
+
+.etlsql-tree-error {
+    color: var(--portal-danger, #b83535);
+}
+
+/* ── Workbench sidebar ────────────────────────────────────────────────────── */
+.etlsql-script-workbench-sidebar {
+    width: 248px;
+    min-width: 248px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff);
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+.etlsql-sidebar-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 12px 6px;
+    color: var(--portal-text, #172033);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.etlsql-sidebar-section-header + .etlsql-sidebar-section {
+    padding: 0 8px 10px;
+    border-bottom: 1px solid var(--portal-border-soft, #e8edf4);
+}
+
+.etlsql-sidebar-section {
+    font-size: 0.75rem;
+    color: var(--portal-text-soft, #46556c);
+}
+
+.etlsql-sidebar-action {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--portal-accent, #2563eb);
+    font: inherit;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+
+.etlsql-sidebar-action:hover {
+    text-decoration: underline;
+}
+
+.etlsql-sidebar-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: var(--portal-radius-sm, 5px);
+    color: var(--portal-text-soft, #46556c);
+    cursor: pointer;
+}
+
+.etlsql-sidebar-file:hover {
+    background: var(--portal-surface-subtle, #f1f5f9);
+    color: var(--portal-text, #172033);
+}
+
+.etlsql-sidebar-file.active {
+    background: var(--portal-accent-soft, #e8f0ff);
+    color: var(--portal-accent, #2563eb);
+    font-weight: 600;
+}
+
+/* Cancel replaces Run only while a script is in flight, so the toolbar keeps one
+   primary action at a time rather than showing a permanently dead button. */
+.etlsql-script-workbench [data-cancel-run] { display: none; }
+.etlsql-script-workbench.is-running [data-cancel-run] { display: inline-flex; }
+.etlsql-script-workbench.is-running [data-run],
+.etlsql-script-workbench.is-running [data-run-selected] { display: none; }
+
+.etlsql-tool-btn[data-cancel-run] {
+    color: var(--portal-danger, #b83535);
+}
+
+.etlsql-tool-btn[data-cancel-run]:hover {
+    background: var(--portal-danger-soft, #fef2f2);
+    color: var(--portal-danger, #b83535);
+}
