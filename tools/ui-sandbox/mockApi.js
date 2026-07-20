@@ -538,28 +538,38 @@ function sanitizeName(name, id) {
   return safe;
 }
 
+function getSlotLetter(index) {
+  let letter = '';
+  let idx = index;
+  while (idx >= 0) {
+    letter = String.fromCharCode(65 + (idx % 26)) + letter;
+    idx = Math.floor(idx / 26) - 1;
+  }
+  return letter;
+}
+
 function buildStructure(visuals) {
   if (!visuals || visuals.length === 0) return '.';
   const maxRow = Math.max(...visuals.map(v => (v.gridRow || 1) + (v.gridRowSpan || 4) - 1));
   const maxCol = Math.max(...visuals.map(v => (v.gridCol || 1) + (v.gridColSpan || 12) - 1));
   const usedCols = Math.min(12, maxCol);
-  
+
   const grid = Array.from({ length: maxRow }, () => Array(usedCols).fill('.'));
-  
-  for (const v of visuals) {
-    const slot = sanitizeName(v.name, v.id);
+
+  visuals.forEach((v, index) => {
+    const slot = getSlotLetter(index);
     const startRow = (v.gridRow || 1) - 1;
     const endRow = startRow + (v.gridRowSpan || 4);
     const startCol = (v.gridCol || 1) - 1;
     const endCol = startCol + (v.gridColSpan || 12);
-    
+
     for (let r = startRow; r < endRow && r < maxRow; r++) {
       for (let c = startCol; c < endCol && c < usedCols; c++) {
         grid[r][c] = slot;
       }
     }
-  }
-  
+  });
+
   return grid.map(row => row.join(' ')).join(' / ');
 }
 
@@ -589,9 +599,10 @@ function generateMockScript(state) {
       }
     }
     const structure = buildStructure(p.visuals);
-    const mapEntries = (p.visuals ?? []).map(v => {
-      const slot = sanitizeName(v.name, v.id);
-      return `            '${slot}' = ${sanitizeName(v.name, v.id)}`;
+    const mapEntries = (p.visuals ?? []).map((v, index) => {
+      const slot = getSlotLetter(index);
+      const vName = sanitizeName(v.name, v.id);
+      return `            '${slot}' = ${vName}`;
     }).join(',\n');
 
     out.push(`CREATE PAGE [${sanitizeName(p.name, p.id)}] AS DASHBOARD (\n    LAYOUT (\n        STRUCTURE = '${structure}',\n        MAP (\n${mapEntries}\n        )\n    )\n);`);

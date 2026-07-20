@@ -50,7 +50,7 @@ public sealed class DesignerScriptGenerationService
                 for (int i = 0; i < visuals.Count; i++)
                 {
                     var v = visuals[i];
-                    var slot = SanitizeSlotName(v.Name, v.Id);
+                    var slot = GetSlotLetter(i);
                     var trail = i < visuals.Count - 1 ? "," : "";
                     sb.AppendLine($"            '{slot}' = {SanitizeName(v.Name, v.Id)}{trail}");
                 }
@@ -108,6 +108,18 @@ public sealed class DesignerScriptGenerationService
         return sb.ToString().TrimEnd();
     }
 
+    private static string GetSlotLetter(int index)
+    {
+        string letter = "";
+        int idx = index;
+        while (idx >= 0)
+        {
+            letter = (char)('A' + (idx % 26)) + letter;
+            idx = (idx / 26) - 1;
+        }
+        return letter;
+    }
+
     private static string BuildStructure(IReadOnlyList<DesignerVisualDto> visuals)
     {
         if (visuals.Count == 0) return ".";
@@ -118,9 +130,10 @@ public sealed class DesignerScriptGenerationService
             for (int c = 0; c < usedCols; c++)
                 grid[r, c] = ".";
 
-        foreach (var v in visuals)
+        for (int i = 0; i < visuals.Count; i++)
         {
-            var slot = SanitizeSlotName(v.Name, v.Id);
+            var v = visuals[i];
+            var slot = GetSlotLetter(i);
             for (int r = v.GridRow - 1; r < v.GridRow - 1 + v.GridRowSpan && r < maxRow; r++)
                 for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < usedCols; c++)
                     grid[r, c] = slot;
@@ -147,8 +160,6 @@ public sealed class DesignerScriptGenerationService
             trimmed = trimmed[1..];
         return "&" + SanitizeName(trimmed);
     }
-
-    private static string SanitizeSlotName(string name, string fallback) => SanitizeName(name, fallback);
 
     private static string EscapeStr(string s) => s.Replace("'", "''");
 
