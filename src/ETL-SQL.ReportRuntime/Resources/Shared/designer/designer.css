@@ -2051,3 +2051,19 @@ body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
     color: var(--portal-accent, #2563eb);
     font-weight: 600;
 }
+
+/* Cancel replaces Run only while a script is in flight, so the toolbar keeps one
+   primary action at a time rather than showing a permanently dead button. */
+.etlsql-script-workbench [data-cancel-run] { display: none; }
+.etlsql-script-workbench.is-running [data-cancel-run] { display: inline-flex; }
+.etlsql-script-workbench.is-running [data-run],
+.etlsql-script-workbench.is-running [data-run-selected] { display: none; }
+
+.etlsql-tool-btn[data-cancel-run] {
+    color: var(--portal-danger, #b83535);
+}
+
+.etlsql-tool-btn[data-cancel-run]:hover {
+    background: var(--portal-danger-soft, #fef2f2);
+    color: var(--portal-danger, #b83535);
+}

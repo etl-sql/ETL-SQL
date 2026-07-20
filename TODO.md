@@ -112,9 +112,11 @@ changes safer.
       Strengthen cancellable runs, visible elapsed time, timeout and memory ceilings,
       destructive-statement guardrails, local audit history, and result/export limits. Do not bypass
       zero-trust rules for local convenience.
-      Partly done: 60s run timeout, 100/1000-row result cap, and an `AbortController` already wired
-      per run. Remaining: expose cancel in the UI (the abort has no button), visible elapsed time,
-      memory ceiling, destructive-statement guardrails, and local audit history.
+      Partly done: 60s run timeout, 100/1000-row result cap, cancellable runs (Cancel replaces Run
+      while in flight, also bound to Esc and the command palette; the host-side cancellation path is
+      covered by `Run_HonoursClientCancellation`), and elapsed time ticking beside the run status.
+      Remaining: memory ceiling on the local run, destructive-statement guardrails, and local audit
+      history.
 - [x] **Report preview.**
       Add `.rptsql` split editor/preview using the same manifest and runtime rendering as
       `ReportPlayer`/Portal, initially with manual refresh. Preview data should come from a bounded

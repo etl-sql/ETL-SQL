@@ -1823,6 +1823,23 @@ export function createScriptResultsPanel(container) {
             <table><thead><tr><th>Statement</th><th>Total</th></tr></thead><tbody>${statements.map(s => `<tr><td>${escape(s.type || 'Statement')}</td><td>${Number(s.totalMs || 0).toLocaleString()} ms</td></tr>`).join('')}</tbody></table>`;
     }
 
+    // Elapsed time ticks next to the status while a run is in flight, so a long run looks
+    // busy rather than hung.
+    let elapsedTimer = null;
+    let elapsedStart = 0;
+
+    function formatElapsed(ms) {
+        const seconds = ms / 1000;
+        return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
+    }
+
+    function paintStatus() {
+        if (!statusEl) return;
+        statusEl.textContent = elapsedTimer
+            ? `${status} · ${formatElapsed(Date.now() - elapsedStart)}`
+            : status;
+    }
+
     function renderMessagesTabLabel() {
         const tab = container.querySelector('[data-tab="messages"]');
         if (!tab) return;
@@ -1834,7 +1851,7 @@ export function createScriptResultsPanel(container) {
     function render() {
         container.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
         renderMessagesTabLabel();
-        statusEl.textContent = status;
+        paintStatus();
         if (toolsEl) toolsEl.hidden = activeTab !== 'results';
         if (activeTab === 'messages') body.innerHTML = renderMessages();
         else if (activeTab === 'pipeline') body.innerHTML = renderPipeline();
@@ -1922,7 +1939,7 @@ export function createScriptResultsPanel(container) {
                 performance = message;
                 break;
             case 'done':
-                status = message.exitCode === 0 ? 'Complete' : 'Failed';
+                status = message.status ?? (message.exitCode === 0 ? 'Complete' : 'Failed');
                 // Switch to Messages if execution failed
                 if (message.exitCode !== 0) {
                     activeTab = 'messages';
@@ -1981,8 +1998,21 @@ export function createScriptResultsPanel(container) {
             diagnostics = Array.isArray(list) ? list : [];
             render();
         },
+        startElapsed() {
+            elapsedStart = Date.now();
+            clearInterval(elapsedTimer);
+            elapsedTimer = setInterval(paintStatus, 100);
+            paintStatus();
+        },
+        stopElapsed() {
+            clearInterval(elapsedTimer);
+            elapsedTimer = null;
+            paintStatus();
+        },
         clear,
         dispose() {
+            clearInterval(elapsedTimer);
+            elapsedTimer = null;
             window.removeEventListener('resize', onResize);
             container.replaceChildren();
         },
@@ -2026,6 +2056,7 @@ const _TOOLBAR_ICONS = {
     apply: '<path d="M2 3.5h12"/><path d="M2 8h12"/><path d="M2 12.5h7"/>',
     save: '<path d="M3 2.5h7.5L13.5 5.5V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5"/><path d="M5 2.5v4h5v-4"/><path d="M5 13.5v-4h6v4"/>',
     close: '<path d="m4 4 8 8"/><path d="m12 4-8 8"/>',
+    cancel: '<rect x="4" y="4" width="8" height="8" rx="1"/>',
 };
 
 function toolbarIcon(name) {
@@ -2077,6 +2108,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 <span class="etlsql-toolbar-divider"></span>
                 ${toolbarButton({ attr: 'data-run-selected', icon: 'runSelected', title: 'Run selection or statement under cursor', key: 'Ctrl+Enter' })}
                 ${toolbarButton({ attr: 'data-run', icon: 'run', title: 'Run script', key: 'Ctrl+Shift+Enter', label: 'Run', primary: true })}
+                ${toolbarButton({ attr: 'data-cancel-run', icon: 'cancel', title: 'Cancel the running script', key: 'Esc', label: 'Cancel' })}
             </div>
             
             ${hasSidebar ? `
@@ -2628,6 +2660,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
     // scope: 'script' runs the whole file (Run); 'selection' runs the highlighted text
     // or the statement under the cursor (Run Selected) — see the roadmap's toolbar schema.
+    function setRunning(isRunning) {
+        root.classList.toggle('is-running', isRunning);
+        const runBtn = container.querySelector('[data-run]');
+        const runSelBtn = container.querySelector('[data-run-selected]');
+        if (runBtn) runBtn.disabled = isRunning;
+        if (runSelBtn) runSelBtn.disabled = isRunning;
+    }
+
     async function run(scope = 'script') {
         if (!opts.runUrl && !opts.onRun) return;
         const script = editor.getValue();
@@ -2640,6 +2680,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             { type: 'status', status: 'running' },
             { type: 'message', level: 'sys', text: scope === 'selection' ? 'Running selected statement.' : 'Running script.' },
         ]);
+        setRunning(true);
+        resultsPanel.startElapsed();
         try {
             runAbort?.abort();
             runAbort = new AbortController();
@@ -2659,13 +2701,26 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 })();
             resultsPanel.replay(normalizeRunTrace(result, runText));
         } catch (err) {
-            if (err?.name === 'AbortError') return;
+            if (err?.name === 'AbortError') {
+                resultsPanel.replay([
+                    { type: 'message', level: 'warn', text: 'Run cancelled.' },
+                    { type: 'done', exitCode: 1, status: 'Cancelled' },
+                ]);
+                return;
+            }
             resultsPanel.replay([
                 { type: 'clear', resetHistory: true },
                 { type: 'message', level: 'error', text: err?.message || 'Run failed.' },
                 { type: 'done', exitCode: 1 },
             ]);
+        } finally {
+            setRunning(false);
+            resultsPanel.stopElapsed();
         }
+    }
+
+    function cancelRun() {
+        runAbort?.abort();
     }
 
     async function save() {
@@ -2808,6 +2863,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         return [
             { id: 'run', label: 'ETL-SQL: Run Script', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('script') },
             { id: 'run-selected', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('selection') },
+            { id: 'cancel-run', label: 'ETL-SQL: Cancel Running Script', enabled: root.classList.contains('is-running'), action: cancelRun },
             { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
             { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
@@ -2849,6 +2905,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', () => run('script'));
     container.querySelector('[data-run-selected]')?.addEventListener('click', () => run('selection'));
+    container.querySelector('[data-cancel-run]')?.addEventListener('click', cancelRun);
     container.querySelector('[data-preview]')?.addEventListener('click', openPreview);
     container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
     container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
@@ -2875,7 +2932,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     root.addEventListener('keydown', async (event) => {
         const key = String(event.key || '').toLowerCase();
         const mod = event.ctrlKey || event.metaKey;
-        if (mod && event.shiftKey && key === 'p') {
+        if (key === 'escape' && root.classList.contains('is-running')) {
+            event.preventDefault();
+            cancelRun();
+        } else if (mod && event.shiftKey && key === 'p') {
             event.preventDefault();
             openPalette();
         } else if (mod && key === 'enter') {
