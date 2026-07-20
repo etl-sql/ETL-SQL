@@ -353,6 +353,131 @@ public sealed class WorkstationEditorTests
             d.Message.Contains("Table 'Users' not found", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task Api_SchemaEndpoint_RequiresSessionToken()
+    {
+        // The schema endpoint exposes cached table/column metadata, so it must sit behind the
+        // same token gate as every other /api route.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        var unauthenticated = await client.GetAsync("/api/designer/schema?connection=m&documentUri=pipeline.etlsql");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+
+        var unauthenticatedSession = await client.GetAsync("/api/session/metadata?documentUri=pipeline.etlsql");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedSession.StatusCode);
+    }
+
+    [Fact]
+    public async Task Run_HonoursClientCancellation()
+    {
+        // A run the caller abandons must not keep the host busy after the request is gone.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var run = new HttpRequestMessage(HttpMethod.Post, "/api/run");
+        run.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        run.Content = JsonContent.Create(new RunRequest(
+            "CREATE CONNECTION m AS MOCKDB();\nSELECT * FROM m.Users;", null, "pipeline.etlsql", 100));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.SendAsync(run, cts.Token));
+
+        // The host stays healthy and serves the next request.
+        using var followUp = new HttpRequestMessage(HttpMethod.Get, "/api/workspace");
+        followUp.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var followUpResponse = await client.SendAsync(followUp);
+        Assert.Equal(HttpStatusCode.OK, followUpResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Preview_BuildsReportManifest()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var preview = new HttpRequestMessage(HttpMethod.Post, "/api/preview");
+        preview.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        preview.Content = JsonContent.Create(new PreviewRequest("""
+            CREATE CONNECTION m AS MOCKDB();
+            CREATE DATASET &users AS (SELECT UserID, UserName FROM m.Users);
+            CREATE VISUAL userTable AS TABLE (SOURCE = &users);
+            CREATE PAGE Overview AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = userTable ) );
+            """));
+
+        var response = await client.SendAsync(preview);
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("userTable", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Preview_EmptyScript_ReturnsRedactedError()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var preview = new HttpRequestMessage(HttpMethod.Post, "/api/preview");
+        preview.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        preview.Content = JsonContent.Create(new PreviewRequest("   "));
+
+        var response = await client.SendAsync(preview);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Run_DoesNotReturnScriptSecretsInResponse()
+    {
+        // Workspace security model: no resolved secret, ENC: value or password may appear in a
+        // browser response. Lineage carries script text verbatim, so it is the likeliest leak.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var run = new HttpRequestMessage(HttpMethod.Post, "/api/run");
+        run.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        // A computed column is the path that carries script text: the lineage entry for Tag gets
+        // TransformationExpression = "(UPPER(UserName) + 'SECRET:db_password')". A pass-through
+        // column would leave it null and the assertion would pass without proving anything.
+        run.Content = JsonContent.Create(new RunRequest(
+            """
+            CREATE CONNECTION m AS MOCKDB();
+            SELECT UserID, UPPER(UserName) + 'SECRET:db_password' AS Tag INTO #staged FROM m.Users;
+            SELECT UserID FROM #staged;
+            """,
+            null,
+            "pipeline.etlsql",
+            100));
+
+        var response = await client.SendAsync(run);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.DoesNotContain("SECRET:db_password", body, StringComparison.OrdinalIgnoreCase);
+        // Assert the expression really did travel, so this stays a test of redaction rather than
+        // a test that the field happened to be empty.
+        Assert.Contains("UPPER(UserName)", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET:********", body, StringComparison.Ordinal);
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()

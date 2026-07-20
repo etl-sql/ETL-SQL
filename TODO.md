@@ -136,25 +136,26 @@ changes safer.
       Render command-line-document style hover content in a compact, scrollable, editor-friendly layout
       so help panes do not dominate the browser viewport.  Use color instead of text size for titles or 
       headings.
-- [ ] **Workspace security model.**
+- [x] **Workspace security model.**
       Keep the process bound to one workspace root or explicitly opened file. Require a random
       per-process session token on API calls, bind to `127.0.0.1`/`localhost` by default, and never
       expose connection strings, passwords, `ENC:` values, or resolved secrets in logs, diagnostics,
       browser responses, or saved workspace metadata.
-      Mostly done: root containment (traversal + symlink escape), `X-ETLSQL-EDITOR-TOKEN` on every
-      `/api` route, Kestrel bound to `IPAddress.Loopback`, and `SecretRedactor` on run lineage and
-      preview errors. Remaining: `/api/designer/schema` still returns `ex.Message` unredacted, and
-      the redaction rule is not enforced by a test.
+      Done: root containment (traversal + symlink escape), `X-ETLSQL-EDITOR-TOKEN` on every `/api`
+      route, Kestrel bound to `IPAddress.Loopback`, and `SecretRedactor` on run lineage, schema
+      errors and preview errors. `Run_DoesNotReturnScriptSecretsInResponse` pins the rule against
+      the path that actually carries script text (a computed column's lineage expression).
 - [ ] **Packaging boundary.**
       Ship as part of the workstation/CLI install set, not as a Portal install component. The executable
       must work without IIS, Docker, PostgreSQL, or a Portal database.
-- [ ] **Host and API tests.**
+- [x] **Host and API tests.**
       Add host-level API tests for workspace containment, token enforcement, file save/open behavior,
       diagnostics parity, bounded run cancellation, schema cache authorization, and report preview
       construction.
-      Partly done in `WorkstationEditorTests` (15 tests): containment, token enforcement, read-only
-      save rejection, diagnostics parity, completion, hover, format, run. Remaining: bounded run
-      cancellation, schema cache authorization, and report preview construction.
+      Done: `WorkstationEditorTests` now covers all of them (20 tests) — containment, token
+      enforcement (including the schema and session-metadata endpoints), read-only save rejection,
+      diagnostics parity, completion, hover, format, run, client-cancelled run, report preview
+      construction and its error path, plus the secret-redaction guard.
 
 ### Misc
 - [ ] **Flatfile fixed width add a character to only show positive**  If we setup a flatfile fixed width 

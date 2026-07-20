@@ -150,7 +150,8 @@ public static class WorkstationEditorApp
             }
             catch (Exception ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                // Connector failures routinely quote the connection string back.
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
             }
         });
 
