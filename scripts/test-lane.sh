@@ -44,6 +44,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 FAST_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+PORTAL_FILTER="(Category!=Integration)"
 
 invoke_dotnet_test() {
     local project="$1"
@@ -86,14 +87,12 @@ case "$LANE" in
     fast)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
-        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
-        invoke_lineage_ui_smoke
         ;;
     engine)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         ;;
     portal)
-        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
         invoke_lineage_ui_smoke
         ;;
     integration)
@@ -123,6 +122,11 @@ case "$LANE" in
             fast_args+=(--collect-coverage --results-directory "$RESULTS_DIRECTORY")
         fi
         bash "$SCRIPT_DIR/test-lane.sh" "${fast_args[@]}"
+
+        portal_args=(--lane portal --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then portal_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then portal_args+=(--no-build); fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${portal_args[@]}"
 
         slt_args=(--lane slt --configuration "$CONFIGURATION")
         if [ "$NO_RESTORE" = true ]; then slt_args+=(--no-restore); fi

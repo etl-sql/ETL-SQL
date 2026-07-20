@@ -174,8 +174,7 @@ function Get-LanesForTest {
 
     $isFastProject =
         $Project -like "tests\ETL-SQL.Tests\*" -or
-        $Project -like "tests\ETL-SQL.LanguageServer.Tests\*" -or
-        $Project -like "tests\ETL-SQL.Portal.Tests\*"
+        $Project -like "tests\ETL-SQL.LanguageServer.Tests\*"
 
     if ($isFastProject -and $fastExclusionReasons.Count -eq 0) {
         $lanes.Add("fast")

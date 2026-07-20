@@ -79,7 +79,7 @@ Before enterprise release claims are made, collect current evidence from these s
 
 | Gate | Command or evidence | Purpose |
 | :--- | :--- | :--- |
-| Functional/fast regression | `.\scripts\test-lane.ps1 -Lane fast -NoRestore` | Parser, engine, portal, reporting, governance, and local orchestration coverage. |
+| Functional/fast regression | `.\scripts\test-lane.ps1 -Lane fast -NoRestore` plus `.\scripts\test-lane.ps1 -Lane portal -NoRestore` for Portal-facing changes | Parser, engine, reporting, governance, local orchestration, Portal API, and browser-side smoke coverage. |
 | Migration/upgrade | `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain` plus the N to N+1 upgrade-path phase | Forward migration and release packaging confidence. |
 | Enterprise hardening | `.\scripts\Test-EnterpriseHardeningCertification.ps1` on Windows and Linux | Enrollment, signed policy, operation-boundary enforcement, standalone behavior, and security-event delivery. |
 | Recovery | `etl-sql admin restore --validate --report recovery-report.json` and `BackupRestoreDrillTests` | Archive integrity, key coverage, clone-safety actions, service-account/audit/job continuity. |

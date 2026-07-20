@@ -13,7 +13,7 @@ The testing foundation now has three complementary layers:
 
 | Layer | What it proves | Current status |
 | :--- | :--- | :--- |
-| Unit / functional xUnit tests | Parser, evaluator, handlers, functions, security rules, reporting, portal APIs, language tooling | Broad coverage. Use `fast` as the default confidence lane. |
+| Unit / functional xUnit tests | Parser, evaluator, handlers, functions, security rules, reporting, portal APIs, language tooling | Broad coverage. Use `fast` for engine/language-server confidence and `portal` for Portal/API changes. |
 | ETL scenario golden tests | Cross-feature ETL-SQL workflows that are easy to miss with isolated tests | 27 scenarios currently cover staged ETL, cleansing, JSON extraction, file round trip, lineage tags/source columns, `WHAT_IF`, loops, `TRY...CATCH`, transactions, DML audit, merge, hash-change detection, set ops, recursive CTE, pivot/unpivot, semi/anti joins, and modular scripts. |
 | SQL Logic Tests | SQL compatibility semantics: SELECT, joins, NULLs, aggregates, DML, set ops, windows, type coercion | Full SLT corpus is explicit/deployment-only. Custom ETL-SQL SLT files cover function and DML areas that SQLite SLT does not. |
 
@@ -130,12 +130,12 @@ Lane intent:
 | Lane | Scope |
 | :--- | :--- |
 | `smoke` | Hand-picked core/security/reporting/portal smoke tests |
-| `fast` | Engine, Language Server, and Portal tests excluding explicit integration/performance/scale categories |
+| `fast` | Engine and Language Server tests excluding explicit integration/performance/scale categories |
 | `engine` | `ETL-SQL.Tests` only, with the fast filter |
-| `portal` | Portal tests only |
+| `portal` | Portal tests and Node UI smoke checks |
 | `integration` | External-boundary tests tagged `Category=Integration` |
 | `perf` | Performance tests tagged `Category=Performance` in `tests\ETL-SQL.Tests` and `tests\ETL-SQL.PerfTests` |
-| `release` | Smoke + fast + SLT, without benchmarks or installer packaging |
+| `release` | Smoke + fast + portal + fuzz smoke + SLT, without benchmarks or installer packaging |
 | `full` | Normal xUnit projects, excluding deployment-only SLT and benchmark executable |
 | `benchmarks` | BenchmarkDotNet executable |
 | `slt` | SQL Logic Test corpus with `ETL_SQL_RUN_SLT=1` set by the lane script |

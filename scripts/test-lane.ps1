@@ -115,11 +115,6 @@ switch ($Lane) {
     "fast" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
-        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
-        Invoke-LineageUiSmoke
-        # Deterministic fuzzer smoke: fixed seed, strict-exec on, low iteration count. Gives
-        # continuous parser/grammar/execution signal on every PR without flakiness.
-        Invoke-FuzzLane -Seed "12345" -Iterations "2000" -StrictExec "1"
     }
     "engine" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
@@ -148,6 +143,12 @@ switch ($Lane) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         & $PSCommandPath -Lane "fast" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$CollectCoverage -ResultsDirectory $ResultsDirectory
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        & $PSCommandPath -Lane "portal" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        & $PSCommandPath -Lane "fuzz-smoke" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         & $PSCommandPath -Lane "slt" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
