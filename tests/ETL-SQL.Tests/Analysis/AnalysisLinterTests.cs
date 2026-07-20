@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -435,6 +435,24 @@ CREATE PAGE Overview AS DASHBOARD (
             Assert.Single(results);
             Assert.Contains("'B'", results.First().Message);
             Assert.Contains("no entry in MAP", results.First().Message);
+        }
+
+        [Fact]
+        public async Task SchemaValidationRule_InScriptMockDbConnection_DoesNotReportTableNotFound()
+        {
+            EnsureConnectorRegistry();
+            var linter = new Linter();
+            linter.AddRule(new SchemaValidationRule());
+
+            var sql = @"
+                CREATE CONNECTION m AS MOCKDB();
+                SELECT * FROM m.Users;
+            ";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.DoesNotContain(results, r => r.RuleName == "SchemaValidation" && r.Message.Contains("Table 'Users' not found"));
         }
 
         [Fact]

@@ -400,8 +400,8 @@ public class SchemaValidationRule : ILintRule
             return;
         }
 
-        var tables = await context.Metadata!.GetTablesAsync(connName);
-        if (tables == null) return;
+        var tables = (await context.Metadata!.GetTablesAsync(connName))?.ToList();
+        if (tables == null || tables.Count == 0) return;
 
         string searchName = NormalizeName(tableRef.TableName);
         if (!tables.Any(t => string.Equals(NormalizeName(t), searchName, StringComparison.OrdinalIgnoreCase)))
@@ -450,7 +450,12 @@ public class SchemaValidationRule : ILintRule
                         break;
                     }
 
-                    var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
+                    var cols = (await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table))?.ToList();
+                    if (cols == null || cols.Count == 0)
+                    {
+                        found = true;
+                        break;
+                    }
                     if (cols.Any(c => string.Equals(c, parts[0], StringComparison.OrdinalIgnoreCase)))
                     {
                         found = true;
@@ -484,7 +489,8 @@ public class SchemaValidationRule : ILintRule
                     // Skip validation for engine-managed temporary tables (#)
                     if (scope.Table.StartsWith("#")) return;
 
-                    var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
+                    var cols = (await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table))?.ToList();
+                    if (cols == null || cols.Count == 0) return;
                     if (!cols.Any(c => string.Equals(c, colName, StringComparison.OrdinalIgnoreCase)))
                     {
                         results.Add(new LintResult

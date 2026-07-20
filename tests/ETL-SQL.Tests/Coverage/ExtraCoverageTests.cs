@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -311,7 +311,7 @@ namespace ETL_SQL.Tests.Coverage
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "BULK INSERT #t FROM '/data/file.csv' WITH (FIELDTERMINATOR = ',');");
+                "BULK INSERT #t FROM 'C:\\WINDOWS\\file.csv' WITH (FIELDTERMINATOR = ',');");
             Assert.NotEmpty(results);
             Assert.All(results, r => Assert.Equal("FileSystemSecurity", r.RuleName));
         }
@@ -332,7 +332,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "FOR @i = 1 TO 1 BEGIN " +
-                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('C:\\WINDOWS\\file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -343,7 +343,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "FOREACH @x IN (SELECT 1 AS n) BEGIN " +
-                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('C:\\WINDOWS\\file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -354,7 +354,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "PARALLEL BEGIN " +
-                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('C:\\WINDOWS\\file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }

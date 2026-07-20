@@ -2078,7 +2078,7 @@ function toolbarButton({ attr, icon, title, label, primary, key }) {
 }
 
 export async function createScriptEditorWorkbench(container, opts = {}) {
-    const savedTheme = localStorage.getItem('portal-theme') || 'dark';
+    const savedTheme = localStorage.getItem('portal-theme') || 'light';
     if (savedTheme === 'dark') {
         document.body.classList.add('theme-dark');
     } else {

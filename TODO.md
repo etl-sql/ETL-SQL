@@ -24,15 +24,18 @@ changes safer.
       Done: Removed redundant `etlsql.showVisualFlow` command; `etlsql.showLineage` ("Show Visual Lineage") opens the interactive AST/lineage diagram panel (`VisualFlowPanel`), and the bottom panel's `Pipeline` tab now renders the full visual DAG flowchart canvas (`VisualDagCanvas`) with graphical node capsules, live status indicators, timing/rows, and dynamic SVG connecting curves.
 
 ### Workstation Editor bugs
-- [ ] **Report preview does not work**  It errors to: Failed to load the preview runtime.
-- [ ] **Make light theme the default**  Make light theme the default not dark theme.
-- [ ] **When in dark theme lint messages are unreadable**  You can see the box but none of the text inside of them.
-      I assume its using white text against a white background messagebox.
-- [ ] **Dark theme highlight causes text to disappear**  When you select text the overcast selection is the same 
-      color as the text so you only see the selection box but not the selected text in it.
-- [ ] **Too much linting, too much noise**  Although accurate, its too much, Ensure this directory is listed in your 'Security.ApprovedSafeZones' 
-      in appsettings.json or the script will fail at runtime.  We either check for them if it's in the approved safe zone or we
-      turn this message off and let it fail.
+- [x] **Report preview does not work**  It errors to: Failed to load the preview runtime.
+      Done: Fixed static file provider mapping in `WorkstationEditorApp.cs` so `/designer` routes to `sharedRoot` containing `echarts.min.js`, `report-runtime.js`, and `report-runtime.css`.
+- [x] **Make light theme the default**  Make light theme the default not dark theme.
+      Done: Updated `createScriptEditorWorkbench` in `designer.js` to fallback to `'light'` theme when no preference is saved in `localStorage`.
+- [x] **When in dark theme lint messages are unreadable**  You can see the box but none of the text inside of them.
+      Done: Added `.cm-tooltip-lint` and `.cm-diagnostic` theme variable overrides in `designer.css` so dark mode renders dark background with readable light text.
+- [x] **Dark theme highlight causes text to disappear**  When you select text the overcast selection is the same color as the text so you only see the selection box but not the selected text in it.
+      Done: Added `.cm-selectionBackground` rule for `body.theme-dark` in `designer.css` setting `#264f78` selection background.
+- [x] **Too much linting, too much noise**  Although accurate, its too much, Ensure this directory is listed in your 'Security.ApprovedSafeZones' in appsettings.json or the script will fail at runtime.
+      Done: Removed the noisy generic `Ensure this directory is listed in your 'Security.ApprovedSafeZones'` info message from `FileSystemSecurityRule.cs`.
+- [x] **Incorrect linter message** Query CREATE CONNECTION m AS MOCKDB();  SELECT * FROM m.Users; Lint message: [SchemaValidation] Line 4: Table 'Users' not found in connection 'm'.
+      Done: Updated `SchemaValidationRule.cs` to return early when a connection or table's metadata has 0 returned objects (in-flight/uninitialized schema cache), preventing false-positive table/column missing warnings during editing.
 
 ### Architecture and Maintainability
 

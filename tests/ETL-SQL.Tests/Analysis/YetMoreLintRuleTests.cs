@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
@@ -698,13 +698,12 @@ namespace ETL_SQL.Tests.Analysis
         // ── FileSystemSecurityRule ────────────────────────────────────────────
 
         [Fact]
-        public async Task FileSystemSecurity_NormalPath_InfoOnly()
+        public async Task FileSystemSecurity_NormalPath_NoWarning()
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "CREATE CONNECTION fc AS FLATFILE('/data/safe/file.csv');");
-            Assert.NotEmpty(results);
-            Assert.All(results, r => Assert.Equal("FileSystemSecurity", r.RuleName));
+            Assert.Empty(results);
         }
 
         [Fact]
@@ -750,7 +749,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "COPY FILE '/data/source.txt' TO '/data/dest.txt';");
+                "COPY FILE 'C:\\WINDOWS\\source.txt' TO 'C:\\WINDOWS\\dest.txt';");
             Assert.NotEmpty(results);
         }
 
@@ -759,7 +758,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE DIRECTORY '/safe/mydir';");
+                "CREATE DIRECTORY 'C:\\WINDOWS\\mydir';");
             Assert.NotEmpty(results);
         }
 
@@ -768,7 +767,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "RUN SCRIPT '/scripts/myscript.etlsql';");
+                "RUN SCRIPT 'C:\\WINDOWS\\myscript.etlsql';");
             Assert.NotEmpty(results);
         }
     }

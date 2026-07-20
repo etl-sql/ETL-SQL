@@ -1140,7 +1140,12 @@ public class DataParser : ParserComponent
                         if (Match(TokenType.COMMA))
                         {
                             dataType += ",";
-                            dataType += Consume(TokenType.NUMBER, "Expected scale").Value;
+                            // A sign constraint stands where a scale would go: INT(5,+) is five
+                            // positive-only digits, INT(5,-) five negative-only digits. Scale and
+                            // sign are mutually exclusive — a scale implies a signed decimal.
+                            if (Match(TokenType.PLUS)) dataType += "+";
+                            else if (Match(TokenType.MINUS)) dataType += "-";
+                            else dataType += Consume(TokenType.NUMBER, "Expected scale, '+', or '-'").Value;
                         }
                         dataType += ")";
                         Consume(TokenType.RPAREN, "Expected ')'");

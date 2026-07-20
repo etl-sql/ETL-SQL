@@ -60,6 +60,23 @@ namespace ETL_SQL.Connectors.FlatFile
             /// leading minus sign. Null for non-integer types.
             /// </summary>
             public int? DeclaredDigits { get; set; }
+            /// <summary>
+            /// Sign constraint from INT(N,+) / INT(N,-). <see cref="IntegerSign.Any"/> for a bare
+            /// INT(N). A positive-only column carries no sign slot, so its
+            /// <see cref="Length"/> equals <see cref="DeclaredDigits"/>.
+            /// </summary>
+            public IntegerSign Sign { get; set; } = IntegerSign.Any;
+        }
+
+        /// <summary>Sign constraint declared on a fixed-width integer column.</summary>
+        internal enum IntegerSign
+        {
+            /// <summary>Bare INT(N) — positive or negative.</summary>
+            Any,
+            /// <summary>INT(N,+) — positive values only.</summary>
+            PositiveOnly,
+            /// <summary>INT(N,-) — negative values only.</summary>
+            NegativeOnly,
         }
 
         public string Path => _filePath;
@@ -232,7 +249,8 @@ namespace ETL_SQL.Connectors.FlatFile
                             Name = col.ColumnName,
                             Start = currentStart,
                             Length = width.Value,
-                            DeclaredDigits = GetIntegerDeclaredDigits(col)
+                            DeclaredDigits = GetIntegerDeclaredDigits(col),
+                            Sign = GetSignConstraint(col)
                         });
                         currentStart += width.Value;
                     }
@@ -264,7 +282,7 @@ namespace ETL_SQL.Connectors.FlatFile
             if (col.Metadata.TryGetValue("width", out var wStr) && int.TryParse(wStr, out var w))
                 return w;
 
-            var match = Regex.Match(col.DataType, @"^(\w+)(?:\((\d+)(?:,\d+)?\))?$",
+            var match = Regex.Match(col.DataType, @"^(\w+)(?:\((\d+)(?:,(\d+|[+-]))?\))?$",
                 RegexOptions.IgnoreCase);
             if (!match.Success) return null;
 
@@ -272,9 +290,11 @@ namespace ETL_SQL.Connectors.FlatFile
             int prec = 0;
             var hasPrec = match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out prec);
 
-            // Priority 2: integer type with declared digit count — physical width = digits + 1 sign slot
+            // Priority 2: integer type with declared digit count.
+            // Physical width = digits + 1 sign slot, except INT(N,+) which is positive-only and
+            // therefore needs no sign column. INT(N,-) still needs the slot to hold the '-'.
             if (IsIntegerType(baseType) && hasPrec)
-                return prec + 1;
+                return GetSignConstraint(col) == IntegerSign.PositiveOnly ? prec : prec + 1;
 
             // Priority 3: any other sized type — use the length as-is
             if (hasPrec)
@@ -284,16 +304,28 @@ namespace ETL_SQL.Connectors.FlatFile
         }
 
         /// <summary>
-        /// If the column is an integer type declared with a precision (e.g. INT(5)), returns that
-        /// precision (the digit count). Returns null for all other types.
+        /// If the column is an integer type declared with a precision (e.g. INT(5) or INT(5,+)),
+        /// returns that precision (the digit count). Returns null for all other types.
         /// </summary>
         private static int? GetIntegerDeclaredDigits(ColumnDefinition col)
         {
-            var match = Regex.Match(col.DataType, @"^(\w+)\((\d+)\)$", RegexOptions.IgnoreCase);
+            var match = Regex.Match(col.DataType, @"^(\w+)\((\d+)(?:,[+-])?\)$", RegexOptions.IgnoreCase);
             if (match.Success && IsIntegerType(match.Groups[1].Value)
                 && int.TryParse(match.Groups[2].Value, out var digits))
                 return digits;
             return null;
+        }
+
+        /// <summary>
+        /// Reads the optional sign constraint from an integer declaration: <c>INT(5,+)</c> accepts
+        /// only positive values, <c>INT(5,-)</c> only negative ones, and a bare <c>INT(5)</c>
+        /// accepts either.
+        /// </summary>
+        private static IntegerSign GetSignConstraint(ColumnDefinition col)
+        {
+            var match = Regex.Match(col.DataType, @"^(\w+)\(\d+,([+-])\)$", RegexOptions.IgnoreCase);
+            if (!match.Success || !IsIntegerType(match.Groups[1].Value)) return IntegerSign.Any;
+            return match.Groups[2].Value == "+" ? IntegerSign.PositiveOnly : IntegerSign.NegativeOnly;
         }
 
         private static readonly HashSet<string> _integerTypeNames = new(StringComparer.OrdinalIgnoreCase)

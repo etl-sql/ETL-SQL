@@ -85,10 +85,26 @@ public static class WorkstationEditorApp
         var sharedRoot = FindSharedRuntimeRoot();
         if (sharedRoot is not null)
         {
+            var designerSubdir = Path.Combine(sharedRoot, "designer");
+            if (Directory.Exists(designerSubdir))
+            {
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    RequestPath = "/designer",
+                    FileProvider = new PhysicalFileProvider(designerSubdir),
+                    OnPrepareResponse = ctx =>
+                    {
+                        ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+                        ctx.Context.Response.Headers.Pragma = "no-cache";
+                        ctx.Context.Response.Headers.Expires = "0";
+                    }
+                });
+            }
+
             app.UseStaticFiles(new StaticFileOptions
             {
                 RequestPath = "/designer",
-                FileProvider = new PhysicalFileProvider(Path.Combine(sharedRoot, "designer")),
+                FileProvider = new PhysicalFileProvider(sharedRoot),
                 OnPrepareResponse = ctx =>
                 {
                     ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
@@ -97,6 +113,8 @@ public static class WorkstationEditorApp
                 }
             });
         }
+
+        app.MapGet("/favicon.ico", () => Results.NoContent());
 
         app.MapGet("/", (WorkstationWorkspace workspace, WorkstationEditorOptions editorOptions) =>
             Results.Content(EditorShell.Html(editorOptions, workspace), "text/html; charset=utf-8"));

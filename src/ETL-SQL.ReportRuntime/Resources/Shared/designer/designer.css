@@ -745,12 +745,33 @@ body.vscode-high-contrast .cm-editor .etlsql-tok-comment   { color: #8b949e; }
     font-size: 0.78rem;
 }
 
+.cm-tooltip,
+.cm-tooltip-lint,
+.cm-diagnostic,
 .cm-tooltip.cm-tooltip-autocomplete,
 .cm-tooltip-autocomplete .cm-completionInfo {
-    background: var(--portal-surface, #ffffff);
-    color: var(--portal-text, #172033);
-    border-color: var(--portal-border, #d9e0ea);
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text, #172033) !important;
+    border-color: var(--portal-border, #d9e0ea) !important;
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24);
+}
+
+.cm-diagnostic,
+.cm-diagnosticText,
+.cm-tooltip-lint .cm-diagnostic {
+    color: var(--portal-text, #172033) !important;
+}
+
+body.theme-dark .cm-editor .cm-selectionBackground,
+body.theme-dark .cm-editor.cm-focused .cm-selectionBackground,
+body.vscode-dark .cm-editor .cm-selectionBackground,
+body.vscode-dark .cm-editor.cm-focused .cm-selectionBackground {
+    background: #264f78 !important;
+}
+
+body.theme-dark .cm-editor .cm-line::selection,
+body.vscode-dark .cm-editor .cm-line::selection {
+    background: #264f78 !important;
 }
 
 .cm-tooltip-autocomplete ul li {
