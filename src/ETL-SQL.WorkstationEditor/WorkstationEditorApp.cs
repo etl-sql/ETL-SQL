@@ -165,6 +165,20 @@ public static class WorkstationEditorApp
 
         app.MapGet("/api/designer/schema", async (string connection, string? documentUri, IMetadataManager metadata, CancellationToken cancellationToken) =>
         {
+            // Re-check egress policy on every request, before anything is served. The schema cache is
+            // warm and connector-free: once an entry is cached, reads never touch the connector that
+            // would normally enforce this, so a host blocked after the cache warmed would keep having
+            // its table and column names completed. Checking here — not at cache-fill — is what makes
+            // tightening policy take effect immediately.
+            try
+            {
+                EnforceSchemaAccessPolicy(metadata, connection, documentUri);
+            }
+            catch (System.Security.SecurityException ex)
+            {
+                return Results.Json(new { error = SecretRedactor.Redact(ex.Message) }, JsonOptions, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             try
             {
                 var tables = await metadata.GetTablesAsync(connection, documentUri);
@@ -335,6 +349,25 @@ public static class WorkstationEditorApp
         var server = app.Services.GetRequiredService<IServer>();
         var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
         return addresses?.FirstOrDefault() ?? "http://127.0.0.1:0";
+    }
+
+    /// <summary>
+    /// Applies the local egress guardrail to the connection behind a schema request. Throws
+    /// <see cref="System.Security.SecurityException"/> when the host is not permitted.
+    ///
+    /// Resolution is best-effort by design: a connection the editor cannot resolve, or a connector
+    /// that cannot report a host (file and in-memory connectors such as MOCKDB), has no host to
+    /// validate and is left to the normal read path, which returns nothing for an unknown
+    /// connection. Only a resolvable host is checked, and it is checked every time.
+    /// </summary>
+    internal static void EnforceSchemaAccessPolicy(IMetadataManager metadata, string connectionName, string? documentUri)
+    {
+        if (string.IsNullOrWhiteSpace(connectionName)) return;
+
+        var host = metadata.GetConnectionHost(connectionName, documentUri);
+        if (string.IsNullOrWhiteSpace(host)) return;
+
+        ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(SystemExecutionContext.Instance, host);
     }
 
     private static bool IsAuthorized(HttpContext context, string expectedToken)

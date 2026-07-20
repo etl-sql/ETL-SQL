@@ -56,6 +56,20 @@ public interface IMetadataManager
     IEnumerable<string> GetRegisteredNames();
     IConnector? GetConnector(string name);
     string? GetConnectionType(string connectionName, string? uri = null);
+
+    /// <summary>
+    /// Returns the network host behind a registered connection, or <c>null</c> when it has none
+    /// (file and in-memory connectors) or cannot be determined.
+    ///
+    /// Exists so a caller can apply egress policy to a cached schema read without the
+    /// credential-bearing connection string leaving the manager — only the host is exposed. Reads
+    /// served from the schema cache never touch the connector that would otherwise enforce this, so
+    /// callers that serve cached schema should check on every request rather than at cache-fill.
+    ///
+    /// Defaults to <c>null</c> so the alternate implementations (TUI, tests) need no change; a
+    /// <c>null</c> host means "nothing to validate", not "permitted".
+    /// </summary>
+    string? GetConnectionHost(string connectionName, string? uri = null) => null;
     void ClearCache();
     void ClearCacheForUri(string uri);
 

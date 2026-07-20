@@ -64,20 +64,49 @@ changes safer.
 ### Developer Experience: Local Browser Script Editor
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
 
-- [ ] **Installed CLI integration.**
+- [x] **Installed CLI integration.**
       Finish the installed CLI command shape and packaging polish for the standalone Workstation
-      Editor binary: `etl-sql-editor <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
+      Editor binary: `etl-sql-editor <path-or-folder> [--port <n>] [--open] [--readonly]`.
 
       Accept a script file, a folder/workspace root, or no path. Pick an available loopback port when
       omitted, print the URL, and optionally open the browser when `--open` is set.
-      Current status: file/folder/no-path launch, `--port`/`-p`, `--open`, `--readonly`, loopback
-      binding, session token, and packaging are implemented in `ETL-SQL.WorkstationEditor`.
-      Not complete because `--profile <name>` is still not parsed or applied; local connection
-      profiles do not exist yet and are covered by **Local schema autocomplete**.
-- [ ] **Local schema autocomplete.**
-      Back the shared schema snapshot contracts with local connection profiles, local cache
-      invalidation, and stale-while-revalidate behavior. Cache by stable connection identity and enforce
-      local profile permissions/policy on every request.
+      Done: file/folder/no-path launch, `--port`/`-p`, `--open`, `--readonly`, loopback binding,
+      session token, and packaging are implemented in `ETL-SQL.WorkstationEditor`.
+      `--profile <name>` was dropped from the command shape rather than implemented: it selects a
+      local connection profile, and local profiles were deliberately declined under **Local schema
+      autocomplete** (a workstation credential store is neither mobile like `ENC:` + script password
+      nor global like `SHARED:alias`). A flag with nothing to select does not belong in the
+      documented surface; if profiles are ever revisited, the flag comes back with them.
+- [x] **Local schema autocomplete.**
+      Back the shared schema snapshot contracts with local cache invalidation and
+      stale-while-revalidate behavior, cache by stable connection identity, and enforce local policy
+      on every request.
+      Closed after auditing the code against the original scope, which turned out to be largely
+      already built or deliberately not worth building:
+      * **Caching, TTL, invalidation and stale-while-revalidate: already shipped.** `MetadataManager`
+        has a configurable TTL, a `SoftRefreshInterval` documented as stale-while-revalidate
+        (`_ongoingRefreshes` serves the cached snapshot instantly and refreshes in the background),
+        a machine-bound encrypted on-disk cache with a 14-day max age, bounded memory, and a
+        per-document TTL. Nothing to add.
+      * **Stable connection identity: already correct where it matters.** The read path is
+        memory -> disk -> introspect, and the *disk* cache is keyed by a salted SHA-256 of the
+        connection string, so a second document or a renamed alias gets a disk hit rather than a
+        second database introspection. The in-memory key stays `{documentUri}:{alias}` on purpose —
+        two scripts may declare different databases under the same alias, and document scoping also
+        carries temp tables. Re-keying it would risk document-isolation regressions to save an
+        in-process copy, not a round trip.
+      * **Policy on every request: was a real gap, now fixed.** A cached schema read never touches
+        the connector that enforces egress policy, so a host blocked after the cache warmed kept
+        having its tables and columns completed. `/api/designer/schema` now re-checks on every
+        request via `IMetadataManager.GetConnectionHost` (which exposes only the host, never the
+        credential-bearing connection string) and returns `403` when denied. Covered by
+        `MetadataConnectionHostTests`.
+      * **Local connection profiles: deliberately not built.** They would be a third credential
+        mechanism that loses on both axes the existing two win on — `ENC:` + script password is
+        *mobile* (the script carries its own credentials anywhere), `SHARED:alias` is *global*
+        (admin-administered, credentials never reach the user). A workstation vault is neither, and
+        being DPAPI machine-scoped it would not even follow a user to a second machine. The only
+        gain was not retyping a connection, which `ENC:` already covers per script.
 - [ ] **Browser smoke coverage.**
       Extend smoke tests for installed CLI launch, selection execution, `.rptsql` preview, schema
       autocomplete, cancellation, and result-grid interaction.

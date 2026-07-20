@@ -7,6 +7,35 @@ namespace ETL_SQL.Tests.WorkstationEditor;
 
 public sealed class WorkstationEditorTests
 {
+    [Theory]
+    [InlineData("--profile")]
+    [InlineData("--wat")]
+    [InlineData("-x")]
+    public void Options_RejectUnknownFlags(string flag)
+    {
+        // An unrecognised flag used to be ignored, and its value was then taken as the positional
+        // path — so `--profile dev` silently opened a workspace called "dev". `--profile` in
+        // particular was once in the documented command shape, so it is the likeliest to be typed.
+        var ex = Assert.Throws<ArgumentException>(
+            () => WorkstationEditorOptions.Parse([flag, "dev"], Directory.GetCurrentDirectory()));
+
+        Assert.Contains(flag, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Options_StillParseTheSupportedFlags()
+    {
+        using var temp = new TempWorkspace();
+
+        var options = WorkstationEditorOptions.Parse(
+            [temp.Root, "--port", "1234", "--open", "--readonly"], Directory.GetCurrentDirectory());
+
+        Assert.Equal(Path.GetFullPath(temp.Root), options.WorkspaceRoot);
+        Assert.Equal(1234, options.Port);
+        Assert.True(options.OpenBrowser);
+        Assert.True(options.ReadOnly);
+    }
+
     [Fact]
     public void Workspace_RejectsTraversalAndNonScriptFiles()
     {

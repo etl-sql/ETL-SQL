@@ -2,7 +2,16 @@ using System.Diagnostics;
 using ETL_SQL.WorkstationEditor;
 using Microsoft.AspNetCore.Builder;
 
-var options = WorkstationEditorOptions.Parse(args, Directory.GetCurrentDirectory());
+WorkstationEditorOptions options;
+try
+{
+    options = WorkstationEditorOptions.Parse(args, Directory.GetCurrentDirectory());
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 1;
+}
 
 WebApplication app;
 try

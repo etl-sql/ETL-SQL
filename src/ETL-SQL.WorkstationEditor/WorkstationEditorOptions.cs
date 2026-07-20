@@ -37,7 +37,15 @@ public sealed record WorkstationEditorOptions(
             {
                 token = args[++i];
             }
-            else if (!args[i].StartsWith("-", StringComparison.Ordinal))
+            else if (args[i].StartsWith("-", StringComparison.Ordinal))
+            {
+                // Reject rather than ignore. An unrecognised flag used to fall through silently and
+                // its value was then taken as the positional path, so `--profile dev` quietly opened
+                // a workspace called "dev" instead of reporting that the flag does not exist.
+                throw new ArgumentException(
+                    $"Unknown option '{args[i]}'. Usage: etl-sql-editor <path-or-folder> [--port <n>] [--open] [--readonly].");
+            }
+            else
             {
                 path ??= args[i];
             }

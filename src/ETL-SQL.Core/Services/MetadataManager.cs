@@ -771,6 +771,33 @@ public class MetadataManager : IMetadataManager
 
     public IConnector? GetConnector(string name) => _connectors.GetConnector(name);
 
+    /// <inheritdoc />
+    public string? GetConnectionHost(string connectionName, string? uri = null)
+    {
+        var connection = GetConnection(connectionName, uri);
+        if (connection is null) return null;
+
+        var connector = _connectors.GetConnector(connection.Type);
+        if (connector is null) return null;
+
+        try
+        {
+            // Resolve inside the manager so the credential-bearing string is never returned to the
+            // caller. Options are not retained on ConnectionInfo, so the connector falls back to
+            // parsing the connection string, which is how every GetHost implementation behaves.
+            return connector.GetHost(ResolveConnectionString(connection));
+        }
+        catch
+        {
+            // A host we cannot parse is reported as "unknown", not as "permitted" — the caller
+            // decides what that means. Deliberately not logged: the exception text from a connector
+            // routinely quotes the connection string, and this type is constructed with a null
+            // logger in several call sites, so logging here would trade a credential leak for a
+            // NullReferenceException.
+            return null;
+        }
+    }
+
     private string GetCacheKey(string connectionName, string? uri)
     {
         var normalizedUri = NormalizeUri(uri);
