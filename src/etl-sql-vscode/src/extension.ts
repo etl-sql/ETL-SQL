@@ -341,11 +341,10 @@ export async function activate(context: vscode.ExtensionContext) {
         ReplManager.getInstance().rollback();
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.showLineage', () => {
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            vscode.commands.executeCommand('editor.action.showHover');
-        }
+    // Retained for existing keybindings/menus. It was a stub that opened a hover, which did not
+    // match its "Show Visual Lineage" title; it now opens the Visual Flow panel.
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.showLineage', (uri?: vscode.Uri) => {
+        vscode.commands.executeCommand('etlsql.showVisualFlow', uri);
     }));
 
 
