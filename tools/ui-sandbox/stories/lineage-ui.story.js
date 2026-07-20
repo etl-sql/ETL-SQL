@@ -1,4 +1,4 @@
-import { renderDependencies, renderLineageRow, lineageRowsToCsv } from '/src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js';
+import { renderDependencies, renderLineageRow, lineageRowsToCsv } from '../../../src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js';
 
 const rows = [
   {

@@ -50,7 +50,7 @@ changes safer.
 
 ### Visual Reporting and Dashboard Designer
 
-- [ ] **Snapshot-backed layout designing.**
+- [x] **Snapshot-backed layout designing.**
       Allow the Report Designer to load and deserialize the last successfully compiled `.etlsnap`
       package. Visuals should render on the grid canvas with historical snapshot data instead of empty
       wireframe placeholders, giving a live-like design experience without hitting production

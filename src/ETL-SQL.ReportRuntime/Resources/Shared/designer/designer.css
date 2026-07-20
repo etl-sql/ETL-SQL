@@ -1545,6 +1545,22 @@ body.vscode-dark .cm-editor .cm-line::selection {
     transition: border-color 0.15s, box-shadow 0.15s;
     user-select: none;
 }
+.etlsql-dsgn-visual-card.dragging {
+    position: absolute !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), 0 0 0 2px var(--portal-accent, #2563eb) !important;
+    opacity: 0.92 !important;
+    transition: none !important;
+}
+.etlsql-dsgn-grid-ghost {
+    background: rgba(37, 99, 235, 0.14) !important;
+    border: 2px dashed var(--portal-accent, #2563eb) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    pointer-events: none !important;
+    z-index: 1 !important;
+    box-sizing: border-box !important;
+}
 .etlsql-dsgn-visual-card:active {
     cursor: grabbing;
 }
@@ -1575,6 +1591,23 @@ body.vscode-dark .cm-editor .cm-line::selection {
     background: linear-gradient(135deg, transparent 55%, var(--portal-accent, #2563eb) 55%);
 }
 
+.etlsql-dsgn-vcard-hdr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid color-mix(in srgb, var(--vc, #64748b) 20%, transparent);
+}
+
+.etlsql-dsgn-vcard-body {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    height: calc(100% - 24px);
+    overflow: hidden;
+    margin-top: 4px;
+}
+
 .etlsql-dsgn-vcard-badge {
     display: inline-block;
     background: var(--vc, #64748b);
@@ -1587,7 +1620,6 @@ body.vscode-dark .cm-editor .cm-line::selection {
 }
 
 .etlsql-dsgn-vcard-name {
-    margin-top: 4px;
     font-size: 0.8125rem;
     color: var(--portal-text, #172033);
     overflow: hidden;
@@ -1596,13 +1628,15 @@ body.vscode-dark .cm-editor .cm-line::selection {
 }
 
 .etlsql-dsgn-vcard-del {
-    position: absolute;
-    top: 4px;
-    right: 4px;
+    position: relative;
+    top: auto;
+    right: auto;
     background: none;
     border: none;
     font-size: 0.7rem;
     color: var(--portal-muted, #7a8798);
+    cursor: pointer;
+}
     cursor: pointer;
     padding: 2px 5px;
     border-radius: 3px;

@@ -3229,6 +3229,100 @@ export function createDesigner(container, opts = {}) {
         });
     }
 
+    function _renderSnapshotCardBody(bodyEl, visual, snapshotPackage) {
+        if (!snapshotPackage || !snapshotPackage.sampleRows) {
+            bodyEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">No snapshot data</div>`;
+            return;
+        }
+
+        const dsName = visual.dataset;
+        const rows = (dsName && snapshotPackage.sampleRows[dsName]) || Object.values(snapshotPackage.sampleRows)[0] || [];
+        const type = (visual.type || '').toUpperCase();
+
+        if (type === 'CARD') {
+            const val = rows[0] ? (rows[0][1] ?? rows[0][0]) : '0';
+            bodyEl.innerHTML = `
+                <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:4px;text-align:center;">
+                    <div style="font-size:22px;font-weight:700;color:var(--portal-accent,#2563eb);line-height:1.2;">${esc(val)}</div>
+                    <div style="font-size:11px;color:var(--portal-muted,#64748b);margin-top:2px;">${esc(visual.title || visual.name)}</div>
+                </div>`;
+            return;
+        }
+
+        if (type === 'TABLE' || type === 'MATRIX') {
+            const mappings = visual.mappings || {};
+            const sampleHeaders = Object.values(mappings).filter(Boolean);
+            const headers = sampleHeaders.length ? sampleHeaders : (type === 'MATRIX' ? ['Row', 'Col', 'Value'] : ['Region', 'Quarter', 'Revenue']);
+            let html = `<table style="width:100%;height:100%;font-size:11px;border-collapse:collapse;color:var(--portal-text,#172033);">
+                <thead><tr style="background:var(--portal-surface-subtle,#f8fafc);border-bottom:1px solid var(--portal-border,#d9e0ea);">
+                    ${headers.map(h => `<th style="padding:3px 5px;text-align:left;font-weight:600;">${esc(h)}</th>`).join('')}
+                </tr></thead><tbody>`;
+            const displayRows = rows.slice(0, 5);
+            displayRows.forEach(r => {
+                const cells = Array.isArray(r) ? r : [r];
+                html += `<tr style="border-bottom:1px solid var(--portal-border,#e2e8f0);">${cells.map(cell => `<td style="padding:2px 5px;">${esc(cell)}</td>`).join('')}</tr>`;
+            });
+            html += `</tbody></table>`;
+            bodyEl.innerHTML = html;
+            return;
+        }
+
+        // Render live chart via ECharts
+        if (window.echarts && typeof window.echarts.init === 'function') {
+            try {
+                const isDark = document.body.classList.contains('theme-dark');
+                const chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
+                const categories = rows.map(r => Array.isArray(r) ? r[0] : String(r));
+                const values = rows.map(r => Array.isArray(r) ? (typeof r[1] === 'number' ? r[1] : (typeof r[2] === 'number' ? r[2] : parseFloat(r[1]) || 10)) : 10);
+
+                let option = {};
+                if (type === 'PIE' || type === 'DONUT') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        tooltip: { trigger: 'item' },
+                        series: [{
+                            type: 'pie',
+                            radius: type === 'DONUT' ? ['35%', '65%'] : '65%',
+                            data: rows.map(r => ({ name: String(Array.isArray(r) ? r[0] : r), value: parseFloat(Array.isArray(r) ? r[1] : 10) || 10 })),
+                            label: { show: false }
+                        }]
+                    };
+                } else if (type === 'LINE' || type === 'AREA') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [{ type: 'line', data: values, areaStyle: type === 'AREA' ? {} : null, itemStyle: { color: '#2563eb' } }]
+                    };
+                } else {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: type === 'HBAR' ? { type: 'value', axisLabel: { fontSize: 9 } } : { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
+                        yAxis: type === 'HBAR' ? { type: 'category', data: categories, axisLabel: { fontSize: 9 } } : { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [{ type: 'bar', data: values, itemStyle: { color: VCOLOR[type] || '#3b82f6', borderRadius: 2 } }]
+                    };
+                }
+                chart.setOption(option);
+
+                if (window.ResizeObserver) {
+                    const ro = new ResizeObserver(() => { try { chart.resize(); } catch {} });
+                    ro.observe(bodyEl);
+                }
+                return;
+            } catch (err) {
+                console.warn('Snapshot ECharts canvas error:', err);
+            }
+        }
+
+        bodyEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:8px;color:var(--portal-muted,#64748b);font-size:11px;">
+                <div style="font-weight:600;color:var(--portal-accent,#2563eb);margin-bottom:2px;">${esc(visual.type)} Snapshot</div>
+                <div>${rows.length} rows loaded from .etlsnap</div>
+            </div>`;
+    }
+
     function renderCanvas() {
         canvasGrid.innerHTML = '';
         const visuals = curVis();
@@ -3248,12 +3342,32 @@ export function createDesigner(container, opts = {}) {
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
-            card.innerHTML = `
+
+            const cardHdr = document.createElement('div');
+            cardHdr.className = 'etlsql-dsgn-vcard-hdr';
+            cardHdr.innerHTML = `
                 <div class="etlsql-dsgn-vcard-badge">${v.type}</div>
-                <div class="etlsql-dsgn-vcard-name">${esc(v.title || v.name)}</div>
+                <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
                 <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
-                <div class="etlsql-dsgn-vcard-resize" title="Drag to resize"></div>
             `;
+            card.appendChild(cardHdr);
+
+            const cardBody = document.createElement('div');
+            cardBody.className = 'etlsql-dsgn-vcard-body';
+
+            if (opts.snapshotPackage || opts.snapshotMode) {
+                _renderSnapshotCardBody(cardBody, v, opts.snapshotPackage);
+            } else {
+                cardBody.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">${v.type} Placeholder</div>`;
+            }
+
+            card.appendChild(cardBody);
+
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'etlsql-dsgn-vcard-resize';
+            resizeHandle.title = 'Drag to resize';
+            card.appendChild(resizeHandle);
+
             canvasGrid.appendChild(card);
         }
     }
@@ -3433,9 +3547,15 @@ export function createDesigner(container, opts = {}) {
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
-    function selectVisual(id) {
+    function selectVisual(id, opts = {}) {
         selVisualId = id;
-        renderCanvas();
+        if (!opts.skipCanvas) {
+            renderCanvas();
+        } else {
+            for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+                card.classList.toggle('selected', card.dataset.vid === id);
+            }
+        }
         renderTree();
         renderProps();
     }
@@ -3716,10 +3836,14 @@ export function createDesigner(container, opts = {}) {
     let isDragging = false;
     let isResizing = false;
     let activeId = null;
+    let activeCardEl = null;
+    let ghostEl = null;
     let startX = 0, startY = 0;
     let startCol = 1, startRow = 1;
     let startColSpan = 12, startRowSpan = 4;
-    let cardOffsetX = 0, cardOffsetY = 0;
+    let targetCol = 1, targetRow = 1;
+    let targetColSpan = 12, targetRowSpan = 4;
+    let initialRect = null;
 
     canvasGrid.addEventListener('mousedown', e => {
         const resizeHandle = e.target.closest('.etlsql-dsgn-vcard-resize');
@@ -3733,15 +3857,16 @@ export function createDesigner(container, opts = {}) {
             const v = findVis(vid);
             if (!v) return;
 
-            selectVisual(vid);
+            selectVisual(vid, { skipCanvas: true });
 
             startX = e.clientX;
             startY = e.clientY;
             activeId = vid;
-            startCol = v.gridCol || 1;
-            startRow = v.gridRow || 1;
-            startColSpan = v.gridColSpan || 12;
-            startRowSpan = v.gridRowSpan || 4;
+            activeCardEl = card;
+            startCol = targetCol = v.gridCol || 1;
+            startRow = targetRow = v.gridRow || 1;
+            startColSpan = targetColSpan = v.gridColSpan || 12;
+            startRowSpan = targetRowSpan = v.gridRowSpan || 4;
 
             if (resizeHandle) {
                 isResizing = true;
@@ -3750,9 +3875,7 @@ export function createDesigner(container, opts = {}) {
                 document.addEventListener('mouseup', handleMouseUp);
             } else {
                 isDragging = true;
-                const rect = card.getBoundingClientRect();
-                cardOffsetX = e.clientX - rect.left;
-                cardOffsetY = e.clientY - rect.top;
+                initialRect = card.getBoundingClientRect();
                 e.preventDefault();
                 document.addEventListener('mousemove', handleMouseMove);
                 document.addEventListener('mouseup', handleMouseUp);
@@ -3761,7 +3884,7 @@ export function createDesigner(container, opts = {}) {
     });
 
     function handleMouseMove(e) {
-        if (!activeId) return;
+        if (!activeId || !activeCardEl) return;
         const v = findVis(activeId);
         if (!v) return;
 
@@ -3770,22 +3893,55 @@ export function createDesigner(container, opts = {}) {
         const W_col = (gridW - 11 * 6) / 12;
 
         if (isDragging) {
-            const cardX = e.clientX - gridRect.left - cardOffsetX - 16;
-            const cardY = e.clientY - gridRect.top - cardOffsetY - 16;
+            if (!ghostEl) {
+                ghostEl = document.createElement('div');
+                ghostEl.className = 'etlsql-dsgn-grid-ghost';
+                ghostEl.style.gridColumn = `${startCol} / span ${startColSpan}`;
+                ghostEl.style.gridRow    = `${startRow} / span ${startRowSpan}`;
+                canvasGrid.appendChild(ghostEl);
 
-            let newCol = Math.round(cardX / (W_col + 6)) + 1;
-            newCol = Math.max(1, Math.min(13 - startColSpan, newCol));
+                activeCardEl.classList.add('dragging');
+                activeCardEl.style.width = `${initialRect.width}px`;
+                activeCardEl.style.height = `${initialRect.height}px`;
+                activeCardEl.style.left = `${initialRect.left - gridRect.left}px`;
+                activeCardEl.style.top = `${initialRect.top - gridRect.top}px`;
+            }
 
-            let newRow = Math.round(cardY / 66) + 1;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            activeCardEl.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+
+            const currentLeft = (initialRect.left - gridRect.left) + dx - 16;
+            const currentTop  = (initialRect.top - gridRect.top) + dy - 16;
+
+            let newCol = Math.round(currentLeft / (W_col + 6)) + 1;
+            newCol = Math.max(1, Math.min(12, newCol));
+
+            let newColSpan = startColSpan;
+            if (newCol + newColSpan - 1 > 12) {
+                newColSpan = Math.max(1, 13 - newCol);
+            }
+
+            let newRow = Math.round(currentTop / 66) + 1;
             newRow = Math.max(1, newRow);
 
-            if (v.gridCol !== newCol || v.gridRow !== newRow) {
-                v.gridCol = newCol;
-                v.gridRow = newRow;
-                renderCanvas();
-                renderProps();
-            }
+            targetCol = newCol;
+            targetRow = newRow;
+            targetColSpan = newColSpan;
+            targetRowSpan = startRowSpan;
+
+            ghostEl.style.gridColumn = `${newCol} / span ${newColSpan}`;
+            ghostEl.style.gridRow    = `${newRow} / span ${startRowSpan}`;
+
         } else if (isResizing) {
+            if (!ghostEl) {
+                ghostEl = document.createElement('div');
+                ghostEl.className = 'etlsql-dsgn-grid-ghost';
+                ghostEl.style.gridColumn = `${startCol} / span ${startColSpan}`;
+                ghostEl.style.gridRow    = `${startRow} / span ${startRowSpan}`;
+                canvasGrid.appendChild(ghostEl);
+            }
+
             const cardRightX = e.clientX - gridRect.left - 16;
             const cardBottomY = e.clientY - gridRect.top - 16;
 
@@ -3798,19 +3954,61 @@ export function createDesigner(container, opts = {}) {
             let newRowSpan = Math.round((cardBottomY - cardTopY + 6) / 66);
             newRowSpan = Math.max(1, newRowSpan);
 
-            if (v.gridColSpan !== newColSpan || v.gridRowSpan !== newRowSpan) {
-                v.gridColSpan = newColSpan;
-                v.gridRowSpan = newRowSpan;
-                renderCanvas();
-                renderProps();
+            targetCol = startCol;
+            targetRow = startRow;
+            targetColSpan = newColSpan;
+            targetRowSpan = newRowSpan;
+
+            activeCardEl.style.gridColumn = `${startCol} / span ${newColSpan}`;
+            activeCardEl.style.gridRow    = `${startRow} / span ${newRowSpan}`;
+
+            ghostEl.style.gridColumn = `${startCol} / span ${newColSpan}`;
+            ghostEl.style.gridRow    = `${startRow} / span ${newRowSpan}`;
+
+            const chartBody = activeCardEl.querySelector('.etlsql-dsgn-vcard-body');
+            if (chartBody && window.echarts) {
+                try {
+                    const chart = window.echarts.getInstanceByDom(chartBody);
+                    chart?.resize();
+                } catch {}
             }
         }
     }
 
     function handleMouseUp(e) {
+        if (ghostEl) {
+            ghostEl.remove();
+            ghostEl = null;
+        }
+
+        if (activeId && activeCardEl) {
+            activeCardEl.classList.remove('dragging');
+            activeCardEl.style.position = '';
+            activeCardEl.style.width = '';
+            activeCardEl.style.height = '';
+            activeCardEl.style.left = '';
+            activeCardEl.style.top = '';
+            activeCardEl.style.transform = '';
+            activeCardEl.style.zIndex = '';
+            activeCardEl.style.opacity = '';
+
+            const v = findVis(activeId);
+            if (v) {
+                v.gridCol = targetCol;
+                v.gridRow = targetRow;
+                v.gridColSpan = targetColSpan;
+                v.gridRowSpan = targetRowSpan;
+            }
+
+            renderCanvas();
+            renderProps();
+        }
+
         isDragging = false;
         isResizing = false;
         activeId = null;
+        activeCardEl = null;
+        initialRect = null;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
     }

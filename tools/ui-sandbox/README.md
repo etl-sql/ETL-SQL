@@ -27,6 +27,7 @@ The sandbox currently hosts the following stories under `stories/`:
 | **DAG / Lineage** | `dag` | Dependency graphs using Apache ECharts (`renderDag()`) |
 | **Script Editor** | `script-editor` | Monaco/CodeMirror based query editor |
 | **Report Designer** | `designer` | Portal-based layout designer canvas (`createDesigner()`) |
+| **Snapshot Designer** | `snapshot-designer` | Snapshot-backed layout designing using `.etlsnap` package data |
 | **VS Code Webviews** | `vscode-webviews` | VS Code extension frames (Results panel, Report preview, Report designer) |
 | **Admin Catalog** | `admin-catalog` | Administration view catalog panels |
 | **Datasets Admin** | `datasets-admin` | Staged dataset status and storage manager |

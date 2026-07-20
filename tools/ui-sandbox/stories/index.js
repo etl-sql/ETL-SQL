@@ -11,12 +11,14 @@ import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
 import policyAuthorityAdmin from './policy-authority-admin.story.js';
+import snapshotDesigner from './snapshot-designer.story.js';
 import lineageDag from './lineage-dag.story.js';
 
 export const stories = [
   scriptEditor,
   scriptEditorUnified,
   designer,
+  snapshotDesigner,
   lineageUi,
   lineageCatalog,
   datasetsAdmin,
