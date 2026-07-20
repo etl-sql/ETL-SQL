@@ -8,6 +8,10 @@
 #   3. Approve the install folder as a Security safe zone so the engine's path-protection guard lets
 #      the services write their working data (datasets, snapshots, portal.db, logs) under the install
 #      folder, which lives in the otherwise-restricted Program Files tree.
+param(
+    [string]$CustomData = ''
+)
+
 $ErrorActionPreference = 'Stop'
 
 function New-Base64Secret {
@@ -17,8 +21,20 @@ function New-Base64Secret {
 }
 
 try {
-    $cfgPath = Join-Path $PSScriptRoot 'appsettings.json'
+    $parts = $CustomData.Split('|')
+    $installDir = if ($parts.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $parts[0] } else { $PSScriptRoot }
+    $cfgPath = Join-Path $installDir 'appsettings.json'
+    if (-not (Test-Path -LiteralPath $cfgPath)) {
+        $cfgPath = Join-Path $PSScriptRoot 'appsettings.json'
+    }
     if (-not (Test-Path -LiteralPath $cfgPath)) { return }
+
+    $moduleOpts = @{}
+    foreach ($part in $parts) {
+        if ($part -match '^([^=]+)=([^=]*)$') {
+            $moduleOpts[$Matches[1].ToUpperInvariant()] = $Matches[2].Trim()
+        }
+    }
 
     $json = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
     $changed = $false
@@ -27,6 +43,30 @@ try {
         [string]::IsNullOrWhiteSpace([string]$json.Portal.Jwt.Secret)) {
         $json.Portal.Jwt.Secret = New-Base64Secret
         $changed = $true
+    }
+
+    # Portal Module Sub-choices (Subject Enablement)
+    if ($null -ne $json.Portal) {
+        if ($null -eq $json.Portal.Modules) {
+            $json.Portal | Add-Member -MemberType NoteProperty -Name "Modules" -Value (New-Object PSObject) -Force
+        }
+
+        if ($moduleOpts.ContainsKey('REPORTING')) {
+            $json.Portal.Modules | Add-Member -MemberType NoteProperty -Name "Reporting" -Value ($moduleOpts['REPORTING'] -eq '1') -Force
+            $changed = $true
+        }
+        if ($moduleOpts.ContainsKey('DESIGNER')) {
+            $json.Portal.Modules | Add-Member -MemberType NoteProperty -Name "Designer" -Value ($moduleOpts['DESIGNER'] -eq '1') -Force
+            $changed = $true
+        }
+        if ($moduleOpts.ContainsKey('SCHEDULING')) {
+            $json.Portal.Modules | Add-Member -MemberType NoteProperty -Name "Scheduling" -Value ($moduleOpts['SCHEDULING'] -eq '1') -Force
+            $changed = $true
+        }
+        if ($moduleOpts.ContainsKey('OPERATIONS')) {
+            $json.Portal.Modules | Add-Member -MemberType NoteProperty -Name "Operations" -Value ($moduleOpts['OPERATIONS'] -eq '1') -Force
+            $changed = $true
+        }
     }
 
     # Orchestrator API key — keep the service key and the Portal's client key in sync.

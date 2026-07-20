@@ -364,11 +364,33 @@ A connector must behave identically whether it is used from the Terminal IDE, th
 
 Use this checklist when reviewing any PR that adds or significantly modifies a connector:
 
+**Project Placement**
+
+Connectors live in per-domain projects, not one assembly. A connector added to the wrong project
+re-monolithises the dependency graph and pushes a provider SDK onto hosts that never use it.
+
+- [ ] Placed in the group matching its domain — `.Databases`, `.Files`, `.Cloud`, `.Messaging`, or
+      `.Remote`? `ETL-SQL.Connectors` itself is for built-ins with no third-party dependency
+      (MockDb, Rest, Portal, Orchestrator) and should not gain provider packages.
+- [ ] Provider `PackageReference` added to that group's `.csproj` and **nowhere else**?
+- [ ] Every `using` in the new file has a matching `PackageReference` in that project? A namespace
+      resolving only through a sibling's transitive dependency compiles today and breaks the moment
+      that sibling moves. `System.DirectoryServices.Protocols` reached `ActiveDirectoryConnector`
+      via `Microsoft.Data.SqlClient` exactly this way.
+- [ ] Group depends only on `ETL-SQL.Core` and `ETL-SQL.Connectors.Common` — never on `Engine`,
+      and never on another connector group?
+- [ ] Shared helper genuinely provider-agnostic before being put in `.Common`? Driver-coupled code
+      belongs with its group, which is why `DatabaseConnectionStringBuilder` and
+      `ConnectorRetryPolicy` sit in `.Databases`.
+
 **Interfaces & Registration**
 - [ ] Implements both `IConnector` (factory) and `IDataSource` (session)?
 - [ ] Implements `IDatabaseSource` if the target is a SQL-capable engine?
 - [ ] Implements `ITransactionalDataSource` if the target supports ACID transactions?
 - [ ] Registered as a singleton `IConnector` in `DependencyInjectionSetup`?
+- [ ] `ProjectReference` added only to the hosts that register it, keeping host graphs explicit?
+      Registration is explicit per host — do not introduce a global auto-registering registry, as
+      `ConnectorRegistry.Instance` is already a documented source of order-dependent test failures.
 
 **Metadata**
 - [ ] `GetSupportedOptions()` lists all `WITH` clause keys including sensitive ones?

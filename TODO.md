@@ -14,9 +14,27 @@ changes safer.
 
 ### Architecture and Maintainability
 
-- [ ] **Split connector implementations into independently deployable projects.**
+- [x] **Split connector implementations into independently deployable projects.**
       Create a small connector contracts/registry layer if needed, move provider-specific code out of
       monolithic assemblies, and keep host dependency graphs explicit.
+      Done: `ETL-SQL.Connectors` is split into per-domain projects — `.Common` (exception wrapper,
+      timeouts, the provider-agnostic connection-string builder), `.Files`, `.Cloud` (S3, Azure Blob,
+      SharePoint), `.Messaging` (Kafka, SMTP), `.Remote` (FTP, SFTP, Directory, Active Directory) and
+      `.Databases` (the ten database connectors plus `DatabaseConnectionStringBuilder` and
+      `ConnectorRetryPolicy`). The monolith retains only the MockDb/Orchestrator/Portal/Rest
+      built-ins and now carries **zero** third-party package references.
+      Contracts and the registry already lived in `ETL-SQL.Core`, so no new layer was needed, and
+      registration stays explicit per host — no global mutable registry was introduced, since
+      `ConnectorRegistry.Instance` is already a documented flaky-test source.
+      Host graphs are explicit: each host references only the groups it registers, so the Portal no
+      longer pulls in provider SDKs it never used. Tier assignments are pinned by
+      `ArchitectureBoundaryTests`.
+      Gotcha worth remembering: `ActiveDirectoryConnector` resolved
+      `System.DirectoryServices.Protocols` transitively via `Microsoft.Data.SqlClient`. Moving the
+      database connectors out broke it, so the package is now pinned centrally and referenced
+      explicitly. Before moving any connector, check for `using` namespaces with no matching
+      `PackageReference` — they are riding on a sibling's transitive dependency and fail silently on
+      extraction.
 - [ ] **Thin Portal controllers.**
       Move parsing, AST/DTO conversion, validation orchestration, and report/workflow service
       composition out of MVC controller methods into application services that can be tested without
@@ -117,9 +135,13 @@ changes safer.
 - [ ] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
       integer length and/or sign.  INT(5, +) would error if the number is over 5 digit or negative.  INT(1)
       would fail if over 8 digits.  If the number of digits exceeds the size of an INT it also fails.  
-- [ ] **Installer add portal sub-choices**  The portal can be installed by subject.  Report, Orchestrator,..
+- [x] **Installer add portal sub-choices**  The portal can be installed by subject.  Report, Orchestrator,..
       we need to add the ability in the installer to pick and choose what you would like to install on the 
       server/workstation.
+      Done: Added Portal module sub-choice properties (`INSTALL_PORTAL_REPORTING`, `INSTALL_PORTAL_DESIGNER`,
+      `INSTALL_PORTAL_SCHEDULING`, `INSTALL_PORTAL_OPERATIONS`) and interactive UI checkboxes in WiX
+      `Installer.wxs`. Post-install configuration in `configure-portal-jwt.ps1` updates `Portal:Modules` in
+      `appsettings.json`. Linux package `postinst` supports subject selection via `ETLSQL_PORTAL_MODULES`.
 
 ### Release Verification
 

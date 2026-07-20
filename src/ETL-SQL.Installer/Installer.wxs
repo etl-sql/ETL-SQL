@@ -18,6 +18,10 @@
         <Property Id="INSTALL_SDK" Value="1" Secure="yes" />
         <Property Id="INSTALL_ORCHESTRATOR" Value="1" Secure="yes" />
         <Property Id="INSTALL_PORTAL" Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_REPORTING" Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_DESIGNER" Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_SCHEDULING" Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL_OPERATIONS" Value="1" Secure="yes" />
 
         <!-- Everything installs into a single flat folder (the 5 executables + one appsettings.json).
              Each sub-feature is turned off (Level 0) when its checkbox property is not "1". -->
@@ -139,7 +143,7 @@
         <!-- Custom actions (JScript). Deferred actions only see CustomActionData, so the install
              folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir. -->
         <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
-        <CustomAction Id="SetWriteJwtData" Property="WriteJwt" Value="[INSTALLFOLDER]" Execute="immediate" />
+        <CustomAction Id="SetWriteJwtData" Property="WriteJwt" Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]" Execute="immediate" />
         <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
@@ -172,14 +176,32 @@
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Select components to install" />
                 <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Check the components you want to install. All install into the same folder." />
 
-                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="60" Width="335" Height="17" Property="INSTALL_SDK" CheckBoxValue="1" Text="Client Tools" />
-                <Control Id="SdkDesc" Type="Text" X="34" Y="77" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="CLI, Language Server, and Report CLI (adds the install folder to PATH)" />
+                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="52" Width="335" Height="15" Property="INSTALL_SDK" CheckBoxValue="1" Text="Client Tools" />
+                <Control Id="SdkDesc" Type="Text" X="34" Y="66" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="CLI, Language Server, and Report CLI (adds the install folder to PATH)" />
 
-                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="105" Width="335" Height="17" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
-                <Control Id="OrchestratorDesc" Type="Text" X="34" Y="122" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
+                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="82" Width="335" Height="15" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
+                <Control Id="OrchestratorDesc" Type="Text" X="34" Y="96" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
 
-                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Portal" />
-                <Control Id="PortalDesc" Type="Text" X="34" Y="167" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Web dashboard — Windows Service — http://localhost:5002" />
+                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="112" Width="335" Height="15" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Portal" />
+                <Control Id="PortalDesc" Type="Text" X="34" Y="126" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Web dashboard — Windows Service — http://localhost:5002" />
+
+                <!-- Portal Sub-choices (Module/Subject Enablement) -->
+                <Control Id="PortalReportingCheckBox" Type="CheckBox" X="35" Y="142" Width="145" Height="15" Property="INSTALL_PORTAL_REPORTING" CheckBoxValue="1" Text="Reporting &amp; Catalog">
+                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
+                </Control>
+                <Control Id="PortalDesignerCheckBox" Type="CheckBox" X="185" Y="142" Width="145" Height="15" Property="INSTALL_PORTAL_DESIGNER" CheckBoxValue="1" Text="Visual Designer">
+                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
+                </Control>
+                <Control Id="PortalSchedulingCheckBox" Type="CheckBox" X="35" Y="160" Width="145" Height="15" Property="INSTALL_PORTAL_SCHEDULING" CheckBoxValue="1" Text="Scheduling &amp; Refresh">
+                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
+                </Control>
+                <Control Id="PortalOperationsCheckBox" Type="CheckBox" X="185" Y="160" Width="145" Height="15" Property="INSTALL_PORTAL_OPERATIONS" CheckBoxValue="1" Text="Admin &amp; Operations">
+                    <Condition Action="disable"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+                    <Condition Action="enable"><![CDATA[INSTALL_PORTAL = "1"]]></Condition>
+                </Control>
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
                 <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">

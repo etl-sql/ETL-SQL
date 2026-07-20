@@ -87,6 +87,19 @@ jwt = data.get("Portal", {}).get("Jwt")
 if isinstance(jwt, dict) and not (jwt.get("Secret") or "").strip():
     jwt["Secret"] = base64.b64encode(os.urandom(32)).decode("ascii")
     changed = True
+# Portal sub-choices / module enablement via ETLSQL_PORTAL_MODULES env var (e.g. Reporting,Designer,Scheduling,Operations)
+env_modules = os.environ.get("ETLSQL_PORTAL_MODULES")
+if env_modules and isinstance(data.get("Portal"), dict):
+    portal_cfg = data["Portal"]
+    if "Modules" not in portal_cfg or not isinstance(portal_cfg["Modules"], dict):
+        portal_cfg["Modules"] = {}
+    mod_cfg = portal_cfg["Modules"]
+    enabled_list = [m.strip().lower() for m in env_modules.split(",") if m.strip()]
+    mod_cfg["Reporting"] = "reporting" in enabled_list or "reports" in enabled_list
+    mod_cfg["Designer"] = "designer" in enabled_list
+    mod_cfg["Scheduling"] = "scheduling" in enabled_list or "scheduler" in enabled_list
+    mod_cfg["Operations"] = "operations" in enabled_list or "ops" in enabled_list
+    changed = True
 # Orchestrator API key: the service binds to a network address and refuses to start without a key.
 # Generate one and mirror it to the Portal's client config so the two halves match out of the box.
 orch = data.get("Orchestrator")

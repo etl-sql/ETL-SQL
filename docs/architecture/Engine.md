@@ -16,29 +16,49 @@ Tier 1 — Execution
   ETL-SQL.Engine          → Core
 
 Tier 2 — Connectors & Orchestration
-  ETL-SQL.Connectors      → Core, Engine
-  ETL-SQL.Orchestrator    → Core, Engine
+  ETL-SQL.Connectors.Common     → Core
+  ETL-SQL.Connectors.Files      → Core, Connectors.Common
+  ETL-SQL.Connectors.Cloud      → Core, Connectors.Common
+  ETL-SQL.Connectors.Messaging  → Core, Connectors.Common
+  ETL-SQL.Connectors.Remote     → Core, Connectors.Common
+  ETL-SQL.Connectors.Databases  → Core, Connectors.Common
+  ETL-SQL.Connectors            → Core, Engine, Connectors.Common   (built-ins only)
+  ETL-SQL.Orchestrator          → Core, Engine
 
 Tier 3 — Analysis, Reporting, and Language Services
   ETL-SQL.Analysis        → Core
   ETL-SQL.Reporting       → Core
   ETL-SQL.ReportRuntime   → static browser assets
-  ETL-SQL.LanguageServer  → Core, Engine, Connectors
+  ETL-SQL.LanguageServer  → Core, Engine, Connectors*
 
 Tier 4 — Application Shells
-  ETL-SQL.TUI             → Core, Engine, Connectors, Orchestrator
-  ETL-SQL.App             → Core, Engine, Connectors, Orchestrator, TUI
+  ETL-SQL.TUI             → Core, Engine, Connectors*, Orchestrator
+  ETL-SQL.App             → Core, Engine, Connectors*, Orchestrator, TUI
   ETL-SQL.ReportHosting   → Core, Engine, Reporting
 
 Tier 5 — Report Layer
   ETL-SQL.ReportBuilder   → Reporting, Core
   ETL-SQL.ReportBuilder.CLI → Reporting, App
   ETL-SQL.ReportPlayer    → ReportHosting, Reporting
-  ETL-SQL.Portal    → ReportHosting, Reporting, Engine, Connectors, Orchestrator
+  ETL-SQL.Portal    → ReportHosting, Reporting, Engine, Connectors*, Orchestrator
 
 Service Host
-  ETL-SQL.Orchestrator.Service → Core, Engine, Connectors, Orchestrator, Reporting
+  ETL-SQL.Orchestrator.Service → Core, Engine, Connectors*, Orchestrator, Reporting
 ```
+
+`Connectors*` is **not** shorthand for "all of them". A host references only the connector groups
+it actually registers, which is the point of the split — the dependency graph stays explicit and a
+host does not drag in provider SDKs it never uses:
+
+| Host | Connector projects referenced |
+| :--- | :--- |
+| App, TUI, Orchestrator, Orchestrator.Service | all six |
+| LanguageServer | all except `Cloud` |
+| Portal | `ETL-SQL.Connectors` only (the built-ins) |
+
+Only `ETL-SQL.Connectors` depends on `Engine`; every extracted group depends on `Core` and
+`Connectors.Common` alone. Tier assignments are enforced by `ArchitectureBoundaryTests`, so adding a
+project without a tier fails the build lane rather than drifting silently.
 
 Build output names:
 - `ETL-SQL` — the primary CLI (App project)
@@ -82,14 +102,28 @@ Static analysis and diagnostics that operate over Core AST objects.
 - **Lineage analysis** — `LineageAnalyzer` and graph rendering helpers used by the evaluator, language server, and documentation tooling.
 - **Script metadata overlay** — document/session metadata used by lint rules without moving runtime services into Core.
 
-### ETL-SQL.Connectors
-All `IConnector` / `IDataSource` implementations.
+### ETL-SQL.Connectors.*
+All `IConnector` / `IDataSource` implementations, split by domain so a host takes on only the
+provider SDKs it registers. The contracts (`IConnector`, `IDataSource`) and `ConnectorRegistry` live
+in `ETL-SQL.Core`, not here, which is why the groups have no dependency on one another.
 
-- SQL databases: `SqlServerConnector`, `PostgresConnector`, `OracleConnector`
-- File formats: `FlatFileConnector` (CSV/TSV), `JsonConnector`, `XmlConnector`, `ExcelConnector`, `ParquetConnector`, `AvroConnector`
-- Transfer protocols: `FtpConnector`, `SftpConnector`, `AzureBlobConnector`
-- Generic: `OdbcConnector`, `RestApiConnector`
-- Email: `MailKitConnector`
+| Project | Connectors | Provider packages |
+| :--- | :--- | :--- |
+| `.Common` | *(no connectors)* — `ConnectorExceptionWrapper`, `ConnectorTimeouts`, and the provider-agnostic `ConnectionStringBuilder` | none |
+| `.Databases` | `SqlServerConnector`, `PostgresConnector`, `MySqlConnector`, `OracleConnector`, `SqliteConnector`, `MongodbConnector`, `Neo4jConnector`, `BigQueryConnector`, `SnowflakeConnector`, `OdbcConnector` | SqlClient, Npgsql, MySqlConnector, Oracle, Microsoft.Data.Sqlite, MongoDB.Driver, Neo4j.Driver, BigQuery, Snowflake.Data, System.Data.Odbc, Polly |
+| `.Files` | `FlatFileConnector` (CSV/TSV), `JsonConnector`, `XmlConnector`, `ExcelConnector`, `ParquetConnector`, `AvroConnector` | ExcelDataReader, MiniExcel, Parquet.Net, Apache.Avro, Snappier |
+| `.Cloud` | `S3Connector`, `AzureBlobConnector`, `SharePointConnector` | AWSSDK.S3, Azure.Storage.Blobs |
+| `.Messaging` | `KafkaConnector`, `SmtpConnector` | Confluent.Kafka, MailKit |
+| `.Remote` | `FtpConnector`, `SftpConnector`, `DirectoryConnector`, `ActiveDirectoryConnector` | FluentFTP, SSH.NET, System.DirectoryServices.Protocols |
+| `ETL-SQL.Connectors` | `MockDbConnector`, `RestConnector`, `PortalConnector`, `OrchestratorConnector` | none — built-ins over `HttpClient`/in-memory |
+
+Two pieces stay with `.Databases` rather than `.Common` because they are driver-coupled:
+`DatabaseConnectionStringBuilder` (the four providers whose driver exposes a typed builder; it
+delegates everything else back to `.Common`) and `ConnectorRetryPolicy` (per-provider Polly
+pipelines).
+
+`ETL-SQL.Connectors` is the only connector project that depends on `Engine`, and it carries no
+third-party package references at all.
 
 ### ETL-SQL.Orchestrator
 Job scheduling and execution infrastructure.

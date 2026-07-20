@@ -5,13 +5,14 @@
 // install folder as a security safe zone) before the services start.
 function ConfigureJwt() {
     try {
-        var installDir = Session.Property("CustomActionData");
-        if (!installDir) {
+        var customData = Session.Property("CustomActionData");
+        if (!customData) {
             return 1;
         }
+        var installDir = customData.split("|")[0];
         var shell = new ActiveXObject("WScript.Shell");
         var cmd = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'
-                + installDir + 'configure-portal-jwt.ps1"';
+                + installDir + 'configure-portal-jwt.ps1" -CustomData "' + customData.replace(/"/g, '""') + '"';
         shell.Run(cmd, 0, true); // hidden window, wait for completion
     } catch (e) {
         // Non-fatal — the services still install; a missing secret surfaces at service start.
