@@ -49,6 +49,10 @@ changes safer.
 - [ ] **Review architecture documentation.**
       After layering changes settle, refresh `/docs/architecture` and source-boundary docs so the
       documented module ownership and dependency rules match the code.
+- [ ] **Scripts audit/cleanup**  The scripts folder has so many useful scripts but its getting cluttered
+      and hard to find what you're looking for.  How can we improve?  Does everything still work?  Are
+      we using them all to their full potential (at release for example)?  Rename to consistency - or _?
+      Update README.md with decisions.
 
 
 ### Visual Reporting and Dashboard Designer
@@ -124,16 +128,21 @@ changes safer.
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
 
 - [x] **Installed CLI integration.**
-      Finish the installed CLI command shape and packaging polish for
-      `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
+      Finish the installed CLI command shape and packaging polish for the standalone Workstation
+      Editor binary: `etl-sql-editor <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
 
       Accept a script file, a folder/workspace root, or no path. Pick an available loopback port when
       omitted, print the URL, and optionally open the browser when `--open` is set.
-      Done: `etl-sql edit [path] [--port|-p] [--open] [--readonly]` hosts the editor in-process, so
-      it behaves the same from a checkout and from an install. A file resolves to its parent folder
-      as the workspace root and pre-loads; a folder opens as the root; no path uses the current
-      directory. Port 0 auto-assigns; the URL with the per-process session token is printed, and
-      `--open` launches the browser (a failure there warns rather than failing the command).
+      Done: this lives entirely in `ETL-SQL.WorkstationEditor` (the `ETL-SQL-Editor` binary already
+      published by `scripts/publish_release.ps1`) — `ETL-SQL.App`/`etl-sql` does not reference it.
+      An earlier pass wired this up as `etl-sql edit` inside `CliOrchestrator`, which pulled the
+      editor's ASP.NET host into the main CLI's dependency graph for no reason; that command has
+      been removed and the CLI parsing moved into `WorkstationEditorOptions`/`Program.cs` instead.
+      `etl-sql-editor [path] [--port|-p] [--open] [--readonly]` hosts the editor in-process. A file
+      resolves to its parent folder as the workspace root and pre-loads; a folder opens as the root;
+      no path uses the current directory. Port 0 auto-assigns; the URL with the per-process session
+      token is printed, and `--open` launches the browser (a failure there warns rather than failing
+      the command); a port already in use prints an error and exits 1 instead of throwing.
       Verified end to end: shell 200, designer assets 200, unauthenticated `/api` 401, workspace
       root and initial file resolved from the supplied path.
       Note: `--profile <name>` is not implemented — local connection profiles do not exist yet

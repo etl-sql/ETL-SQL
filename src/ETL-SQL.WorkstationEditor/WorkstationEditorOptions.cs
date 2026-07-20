@@ -8,13 +8,15 @@ public sealed record WorkstationEditorOptions(
     string? InitialFile,
     int Port,
     bool ReadOnly,
-    string SessionToken)
+    string SessionToken,
+    bool OpenBrowser = false)
 {
     public static WorkstationEditorOptions Parse(string[] args, string invocationDirectory)
     {
         string? path = null;
         int port = 0;
         bool readOnly = false;
+        bool openBrowser = false;
         string? token = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -26,6 +28,10 @@ public sealed record WorkstationEditorOptions(
             else if (args[i] == "--readonly" || args[i] == "--read-only")
             {
                 readOnly = true;
+            }
+            else if (args[i] == "--open")
+            {
+                openBrowser = true;
             }
             else if (args[i] == "--token" && i + 1 < args.Length)
             {
@@ -58,7 +64,8 @@ public sealed record WorkstationEditorOptions(
             initialFile is null ? null : Path.GetFullPath(initialFile),
             port,
             readOnly,
-            string.IsNullOrWhiteSpace(token) ? GenerateToken() : token);
+            string.IsNullOrWhiteSpace(token) ? GenerateToken() : token,
+            openBrowser);
     }
 
     internal string LocalhostUrl => $"http://{IPAddress.Loopback}:{Port}";

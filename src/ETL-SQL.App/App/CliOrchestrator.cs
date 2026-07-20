@@ -3,14 +3,10 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.WorkstationEditor;
-using Microsoft.Extensions.Hosting;
 using Spectre.Console;
 
 namespace ETL_SQL.App
@@ -119,24 +115,6 @@ namespace ETL_SQL.App
         private static readonly Option<bool> ServeNoBrowserOption = new("--no-browser", Array.Empty<string>())
         {
             Description = "Do not automatically open the browser on start"
-        };
-        private static readonly Argument<string?> EditPathArg = new("path")
-        {
-            Description = "Script file or workspace folder to open (default: current directory)",
-            Arity = ArgumentArity.ZeroOrOne
-        };
-        private static readonly Option<int?> EditPortOption = new("--port", new[] { "-p" })
-        {
-            Description = "Loopback port to listen on (default: auto-assigned ephemeral port)",
-            DefaultValueFactory = _ => null
-        };
-        private static readonly Option<bool> EditOpenOption = new("--open", Array.Empty<string>())
-        {
-            Description = "Open the editor in the default browser on start"
-        };
-        private static readonly Option<bool> EditReadOnlyOption = new("--readonly", new[] { "--read-only" })
-        {
-            Description = "Open the workspace read-only (saving is rejected)"
         };
         private static readonly Option<bool> DoctorStrictOption = new("--strict", Array.Empty<string>())
         {
@@ -560,16 +538,6 @@ namespace ETL_SQL.App
             };
             serveCommand.SetAction(context => Dispatch(context, "serve", handler));
 
-            // 9b. EDIT Command — start the loopback browser script editor
-            var editCommand = new Command("edit", "Open a script or workspace in the browser script editor")
-            {
-                EditPathArg,
-                EditPortOption,
-                EditOpenOption,
-                EditReadOnlyOption,
-            };
-            editCommand.SetAction((context, _) => RunWorkstationEditorAsync(context));
-
             // 10. PURGE Command — delete all runtime data (cross-platform "delete all data")
             var purgeCommand = new Command("purge", "Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions)")
             {
@@ -885,7 +853,6 @@ namespace ETL_SQL.App
             rootCommand.Add(doctorCommand);
             rootCommand.Add(configCommand);
             rootCommand.Add(serveCommand);
-            rootCommand.Add(editCommand);
             rootCommand.Add(purgeCommand);
             rootCommand.Add(genScriptCommand);
             rootCommand.Add(extractSpecCommand);
@@ -918,67 +885,6 @@ namespace ETL_SQL.App
 
         private static bool TryGetBool(ParseResult res, Option<bool> option) =>
             res.GetResult(option) != null && res.GetValue(option);
-
-        /// <summary>
-        /// Hosts the loopback browser script editor for `etl-sql edit`.
-        /// </summary>
-        /// <remarks>
-        /// Runs in-process rather than shelling out to ETL-SQL-Editor so the command behaves the
-        /// same from a checkout and from an install. The editor builds its own host and issues its
-        /// own per-process session token, so no engine service provider is threaded in here.
-        /// </remarks>
-        private static async Task<int> RunWorkstationEditorAsync(ParseResult res)
-        {
-            var requestedPath = res.GetValue(EditPathArg);
-            var port = res.GetValue(EditPortOption) ?? 0;
-            var openBrowser = res.GetValue(EditOpenOption);
-            var readOnly = res.GetValue(EditReadOnlyOption);
-
-            var args = new List<string>();
-            if (!string.IsNullOrWhiteSpace(requestedPath)) args.Add(requestedPath!);
-            if (port > 0) { args.Add("--port"); args.Add(port.ToString(CultureInfo.InvariantCulture)); }
-            if (readOnly) args.Add("--readonly");
-
-            var options = WorkstationEditorOptions.Parse(args.ToArray(), Directory.GetCurrentDirectory());
-
-            try
-            {
-                var app = WorkstationEditorApp.Create(args.ToArray(), options);
-                await app.StartAsync();
-
-                var url = $"{WorkstationEditorApp.GetListeningUrl(app)}/?token={Uri.EscapeDataString(options.SessionToken)}";
-                Console.WriteLine("ETL-SQL Script Editor");
-                Console.WriteLine($"Workspace: {options.WorkspaceRoot}");
-                if (readOnly) Console.WriteLine("Mode:      read-only");
-                Console.WriteLine($"URL:       {url}");
-                Console.WriteLine("Press Ctrl+C to stop.");
-
-                if (openBrowser) TryOpenBrowser(url);
-
-                await app.WaitForShutdownAsync();
-                return 0;
-            }
-            catch (IOException ex)
-            {
-                // Most commonly the requested port is already in use.
-                Console.Error.WriteLine($"Could not start the script editor: {ex.Message}");
-                return 1;
-            }
-        }
-
-        private static void TryOpenBrowser(string url)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                // Headless machines and locked-down shells have no browser handler; the URL is
-                // already printed, so this is not worth failing the command over.
-                Console.Error.WriteLine($"Could not open a browser automatically ({ex.Message}). Open the URL above.");
-            }
-        }
 
         private static async Task<int> Dispatch(ParseResult res, string commandName, Func<CliContext, Task<int>> handler)
         {
