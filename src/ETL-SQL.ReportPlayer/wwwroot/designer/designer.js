@@ -1515,6 +1515,10 @@ function normalizeRunTrace(result, script) {
         : [{ id: '1', name: 'Execute script', status: isSuccess ? 'Completed' : 'Failed', rowsProcessed: rows.length, durationMs: elapsedMs, isParallelBlock: false, children: [] }];
     trace.push({ type: 'progress', data: pipeline });
 
+    if (Array.isArray(result?.lineage)) {
+        trace.push({ type: 'lineage', data: result.lineage });
+    }
+
     if (isSuccess) {
         trace.push({ type: 'message', level: rows.length ? 'info' : 'warn', text: message });
         trace.push({ type: 'message', level: 'sys', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 180) });
@@ -1712,6 +1716,41 @@ export function createScriptResultsPanel(container) {
         return escapeHtml(value);
     }
 
+    let activeLineageColumn = null;
+    let lineageData = [];
+
+    function renderLineageBar() {
+        if (!activeLineageColumn) return '';
+        // A column name appears once per hop (m.Users.UserID -> #staging.UserID -> RESULTSET.UserID).
+        // The grid shows the final result set, so prefer that entry; a plain find() would report
+        // the first intermediate hop instead of the lineage of the column actually clicked.
+        const columnMatches = lineageData.filter(e =>
+            String(e.targetColumn || e.TargetColumn || '').toLowerCase() === String(activeLineageColumn).toLowerCase()
+        );
+        const match = columnMatches.find(e =>
+            String(e.targetTable || e.TargetTable || '').toUpperCase() === 'RESULTSET'
+        ) ?? columnMatches[0];
+        let pathStr = '';
+        if (match) {
+            const srcT = match.sourceTables || match.SourceTables || 'source';
+            const srcC = match.sourceColumns || match.SourceColumns || activeLineageColumn;
+            const tgtT = match.targetTable || match.TargetTable || 'result';
+            const kind = match.transformationKind || match.TransformationKind ? ` [${match.transformationKind || match.TransformationKind}]` : '';
+            const desc = match.description || match.Description ? ` — ${match.description || match.Description}` : '';
+            pathStr = `${escape(srcT)}.${escape(srcC)} ➔ ${escape(tgtT)}.${escape(activeLineageColumn)}${escape(kind)}${escape(desc)}`;
+        } else {
+            // Say so rather than drawing a plausible-looking path. A guessed
+            // source.db ➔ #staging ➔ result chain reads as recorded lineage and would be
+            // trusted as such — the whole point of the panel is that it reflects the run.
+            pathStr = `<em>no lineage recorded for ${escape(activeLineageColumn)}</em>`;
+        }
+        return `
+            <div class="etlsql-lineage-bar" style="background:var(--portal-accent-soft, rgba(88,166,255,0.15)); border:1px solid var(--portal-border, #30363d); padding:4px 10px; font-size:11px; display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; border-radius:4px;">
+                <span>📍 <strong>Lineage:</strong> ${pathStr}</span>
+                <button type="button" data-close-lineage style="background:none; border:none; color:var(--portal-text-muted, #9da7b1); cursor:pointer; font-size:11px; font-weight:bold;">✕</button>
+            </div>`;
+    }
+
     function renderResults() {
         const latest = resultSets[resultSets.length - 1];
         if (!latest) return '<div class="etlsql-script-results-empty">No results yet.</div>';
@@ -1719,12 +1758,12 @@ export function createScriptResultsPanel(container) {
         const rows = Array.isArray(latest.rows) ? latest.rows : [];
         if (!columns.length) return '<div class="etlsql-script-results-empty">No result grid.</div>';
         const filteredRows = filterRows(rows, columns, resultFilter);
-        const head = columns.map(c => `<th>${escape(c)}</th>`).join('');
-        const dataRows = filteredRows.map(row => `<tr>${columns.map(c => `<td>${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
+        const head = columns.map(c => `<th data-column="${escape(c)}" style="cursor:pointer;" title="Click for column lineage">${escape(c)}</th>`).join('');
+        const dataRows = filteredRows.map(row => `<tr>${columns.map(c => `<td data-column="${escape(c)}" style="cursor:pointer;" title="Click for cell lineage">${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
         const count = resultFilter
             ? `${filteredRows.length} of ${rows.length} row${rows.length === 1 ? '' : 's'}`
             : `${rows.length} row${rows.length === 1 ? '' : 's'}`;
-        return `<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
+        return `${renderLineageBar()}<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
 
     function diagnosticLevel(d) {
@@ -1876,6 +1915,9 @@ export function createScriptResultsPanel(container) {
             case 'progress':
                 progress.push(Array.isArray(message.data) ? message.data : []);
                 break;
+            case 'lineage':
+                lineageData = Array.isArray(message.data) ? message.data : [];
+                break;
             case 'results':
                 resultSets.push({ columns: message.columns || [], rows: message.rows || [] });
                 // Focus results tab on success
@@ -1902,6 +1944,20 @@ export function createScriptResultsPanel(container) {
             }, 50);
         }
     }
+
+    // Delegated: the results grid is re-rendered on every trace message, so binding a listener
+    // per cell would re-attach hundreds of them per run.
+    body.addEventListener('click', (event) => {
+        if (event.target.closest('[data-close-lineage]')) {
+            activeLineageColumn = null;
+            render();
+            return;
+        }
+        const cell = event.target.closest('[data-column]');
+        if (!cell) return;
+        activeLineageColumn = cell.dataset.column;
+        render();
+    });
 
     container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
     filterEl?.addEventListener('input', () => {
@@ -2022,6 +2078,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ${opts.onApply ? toolbarButton({ attr: 'data-apply', icon: 'apply', title: 'Update designer from script' }) : ''}
                 ${opts.onSave ? toolbarButton({ attr: 'data-save', icon: 'save', title: 'Save', key: 'Ctrl+S' }) : ''}
                 ${opts.onClose ? toolbarButton({ attr: 'data-close', icon: 'close', title: 'Close editor' }) : ''}
+                ${opts.onExit ? toolbarButton({ attr: 'data-exit', icon: 'close', title: 'Exit process', label: 'Exit' }) : ''}
                 <span class="etlsql-toolbar-divider"></span>
                 ${toolbarButton({ attr: 'data-run-selected', icon: 'runSelected', title: 'Run selection or statement under cursor', key: 'Ctrl+Enter' })}
                 ${toolbarButton({ attr: 'data-run', icon: 'run', title: 'Run script', key: 'Ctrl+Shift+Enter', label: 'Run', primary: true })}
@@ -2803,6 +2860,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-apply]')?.addEventListener('click', apply);
     container.querySelector('[data-save]')?.addEventListener('click', save);
     container.querySelector('[data-close]')?.addEventListener('click', () => opts.onClose?.());
+    container.querySelector('[data-exit]')?.addEventListener('click', () => opts.onExit?.());
     paletteFilter.addEventListener('input', renderPalette);
     paletteFilter.addEventListener('keydown', async (event) => {
         if (event.key === 'Escape') {

@@ -4,6 +4,7 @@ using System.Text.Json;
 using ETL_SQL.Analysis.Services;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Orchestrator;
 using Microsoft.AspNetCore.Builder;
@@ -54,6 +55,7 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton<WorkstationHelpService>();
         builder.Services.AddSingleton<WorkstationFormatService>();
         builder.Services.AddSingleton<WorkstationRunService>();
+        builder.Services.AddSingleton<WorkstationPreviewService>();
 
         var app = builder.Build();
 
@@ -199,6 +201,99 @@ public static class WorkstationEditorApp
 
         app.MapPost("/api/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
             Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
+
+        app.MapPost("/api/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var manifest = await previewer.BuildPreviewAsync(request.Script ?? string.Empty, cancellationToken);
+                return Results.Json(manifest, JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                // BuildPreviewAsync redacts its own failure message, but any other exception
+                // reaching here (connector, IO) can carry a connection string.
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
+
+        app.MapPost("/api/shutdown", (IHostApplicationLifetime lifetime) =>
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(200);
+                lifetime.StopApplication();
+            });
+            return Results.Ok(new { message = "Shutting down workstation editor..." });
+        });
+
+        app.MapGet("/designer-preview.html", () => Results.Content("""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/designer/report-runtime.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  #root { min-height: 100%; }
+  .preview-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; padding: 24px; box-sizing: border-box;
+    font-family: system-ui, -apple-system, sans-serif; font-size: 13px; color: #64748b;
+    text-align: center;
+  }
+</style>
+<script>
+  window.__IS_PREVIEW__ = true;
+  (function () {
+    var runtimeInjected = false;
+
+    function injectRuntimeOnce() {
+      if (runtimeInjected) return;
+      runtimeInjected = true;
+      var echarts = document.createElement('script');
+      echarts.src = '/designer/echarts.min.js';
+      echarts.onload = function () {
+        var rt = document.createElement('script');
+        rt.src = '/designer/report-runtime.js';
+        document.body.appendChild(rt);
+      };
+      echarts.onerror = showError;
+      document.body.appendChild(echarts);
+    }
+
+    function showError() {
+      var root = document.getElementById('root');
+      if (root) root.innerHTML = '<div class="preview-placeholder">Failed to load the preview runtime.</div>';
+    }
+
+    window.addEventListener('message', function (e) {
+      var data = e.data;
+      if (!data || data.type !== 'reportManifest') return;
+      window.__MANIFEST__ = data.manifest;
+      if (data.dark) document.body.classList.add('theme-dark');
+      else document.body.classList.remove('theme-dark');
+      if (runtimeInjected) {
+        if (window.__reportRuntimeRender__) window.__reportRuntimeRender__(data.manifest);
+      } else {
+        injectRuntimeOnce();
+      }
+    });
+
+    function announceReady() {
+      (window.parent || window).postMessage({ type: 'previewReady' }, '*');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', announceReady);
+    else announceReady();
+  })();
+</script>
+</head>
+<body style="margin:0">
+<div id="root"><div class="preview-placeholder">Run a preview to render the report here.</div></div>
+</body>
+</html>
+""", "text/html; charset=utf-8"));
 
         return app;
     }

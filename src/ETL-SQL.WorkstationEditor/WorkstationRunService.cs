@@ -1,4 +1,5 @@
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Orchestrator.Execution;
 
@@ -8,6 +9,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
 {
     private const int DefaultRowLimit = 100;
     private const int MaxRowLimit = 1000;
+    private const int MaxLineageEntries = 500;
     private static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(60);
 
     public async Task<RunResponse> RunAsync(RunRequest request, CancellationToken cancellationToken = default)
@@ -61,6 +63,22 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             ? $"Showing first {rows.Count} rows; result was capped."
             : $"Returned {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")}.";
 
+        // TransformationExpression and Description carry script text verbatim, so they go through
+        // the same redaction as error messages before reaching the browser — the workspace
+        // security model requires that no resolved secret leaves the process in a response.
+        // Capped because GetFullLineage() is unbounded while the result grid is capped at RowLimit.
+        var lineageList = session.LastEvaluator?.LineageTracker?.GetFullLineage()?
+            .Take(MaxLineageEntries)
+            .Select(e => new LineageEntryDto(
+                e.TargetTable ?? string.Empty,
+                e.TargetColumn ?? string.Empty,
+                e.SourceTables != null ? string.Join(", ", e.SourceTables) : string.Empty,
+                e.SourceColumns != null ? string.Join(", ", e.SourceColumns) : string.Empty,
+                Redact(e.Description),
+                e.TransformationKind.ToString(),
+                Redact(e.TransformationExpression)))
+            .ToList();
+
         return new RunResponse(
             true,
             columns,
@@ -71,8 +89,12 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             successMessage,
             diagnostics,
             result.Messages.Select(m => m.Message).ToList(),
-            result.ExecutionTree?.ToSnapshot());
+            result.ExecutionTree?.ToSnapshot(),
+            lineageList);
     }
+
+    private static string? Redact(string? value) =>
+        string.IsNullOrEmpty(value) ? value : SecretRedactor.Redact(value);
 
     private static IReadOnlyList<RunDiagnostic> ToRunDiagnostics(ExecutionResult result)
     {
@@ -126,6 +148,16 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
 }
 
 public sealed record RunRequest(string? Script, string? Selection = null, string? DocumentUri = null, int? RowLimit = null);
+public sealed record PreviewRequest(string? Script);
+
+public sealed record LineageEntryDto(
+    string TargetTable,
+    string TargetColumn,
+    string SourceTables,
+    string SourceColumns,
+    string? Description = null,
+    string? TransformationKind = null,
+    string? TransformationExpression = null);
 
 public sealed record RunResponse(
     bool Success,
@@ -138,7 +170,8 @@ public sealed record RunResponse(
     IReadOnlyList<RunDiagnostic> Diagnostics,
     IReadOnlyList<string> Messages,
     /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
-    object? Pipeline = null)
+    object? Pipeline = null,
+    IReadOnlyList<LineageEntryDto>? Lineage = null)
 {
     public static RunResponse Failed(string code, string message) =>
         new(false, [], [], 0, false, 0, message, [new RunDiagnostic(0, 0, "Error", message, code)], []);

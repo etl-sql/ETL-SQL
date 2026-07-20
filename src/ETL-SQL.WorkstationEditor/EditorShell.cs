@@ -115,7 +115,18 @@ internal static class EditorShell
         title: initialFile || 'new-script.etlsql',
         showSidebar: true,
         runUrl: '/api/run',
+        previewApiUrl: '/api/preview',
         authFetch,
+        onExit: async () => {
+          if (confirm('Stop Workstation Editor process and exit?')) {
+            try {
+              await authFetch('/api/shutdown', { method: 'POST' });
+              document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Segoe UI,sans-serif;color:#9da7b1;background:#101317;font-size:18px;">Workstation Editor host stopped. You may close this browser tab.</div>';
+            } catch (e) {
+              alert('Shutdown failed: ' + e.message);
+            }
+          }
+        },
         editor: {
           value: initialContent || '\n'.repeat(9),
           readOnly,
