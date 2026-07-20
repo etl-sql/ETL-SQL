@@ -111,15 +111,47 @@ public sealed class SecurityBoundaryDocTests
         Assert.Contains("StandaloneRegressionTests", text, System.StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The active release must track the evidence gates from
+    /// <c>Enterprise_Release_Evidence_Checklist.md</c>, so a release cannot be cut without the
+    /// recovery, HA and security-boundary evidence having been run.
+    ///
+    /// Deliberately version-agnostic. This previously pinned the literal "v0.16.0 Pre-Release
+    /// Evidence" and so began failing the moment TODO.md rolled over to the next release — a guard
+    /// that breaks on every rollover teaches people to ignore it, which is worse than no guard. The
+    /// version is read from TODO.md itself rather than <c>VersionPrefix</c>, because Set-Version.ps1
+    /// only bumps that at release time, so the props file still names the previous release while the
+    /// next one is being prepared.
+    /// </summary>
     [Fact]
-    public void Todo_TracksV016ReleaseSuiteEvidence()
+    public void Todo_TracksReleaseSuiteEvidenceForTheActiveRelease()
     {
+        var raw = System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "TODO.md"));
+
+        var release = System.Text.RegularExpressions.Regex.Match(
+            raw, @"^##\s+v(\d+\.\d+\.\d+)\s+Release",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        Assert.True(release.Success,
+            "TODO.md must name the active release with a '## vX.Y.Z Release' heading so the release " +
+            "evidence below it is attributable to a version.");
+
         var text = Todo();
-        Assert.Contains("v0.16.0 Pre-Release Evidence", text, System.StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Enterprise_Release_Evidence_Checklist.md", text, System.StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Test-PreRelease.ps1", text, System.StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Test-EnterpriseHardeningCertification.ps1", text, System.StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ha-soak validate", text, System.StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("SecurityBoundaryDocTests", text, System.StringComparison.OrdinalIgnoreCase);
+        string[] evidenceGates =
+        [
+            "Enterprise_Release_Evidence_Checklist.md",
+            "test-lane.ps1",
+            "Test-PreRelease.ps1",
+            "Test-EnterpriseHardeningCertification.ps1",
+            "admin restore --validate",
+            "ha-soak validate",
+            "SecurityBoundaryDocTests"
+        ];
+
+        foreach (var gate in evidenceGates)
+        {
+            Assert.True(text.Contains(gate, System.StringComparison.OrdinalIgnoreCase),
+                $"TODO.md tracks release v{release.Groups[1].Value} but does not reference the " +
+                $"'{gate}' evidence gate from Enterprise_Release_Evidence_Checklist.md.");
+        }
     }
 }
