@@ -5,8 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.S3" />
-    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="FluentFTP" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
