@@ -58,6 +58,15 @@ namespace ETL_SQL.Tests.Analysis
             // File operations
             new object[] { "COMPRESS FILE 'C:\\raw.csv' TO 'C:\\raw.zip' WITH (OVERWRITE = ON);" },
             new object[] { "ENCRYPT FILE 'C:\\raw.csv' TO 'C:\\raw.pgp' PASSWORD 'Secret123';" },
+            // WAITFOR FILE UNLOCKED — the grammar modelled only DELAY/TIME/(condition), so these
+            // valid statements linted as syntax errors ("Unexpected token 'FILE'").
+            new object[] { "WAITFOR FILE UNLOCKED 'C:\\drop\\export.csv';" },
+            new object[] { "WAITFOR FILE UNLOCKED 'C:\\drop\\export.csv' WITH (TIMEOUT = 120);" },
+            new object[] { "WAITFOR FILE UNLOCKED 'C:\\drop\\export.csv' WITH (TIMEOUT = 120, POLL_INTERVAL_MS = 500);" },
+            // The parser also accepts the options bare, without the WITH(...) wrapper
+            // (ParseWaitForFileStatement's else-branch), so the grammar must accept that shape too.
+            new object[] { "WAITFOR FILE UNLOCKED 'C:\\drop\\export.csv' TIMEOUT 120;" },
+            new object[] { "WAITFOR FILE UNLOCKED 'C:\\drop\\export.csv' TIMEOUT 120 POLL_INTERVAL_MS 500;" },
             // Control flow
             new object[] { "IF @x > 1 BEGIN SELECT 1; END;" },
             new object[] { "WHILE @x < 10 BEGIN SET @x = @x + 1; END;" },

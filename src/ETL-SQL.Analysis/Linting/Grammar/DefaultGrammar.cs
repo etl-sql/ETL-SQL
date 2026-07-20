@@ -1033,6 +1033,31 @@ public static class DefaultGrammar
         waitforNode.AddTokenTransition(TokenType.LPAREN, waitforCondition, "(", null, null,
             (token, walker) => walker.StateBag["WaitForParenDepth"] = 1);
 
+        // 2b. WAITFOR FILE UNLOCKED '<path>' [WITH(TIMEOUT = <n>, POLL_INTERVAL_MS = <n>)]
+        // The parser accepts this (ExtensionParser.ParseWaitFor branches on FILE first), so the
+        // grammar must too — otherwise a valid script lints as a syntax error and completion stops
+        // offering the next token.
+        var waitforFile = new StateNode("WAITFOR_FILE");
+        var waitforFileUnlocked = new StateNode("WAITFOR_FILE_UNLOCKED");
+        var waitforFilePath = new StateNode("WAITFOR_FILE_PATH");
+
+        waitforNode.AddTransitionTo("FILE", waitforFile, SuggestionType.Keyword);
+        waitforFile.AddTransitionTo("UNLOCKED", waitforFileUnlocked, SuggestionType.Keyword);
+        waitforFileUnlocked.AddWildcardTransition(waitforFilePath, "<file_path>");
+
+        // Absorb the rest of the path expression and the bare TIMEOUT/POLL_INTERVAL_MS form, stopping
+        // at WITH, a statement terminator, or the start of the next statement.
+        //
+        // Deliberately no "<next_statement>" transition to the root here: such a transition *consumes*
+        // the following statement's first token to make the move, so `WAITFOR ...; SELECT * FROM t;`
+        // would swallow the SELECT and then reject the `*`. The semicolon already ends the statement.
+        waitforFilePath.AddTransition(new StateTransition(
+            t => !t.Value.Equals("WITH", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON && tree.GetStartNode(t.Value) == null,
+            waitforFilePath,
+            "<option_token>"
+        ));
+        waitforFilePath.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+
         // Wait FOR UNTIL condition
         var waitNode = new StateNode("WAIT");
         var waitUntilCondition = new StateNode("WAIT_UNTIL_CONDITION");
