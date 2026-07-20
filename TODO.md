@@ -213,9 +213,15 @@ changes safer.
       maximum throughput means knowing and setting three separate options. If a `SET FAST_PATH = ON`
       that flips all three is wanted, that is a dialect addition (token, parser, handler, docs,
       tests) and should be decided deliberately rather than added in passing.
-- [ ] **Document Advanced File Operations should be broken out** The document docs/reference/file-operations/advanced-file-operations.md
+- [x] **Document Advanced File Operations should be broken out** The document docs/reference/file-operations/advanced-file-operations.md
       should be broken out so each item as its own file.  WAITFOR FILE UNLOCKED, CONVERT FILE ENCODING, SPLIT FILE,
       MERGE FILES, SYNC DIRECTORY, VERIFY FILE INTEGRITY
+      Done: six pages (`waitfor-file-unlocked.md`, `convert-file-encoding.md`, `split-file.md`,
+      `merge-files.md`, `sync-directory.md`, `verify-file-integrity.md`), each following the
+      house layout (syntax, worked example, options table, references) and adding examples the
+      combined page did not have. `advanced-file-operations.md` stays as a hub so existing links
+      still resolve, keeping the path-aliasing section that is not statement-specific. Index table
+      updated; all intra-folder links verified to resolve.
 - [ ] **Audit for missing documentation**  I suspect we missed some, let's go through an audit each syntax
       statement to make sure it's accounted for.  Audit docs/syntax-index.md to make sure all syntax is represented
       in a document.
