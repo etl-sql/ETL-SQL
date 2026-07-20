@@ -117,15 +117,23 @@ changes safer.
       root and initial file resolved from the supplied path.
       Note: `--profile <name>` is not implemented — local connection profiles do not exist yet
       (see **Local schema autocomplete**), so there is nothing for it to select.
-- [ ] **Interactive run hardening.**
+- [x] **Interactive run hardening.**
       Strengthen cancellable runs, visible elapsed time, timeout and memory ceilings,
       destructive-statement guardrails, local audit history, and result/export limits. Do not bypass
       zero-trust rules for local convenience.
-      Partly done: 60s run timeout, 100/1000-row result cap, cancellable runs (Cancel replaces Run
-      while in flight, also bound to Esc and the command palette; the host-side cancellation path is
-      covered by `Run_HonoursClientCancellation`), and elapsed time ticking beside the run status.
-      Remaining: memory ceiling on the local run, destructive-statement guardrails, and local audit
-      history.
+      Done: 60s run timeout and 100/1000-row result cap; cancellable runs (Cancel replaces Run while
+      in flight, also on Esc and in the command palette, covered by `Run_HonoursClientCancellation`);
+      elapsed time ticking beside the run status; `OPERATOR_MEMORY_GRANT` and `MAX_SESSION_SIZE`
+      ceilings on every local run, matching how the Portal bounds an interactive run.
+      Destructive-statement guardrail: `WorkstationRunGuard` flags DROP/TRUNCATE and unfiltered
+      DELETE against persistent tables (including inside control flow) and the host refuses the run
+      with a `RUN_DESTRUCTIVE` code until the client re-sends confirmed. The engine's
+      `MutationGuardrailPolicy` could not cover this — it returns early unless the process is
+      enterprise-enrolled, which a standalone workstation never is, so local convenience was
+      bypassing the rule.
+      Local audit history: each run appends a redacted, truncated JSON line to
+      `%LOCALAPPDATA%/ETL-SQL/workstation-editor/run-history.jsonl`; failures to write are logged,
+      never fatal.
 - [x] **Report preview.**
       Add `.rptsql` split editor/preview using the same manifest and runtime rendering as
       `ReportPlayer`/Portal, initially with manual refresh. Preview data should come from a bounded

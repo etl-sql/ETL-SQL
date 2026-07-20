@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
@@ -10,6 +11,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     private const int DefaultRowLimit = 100;
     private const int MaxRowLimit = 1000;
     private const int MaxLineageEntries = 500;
+    private const int OperatorGrantMb = 128;
+    private const long SessionCeilingBytes = 256L * 1024 * 1024;
     private static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(60);
 
     public async Task<RunResponse> RunAsync(RunRequest request, CancellationToken cancellationToken = default)
@@ -23,9 +26,30 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             return RunResponse.Failed("RUN_EMPTY", "Select or type a script before running.");
         }
 
+        // Destructive statements need an explicit confirmation. The engine's MutationGuardrailPolicy
+        // only fires for enterprise-enrolled processes, which a standalone workstation is not.
+        if (!request.ConfirmDestructive)
+        {
+            var destructive = WorkstationRunGuard.FindDestructiveStatements(script);
+            if (destructive.Count > 0)
+            {
+                return RunResponse.Failed(
+                    "RUN_DESTRUCTIVE",
+                    "This run would destroy persistent data: " + string.Join("; ", destructive) +
+                    ". Re-run and confirm if that is intended.");
+            }
+        }
+
         var rowLimit = Math.Clamp(request.RowLimit ?? DefaultRowLimit, 1, MaxRowLimit);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RunTimeout);
+
+        // Bound the run's memory the same way the Portal bounds an interactive run, so a careless
+        // local query cannot take the machine down.
+        var governedScript =
+            $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" +
+            $"SET MAX_SESSION_SIZE = {SessionCeilingBytes};\n" +
+            script;
 
         var context = new CliContext
         {
@@ -36,15 +60,18 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
         };
 
         await using var session = new ExecutionSession(services, context, logger);
-        var result = await session.ExecuteAsync(script, timeout.Token, "workstation-editor-run");
+        var result = await session.ExecuteAsync(governedScript, timeout.Token, "workstation-editor-run");
         var table = session.LastEvaluator?.LastResult ?? result.ResultsTables.LastOrDefault();
         var diagnostics = ToRunDiagnostics(result);
+
+        var historyUri = request.DocumentUri ?? "(untitled)";
 
         if (!result.Success)
         {
             var message = diagnostics.Count > 0
                 ? diagnostics[0].Message
                 : "Script execution failed.";
+            AppendHistory(historyUri, script, success: false, result.ExecutionTimeMs, rowCount: 0);
             return new RunResponse(
                 false,
                 [],
@@ -79,6 +106,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 Redact(e.TransformationExpression)))
             .ToList();
 
+        AppendHistory(historyUri, script, success: true, result.ExecutionTimeMs, rowCount);
+
         return new RunResponse(
             true,
             columns,
@@ -95,6 +124,44 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
 
     private static string? Redact(string? value) =>
         string.IsNullOrEmpty(value) ? value : SecretRedactor.Redact(value);
+
+    /// <summary>
+    /// Appends a one-line JSON record of the run to a local history file.
+    /// </summary>
+    /// <remarks>
+    /// Local-only accountability: what ran, when, against which document, and the outcome. The
+    /// script text is redacted and truncated — the point is a trail, not a copy of the work. Never
+    /// throws: losing a history line must not fail a run the user asked for.
+    /// </remarks>
+    private void AppendHistory(string documentUri, string script, bool success, long elapsedMs, int rowCount)
+    {
+        try
+        {
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ETL-SQL", "workstation-editor");
+            Directory.CreateDirectory(root);
+
+            var summary = SecretRedactor.Redact(script.Trim().Replace("\r", " ").Replace("\n", " ")) ?? string.Empty;
+            if (summary.Length > 400) summary = summary[..400] + "…";
+
+            var line = JsonSerializer.Serialize(new
+            {
+                timestampUtc = DateTime.UtcNow.ToString("O"),
+                documentUri,
+                success,
+                elapsedMs,
+                rowCount,
+                script = summary,
+            });
+
+            File.AppendAllText(Path.Combine(root, "run-history.jsonl"), line + Environment.NewLine);
+        }
+        catch (Exception ex)
+        {
+            logger.Warning("Could not append workstation run history: {Message}", ex.Message);
+        }
+    }
 
     private static IReadOnlyList<RunDiagnostic> ToRunDiagnostics(ExecutionResult result)
     {
@@ -147,7 +214,13 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     };
 }
 
-public sealed record RunRequest(string? Script, string? Selection = null, string? DocumentUri = null, int? RowLimit = null);
+public sealed record RunRequest(
+    string? Script,
+    string? Selection = null,
+    string? DocumentUri = null,
+    int? RowLimit = null,
+    /// <summary>Set once the user has acknowledged a destructive-statement warning.</summary>
+    bool ConfirmDestructive = false);
 public sealed record PreviewRequest(string? Script);
 
 public sealed record LineageEntryDto(

@@ -478,6 +478,73 @@ public sealed class WorkstationEditorTests
         Assert.Contains("SECRET:********", body, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("DROP TABLE m.Users;")]
+    [InlineData("TRUNCATE TABLE m.Users;")]
+    [InlineData("DELETE FROM m.Users;")]
+    public void Guard_FlagsDestructiveStatements(string sql) =>
+        Assert.NotEmpty(WorkstationRunGuard.FindDestructiveStatements(sql));
+
+    [Theory]
+    [InlineData("SELECT 1;")]
+    [InlineData("DELETE FROM m.Users WHERE UserID = 1;")]   // filtered delete is ordinary editing
+    [InlineData("DROP TABLE #staging;")]                     // session-local, dies with the session
+    [InlineData("SELECT UserID INTO #t FROM m.Users;")]
+    public void Guard_AllowsNonDestructiveStatements(string sql) =>
+        Assert.Empty(WorkstationRunGuard.FindDestructiveStatements(sql));
+
+    [Fact]
+    public void Guard_FindsDestructiveStatementsNestedInControlFlow()
+    {
+        // Hiding a DROP inside an IF still destroys data.
+        var found = WorkstationRunGuard.FindDestructiveStatements(
+            "IF 1 = 1 BEGIN DROP TABLE m.Users; END");
+
+        Assert.Single(found);
+        Assert.Contains("DROP TABLE", found[0]);
+    }
+
+    [Fact]
+    public void Guard_IgnoresUnparseableText() =>
+        // The run itself surfaces the parse error; the guard must not throw on the way there.
+        Assert.Empty(WorkstationRunGuard.FindDestructiveStatements("this is not a script ("));
+
+    [Fact]
+    public async Task Run_RefusesDestructiveScriptUntilConfirmed()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        async Task<RunResponse?> PostRun(bool confirm)
+        {
+            using var run = new HttpRequestMessage(HttpMethod.Post, "/api/run");
+            run.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+            run.Content = JsonContent.Create(new RunRequest(
+                "CREATE CONNECTION m AS MOCKDB();\nDROP TABLE m.Users;",
+                null,
+                "pipeline.etlsql",
+                100,
+                confirm));
+            var response = await client.SendAsync(run);
+            return await response.Content.ReadFromJsonAsync<RunResponse>();
+        }
+
+        var refused = await PostRun(confirm: false);
+        Assert.NotNull(refused);
+        Assert.False(refused!.Success);
+        Assert.Contains(refused.Diagnostics, d => d.Code == "RUN_DESTRUCTIVE");
+        Assert.Contains("DROP TABLE m.Users", refused.Message);
+
+        // Confirming gets past the guard — the guard gates, it does not forbid.
+        var confirmed = await PostRun(confirm: true);
+        Assert.NotNull(confirmed);
+        Assert.DoesNotContain(confirmed!.Diagnostics, d => d.Code == "RUN_DESTRUCTIVE");
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()

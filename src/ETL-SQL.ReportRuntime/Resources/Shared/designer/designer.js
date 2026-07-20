@@ -2660,6 +2660,12 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
     // scope: 'script' runs the whole file (Run); 'selection' runs the highlighted text
     // or the statement under the cursor (Run Selected) — see the roadmap's toolbar schema.
+    // Hosts signal a destructive-statement refusal with a RUN_DESTRUCTIVE diagnostic code.
+    function isDestructiveRefusal(result) {
+        return result?.success === false
+            && (result.diagnostics ?? []).some(d => d?.code === 'RUN_DESTRUCTIVE');
+    }
+
     function setRunning(isRunning) {
         root.classList.toggle('is-running', isRunning);
         const runBtn = container.querySelector('[data-run]');
@@ -2668,7 +2674,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         if (runSelBtn) runSelBtn.disabled = isRunning;
     }
 
-    async function run(scope = 'script') {
+    async function run(scope = 'script', confirmDestructive = false) {
         if (!opts.runUrl && !opts.onRun) return;
         const script = editor.getValue();
         let runText = script;
@@ -2686,19 +2692,36 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             runAbort?.abort();
             runAbort = new AbortController();
             const result = opts.onRun
-                ? await opts.onRun({ script, selection: runText, connectionRef: opts.connectionRef || null, signal: runAbort.signal })
+                ? await opts.onRun({ script, selection: runText, connectionRef: opts.connectionRef || null, confirmDestructive, signal: runAbort.signal })
                 : await (async () => {
                     const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
                     const res = await fetcher(opts.runUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri() }),
+                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri(), confirmDestructive }),
                         signal: runAbort.signal,
                     });
 
                     if (!res?.ok) throw new Error(await res.text());
                     return await res.json();
                 })();
+
+            // The host refuses destructive statements until they are acknowledged. Ask once, then
+            // re-run confirmed rather than making the user edit the script to get past the guard.
+            if (!confirmDestructive && isDestructiveRefusal(result)) {
+                setRunning(false);
+                resultsPanel.stopElapsed();
+                if (confirm(`${result.message}\n\nRun anyway?`)) {
+                    await run(scope, true);
+                } else {
+                    resultsPanel.replay([
+                        { type: 'message', level: 'warn', text: 'Run cancelled — destructive statements not confirmed.' },
+                        { type: 'done', exitCode: 1, status: 'Cancelled' },
+                    ]);
+                }
+                return;
+            }
+
             resultsPanel.replay(normalizeRunTrace(result, runText));
         } catch (err) {
             if (err?.name === 'AbortError') {
