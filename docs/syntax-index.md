@@ -257,7 +257,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | Function | Category | Help File | Description |
 | :--- | :--- | :--- | :--- |
 | `UPPER(string)` | String | [UPPER.md](reference/functions/string/upper.md) | Converts string to uppercase |
-| `Data Type Conversion` | Conversion | [Data Type Conversion](reference/functions/conversion/data-conversion.md) | Convert values between ETL-SQL [data types](../../data-types.md). Use [`CAST`](cast.md)... |
+| `Data Type Conversion` | Conversion | [Data Type Conversion](reference/functions/conversion/data-conversion.md) | Convert values between ETL-SQL [data types](reference/data-types.md). Use [`CAST`](reference/functions/conversion/cast.md)... |
 | `DATE_PART` | Date/Time | [DATE_PART](reference/functions/datetime/date_part.md) | Extracts a specified date part component from a date as an integer value. |
 | `DATETRUNC` | Date/Time | [DATETRUNC](reference/functions/datetime/datetrunc.md) | Truncates a date to the beginning of the specified date part boundary. |
 | `GET_JOB_STATE` | Job | [GET_JOB_STATE](reference/functions/job/get_job_state.md) | Returns the saved state value for the current script or job execution context. |

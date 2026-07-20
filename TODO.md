@@ -261,7 +261,7 @@ changes safer.
       combined page did not have. `advanced-file-operations.md` stays as a hub so existing links
       still resolve, keeping the path-aliasing section that is not statement-specific. Index table
       updated; all intra-folder links verified to resolve.
-- [ ] **Audit for missing documentation**  I suspect we missed some, let's go through an audit each syntax
+- [x] **Audit for missing documentation**  I suspect we missed some, let's go through an audit each syntax
       statement to make sure it's accounted for.  Audit docs/syntax-index.md to make sure all syntax is represented
       in a document.
       Done. Nothing was undocumented — every CLI, SHOW and SET command already had a reference page;
@@ -278,6 +278,11 @@ changes safer.
       `TryCatchStatement` is written `BEGIN TRY`, `CreatePgpKeyPairStatement` is `CREATE PGP_KEY_PAIR`,
       `WaitForFileStatement` is `WAITFOR FILE UNLOCKED` — name-derived matching reported ~75 false
       gaps. Auditing that dimension needs syntax taken from the parser's token dispatch.
+      Re-verified 2026-07-20: `Audit-SyntaxIndex.py --strict` still reports 0 broken links / 0
+      unlinked pages. `DocsLinkIntegrityTests` (which scans every markdown link, not just the
+      per-row reference-page column `Audit-SyntaxIndex.py` checks) caught two links inside a
+      description cell — the Data Type Conversion row's prose was copy-pasted from
+      `data-conversion.md` without adjusting its relative paths for the new location. Fixed.
 
 ### Release Verification
 
