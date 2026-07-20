@@ -15,6 +15,7 @@ import { ConnectionsProvider, Connection } from './connectionsProvider';
 import { SidebarProvider } from './sidebarProvider';
 import { ReportPreviewPanel } from './reportPreviewPanel';
 import { ReportDesignerPanel } from './reportDesignerPanel';
+import { VisualFlowPanel } from './visualFlowPanel';
 import * as crypto from 'crypto';
 import { ETLNotebookSerializer } from './notebookSerializer';
 import { ETLNotebookController } from './notebookController';
@@ -273,6 +274,7 @@ export async function activate(context: vscode.ExtensionContext) {
             connectionsProvider.client = client;
             sidebarProvider.client = client;
             ReportDesignerPanel.setLspClient(client);
+            VisualFlowPanel.setLspClient(client);
             connectionsProvider.refresh();
             syncConnectionsToLsp();
 
@@ -442,6 +444,15 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showWarningMessage('ETL-SQL: Report Designer is intended for .rptsql files.');
         }
         ReportDesignerPanel.open(context, scriptPath);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.showVisualFlow', (uri?: vscode.Uri) => {
+        const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+        if (!target) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a script first.');
+            return;
+        }
+        VisualFlowPanel.open(context, target);
     }));
 
     // Security: Secure Connections command (Quick Fix target)

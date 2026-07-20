@@ -48,12 +48,20 @@ changes safer.
 > ACL-gated schema-snapshot service (see `docs/architecture/decisions/PortalEditorStrategy.md` B1)
 > and make it the single dependency for all three rather than three parallel introspection paths.
 
-- [ ] **VS Code Visual Flow (DAG) Webview.**
+- [x] **VS Code Visual Flow (DAG) Webview.**
       Port the Orchestrator's AST-to-DAG rendering into a VS Code extension panel. "Show Visual Flow"
       should generate a read-only, interactive diagram of the pipeline (flat files to temp
       tables/queries to database targets), replicating the visual-flow benefit of SSIS.
       Scope: reuse the canonical `renderDag`; the `sync-assets` pipeline already targets VS Code
       media. Start read-only with on-demand refresh; defer live sync.
+      Done: the Orchestrator's private `BuildStatementDag` is extracted to
+      `ETL-SQL.Analysis/Lineage/ScriptDagBuilder` and shared — the Portal job view and the new
+      `etlsql.showVisualFlow` panel render the same graph through the canonical `renderDag`
+      (`theme: 'vscode'`). The graph comes from a new `etlsql/scriptDag` LSP request; clicking a
+      node reveals its source line. Read-only with a manual Refresh, as scoped.
+      Covered by `ScriptDagBuilderTests`.
+      Note: the older `etlsql.showLineage` command ("Show Visual Lineage") is still a stub that
+      just triggers `editor.action.showHover` — decide whether to retire it or point it here.
 - [x] **First-class Portal Script Editor.**
       Upgrade the Portal's script editor to a high-fidelity development workbench sharing core design elements with the Workstation Editor. Follow the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md) and `docs/architecture/decisions/PortalEditorStrategy.md`.
       Done: Portal and Workstation share `createScriptEditorWorkbench` from the canonical

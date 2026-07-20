@@ -168,7 +168,12 @@
         },
         "etlsql.format.keywordCasing": {
           "type": "string",
-          "enum": ["upper", "lower", "pascal", "preserve"],
+          "enum": [
+            "upper",
+            "lower",
+            "pascal",
+            "preserve"
+          ],
           "default": "upper",
           "markdownDescription": "Casing style for SQL keywords. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
@@ -179,7 +184,10 @@
         },
         "etlsql.format.commaPlacement": {
           "type": "string",
-          "enum": ["trailing", "leading"],
+          "enum": [
+            "trailing",
+            "leading"
+          ],
           "default": "leading",
           "markdownDescription": "Position of list commas (leading or trailing). *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
@@ -205,7 +213,14 @@
         },
         "etlsql.ai.provider": {
           "type": "string",
-          "enum": ["Gemini", "OpenAI", "Anthropic", "OpenRouter", "VS Code Chat Extensions (Copilot/Claude/etc.)", "Custom"],
+          "enum": [
+            "Gemini",
+            "OpenAI",
+            "Anthropic",
+            "OpenRouter",
+            "VS Code Chat Extensions (Copilot/Claude/etc.)",
+            "Custom"
+          ],
           "default": "Gemini",
           "markdownDescription": "The AI provider to use for parsing specifications. Gemini and Anthropic support direct PDF analysis; OpenAI supports text files; VS Code Chat Extensions uses your installed VS Code chat model provider (no API key required)."
         },
@@ -246,6 +261,11 @@
         "command": "etlsql.runSelection",
         "title": "ETL-SQL: Run Selection",
         "icon": "$(run-above)"
+      },
+      {
+        "command": "etlsql.showVisualFlow",
+        "title": "ETL-SQL: Show Visual Flow",
+        "category": "ETL-SQL"
       },
       {
         "command": "etlsql.showLineage",

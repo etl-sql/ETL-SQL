@@ -111,4 +111,32 @@ namespace ETL_SQL.LSP
     {
         public string script { get; set; } = "";
     }
+
+    // ── Script flow DAG ───────────────────────────────────────────────────────
+
+    public class ScriptDagParams : IRequest<ScriptDagResponse>
+    {
+        public string script { get; set; } = "";
+    }
+
+    public class ScriptDagNodeDto
+    {
+        public string id { get; set; } = "";
+        public string label { get; set; } = "";
+        public string type { get; set; } = "";
+        public int line { get; set; }
+    }
+
+    public class ScriptDagEdgeDto
+    {
+        public string source { get; set; } = "";
+        public string target { get; set; } = "";
+    }
+
+    public class ScriptDagResponse
+    {
+        public List<ScriptDagNodeDto> nodes { get; set; } = new();
+        public List<ScriptDagEdgeDto> edges { get; set; } = new();
+        public string? error { get; set; }
+    }
 }

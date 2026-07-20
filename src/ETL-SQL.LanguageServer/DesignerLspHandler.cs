@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using MediatR;
@@ -24,9 +25,13 @@ namespace ETL_SQL.LSP
     [Method("etlsql/designerGenerate", Direction.ClientToServer)]
     public interface IDesignerGenerateHandler : IJsonRpcRequestHandler<DesignerGenerateParams, DesignerGenerateResponse> { }
 
+    [Method("etlsql/scriptDag", Direction.ClientToServer)]
+    public interface IScriptDagHandler : IJsonRpcRequestHandler<ScriptDagParams, ScriptDagResponse> { }
+
     // ── Handler ───────────────────────────────────────────────────────────────
 
-    public class DesignerLspHandler(ILogger<DesignerLspHandler> logger) : IDesignerParseHandler, IDesignerGenerateHandler
+    public class DesignerLspHandler(ILogger<DesignerLspHandler> logger)
+        : IDesignerParseHandler, IDesignerGenerateHandler, IScriptDagHandler
     {
         private static readonly JsonSerializerOptions _json = new()
         {
@@ -69,6 +74,38 @@ namespace ETL_SQL.LSP
             {
                 logger.LogWarning(ex, "LSP: etlsql/designerGenerate failed");
                 return Task.FromResult(new DesignerGenerateResponse { script = $"-- Error: {ex.Message}\n" });
+            }
+        }
+
+        /// <summary>
+        /// Builds the read-only pipeline diagram for the VS Code Visual Flow panel, using the same
+        /// <see cref="ScriptDagBuilder"/> the Portal's Orchestrator job view renders.
+        /// </summary>
+        public Task<ScriptDagResponse> Handle(ScriptDagParams request, CancellationToken ct)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.script))
+                    return Task.FromResult(new ScriptDagResponse());
+
+                var tokens = new Lexer(request.script).Tokenize();
+                var ast = new CoreParser(tokens, request.script).Parse();
+                var dag = ScriptDagBuilder.Build(ast);
+
+                return Task.FromResult(new ScriptDagResponse
+                {
+                    nodes = dag.Nodes
+                        .Select(n => new ScriptDagNodeDto { id = n.Id, label = n.Label, type = n.Type, line = n.Line })
+                        .ToList(),
+                    edges = dag.Edges
+                        .Select(e => new ScriptDagEdgeDto { source = e.Source, target = e.Target })
+                        .ToList(),
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "LSP: etlsql/scriptDag failed");
+                return Task.FromResult(new ScriptDagResponse { error = ex.Message });
             }
         }
 
