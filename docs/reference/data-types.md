@@ -16,6 +16,22 @@ ETL-SQL's built-in data types. For converting between them, see
 | `REAL` | 4 bytes | Approximate (~6-9 significant digits) |
 | `MONEY` | 8 bytes | Fixed-precision currency (4 decimal places) |
 
+### Integer Precision & Sign Constraints
+
+Integer types (`INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`) support optional digit precision limits and sign constraints in table definitions (both `#temp` tables and `FLATFILE` fixed-width schemas):
+
+- `INT(N)` — Constrains integer values to a maximum of $N$ digits. Values exceeding $N$ digits cause a validation error on insert.
+- `INT(N,+)` — Restricts values to positive integers only (up to $N$ digits). Negative values cause a sign constraint violation error. In `FLATFILE` fixed-width files, `INT(N,+)` omits the sign character slot, making the physical width equal to $N$.
+- `INT(N,-)` — Restricts values to negative integers only (up to $N$ digits). Positive values cause a sign constraint violation error.
+
+```sql
+CREATE TABLE #stage (
+    id INT(5,+),     -- 1 to 5 digits, positive values only (1 to 99999)
+    delta INT(3,-),  -- 1 to 3 digits, negative values only (-1 to -999)
+    code INT(6)      -- Up to 6 digits, positive or negative (-999999 to 999999)
+);
+```
+
 ## Temporal Types
 
 | Type | Precision |

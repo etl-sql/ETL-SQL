@@ -440,6 +440,62 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 }
             }
 
+            // 0c. Integer Precision & Sign Constraint Check (e.g. INT(5,+), INT(5,-), INT(5))
+            if (val != null && val != DBNull.Value)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(col.DataType, @"^(\w+)\((\d+)(?:,([+-]))?\)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success && (match.Groups[1].Value.Equals("INT", StringComparison.OrdinalIgnoreCase) ||
+                                      match.Groups[1].Value.Equals("INTEGER", StringComparison.OrdinalIgnoreCase) ||
+                                      match.Groups[1].Value.Equals("BIGINT", StringComparison.OrdinalIgnoreCase) ||
+                                      match.Groups[1].Value.Equals("SMALLINT", StringComparison.OrdinalIgnoreCase) ||
+                                      match.Groups[1].Value.Equals("TINYINT", StringComparison.OrdinalIgnoreCase)) &&
+                    int.TryParse(match.Groups[2].Value, out var declaredDigits))
+                {
+                    string signChar = match.Groups[3].Value;
+                    if (decimal.TryParse(val.ToString(), out var numVal))
+                    {
+                        if (signChar == "+" && numVal < 0)
+                        {
+                            if (ExecutionContext?.SkipError == true)
+                            {
+                                throw new RowSkipException($"Column '{col.ColumnName}' (value '{val}') violates positive-only constraint INT({declaredDigits},+).");
+                            }
+                            else
+                            {
+                                (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' (value '{val}') violates positive-only constraint INT({declaredDigits},+).");
+                            }
+                        }
+                        else if (signChar == "-" && numVal > 0)
+                        {
+                            if (ExecutionContext?.SkipError == true)
+                            {
+                                throw new RowSkipException($"Column '{col.ColumnName}' (value '{val}') violates negative-only constraint INT({declaredDigits},-).");
+                            }
+                            else
+                            {
+                                (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' (value '{val}') violates negative-only constraint INT({declaredDigits},-).");
+                            }
+                        }
+                        else
+                        {
+                            var absStr = Math.Abs(Math.Truncate(numVal)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            if (absStr.Length > declaredDigits)
+                            {
+                                if (ExecutionContext?.SkipError == true)
+                                {
+                                    throw new RowSkipException($"Column '{col.ColumnName}' value '{val}' exceeds declared digit limit of {declaredDigits}.");
+                                }
+                                else
+                                {
+                                    long maxVal = declaredDigits <= 18 ? (long)Math.Pow(10, declaredDigits) - 1 : long.MaxValue;
+                                    (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' value '{val}' exceeds declared digit limit of {declaredDigits} (max {declaredDigits} digits, range -{maxVal} to {maxVal}).");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 1. NOT NULL
             if (!col.IsNullable && (val == null || val == DBNull.Value))
             {

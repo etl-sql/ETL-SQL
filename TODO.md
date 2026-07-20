@@ -132,9 +132,13 @@ changes safer.
       Keep the query editor and result area stable after a run, jump/focus directly to the results, and
       virtualize large result sets so the page does not shift or become sluggish.
 ### Misc
-- [ ] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
-      integer length and/or sign.  INT(5, +) would error if the number is over 5 digit or negative.  INT(1)
-      would fail if over 8 digits.  If the number of digits exceeds the size of an INT it also fails.  
+- [x] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
+      integer length and/or sign. INT(5, +) would error if the number is over 5 digit or negative. INT(1)
+      would fail if over 8 digits. If the number of digits exceeds the size of an INT it also fails.  
+      Done: FLATFILE fixed-width connector previously supported `INT(N,+)` and `INT(N,-)`. Extended
+      `InMemoryDataSource` (`#temp` tables) in `DataSources.cs` to enforce integer precision limits (`INT(N)`)
+      and sign constraints (`INT(N,+)`, `INT(N,-)`) during insert/update validation. Added unit tests in
+      `TempTableIntegerConstraintTests.cs`.
 - [x] **Installer add portal sub-choices**  The portal can be installed by subject.  Report, Orchestrator,..
       we need to add the ability in the installer to pick and choose what you would like to install on the 
       server/workstation.
