@@ -354,6 +354,27 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task Shell_RequiresSessionToken_AndDoesNotLeakIt()
+    {
+        // The shell embeds the session token so the page can call the API. Serving it
+        // unauthenticated would hand that token to anything able to reach the loopback port,
+        // making the /api gate decorative.
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "secret-token-value"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        var anonymous = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.DoesNotContain("secret-token-value", await anonymous.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var authorised = await client.GetAsync("/?token=secret-token-value");
+        Assert.Equal(HttpStatusCode.OK, authorised.StatusCode);
+    }
+
+    [Fact]
     public async Task Api_SchemaEndpoint_RequiresSessionToken()
     {
         // The schema endpoint exposes cached table/column metadata, so it must sit behind the

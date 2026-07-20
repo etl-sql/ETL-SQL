@@ -67,20 +67,28 @@ public static class WorkstationEditorApp
             await next();
         });
 
-        app.UseWhen(ctx => ctx.Request.Path.StartsWithSegments("/api"), branch =>
-        {
-            branch.Use(async (ctx, next) =>
+        // The shell is gated as well as /api. It embeds the session token so the page can call the
+        // API, so serving it unauthenticated would hand the token to anything that can reach the
+        // loopback port and defeat the gate entirely. The printed URL already carries ?token=.
+        // Static assets under /designer stay open: they are public JS/CSS with no session data, and
+        // `<script src>` / module imports cannot send the header.
+        app.UseWhen(
+            ctx => ctx.Request.Path.StartsWithSegments("/api")
+                   || ctx.Request.Path.Equals("/", StringComparison.Ordinal),
+            branch =>
             {
-                if (!IsAuthorized(ctx, options.SessionToken))
+                branch.Use(async (ctx, next) =>
                 {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await ctx.Response.WriteAsJsonAsync(new { error = "A valid editor session token is required." }, JsonOptions);
-                    return;
-                }
+                    if (!IsAuthorized(ctx, options.SessionToken))
+                    {
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        await ctx.Response.WriteAsJsonAsync(new { error = "A valid editor session token is required." }, JsonOptions);
+                        return;
+                    }
 
-                await next();
+                    await next();
+                });
             });
-        });
 
         var sharedRoot = FindSharedRuntimeRoot();
         if (sharedRoot is not null)
@@ -101,9 +109,14 @@ public static class WorkstationEditorApp
                 });
             }
 
+            // The report runtime (report-runtime.js/css, echarts, tabulator, maps) sits beside
+            // designer/ rather than inside it, and the preview iframe needs it. Mount it on its own
+            // path instead of layering a second provider over /designer: overlapping mounts at one
+            // path make it ambiguous which directory answers a request, and would silently publish
+            // anything later added beside designer/ under the same URL space.
             app.UseStaticFiles(new StaticFileOptions
             {
-                RequestPath = "/designer",
+                RequestPath = "/runtime",
                 FileProvider = new PhysicalFileProvider(sharedRoot),
                 OnPrepareResponse = ctx =>
                 {
@@ -252,7 +265,7 @@ public static class WorkstationEditorApp
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/designer/report-runtime.css">
+<link rel="stylesheet" href="/runtime/report-runtime.css">
 <style>
   html, body { margin: 0; height: 100%; }
   #root { min-height: 100%; }
@@ -272,10 +285,10 @@ public static class WorkstationEditorApp
       if (runtimeInjected) return;
       runtimeInjected = true;
       var echarts = document.createElement('script');
-      echarts.src = '/designer/echarts.min.js';
+      echarts.src = '/runtime/echarts.min.js';
       echarts.onload = function () {
         var rt = document.createElement('script');
-        rt.src = '/designer/report-runtime.js';
+        rt.src = '/runtime/report-runtime.js';
         document.body.appendChild(rt);
       };
       echarts.onerror = showError;
