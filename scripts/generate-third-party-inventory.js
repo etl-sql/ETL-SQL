@@ -122,7 +122,10 @@ function walk(dir, predicate, output = []) {
         || entry.name === 'obj'
         || entry.name === 'node_modules'
         || entry.name === '.git'
-        || entry.name === '.worktrees') continue;
+        || entry.name === '.worktrees'
+        // Claude Code checks out git worktrees under .claude/worktrees; scanning them
+        // duplicates every project reference under a second, non-canonical path.
+        || entry.name === '.claude') continue;
       walk(full, predicate, output);
     } else if (predicate(full)) {
       output.push(full);

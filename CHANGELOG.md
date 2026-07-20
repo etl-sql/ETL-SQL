@@ -379,7 +379,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added Publish to Portal support (matching VS Code publish features) and connection reset commands.
 
 **Connectors & Integrations**
-- Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](./src/ETL-SQL.Connectors/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](./src/ETL-SQL.Connectors/Neo4j/Neo4jDataSource.cs)).
+- Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](./src/ETL-SQL.Connectors.Databases/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](./src/ETL-SQL.Connectors.Databases/Neo4j/Neo4jDataSource.cs)).
 - Added outbound writing support and completed production gaps for the REST API connector.
 - Enhanced Azure Blob, SFTP, S3, and local Directory connectors to include fallback decryption and structured path parsing.
 
