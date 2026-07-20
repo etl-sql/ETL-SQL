@@ -195,9 +195,24 @@ changes safer.
 - [ ] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
       integer length and/or sign.  INT(5, +) would error if the number is over 5 digit or negative.  INT(1)
       would fail if over 8 digits.  If the number of digits exceeds the size of an INT it also fails.  
-- [ ] **Ensure we have all the SET commands for a fast path**  Ensure we have all the SET commands for a fast
+- [x] **Ensure we have all the SET commands for a fast path**  Ensure we have all the SET commands for a fast
       path where lineage, metrics, counts, etc are turned off so we get maximum performance.  I think we have
       most of this already.  This is just an audit.
+      Audited — the coverage is there. Each toggle is parsed in `StatementParser.ParseSetDispatch`,
+      applied in `SetThresholdStatementHandler`, and has an `appsettings` default in
+      `DefaultThresholds`:
+      * `SET LINEAGE = OFF` — gates lineage recording (`Evaluator.LineageEnabled`, checked before
+        the tracker is touched), default `Engine:LineageEnabled`.
+      * `SET TELEMETRY = OFF` — gates execution-tree/telemetry node creation
+        (`Evaluator.Telemetry.TelemetryEnabled`), default `Engine:TelemetryEnabled`.
+      * `SET PROFILING = OFF` / `SET PROFILE = OFF` — profiling detail.
+      * Counts need no toggle: `TotalRowsMatched` is taken from already-materialized rows, and the
+        `IsValidatedCountCandidate` path in `SelectStatementHandler` is a COUNT pushdown — an
+        optimization, not overhead.
+      One gap, left as a decision rather than assumed: there is no single umbrella switch, so
+      maximum throughput means knowing and setting three separate options. If a `SET FAST_PATH = ON`
+      that flips all three is wanted, that is a dialect addition (token, parser, handler, docs,
+      tests) and should be decided deliberately rather than added in passing.
 - [ ] **Document Advanced File Operations should be broken out** The document docs/reference/file-operations/advanced-file-operations.md
       should be broken out so each item as its own file.  WAITFOR FILE UNLOCKED, CONVERT FILE ENCODING, SPLIT FILE,
       MERGE FILES, SYNC DIRECTORY, VERIFY FILE INTEGRITY
