@@ -209,10 +209,19 @@ changes safer.
       construction and its error path, plus the secret-redaction guard.
 
 ### Misc
-- [ ] **Flatfile fixed width add a character to only show positive**  If we setup a flatfile fixed width 
+- [x] **Flatfile fixed width add a character to only show positive**  If we setup a flatfile fixed width 
       as INT(5,+) that would be only positive up to 5 digits long.  Likewise as INT(5,-) only negative five
       digits long.  Vs normal INT(5) which is 5 digits but the sign so can be up to 6 digits big for 
       negative numbers.
+      Done: the column-type parser accepts a `+`/`-` where a scale would go, so `INT(5,+)` and
+      `INT(5,-)` are valid declarations. In a fixed-width TEMPLATE, `INT(5,+)` occupies exactly 5
+      characters (no sign slot) while `INT(5)` and `INT(5,-)` occupy 6. Writing a value of the wrong
+      sign fails the row with a message naming the column and declared type — checked before the
+      width check, so a negative is rejected rather than having its `-` truncated away.
+      `SET SKIP_ERROR = ON` blanks the field instead, matching the existing overflow behaviour.
+      Covered by `FixedWidthTests` (22 tests: width with and without the sign slot, rejection in
+      both directions, acceptance, and parser round-trip including `DECIMAL(10,2)` to confirm a
+      scale still parses).
 - [ ] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
       integer length and/or sign.  INT(5, +) would error if the number is over 5 digit or negative.  INT(1)
       would fail if over 8 digits.  If the number of digits exceeds the size of an INT it also fails.  

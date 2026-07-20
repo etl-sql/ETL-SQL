@@ -79,6 +79,8 @@ Width resolution per column:
 | :--- | :--- | :--- |
 | `CHAR(N)` / `VARCHAR(N)` / `NVARCHAR(N)` | N characters | Character data — N is the exact field width |
 | `INT(N)` / `BIGINT(N)` etc. | N+1 characters | Integer data — N significant digits; the extra slot holds the sign, giving the range −(10ⁿ−1) to (10ⁿ−1) |
+| `INT(N,+)` | N characters | Positive-only integer — no sign slot is reserved, so the field is exactly N wide. Range 0 to (10ⁿ−1) |
+| `INT(N,-)` | N+1 characters | Negative-only integer — the sign slot still holds the `-`. Range −(10ⁿ−1) to 0 |
 | `/* @width: N */` | N characters (exact) | Any column where the type carries no natural length, or to override the type width |
 
 ```sql
@@ -96,6 +98,25 @@ CREATE CONNECTION fixed_emp AS FLATFILE('employees.dat', FORMAT='FIXED', TEMPLAT
 -- 3. Query as normal
 SELECT * FROM fixed_emp;
 ```
+
+### Sign constraints
+
+Mainframe and legacy fixed-width feeds often reserve no column for a sign because the field can
+only ever be positive. Declaring `INT(N,+)` says so explicitly: the slot is exactly `N` characters
+instead of `N+1`, and writing a negative value is an error rather than a silently truncated `-`.
+
+```sql
+CREATE TABLE #InvoiceLayout (
+    InvoiceNo  INT(6,+),       -- 6 chars, positive only  (no sign slot)
+    Adjustment INT(5,-),       -- 6 chars, negative only  (sign slot holds '-')
+    Balance    INT(9),         -- 10 chars, either sign
+    Customer   VARCHAR(30)
+);
+```
+
+A value that breaks the constraint fails the row with a message naming the column and the declared
+type. `SET SKIP_ERROR = ON` blanks the offending field instead, consistent with how width overflow
+is handled.
 
 > [!NOTE]
 > `INT` without a precision parameter has no inherent length and raises a "Width not defined" error.

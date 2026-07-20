@@ -873,6 +873,24 @@ namespace ETL_SQL.Connectors.FlatFile
                                 {
                                     var raw = row[col.Name]?.ToString() ?? "";
 
+                                    // A sign constraint is a domain rule, not a width rule, so it is
+                                    // checked before overflow: INT(N,+) rejects negatives outright
+                                    // rather than silently truncating the '-' away.
+                                    if (col.Sign != IntegerSign.Any && raw.Length > 0)
+                                    {
+                                        var isNegative = raw.TrimStart().StartsWith('-');
+                                        var violates = col.Sign == IntegerSign.PositiveOnly ? isNegative : !isNegative;
+                                        if (violates)
+                                        {
+                                            var expected = col.Sign == IntegerSign.PositiveOnly ? "positive" : "negative";
+                                            var declared = col.Sign == IntegerSign.PositiveOnly ? "+" : "-";
+                                            var signErr = $"Row {rowNum}: Column '{col.Name}' value '{raw}' violates the declared " +
+                                                          $"INT({col.DeclaredDigits?.ToString() ?? "N"},{declared}) sign constraint ({expected} values only)";
+                                            if (skipErrorEnabled) { raw = ""; }
+                                            else { errors.Add(signErr); }
+                                        }
+                                    }
+
                                     // For integer columns declared as INT(N): overflow is defined by
                                     // digit count (sign excluded) vs DeclaredDigits, giving a
                                     // symmetric range of -(10^N - 1) to (10^N - 1).
