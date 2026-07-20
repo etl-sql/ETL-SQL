@@ -73,7 +73,12 @@ describe('ResultsPanel Webview Provider', () => {
         expect(mockContext.subscriptions).toHaveLength(1);
         expect(vscode.window.registerWebviewViewProvider).toHaveBeenCalledWith(
             'etlsql-results-view',
-            provider
+            provider,
+            {
+                webviewOptions: {
+                    retainContextWhenHidden: true
+                }
+            }
         );
     });
 

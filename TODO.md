@@ -13,8 +13,26 @@ improve authoring surfaces, and close the maintainability work that makes future
 changes safer.
 
 ### VS Code bugs
-- [ ] **Selecting another tab example Terminal clears the ETL-SQL pane**  If you click any other tab in
+- [x] **Selecting another tab example Terminal clears the ETL-SQL pane**  If you click any other tab in
       bottom pane ETL-SQL is cleared and cannot be retrieved you must re-run.
+      Done: Registered `ResultsPanel` and `SidebarProvider` with `{ webviewOptions: { retainContextWhenHidden: true } }` so VS Code keeps the webview context alive when tabs are switched.
+- [x] **ETL-SQL: Show Visual flow incorrect**  Two bugs exist.  1. The name is ETL-SQL:ETL-SQL:Show Visual Flow.
+      Remove the extra ETL-SQL:.  2. This is not the visual flow this is the Lineage diagram which is already
+      hooked into VS Code as ETL-SQL: Show Lineage Visual Lineage.  The actual Visual flow should be what is 
+      seen in tools/ui-sandbox -> Unified Script Editor (Stateful) -> Pipeline.  And I thought the idea was that
+      it would replace the current pipeline and not be a separate object.
+      Done: Removed redundant `etlsql.showVisualFlow` command; `etlsql.showLineage` ("Show Visual Lineage") opens the interactive AST/lineage diagram panel (`VisualFlowPanel`), and the bottom panel's `Pipeline` tab now renders the full visual DAG flowchart canvas (`VisualDagCanvas`) with graphical node capsules, live status indicators, timing/rows, and dynamic SVG connecting curves.
+
+### Workstation Editor bugs
+- [ ] **Report preview does not work**  It errors to: Failed to load the preview runtime.
+- [ ] **Make light theme the default**  Make light theme the default not dark theme.
+- [ ] **When in dark theme lint messages are unreadable**  You can see the box but none of the text inside of them.
+      I assume its using white text against a white background messagebox.
+- [ ] **Dark theme highlight causes text to disappear**  When you select text the overcast selection is the same 
+      color as the text so you only see the selection box but not the selected text in it.
+- [ ] **Too much linting, too much noise**  Although accurate, its too much, Ensure this directory is listed in your 'Security.ApprovedSafeZones' 
+      in appsettings.json or the script will fail at runtime.  We either check for them if it's in the approved safe zone or we
+      turn this message off and let it fail.
 
 ### Architecture and Maintainability
 

@@ -20,7 +20,11 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     public static register(context: vscode.ExtensionContext): ResultsPanel {
         const provider = new ResultsPanel(context.extensionUri);
         context.subscriptions.push(
-            vscode.window.registerWebviewViewProvider(ResultsPanel.viewType, provider)
+            vscode.window.registerWebviewViewProvider(ResultsPanel.viewType, provider, {
+                webviewOptions: {
+                    retainContextWhenHidden: true
+                }
+            })
         );
         ResultsPanel.currentPanel = provider;
         return provider;

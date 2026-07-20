@@ -121,7 +121,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
     sidebarProvider = new SidebarProvider(context.extensionUri, connectionsProvider);
     context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider)
+        vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider, {
+            webviewOptions: {
+                retainContextWhenHidden: true
+            }
+        })
     );
 
     // Welcome Page registration
@@ -341,10 +345,13 @@ export async function activate(context: vscode.ExtensionContext) {
         ReplManager.getInstance().rollback();
     }));
 
-    // Retained for existing keybindings/menus. It was a stub that opened a hover, which did not
-    // match its "Show Visual Lineage" title; it now opens the Visual Flow panel.
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.showLineage', (uri?: vscode.Uri) => {
-        vscode.commands.executeCommand('etlsql.showVisualFlow', uri);
+        const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+        if (!target) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a script first.');
+            return;
+        }
+        VisualFlowPanel.open(context, target);
     }));
 
 
@@ -443,15 +450,6 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showWarningMessage('ETL-SQL: Report Designer is intended for .rptsql files.');
         }
         ReportDesignerPanel.open(context, scriptPath);
-    }));
-
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.showVisualFlow', (uri?: vscode.Uri) => {
-        const target = uri ?? vscode.window.activeTextEditor?.document.uri;
-        if (!target) {
-            vscode.window.showErrorMessage('ETL-SQL: Open a script first.');
-            return;
-        }
-        VisualFlowPanel.open(context, target);
     }));
 
     // Security: Secure Connections command (Quick Fix target)

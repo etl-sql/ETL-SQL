@@ -263,13 +263,9 @@
         "icon": "$(run-above)"
       },
       {
-        "command": "etlsql.showVisualFlow",
-        "title": "ETL-SQL: Show Visual Flow",
-        "category": "ETL-SQL"
-      },
-      {
         "command": "etlsql.showLineage",
-        "title": "ETL-SQL: Show Visual Lineage"
+        "title": "Show Visual Lineage",
+        "category": "ETL-SQL"
       },
       {
         "command": "etlsql.refreshConnections",
@@ -334,7 +330,7 @@
       },
       {
         "command": "etlsql.showWelcome",
-        "title": "ETL-SQL: Show Welcome Page",
+        "title": "Show Welcome Page",
         "category": "ETL-SQL"
       },
       {
@@ -348,7 +344,7 @@
       },
       {
         "command": "etlsql.reportIssue",
-        "title": "ETL-SQL: Report Issue & Export Logs",
+        "title": "Report Issue & Export Logs",
         "category": "ETL-SQL"
       }
     ],

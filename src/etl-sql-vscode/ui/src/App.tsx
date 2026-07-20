@@ -45,6 +45,17 @@ function App() {
     prevStatusRef.current = status;
   }, [status]);
 
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const message = event.data;
+      if (message && message.type === 'setActiveTab' && message.tab) {
+        setActiveTab(message.tab as TabId);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   // Allow switching view mode via query param in browser mode
   const currentView = useMemo(() => {
     if (window.VIEW_TYPE) return window.VIEW_TYPE;

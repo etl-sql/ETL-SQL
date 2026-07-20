@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ExecutionNode, LogMessage, ProtocolMessage } from '../types';
 import { extractPipelineNodes } from '../utils/pipeline_utils';
@@ -12,19 +12,6 @@ interface PipelineTabProps {
 }
 
 type NodeStatus = 'Waiting' | 'Running' | 'Completed' | 'Faulted';
-
-interface RenderLine {
-  indent: string;
-  connector: string;
-  label: string;
-  stats: string;
-  status: NodeStatus;
-  isSummary: boolean;
-  isRunning: boolean;
-  error?: string;
-}
-
-const COLLAPSE_THRESHOLD = 5;
 
 function statusIcon(status: NodeStatus): string {
   switch (status) {
@@ -44,99 +31,6 @@ function statusColorClass(status: NodeStatus): string {
   }
 }
 
-function formatMs(ms: number): string {
-  if (ms >= 60_000) return `${(ms / 60_000).toFixed(1)}m`;
-  if (ms >= 1_000)  return `${(ms / 1_000).toFixed(1)}s`;
-  return `${Math.round(ms)}ms`;
-}
-
-function formatRows(r: number): string {
-  if (r >= 1_000_000) return `${(r / 1_000_000).toFixed(1)}M`;
-  if (r >= 1_000)     return `${(r / 1_000).toFixed(1)}k`;
-  return `${r}r`;
-}
-
-function formatStats(node: ExecutionNode): string {
-  if (node.status === 'Waiting') return '';
-  if (node.status === 'Running') {
-    return node.durationMs > 0 ? formatMs(node.durationMs) + '…' : '…';
-  }
-  const t = formatMs(node.durationMs);
-  return node.rowsProcessed > 0 ? `${t}  ${formatRows(node.rowsProcessed)}` : t;
-}
-
-function nodeLabel(node: ExecutionNode): string {
-  const childCount = (node.children || []).length;
-  return node.isParallelBlock ? `PARALLEL (${childCount})` : node.name;
-}
-
-function buildSummary(count: number, nodes: ExecutionNode[]): string {
-  const running   = nodes.filter(n => n.status === 'Running').length;
-  const faulted   = nodes.filter(n => n.status === 'Faulted').length;
-  const completed = nodes.filter(n => n.status === 'Completed').length;
-  const waiting   = nodes.filter(n => n.status === 'Waiting').length;
-  const parts: string[] = [];
-  if (running   > 0) parts.push(`${running} ●`);
-  if (faulted   > 0) parts.push(`${faulted} ✗`);
-  if (completed > 0) parts.push(`${completed} ✓`);
-  if (waiting   > 0) parts.push(`${waiting} ·`);
-  const desc = parts.length > 0 ? parts.join(', ') : 'all pending';
-  return `... ${count} more  (${desc})`;
-}
-
-function appendChildNode(node: ExecutionNode, indent: string, connector: string, childCont: string, lines: RenderLine[]) {
-  lines.push({
-    indent, connector,
-    label: nodeLabel(node),
-    stats: formatStats(node),
-    status: node.status as NodeStatus,
-    isSummary: false,
-    isRunning: node.status === 'Running',
-    error: node.error,
-  });
-  appendChildren(node, childCont, lines);
-}
-
-function appendChildren(node: ExecutionNode, continuation: string, lines: RenderLine[]) {
-  const children = node.children || [];
-  if (children.length === 0) return;
-  const collapse = node.isParallelBlock && children.length > COLLAPSE_THRESHOLD;
-  if (collapse) {
-    const showFirst = Math.min(2, children.length - 1);
-    for (let i = 0; i < showFirst; i++) {
-      appendChildNode(children[i], continuation, '├─ ', continuation + '│  ', lines);
-    }
-    const hiddenCount = children.length - showFirst - 1;
-    if (hiddenCount > 0) {
-      const hidden = children.slice(showFirst, showFirst + hiddenCount);
-      lines.push({ indent: continuation, connector: '┊  ', label: buildSummary(hiddenCount, hidden), stats: '', status: 'Waiting', isSummary: true, isRunning: false });
-    }
-    appendChildNode(children[children.length - 1], continuation, '└─ ', continuation + '   ', lines);
-  } else {
-    for (let i = 0; i < children.length; i++) {
-      const isLast = i === children.length - 1;
-      appendChildNode(children[i], continuation, isLast ? '└─ ' : '├─ ', continuation + (isLast ? '   ' : '│  '), lines);
-    }
-  }
-}
-
-function renderTree(nodes: ExecutionNode[]): RenderLine[] {
-  const lines: RenderLine[] = [];
-  for (const root of nodes) {
-    lines.push({
-      indent: '', connector: '',
-      label: nodeLabel(root),
-      stats: formatStats(root),
-      status: root.status as NodeStatus,
-      isSummary: false,
-      isRunning: root.status === 'Running',
-      error: root.error,
-    });
-    appendChildren(root, '', lines);
-  }
-  return lines;
-}
-
 function msgLevelClass(level: string): string {
   switch ((level || 'info').toLowerCase()) {
     case 'err':
@@ -147,6 +41,123 @@ function msgLevelClass(level: string): string {
     default:        return 'text-[var(--text-primary)] opacity-80';
   }
 }
+
+interface ColumnData {
+  type: 'single' | 'parallel';
+  nodes: ExecutionNode[];
+}
+
+function flattenDagColumns(nodes: ExecutionNode[]): ColumnData[] {
+  const columns: ColumnData[] = [];
+  for (const node of nodes) {
+    const children = node.children || [];
+    if (node.isParallelBlock && children.length) {
+      columns.push({ type: 'parallel', nodes: children });
+    } else if (children.length) {
+      columns.push(...flattenDagColumns(children));
+    } else {
+      columns.push({ type: 'single', nodes: [node] });
+    }
+  }
+  return columns;
+}
+
+export const VisualDagCanvas: React.FC<{ nodes: ExecutionNode[] }> = ({ nodes }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [svgPaths, setSvgPaths] = useState<string[]>([]);
+  const columns = useMemo(() => flattenDagColumns(nodes), [nodes]);
+
+  const updatePaths = useCallback(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const columnEls = Array.from(container.querySelectorAll<HTMLElement>('[data-dag-column]'));
+
+    const paths: string[] = [];
+    for (let i = 0; i < columnEls.length - 1; i++) {
+      const col1 = columnEls[i];
+      const col2 = columnEls[i + 1];
+      const caps1 = Array.from(col1.querySelectorAll<HTMLElement>('[data-dag-capsule]'));
+      const caps2 = Array.from(col2.querySelectorAll<HTMLElement>('[data-dag-capsule]'));
+
+      caps1.forEach(c1 => {
+        const r1 = c1.getBoundingClientRect();
+        const x1 = r1.right - containerRect.left + container.scrollLeft;
+        const y1 = (r1.top + r1.bottom) / 2 - containerRect.top + container.scrollTop;
+
+        caps2.forEach(c2 => {
+          const r2 = c2.getBoundingClientRect();
+          const x2 = r2.left - containerRect.left + container.scrollLeft;
+          const y2 = (r2.top + r2.bottom) / 2 - containerRect.top + container.scrollTop;
+
+          const dx = x2 - x1;
+          const cp1x = x1 + dx / 3;
+          const cp2x = x1 + (2 * dx) / 3;
+          paths.push(`M ${x1} ${y1} C ${cp1x} ${y1}, ${cp2x} ${y2}, ${x2} ${y2}`);
+        });
+      });
+    }
+    setSvgPaths(paths);
+  }, []);
+
+  useEffect(() => {
+    updatePaths();
+    const timer = setTimeout(updatePaths, 100);
+    window.addEventListener('resize', updatePaths);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updatePaths);
+    };
+  }, [columns, updatePaths]);
+
+  if (columns.length === 0) {
+    return <p className="text-[var(--muted)] text-[11px] italic p-2">No pipeline data.</p>;
+  }
+
+  return (
+    <div ref={containerRef} onScroll={updatePaths} className="relative flex-1 overflow-auto scrollbar-fancy p-3">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+        {svgPaths.map((d, i) => (
+          <path key={i} d={d} stroke="var(--vscode-panel-border, rgba(128,128,128,0.35))" strokeWidth="2" fill="none" />
+        ))}
+      </svg>
+      <div className="relative z-10 flex items-center gap-10 min-h-full">
+        {columns.map((col, colIdx) => (
+          <div key={colIdx} data-dag-column={colIdx} className="flex flex-col gap-3 justify-center">
+            {col.nodes.map((node, rowIdx) => {
+              const status = node.status as NodeStatus;
+              const icon = statusIcon(status);
+              const colorClass = statusColorClass(status);
+              const durationStr = node.durationMs != null ? `${Math.round(node.durationMs)}ms` : '';
+              const rowsStr = node.rowsProcessed != null ? `${node.rowsProcessed.toLocaleString()}r` : '';
+
+              return (
+                <div
+                  key={node.id || rowIdx}
+                  data-dag-capsule={`${colIdx}-${rowIdx}`}
+                  className={`flex flex-col gap-1 px-3 py-2 rounded-md border border-[var(--vscode-panel-border,rgba(128,128,128,0.35))] bg-[var(--vscode-sideBar-background,rgba(30,30,30,0.6))] min-w-[140px] max-w-[220px] shadow-sm ${node.status === 'Running' ? 'ring-1 ring-[var(--vscode-progressBar-background,#0e70c0)] animate-pulse' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-1 font-semibold text-[11px] min-w-0">
+                    <span className={`truncate ${colorClass}`}>{icon} {node.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-[var(--muted)] font-mono">
+                    <span>{rowsStr}</span>
+                    <span>{durationStr}</span>
+                  </div>
+                  {node.error && (
+                    <div className="text-[10px] text-red-400/80 italic break-words mt-0.5">
+                      {node.error}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFinished, status, runHistory }) => {
   const logRef = useRef<HTMLDivElement>(null);
@@ -196,8 +207,6 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
     return displayNodes.map(fix);
   }, [displayNodes, displayIsFinished]);
 
-  const lines = useMemo(() => renderTree(normalizedNodes), [normalizedNodes]);
-
   const isEmpty = displayNodes.length === 0 && logs.length === 0;
 
   if (isEmpty) {
@@ -223,63 +232,33 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-    <div className="flex flex-row flex-1 overflow-hidden">
-      {/* Left: Execution tree (~40%) */}
-      <div className="w-[40%] min-w-[180px] flex flex-col border-r border-[var(--border)] overflow-hidden">
-        <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
-          <span className="text-[11px] font-semibold text-[var(--text)]">Pipeline</span>
+      <div className="flex flex-row flex-1 overflow-hidden">
+        {/* Left: Execution Visual DAG (~55%) */}
+        <div className="w-[55%] min-w-[240px] flex flex-col border-r border-[var(--border)] overflow-hidden">
+          <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+            <span className="text-[11px] font-semibold text-[var(--text)]">Pipeline DAG</span>
+          </div>
+          <VisualDagCanvas nodes={normalizedNodes} />
         </div>
-        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[12px] leading-[1.55]">
-          {lines.length === 0 ? (
-            <p className="text-[var(--muted)] text-[11px] italic px-1">No pipeline data.</p>
-          ) : (
-            lines.map((line, idx) => (
-              <div key={idx} className="flex items-baseline whitespace-pre min-w-0">
-                <span className="text-[var(--muted)] select-none">{line.indent}</span>
-                <span className="text-[var(--muted)] select-none">{line.connector}</span>
-                {!line.isSummary && (
-                  <span className={`mr-1.5 shrink-0 ${statusColorClass(line.status)} ${line.isRunning ? 'animate-pulse' : ''}`}>
-                    {statusIcon(line.status)}
-                  </span>
-                )}
-                <span className={
-                  line.isSummary ? 'text-[var(--muted)] italic text-[11px]' :
-                  line.status === 'Faulted' ? 'text-red-300' : 'text-[var(--text-primary)]'
-                }>
-                  {line.label}
-                </span>
-                {line.stats && (
-                  <span className="ml-2 text-[var(--muted)] text-[11px] shrink-0">{line.stats}</span>
-                )}
-                {line.error && (
-                  <span className="ml-2 text-red-400/70 text-[10px] italic break-all select-text">
-                    — {line.error}
-                  </span>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
 
-      {/* Right: Message log */}
-      <div ref={logRef} className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
-          <span className="text-[11px] font-semibold text-[var(--text)]">Messages</span>
-        </div>
-        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[11px] leading-[1.55]">
-          {logs.length === 0 ? (
-            <p className="text-[var(--muted)] italic px-1">No messages.</p>
-          ) : (
-            logs.map((msg, i) => (
-              <div key={i} className={`whitespace-pre-wrap ${msgLevelClass(msg.level)}`}>
-                {msg.text}
-              </div>
-            ))
-          )}
+        {/* Right: Message log (~45%) */}
+        <div ref={logRef} className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+            <span className="text-[11px] font-semibold text-[var(--text)]">Messages</span>
+          </div>
+          <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[11px] leading-[1.55]">
+            {logs.length === 0 ? (
+              <p className="text-[var(--muted)] italic px-1">No messages.</p>
+            ) : (
+              logs.map((msg, i) => (
+                <div key={i} className={`whitespace-pre-wrap ${msgLevelClass(msg.level)}`}>
+                  {msg.text}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
-    </div>
 
       {/* Run history navigation — only visible when there is history */}
       {historyLen > 0 && (
