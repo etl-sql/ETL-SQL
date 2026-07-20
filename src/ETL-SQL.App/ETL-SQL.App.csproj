@@ -61,6 +61,9 @@
     <ProjectReference Include="..\ETL-SQL.Connectors.Files\ETL-SQL.Connectors.Files.csproj" />
     <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\ETL-SQL.TUI\ETL-SQL.TUI.csproj" />
+    <!-- Hosts `etl-sql edit`, the loopback browser editor. Web SDK project, but it brings only
+         ASP.NET hosting; no Portal, IIS, PostgreSQL or Docker dependency. -->
+    <ProjectReference Include="..\ETL-SQL.WorkstationEditor\ETL-SQL.WorkstationEditor.csproj" />
     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
   </ItemGroup>
 

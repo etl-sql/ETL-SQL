@@ -102,12 +102,21 @@ changes safer.
 ### Developer Experience: Local Browser Script Editor
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
 
-- [ ] **Installed CLI integration.**
+- [x] **Installed CLI integration.**
       Finish the installed CLI command shape and packaging polish for
       `etl-sql edit <path-or-folder> [--port <n>] [--open] [--profile <name>] [--readonly]`.
 
       Accept a script file, a folder/workspace root, or no path. Pick an available loopback port when
       omitted, print the URL, and optionally open the browser when `--open` is set.
+      Done: `etl-sql edit [path] [--port|-p] [--open] [--readonly]` hosts the editor in-process, so
+      it behaves the same from a checkout and from an install. A file resolves to its parent folder
+      as the workspace root and pre-loads; a folder opens as the root; no path uses the current
+      directory. Port 0 auto-assigns; the URL with the per-process session token is printed, and
+      `--open` launches the browser (a failure there warns rather than failing the command).
+      Verified end to end: shell 200, designer assets 200, unauthenticated `/api` 401, workspace
+      root and initial file resolved from the supplied path.
+      Note: `--profile <name>` is not implemented — local connection profiles do not exist yet
+      (see **Local schema autocomplete**), so there is nothing for it to select.
 - [ ] **Interactive run hardening.**
       Strengthen cancellable runs, visible elapsed time, timeout and memory ceilings,
       destructive-statement guardrails, local audit history, and result/export limits. Do not bypass
