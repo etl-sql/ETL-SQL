@@ -40,6 +40,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql config`](config.md) | Manage application configuration |
 | [`etl-sql config setup-jwt`](config-setup-jwt.md) | Generate a secure JWT secret and update appsettings.json |
 | [`etl-sql doctor`](doctor.md) | Perform a system health check to verify the environment |
+| [`etl-sql edit`](edit.md) | Open a script or workspace in the browser script editor |
 | [`etl-sql encrypt`](encrypt.md) | Utility to encrypt a string for secure connections |
 | [`etl-sql enterprise`](enterprise.md) | Manage machine-level enterprise policy enrollment |
 | [`etl-sql enterprise enroll`](enterprise-enroll.md) | Enroll this machine in authoritative enterprise policy |

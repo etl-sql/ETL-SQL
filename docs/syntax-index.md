@@ -1260,6 +1260,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin` | Operator and administration commands | [admin](reference/cli/admin.md) |
 | `etl-sql config setup-jwt` | Generate a secure JWT secret and update appsettings.json | [config setup-jwt](reference/cli/config-setup-jwt.md) |
 | `etl-sql config` | Manage application configuration | [config](reference/cli/config.md) |
+| `etl-sql edit` | Open a script or workspace in the browser script editor | [edit](reference/cli/edit.md) |
 | `etl-sql doctor` | Perform a system health check to verify the environment | [doctor](reference/cli/doctor.md) |
 | `etl-sql encrypt` | Utility to encrypt a string for secure connections | [encrypt](reference/cli/encrypt.md) |
 | `etl-sql enterprise enroll` | Enroll this machine in authoritative enterprise policy | [enterprise enroll](reference/cli/enterprise-enroll.md) |
