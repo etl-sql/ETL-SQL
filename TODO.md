@@ -225,6 +225,20 @@ changes safer.
 - [ ] **Audit for missing documentation**  I suspect we missed some, let's go through an audit each syntax
       statement to make sure it's accounted for.  Audit docs/syntax-index.md to make sure all syntax is represented
       in a document.
+      Audited; the suspicion was right, and the gap is bigger than one sitting. `scripts/Audit-SyntaxIndex.py`
+      is checked in so this is repeatable (`--strict` for CI). Current state:
+      * 540 reference pages, **0 broken links** in the index — every link it does have resolves.
+      * **149 reference pages are not linked from the index**, which bills itself as a central map.
+        Roughly: ~55 `cli/` pages, ~24 `set-commands/`, ~25 `show-commands/`, plus query-syntax
+        pages (`lateral`, `asof-join`, `window`, `set-operations`), `data-types.md`, and the
+        `@@current_user` family.
+      Remaining work is deciding scope then filling rows: the `cli/` pages may belong in a separate
+      CLI index rather than the *syntax* index — that call should be made before bulk-adding ~55 rows.
+      Method note for whoever picks this up: do **not** audit statement coverage by deriving syntax
+      from AST type names. `TryCatchStatement` is written `BEGIN TRY`, `CreatePgpKeyPairStatement` is
+      `CREATE PGP_KEY_PAIR`, `WaitForFileStatement` is `WAITFOR FILE UNLOCKED` — name-derived
+      matching reported ~75 false gaps. That dimension needs syntax taken from the parser's token
+      dispatch.
 
 ### Release Verification
 

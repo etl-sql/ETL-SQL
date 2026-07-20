@@ -73,6 +73,12 @@ Statements are the top-level actions in an ETL-SQL script.
 | `RECEIVE FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [RECEIVE/FILE.md](reference/file-operations/file.md) |
 | `SEND EMAIL` | Notifications | [File Operations](reference/file-operations/README.md) | [SEND/EMAIL.md](reference/file-operations/send-email.md) |
 | `DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `WAITFOR FILE UNLOCKED` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [WAITFOR.FILE.UNLOCKED.md](reference/file-operations/waitfor-file-unlocked.md) |
+| `CONVERT FILE ENCODING` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [CONVERT.FILE.ENCODING.md](reference/file-operations/convert-file-encoding.md) |
+| `SPLIT FILE` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [SPLIT.FILE.md](reference/file-operations/split-file.md) |
+| `MERGE FILES` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [MERGE.FILES.md](reference/file-operations/merge-files.md) |
+| `SYNC DIRECTORY` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [SYNC.DIRECTORY.md](reference/file-operations/sync-directory.md) |
+| `VERIFY FILE INTEGRITY` | File IO | [Advanced File Operations](reference/file-operations/advanced-file-operations.md) | [VERIFY.FILE.INTEGRITY.md](reference/file-operations/verify-file-integrity.md) |
 | `CREATE JOB` | Orchestration | [Statement Reference](reference/statements/README.md) | [SCHEDULE.md](reference/orchestrator-jobs/schedule.md) |
 | `KILL JOB` | Orchestration | [Statement Reference](reference/statements/README.md) | [KILL.md](reference/orchestrator-jobs/kill.md) |
 | `CREATE INDEX` | DDL | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
