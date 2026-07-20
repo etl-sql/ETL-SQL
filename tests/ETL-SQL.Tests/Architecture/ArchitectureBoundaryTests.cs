@@ -38,7 +38,13 @@ public sealed class ArchitectureBoundaryTests
         ["Portal.Data"] = 2,
         ["Connectors.Common"] = 2,
         ["Connectors"] = 3,
+        // The per-domain connector groups are peers of Connectors.Files: each references only Core
+        // and Connectors.Common, never Engine.
+        ["Connectors.Cloud"] = 3,
+        ["Connectors.Databases"] = 3,
         ["Connectors.Files"] = 3,
+        ["Connectors.Messaging"] = 3,
+        ["Connectors.Remote"] = 3,
         ["Infrastructure.Docker"] = 3,
         ["Infrastructure.Logging"] = 3,
         ["Infrastructure.Sqlite"] = 3,
