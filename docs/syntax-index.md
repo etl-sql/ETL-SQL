@@ -52,12 +52,12 @@ Statements are the top-level actions in an ETL-SQL script.
 | `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
-| `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW VARIABLES` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW PROFILE](reference/show-commands/show-profile.md) |
+| `SHOW VARIABLES` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW VARIABLES](reference/show-commands/show-variables.md) |
 | `SHOW LOCAL VARIABLES`| Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Statement Reference](reference/statements/README.md) | [CONFIG.md](reference/statements/session-control/config.md) |
-| `SHOW CONNECTIONS` | Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW LOCKS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW CONNECTIONS` | Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW CONNECTIONS](reference/show-commands/show-connections.md) |
+| `SHOW LOCKS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW LOCKS](reference/show-commands/show-locks.md) |
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
 | `USE SETS` | Session | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
@@ -87,7 +87,47 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CREATE VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
 | `DROP VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `SHOW VIEWS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW VIEWS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW VIEWS](reference/show-commands/show-views.md) |
+| `DIRECTORY Operations` | File IO | [Statement Reference](reference/statements/README.md) | [DIRECTORY Operations](reference/file-operations/directory.md) |
+| `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/receive-file.md) |
+| `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/send-file.md) |
+| `SHOW ACTIVE SESSIONS` | Portal Admin | [Statement Reference](reference/statements/README.md) | [SHOW ACTIVE SESSIONS](reference/show-commands/show-active-sessions.md) |
+| `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-admin/service-accounts.md) |
+| `EXPECT SCHEMA` | DDL / Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
+| `TEST CONNECTION` | DDL / Diagnostics | [Statement Reference](reference/statements/README.md) | [TEST CONNECTION](reference/statements/ddl/test-connection.md) |
+| `UNNEST / FLATTEN` | DML / Query | [Statement Reference](reference/statements/README.md) | [UNNEST / FLATTEN](reference/statements/dml/unnest.md) |
+| `Execution Blocks` | Flow Control | [Statement Reference](reference/statements/README.md) | [Execution Blocks](reference/statements/execution-blocks.md) |
+| `Expressions and Operators` | Expressions | [Statement Reference](reference/statements/README.md) | [Expressions and Operators](reference/statements/expressions-and-operators.md) |
+| `Procedures and Functions` | Procedures | [Statement Reference](reference/statements/README.md) | [Procedures and Functions](reference/statements/procedures.md) |
+| `Containerized Test Databases (USE DOCKER)` | Containers | [Statement Reference](reference/statements/README.md) | [Containerized Test Databases (USE DOCKER)](reference/statements/use-docker.md) |
+| `ASOF JOIN` | Join Syntax | [Statement Reference](reference/statements/README.md) | [ASOF JOIN](reference/statements/query-syntax/asof-join.md) |
+| `IS [NOT] DISTINCT FROM` | Expressions | [Statement Reference](reference/statements/README.md) | [IS [NOT] DISTINCT FROM](reference/statements/query-syntax/is-distinct-from.md) |
+| `LATERAL` | Query Clauses | [Statement Reference](reference/statements/README.md) | [LATERAL](reference/statements/query-syntax/lateral.md) |
+| `Set Operations` | Set Operations | [Statement Reference](reference/statements/README.md) | [Set Operations](reference/statements/query-syntax/set-operations.md) |
+| `WINDOW` | Window Functions | [Statement Reference](reference/statements/README.md) | [WINDOW](reference/statements/query-syntax/window.md) |
+| `` | Date/Time | [Statement Reference](reference/statements/README.md) | [](reference/dates-times/reldate.md) |
+| `Data Types` | Data Types | [Statement Reference](reference/statements/README.md) | [Data Types](reference/data-types.md) |
+| `SHOW ALERTS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW ALERTS FOR REPORT](reference/show-commands/show-alerts.md) |
+| `SHOW CATALOG SEARCH` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW CATALOG SEARCH](reference/show-commands/show-catalog-search.md) |
+| `SHOW CONNECTION CONFIG` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW CONNECTION CONFIG](reference/show-commands/show-connection-config.md) |
+| `SHOW EFFECTIVE PERMISSIONS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW EFFECTIVE PERMISSIONS](reference/show-commands/show-effective-permissions.md) |
+| `SHOW EMBED TOKENS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW EMBED TOKENS FOR REPORT](reference/show-commands/show-embed-tokens.md) |
+| `SHOW FAVORITES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW FAVORITES](reference/show-commands/show-favorites.md) |
+| `SHOW HOST METRICS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW HOST METRICS](reference/show-commands/show-host-metrics.md) |
+| `SHOW JOB HISTORY` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOB HISTORY](reference/show-commands/show-job-history.md) |
+| `SHOW JOB STATE` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOB STATE](reference/show-commands/show-job-state.md) |
+| `SHOW JOBS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOBS](reference/show-commands/show-jobs.md) |
+| `SHOW PORTAL USAGE METRICS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW PORTAL USAGE METRICS](reference/show-commands/show-portal-usage-metrics.md) |
+| `SHOW RECENT REPORTS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW RECENT REPORTS](reference/show-commands/show-recent-reports.md) |
+| `SHOW REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT](reference/show-commands/show-report.md) |
+| `SHOW REPORT DEPENDENCIES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT DEPENDENCIES](reference/show-commands/show-report-dependencies.md) |
+| `SHOW REPORT HISTORY` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT HISTORY](reference/show-commands/show-report-history.md) |
+| `SHOW SAVED VIEWS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SAVED VIEWS FOR REPORT](reference/show-commands/show-saved-views.md) |
+| `SHOW SHARE LINKS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SHARE LINKS FOR REPORT](reference/show-commands/show-share-links.md) |
+| `SHOW SUBSCRIPTIONS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SUBSCRIPTIONS](reference/show-commands/show-subscriptions.md) |
+| `SHOW TABLES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW TABLES](reference/show-commands/show-tables.md) |
+| `SHOW TAGS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW TAGS](reference/show-commands/show-tags.md) |
+| `SHOW VERSION` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW VERSION](reference/show-commands/show-version.md) |
 | `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
@@ -192,6 +232,8 @@ Connectors define how to communicate with external data sources.
 | `S3` | Transfer | [S3.md](reference/connectors/services/s3.md) | BUCKET, ENDPOINT, ACCESS_KEY, SECRET_KEY, REGION, FORCE_PATH_STYLE |
 | `API` / `REST` | Service | [API.md](reference/connectors/services/api.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
 | `SMTP` | Service | [SMTP.md](reference/connectors/services/smtp.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
+| `DIRECTORY` | Service | [DIRECTORY](reference/connectors/services/directory.md) | Treats a local or UNC filesystem folder as a data source for file-management operations... |
+| `PORTAL` | Service | [PORTAL](reference/connectors/services/portal.md) | Admin service connector for an ETL-SQL Portal service. Does not transfer data — stateme... |
 | `SHAREPOINT` | Transfer/Service | [SHAREPOINT.md](reference/connectors/services/sharepoint.md) | URL, AUTH_MODE, USER, PASSWORD, DOMAIN, CLIENT_ID, CLIENT_SECRET, TENANT_ID, DOCUMENT_LIBRARY, LIST_NAME |
 | `KAFKA` | Streaming | [KAFKA.md](reference/connectors/services/kafka.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
@@ -215,6 +257,15 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | Function | Category | Help File | Description |
 | :--- | :--- | :--- | :--- |
 | `UPPER(string)` | String | [UPPER.md](reference/functions/string/upper.md) | Converts string to uppercase |
+| `Data Type Conversion` | Conversion | [Data Type Conversion](reference/functions/conversion/data-conversion.md) | Convert values between ETL-SQL [data types](../../data-types.md). Use [`CAST`](cast.md)... |
+| `DATE_PART` | Date/Time | [DATE_PART](reference/functions/datetime/date_part.md) | Extracts a specified date part component from a date as an integer value. |
+| `DATETRUNC` | Date/Time | [DATETRUNC](reference/functions/datetime/datetrunc.md) | Truncates a date to the beginning of the specified date part boundary. |
+| `GET_JOB_STATE` | Job | [GET_JOB_STATE](reference/functions/job/get_job_state.md) | Returns the saved state value for the current script or job execution context. |
+| `SET_JOB_STATE` | Job | [SET_JOB_STATE](reference/functions/job/set_job_state.md) | Sets a saved state value for the current script or job execution context. |
+| `TRUNCATE` | Math | [TRUNCATE](reference/functions/math/truncate.md) | Truncates a number to a specified number of decimal places without rounding. |
+| `IS_NULL` | Null Handling | [IS_NULL](reference/functions/null-handler/is_null.md) | Returns whether an expression evaluates to `NULL`. |
+| `REMOVE_HIDDEN_CHARACTERS` | String | [REMOVE_HIDDEN_CHARACTERS](reference/functions/string/remove_hidden_characters.md) | Cleans invisible and whitespace-class characters out of a string. A specialized form of... |
+| `REMOVE_HTML_CHARACTERS` | String | [REMOVE_HTML_CHARACTERS](reference/functions/string/remove_html_characters.md) | Decodes HTML entities and normalizes typographic ("smart") Unicode to plain ASCII, fixi... |
 | `LOWER(string)` | String | [LOWER.md](reference/functions/string/lower.md) | Converts string to lowercase |
 | `CONCAT(string1, string2, ...)` | String | [CONCAT.md](reference/functions/string/concat.md) | Concatenates multiple strings |
 | `LEN(string)` / `LENGTH(string)` | String | [LEN.md](reference/functions/string/len.md) / [LENGTH.md](reference/functions/string/length.md) | Returns string length |
@@ -583,6 +634,10 @@ Read-only counters tracking session state.
 | Variable | Description | Help File |
 | :--- | :--- | :--- |
 | `@@ROWCOUNT` | Rows affected by last statement | [@@ROWCOUNT.md](reference/variables-parameters/@@rowcount.md) |
+| `@@CURRENT_USER` | Returns the username of the current execution identity. | [@@CURRENT_USER](reference/variables-parameters/@@current_user.md) |
+| `@@CURRENT_USER_ID` | Returns the stable, unique identifier of the current execution identity. | [@@CURRENT_USER_ID](reference/variables-parameters/@@current_user_id.md) |
+| `@@IS_ADMIN` | Returns whether the current execution identity has administrator privileges. | [@@IS_ADMIN](reference/variables-parameters/@@is_admin.md) |
+| `@@REAL_USER` | Returns the username of the actual authenticated session user. | [@@REAL_USER](reference/variables-parameters/@@real_user.md) |
 | `@@ERROR` | Last error code (0 = success) | [@@ERROR.md](reference/variables-parameters/@@error.md) |
 | `@@VERSION` | Engine version string | [@@VERSION.md](reference/variables-parameters/@@version.md) |
 | `@@TRANCOUNT` | Transaction nesting level | [@@TRANCOUNT.md](reference/variables-parameters/@@trancount.md) |
@@ -621,52 +676,55 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 
 | Option | Category | Default | Help File |
 | :--- | :--- | :--- | :--- |
-| `WHAT_IF` | Execution | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `PROFILING` | Execution | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `SHOW_SECRETS` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `WHAT_IF` | Execution | OFF | [SET WHAT_IF](reference/set-commands/set-what-if.md) |
+| `PROFILING` | Execution | OFF | [SET PROFILING](reference/set-commands/set-profiling.md) |
+| `SHOW_SECRETS` | Security | OFF | [SET SHOW_SECRETS](reference/set-commands/set-show-secrets.md) |
 | `SHOW_PASSWORD` | Security | OFF — alias for `SHOW_SECRETS` | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `ALLOW_PLAINTEXT_SECRETS` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `NO_SAVE_SENSITIVE` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `NO_SAVE_CONNECTION` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `CONNECTION_ENCRYPTION` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `ALLOW_PLAINTEXT_SECRETS` | Security | OFF | [SET ALLOW_PLAINTEXT_SECRETS](reference/set-commands/set-allow-plaintext-secrets.md) |
+| `NO_SAVE_SENSITIVE` | Security | OFF | [SET NO_SAVE_SENSITIVE](reference/set-commands/set-no-save-sensitive.md) |
+| `NO_SAVE_CONNECTION` | Security | OFF | [SET NO_SAVE_CONNECTION](reference/set-commands/set-no-save-connection.md) |
+| `CONNECTION_ENCRYPTION` | Security | OFF | [SET CONNECTION_ENCRYPTION](reference/set-commands/set-connection-encryption.md) |
 | `LINEAGE` | Data | ON | [LINEAGE.md](reference/statements/session-control/lineage.md) |
 | `LINEAGE_NAMESPACE` | Lineage | `'etl-sql'` | [LINEAGE.md](reference/statements/session-control/lineage.md) |
 | `LINEAGE_IMPORT_CATALOG` | Lineage | OFF | [LINEAGE.md](reference/statements/session-control/lineage.md) |
 | `TELEMETRY` | Metrics | ON | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `BATCHSIZE` | Performance | 10,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `JOIN_SPILL_THRESHOLD` | Performance | 100,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `TEMP_TABLE_SPILL_THRESHOLD` | Performance | 1,000,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `WEEK_START_DAY` | Localization | Monday | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `EXTERNAL_HASH_PARTITIONS` | Performance | 32 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `EXTERNAL_SORT_CHUNK_SIZE` | Performance | 50,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `FOREACH_PAGE_SIZE` | Performance | 10,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `BATCHSIZE` | Performance | 10,000 | [SET BATCHSIZE](reference/set-commands/set-batchsize.md) |
+| `JOIN_SPILL_THRESHOLD` | Performance | 100,000 | [SET JOIN_SPILL_THRESHOLD](reference/set-commands/set-join-spill-threshold.md) |
+| `TEMP_TABLE_SPILL_THRESHOLD` | Performance | 1,000,000 | [SET TEMP_TABLE_SPILL_THRESHOLD](reference/set-commands/set-temp-table-spill-threshold.md) |
+| `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [SET MAX_PARALLEL_DEGREE](reference/set-commands/set-max-parallel-degree.md) |
+| `WEEK_START_DAY` | Localization | Monday | [SET WEEK_START_DAY](reference/set-commands/set-week-start-day.md) |
+| `EXTERNAL_HASH_PARTITIONS` | Performance | 32 | [SET EXTERNAL_HASH_PARTITIONS](reference/set-commands/set-external-hash-partitions.md) |
+| `EXTERNAL_SORT_CHUNK_SIZE` | Performance | 50,000 | [SET EXTERNAL_SORT_CHUNK_SIZE](reference/set-commands/set-external-sort-chunk-size.md) |
+| `FOREACH_PAGE_SIZE` | Performance | 10,000 | [SET FOREACH_PAGE_SIZE](reference/set-commands/set-foreach-page-size.md) |
 | `INTERACTIVE_MODE` | Session | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `MAX_FILE_OPERATIONS` | Security | 100 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `MAX_GENERATE_ROWS` | Performance | 1,000,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `MAX_SMTP_EMAILS_PER_SCRIPT` | Security | 100 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `MAX_GENERATE_ROWS` | Performance | 1,000,000 | [SET MAX_GENERATE_ROWS](reference/set-commands/set-max-generate-rows.md) |
+| `MAX_SMTP_EMAILS_PER_SCRIPT` | Security | 100 | [SET MAX_SMTP_EMAILS_PER_SCRIPT](reference/set-commands/set-max-smtp-emails.md) |
 | `MAX_GROUPING_SETS` | Performance | 100 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `MAX_IN_MEMORY_BATCHES` | Performance | 100 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `MAX_MESSAGES` | Diagnostics | 1,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `MAX_RECURSIVE_DEPTH` | Flow | 10,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `MAX_SESSION_SIZE` | Performance | 500 MB | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `MAX_STRING_RESULT_SIZE` | Performance | 5 MB | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `MAX_STRING_RESULT_SIZE` | Performance | 5 MB | [SET MAX_STRING_RESULT_SIZE](reference/set-commands/set-max-string-result-size.md) |
 | `PERSIST` | Session | ON | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `REGEX_MATCH_TIMEOUT` | Flow | 1,000ms | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `SPILL_COMPRESSION` | Performance | ON | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `SPILL_ENCRYPTION` | Performance | ON | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `REGEX_MATCH_TIMEOUT` | Flow | 1,000ms | [SET REGEX_MATCH_TIMEOUT](reference/set-commands/set-regex-match-timeout.md) |
+| `SPILL_COMPRESSION` | Performance | ON | [SET SPILL_COMPRESSION](reference/set-commands/set-spill-compression.md) |
+| `SPILL_ENCRYPTION` | Performance | ON | [SET SPILL_ENCRYPTION](reference/set-commands/set-spill-encryption.md) |
 | `SPILL_FORMAT` | Performance | AUTO | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `WINDOW_SPILL_THRESHOLD` | Performance | 100,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `MAX_LAST_RESULT_ROWS` | Performance | 1,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `WINDOW_SPILL_THRESHOLD` | Performance | 100,000 | [SET WINDOW_SPILL_THRESHOLD](reference/set-commands/set-window-spill-threshold.md) |
+| `MAX_LAST_RESULT_ROWS` | Performance | 1,000 | [SET MAX_LAST_RESULT_ROWS](reference/set-commands/set-max-last-result-rows.md) |
 | `MAX_INTERNAL_OPERATIONS`| Performance | 1,000,000 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `SET_CUBE_LIMIT` | Performance | 10 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `SCRIPT_HASH_POLICY` | Security | VALIDATE | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `CASE_SENSITIVE` | Execution | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
 | `TEMPLATE_PATH` | Report | NULL | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `ALLOW_FILE_TYPE_ACCESS` | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `ALLOW_FILE_OPERATIONS` | Security | 100 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
-| `ALLOW_RECURSIVE_LAYERS` | Security | 5 | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+| `ALLOW_FILE_TYPE_ACCESS` | Security | OFF | [SET ALLOW_FILE_TYPE_ACCESS](reference/set-commands/set-allow-file-type-access.md) |
+| `ALLOW_FILE_OPERATIONS` | Security | 100 | [SET ALLOW_FILE_OPERATIONS](reference/set-commands/set-allow-file-operations.md) |
+| `ALLOW_RECURSIVE_LAYERS` | Security | 5 | [SET ALLOW_RECURSIVE_LAYERS](reference/set-commands/set-allow-recursive-layers.md) |
 | `ALLOW_...` (various) | Security | OFF | [Options/INDEX.md](reference/visuals-reporting/visuals/index.md) |
+
+| `@VARIABLE` | | | [SET @variable](reference/set-commands/set-variable.md) |
+| `WITH_PROMPT` | | | [SET WITH_PROMPT](reference/set-commands/set-with-prompt.md) |
 
 ---
 
@@ -879,6 +937,17 @@ Specific to `.rptsql` files and the reporting engine.
 | `NUMBERBOX` | Control | [NUMBERBOX.md](reference/visuals-reporting/visuals/numberbox.md) |
 
 ---
+
+
+### Further reading
+
+- [Report CLI, Hosting, and Preview](reference/visuals-reporting/report-cli.md) — Reference for building, serving, and previewing `.rptsql` reports: the `etl-sql-report`...
+- [ReportManifest JSON Schema](reference/visuals-reporting/report-manifest.md) — The compiled `ReportManifest` is the structure returned by the snapshot and by the Repo...
+- [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
+- [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
+- [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a custom ECharts color theme that can be applied to any visual or page with `ST...
+- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.16.0**
+- [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 
 ## 9. Portal & Orchestrator Admin
 
@@ -1157,20 +1226,62 @@ Annotations used for lineage, security, and script behavior.
 
 Commands run outside a script via `etl-sql <command>`. These are shell-level entry points, not SQL statements.
 
-| Command | Purpose |
-| :--- | :--- |
-| `etl-sql --run <script>` | Execute a `.etlsql` script headlessly |
-| `etl-sql --ui edit <script>` | Open the Terminal IDE (TUI) |
-| `etl-sql encrypt --value <v> --pass <p>` | Produce an `ENC:...` cipher string |
-| `etl-sql doctor` | Quick install validation (checks 1–10: OS, runtime, write access, disk, ODBC, config, security, connectors, history DB, log dirs) |
-| `etl-sql doctor --profile full` | Full validation adds parser/engine/encryption/linter/security-guardrail/report/PDF/runtime/asset-drift/Node.js/portal-DB/configured-service checks |
-| `etl-sql doctor --strict` | Exit code 1 on any WARN or FAIL result (CI-safe) |
-| `etl-sql doctor --json` | Machine-readable JSON output |
-| `etl-sql report serve <file>` | Serve a `.rptsql` dashboard |
-| `etl-sql report build <file>` | Export report to PDF/CSV/Markdown |
-| `etl-sql report refresh <file>` | Re-evaluate data and update a snapshot |
-| `etl-sql gen-script -s <json> -o <etlsql>` | Compile a reviewed JSON spec contract into an ETL-SQL starter script with schema checks, lineage tags, validation summaries, and quarantine scaffolding |
-| `etl-sql extract-spec -i <pdf> -o <pdf>` | Trim likely data dictionary / schema pages from a large vendor PDF before LLM review |
+| Command | Purpose | Help File |
+| :--- | :--- | :--- |
+| `etl-sql admin backup` | Back up portal/orchestrator state into split-custody data and keys archives | [admin backup](reference/cli/admin-backup.md) |
+| `etl-sql admin delete-connection` | Permanently remove a shared connection from the catalog | [admin delete-connection](reference/cli/admin-delete-connection.md) |
+| `etl-sql admin delete-secret` | Permanently remove a named secret from the secret store | [admin delete-secret](reference/cli/admin-delete-secret.md) |
+| `etl-sql admin disable-connection` | Disable a shared connection so SHARED:alias fails until it is re-enabled | [admin disable-connection](reference/cli/admin-disable-connection.md) |
+| `etl-sql admin disable-secret` | Disable a named secret so resolution fails until it is re-enabled | [admin disable-secret](reference/cli/admin-disable-secret.md) |
+| `etl-sql admin doctor` | Perform a system health check to verify the environment | [admin doctor](reference/cli/admin-doctor.md) |
+| `etl-sql admin enable-connection` | Re-enable a disabled shared connection; its stored definition is retained | [admin enable-connection](reference/cli/admin-enable-connection.md) |
+| `etl-sql admin enable-secret` | Re-enable a disabled secret; the stored value resolves again | [admin enable-secret](reference/cli/admin-enable-secret.md) |
+| `etl-sql admin ha-soak diagnostics` | Export a redacted diagnostics bundle for a topology run | [admin ha-soak diagnostics](reference/cli/admin-ha-soak-diagnostics.md) |
+| `etl-sql admin ha-soak evidence` | Generate the non-secret HA soak evidence checklist | [admin ha-soak evidence](reference/cli/admin-ha-soak-evidence.md) |
+| `etl-sql admin ha-soak fault-plan` | Generate the HA fault-injection plan | [admin ha-soak fault-plan](reference/cli/admin-ha-soak-fault-plan.md) |
+| `etl-sql admin ha-soak fault-run` | Run the bounded HA fault-injection harness | [admin ha-soak fault-run](reference/cli/admin-ha-soak-fault-run.md) |
+| `etl-sql admin ha-soak large-job-plan` | Generate the concurrent large-job soak plan | [admin ha-soak large-job-plan](reference/cli/admin-ha-soak-large-job-plan.md) |
+| `etl-sql admin ha-soak large-job-run` | Run the bounded concurrent large-job soak harness | [admin ha-soak large-job-run](reference/cli/admin-ha-soak-large-job-run.md) |
+| `etl-sql admin ha-soak metrics` | Capture a non-secret PostgreSQL metrics snapshot | [admin ha-soak metrics](reference/cli/admin-ha-soak-metrics.md) |
+| `etl-sql admin ha-soak prepare` | Generate an isolated PostgreSQL HA soak topology run root | [admin ha-soak prepare](reference/cli/admin-ha-soak-prepare.md) |
+| `etl-sql admin ha-soak runbook` | Generate an ordered operator runbook for a topology run | [admin ha-soak runbook](reference/cli/admin-ha-soak-runbook.md) |
+| `etl-sql admin ha-soak validate` | Validate completed HA soak evidence before citing it | [admin ha-soak validate](reference/cli/admin-ha-soak-validate.md) |
+| `etl-sql admin ha-soak workload` | Materialize the sustained-load workload config for a topology run | [admin ha-soak workload](reference/cli/admin-ha-soak-workload.md) |
+| `etl-sql admin ha-soak` | Prepare and collect PostgreSQL HA soak certification artifacts | [admin ha-soak](reference/cli/admin-ha-soak.md) |
+| `etl-sql admin list-connections` | List shared connection catalog entries and their status | [admin list-connections](reference/cli/admin-list-connections.md) |
+| `etl-sql admin migrate-database` | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment | [admin migrate-database](reference/cli/admin-migrate-database.md) |
+| `etl-sql admin restore` | Validate and restore a backup (data + keys archives) | [admin restore](reference/cli/admin-restore.md) |
+| `etl-sql admin rotate-secret` | Replace the value of an existing named secret | [admin rotate-secret](reference/cli/admin-rotate-secret.md) |
+| `etl-sql admin set-connection` | Store a shared connection in the catalog for scripts to use as SHARED:alias | [admin set-connection](reference/cli/admin-set-connection.md) |
+| `etl-sql admin set-secret` | Encrypt and store a named secret in the configured secret store (machine scope) | [admin set-secret](reference/cli/admin-set-secret.md) |
+| `etl-sql admin support-bundle` | Collect a redacted support archive (config, health, logs, database metrics) | [admin support-bundle](reference/cli/admin-support-bundle.md) |
+| `etl-sql admin verify-connection` | Prove a shared connection's definition and secret references resolve, without printing values | [admin verify-connection](reference/cli/admin-verify-connection.md) |
+| `etl-sql admin verify-secret` | Resolve a named secret to prove it is readable, without printing the value | [admin verify-secret](reference/cli/admin-verify-secret.md) |
+| `etl-sql admin` | Operator and administration commands | [admin](reference/cli/admin.md) |
+| `etl-sql config setup-jwt` | Generate a secure JWT secret and update appsettings.json | [config setup-jwt](reference/cli/config-setup-jwt.md) |
+| `etl-sql config` | Manage application configuration | [config](reference/cli/config.md) |
+| `etl-sql doctor` | Perform a system health check to verify the environment | [doctor](reference/cli/doctor.md) |
+| `etl-sql encrypt` | Utility to encrypt a string for secure connections | [encrypt](reference/cli/encrypt.md) |
+| `etl-sql enterprise enroll` | Enroll this machine in authoritative enterprise policy | [enterprise enroll](reference/cli/enterprise-enroll.md) |
+| `etl-sql enterprise status` | Inspect machine enterprise enrollment | [enterprise status](reference/cli/enterprise-status.md) |
+| `etl-sql enterprise unenroll` | Remove machine enterprise enrollment | [enterprise unenroll](reference/cli/enterprise-unenroll.md) |
+| `etl-sql enterprise` | Manage machine-level enterprise policy enrollment | [enterprise](reference/cli/enterprise.md) |
+| `etl-sql extract-spec` | Extract data dictionary / schema pages from a large PDF specification | [extract-spec](reference/cli/extract-spec.md) |
+| `etl-sql gen-script` | Compile a schema JSON specification into a validated ETL-SQL script template | [gen-script](reference/cli/gen-script.md) |
+| `etl-sql generate` | Generate mock data for testing projects | [generate](reference/cli/generate.md) |
+| `etl-sql init` | Scaffold a starter configuration and first ETL-SQL script for new users | [init](reference/cli/init.md) |
+| `etl-sql notices` | Show third-party notices and dependency credits | [notices](reference/cli/notices.md) |
+| `etl-sql purge` | Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions) | [purge](reference/cli/purge.md) |
+| `etl-sql run` | Execute an ETL-SQL script | [run](reference/cli/run.md) |
+| `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
+| `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
+| `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |
+| `etl-sql test` | Run internal diagnostics or unit tests | [test](reference/cli/test.md) |
+| `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
+| `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |
+| `etl-sql ui repl` | Start the JSON-based REPL protocol for IDE integration | [ui repl](reference/cli/ui-repl.md) |
+| `etl-sql ui simple` | Start the simple interactive menu UI | [ui simple](reference/cli/ui-simple.md) |
+| `etl-sql ui` | Interactive user interface commands | [ui](reference/cli/ui.md) |
 
 See [Getting Started](guides/getting-started.md) and [Administration](administration/platform/README.md) for full option reference.
 
