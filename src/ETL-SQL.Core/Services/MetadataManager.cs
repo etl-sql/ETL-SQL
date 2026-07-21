@@ -1163,12 +1163,22 @@ public class MetadataManager : IMetadataManager
         }
     }
 
+    /// <summary>
+    /// Bumped when a change makes previously cached schema wrong rather than merely stale, so old
+    /// entries are bypassed immediately instead of being served until they age out.
+    ///
+    /// v2: MOCKDB and SQLite gained catalog providers. Entries written before that recorded every
+    /// column as <c>ANY</c>, and the disk cache is consulted ahead of the provider, so without a bump
+    /// an existing workstation would keep showing <c>ANY</c> for up to <see cref="DiskCacheMaxAge"/>.
+    /// </summary>
+    private const string CacheSchemaVersion = "v2";
+
     private string GetCacheFileName(string connectionName, string connectionString)
     {
         using var sha = System.Security.Cryptography.SHA256.Create();
         // Salt with a per-user/machine value so the filename is not a portable, confirmable
         // SHA-256 of the (credential-bearing) connection string.
-        var salt = $"{Environment.UserName}|{Environment.MachineName}|";
+        var salt = $"{Environment.UserName}|{Environment.MachineName}|{CacheSchemaVersion}|";
         var inputBytes = Encoding.UTF8.GetBytes(salt + connectionString);
         var hashBytes = sha.ComputeHash(inputBytes);
         var hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();

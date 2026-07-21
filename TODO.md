@@ -41,13 +41,35 @@ changes safer.
 
 ### Developer Experience: Portal and VS Code
 
-> Shared dependency: the Portal script editor's schema autocomplete and the schema-aware parts of
-> `TEST CONNECTION` rely on the same capability: schema introspection. Build one shared, cached,
-> ACL-gated schema-snapshot service (see `docs/architecture/decisions/PortalEditorStrategy.md` B1)
-> and make it the single dependency for all three rather than three parallel introspection paths.
+> Shared schema introspection: the Portal script editor's autocomplete and the Workstation editor
+> both resolve schema through the shared, cached, ACL-gated snapshot service
+> (`docs/architecture/decisions/PortalEditorStrategy.md` B1), which is shipped.
+>
+> This note previously also named `TEST CONNECTION` as a consumer. It is not one and never was:
+> `TestConnectionStatementHandler` runs a layered network diagnostic (DNS → TCP → TLS) through
+> `ConnectionDiagnosticEngine` and does no schema introspection at all, and the B1 decision never
+> mentions it. Corrected so nobody plans work against a dependency that does not exist.
 
 ### Developer Experience: Local Browser Script Editor
-> Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
+> Design for the unified workbench — workspace layout, execution flow, the DAG swimlane and the
+> sandbox prototyping route — lives in the
+> [Unified Script Editor Roadmap](docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
+> That document is design intent, not a status record: its "Advanced Gaps & Customizations" section
+> describes six capabilities in present tense regardless of whether they exist. Audited against the
+> code — LSP hover, hover lineage, the stateful sidebar explorer and server lifecycle
+> (`POST /api/shutdown`) are shipped; the two below are not.
+
+- [ ] **Formatter settings panel.**
+      A visual configuration sidebar for the editor's formatter (casing, spaces vs tabs, newlines)
+      that serializes to a local `.etlsql-formatter.json`. Nothing in the codebase references that
+      file today, so this is unbuilt rather than partially done — the formatter itself works, it is
+      only the settings surface and persistence that are missing.
+
+- [ ] **Workstation git status surface.**
+      A branch indicator in the status bar and a staging/commit sidebar panel, explicitly excluding
+      diff viewers. The Portal already commits on save through
+      `PortalScriptSourceControlService`; the Workstation editor has no git surface at all, so this
+      is about showing state locally rather than adding a second commit path.
 
 ### Release Verification
 

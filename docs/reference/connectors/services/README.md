@@ -4,16 +4,16 @@
 
 | Page | Description |
 | :--- | :--- |
-| [ACTIVE_DIRECTORY](active-directory.md) | Connects to an Active Directory or LDAP server to perform user, group, and computer lookups. Automatically translates SQL WHERE clauses into raw LD... |
-| [API](api.md) | Connects to REST or HTTP endpoints. Use SELECT to call the endpoint and parse the JSON response into a result set. Use INSERT to send rows to the API. |
-| [AZURE_BLOB](azure-blob.md) | Reads files stored in Azure Blob Storage. Use as a source in SELECT to list or read blobs, or as a target to write output files. |
-| [DIRECTORY](directory.md) | Connects to a local or UNC file-system folder. SELECT returns a listing of files and subdirectories with their metadata. |
-| [FTP](ftp.md) | Connects to an FTP or FTPS server for file transfer operations (SEND FILE, RECEIVE FILE). Not used for SELECT/INSERT — pair it with the TRANSFER op... |
-| [KAFKA](kafka.md) | Connects to Apache Kafka message streams using the Confluent.Kafka driver. Supports publishing rows as JSON messages to a topic or consuming messag... |
-| [MOCKDB](mockdb.md) | An in-memory test database for development and unit-testing scripts without connecting to a live database. MOCKDB accepts all DDL and DML operation... |
-| [ORCHESTRATOR](orchestrator.md) | Admin service connector for remote Orchestrator job management via `EXECUTE orch BEGIN...END` (API-key auth). |
-| [PORTAL](portal.md) | Admin service connector for scripted Portal administration (users, groups, folders/ACLs, reports, datasets) via `EXECUTE portal BEGIN...END`. |
-| [S3](s3.md) | Connects to Amazon S3 or S3-compatible cloud object storage providers (e.g. Cloudflare R2, MinIO, Google Cloud Storage, Wasabi). Implements remote ... |
-| [SFTP](sftp.md) | Connects to an SFTP (SSH File Transfer Protocol) server for secure file transfer. Use SEND FILE and RECEIVE FILE with this connection. |
-| [SHAREPOINT](sharepoint.md) | Connects to a SharePoint site to perform file operations against Document Libraries and read/write queries against Lists. |
-| [SMTP](smtp.md) | Connects to an SMTP mail server for sending email. Used with SEND EMAIL operations and report subscription delivery. |
+| [ACTIVE_DIRECTORY](active-directory.md) | Connects to an Active Directory or LDAP server to perform user, group, and computer lookups. Standard |
+| [API](api.md) | Universal connector for web services and REST APIs. Supports `SELECT` to call endpoints and parse JSON |
+| [AZURE_BLOB](azure-blob.md) | Cloud storage connector for reading and writing files in Azure Blob Storage containers. |
+| [DIRECTORY](directory.md) | Treats a local or UNC filesystem folder as a data source for file-management operations (`COPY FILE`, |
+| [FTP](ftp.md) | Legacy File Transfer Protocol. Supports active and passive mode depending on the server. Used with |
+| [KAFKA](kafka.md) | Connects to an Apache Kafka message-broker cluster using the Confluent.Kafka driver. `SELECT` pulls |
+| [MOCKDB](mockdb.md) | Built-in, zero-configuration in-memory database for script development and testing. No credentials, no |
+| [ORCHESTRATOR](orchestrator.md) | Admin service connector for an ETL-SQL Orchestrator service. Does not transfer data — statements inside |
+| [PORTAL](portal.md) | Admin service connector for an ETL-SQL Portal service. Does not transfer data — statements inside an |
+| [S3](s3.md) | Cloud storage connector for reading and writing files in Amazon S3 or S3-compatible object storage |
+| [SFTP](sftp.md) | Secure File Transfer Protocol over SSH. Supports password and key-pair authentication (mutually |
+| [SHAREPOINT](sharepoint.md) | Manages files in SharePoint Document Libraries (remote file-system operations) and reads/writes |
+| [SMTP](smtp.md) | Outbound-only email connector used with the `SEND EMAIL` statement and report subscription delivery. |

@@ -85,6 +85,39 @@ public class MockDbColumnTypeTests : System.IDisposable
         Assert.DoesNotContain(columns, c => c.DataType.Equals("ANY", System.StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void DiskCacheFileName_IncludesTheSchemaVersion_SoStaleEntriesAreBypassed()
+    {
+        // The on-disk cache is consulted *before* the catalog provider, so an entry written when
+        // MOCKDB reported ANY would keep masking real types until it aged out — up to 14 days on an
+        // existing workstation. The schema version participates in the cache filename precisely so a
+        // correctness change orphans old entries instead of waiting them out. If someone drops the
+        // version from the salt, stale schema silently comes back.
+        var method = typeof(MetadataManager).GetMethod(
+            "GetCacheFileName",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var versionField = typeof(MetadataManager).GetField(
+            "CacheSchemaVersion",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(versionField);
+        var version = (string)versionField!.GetRawConstantValue()!;
+
+        var manager = NewManager();
+        var withVersion = (string)method!.Invoke(manager, ["conn", "Server=x;Database=y;"])!;
+
+        // Recompute the same name with the version removed from the salt; it must differ, which is
+        // what guarantees a bump orphans the previous generation of cache files.
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var unversionedSalt = $"{System.Environment.UserName}|{System.Environment.MachineName}|";
+        var unversioned = System.Convert.ToHexString(
+            sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(unversionedSalt + "Server=x;Database=y;"))).ToLowerInvariant();
+
+        Assert.False(string.IsNullOrWhiteSpace(version));
+        Assert.DoesNotContain(unversioned, withVersion, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     // The seeder publishes several tables under more than one name. A qualified spelling must not
     // fall back to ANY just because the declared schema was keyed differently.

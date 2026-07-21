@@ -150,12 +150,9 @@ update_file "docs/guides/faq.md" \
     "(current release baseline is \*\*v)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-# Release checklist target-version pointer (two mirrored copies: releases/ and guides/)
+# Release checklist target-version pointer. Single copy: the checklist is a maintainer procedure
+# and lives with the release notes it produces, not among the user-facing guides.
 update_file "docs/releases/release-checklist.md" \
-    "(current target: \*\*)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
-    "\1${VERSION}\2"
-
-update_file "docs/guides/release-checklist.md" \
     "(current target: \*\*)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 

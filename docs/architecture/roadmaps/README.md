@@ -24,3 +24,4 @@
 | [Source Boundary Migration Plan](Source_Boundary_Migration_Plan.md) | > [!NOTE] |
 | [Subscription Parameters Strategy](SubscriptionParameters_Strategy.md) | > [!IMPORTANT] |
 | [Test Strategy](Test_Strategy.md) | ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration,... |
+| [Workstation and Portal Unified Script Editor Roadmap](Workstation_and_Portal_Editor_Roadmap.md) | This document defines the architecture, design patterns, and implementation plan for the unified web-based coding area of **ETL-SQL**. It aligns th... |

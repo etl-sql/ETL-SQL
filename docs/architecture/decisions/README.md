@@ -28,3 +28,4 @@
 | [v0.13.0 Performance Results](v0.13.0-performance-results.md) | Generated 2026-06-27 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX. |
 | [Flaky Tests — noted during v0.15.0 release, fix in v0.16.0](v0.15.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.15.0 release. Policy: **don't fight a flaky test |
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |
+| [Flaky Tests — noted during v0.17.0 release, fix in v0.18.0](v0.17.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.17.0 release. Policy is unchanged from |

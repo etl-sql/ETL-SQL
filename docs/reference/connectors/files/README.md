@@ -4,9 +4,9 @@
 
 | Page | Description |
 | :--- | :--- |
-| [AVRO](avro.md) | Reads and writes Apache Avro binary files. The schema is either embedded in the file or supplied via SCHEMA_FILE. |
-| [EXCEL](excel.md) | Reads from and writes to Excel workbooks (.xlsx, .xls). Specify a worksheet name and optionally a named range or cell range. |
-| [FLATFILE](flatfile.md) | Reads and writes delimited text files (CSV, TSV) or fixed-width flat files. The most flexible file-based connector — use it for any text-based tabu... |
-| [JSON](json.md) | Reads and writes JSON files. Use ROOT_PATH to navigate to the array node to unpack as rows. |
-| [PARQUET](parquet.md) | Reads and writes Apache Parquet columnar files. Parquet is the preferred format for large analytical datasets — it compresses well and supports eff... |
-| [XML](xml.md) | Reads and writes XML files. Use ROOT_PATH to specify the XPath expression selecting the repeating element to unpack as rows. |
+| [AVRO](avro.md) | Apache Avro format. The schema is embedded within the file; optionally reference an external `.avsc` |
+| [EXCEL](excel.md) | Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`). When querying an `EXCEL` |
+| [FLATFILE](flatfile.md) | General-purpose connector for delimited (CSV/TSV) and fixed-width text files — the most flexible |
+| [JSON](json.md) | Document extraction with JSONPath addressing for nested data. When querying a `JSON` connection via |
+| [PARQUET](parquet.md) | Apache Parquet columnar format. Ideal for high-throughput analytics and interoperability with Spark, |
+| [XML](xml.md) | Document extraction with XPath addressing for nested elements. When querying an `XML` connection via |
