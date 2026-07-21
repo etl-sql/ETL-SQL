@@ -3866,6 +3866,10 @@ export function createDesigner(container, opts = {}) {
             const isContainer = v.type === 'CONTAINER';
             const card = document.createElement('div');
             card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '');
+            if (v.containerId) {
+                card.classList.add('has-container');
+                card.dataset.containerId = v.containerId;
+            }
             card.dataset.vid = v.id;
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;

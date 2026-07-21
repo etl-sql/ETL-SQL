@@ -2152,6 +2152,14 @@ body.vscode-dark .cm-editor .cm-line::selection {
     background: rgba(148, 163, 184, 0.05);
 }
 
+.etlsql-dsgn-visual-card.has-container {
+    box-sizing: border-box !important;
+    margin-top: 38px !important;
+    margin-bottom: 8px !important;
+    margin-left: 8px !important;
+    margin-right: 8px !important;
+}
+
 .etlsql-dsgn-visual-card.is-container .etlsql-dsgn-vcard-badge {
     background: #475569;
     color: #ffffff;

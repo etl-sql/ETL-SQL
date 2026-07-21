@@ -322,22 +322,44 @@ public sealed class DesignerAnalysisService
         return (gridColStart, gridRowStart, colSpan, rowSpan);
     }
 
+    private static (int col, int row, int colSpan, int rowSpan) FindRawSlotBounds(
+        List<List<string>> grid, string slot)
+    {
+        int minC = int.MaxValue, maxC = -1, minR = int.MaxValue, maxR = -1;
+        for (int r = 0; r < grid.Count; r++)
+        {
+            for (int c = 0; c < grid[r].Count; c++)
+            {
+                if (!string.Equals(grid[r][c], slot, StringComparison.OrdinalIgnoreCase)) continue;
+                if (c < minC) minC = c;
+                if (c > maxC) maxC = c;
+                if (r < minR) minR = r;
+                if (r > maxR) maxR = r;
+            }
+        }
+
+        if (minC == int.MaxValue || minR == int.MaxValue)
+            return (0, 0, 1, 1);
+
+        return (minC, minR, maxC - minC + 1, maxR - minR + 1);
+    }
+
     private static (int col, int row, int colSpan, int rowSpan) CalculateAbsoluteChildBounds(
         int containerCol, int containerRow, int containerColSpan, int containerRowSpan,
         List<List<string>> containerGrid, string slot)
     {
-        var (sCol, sRow, sColSpan, sRowSpan) = FindSlotBounds(containerGrid, slot);
+        var (sCol, sRow, sColSpan, sRowSpan) = FindRawSlotBounds(containerGrid, slot);
         int gridRows = containerGrid.Count;
         int gridCols = containerGrid[0].Count;
 
         double colWidth = (double)containerColSpan / gridCols;
-        int startCol = containerCol + (int)Math.Round((sCol - 1) * colWidth);
-        int endCol = containerCol + (int)Math.Round((sCol - 1 + sColSpan) * colWidth);
+        int startCol = containerCol + (int)Math.Round(sCol * colWidth);
+        int endCol = containerCol + (int)Math.Round((sCol + sColSpan) * colWidth);
         int colSpan = Math.Max(1, endCol - startCol);
 
         double rowHeight = (double)containerRowSpan / gridRows;
-        int startRow = containerRow + (int)Math.Round((sRow - 1) * rowHeight);
-        int endRow = containerRow + (int)Math.Round((sRow - 1 + sRowSpan) * rowHeight);
+        int startRow = containerRow + (int)Math.Round(sRow * rowHeight);
+        int endRow = containerRow + (int)Math.Round((sRow + sRowSpan) * rowHeight);
         int rowSpan = Math.Max(1, endRow - startRow);
 
         return (startCol, startRow, colSpan, rowSpan);
