@@ -112,7 +112,7 @@ export default {
     // (its catalog is folders/reports) and git write-back is a separate roadmap item.
     const isPortal = fixtureId === 'portal';
     const sidebar = isPortal
-      ? { schema: true, session: true }
+      ? { schema: true, session: true, git: true }
       : { workspace: true, schema: true, session: true, git: true };
 
     const workbench = await mod.createScriptEditorWorkbench(stage, {
