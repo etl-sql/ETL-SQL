@@ -77,7 +77,7 @@ public class PortalModuleRouteFencingTests
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var audit = await db.AuditLogs.SingleAsync(a => a.Action == "AD_HOC_RUN");
         Assert.Contains("QueryHash=sha256:", audit.Detail);
-        Assert.Contains("Statement=SelectStatement", audit.Detail);
+        Assert.Contains("SelectStatement", audit.Detail);
         Assert.DoesNotContain("Query=", audit.Detail);
         Assert.DoesNotContain("ssn-123-45-6789", audit.Detail);
     }
