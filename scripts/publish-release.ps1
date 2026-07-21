@@ -1,5 +1,5 @@
 # ETL-SQL Release Automation Script
-# Usage: ./publish_release.ps1 [-Platforms win-x64,linux-x64]
+# Usage: ./publish-release.ps1 [-Platforms win-x64,linux-x64]
 
 param(
     [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
@@ -188,8 +188,8 @@ foreach ($Platform in $Platforms) {
 
     if (-not $SkipVsix) {
         Write-Host "  Packaging VSIX bundle..." -ForegroundColor Gray
-        $VsixPath = & (Join-Path $PSScriptRoot "publish_vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder
-        # Fail loudly instead of silently shipping a release with no extension. publish_vsix.ps1
+        $VsixPath = & (Join-Path $PSScriptRoot "publish-vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder
+        # Fail loudly instead of silently shipping a release with no extension. publish-vsix.ps1
         # exits non-zero on failure; that leaves $VsixPath empty/invalid here.
         if (-not $VsixPath -or -not (Test-Path $VsixPath)) {
             throw "VSIX packaging failed for $Platform (no .vsix produced). Re-run with -SkipVsix to bypass."

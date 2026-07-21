@@ -1,6 +1,6 @@
 #!/bin/bash
-# test_sdk_build.sh - Verify ETL-SQL SDK self-contained single-file builds and smoke-test them.
-# Usage: ./scripts/test_sdk_build.sh [--rid <runtime-id>]
+# test-sdk-build.sh - Verify ETL-SQL SDK self-contained single-file builds and smoke-test them.
+# Usage: ./scripts/test-sdk-build.sh [--rid <runtime-id>]
 #   Default RID is auto-detected from the current platform.
 
 set -e

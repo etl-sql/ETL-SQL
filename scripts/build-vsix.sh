@@ -1,6 +1,6 @@
 #!/bin/bash
-# build_vsix.sh - Build and package the ETL-SQL VS Code extension VSIX.
-# Usage: ./scripts/build_vsix.sh
+# build-vsix.sh - Build and package the ETL-SQL VS Code extension VSIX.
+# Usage: ./scripts/build-vsix.sh
 
 set -e
 

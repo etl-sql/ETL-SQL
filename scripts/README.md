@@ -74,15 +74,71 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`generate-syntax-index.js`](./generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |
 | **[`install.ps1`](./install.ps1)** / **[`install.sh`](./install.sh)** | PowerShell / Bash | Cross-platform | Boostrapping workstation installers that download, unpack, and register the ETL-SQL SDK to the user's `PATH`. |
 | **[`Master-Release.ps1`](./Master-Release.ps1)** | PowerShell | Windows | Orchestrator script to validate tools, compile release binaries, execute smoke tests, build the UI, bundle cross-platform packages, and construct installer setups. |
-| **[`publish_release.ps1`](./publish_release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
-| **[`build_msi.ps1`](./build_msi.ps1)** | PowerShell | Windows | Bundles Windows published binaries into an MSI setup package using the WiX candle/light compilation toolset. |
-| **[`build_linux_packages.sh`](./build_linux_packages.sh)** | Bash | Linux / WSL | Packages published binaries into Debian (`.deb`) and RedHat (`.rpm`) distributions using standard linux packaging utilities. |
-| **[`build_mac_dmg.sh`](./build_mac_dmg.sh)** | Bash | macOS | Compiles a macOS application bundle and outputs a signed, notarized DMG mount disk image. |
-| **[`build_vsix.ps1`](./build_vsix.ps1)** / **[`build_vsix.sh`](./build_vsix.sh)** | PowerShell / Bash | Cross-platform | Builds and packages the VS Code extension bundle into a publish-ready `.vsix` file using `vsce`. |
-| **[`publish_vsix.ps1`](./publish_vsix.ps1)** / **[`publish_vsix.sh`](./publish_vsix.sh)** | PowerShell / Bash | Cross-platform | Packages a platform-targeted `.vsix` with bundled native binaries for a specific runtime identifier (win-x64, linux-x64, osx-x64, osx-arm64). |
+| **[`publish-release.ps1`](./publish-release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
+| **[`build-msi.ps1`](./build-msi.ps1)** | PowerShell | Windows | Bundles Windows published binaries into an MSI setup package using the WiX candle/light compilation toolset. |
+| **[`build-linux-packages.sh`](./build-linux-packages.sh)** | Bash | Linux / WSL | Packages published binaries into Debian (`.deb`) and RedHat (`.rpm`) distributions using standard linux packaging utilities. |
+| **[`build-mac-dmg.sh`](./build-mac-dmg.sh)** | Bash | macOS | Compiles a macOS application bundle and outputs a signed, notarized DMG mount disk image. |
+| **[`build-vsix.ps1`](./build-vsix.ps1)** / **[`build-vsix.sh`](./build-vsix.sh)** | PowerShell / Bash | Cross-platform | Builds and packages the VS Code extension bundle into a publish-ready `.vsix` file using `vsce`. |
+| **[`publish-vsix.ps1`](./publish-vsix.ps1)** / **[`publish-vsix.sh`](./publish-vsix.sh)** | PowerShell / Bash | Cross-platform | Packages a platform-targeted `.vsix` with bundled native binaries for a specific runtime identifier (win-x64, linux-x64, osx-x64, osx-arm64). |
 | **[`generate-third-party-inventory.js`](./generate-third-party-inventory.js)** | JavaScript | Cross-platform | Scans npm and NuGet locks to build the third-party dependency licensing inventory report. |
-| **[`test_sdk_build.ps1`](./test_sdk_build.ps1)** / **[`test_sdk_build.sh`](./test_sdk_build.sh)** | PowerShell / Bash | Cross-platform | Verifies compilation of self-contained single-file SDK CLI tools and runs validation smoke tests on them. |
+| **[`test-sdk-build.ps1`](./test-sdk-build.ps1)** / **[`test-sdk-build.sh`](./test-sdk-build.sh)** | PowerShell / Bash | Cross-platform | Verifies compilation of self-contained single-file SDK CLI tools and runs validation smoke tests on them. |
 | **[`Set-Version.ps1`](./Set-Version.ps1)** / **[`set-version.sh`](./set-version.sh)** | PowerShell / Bash | Cross-platform | Updates the version string across all canonical locations (build props, manifests, docs, scripts). Does not modify `CHANGELOG.md`. |
+| **[`Invoke-Release.ps1`](./Invoke-Release.ps1)** / **[`invoke-release.sh`](./invoke-release.sh)** | PowerShell / Bash | Cross-platform | Mechanical release driver: lands `main`, tags, sets curated release notes, and drives the tag-to-publish steps. Run with `-DryRun` first; `-Force` continues a partial release. |
+| **[`generate-sbom.js`](./generate-sbom.js)** | JavaScript | Cross-platform | Emits the CycloneDX `sbom.json` published with each release. Called by the release pipeline. |
+| **[`scan-secrets.js`](./scan-secrets.js)** | JavaScript | Cross-platform | Dependency-free pre-release secret scan over the tree. Called by the release pipeline. |
+
+### Certification and performance gates
+
+Release-gate helpers that produce evidence JSON under `certification-results/`. These back the scale
+and performance claims; they are not part of the default test lanes.
+
+| Script Name | Language | Platform | Description |
+| :--- | :--- | :---: | :--- |
+| **[`Test-ColumnarStorageGate.ps1`](./Test-ColumnarStorageGate.ps1)** | PowerShell | Cross-platform | Certifies columnar storage size against a maximum ratio (default 0.5) at a chosen row count. |
+| **[`Test-ColumnarOperatorGate.ps1`](./Test-ColumnarOperatorGate.ps1)** | PowerShell | Cross-platform | Certifies columnar operator speedup against a minimum factor (default 1.5x) at a chosen row count. |
+| **[`Test-SpillAllocProfile.ps1`](./Test-SpillAllocProfile.ps1)** | PowerShell | Cross-platform | Profiles allocation, GC and I/O for the Gate F `#temp` round trip and writes a spill-allocation report. |
+| **[`Compare-AllocBudget.ps1`](./Compare-AllocBudget.ps1)** | PowerShell | Cross-platform | Compares a spill-allocation profile against its checked-in budget and fails on regression. Bless a new budget with `-UpdateBudget`. |
+| **[`Compare-CertBaseline.ps1`](./Compare-CertBaseline.ps1)** | PowerShell | Cross-platform | Compares a `cert-report.json` against the stored baseline and reports regressions. |
+
+### Repository guardrails
+
+Checks that protect conventions the compiler cannot. Useful to run locally before pushing.
+
+| Script Name | Language | Platform | Description |
+| :--- | :--- | :---: | :--- |
+| **[`Audit-SyntaxIndex.py`](./Audit-SyntaxIndex.py)** | Python | Cross-platform | Audits `docs/syntax-index.md` against the reference documentation tree for broken links and unlinked pages. `--strict` fails on any finding (CI mode). |
+| **[`check-flaky-test-delays.mjs`](./check-flaky-test-delays.mjs)** | JavaScript | Cross-platform | Flags the "sleep-then-assert" anti-pattern — a literal `Task.Delay` used as the only synchronization before an assertion. See [flaky-test policy](../docs/architecture/decisions/v0.15.0-flaky-tests.md). |
+| **[`Test-DependencyAudit.ps1`](./Test-DependencyAudit.ps1)** | PowerShell | Cross-platform | Script-level tests for the NuGet dependency-audit helpers in `scripts/lib/DependencyAudit.ps1`. |
+
+### Browser-side unit tests
+
+Node test files covering extracted Portal UI modules without a browser or a running Portal. Run with
+`node scripts/<file>`; they are also included in the `portal` and `full` test lanes.
+
+| Script Name | Language | Platform | Description |
+| :--- | :--- | :---: | :--- |
+| **[`test-admin-catalog-ui.mjs`](./test-admin-catalog-ui.mjs)** | JavaScript | Cross-platform | Admin catalog query, selection and pager rendering helpers. |
+| **[`test-lineage-ui.mjs`](./test-lineage-ui.mjs)** | JavaScript | Cross-platform | Lineage row and dependency rendering from the canonical `designer.js`. |
+| **[`test-publish-folders.mjs`](./test-publish-folders.mjs)** | JavaScript | Cross-platform | Admin publish-form folder helpers — nested folder selection and newly created folders appearing without a reload. |
+| **[`test-subscription-history-ui.mjs`](./test-subscription-history-ui.mjs)** | JavaScript | Cross-platform | Subscription delivery-history rendering. |
+
+### Asset and documentation tooling
+
+| Script Name | Language | Platform | Description |
+| :--- | :--- | :---: | :--- |
+| **[`build-codemirror-bundle.ps1`](./build-codemirror-bundle.ps1)** | PowerShell | Cross-platform | Rebuilds the vendored CodeMirror 6 bundle used by the designer. Run after changing `scripts/codemirror/package.json`. |
+| **[`generate-readmes.js`](./generate-readmes.js)** | JavaScript | Cross-platform | Regenerates the per-folder `README.md` index pages across the documentation tree. |
+
+### One-shot migration helpers
+
+Written for a specific restructure and kept for reference. They are **not** part of any routine
+workflow — check what they rewrite before running one.
+
+| Script Name | Language | Platform | Description |
+| :--- | :--- | :---: | :--- |
+| **[`migrate-all-docs-links.js`](./migrate-all-docs-links.js)** | JavaScript | Cross-platform | Rewrote documentation links when folders were renamed during the docs IA restructure. |
+| **[`migrate-syntax-index.js`](./migrate-syntax-index.js)** | JavaScript | Cross-platform | Migrated `docs/syntax-index.md` to the restructured reference layout. |
+| **[`fix-broken-relative-links.js`](./fix-broken-relative-links.js)** | JavaScript | Cross-platform | Finds and repairs broken relative markdown links left by a move. |
 
 ---
 
@@ -184,7 +240,7 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 
 The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; secret scan; restore; dependency-audit self-test; NuGet dependency audit; SBOM generation; release build; format verify (auto-fixes drift); smoke lane; fast lane; portal lane; N→N+1 upgrade-path drill; sample scripts; SLT lane; VS Code npm ci/audit/compile/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
 
-Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build_msi.ps1`:
+Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build-msi.ps1`:
 
 ```powershell
 choco install wixtoolset -y --no-progress --skip-if-installed

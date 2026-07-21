@@ -1,6 +1,6 @@
 #!/bin/bash
-# publish_vsix.sh - Package the VS Code extension VSIX for a specific platform target.
-# Usage: ./scripts/publish_vsix.sh --platform <rid> --bin-dir <path>
+# publish-vsix.sh - Package the VS Code extension VSIX for a specific platform target.
+# Usage: ./scripts/publish-vsix.sh --platform <rid> --bin-dir <path>
 #   rid:     win-x64 | linux-x64 | osx-x64 | osx-arm64
 
 set -e

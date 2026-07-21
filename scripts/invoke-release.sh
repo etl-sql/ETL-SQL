@@ -151,9 +151,9 @@ check_src() { # file needle
 MISS=""
 MISS+="$(check_src 'Directory.Build.props'           "<VersionPrefix>$VERSION</VersionPrefix>")
 $(check_src 'src/etl-sql-vscode/package.json'        "\"version\": \"$VERSION\"")
-$(check_src 'scripts/build_msi.ps1'                  "} else { \"$VERSION\" }")
-$(check_src 'scripts/build_vsix.ps1'                 "\$Version = \"$VERSION\"")
-$(check_src 'scripts/publish_release.ps1'            "} else { \"$VERSION\" }")
+$(check_src 'scripts/build-msi.ps1'                  "} else { \"$VERSION\" }")
+$(check_src 'scripts/build-vsix.ps1'                 "\$Version = \"$VERSION\"")
+$(check_src 'scripts/publish-release.ps1'            "} else { \"$VERSION\" }")
 $(check_src 'scripts/Master-Release.ps1'             "\$Version = \"$VERSION\"")"
 MISS="$(printf '%s\n' "$MISS" | grep -v '^[[:space:]]*$' || true)"
 if [ -n "$MISS" ]; then

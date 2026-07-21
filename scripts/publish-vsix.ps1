@@ -1,4 +1,4 @@
-# scripts/publish_vsix.ps1
+# scripts/publish-vsix.ps1
 # Packages the VS Code extension for a specific platform target.
 param(
     [Parameter(Mandatory=$true)]

@@ -11,7 +11,7 @@ ETL-SQL releases are local-first while the product remains owner-controlled. The
 
 ## Release Artifact Verification (Checksums & SBOM)
 
-During the release publishing process (`scripts/publish_release.ps1`), the packaging runner automatically:
+During the release publishing process (`scripts/publish-release.ps1`), the packaging runner automatically:
 1. **Generates SHA-256 Checksums**: Computes the cryptographic checksum for all binary bundles and installers, exporting them to `sha256sums.txt`.
 2. **Generates CycloneDX SBOM**: Invokes `scripts/generate-sbom.js` to scan central NuGet PackageReferences and npm/extension package specifications, exporting a unified JSON SBOM to `release/sbom.json`.
 

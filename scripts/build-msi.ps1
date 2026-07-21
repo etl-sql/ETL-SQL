@@ -81,7 +81,7 @@ function Resolve-WixToolset {
 
     if (-not ($candle -and $light)) {
         Write-Host "[ERROR] WiX Toolset v3.x (candle.exe/light.exe) was not found." -ForegroundColor Red
-        Write-Host "  Install WiX 3.x and re-run, or add this CI step before build_msi.ps1:" -ForegroundColor Gray
+        Write-Host "  Install WiX 3.x and re-run, or add this CI step before build-msi.ps1:" -ForegroundColor Gray
         Write-Host "  choco install wixtoolset -y --no-progress --skip-if-installed" -ForegroundColor Gray
         return $null
     }

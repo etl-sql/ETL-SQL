@@ -151,7 +151,7 @@ show_pre_release_plan() {
     fi
 
     if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
-        print_plan_phase "$i" "Release publish artifacts" "./scripts/publish_release.sh --platforms $PLATFORMS" "Release binaries can be published for target platforms."; i=$((i + 1))
+        print_plan_phase "$i" "Release publish artifacts" "./scripts/publish-release.sh --platforms $PLATFORMS" "Release binaries can be published for target platforms."; i=$((i + 1))
     fi
 }
 
@@ -713,7 +713,7 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         "npm run test:unit (src/etl-sql-vscode/ui)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm run test:unit"
 
-    # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
+    # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish-vsix.ps1),
     # so packaging/manifest errors are caught locally instead of failing the release build.
     run_phase "VS Code VSIX package" \
         "npx @vscode/vsce package --target linux-x64 (manifest/packaging validation)" \
@@ -752,19 +752,19 @@ fi
 
 if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
     run_phase "Release publish artifacts" \
-        "./scripts/publish_release.sh --platforms $PLATFORMS" \
-        bash "./scripts/publish_release.sh" "--platforms" "$PLATFORMS"
+        "./scripts/publish-release.sh --platforms $PLATFORMS" \
+        bash "./scripts/publish-release.sh" "--platforms" "$PLATFORMS"
 
     if [[ "$PLATFORMS" == *"linux"* ]]; then
         run_phase "Linux packages" \
-            "./scripts/build_linux_packages.sh" \
-            bash "./scripts/build_linux_packages.sh"
+            "./scripts/build-linux-packages.sh" \
+            bash "./scripts/build-linux-packages.sh"
     fi
 
     if [[ "$PLATFORMS" == *"osx"* ]]; then
         run_phase "macOS DMG" \
-            "./scripts/build_mac_dmg.sh" \
-            bash "./scripts/build_mac_dmg.sh"
+            "./scripts/build-mac-dmg.sh" \
+            bash "./scripts/build-mac-dmg.sh"
     fi
 fi
 

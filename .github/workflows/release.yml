@@ -85,7 +85,7 @@ jobs:
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          .\scripts\publish_release.ps1 -Platforms win-x64
+          .\scripts\publish-release.ps1 -Platforms win-x64
 
       - name: Install WiX Toolset
         shell: pwsh
@@ -96,8 +96,8 @@ jobs:
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          .\scripts\build_msi.ps1
-          if ($LASTEXITCODE -ne 0) { throw "build_msi.ps1 failed with exit code $LASTEXITCODE" }
+          .\scripts\build-msi.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build-msi.ps1 failed with exit code $LASTEXITCODE" }
           Move-Item "src/ETL-SQL.Installer/ETL-SQL-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
 
       - name: Upload Windows release assets
@@ -126,9 +126,9 @@ jobs:
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish_release.ps1 -Platforms linux-x64
-          chmod +x scripts/build_linux_packages.sh
-          ./scripts/build_linux_packages.sh $Version release/linux-x64/bin
+          ./scripts/publish-release.ps1 -Platforms linux-x64
+          chmod +x scripts/build-linux-packages.sh
+          ./scripts/build-linux-packages.sh $Version release/linux-x64/bin
           mv "etl-sql_${Version}_amd64.deb" release/
 
       - name: Upload Linux release assets
@@ -154,13 +154,13 @@ jobs:
 
       # Apple Silicon is the priority artifact (most current Macs). Publish and upload it
       # FIRST so an Intel/R2R failure below can never cost us the arm64 release. Each
-      # publish_release.ps1 run wipes release/, so arm64 is safely uploaded before x64 starts.
+      # publish-release.ps1 run wipes release/, so arm64 is safely uploaded before x64 starts.
       - name: Publish Apple Silicon (arm64) VSIX + ZIP
         shell: pwsh
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish_release.ps1 -Platforms osx-arm64
+          ./scripts/publish-release.ps1 -Platforms osx-arm64
 
       - name: Upload arm64 release assets
         shell: bash
@@ -177,7 +177,7 @@ jobs:
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish_release.ps1 -Platforms osx-x64
+          ./scripts/publish-release.ps1 -Platforms osx-x64
 
       - name: Upload x64 release assets
         if: steps.macos_x64.outcome == 'success'
@@ -195,8 +195,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           Version="${TAG_NAME#v}"
-          chmod +x scripts/build_mac_dmg.sh
-          ./scripts/build_mac_dmg.sh "$Version" release/osx-x64/bin
+          chmod +x scripts/build-mac-dmg.sh
+          ./scripts/build-mac-dmg.sh "$Version" release/osx-x64/bin
           mv "ETL-SQL_v${Version}.dmg" release/
           gh release upload "$TAG_NAME" release/*.dmg --clobber
 
@@ -239,7 +239,7 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'dist/*'
-      # The per-platform build jobs each run publish_release.ps1, which wipes release/, so the
+      # The per-platform build jobs each run publish-release.ps1, which wipes release/, so the
       # consolidated integrity assets never survived to upload. Generate them here — once, over the
       # full set of published artifacts — and attach them (SBOM = contents, sha256sums = integrity;
       # the attestation above is authenticity).

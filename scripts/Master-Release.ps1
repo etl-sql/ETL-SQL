@@ -7,7 +7,7 @@
     1. Validates environment (dotnet, node, npm).
     2. Runs the release smoke lane by default, with optional full sample validation.
     3. Builds the React UI once.
-    4. Orchestrates platform-specific builds via publish_release.ps1.
+    4. Orchestrates platform-specific builds via publish-release.ps1.
 
 .EXAMPLE
     .\Master-Release.ps1 -Version "0.16.0"
@@ -89,7 +89,7 @@ Write-Host "`n[4/7] Starting Cross-Platform Publishing..." -ForegroundColor Yell
 
 # We pass the version to the sub-script via environment variable
 $env:ETL_SQL_VERSION = $Version
-& (Join-Path $PSScriptRoot "publish_release.ps1")
+& (Join-Path $PSScriptRoot "publish-release.ps1")
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Publishing failed."
@@ -99,7 +99,7 @@ if ($LASTEXITCODE -ne 0) {
 # --- STEP 4: Build Windows MSI Installer ---
 Write-Host "`n[5/7] Building Windows MSI Installer..." -ForegroundColor Yellow
 if (Get-Command candle.exe -ErrorAction SilentlyContinue) {
-    & (Join-Path $PSScriptRoot "build_msi.ps1")
+    & (Join-Path $PSScriptRoot "build-msi.ps1")
 } else {
     Write-Warning "  Skipping MSI build (WiX Toolset not found in PATH)."
 }
@@ -110,18 +110,18 @@ if ($IsWindows) {
     Write-Host "  Note: Linux/Mac package scripts are triggered but may require WSL or native host for full validation." -ForegroundColor Gray
 }
 
-$LinuxScript = Join-Path $PSScriptRoot "build_linux_packages.sh"
+$LinuxScript = Join-Path $PSScriptRoot "build-linux-packages.sh"
 if (Test-Path $LinuxScript) {
     Write-Host "  Triggering Linux package build..." -ForegroundColor Gray
     # On Windows, we can trigger via WSL if available, or just acknowledge existence
     if (Get-Command wsl -ErrorAction SilentlyContinue) {
-        wsl bash -c "./scripts/build_linux_packages.sh $Version release/linux-x64/bin"
+        wsl bash -c "./scripts/build-linux-packages.sh $Version release/linux-x64/bin"
     } else {
-        Write-Warning "  WSL not found. Please run build_linux_packages.sh on a Linux host."
+        Write-Warning "  WSL not found. Please run build-linux-packages.sh on a Linux host."
     }
 }
 
-$MacScript = Join-Path $PSScriptRoot "build_mac_dmg.sh"
+$MacScript = Join-Path $PSScriptRoot "build-mac-dmg.sh"
 if (Test-Path $MacScript) {
     Write-Host "  Triggering Mac DMG build (Requires MacOS host)..." -ForegroundColor Gray
 }

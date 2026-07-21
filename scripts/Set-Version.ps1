@@ -96,23 +96,23 @@ Update-File "scripts/Master-Release.ps1" `
     '(Master-Release\.ps1 -Version ")\d+\.\d+\.\d+(")' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/publish_release.ps1" `
+Update-File "scripts/publish-release.ps1" `
     '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/build_msi.ps1" `
+Update-File "scripts/build-msi.ps1" `
     '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/build_vsix.ps1" `
+Update-File "scripts/build-vsix.ps1" `
     '(\$Version = ")\d+\.\d+\.\d+(")' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/build_mac_dmg.sh" `
+Update-File "scripts/build-mac-dmg.sh" `
     '(VERSION=\$\{1:-")\d+\.\d+\.\d+("\})' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/build_linux_packages.sh" `
+Update-File "scripts/build-linux-packages.sh" `
     '(VERSION=\$\{1:-")\d+\.\d+\.\d+("\})' `
     "`${1}$Version`${2}"
 

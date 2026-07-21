@@ -179,7 +179,7 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 .\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
 ```
 
-Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). Install it locally, or add this step before `build_msi.ps1` on a clean Windows CI runner:
+Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). Install it locally, or add this step before `build-msi.ps1` on a clean Windows CI runner:
 
 ```powershell
 choco install wixtoolset -y --no-progress --skip-if-installed

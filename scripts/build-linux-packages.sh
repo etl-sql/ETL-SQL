@@ -1,6 +1,6 @@
 #!/bin/bash
 # ETL-SQL Linux Package Builder
-# Usage: ./build_linux_packages.sh <version>
+# Usage: ./build-linux-packages.sh <version>
 
 VERSION=${1:-"0.16.0"}
 PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}

@@ -136,9 +136,9 @@ function Get-PlannedPreReleasePhases {
     }
 
     if ($EffectiveBuildInstallers) {
-        $phases.Add([ordered]@{ Phase = "Release publish artifacts"; Command = ".\scripts\publish_release.ps1"; Reason = "Release binaries can be published for target platforms." })
+        $phases.Add([ordered]@{ Phase = "Release publish artifacts"; Command = ".\scripts\publish-release.ps1"; Reason = "Release binaries can be published for target platforms." })
         if ($Platforms -contains "win-x64") {
-            $phases.Add([ordered]@{ Phase = "Windows MSI"; Command = ".\scripts\build_msi.ps1"; Reason = "Windows installer can be built." })
+            $phases.Add([ordered]@{ Phase = "Windows MSI"; Command = ".\scripts\build-msi.ps1"; Reason = "Windows installer can be built." })
         }
     }
 
@@ -752,7 +752,7 @@ try {
             { Push-Location "src\etl-sql-vscode\ui"; try { & npm run test:unit } finally { Pop-Location } } `
             $previousPhaseMap $fingerprint $results
 
-        # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
+        # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish-vsix.ps1),
         # so packaging/manifest errors (e.g. @types/vscode > engines.vscode, missing icon/README) are
         # caught locally and cheaply instead of failing the expensive cross-platform release build.
         Invoke-LoggedPhase "VS Code VSIX package" `
@@ -818,14 +818,14 @@ try {
     if ($EffectiveBuildInstallers) {
         $platformText = $Platforms -join ","
         Invoke-LoggedPhase "Release publish artifacts" `
-            ".\scripts\publish_release.ps1 -Platforms $platformText" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\publish_release.ps1" "-Platforms" $Platforms } `
+            ".\scripts\publish-release.ps1 -Platforms $platformText" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\publish-release.ps1" "-Platforms" $Platforms } `
             $previousPhaseMap $fingerprint $results
 
         if ($Platforms -contains "win-x64") {
             Invoke-LoggedPhase "Windows MSI" `
-                ".\scripts\build_msi.ps1" `
-                { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\build_msi.ps1" } `
+                ".\scripts\build-msi.ps1" `
+                { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\build-msi.ps1" } `
                 $previousPhaseMap $fingerprint $results
         }
     }

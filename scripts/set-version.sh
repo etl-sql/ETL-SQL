@@ -125,23 +125,23 @@ update_file "scripts/Master-Release.ps1" \
     "(Master-Release\.ps1 -Version \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-update_file "scripts/publish_release.ps1" \
+update_file "scripts/publish-release.ps1" \
     "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
     "\1${VERSION}\2"
 
-update_file "scripts/build_msi.ps1" \
+update_file "scripts/build-msi.ps1" \
     "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
     "\1${VERSION}\2"
 
-update_file "scripts/build_vsix.ps1" \
+update_file "scripts/build-vsix.ps1" \
     "(\\\$Version = \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-update_file "scripts/build_mac_dmg.sh" \
+update_file "scripts/build-mac-dmg.sh" \
     "(VERSION=\\\$\{1:-\")[0-9]+\.[0-9]+\.[0-9]+(\"\\})" \
     "\1${VERSION}\2"
 
-update_file "scripts/build_linux_packages.sh" \
+update_file "scripts/build-linux-packages.sh" \
     "(VERSION=\\\$\{1:-\")[0-9]+\.[0-9]+\.[0-9]+(\"\\})" \
     "\1${VERSION}\2"
 
