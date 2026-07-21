@@ -3113,6 +3113,7 @@ export function createDesigner(container, opts = {}) {
         <input id="dsgn-name" class="etlsql-dsgn-name-input" type="text" placeholder="Report name" />
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
+        <button class="btn btn-sm" id="dsgn-tidy" title="Compact empty row gaps and tidy layout">🧹 Tidy Layout</button>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
         <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
@@ -3222,6 +3223,53 @@ export function createDesigner(container, opts = {}) {
 
     // ── Render ────────────────────────────────────────────────────────────────
 
+    let activeSnapshotFilter = null;
+
+    function tidyLayout() {
+        const page = curPage();
+        if (!page?.visuals?.length) return;
+
+        const visuals = [...page.visuals].sort((a, b) => ((a.gridRow || 1) - (b.gridRow || 1)) || ((a.gridCol || 1) - (b.gridCol || 1)));
+
+        for (let i = 0; i < visuals.length; i++) {
+            const v = visuals[i];
+            const vColStart = v.gridCol || 1;
+            const vColEnd = vColStart + (v.gridColSpan || 12) - 1;
+
+            let newRow = 1;
+
+            for (let j = 0; j < i; j++) {
+                const prev = visuals[j];
+                const pColStart = prev.gridCol || 1;
+                const pColEnd = pColStart + (prev.gridColSpan || 12) - 1;
+
+                const overlapsHorizontally = (vColStart <= pColEnd) && (vColEnd >= pColStart);
+
+                if (overlapsHorizontally) {
+                    const prevBottom = (prev.gridRow || 1) + (prev.gridRowSpan || 4);
+                    if (prevBottom > newRow) {
+                        newRow = prevBottom;
+                    }
+                }
+            }
+
+            const deltaRow = newRow - (v.gridRow || 1);
+            v.gridRow = newRow;
+
+            if (v.type === 'CONTAINER' && deltaRow !== 0) {
+                for (const child of page.visuals) {
+                    if (child.containerId === v.id) {
+                        child.gridRow = Math.max(1, (child.gridRow || 1) + deltaRow);
+                    }
+                }
+            }
+        }
+
+        renderCanvas();
+        renderTree();
+        renderProps();
+    }
+
     function renderPageTabs() {
         const strip = topbar.querySelector('#dsgn-pages');
         strip.innerHTML = '';
@@ -3241,8 +3289,40 @@ export function createDesigner(container, opts = {}) {
         }
 
         const dsName = visual.dataset;
-        const rows = (dsName && snapshotPackage.sampleRows[dsName]) || Object.values(snapshotPackage.sampleRows)[0] || [];
+        let rows = (dsName && snapshotPackage.sampleRows[dsName]) || Object.values(snapshotPackage.sampleRows)[0] || [];
         const type = (visual.type || '').toUpperCase();
+
+        // Interactive Filter Slicers Simulation
+        if (type === 'SLICER' || type === 'MULTISELECT' || type === 'DATEPICKER') {
+            const categories = Array.from(new Set(rows.map(r => String(Array.isArray(r) ? r[0] : r))));
+            const selected = activeSnapshotFilter;
+            let btnHtml = `<button class="btn btn-xs ${!selected ? 'btn-primary' : ''}" data-slicer-val="" style="margin:2px;font-size:10px;">All</button>`;
+            categories.slice(0, 8).forEach(cat => {
+                const isSel = selected === cat;
+                btnHtml += `<button class="btn btn-xs ${isSel ? 'btn-primary' : ''}" data-slicer-val="${esc(cat)}" style="margin:2px;font-size:10px;">${esc(cat)}</button>`;
+            });
+
+            bodyEl.innerHTML = `
+                <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:4px;text-align:center;">
+                    <div style="font-size:10px;font-weight:600;color:var(--portal-muted,#64748b);margin-bottom:4px;">Filter by ${esc(visual.title || 'Category')}</div>
+                    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:2px;">${btnHtml}</div>
+                </div>`;
+
+            bodyEl.querySelectorAll('[data-slicer-val]').forEach(b => {
+                b.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const val = e.target.dataset.slicerVal;
+                    activeSnapshotFilter = val || null;
+                    renderCanvas();
+                });
+            });
+            return;
+        }
+
+        // Apply active filter if set
+        if (activeSnapshotFilter) {
+            rows = rows.filter(r => String(Array.isArray(r) ? r[0] : r) === activeSnapshotFilter);
+        }
 
         if (type === 'CARD') {
             const val = rows[0] ? (rows[0][1] ?? rows[0][0]) : '0';
@@ -3349,11 +3429,22 @@ export function createDesigner(container, opts = {}) {
             card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
 
+            let badgeExtra = '';
+            if (opts.snapshotPackage) {
+                const meta = opts.snapshotPackage.metadata || {};
+                if (meta.rlsPolicy || meta.rlsEnforced) {
+                    badgeExtra += `<span style="background:var(--portal-accent,#2563eb);color:#fff;padding:1px 4px;border-radius:3px;font-size:9px;margin-left:4px;" title="RLS Governance Policy Enforced">🔒 RLS</span>`;
+                }
+                if (meta.isSampled) {
+                    badgeExtra += `<span style="background:#f59e0b;color:#fff;padding:1px 4px;border-radius:3px;font-size:9px;margin-left:4px;" title="Sampled Snapshot Data">⚡ Sampled</span>`;
+                }
+            }
+
             const badgeText = isContainer ? `📁 ${v.options?.CONTAINER_TYPE || 'BOX'}` : v.type;
             const cardHdr = document.createElement('div');
             cardHdr.className = 'etlsql-dsgn-vcard-hdr';
             cardHdr.innerHTML = `
-                <div class="etlsql-dsgn-vcard-badge">${badgeText}</div>
+                <div class="etlsql-dsgn-vcard-badge">${badgeText}${badgeExtra}</div>
                 <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
                 <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
             `;
@@ -3853,6 +3944,7 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
     topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
+    topbar.querySelector('#dsgn-tidy')?.addEventListener('click', tidyLayout);
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
         scriptOverlay.classList.contains('active') ? closeScript() : openScript());
