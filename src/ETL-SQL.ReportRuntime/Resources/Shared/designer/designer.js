@@ -3613,7 +3613,214 @@ export function createDesigner(container, opts = {}) {
                         grid: { top: 10, bottom: 20, left: 30, right: 10 },
                         xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
                         yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
-                        series: [{ type: 'line', data: values, areaStyle: type === 'AREA' ? {} : null, itemStyle: { color: '#2563eb' } }]
+                        series: [{ type: 'line', data: values, areaStyle: type === 'AREA' ? {} : null, itemStyle: { color: VCOLOR[type] || '#2563eb' } }]
+                    };
+                } else if (type === 'SCATTER' || type === 'BUBBLE') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [{
+                            type: 'scatter',
+                            data: rows.map(r => [
+                                parseFloat(Array.isArray(r) ? r[0] : r) || 0,
+                                parseFloat(Array.isArray(r) ? r[1] : 10) || 0,
+                                parseFloat(Array.isArray(r) ? r[2] : 10) || 10
+                            ]),
+                            symbolSize: function (data) {
+                                return type === 'BUBBLE' ? Math.min(Math.max(data[2] || 10, 5), 30) : 8;
+                            },
+                            itemStyle: { color: VCOLOR[type] || '#3b82f6' }
+                        }]
+                    };
+                } else if (type === 'COMBO') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [
+                            { type: 'bar', data: values, itemStyle: { color: '#3b82f6', borderRadius: 2 } },
+                            { type: 'line', data: values.map(v => v * 0.9), itemStyle: { color: '#ef4444' } }
+                        ]
+                    };
+                } else if (type === 'TREEMAP') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'treemap',
+                            roam: false,
+                            breadcrumb: { show: false },
+                            data: rows.map(r => ({
+                                name: String(Array.isArray(r) ? r[0] : r),
+                                value: parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10
+                            })),
+                            label: { fontSize: 9 }
+                        }]
+                    };
+                } else if (type === 'FUNNEL') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'funnel',
+                            left: '10%', width: '80%',
+                            data: rows.map(r => ({
+                                name: String(Array.isArray(r) ? r[0] : r),
+                                value: parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10
+                            })),
+                            label: { fontSize: 9 }
+                        }]
+                    };
+                } else if (type === 'RADAR') {
+                    const indicators = categories.slice(0, 6).map(c => ({ name: c, max: 100 }));
+                    const valData = values.slice(0, 6).map(v => Math.min(v, 100));
+                    option = {
+                        backgroundColor: 'transparent',
+                        radar: {
+                            indicator: indicators.length > 0 ? indicators : [{ name: 'A', max: 100 }, { name: 'B', max: 100 }, { name: 'C', max: 100 }],
+                            radius: '60%',
+                            axisName: { fontSize: 8 }
+                        },
+                        series: [{
+                            type: 'radar',
+                            data: [{ value: valData.length > 0 ? valData : [60, 70, 80], name: 'Data' }]
+                        }]
+                    };
+                } else if (type === 'GAUGE') {
+                    const gaugeVal = parseFloat(values[0]) || 50;
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'gauge',
+                            progress: { show: true, width: 8 },
+                            detail: { valueAnimation: true, formatter: '{value}', fontSize: 12, offsetCenter: [0, '70%'] },
+                            data: [{ value: Math.min(Math.max(gaugeVal, 0), 100) }],
+                            axisLabel: { fontSize: 8, distance: 10 },
+                            axisTick: { show: false },
+                            splitLine: { show: false },
+                            anchor: { show: false },
+                            title: { show: false }
+                        }]
+                    };
+                } else if (type === 'HEATMAP') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: categories.slice(0, 5), axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'category', data: categories.slice(0, 5), axisLabel: { fontSize: 9 } },
+                        visualMap: { min: 0, max: 100, show: false, inRange: { color: ['#eff6ff', '#1e3a8a'] } },
+                        series: [{
+                            type: 'heatmap',
+                            data: rows.slice(0, 10).map((r, idx) => [
+                                idx % 5,
+                                Math.floor(idx / 5) % 5,
+                                parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10
+                            ]),
+                            label: { show: false }
+                        }]
+                    };
+                } else if (type === 'BOXPLOT') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: ['Data'], axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [{
+                            type: 'boxplot',
+                            data: [
+                                [
+                                    parseFloat(values[0]) || 10,
+                                    parseFloat(values[1]) || 20,
+                                    parseFloat(values[2]) || 30,
+                                    parseFloat(values[3]) || 40,
+                                    parseFloat(values[4]) || 50
+                                ]
+                            ]
+                        }]
+                    };
+                } else if (type === 'SUNBURST') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'sunburst',
+                            radius: ['20%', '80%'],
+                            data: rows.slice(0, 8).map(r => ({
+                                name: String(Array.isArray(r) ? r[0] : r),
+                                value: parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10
+                            })),
+                            label: { fontSize: 8 }
+                        }]
+                    };
+                } else if (type === 'WATERFALL') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [
+                            {
+                                type: 'bar',
+                                stack: 'all',
+                                itemStyle: { borderColor: 'transparent', color: 'transparent' },
+                                data: values.map((v, idx) => {
+                                    if (idx === 0) return 0;
+                                    return Math.min(values[idx - 1], v);
+                                })
+                            },
+                            {
+                                type: 'bar',
+                                stack: 'all',
+                                data: values.map((v, idx) => {
+                                    if (idx === 0) return v;
+                                    return Math.abs(v - values[idx - 1]);
+                                }),
+                                itemStyle: {
+                                    color: function (params) {
+                                        const idx = params.dataIndex;
+                                        if (idx === 0) return '#3b82f6';
+                                        return values[idx] >= values[idx - 1] ? '#10b981' : '#ef4444';
+                                    }
+                                }
+                            }
+                        ]
+                    };
+                } else if (type === 'CANDLESTICK') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        grid: { top: 10, bottom: 20, left: 30, right: 10 },
+                        xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 9 } },
+                        yAxis: { type: 'value', axisLabel: { fontSize: 9 } },
+                        series: [{
+                            type: 'candlestick',
+                            data: rows.map(r => {
+                                const v = parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10;
+                                return [v * 0.9, v * 1.1, v * 0.8, v * 1.2];
+                            }),
+                            itemStyle: {
+                                color: '#10b981',
+                                color0: '#ef4444',
+                                borderColor: '#10b981',
+                                borderColor0: '#ef4444'
+                            }
+                        }]
+                    };
+                } else if (type === 'SANKEY') {
+                    option = {
+                        backgroundColor: 'transparent',
+                        series: [{
+                            type: 'sankey',
+                            layout: 'none',
+                            emphasis: { focus: 'adjacency' },
+                            data: [
+                                { name: 'A' }, { name: 'B' }, { name: 'C' }
+                            ],
+                            links: [
+                                { source: 'A', target: 'B', value: 10 },
+                                { source: 'B', target: 'C', value: 5 }
+                            ],
+                            label: { fontSize: 8 }
+                        }]
                     };
                 } else {
                     option = {
