@@ -570,7 +570,26 @@ function buildStructure(visuals) {
     }
   });
 
-  return grid.map(row => row.join(' ')).join(' / ');
+  // 1. Compress horizontal contiguous identical slot cells per row
+  const compressedRows = grid.map(row => {
+    const rowSlots = [];
+    row.forEach(slot => {
+      if (rowSlots.length === 0 || rowSlots[rowSlots.length - 1] !== slot) {
+        rowSlots.push(slot);
+      }
+    });
+    return rowSlots.join(' ');
+  });
+
+  // 2. Deduplicate consecutive identical rows vertically
+  const dedupedRows = [];
+  compressedRows.forEach(rowStr => {
+    if (dedupedRows.length === 0 || dedupedRows[dedupedRows.length - 1] !== rowStr) {
+      dedupedRows.push(rowStr);
+    }
+  });
+
+  return dedupedRows.join(' / ');
 }
 
 function generateMockScript(state) {

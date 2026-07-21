@@ -139,9 +139,29 @@ public sealed class DesignerScriptGenerationService
                     grid[r, c] = slot;
         }
 
-        var rows = Enumerable.Range(0, maxRow)
-            .Select(r => string.Join(" ", Enumerable.Range(0, usedCols).Select(c => grid[r, c])));
-        return string.Join(" / ", rows);
+        // 1. Compress horizontal contiguous identical slot cells per row
+        var compressedRows = new List<string>(maxRow);
+        for (int r = 0; r < maxRow; r++)
+        {
+            var rowSlots = new List<string>();
+            for (int c = 0; c < usedCols; c++)
+            {
+                var slot = grid[r, c];
+                if (rowSlots.Count == 0 || rowSlots[^1] != slot)
+                    rowSlots.Add(slot);
+            }
+            compressedRows.Add(string.Join(" ", rowSlots));
+        }
+
+        // 2. Deduplicate consecutive identical rows vertically
+        var dedupedRows = new List<string>(maxRow);
+        foreach (var rowStr in compressedRows)
+        {
+            if (dedupedRows.Count == 0 || dedupedRows[^1] != rowStr)
+                dedupedRows.Add(rowStr);
+        }
+
+        return string.Join(" / ", dedupedRows);
     }
 
     private static string SanitizeName(string name, string? fallback = null)
