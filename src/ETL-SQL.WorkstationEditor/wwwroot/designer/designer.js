@@ -3298,7 +3298,7 @@ export function createDesigner(container, opts = {}) {
             const selected = activeSnapshotFilter;
             let btnHtml = `<button class="btn btn-xs ${!selected ? 'btn-primary' : ''}" data-slicer-val="" style="margin:2px;font-size:10px;">All</button>`;
             categories.slice(0, 8).forEach(cat => {
-                const isSel = selected === cat;
+                const isSel = String(selected).toLowerCase() === String(cat).toLowerCase();
                 btnHtml += `<button class="btn btn-xs ${isSel ? 'btn-primary' : ''}" data-slicer-val="${esc(cat)}" style="margin:2px;font-size:10px;">${esc(cat)}</button>`;
             });
 
@@ -3311,11 +3311,23 @@ export function createDesigner(container, opts = {}) {
             bodyEl.querySelectorAll('[data-slicer-val]').forEach(b => {
                 b.addEventListener('click', e => {
                     e.stopPropagation();
-                    const val = e.target.dataset.slicerVal;
+                    const btn = e.currentTarget;
+                    const val = btn.getAttribute('data-slicer-val');
                     activeSnapshotFilter = val || null;
                     renderCanvas();
                 });
             });
+            return;
+        }
+
+        if (type === 'CONTAINER') {
+            const containerType = visual.options?.CONTAINER_TYPE || 'BOX';
+            const childCount = curVis().filter(c => c.containerId === visual.id).length;
+            bodyEl.innerHTML = `
+                <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:12px;color:var(--portal-muted,#64748b);font-size:11px;border:1.5px dashed var(--portal-border-soft,#cbd5e1);border-radius:6px;background:rgba(37, 99, 235, 0.02);pointer-events:none;">
+                    <div style="font-weight:600;color:var(--portal-text-soft,#475569);font-size:12px;margin-bottom:2px;">📁 ${esc(containerType)} Container</div>
+                    <div style="font-size:10px;color:var(--portal-muted,#94a3b8);">${childCount > 0 ? `${childCount} visual${childCount === 1 ? '' : 's'} grouped inside` : 'Drag visuals on top to group'}</div>
+                </div>`;
             return;
         }
 
@@ -3436,6 +3448,7 @@ export function createDesigner(container, opts = {}) {
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
+            card.style.zIndex     = isContainer ? '1' : '2';
 
             let badgeExtra = '';
             if (opts.snapshotPackage) {
