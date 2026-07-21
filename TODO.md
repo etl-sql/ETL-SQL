@@ -39,9 +39,28 @@ changes safer.
       Move parsing, AST/DTO conversion, validation orchestration, and report/workflow service
       composition out of MVC controller methods into application services that can be tested without
       HTTP plumbing.
-- [ ] **Review architecture documentation.**
+- [x] **Review architecture documentation.**
       After layering changes settle, refresh `/docs/architecture` and source-boundary docs so the
       documented module ownership and dependency rules match the code.
+      Done, driven off the connector split above. The dependency graph in each doc was re-derived
+      from the `.csproj` files rather than edited by hand, so it states what the build actually does:
+      * `Engine.md` tier diagram listed a single `ETL-SQL.Connectors → Core, Engine`. It now lists
+        the six connector projects with their real edges, and records that only the built-ins project
+        depends on `Engine` while every extracted group depends on `Core` + `.Common` alone.
+      * `Engine.md` host lines said "Connectors" as if every host took all of them. `Connectors*` is
+        now defined by a table: App/TUI/Orchestrator/Orchestrator.Service reference all six,
+        LanguageServer omits `.Cloud`, and Portal references only the built-ins.
+      * The `ETL-SQL.Connectors` section listed 13 connectors including a `MailKitConnector` that
+        does not exist, and omitted ten that do (MySql, Sqlite, Mongodb, Neo4j, BigQuery, Snowflake,
+        Kafka, S3, SharePoint, Directory/AD). Replaced with a per-project table generated from the
+        actual connector classes and package references.
+      * `Connectors_Standards.md` had no project-placement rule, so a new connector could be dropped
+        into the monolith and silently re-monolithise the graph. Added a Project Placement block to
+        the new-connector checklist covering group choice, package placement, the transitive-`using`
+        trap, the no-Engine/no-cross-group rule, and when a helper belongs in `.Common`.
+      Not changed: `Connectors.md` and the rest of `standards/` describe connector behaviour and
+      contracts, which the split did not alter. Version badges ("Applies to ETL-SQL 0.16.0") are left
+      to the release version bump rather than edited here.
 - [ ] **Scripts audit/cleanup**  The scripts folder has so many useful scripts but its getting cluttered
       and hard to find what you're looking for.  How can we improve?  Does everything still work?  Are
       we using them all to their full potential (at release for example)?  Rename to consistency - or _?
