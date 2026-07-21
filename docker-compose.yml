@@ -40,6 +40,7 @@ services:
       - Portal__FirstRun__AdminPassword=Admin12345!Password
       - Portal__FirstRun__MustChangePassword=false
       - Portal__Dataset__AtRestKey=c29tZS1zZWN1cmUtYmFzZTY0LWF0LXJlc3Qta2V5LTMyLWJ5dGVzLSE=
+      - Portal__Dataset__AtRestKeyVersion=v1
       - Portal__Dataset__AllowMachineFallback=true
     depends_on:
       - orchestrator-srv
