@@ -65,6 +65,32 @@ export function makeMockApi(seedState) {
         variables: seedState?.variables || [],
         tempTables: seedState?.tempTables || []
       };
+    } else if (path.endsWith('/api/formatter/config')) {
+      if (init?.method === 'POST') {
+        seedState._formatterOptions = { ...(seedState?._formatterOptions || {}), ...body };
+        data = { saved: true, path: '.etlsql-formatter.json' };
+      } else {
+        data = seedState?._formatterOptions || {
+          keywordCasing: 'upper',
+          indentSize: 2,
+          commaPlacement: 'leading',
+          lineWidth: 100,
+          indentJoins: false,
+          onClauseOnNewLine: false,
+          caseWhenThenNewLine: false,
+          breakoutWindowFunctions: false,
+          rightAlignKeywords: false,
+        };
+      }
+    } else if (path.endsWith('/api/format')) {
+      const casing = (seedState?._formatterOptions?.keywordCasing || 'upper').toLowerCase();
+      let formatted = body.script || '';
+      if (casing === 'lower') {
+        formatted = formatted.replace(/\b(SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|GROUP BY|ORDER BY|HAVING|CREATE|CONNECTION|DATASET|VISUAL|PAGE|AS|INTO|BEGIN|TRY|CATCH|MERGE|UPDATE|SET|INSERT|VALUES)\b/g, m => m.toLowerCase());
+      } else if (casing === 'upper') {
+        formatted = formatted.replace(/\b(select|from|where|join|left|right|inner|outer|group by|order by|having|create|connection|dataset|visual|page|as|into|begin|try|catch|merge|update|set|insert|values)\b/gi, m => m.toUpperCase());
+      }
+      data = { script: formatted };
     } else if (path.endsWith('/api/git/status')) {
       data = {
         branch: 'main',
