@@ -793,31 +793,52 @@
 
             el.dataset.page = pageName; // allows programmatic navigation
             el.addEventListener('click', () => {
-                // Hide all, show clicked
-                navDef.pages.forEach(n => {
-                    const s = pageSections[n];
-                    if (s) s.style.display = (n === pageName) ? 'block' : 'none';
-                });
-
-                updateBodyTheme(manifest, pageName);
+                try {
+                    // Hide all, show clicked
+                    navDef.pages.forEach(n => {
+                        const s = pageSections[n];
+                        if (s) s.style.display = (n === pageName) ? 'block' : 'none';
+                    });
+                } catch (e) {
+                    console.error('Error switching page visibility:', e);
+                }
 
                 // Set active state on all matching data-page elements
-                document.querySelectorAll('[data-page]').forEach(item => {
-                    if (item.dataset.page === pageName) {
-                        item.classList.add('active');
-                    } else {
-                        item.classList.remove('active');
-                    }
-                });
+                try {
+                    document.querySelectorAll('[data-page]').forEach(item => {
+                        if (item.dataset.page === pageName) {
+                            item.classList.add('active');
+                        } else {
+                            item.classList.remove('active');
+                        }
+                    });
+                } catch (e) {
+                    console.error('Error updating active page classes:', e);
+                }
+
                 _lastActivePage = pageName;
 
                 // Defer resize to the next frame so the active class renders first.
-                const target = pageSections[pageName];
-                if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
+                try {
+                    const target = pageSections[pageName];
+                    if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
+                } catch (e) {
+                    console.error('Error resizing charts:', e);
+                }
+
+                try {
+                    updateBodyTheme(manifest, pageName);
+                } catch (e) {
+                    console.error('Error updating body theme:', e);
+                }
 
                 // Notify portal of user-driven tab change so it can push a history entry
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+                    }
+                } catch (e) {
+                    console.error('Error posting message to parent window:', e);
                 }
             });
 
@@ -4044,29 +4065,40 @@
     function navigateToPage(pageName) {
         if (!pageName) return;
 
-        const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
-        if (navItem) {
-            navItem.click();
-            return;
-        }
+        try {
+            const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
+            if (navItem) {
+                navItem.click();
+                return;
+            }
+        } catch (e) { console.error(e); }
 
         const targetPage = document.getElementById('page-' + String(pageName).toLowerCase());
         if (!targetPage) return;
 
-        document.querySelectorAll('.page').forEach(page => {
-            page.style.display = page === targetPage ? 'block' : 'none';
-        });
+        try {
+            document.querySelectorAll('.page').forEach(page => {
+                page.style.display = page === targetPage ? 'block' : 'none';
+            });
+        } catch (e) { console.error(e); }
 
-        document.querySelectorAll('[data-page]').forEach(item => {
-            if (item.dataset.page === pageName) item.classList.add('active');
-            else item.classList.remove('active');
-        });
+        try {
+            document.querySelectorAll('[data-page]').forEach(item => {
+                if (item.dataset.page === pageName) item.classList.add('active');
+                else item.classList.remove('active');
+            });
+        } catch (e) { console.error(e); }
         _lastActivePage = pageName;
-        resizeChartsIn(targetPage);
 
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
-        }
+        try {
+            resizeChartsIn(targetPage);
+        } catch (e) { console.error(e); }
+
+        try {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+            }
+        } catch (e) { console.error(e); }
     }
 
     function getActivePage() {
