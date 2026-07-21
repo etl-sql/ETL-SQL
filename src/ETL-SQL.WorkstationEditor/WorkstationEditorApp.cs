@@ -56,6 +56,7 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton<WorkstationFormatService>();
         builder.Services.AddSingleton<WorkstationRunService>();
         builder.Services.AddSingleton<WorkstationPreviewService>();
+        builder.Services.AddSingleton<WorkstationGitService>();
 
         var app = builder.Build();
 
@@ -280,6 +281,26 @@ public static class WorkstationEditorApp
                 // BuildPreviewAsync redacts its own failure message, but any other exception
                 // reaching here (connector, IO) can carry a connection string.
                 return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
+
+        app.MapGet("/api/git/status", (WorkstationGitService git) =>
+            Results.Json(git.GetStatus(), JsonOptions));
+
+        app.MapPost("/api/git/commit", (GitCommitRequest request, WorkstationGitService git) =>
+        {
+            try
+            {
+                var result = git.Commit(request);
+                return Results.Json(result, JsonOptions);
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
             }
         });
 

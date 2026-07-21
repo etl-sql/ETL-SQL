@@ -649,6 +649,37 @@ public sealed class WorkstationEditorTests
         Assert.Contains("from", formatBody.Script);
     }
 
+    [Fact]
+    public async Task GitStatus_GetAndPost_ReturnsStatusAndCommitResponse()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        // 1. GET /api/git/status on non-git directory returns empty gracefully
+        using var getReq = new HttpRequestMessage(HttpMethod.Get, "/api/git/status");
+        getReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var getRes = await client.SendAsync(getReq);
+        Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
+        var status = await getRes.Content.ReadFromJsonAsync<GitStatusResponse>();
+        Assert.NotNull(status);
+        Assert.False(status!.IsGitRepository);
+
+        // 2. POST /api/git/commit without message returns error
+        using var commitReq = new HttpRequestMessage(HttpMethod.Post, "/api/git/commit");
+        commitReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        commitReq.Content = JsonContent.Create(new GitCommitRequest("  "));
+        var commitRes = await client.SendAsync(commitReq);
+        Assert.Equal(HttpStatusCode.OK, commitRes.StatusCode);
+        var commitBody = await commitRes.Content.ReadFromJsonAsync<GitCommitResponse>();
+        Assert.NotNull(commitBody);
+        Assert.False(commitBody!.Committed);
+        Assert.Equal("Commit message cannot be empty.", commitBody.Message);
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()

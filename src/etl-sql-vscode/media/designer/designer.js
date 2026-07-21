@@ -2137,6 +2137,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         <div class="etlsql-script-workbench ${hasSidebar ? 'etlsql-script-workbench-with-sidebar' : ''}">
             <div class="etlsql-script-workbench-toolbar">
                 <strong class="etlsql-script-workbench-title">${escapeHtml(opts.title || 'Script')}</strong>
+                <span class="etlsql-workbench-branch-badge" data-workbench-branch style="display:none; font-size:11px; font-weight:500; color:var(--portal-text-soft, #9da7b1); background:var(--portal-surface-subtle, rgba(255,255,255,0.06)); padding:2px 8px; border-radius:12px; border:1px solid var(--portal-border, #30363d); margin-left:8px;"></span>
                 <span class="etlsql-script-workbench-spacer"></span>
                 ${hasSidebar ? toolbarButton({ attr: 'data-toggle-sidebar', icon: 'sidebar', title: 'Toggle sidebar' }) : ''}
                 ${toolbarButton({ attr: 'data-toggle-theme', icon: 'theme', title: 'Toggle dark/light mode' })}
@@ -2613,16 +2614,29 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
     async function loadGit() {
         const gitEl = root.querySelector('[data-sidebar-git]');
+        const branchBadge = root.querySelector('[data-workbench-branch]');
         if (!gitEl) return;
         try {
             const fetcher = opts.authFetch ?? fetch;
             const res = await fetcher(opts.gitStatusUrl || '/api/git/status');
-            if (!res.ok) { hideGitSection(); return; }
+            if (!res.ok) { hideGitSection(); if (branchBadge) branchBadge.style.display = 'none'; return; }
             const data = await res.json();
-            if (data) {
-                // Branch and path names are attacker-influenceable (a cloned repo can carry a
-                // branch or file named `<img src=x onerror=...>`), so every value is escaped.
-                let gitHtml = `<div class="etlsql-tree-row etlsql-tree-header">🌿 ${escapeHtml(data.branch ?? '')}</div>`;
+            if (data && (data.branch || data.isGitRepository !== false)) {
+                const branchName = data.branch || opts.gitStatus?.branch || '';
+                if (branchBadge) {
+                    if (branchName) {
+                        branchBadge.textContent = `🌿 ${branchName}`;
+                        branchBadge.style.display = 'inline-block';
+                    } else {
+                        branchBadge.style.display = 'none';
+                    }
+                }
+
+                let gitHtml = `<div class="etlsql-tree-row etlsql-tree-header">🌿 ${escapeHtml(branchName)}</div>`;
+                if (data.staged && data.staged.length > 0) {
+                    gitHtml += '<div class="etlsql-tree-note">Staged</div>';
+                    gitHtml += data.staged.map(f => `<div class="etlsql-tree-row" style="color:var(--portal-success, #117853);">✓ ${escapeHtml(f)}</div>`).join('');
+                }
                 if (data.modified && data.modified.length > 0) {
                     gitHtml += '<div class="etlsql-tree-note">Modified</div>';
                     gitHtml += data.modified.map(f => `<div class="etlsql-tree-row" style="color:var(--portal-warning, #a05a00);">📝 ${escapeHtml(f)}</div>`).join('');
@@ -2632,8 +2646,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     gitHtml += data.untracked.map(f => `<div class="etlsql-tree-row">➕ ${escapeHtml(f)}</div>`).join('');
                 }
                 gitHtml += `
-                    <input type="text" data-git-comment placeholder="Commit message..." style="background:var(--portal-surface, #0f141b); color:var(--portal-text, #e6edf3); border:1px solid var(--portal-border, #30363d); padding:4px 6px; border-radius:4px; font-size:11px; margin-top:6px; outline:none;">
-                    <button type="button" class="btn btn-sm btn-primary" data-git-commit style="margin-top:4px; font-size:11px; font-weight:600; padding:4px;">Commit Changes</button>
+                    <input type="text" data-git-comment placeholder="Commit message..." style="background:var(--portal-surface, #0f141b); color:var(--portal-text, #e6edf3); border:1px solid var(--portal-border, #30363d); padding:4px 6px; border-radius:4px; font-size:11px; margin-top:6px; outline:none; width: 100%;">
+                    <button type="button" class="btn btn-sm btn-primary" data-git-commit style="margin-top:4px; font-size:11px; font-weight:600; padding:4px; width: 100%;">Commit Changes</button>
                 `;
                 gitEl.innerHTML = gitHtml;
                 
@@ -2651,10 +2665,11 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         });
                         const cData = await cRes.json();
                         if (cData.committed) {
-                            alert(`Committed successfully! Rev: ${cData.sourceRevision}`);
-                            loadGit();
+                            alert(`Committed successfully! Rev: ${cData.sourceRevision || cData.rev || ''}`);
+                            await loadGit();
+                            await loadFiles();
                         } else {
-                            alert('Nothing to commit.');
+                            alert(cData.message || 'Nothing to commit.');
                         }
                     } catch (e) {
                         alert('Commit failed: ' + e.message);
@@ -2662,9 +2677,13 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         commitBtn.disabled = false;
                     }
                 });
+            } else {
+                hideGitSection();
+                if (branchBadge) branchBadge.style.display = 'none';
             }
         } catch {
             hideGitSection();
+            if (branchBadge) branchBadge.style.display = 'none';
         }
     }
 

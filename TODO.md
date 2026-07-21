@@ -65,7 +65,7 @@ changes safer.
       file today, so this is unbuilt rather than partially done — the formatter itself works, it is
       only the settings surface and persistence that are missing.
 
-- [ ] **Workstation git status surface.**
+- [x] **Workstation git status surface.**
       A branch indicator in the status bar and a staging/commit sidebar panel, explicitly excluding
       diff viewers. The Portal already commits on save through
       `PortalScriptSourceControlService`; the Workstation editor has no git surface at all, so this
