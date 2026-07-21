@@ -2146,3 +2146,19 @@ body.vscode-dark .cm-editor .cm-line::selection {
     background: var(--portal-danger-soft, #fef2f2);
     color: var(--portal-danger, #b83535);
 }
+
+/* Container Box Visual Cards */
+.etlsql-dsgn-visual-card.is-container {
+    border: 2px dashed var(--portal-border-dark, #94a3b8);
+    background: rgba(148, 163, 184, 0.05);
+}
+
+.etlsql-dsgn-visual-card.is-container .etlsql-dsgn-vcard-badge {
+    background: #475569;
+    color: #ffffff;
+}
+
+.etlsql-dsgn-tree-item.child-item {
+    font-size: 11px;
+    color: var(--portal-muted, #64748b);
+}

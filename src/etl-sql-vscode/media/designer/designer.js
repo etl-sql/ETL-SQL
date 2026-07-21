@@ -3341,17 +3341,19 @@ export function createDesigner(container, opts = {}) {
         const rows = maxRow(visuals) + 2;
         canvasGrid.style.gridTemplateRows = `repeat(${rows}, 60px)`;
         for (const v of visuals) {
+            const isContainer = v.type === 'CONTAINER';
             const card = document.createElement('div');
-            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '');
+            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '');
             card.dataset.vid = v.id;
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
 
+            const badgeText = isContainer ? `📁 ${v.options?.CONTAINER_TYPE || 'BOX'}` : v.type;
             const cardHdr = document.createElement('div');
             cardHdr.className = 'etlsql-dsgn-vcard-hdr';
             cardHdr.innerHTML = `
-                <div class="etlsql-dsgn-vcard-badge">${v.type}</div>
+                <div class="etlsql-dsgn-vcard-badge">${badgeText}</div>
                 <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
                 <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
             `;
@@ -3380,12 +3382,29 @@ export function createDesigner(container, opts = {}) {
     function renderTree() {
         const tree = sidebar.querySelector('#dsgn-tree');
         tree.innerHTML = '';
-        for (const v of curVis()) {
+        const visuals = curVis();
+        const containers = visuals.filter(v => v.type === 'CONTAINER');
+        const rootVisuals = visuals.filter(v => !v.containerId || !containers.some(c => c.id === v.containerId));
+
+        for (const v of rootVisuals) {
             const item = document.createElement('div');
             item.className = 'etlsql-dsgn-tree-item' + (v.id === selVisualId ? ' selected' : '');
             item.dataset.vid = v.id;
-            item.textContent = `${v.name} (${v.type})`;
+            const icon = v.type === 'CONTAINER' ? '📁' : '📊';
+            item.textContent = `${icon} ${v.name} (${v.type})`;
             tree.appendChild(item);
+
+            if (v.type === 'CONTAINER') {
+                const children = visuals.filter(c => c.containerId === v.id);
+                for (const child of children) {
+                    const citem = document.createElement('div');
+                    citem.className = 'etlsql-dsgn-tree-item child-item' + (child.id === selVisualId ? ' selected' : '');
+                    citem.style.paddingLeft = '20px';
+                    citem.dataset.vid = child.id;
+                    citem.textContent = `└─ ${child.name} (${child.type})`;
+                    tree.appendChild(citem);
+                }
+            }
         }
     }
 
@@ -3487,6 +3506,11 @@ export function createDesigner(container, opts = {}) {
             .map(d => `<option value="${esc(d.name)}"${v.dataset === d.name ? ' selected' : ''}>#${esc(d.name)}</option>`)
             .join('');
 
+        const containers = curVis().filter(c => c.type === 'CONTAINER' && c.id !== v.id);
+        const cOpts = containers
+            .map(c => `<option value="${c.id}"${v.containerId === c.id ? ' selected' : ''}>📁 ${esc(c.title || c.name)}</option>`)
+            .join('');
+
         propsPanel.innerHTML = `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Properties</div>
@@ -3494,6 +3518,11 @@ export function createDesigner(container, opts = {}) {
                 <label class="etlsql-dsgn-label">Type
                     <select id="pp-type" class="form-control">
                         ${VTYPES.map(([t]) => `<option${v.type === t ? ' selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="etlsql-dsgn-label">Container Group
+                    <select id="pp-container-id" class="form-control">
+                        <option value="">— none —</option>${cOpts}
                     </select>
                 </label>
                 <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
@@ -3525,16 +3554,17 @@ export function createDesigner(container, opts = {}) {
             </div>
         `;
 
-        on('#pp-name',   e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',   e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-title',  e => { v.title = e.target.value; renderCanvas(); });
-        on('#pp-ds',     e => { v.dataset = e.target.value || null; });
-        on('#pp-width',  e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
-        on('#pp-height', e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
-        on('#pp-col',    e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-row',    e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-cspan',  e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
-        on('#pp-rspan',  e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+        on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-type',         e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); });
+        on('#pp-title',        e => { v.title = e.target.value; renderCanvas(); });
+        on('#pp-ds',           e => { v.dataset = e.target.value || null; });
+        on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
+        on('#pp-height',       e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
+        on('#pp-col',          e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-row',          e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
+        on('#pp-rspan',        e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
 
         for (const role of ROLES) {
             propsPanel.querySelector(`[data-role="${role}"]`)?.addEventListener('change', ev => {
@@ -4003,10 +4033,22 @@ export function createDesigner(container, opts = {}) {
 
             const v = findVis(activeId);
             if (v) {
+                const deltaCol = targetCol - (v.gridCol || 1);
+                const deltaRow = targetRow - (v.gridRow || 1);
+
                 v.gridCol = targetCol;
                 v.gridRow = targetRow;
                 v.gridColSpan = targetColSpan;
                 v.gridRowSpan = targetRowSpan;
+
+                if (v.type === 'CONTAINER' && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
+                    for (const child of curVis()) {
+                        if (child.containerId === v.id) {
+                            child.gridCol = Math.max(1, (child.gridCol || 1) + deltaCol);
+                            child.gridRow = Math.max(1, (child.gridRow || 1) + deltaRow);
+                        }
+                    }
+                }
             }
 
             renderCanvas();
