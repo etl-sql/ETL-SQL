@@ -3316,11 +3316,14 @@ export function createDesigner(container, opts = {}) {
 
         // Apply active filter if set
         if (activeSnapshotFilter) {
-            rows = rows.filter(r => String(Array.isArray(r) ? r[0] : r) === activeSnapshotFilter);
+            const filterLower = activeSnapshotFilter.toLowerCase();
+            rows = rows.filter(r => Array.isArray(r)
+                ? r.some(cell => String(cell).toLowerCase() === filterLower)
+                : String(r).toLowerCase() === filterLower);
         }
 
         if (type === 'CARD') {
-            const val = rows[0] ? (rows[0][1] ?? rows[0][0]) : '0';
+            const val = rows[0] ? (rows[0][rows[0].length - 1] ?? rows[0][0]) : '0';
             bodyEl.innerHTML = `
                 <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:4px;text-align:center;">
                     <div style="font-size:22px;font-weight:700;color:var(--portal-accent,#2563eb);line-height:1.2;">${esc(val)}</div>
@@ -3352,8 +3355,13 @@ export function createDesigner(container, opts = {}) {
             try {
                 const isDark = document.body.classList.contains('theme-dark');
                 const chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
-                const categories = rows.map(r => Array.isArray(r) ? r[0] : String(r));
-                const values = rows.map(r => Array.isArray(r) ? (typeof r[1] === 'number' ? r[1] : (typeof r[2] === 'number' ? r[2] : parseFloat(r[1]) || 10)) : 10);
+                
+                const sample = rows[0] || [];
+                const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
+                const valIdx = (Array.isArray(sample) && sample.length >= 2) ? sample.length - 1 : 0;
+
+                const categories = rows.map(r => Array.isArray(r) ? String(r[catIdx]) : String(r));
+                const values = rows.map(r => Array.isArray(r) ? (typeof r[valIdx] === 'number' ? r[valIdx] : parseFloat(r[valIdx]) || 10) : 10);
 
                 let option = {};
                 if (type === 'PIE' || type === 'DONUT') {
@@ -3363,7 +3371,7 @@ export function createDesigner(container, opts = {}) {
                         series: [{
                             type: 'pie',
                             radius: type === 'DONUT' ? ['35%', '65%'] : '65%',
-                            data: rows.map(r => ({ name: String(Array.isArray(r) ? r[0] : r), value: parseFloat(Array.isArray(r) ? r[1] : 10) || 10 })),
+                            data: rows.map(r => ({ name: String(Array.isArray(r) ? r[catIdx] : r), value: parseFloat(Array.isArray(r) ? r[valIdx] : 10) || 10 })),
                             label: { show: false }
                         }]
                     };
@@ -3672,17 +3680,75 @@ export function createDesigner(container, opts = {}) {
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
+    let selVisualIds = new Set();
+
     function selectVisual(id, opts = {}) {
-        selVisualId = id;
-        if (!opts.skipCanvas) {
-            renderCanvas();
-        } else {
-            for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
-                card.classList.toggle('selected', card.dataset.vid === id);
+        if (opts.toggle || opts.multi) {
+            if (id) {
+                if (selVisualIds.has(id)) selVisualIds.delete(id);
+                else selVisualIds.add(id);
             }
+        } else {
+            selVisualIds.clear();
+            if (id) selVisualIds.add(id);
         }
+
+        selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
+
+        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+            card.classList.toggle('selected', selVisualIds.has(card.dataset.vid));
+        }
+
         renderTree();
         renderProps();
+        renderAlignmentToolbar();
+    }
+
+    function renderAlignmentToolbar() {
+        let bar = canvasWrap.querySelector('#dsgn-align-bar');
+        if (selVisualIds.size < 2) {
+            if (bar) bar.style.display = 'none';
+            return;
+        }
+
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'dsgn-align-bar';
+            bar.className = 'etlsql-dsgn-align-bar';
+            canvasWrap.appendChild(bar);
+
+            bar.addEventListener('click', e => {
+                const btn = e.target.closest('[data-align]');
+                if (!btn) return;
+                const mode = btn.dataset.align;
+                const visuals = curVis().filter(v => selVisualIds.has(v.id));
+                if (visuals.length < 2) return;
+
+                if (mode === 'left') {
+                    const minCol = Math.min(...visuals.map(v => v.gridCol || 1));
+                    visuals.forEach(v => v.gridCol = minCol);
+                } else if (mode === 'top') {
+                    const minRow = Math.min(...visuals.map(v => v.gridRow || 1));
+                    visuals.forEach(v => v.gridRow = minRow);
+                } else if (mode === 'width') {
+                    const targetSpan = visuals[0].gridColSpan || 12;
+                    visuals.forEach(v => v.gridColSpan = targetSpan);
+                } else if (mode === 'height') {
+                    const targetSpan = visuals[0].gridRowSpan || 4;
+                    visuals.forEach(v => v.gridRowSpan = targetSpan);
+                }
+                renderCanvas();
+            });
+        }
+
+        bar.innerHTML = `
+            <span style="font-size:11px;font-weight:600;margin-right:2px;">${selVisualIds.size} selected</span>
+            <button class="btn btn-xs" data-align="left" title="Align Left">⬅ Left</button>
+            <button class="btn btn-xs" data-align="top" title="Align Top">⬆ Top</button>
+            <button class="btn btn-xs" data-align="width" title="Equal Width">↔ Width</button>
+            <button class="btn btn-xs" data-align="height" title="Equal Height">↕ Height</button>
+        `;
+        bar.style.display = 'flex';
     }
 
     function deleteVisual(id) {
@@ -4135,6 +4201,16 @@ export function createDesigner(container, opts = {}) {
                             child.gridRow = Math.max(1, (child.gridRow || 1) + deltaRow);
                         }
                     }
+                } else if (v.type !== 'CONTAINER' && isDragging) {
+                    const containers = curVis().filter(c => c.type === 'CONTAINER' && c.id !== v.id);
+                    const parentContainer = containers.find(c => {
+                        const cColStart = c.gridCol || 1;
+                        const cColEnd = cColStart + (c.gridColSpan || 12) - 1;
+                        const cRowStart = c.gridRow || 1;
+                        const cRowEnd = cRowStart + (c.gridRowSpan || 4) - 1;
+                        return targetCol >= cColStart && targetCol <= cColEnd && targetRow >= cRowStart && targetRow <= cRowEnd;
+                    });
+                    v.containerId = parentContainer ? parentContainer.id : null;
                 }
             }
 
@@ -4155,8 +4231,11 @@ export function createDesigner(container, opts = {}) {
         const del = e.target.closest('[data-del]');
         if (del) { deleteVisual(del.dataset.del); return; }
         const card = e.target.closest('.etlsql-dsgn-visual-card');
-        if (card) selectVisual(card.dataset.vid);
-        else { selVisualId = null; renderCanvas(); renderTree(); renderProps(); }
+        if (card) {
+            selectVisual(card.dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
+        } else {
+            selectVisual(null);
+        }
     });
 
     sidebar.querySelector('#dsgn-tree').addEventListener('click', e => {
