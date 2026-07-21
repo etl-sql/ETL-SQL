@@ -94,8 +94,16 @@ export function makeMockApi(seedState) {
     } else if (path.endsWith('/api/git/status')) {
       data = {
         branch: 'main',
+        staged: ['etl/staged_load.etlsql'],
         modified: ['etl/weekly_load.etlsql'],
-        untracked: ['etl/new_enrichment.etlsql']
+        untracked: ['etl/new_enrichment.etlsql'],
+        isGitRepository: true,
+      };
+    } else if (path.endsWith('/api/git/commit')) {
+      data = {
+        committed: true,
+        sourceRevision: 'c0ffee1',
+        message: 'Committed successfully.'
       };
     }
 
