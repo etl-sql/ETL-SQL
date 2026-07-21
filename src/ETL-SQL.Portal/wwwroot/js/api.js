@@ -83,6 +83,7 @@ async function apiJson(url, opts = {}) {
 }
 
 function versionHeaders(version) {
+    if (version === undefined || version === null) return {};
     return { 'If-Match': `"${version}"` };
 }
 

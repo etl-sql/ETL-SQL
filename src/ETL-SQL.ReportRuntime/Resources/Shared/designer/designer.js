@@ -3280,7 +3280,7 @@ export function createDesigner(container, opts = {}) {
     // ── API helper ────────────────────────────────────────────────────────────
     async function apiJson(url, method = 'GET', body = null, version = null) {
         const init = { method, headers: {} };
-        if (version !== null)
+        if (version !== null && version !== undefined)
             init.headers['If-Match'] = `"${version}"`;
         if (body !== null) {
             init.headers['Content-Type'] = 'application/json';

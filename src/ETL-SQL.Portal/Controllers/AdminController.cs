@@ -1041,7 +1041,8 @@ public class AdminController(
                 FolderName = r.Folder != null ? r.Folder.Name : "Root",
                 FolderPath = r.Folder != null ? r.Folder.Path : "/",
                 r.CreatedAt,
-                r.UpdatedAt
+                r.UpdatedAt,
+                r.Version
             })
             .ToListAsync();
 
