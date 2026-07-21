@@ -37,6 +37,29 @@ changes safer.
       * Remaining work: a designer-facing endpoint that resolves the last compiled snapshot for a
         report under the caller's identity, sampling/capping rows server-side, plus the
         `designer.html` wiring to pass it through. The client rendering is already done.
+      **RLS turns out to be satisfied structurally, not by filtering.** `ExecutionJobService` refuses
+      to persist a shared snapshot when a report is identity-sensitive — if the script references
+      identity or the run was impersonated, no `ReportSnapshot` row is written and the report is
+      per-viewer execution only. So any snapshot that exists cannot vary by identity, and reusing
+      `ExecutionController.ResolveReadableSnapshotKeyAsync` (folder permission + path containment +
+      artifact existence) is both necessary and sufficient. An identity-sensitive report correctly
+      yields "no snapshot available" in the designer.
+      **Blocked on one design decision: the manifest does not link a visual to its dataset.**
+      `VisualManifest` has 34 properties (`name`, `visualType`, `columns`, `rows`, `rowsSource`, …)
+      and none identifies the `DATASET` that produced it; `DatasetManifest` separately records
+      `TempTableName` and `RowCount`. Rows load per *visual index* (`SnapshotPackageService.LoadRowsAsync`),
+      but the client looks rows up by dataset name (`sampleRows[visual.dataset]`), so there is
+      nothing to key on. Options:
+      * **(a) Add the dataset name to `VisualManifest`.** Correct and durable, but changes the
+        snapshot format — and existing `.etlsnap` packages would still lack it, so a fallback is
+        needed regardless. Since the feature is specifically about loading the *last compiled*
+        package, older snapshots are the common case on day one.
+      * **(b) Key `sampleRows` by visual name and have the snapshot render path prefer the visual's
+        own identity over `visual.dataset`.** Works with snapshots that already exist, no format
+        bump; costs a small change to the shared `designer.js` snapshot lookup. **Recommended.**
+      * **(c) Rely on the client's existing "first dataset" fallback.** Cheapest, but every visual
+        then renders the same rows, which is visibly wrong for any multi-dataset report — i.e. most
+        real ones.
 
 ### Developer Experience: Portal and VS Code
 
