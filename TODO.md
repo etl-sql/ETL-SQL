@@ -59,7 +59,7 @@ changes safer.
 > code — LSP hover, hover lineage, the stateful sidebar explorer and server lifecycle
 > (`POST /api/shutdown`) are shipped; the two below are not.
 
-- [ ] **Formatter settings panel.**
+- [x] **Formatter settings panel.**
       A visual configuration sidebar for the editor's formatter (casing, spaces vs tabs, newlines)
       that serializes to a local `.etlsql-formatter.json`. Nothing in the codebase references that
       file today, so this is unbuilt rather than partially done — the formatter itself works, it is

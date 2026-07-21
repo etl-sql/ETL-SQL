@@ -22,6 +22,19 @@ public sealed class WorkstationFormatService(WorkstationWorkspace workspace)
         }
     }
 
+    public FormatterOptions GetOptions(string? documentUri)
+    {
+        return FormatterOptions.LoadFromFile(GetFormatterStartPath(documentUri)) ?? new FormatterOptions();
+    }
+
+    public string SaveOptions(FormatterOptions options)
+    {
+        if (workspace.ReadOnly)
+            throw new InvalidOperationException("Workspace is read-only.");
+
+        return FormatterOptions.SaveToWorkspace(workspace.Root, options);
+    }
+
     private string? GetFormatterStartPath(string? documentUri)
     {
         if (string.IsNullOrWhiteSpace(documentUri) ||

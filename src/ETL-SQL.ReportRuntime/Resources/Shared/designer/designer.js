@@ -2092,6 +2092,8 @@ const _TOOLBAR_ICONS = {
     save: '<path d="M3 2.5h7.5L13.5 5.5V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5"/><path d="M5 2.5v4h5v-4"/><path d="M5 13.5v-4h6v4"/>',
     close: '<path d="m4 4 8 8"/><path d="m12 4-8 8"/>',
     cancel: '<rect x="4" y="4" width="8" height="8" rx="1"/>',
+    format: '<path d="M2 3.5h12"/><path d="M2 7.5h8"/><path d="M2 11.5h12"/><path d="M2 15.5h6"/>',
+    formatSettings: '<path d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/><path d="M8 1v2m0 10v2m-6-7h2m10 0h2m-2.1-4.9-1.4 1.4m-7 7-1.4 1.4m0-9.8 1.4 1.4m7 7 1.4 1.4"/>',
 };
 
 function toolbarIcon(name) {
@@ -2137,6 +2139,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ${opts.editor?.completeUrl ? toolbarButton({ attr: 'data-suggest', icon: 'suggest', title: 'Suggest completions', key: 'Ctrl+Space' }) : ''}
                 ${opts.previewApiUrl ? toolbarButton({ attr: 'data-preview', icon: 'preview', title: 'Preview report' }) : ''}
                 ${opts.onApply ? toolbarButton({ attr: 'data-apply', icon: 'apply', title: 'Update designer from script' }) : ''}
+                ${toolbarButton({ attr: 'data-format', icon: 'format', title: 'Format document', key: 'Shift+Alt+F' })}
+                ${toolbarButton({ attr: 'data-format-settings', icon: 'formatSettings', title: 'Formatter settings (.etlsql-formatter.json)' })}
                 ${opts.onSave ? toolbarButton({ attr: 'data-save', icon: 'save', title: 'Save', key: 'Ctrl+S' }) : ''}
                 ${opts.onClose ? toolbarButton({ attr: 'data-close', icon: 'close', title: 'Close editor' }) : ''}
                 ${opts.onExit ? toolbarButton({ attr: 'data-exit', icon: 'close', title: 'Exit process', label: 'Exit' }) : ''}
@@ -2959,6 +2963,153 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         editorHost.querySelector('.cm-editor')?.focus();
     }
 
+    async function formatScript() {
+        if (opts.onFormat) {
+            await opts.onFormat(editor.getValue());
+            return;
+        }
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const docUri = getDocumentUri();
+            const script = editor.getValue();
+            const res = await fetcher('/api/format', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, documentUri: docUri }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.script) editor.setValue(data.script);
+            }
+        } catch (e) {
+            console.warn('Format failed:', e);
+        }
+    }
+
+    async function openFormatterSettingsModal() {
+        let modal = container.querySelector('#etlsql-formatter-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'etlsql-formatter-modal';
+            modal.className = 'etlsql-formatter-drawer';
+            container.appendChild(modal);
+        }
+
+        modal.innerHTML = `
+            <div class="etlsql-formatter-header">
+                <strong>⚙️ Formatter Settings</strong>
+                <button type="button" class="etlsql-tool-btn" data-fmt-close title="Close">✕</button>
+            </div>
+            <div class="etlsql-formatter-body">
+                <label class="etlsql-fmt-field">
+                    <span>Keyword Casing</span>
+                    <select id="fmt-casing" class="form-control">
+                        <option value="upper">UPPERCASE (SELECT)</option>
+                        <option value="lower">lowercase (select)</option>
+                        <option value="pascal">PascalCase (Select)</option>
+                        <option value="preserve">Preserve</option>
+                    </select>
+                </label>
+                <label class="etlsql-fmt-field">
+                    <span>Indent Size</span>
+                    <select id="fmt-indent" class="form-control">
+                        <option value="2">2 spaces</option>
+                        <option value="4">4 spaces</option>
+                        <option value="8">8 spaces</option>
+                    </select>
+                </label>
+                <label class="etlsql-fmt-field">
+                    <span>Comma Placement</span>
+                    <select id="fmt-comma" class="form-control">
+                        <option value="leading">Leading (,col)</option>
+                        <option value="trailing">Trailing (col,)</option>
+                    </select>
+                </label>
+                <label class="etlsql-fmt-field">
+                    <span>Line Width</span>
+                    <input type="number" id="fmt-linewidth" class="form-control" min="40" max="300" value="100">
+                </label>
+                <label class="etlsql-fmt-checkbox">
+                    <input type="checkbox" id="fmt-indentjoins"> Indent JOIN clauses
+                </label>
+                <label class="etlsql-fmt-checkbox">
+                    <input type="checkbox" id="fmt-onnewline"> Put ON clause on new line
+                </label>
+                <label class="etlsql-fmt-checkbox">
+                    <input type="checkbox" id="fmt-casenewline"> Put CASE WHEN/THEN on new line
+                </label>
+                <label class="etlsql-fmt-checkbox">
+                    <input type="checkbox" id="fmt-breakwindow"> Breakout window functions
+                </label>
+                <label class="etlsql-fmt-checkbox">
+                    <input type="checkbox" id="fmt-rightalign"> Right-align query keywords
+                </label>
+            </div>
+            <div class="etlsql-formatter-footer">
+                <button type="button" id="fmt-save-btn" class="btn btn-primary btn-sm">Save to .etlsql-formatter.json</button>
+                <span id="fmt-status" class="etlsql-fmt-status"></span>
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+        modal.querySelector('[data-fmt-close]').addEventListener('click', () => { modal.style.display = 'none'; });
+
+        try {
+            const fetcher = opts.authFetch ?? fetch;
+            const docUri = getDocumentUri();
+            const res = await fetcher(`/api/formatter/config?documentUri=${encodeURIComponent(docUri)}`);
+            if (res.ok) {
+                const config = await res.json();
+                if (config) {
+                    if (config.keywordCasing) modal.querySelector('#fmt-casing').value = config.keywordCasing.toLowerCase();
+                    if (config.indentSize) modal.querySelector('#fmt-indent').value = String(config.indentSize);
+                    if (config.commaPlacement) modal.querySelector('#fmt-comma').value = config.commaPlacement.toLowerCase();
+                    if (config.lineWidth) modal.querySelector('#fmt-linewidth').value = config.lineWidth;
+                    modal.querySelector('#fmt-indentjoins').checked = Boolean(config.indentJoins);
+                    modal.querySelector('#fmt-onnewline').checked = Boolean(config.onClauseOnNewLine);
+                    modal.querySelector('#fmt-casenewline').checked = Boolean(config.caseWhenThenNewLine);
+                    modal.querySelector('#fmt-breakwindow').checked = Boolean(config.breakoutWindowFunctions);
+                    modal.querySelector('#fmt-rightalign').checked = Boolean(config.rightAlignKeywords);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load formatter options:', e);
+        }
+
+        modal.querySelector('#fmt-save-btn').addEventListener('click', async () => {
+            const statusEl = modal.querySelector('#fmt-status');
+            statusEl.textContent = 'Saving...';
+            const payload = {
+                keywordCasing: modal.querySelector('#fmt-casing').value,
+                indentSize: parseInt(modal.querySelector('#fmt-indent').value, 10),
+                commaPlacement: modal.querySelector('#fmt-comma').value,
+                lineWidth: parseInt(modal.querySelector('#fmt-linewidth').value, 10) || 100,
+                indentJoins: modal.querySelector('#fmt-indentjoins').checked,
+                onClauseOnNewLine: modal.querySelector('#fmt-onnewline').checked,
+                caseWhenThenNewLine: modal.querySelector('#fmt-casenewline').checked,
+                breakoutWindowFunctions: modal.querySelector('#fmt-breakwindow').checked,
+                rightAlignKeywords: modal.querySelector('#fmt-rightalign').checked,
+            };
+
+            try {
+                const fetcher = opts.authFetch ?? fetch;
+                const res = await fetcher('/api/formatter/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                statusEl.textContent = '✓ Saved to .etlsql-formatter.json';
+                setTimeout(() => { modal.style.display = 'none'; }, 1000);
+
+                await formatScript();
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
     container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', () => run('script'));
@@ -2968,6 +3119,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
     container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
     container.querySelector('[data-apply]')?.addEventListener('click', apply);
+    container.querySelector('[data-format]')?.addEventListener('click', formatScript);
+    container.querySelector('[data-format-settings]')?.addEventListener('click', openFormatterSettingsModal);
     container.querySelector('[data-save]')?.addEventListener('click', save);
     container.querySelector('[data-close]')?.addEventListener('click', () => opts.onClose?.());
     container.querySelector('[data-exit]')?.addEventListener('click', () => opts.onExit?.());

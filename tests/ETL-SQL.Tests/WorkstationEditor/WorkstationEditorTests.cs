@@ -595,6 +595,60 @@ public sealed class WorkstationEditorTests
         Assert.DoesNotContain(confirmed!.Diagnostics, d => d.Code == "RUN_DESTRUCTIVE");
     }
 
+    [Fact]
+    public async Task FormatterConfig_GetAndPost_SavesToEtlsqlFormatterJson()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        // 1. GET initial options
+        using var getReq = new HttpRequestMessage(HttpMethod.Get, "/api/formatter/config");
+        getReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        var getRes = await client.SendAsync(getReq);
+        Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
+        var defaultOpts = await getRes.Content.ReadFromJsonAsync<ETL_SQL.Core.Formatting.FormatterOptions>();
+        Assert.NotNull(defaultOpts);
+        Assert.Equal("upper", defaultOpts!.KeywordCasing);
+
+        // 2. POST updated options (lower casing, 2 spaces)
+        var updatedOpts = new ETL_SQL.Core.Formatting.FormatterOptions
+        {
+            KeywordCasing = "lower",
+            IndentSize = 2,
+            CommaPlacement = "trailing",
+            IndentJoins = true,
+        };
+
+        using var postReq = new HttpRequestMessage(HttpMethod.Post, "/api/formatter/config");
+        postReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        postReq.Content = JsonContent.Create(updatedOpts);
+        var postRes = await client.SendAsync(postReq);
+        Assert.Equal(HttpStatusCode.OK, postRes.StatusCode);
+
+        // 3. Verify .etlsql-formatter.json was created on disk
+        string configFile = Path.Combine(temp.Root, ".etlsql-formatter.json");
+        Assert.True(File.Exists(configFile));
+        string json = await File.ReadAllTextAsync(configFile);
+        Assert.Contains("\"KeywordCasing\": \"lower\"", json);
+
+        // 4. Verify /api/format uses the saved options
+        using var formatReq = new HttpRequestMessage(HttpMethod.Post, "/api/format");
+        formatReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        formatReq.Content = JsonContent.Create(new FormatRequest(
+            "SELECT id, name FROM customers;",
+            "pipeline.etlsql"));
+        var formatRes = await client.SendAsync(formatReq);
+        Assert.Equal(HttpStatusCode.OK, formatRes.StatusCode);
+        var formatBody = await formatRes.Content.ReadFromJsonAsync<FormatResponse>();
+        Assert.NotNull(formatBody);
+        Assert.Contains("select", formatBody!.Script);
+        Assert.Contains("from", formatBody.Script);
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()

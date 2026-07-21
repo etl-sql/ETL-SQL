@@ -31,20 +31,23 @@ public class FormatterOptions
 
         try
         {
-            string? currentDir = Path.GetDirectoryName(startFilePath);
+            string? currentDir = Directory.Exists(startFilePath) ? startFilePath : Path.GetDirectoryName(startFilePath);
             while (!string.IsNullOrEmpty(currentDir))
             {
-                string configPath = Path.Combine(currentDir, ".etlsqlformat.json");
-                if (File.Exists(configPath))
+                foreach (var fileName in new[] { ".etlsql-formatter.json", ".etlsqlformat.json" })
                 {
-                    string json = File.ReadAllText(configPath);
-                    var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json, new System.Text.Json.JsonSerializerOptions
+                    string configPath = Path.Combine(currentDir, fileName);
+                    if (File.Exists(configPath))
                     {
-                        PropertyNameCaseInsensitive = true
-                    });
-                    if (loaded != null)
-                    {
-                        return loaded;
+                        string json = File.ReadAllText(configPath);
+                        var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json, new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        if (loaded != null)
+                        {
+                            return loaded;
+                        }
                     }
                 }
                 currentDir = Path.GetDirectoryName(currentDir);
@@ -64,13 +67,16 @@ public class FormatterOptions
 
         try
         {
-            string? currentDir = Path.GetDirectoryName(startFilePath);
-            while (!string.IsNullOrEmpty(currentDir))
+            var loadedFromWorkspace = LoadFromWorkspace(startFilePath);
+            if (loadedFromWorkspace != null) return loadedFromWorkspace;
+
+            // Fallback to the executable directory
+            foreach (var fileName in new[] { ".etlsql-formatter.json", ".etlsqlformat.json" })
             {
-                string configPath = Path.Combine(currentDir, ".etlsqlformat.json");
-                if (File.Exists(configPath))
+                string exeDirConfig = Path.Combine(AppContext.BaseDirectory, fileName);
+                if (File.Exists(exeDirConfig))
                 {
-                    string json = File.ReadAllText(configPath);
+                    string json = File.ReadAllText(exeDirConfig);
                     var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json, new System.Text.Json.JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true
@@ -80,22 +86,6 @@ public class FormatterOptions
                         return loaded;
                     }
                 }
-                currentDir = Path.GetDirectoryName(currentDir);
-            }
-
-            // Fallback to the executable directory
-            string exeDirConfig = Path.Combine(AppContext.BaseDirectory, ".etlsqlformat.json");
-            if (File.Exists(exeDirConfig))
-            {
-                string json = File.ReadAllText(exeDirConfig);
-                var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json, new System.Text.Json.JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                if (loaded != null)
-                {
-                    return loaded;
-                }
             }
         }
         catch
@@ -104,6 +94,21 @@ public class FormatterOptions
         }
 
         return options;
+    }
+
+    public static string SaveToWorkspace(string workspaceRoot, FormatterOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceRoot)) throw new ArgumentException("Workspace root path is required.", nameof(workspaceRoot));
+        options ??= new FormatterOptions();
+
+        string targetPath = Path.Combine(workspaceRoot, ".etlsql-formatter.json");
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+        string json = System.Text.Json.JsonSerializer.Serialize(options, jsonOptions);
+        File.WriteAllText(targetPath, json);
+        return targetPath;
     }
 }
 

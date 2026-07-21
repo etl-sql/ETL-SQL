@@ -245,6 +245,26 @@ public static class WorkstationEditorApp
         app.MapPost("/api/format", (FormatRequest request, WorkstationFormatService formatter) =>
             Results.Json(formatter.Format(request), JsonOptions));
 
+        app.MapGet("/api/formatter/config", (string? documentUri, WorkstationFormatService formatter) =>
+            Results.Json(formatter.GetOptions(documentUri), JsonOptions));
+
+        app.MapPost("/api/formatter/config", (ETL_SQL.Core.Formatting.FormatterOptions options, WorkstationFormatService formatter) =>
+        {
+            try
+            {
+                var targetPath = formatter.SaveOptions(options);
+                return Results.Json(new { saved = true, path = targetPath }, JsonOptions);
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPost("/api/run", async (RunRequest request, WorkstationRunService runner, CancellationToken cancellationToken) =>
             Results.Json(await runner.RunAsync(request, cancellationToken), JsonOptions));
 
