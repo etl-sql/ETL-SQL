@@ -251,9 +251,11 @@ public class DesignerControllerTests
     public void Parse_ScalesStructureSlotsToGridColumns()
     {
         const string script = """
-            CREATE VISUAL BasicBar AS BAR (TITLE = 'Basic');
-            CREATE VISUAL GroupedBar AS BAR (TITLE = 'Grouped');
-            CREATE VISUAL FullBar AS BAR (TITLE = 'Full');
+            CREATE DATASET &sales AS (SELECT 1 AS x);
+
+            CREATE VISUAL BasicBar AS BAR (SOURCE = &sales, TITLE = 'Basic');
+            CREATE VISUAL GroupedBar AS BAR (SOURCE = &sales, TITLE = 'Grouped');
+            CREATE VISUAL FullBar AS BAR (SOURCE = &sales, TITLE = 'Full');
 
             CREATE PAGE BarKitchenSink AS DASHBOARD (
                 LAYOUT (
@@ -270,6 +272,7 @@ public class DesignerControllerTests
         var parseResult = Assert.IsType<OkObjectResult>(controller.Parse(new ParseDesignerRequest(script)));
         var parseResponse = Assert.IsType<ParseDesignerResponse>(parseResult.Value);
 
+        Assert.Null(parseResponse.Error);
         Assert.NotNull(parseResponse.DesignState);
         Assert.Single(parseResponse.DesignState.Pages);
         var page = parseResponse.DesignState.Pages[0];
