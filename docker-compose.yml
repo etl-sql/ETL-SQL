@@ -1,6 +1,9 @@
 services:
   orchestrator-srv:
     image: etl-sql/orchestrator:latest
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.Orchestrator.Service/Dockerfile
     ports:
       - "5001:5001"
     volumes:
@@ -14,6 +17,9 @@ services:
 
   portal-srv:
     image: etl-sql/portal:latest
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.Portal/Dockerfile
     ports:
       - "5000:5000"
     volumes:
