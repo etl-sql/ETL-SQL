@@ -115,9 +115,21 @@ changes safer.
         should do the same.
       Not done: the "audit the real connectors for the same gap" half. `SqlServer`, `Postgres` and
       `MySql` have catalog providers; the remaining connectors do not and still report `ANY`.
-- [ ] **Optional Portal git write-back.**
+- [x] **Optional Portal git write-back.**
       When a git backend is configured, save commits on behalf of the user to preserve the
       source-controlled-report promise.
+      Verified already shipped, not newly built. `PortalScriptSourceControlService` gates on
+      `PortalSourceControlConfig` (`Enabled`, `Provider`, `RepositoryRoot`, `Remote`, `Branch`,
+      `PushOnSave`), commits through `CommitScriptAsync`, and attributes the commit to the user via
+      `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` while the Portal remains the committer. `PushOnSave`
+      optionally pushes.
+      Reachable, not just registered: `ReportsController` calls `CommitScriptAsync` on save,
+      `ReportScriptSaveService` drives validation and revision checks, and the service is registered
+      in `Program.cs`.
+      Beyond the original ask: `ValidateScriptTextForCommit` refuses to commit scripts containing
+      plaintext credentials (committing one to git is precisely where a leaked password becomes
+      permanent), `IsBaseRevisionCurrent` detects concurrent edits, and repository writes are
+      serialized. Covered by `PortalScriptSourceControlServiceTests`.
       
 ### Developer Experience: Local Browser Script Editor
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
