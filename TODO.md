@@ -61,10 +61,32 @@ changes safer.
       Not changed: `Connectors.md` and the rest of `standards/` describe connector behaviour and
       contracts, which the split did not alter. Version badges ("Applies to ETL-SQL 0.16.0") are left
       to the release version bump rather than edited here.
-- [ ] **Scripts audit/cleanup**  The scripts folder has so many useful scripts but its getting cluttered
+- [x] **Scripts audit/cleanup**  The scripts folder has so many useful scripts but its getting cluttered
       and hard to find what you're looking for.  How can we improve?  Does everything still work?  Are
       we using them all to their full potential (at release for example)?  Rename to consistency - or _?
       Update README.md with decisions.
+      Done. Nothing retired — the audit found no dead scripts, only undiscoverable ones.
+      * **Naming:** ten scripts used underscores; renamed to hyphens to match documentation
+        filenaming. References updated in live files (scripts, `release.yml`, the workflow template,
+        `.gitignore`, `CLAUDE.md`, current docs); history keeps the old names deliberately. Verified
+        rather than assumed — every referenced path resolves and all nine modified PowerShell
+        scripts parse. PowerShell `Verb-Noun` PascalCase names were **left alone**: that is
+        PowerShell's own convention, the `.ps1`/`.sh` pairs already split that way on purpose, and
+        renaming them would churn every documented release command.
+      * **Discoverability:** 21 of 90 scripts were missing from `scripts/README.md`, including
+        `Invoke-Release.ps1` itself. All 90 are now listed with descriptions taken from each
+        script's own header, grouped by purpose, and the one-shot migration helpers left over from
+        the docs restructure are explicitly marked as not routine.
+      * **Release coverage:** the apparent orphans were mostly false positives — name-based
+        reachability undercounts, because `Test-AllSamples.ps1` runs as a phase inside
+        `Test-PreRelease.ps1` and `Test-HaSoakContracts.ps1` aggregates nine HA scripts. One real
+        gap: nothing checked `THIRD-PARTY-INVENTORY.md` against the package graph, and it had
+        already drifted silently after the connector split. `Test-PreRelease.ps1` now runs
+        `generate-third-party-inventory.js --check`.
+      * **Deliberately not added:** a `Test-VulnerablePackages.ps1` phase. The "NuGet dependency
+        audit" phase already fails on vulnerable *and* deprecated packages via
+        `scripts/lib/DependencyAudit.ps1`, with a per-project fallback for a solution-level CPM bug
+        the standalone script would hit — it is the weaker of the two.
 
 
 ### Visual Reporting and Dashboard Designer
