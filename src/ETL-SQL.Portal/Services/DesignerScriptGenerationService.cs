@@ -103,6 +103,15 @@ public sealed class DesignerScriptGenerationService
                 .ToList();
             if (mappings.Count > 0)
                 sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
+
+            var layoutOpts = new List<string>();
+            if (v.Options.TryGetValue("WIDTH", out var w) && !string.IsNullOrWhiteSpace(w))
+                layoutOpts.Add($"WIDTH = '{EscapeStr(w)}'");
+            if (v.Options.TryGetValue("HEIGHT", out var h) && !string.IsNullOrWhiteSpace(h))
+                layoutOpts.Add($"HEIGHT = '{EscapeStr(h)}'");
+            if (layoutOpts.Count > 0)
+                sb.AppendLine($"    LAYOUT ({string.Join(", ", layoutOpts)}),");
+
             sb.Append(");");
         }
         return sb.ToString().TrimEnd();

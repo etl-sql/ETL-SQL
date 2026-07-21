@@ -3497,6 +3497,8 @@ export function createDesigner(container, opts = {}) {
                         <option value="">— none —</option>${dsOpts}
                     </select>
                 </label>
+                <label class="etlsql-dsgn-label">Width<input id="pp-width" class="form-control" placeholder="auto, 300px, 100%" value="${esc(v.options?.WIDTH || v.width || '')}"></label>
+                <label class="etlsql-dsgn-label">Height<input id="pp-height" class="form-control" placeholder="auto, 200px, 100%" value="${esc(v.options?.HEIGHT || v.height || '')}"></label>
             </div>
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Mappings</div>
@@ -3518,14 +3520,16 @@ export function createDesigner(container, opts = {}) {
             </div>
         `;
 
-        on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',  e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
-        on('#pp-ds',    e => { v.dataset = e.target.value || null; });
-        on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
-        on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+        on('#pp-name',   e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-type',   e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-title',  e => { v.title = e.target.value; renderCanvas(); });
+        on('#pp-ds',     e => { v.dataset = e.target.value || null; });
+        on('#pp-width',  e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
+        on('#pp-height', e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
+        on('#pp-col',    e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-row',    e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-cspan',  e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
+        on('#pp-rspan',  e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
 
         for (const role of ROLES) {
             propsPanel.querySelector(`[data-role="${role}"]`)?.addEventListener('change', ev => {

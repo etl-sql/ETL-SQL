@@ -614,7 +614,12 @@ function generateMockScript(state) {
           .map(([k, c]) => `${k} = ${c}`)
           .join(', ');
         const dsName = v.dataset ? (v.dataset.startsWith('&') ? v.dataset : '&' + v.dataset) : '&sales';
-        out.push(`CREATE VISUAL ${vName} AS ${v.type} (\n    SOURCE = ${dsName}${maps ? `,\n    MAPPINGS (${maps})` : ''},\n    TITLE = '${v.title || v.name}'\n);`);
+        const layoutOpts = [];
+        if (v.width || v.options?.WIDTH) layoutOpts.push(`WIDTH = '${v.width || v.options.WIDTH}'`);
+        if (v.height || v.options?.HEIGHT) layoutOpts.push(`HEIGHT = '${v.height || v.options.HEIGHT}'`);
+        const layoutClause = layoutOpts.length ? `,\n    LAYOUT (${layoutOpts.join(', ')})` : '';
+
+        out.push(`CREATE VISUAL ${vName} AS ${v.type} (\n    SOURCE = ${dsName}${maps ? `,\n    MAPPINGS (${maps})` : ''},\n    TITLE = '${v.title || v.name}'${layoutClause}\n);`);
       }
     }
     const structure = buildStructure(p.visuals);
