@@ -2025,13 +2025,16 @@ export function createScriptResultsPanel(container) {
 
 }
 
-function filterRows(rows, columns, filter) {
+// Exported for scripts/test-result-grid-ui.mjs. These three carry the result grid's behaviour —
+// what the filter box matches, how a value becomes display text, and what CSV export writes — and
+// are pure, so they are testable without a DOM. The rendering around them is not.
+export function filterRows(rows, columns, filter) {
     const term = String(filter || '').trim().toLowerCase();
     if (!term) return rows;
     return rows.filter(row => columns.some(c => formatResultCell(row?.[c]).toLowerCase().includes(term)));
 }
 
-function toCsv(columns, rows) {
+export function toCsv(columns, rows) {
     const escapeCsv = value => {
         const text = formatResultCell(value);
         return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -2042,7 +2045,7 @@ function toCsv(columns, rows) {
     ].join('\r\n');
 }
 
-function formatResultCell(value) {
+export function formatResultCell(value) {
     if (value == null) return '';
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);

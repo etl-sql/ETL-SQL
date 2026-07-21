@@ -229,9 +229,27 @@ changes safer.
         (admin-administered, credentials never reach the user). A workstation vault is neither, and
         being DPAPI machine-scoped it would not even follow a user to a second machine. The only
         gain was not retyping a connection, which `ENC:` already covers per script.
-- [ ] **Browser smoke coverage.**
+- [x] **Browser smoke coverage.**
       Extend smoke tests for installed CLI launch, selection execution, `.rptsql` preview, schema
       autocomplete, cancellation, and result-grid interaction.
+      Audited each of the six. Five were already covered by `WorkstationEditorTests` — CLI launch
+      (option parsing and host startup), selection execution, `.rptsql` preview including its error
+      path, schema autocomplete (completions, star expansion, document connection metadata), and
+      cancellation (`Run_HonoursClientCancellation`).
+      Result-grid interaction was the real gap: the four existing browser-side tests cover admin
+      catalog, lineage, publish folders and subscription history, and none touched the grid.
+      `scripts/test-result-grid-ui.mjs` now covers what the grid actually decides — filter matching
+      (case-insensitive, across columns, on display text, tolerant of null cells and missing rows),
+      cell formatting (null renders empty while `0`/`false`/`''` survive), and CSV escaping (commas,
+      embedded quotes doubled per RFC 4180, newlines, escaped headers). Wired into the same lane
+      block as its siblings.
+      `filterRows`, `toCsv` and `formatResultCell` were exported from the canonical `designer.js` to
+      make this possible. Testing them directly rather than through the DOM is deliberate: the
+      `scripts/*.mjs` tests run as bare `node <file>` with no root `package.json`, so no npm
+      dependency is available — which is why the sibling tests hand-roll a DOM. jsdom exists only
+      under the VS Code extension's `node_modules` and is not resolvable from the repo root; pulling
+      it in would mean introducing root `node_modules` and a licence-audit obligation for test
+      scaffolding. The rendering wrapper around these helpers remains uncovered.
 - [ ] **Result rendering UX.**
       Keep the query editor and result area stable after a run, jump/focus directly to the results, and
       virtualize large result sets so the page does not shift or become sluggish.
