@@ -46,6 +46,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   with usage. `--profile` was removed from the documented command shape; local connection profiles
   were deliberately not built.
 
+**Report Designer lays out against the last compiled snapshot**
+- The designer canvas now renders visuals using data from the report's most recent `.etlsnap`
+  package instead of empty wireframe placeholders, so layout decisions are made against real shapes
+  without touching a production database. Rows are capped at 500 per visual and the canvas badges a
+  sampled snapshot.
+- A report that has never run, or one whose output depends on the viewer's identity, has no shared
+  snapshot and continues to show placeholders — identity-sensitive reports deliberately never
+  persist one.
+
+**Result grid no longer renders unbounded result sets**
+- The grid built one row of DOM for every row returned. Runs started from the Workstation editor and
+  the Portal are capped, but the VS Code REPL streams whatever the CLI evaluated, so a large
+  `SELECT` could hang the results panel. The grid now draws at most 5,000 rows and labels a
+  truncated view "showing first N of M". Export is unaffected and still writes every row.
+
 **`WAITFOR FILE UNLOCKED` no longer reports a false syntax error**
 - The linter grammar modelled only `WAITFOR DELAY | TIME | (condition)`, so a valid
   `WAITFOR FILE UNLOCKED` statement was flagged as a syntax error in the editor and completion

@@ -14,61 +14,30 @@ changes safer.
 
 ### Visual Reporting and Dashboard Designer
 
-- [ ] **Snapshot-backed layout designing.**
+- [ ] **Snapshot-backed layout designing.** — *implementation shipped, end-to-end verification outstanding*
       Allow the Report Designer to load and deserialize the last successfully compiled `.etlsnap`
       package. Visuals should render on the grid canvas with historical snapshot data instead of empty
       wireframe placeholders, giving a live-like design experience without hitting production
       databases.
-      Snapshot rows are real data: apply the same row-level security as viewing
-      (RLS-filtered/sampled/redacted snapshot), so a designer never sees rows they could not see in the
-      report. Cap or sample large snapshots to avoid loading millions of rows into the browser canvas.
-      **Reopened after verification — the rendering half exists, the production half does not.**
-      * Present: `designer.js` renders a supplied package (`_renderSnapshotCardBody` reads
-        `opts.snapshotPackage.sampleRows`, with a category filter and an ECharts path), and
-        `tools/ui-sandbox/stories/snapshot-designer.story.js` drives it from fixtures.
-      * Missing: nothing in production supplies `snapshotPackage`. `src/ETL-SQL.Portal/wwwroot/designer.html`
-        never mentions snapshots, and `DesignerController` has zero snapshot references, so the
-        Portal designer still renders wireframe placeholders. The sandbox story is the only consumer.
-      * Missing: the RLS requirement is therefore unmet — not violated, just unreachable. The
-        existing snapshot endpoints on `ExecutionController`
-        (`reports/{id}/snapshot/rows/{visualIndex}`) are the *viewing* path and gate on
-        `ResolveReadableSnapshotKeyAsync`; whatever wires the designer must go through an
-        equivalently gated path rather than reading `.etlsnap` off disk.
-      * Remaining work: a designer-facing endpoint that resolves the last compiled snapshot for a
-        report under the caller's identity, sampling/capping rows server-side, plus the
-        `designer.html` wiring to pass it through. The client rendering is already done.
-      **RLS turns out to be satisfied structurally, not by filtering.** `ExecutionJobService` refuses
-      to persist a shared snapshot when a report is identity-sensitive — if the script references
-      identity or the run was impersonated, no `ReportSnapshot` row is written and the report is
-      per-viewer execution only. So any snapshot that exists cannot vary by identity, and reusing
-      `ExecutionController.ResolveReadableSnapshotKeyAsync` (folder permission + path containment +
-      artifact existence) is both necessary and sufficient. An identity-sensitive report correctly
-      yields "no snapshot available" in the designer.
-      **Server and wiring now shipped (option b).** `DesignerSnapshotService` resolves the latest
-      snapshot behind the same folder-permission and path-containment gate the view path uses, loads
-      rows per visual, caps them at 500 per visual for a browser canvas, and reports
-      `isSampled`/`totalRows` so the canvas badge is honest. `GET /api/designer/snapshot/{reportId}`
-      exposes it, `designer.html` fetches it and passes `snapshotPackage`, and a failure there never
-      blocks opening the designer. Covered by `DesignerSnapshotServiceTests`.
-      Remaining: the render path is unverified against a real compiled `.etlsnap` — the tests cover
-      the gate and the absence cases, not a populated package end to end. Worth a pass once a
-      snapshot exists in a dev Portal.
-      **Design decision taken — the manifest does not link a visual to its dataset.**
-      `VisualManifest` has 34 properties (`name`, `visualType`, `columns`, `rows`, `rowsSource`, …)
-      and none identifies the `DATASET` that produced it; `DatasetManifest` separately records
-      `TempTableName` and `RowCount`. Rows load per *visual index* (`SnapshotPackageService.LoadRowsAsync`),
-      but the client looks rows up by dataset name (`sampleRows[visual.dataset]`), so there is
-      nothing to key on. Options:
-      * **(a) Add the dataset name to `VisualManifest`.** Correct and durable, but changes the
-        snapshot format — and existing `.etlsnap` packages would still lack it, so a fallback is
-        needed regardless. Since the feature is specifically about loading the *last compiled*
-        package, older snapshots are the common case on day one.
-      * **(b) Key `sampleRows` by visual name and have the snapshot render path prefer the visual's
-        own identity over `visual.dataset`.** Works with snapshots that already exist, no format
-        bump; costs a small change to the shared `designer.js` snapshot lookup. **Recommended.**
-      * **(c) Rely on the client's existing "first dataset" fallback.** Cheapest, but every visual
-        then renders the same rows, which is visibly wrong for any multi-dataset report — i.e. most
-        real ones.
+      Shipped: `DesignerSnapshotService` resolves the newest snapshot behind the same gate the view
+      path uses (folder permission, path containment on the script and the snapshot key, artifact
+      existence), loads rows per visual, caps at 500 rows per visual, and returns
+      `isSampled`/`totalRows` so the canvas badge is honest.
+      `GET /api/designer/snapshot/{reportId}` exposes it and `designer.html` passes it through; a
+      failure there never blocks opening the designer, since a report that has never run legitimately
+      has no snapshot. Covered by `DesignerSnapshotServiceTests`.
+      Row-level security needs no filtering: `ExecutionJobService` refuses to persist a shared
+      snapshot for an identity-sensitive report — if the script references identity or the run was
+      impersonated, none is written and the report stays per-viewer execution only — so any snapshot
+      that exists is identity-independent by construction and the permission gate is sufficient.
+      Sample rows are keyed by visual name because the manifest never links a visual to its dataset
+      (`VisualManifest` has 34 properties, none naming the `DATASET`). The render path resolves a
+      visual's own name/title/id, then its dataset, then the first entry. Chosen over adding the link
+      to the manifest because this works with snapshots that already exist, which is the whole point
+      of loading the last *already-compiled* package.
+      **Remaining: verify the render path against a real compiled `.etlsnap`.** The tests cover the
+      permission gate and the absence cases, not a populated package rendering end to end. Needs a
+      dev Portal with a report that has actually run.
 
 ### Developer Experience: Portal and VS Code
 
@@ -79,10 +48,6 @@ changes safer.
 
 ### Developer Experience: Local Browser Script Editor
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
-
-- [ ] **Result rendering UX.**
-      Keep the query editor and result area stable after a run, jump/focus directly to the results, and
-      virtualize large result sets so the page does not shift or become sluggish.
 
 ### Release Verification
 

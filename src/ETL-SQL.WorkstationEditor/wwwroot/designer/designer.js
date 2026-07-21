@@ -1758,11 +1758,10 @@ export function createScriptResultsPanel(container) {
         const rows = Array.isArray(latest.rows) ? latest.rows : [];
         if (!columns.length) return '<div class="etlsql-script-results-empty">No result grid.</div>';
         const filteredRows = filterRows(rows, columns, resultFilter);
+        // Bounded so an uncapped producer cannot hang the panel; the label says when it truncated.
+        const { visible, label: count } = resultRenderWindow(filteredRows, rows.length, !!resultFilter);
         const head = columns.map(c => `<th data-column="${escape(c)}" style="cursor:pointer;" title="Click for column lineage">${escape(c)}</th>`).join('');
-        const dataRows = filteredRows.map(row => `<tr>${columns.map(c => `<td data-column="${escape(c)}" style="cursor:pointer;" title="Click for cell lineage">${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
-        const count = resultFilter
-            ? `${filteredRows.length} of ${rows.length} row${rows.length === 1 ? '' : 's'}`
-            : `${rows.length} row${rows.length === 1 ? '' : 's'}`;
+        const dataRows = visible.map(row => `<tr>${columns.map(c => `<td data-column="${escape(c)}" style="cursor:pointer;" title="Click for cell lineage">${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
         return `${renderLineageBar()}<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
 
@@ -2025,9 +2024,42 @@ export function createScriptResultsPanel(container) {
 
 }
 
-// Exported for scripts/test-result-grid-ui.mjs. These three carry the result grid's behaviour —
-// what the filter box matches, how a value becomes display text, and what CSV export writes — and
-// are pure, so they are testable without a DOM. The rendering around them is not.
+/**
+ * Rows the grid will build DOM for in one pass.
+ *
+ * Not every producer bounds its result set: the Workstation and Portal run paths cap at 100/1000,
+ * but the VS Code REPL streams whatever the CLI evaluated, so `SELECT * FROM big_table` arrives
+ * whole. Rendering that as a single HTML string hangs the panel. Export is unaffected because it
+ * reads the filtered rows directly rather than what was drawn.
+ */
+export const MAX_RENDERED_ROWS = 5000;
+
+/**
+ * Splits filtered rows into what to draw and what to say about it. Pure so the cap is testable
+ * without a DOM — the point is that a truncated grid says so rather than quietly showing less.
+ */
+export function resultRenderWindow(filteredRows, totalRows, isFiltered, cap = MAX_RENDERED_ROWS) {
+    const filtered = Array.isArray(filteredRows) ? filteredRows : [];
+    const total = Number.isFinite(totalRows) ? totalRows : filtered.length;
+    const truncated = filtered.length > cap;
+    const visible = truncated ? filtered.slice(0, cap) : filtered;
+
+    const plural = n => `${n.toLocaleString()} row${n === 1 ? '' : 's'}`;
+    let label;
+    if (truncated) {
+        label = isFiltered
+            ? `showing first ${plural(visible.length)} of ${filtered.length.toLocaleString()} matched (${plural(total)} total)`
+            : `showing first ${plural(visible.length)} of ${plural(total)}`;
+    } else {
+        label = isFiltered ? `${filtered.length.toLocaleString()} of ${plural(total)}` : plural(total);
+    }
+
+    return { visible, truncated, label };
+}
+
+// Exported for scripts/test-result-grid-ui.mjs. These carry the result grid's behaviour — what the
+// filter box matches, how a value becomes display text, what CSV export writes, and how many rows
+// are drawn — and are pure, so they are testable without a DOM. The rendering around them is not.
 export function filterRows(rows, columns, filter) {
     const term = String(filter || '').trim().toLowerCase();
     if (!term) return rows;

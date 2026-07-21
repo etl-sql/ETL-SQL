@@ -17,7 +17,8 @@ const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'etlsql-result-grid-'));
 const tempModule = path.join(tempDir, 'designer.mjs');
 await fs.writeFile(tempModule, await fs.readFile(sourcePath, 'utf8'), 'utf8');
 
-const { filterRows, toCsv, formatResultCell } = await import(pathToFileURL(tempModule).href);
+const { filterRows, toCsv, formatResultCell, resultRenderWindow, MAX_RENDERED_ROWS } =
+    await import(pathToFileURL(tempModule).href);
 
 const columns = ['Id', 'Name', 'Notes'];
 const rows = [
@@ -92,6 +93,56 @@ assert.equal(toCsv(['we,ird'], [{ 'we,ird': 1 }]).split('\r\n')[0], '"we,ird"');
 // A formula-looking value is written verbatim: CSV injection is a spreadsheet concern, and silently
 // mangling data would be worse. Pinned so a future change to this is a deliberate one.
 assert.equal(toCsv(['A'], [{ A: '=1+1' }]).split('\r\n')[1], '=1+1');
+
+// ── resultRenderWindow ──────────────────────────────────────────────────────
+//
+// Not every producer bounds its rows: the Workstation and Portal run paths cap at 100/1000, but the
+// VS Code REPL streams whatever the CLI evaluated. Rendering that whole is what hangs the panel.
+
+// A small result is drawn entirely and reads naturally.
+{
+    const { visible, truncated, label } = resultRenderWindow(rows, rows.length, false);
+    assert.equal(visible.length, 3);
+    assert.equal(truncated, false);
+    assert.equal(label, '3 rows');
+}
+
+// Singular is not "1 rows".
+assert.equal(resultRenderWindow([rows[0]], 1, false).label, '1 row');
+
+// An oversized result is capped, and the label says so rather than quietly showing fewer.
+{
+    const many = Array.from({ length: MAX_RENDERED_ROWS + 250 }, (_, i) => ({ Id: i }));
+    const { visible, truncated, label } = resultRenderWindow(many, many.length, false);
+    assert.equal(visible.length, MAX_RENDERED_ROWS);
+    assert.equal(truncated, true);
+    assert.match(label, /showing first/);
+    // The true total stays visible — a truncated grid must not misreport how much data there is.
+    assert.match(label, new RegExp(many.length.toLocaleString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+
+// When filtered and truncated, both the matched count and the true total survive.
+{
+    const many = Array.from({ length: MAX_RENDERED_ROWS + 10 }, (_, i) => ({ Id: i }));
+    const { label } = resultRenderWindow(many, 99999, true);
+    assert.match(label, /matched/);
+    assert.match(label, /total/);
+}
+
+// Filtered but small: the "x of y" form, not a truncation notice.
+assert.equal(resultRenderWindow([rows[0]], 3, true).label, '1 of 3 rows');
+
+// Degenerate input must not throw — the panel renders whatever a producer sent.
+assert.equal(resultRenderWindow(null, 0, false).visible.length, 0);
+assert.equal(resultRenderWindow(undefined, undefined, false).visible.length, 0);
+
+// The cap bounds the DOM but never the data: export reads the filtered rows, not what was drawn,
+// so a truncated grid still exports in full.
+{
+    const many = Array.from({ length: MAX_RENDERED_ROWS + 5 }, (_, i) => ({ A: i }));
+    const exported = toCsv(['A'], many).split('\r\n');
+    assert.equal(exported.length, many.length + 1); // header + every row
+}
 
 await fs.rm(tempDir, { recursive: true, force: true });
 console.log('result-grid-ui smoke passed');
