@@ -80,6 +80,14 @@
         if (!activeTheme) {
             activeTheme = getDefaultTheme(manifest);
         }
+        if (!activeTheme && typeof window !== 'undefined') {
+            try {
+                const pDoc = (window.parent && window.parent !== window) ? window.parent.document : null;
+                if (pDoc && pDoc.body && pDoc.body.classList.contains('theme-dark')) {
+                    activeTheme = 'dark';
+                }
+            } catch { /* cross-origin fallback */ }
+        }
 
         if (activeTheme && activeTheme.toLowerCase() === 'dark') {
             document.body.classList.add('theme-dark');
@@ -803,7 +811,7 @@
                 // Set active state BEFORE resize so it is never racing against
                 // event callbacks (e.g. ECharts force-layout rendering) that fire
                 // during chart.resize() and may themselves trigger re-renders.
-                nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
+                nav.querySelectorAll('.nav-tab, .nav-btn, .nav-link').forEach(e => e.classList.remove('active'));
                 el.classList.add('active');
                 _lastActivePage = pageName;
 
