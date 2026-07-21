@@ -35,10 +35,25 @@ changes safer.
       explicitly. Before moving any connector, check for `using` namespaces with no matching
       `PackageReference` — they are riding on a sibling's transitive dependency and fail silently on
       extraction.
-- [ ] **Thin Portal controllers.**
+- [x] **Thin Portal controllers.**
       Move parsing, AST/DTO conversion, validation orchestration, and report/workflow service
       composition out of MVC controller methods into application services that can be tested without
       HTTP plumbing.
+      Audited by measurement, then closed the one real remainder. 88 application services already
+      exist, and the two largest controllers are long because they have many endpoints, not because
+      the methods are fat: `AdminController` is 43 endpoints over 1478 lines and `ReportsController`
+      35 over 1213 — about 34 lines per endpoint each.
+      Parsing appeared in a controller exactly once. `OrchestratorController.GetJobDag` lexed,
+      parsed, built the graph and converted it to DTOs inline; that now lives in
+      `ScriptDagProjectionService`, which returns a `ScriptDagProjection` rather than an
+      `IActionResult` so the parsed/failed distinction stays a domain fact and the controller keeps
+      the status-code mapping. Covered by `ScriptDagProjectionServiceTests` with no HTTP involved.
+      Finding worth a separate decision: the endpoint's 422 branch is close to unreachable. The
+      ETL-SQL parser is error-tolerant — it records syntax problems as `Diagnostics` and returns a
+      best-effort `Script` instead of throwing — so a malformed job script currently renders a
+      partial graph with 200, and only an unexpected exception produces 422. `Evaluator`, the
+      language server and `PortalScriptSourceControlService` all treat error-severity diagnostics as
+      failure. Behaviour was deliberately left unchanged here rather than altered inside a refactor.
 - [x] **Review architecture documentation.**
       After layering changes settle, refresh `/docs/architecture` and source-boundary docs so the
       documented module ownership and dependency rules match the code.

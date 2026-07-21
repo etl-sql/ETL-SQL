@@ -367,6 +367,7 @@ builder.Services.AddSingleton<ETL_SQL.Portal.Services.UserSecurityStateCache>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.AuditService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ScriptDagProjectionService>();
 builder.Services.AddHttpClient<ETL_SQL.Portal.Services.AuditOutboxTransportService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(Math.Max(1, portalConfig.Audit.TransportTimeoutSeconds));

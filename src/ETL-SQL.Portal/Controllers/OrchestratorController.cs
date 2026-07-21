@@ -1,19 +1,18 @@
 using System.Security.Claims;
-using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.Portal.Controllers;
 
 [ApiController]
 [Route("api/orchestrator")]
 [Authorize(Policy = "OrchestratorAccess")]
-public class OrchestratorController(OrchestratorProxyService proxy, AuditService audit) : ControllerBase
+public class OrchestratorController(
+    OrchestratorProxyService proxy,
+    AuditService audit,
+    ScriptDagProjectionService scriptDag) : ControllerBase
 {
     // ── Status & metrics ──────────────────────────────────────────────────────
 
@@ -137,22 +136,10 @@ public class OrchestratorController(OrchestratorProxyService proxy, AuditService
             j.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (job is null) return NotFound();
 
-        if (string.IsNullOrWhiteSpace(job.Script))
-            return Ok(new DagDto([], []));
-
-        try
-        {
-            var tokens = new Lexer(job.Script).Tokenize();
-            var script = new CoreParser(tokens, job.Script).Parse();
-            var dag = ScriptDagBuilder.Build(script);
-            return Ok(new DagDto(
-                dag.Nodes.Select(n => new DagNodeDto(n.Id, n.Label, n.Type, new { line = n.Line })).ToList(),
-                dag.Edges.Select(e => new DagEdgeDto(e.Source, e.Target, e.Label)).ToList()));
-        }
-        catch (Exception ex)
-        {
-            return UnprocessableEntity(new { Error = $"Could not parse job script: {ex.Message}" });
-        }
+        var projection = scriptDag.Project(job.Script);
+        return projection.Parsed
+            ? Ok(projection.Dag)
+            : UnprocessableEntity(new { Error = projection.Error });
     }
 
     // ── Script browser ────────────────────────────────────────────────────────
