@@ -161,11 +161,18 @@
   .clickable tbody tr:hover { background: #f0f4ff; }
   .clickable tbody tr { cursor: pointer; }
   .nav-bar { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
-  .nav-tab, .nav-btn { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #f0f0f0; font-size: 0.9em; }
+  .nav-tab, .nav-btn { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #f0f0f0; color: #333; font-size: 0.9em; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+  .nav-tab:hover:not(.active), .nav-btn:hover:not(.active) { background: #e4e4e4; }
   .nav-tab.active, .nav-btn.active { background: #5470c6; color: white; border-color: #5470c6; }
   .nav-link { color: #5470c6; cursor: pointer; font-size: 0.9em; }
   .nav-link.active { font-weight: bold; text-decoration: underline; }
   .nav-sep { color: #ccc; }
+
+  .theme-dark .nav-tab, .theme-dark .nav-btn { background: #2d2d2d; border-color: #444; color: #ccc; }
+  .theme-dark .nav-tab:hover:not(.active), .theme-dark .nav-btn:hover:not(.active) { background: #383838; border-color: #555; color: #fff; }
+  .theme-dark .nav-tab.active, .theme-dark .nav-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .theme-dark .nav-link { color: #60a5fa; }
+  .theme-dark .nav-sep { color: #555; }
   .page { display: none; height: 100%; }
   .page.active { display: flex; flex-direction: column; height: auto; min-height: 100%; }
   .page-grid { display: grid; gap: 24px; flex: 1; width: 100%; }
