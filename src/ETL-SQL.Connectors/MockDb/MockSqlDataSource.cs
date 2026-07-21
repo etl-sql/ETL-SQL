@@ -250,5 +250,42 @@ namespace ETL_SQL.Connectors.MockDb
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : _context.CancellationToken;
+
+        /// <summary>
+        /// Serves the seeder's declared column types. Without this the metadata layer falls back to
+        /// column names with a type of <c>ANY</c>, which is what the schema and session explorers
+        /// displayed for every MOCKDB column — the default development loop.
+        /// </summary>
+        public ICatalogMetadataProvider? GetCatalogProvider()
+        {
+            var schema = _seeder.GetDeclaredSchema();
+            return schema.Count == 0 ? null : new MockCatalogProvider(schema);
+        }
+
+        private sealed class MockCatalogProvider(IReadOnlyDictionary<string, IReadOnlyList<CatalogColumn>> schema)
+            : ICatalogMetadataProvider
+        {
+            public Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
+                string schemaName, string tableName, CancellationToken ct = default)
+            {
+                // Callers split a qualified name before calling, but the seeder publishes some tables
+                // under qualified keys ("hr.departments", "DemoDb.dbo.Employee"). Try the rejoined
+                // name first, then the bare one, so both spellings resolve to real types.
+                if (!string.IsNullOrEmpty(schemaName)
+                    && schema.TryGetValue($"{schemaName}.{tableName}", out var qualified))
+                {
+                    return Task.FromResult(qualified);
+                }
+
+                return Task.FromResult(schema.TryGetValue(tableName, out var columns)
+                    ? columns
+                    : (IReadOnlyList<CatalogColumn>)[]);
+            }
+
+            // MockDb declares no foreign keys; an empty list is accurate, not a stub.
+            public Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
+                string schemaName, string tableName, CancellationToken ct = default) =>
+                Task.FromResult((IReadOnlyList<CatalogRelationship>)[]);
+        }
     }
 }

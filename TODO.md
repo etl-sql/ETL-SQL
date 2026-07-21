@@ -84,7 +84,7 @@ changes safer.
 > `TEST CONNECTION` rely on the same capability: schema introspection. Build one shared, cached,
 > ACL-gated schema-snapshot service (see `docs/architecture/decisions/PortalEditorStrategy.md` B1)
 > and make it the single dependency for all three rather than three parallel introspection paths.
-- [ ] **Column data types in the schema and session explorers.**
+- [x] **Column data types in the schema and session explorers.**
       The explorers render a type column per column, but it reads `ANY` for any source whose data
       source has no catalog provider — `MetadataManager.GetColumnDetailsAsync` falls back to
       `new ColumnMetadata(name, "ANY")` when `GetCatalogProvider()` is null or returns nothing.
@@ -94,6 +94,27 @@ changes safer.
       would misreport), then audit the real connectors for the same gap.
       Downstream: `SELECT ... INTO #temp` already inherits source types for bare column references
       (`WorkstationMetadataService`), so temp tables get real types for free once the source does.
+      Done: `MockDataSeeder` now declares a catalog schema (`GetDeclaredSchema`, a default interface
+      member so alternate seeders need no change) and `MockSqlDataSource.GetCatalogProvider` serves
+      it, so MOCKDB reports real types instead of `ANY`. Types are declared, not inferred, exactly
+      as the note above requires — `SaleID`/`LogID`/`WeightGrams` are seeded as `long` and
+      `Quantity`/`StockLevel` as `int`, a distinction that no longer exists at runtime where every
+      numeric is `decimal`. Nullability (`ManagerID`) and intended primary keys are declared too.
+      Aliased tables (`Orders`, `Employee_Log`, `DemoDb.dbo.Employee`, `hr.departments`) resolve to
+      the same declaration, so a qualified spelling does not silently fall back to `ANY`.
+      Covered by `MockDbColumnTypeTests` (16 cases).
+      Two things worth knowing that came out of it:
+      * **A warm cache masks the fix.** `GetColumnDetailsAsync` consults the on-disk schema cache
+        *before* the catalog provider, and that cache is machine-global
+        (`%LOCALAPPDATA%/ETL-SQL/SchemaCache`), keyed by connection string, with a 14-day max age.
+        An existing workstation will keep showing `ANY` for MOCKDB until its entry ages out or is
+        cleared. Worth a release note, and an argument for an explicit "refresh schema" action.
+      * **`MetadataManager` tests are order-dependent through that same cache** unless
+        `SchemaCacheDirectory` is pointed at a temp directory — a stale entry from any earlier run is
+        served ahead of live metadata. `MockDbColumnTypeTests` isolates it; other metadata tests
+        should do the same.
+      Not done: the "audit the real connectors for the same gap" half. `SqlServer`, `Postgres` and
+      `MySql` have catalog providers; the remaining connectors do not and still report `ANY`.
 - [ ] **Optional Portal git write-back.**
       When a git backend is configured, save commits on behalf of the user to preserve the
       source-controlled-report promise.

@@ -13,10 +13,124 @@ namespace ETL_SQL.Connectors.MockDb
     public interface IMockDataSeeder
     {
         Task SeedDataAsync(Dictionary<string, DataTable> tables, Random rng);
+
+        /// <summary>
+        /// Declared column metadata per table, keyed exactly as the seeded table dictionary is.
+        ///
+        /// Declared rather than inferred from the seeded rows on purpose: every numeric is a
+        /// <see cref="decimal"/> at runtime, so inference would report <c>DECIMAL</c> for
+        /// <c>Quantity</c> (int) and <c>WeightGrams</c> (bigint) alike and quietly misdescribe the
+        /// schema the explorers show.
+        ///
+        /// Defaults to empty so alternate seeders need no change; an empty map simply leaves the
+        /// existing <c>ANY</c> behaviour in place.
+        /// </summary>
+        IReadOnlyDictionary<string, IReadOnlyList<CatalogColumn>> GetDeclaredSchema() =>
+            new Dictionary<string, IReadOnlyList<CatalogColumn>>();
     }
 
     public class MockDataSeeder : IMockDataSeeder
     {
+        private static CatalogColumn Col(string name, string type, bool nullable = false, bool primaryKey = false) =>
+            new(name, type, nullable, primaryKey, null, new Dictionary<string, string>());
+
+        // Types match what SeedDataAsync actually writes — note SaleID/LogID/WeightGrams are seeded
+        // as long (BIGINT) while Quantity/StockLevel are int, a distinction lost at runtime.
+        private static readonly IReadOnlyDictionary<string, IReadOnlyList<CatalogColumn>> Schema =
+            new Dictionary<string, IReadOnlyList<CatalogColumn>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Users"] =
+                [
+                    Col("UserID", "INT", primaryKey: true),
+                    Col("UserName", "VARCHAR"),
+                    Col("Email", "VARCHAR"),
+                    Col("ExternalID", "UNIQUEIDENTIFIER"),
+                    Col("RegistrationDate", "DATE"),
+                    Col("PreciseTime", "DATETIME2"),
+                    Col("LastLoginOffset", "DATETIMEOFFSET")
+                ],
+                ["Products"] =
+                [
+                    Col("ProductID", "INT", primaryKey: true),
+                    Col("ProductName", "VARCHAR"),
+                    Col("Category", "VARCHAR"),
+                    Col("Cost", "DECIMAL(18,2)"),
+                    Col("Price", "DECIMAL(18,2)"),
+                    Col("StockLevel", "INT"),
+                    // Seeded as an int 1/0 flag, so declared INT rather than BIT — the declaration
+                    // describes what is stored, not what the name suggests.
+                    Col("Discontinued", "INT"),
+                    Col("WeightGrams", "BIGINT"),
+                    Col("SkidGuid", "UNIQUEIDENTIFIER")
+                ],
+                ["Sales"] =
+                [
+                    Col("SaleID", "BIGINT", primaryKey: true),
+                    Col("OrderDate", "DATETIME2"),
+                    Col("CustomerID", "INT"),
+                    Col("ProductID", "INT"),
+                    Col("Quantity", "INT"),
+                    Col("UnitPrice", "DECIMAL(18,2)"),
+                    Col("Total", "DECIMAL(18,2)"),
+                    Col("Region", "VARCHAR"),
+                    Col("ShipTimeOffset", "DATETIMEOFFSET"),
+                    Col("ProcessDuration", "TIME")
+                ],
+                ["Employee"] =
+                [
+                    Col("EmpID", "INT", primaryKey: true),
+                    Col("FirstName", "VARCHAR"),
+                    Col("LastName", "VARCHAR"),
+                    Col("Name", "VARCHAR"),
+                    Col("DeptID", "INT"),
+                    Col("Salary", "DECIMAL(18,2)"),
+                    Col("HireDate", "DATE"),
+                    // The first employee has no manager, so this column really is nullable.
+                    Col("ManagerID", "INT", nullable: true),
+                    Col("Status", "INT"),
+                    Col("Active", "INT"),
+                    Col("GlobalID", "UNIQUEIDENTIFIER")
+                ],
+                ["AuditTrail"] =
+                [
+                    Col("LogID", "BIGINT", primaryKey: true),
+                    Col("EventID", "UNIQUEIDENTIFIER"),
+                    Col("Principal", "VARCHAR"),
+                    Col("Operation", "VARCHAR"),
+                    Col("OccurredAt", "DATETIMEOFFSET"),
+                    Col("Duration", "TIME"),
+                    Col("ResultCode", "INT"),
+                    Col("TraceID", "UNIQUEIDENTIFIER")
+                ],
+                ["departments"] =
+                [
+                    Col("DeptID", "INT", primaryKey: true),
+                    Col("DeptName", "VARCHAR"),
+                    Col("Budget", "DECIMAL(18,2)")
+                ]
+            };
+
+        // The seeder publishes several tables under more than one name; the declared schema follows
+        // the same aliases so a qualified lookup does not fall back to ANY.
+        private static readonly IReadOnlyDictionary<string, string> Aliases =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Orders"] = "Sales",
+                ["Employee_Log"] = "Employee",
+                ["DemoDb.dbo.Employee"] = "Employee",
+                ["hr.departments"] = "departments"
+            };
+
+        public IReadOnlyDictionary<string, IReadOnlyList<CatalogColumn>> GetDeclaredSchema()
+        {
+            var map = new Dictionary<string, IReadOnlyList<CatalogColumn>>(Schema, StringComparer.OrdinalIgnoreCase);
+            foreach (var (alias, target) in Aliases)
+            {
+                if (Schema.TryGetValue(target, out var columns)) map[alias] = columns;
+            }
+            return map;
+        }
+
         public async Task SeedDataAsync(Dictionary<string, DataTable> tables, Random rng)
         {
             // 1. Users
