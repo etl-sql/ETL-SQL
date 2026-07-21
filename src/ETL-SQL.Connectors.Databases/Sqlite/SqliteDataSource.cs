@@ -74,6 +74,12 @@ namespace ETL_SQL.Connectors.Sqlite
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "SQLITE";
 
+        /// <summary>
+        /// Serves declared column types from <c>PRAGMA table_info</c>. Without this the metadata
+        /// layer reports every SQLite column as <c>ANY</c>.
+        /// </summary>
+        public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider() => new SqliteCatalogProvider(_connectionString);
+
         public IDataSource WithTable(string tableName)
         {
             return new SqliteDataSource(_context!, _connectionString, tableName, _options,

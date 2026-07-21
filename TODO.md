@@ -113,8 +113,23 @@ changes safer.
         `SchemaCacheDirectory` is pointed at a temp directory — a stale entry from any earlier run is
         served ahead of live metadata. `MockDbColumnTypeTests` isolates it; other metadata tests
         should do the same.
-      Not done: the "audit the real connectors for the same gap" half. `SqlServer`, `Postgres` and
-      `MySql` have catalog providers; the remaining connectors do not and still report `ANY`.
+      Connector audit (the second half) — done as an audit; one connector fixed, six triaged:
+      * **Fixed: SQLite.** `SqliteDataSource` already ran `PRAGMA table_info`, which returns the
+        declared type, NOT NULL flag and primary-key position, and discarded everything but the
+        name. `SqliteCatalogProvider` now surfaces all of it plus foreign keys from
+        `PRAGMA foreign_key_list`, at no extra query cost. An untyped column (SQLite permits one)
+        reports `ANY` rather than a guess. Covered by `SqliteCatalogProviderTests` against a real
+        on-disk database — the engine is embedded, so this is a unit test, not an integration one.
+      * **Deferred, needs a live database: Oracle, Snowflake, BigQuery, ODBC.** All four can supply
+        types (`ALL_TAB_COLUMNS`, `INFORMATION_SCHEMA.COLUMNS`, `GetSchema`), but none can be
+        verified without a real server, and the dialect details are easy to get subtly wrong —
+        Oracle's `ALL_` vs `USER_` scope, BigQuery's dataset-qualified `INFORMATION_SCHEMA`. Writing
+        four unverifiable providers would look like progress while shipping untested query text.
+        These belong with the Docker integration lane, not here.
+      * **Not applicable: MongoDB, Neo4j.** Both are schemaless — a type is a property of a document
+        or node, not of a collection. A provider could only sample and infer, which is exactly the
+        failure this item warned about for MockDb. `ANY` is the honest answer for a source with no
+        declared schema; a sampled guess presented as a type would be worse than no type.
 - [x] **Optional Portal git write-back.**
       When a git backend is configured, save commits on behalf of the user to preserve the
       source-controlled-report promise.
