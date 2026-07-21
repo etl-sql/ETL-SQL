@@ -166,6 +166,34 @@ public sealed class DesignerAnalysisService
                 pageVisuals.Add(el with { GridCol = col, GridRow = row, GridColSpan = colSpan, GridRowSpan = rowSpan });
             }
 
+            var containerChildren = new List<DesignerVisualDto>();
+            foreach (var v in pageVisuals.Where(x => string.Equals(x.Type, "CONTAINER", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                var cStmt = ast.Statements.OfType<CreateContainerStatement>()
+                    .FirstOrDefault(c => string.Equals(c.Name, v.Name, StringComparison.OrdinalIgnoreCase));
+                if (cStmt == null) continue;
+
+                var containerGrid = ParseStructure(cStmt.Structure ?? "A");
+                foreach (var (slot, childName) in cStmt.SlotMap)
+                {
+                    if (!elements.TryGetValue(childName, out var childEl))
+                        continue;
+
+                    var (cCol, cRow, cColSpan, cRowSpan) = CalculateAbsoluteChildBounds(
+                        v.GridCol, v.GridRow, v.GridColSpan, v.GridRowSpan,
+                        containerGrid, slot);
+
+                    containerChildren.Add(childEl with {
+                        GridCol = cCol,
+                        GridRow = cRow,
+                        GridColSpan = cColSpan,
+                        GridRowSpan = cRowSpan,
+                        ContainerId = v.Id
+                    });
+                }
+            }
+            pageVisuals.AddRange(containerChildren);
+
             if (pageVisuals.Count == 0)
             {
                 foreach (var el in elements.Values)
@@ -292,6 +320,27 @@ public sealed class DesignerAnalysisService
         int rowSpan = Math.Max(1, (maxR - minR + 1) * 4);
 
         return (gridColStart, gridRowStart, colSpan, rowSpan);
+    }
+
+    private static (int col, int row, int colSpan, int rowSpan) CalculateAbsoluteChildBounds(
+        int containerCol, int containerRow, int containerColSpan, int containerRowSpan,
+        List<List<string>> containerGrid, string slot)
+    {
+        var (sCol, sRow, sColSpan, sRowSpan) = FindSlotBounds(containerGrid, slot);
+        int gridRows = containerGrid.Count;
+        int gridCols = containerGrid[0].Count;
+
+        double colWidth = (double)containerColSpan / gridCols;
+        int startCol = containerCol + (int)Math.Round((sCol - 1) * colWidth);
+        int endCol = containerCol + (int)Math.Round((sCol - 1 + sColSpan) * colWidth);
+        int colSpan = Math.Max(1, endCol - startCol);
+
+        double rowHeight = (double)containerRowSpan / gridRows;
+        int startRow = containerRow + (int)Math.Round((sRow - 1) * rowHeight);
+        int endRow = containerRow + (int)Math.Round((sRow - 1 + sRowSpan) * rowHeight);
+        int rowSpan = Math.Max(1, endRow - startRow);
+
+        return (startCol, startRow, colSpan, rowSpan);
     }
 
     private static string NormalizeDatasetName(string name)
