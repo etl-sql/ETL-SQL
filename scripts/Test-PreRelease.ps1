@@ -94,6 +94,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
     $phases.Add([ordered]@{ Phase = "SBOM generation"; Command = "node scripts/generate-sbom.js"; Reason = "The released SBOM generates and its component version matches Directory.Build.props." })
+    $phases.Add([ordered]@{ Phase = "Third-party inventory drift"; Command = "node scripts/generate-third-party-inventory.js --check"; Reason = "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
@@ -607,6 +608,21 @@ try {
             $actual = (Get-Content "release/sbom.json" -Raw | ConvertFrom-Json).metadata.component.version
             if ($actual -ne $expected) { throw "SBOM version '$actual' does not match Directory.Build.props '$expected'." }
             Write-Output "SBOM component version $actual matches Directory.Build.props."
+        } `
+        $previousPhaseMap $fingerprint $results
+
+    # Licence-compliance gate. Nothing in the pipeline checked the inventory against the real package
+    # graph, so it drifted silently once the connector projects were split — the file still credited
+    # the monolith for packages that had moved. Vulnerability scanning is deliberately not repeated
+    # here: the "NuGet dependency audit" phase above already fails on vulnerable *and* deprecated
+    # packages, with a per-project fallback for the solution-level CPM bug.
+    Invoke-LoggedPhase "Third-party inventory drift" `
+        "node scripts/generate-third-party-inventory.js --check" `
+        {
+            & node "scripts/generate-third-party-inventory.js" "--check"
+            if ($LASTEXITCODE -ne 0) {
+                throw "THIRD-PARTY-INVENTORY.md is out of date. Run: node scripts/generate-third-party-inventory.js"
+            }
         } `
         $previousPhaseMap $fingerprint $results
 
