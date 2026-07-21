@@ -14,6 +14,8 @@ services:
     environment:
       - Jobs__UseProcessSpawning=false
       - Session__Root=/app/Sessions
+      - Orchestrator__ApiKey=LocalDevApiKey_32CharsMinimumRequiredForSecurity!
+      - Orchestrator__Database__ConnectionString=Data Source=/app/data/orchestrator.db
 
   portal-srv:
     image: etl-sql/portal:latest
@@ -29,10 +31,16 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:5000
       - Portal__Orchestrator__ApiUrl=http://orchestrator-srv:5001
+      - Portal__Orchestrator__ApiKey=LocalDevApiKey_32CharsMinimumRequiredForSecurity!
       - Portal__DatabasePath=/app/data/portal.db
       - Portal__ScriptRootPath=/app/Reports
       - Portal__SnapshotDirectory=/app/Snapshots
       - Portal__Jwt__Secret=LocalDevelopmentSecretKeyForPortal_32CharsMinimum!
+      - Portal__FirstRun__AdminUsername=admin
+      - Portal__FirstRun__AdminPassword=Admin12345!Password
+      - Portal__FirstRun__MustChangePassword=false
+      - Portal__Dataset__AtRestKey=c29tZS1zZWN1cmUtYmFzZTY0LWF0LXJlc3Qta2V5LTMyLWJ5dGVzLSE=
+      - Portal__Dataset__AllowMachineFallback=true
     depends_on:
       - orchestrator-srv
 

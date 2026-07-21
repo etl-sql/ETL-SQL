@@ -1938,9 +1938,13 @@ namespace ETL_SQL.Orchestrator.Storage
         /// </summary>
         public static string DefaultDbPath()
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ETL-SQL");
+            var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Path.GetTempPath();
+
+            var dir = Path.Combine(baseDir, "etlsql-data");
             Directory.CreateDirectory(dir);
             return Path.Combine(dir, "etlsql.db");
         }
