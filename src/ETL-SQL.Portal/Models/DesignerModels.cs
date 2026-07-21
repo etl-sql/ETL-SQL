@@ -86,7 +86,8 @@ public record DesignerVisualDto(
     string? Title,
     string? Dataset,
     Dictionary<string, string> Mappings,
-    Dictionary<string, string> Options);
+    Dictionary<string, string> Options,
+    string? ContainerId = null);
 
 public record DesignerDatasetDto(
     string Id,

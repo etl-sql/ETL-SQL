@@ -33,7 +33,7 @@ public sealed class DesignerScriptGenerationService
 
             foreach (var v in visuals)
             {
-                sb.AppendLine(GenerateElement(v));
+                sb.AppendLine(GenerateElement(v, visuals));
                 sb.AppendLine();
             }
 
@@ -69,7 +69,7 @@ public sealed class DesignerScriptGenerationService
         return sb.ToString();
     }
 
-    private static string GenerateElement(DesignerVisualDto v)
+    private static string GenerateElement(DesignerVisualDto v, IReadOnlyList<DesignerVisualDto> allVisuals)
     {
         var sb = new StringBuilder();
         var name = SanitizeName(v.Name, v.Id);
@@ -79,6 +79,25 @@ public sealed class DesignerScriptGenerationService
             sb.AppendLine($"CREATE CONTAINER {name} AS {containerType.ToUpper()} (");
             if (!string.IsNullOrWhiteSpace(v.Title))
                 sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+
+            var children = allVisuals.Where(c => c.ContainerId == v.Id).ToList();
+            if (children.Count > 0)
+            {
+                sb.AppendLine("    LAYOUT (");
+                var slots = children.Select((c, idx) => GetSlotLetter(idx)).ToList();
+                var structureStr = string.Join(" ", slots);
+                sb.AppendLine($"        STRUCTURE = '{structureStr}',");
+                sb.AppendLine("        MAP (");
+                for (int i = 0; i < children.Count; i++)
+                {
+                    var child = children[i];
+                    var slot = slots[i];
+                    var trail = i < children.Count - 1 ? "," : "";
+                    sb.AppendLine($"            '{slot}' = {SanitizeName(child.Name, child.Id)}{trail}");
+                }
+                sb.AppendLine("        )");
+                sb.AppendLine("    )");
+            }
             sb.Append(");");
         }
         else if (string.Equals(v.Type, "BUTTON", StringComparison.OrdinalIgnoreCase))

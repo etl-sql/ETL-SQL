@@ -116,17 +116,36 @@ public sealed class DesignerAnalysisService
 
         var elements = new Dictionary<string, DesignerVisualDto>(StringComparer.OrdinalIgnoreCase);
         int idx = 0;
-        foreach (var v in ast.Statements.OfType<CreateVisualStatement>())
+
+        var visualsList = ast.Statements.OfType<CreateVisualStatement>().Select(v => (v.Name, Dto: VisualToDto(v, idx++, 1, 1, 12, 4))).ToList();
+        var containersList = ast.Statements.OfType<CreateContainerStatement>().Select(c => (c.Name, c.SlotMap, Dto: ContainerToDto(c, idx++))).ToList();
+        var buttonsList = ast.Statements.OfType<CreateButtonStatement>().Select(b => (b.Name, Dto: ButtonToDto(b, idx++))).ToList();
+
+        var childToParentId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in containersList)
         {
-            elements[v.Name] = VisualToDto(v, idx++, 1, 1, 12, 4);
+            foreach (var childName in c.SlotMap.Values)
+            {
+                childToParentId[childName] = c.Dto.Id;
+            }
         }
-        foreach (var c in ast.Statements.OfType<CreateContainerStatement>())
+
+        foreach (var item in visualsList)
         {
-            elements[c.Name] = ContainerToDto(c, idx++);
+            var dto = item.Dto;
+            if (childToParentId.TryGetValue(item.Name, out var pId))
+            {
+                dto = dto with { ContainerId = pId };
+            }
+            elements[item.Name] = dto;
         }
-        foreach (var b in ast.Statements.OfType<CreateButtonStatement>())
+        foreach (var item in containersList)
         {
-            elements[b.Name] = ButtonToDto(b, idx++);
+            elements[item.Name] = item.Dto;
+        }
+        foreach (var item in buttonsList)
+        {
+            elements[item.Name] = item.Dto;
         }
 
         var pages = new List<DesignerPageDto>();
