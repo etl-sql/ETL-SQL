@@ -10,11 +10,14 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return new GitStatusResponse(null, [], [], [], false);
 
-        string? branch = RunGitCommand(root, "rev-parse --abbrev-ref HEAD");
-        if (string.IsNullOrWhiteSpace(branch))
+        var (branchExit, branch, _) = RunGitCommand(root, "rev-parse --abbrev-ref HEAD");
+        if (branchExit != 0 || string.IsNullOrWhiteSpace(branch))
             return new GitStatusResponse(null, [], [], [], false);
 
-        string statusOutput = RunGitCommand(root, "status --porcelain") ?? string.Empty;
+        var (statusExit, statusOutput, _) = RunGitCommand(root, "status --porcelain");
+        if (statusExit != 0)
+            return new GitStatusResponse(null, [], [], [], false);
+
         var modified = new List<string>();
         var untracked = new List<string>();
         var staged = new List<string>();
@@ -48,21 +51,37 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         if (string.IsNullOrWhiteSpace(comment))
             return new GitCommitResponse(false, null, "Commit message cannot be empty.");
 
-        // Stage all changes
-        RunGitCommand(root, "add -A");
+        // 1. Stage all changes
+        var (addExit, _, addError) = RunGitCommand(root, "add -A");
+        if (addExit != 0)
+        {
+            string errorMsg = string.IsNullOrWhiteSpace(addError) ? "git add failed." : addError.Trim();
+            return new GitCommitResponse(false, null, errorMsg);
+        }
 
-        // Commit
+        // 2. Commit
         string safeComment = comment.Replace("\"", "\\\"");
-        string commitOutput = RunGitCommand(root, $"commit -m \"{safeComment}\"") ?? string.Empty;
+        var (commitExit, commitOutput, commitError) = RunGitCommand(root, $"commit -m \"{safeComment}\"");
+        string combinedOutput = $"{commitOutput}\n{commitError}";
 
-        if (commitOutput.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+        if (combinedOutput.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
             return new GitCommitResponse(false, null, "Nothing to commit.");
 
-        string? rev = RunGitCommand(root, "rev-parse --short HEAD");
-        return new GitCommitResponse(true, rev?.Trim(), "Committed successfully.");
+        if (commitExit != 0)
+        {
+            string errorMsg = !string.IsNullOrWhiteSpace(commitError) ? commitError.Trim() : (!string.IsNullOrWhiteSpace(commitOutput) ? commitOutput.Trim() : "git commit failed.");
+            return new GitCommitResponse(false, null, errorMsg);
+        }
+
+        // 3. Resolve HEAD revision
+        var (revExit, revOutput, _) = RunGitCommand(root, "rev-parse --short HEAD");
+        if (revExit != 0 || string.IsNullOrWhiteSpace(revOutput))
+            return new GitCommitResponse(false, null, "Could not resolve commit HEAD revision.");
+
+        return new GitCommitResponse(true, revOutput.Trim(), "Committed successfully.");
     }
 
-    private static string? RunGitCommand(string workingDir, string arguments)
+    private static (int ExitCode, string Output, string Error) RunGitCommand(string workingDir, string arguments)
     {
         try
         {
@@ -78,14 +97,15 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
             };
 
             using var process = Process.Start(psi);
-            if (process == null) return null;
+            if (process == null) return (-1, string.Empty, "Failed to start git process.");
             string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
             process.WaitForExit(3000);
-            return process.ExitCode == 0 ? output : output;
+            return (process.ExitCode, output, error);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            return (-1, string.Empty, ex.Message);
         }
     }
 }

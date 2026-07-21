@@ -12,6 +12,36 @@ Release focus: promote the actionable roadmap work into the sprint, finish the w
 improve authoring surfaces, and close the maintainability work that makes future connector and Portal
 changes safer.
 
+### Code Review Findings
+
+- [x] **Fix Workstation Git commit failure reporting.**
+      `WorkstationGitService.Commit` stages with `git add -A`, runs `git commit -m ...`, then reports
+      success as long as `rev-parse --short HEAD` returns a revision. Because `RunGitCommand` discards
+      exit status and stderr, failures such as missing Git identity, index lock errors, or rejected
+      commits can still return `Committed = true` against the previous HEAD. Return exit code/stderr
+      from the helper, fail when `git add` or `git commit` fails, and add a temp-repository test that
+      proves failed commits are not reported as successful.
+
+- [x] **Bump Portal static asset cache keys for the v0.17.0 designer/runtime changes.**
+      Portal pages still load changed JavaScript and CSS with `?v=0.16.0` query strings
+      (`designer.html`, `orchestrator.html`, `index.html`, `admin.html`, `docs.html`, `login.html`,
+      and preview/runtime embeds). A browser with cached v0.16.0 designer assets can run old client
+      code against the new v0.17.0 endpoints until cache expiry or manual cache clearing. Update the
+      cache token to the release version or derive it from the product version during build/publish.
+
+- [x] **Repair the bash pre-release installer phase.**
+      `scripts/test-pre-release.sh --build-installers` calls `./scripts/publish-release.sh`, but the
+      repository contains `scripts/publish-release.ps1` and no `publish-release.sh` wrapper. The
+      Linux/macOS pre-release gate will fail as soon as the installer phase is enabled. Either add the
+      bash wrapper or invoke the PowerShell script through `pwsh`, matching the existing release
+      workflow behavior.
+
+- [x] **Normalize bash scripts to LF before release.**
+      `bash -n scripts/test-pre-release.sh` currently fails on Windows checkout text with
+      `syntax error near unexpected token $'in\r'`, despite `.gitattributes` pinning `*.sh` to LF.
+      Re-normalize the affected shell scripts and add a release verification step that catches CRLF
+      drift before Linux/macOS gates run.
+
 ### Visual Reporting and Dashboard Designer
 
 - [ ] **Snapshot-backed layout designing.** — *implementation shipped, end-to-end verification outstanding*

@@ -678,6 +678,17 @@ public sealed class WorkstationEditorTests
         Assert.NotNull(commitBody);
         Assert.False(commitBody!.Committed);
         Assert.Equal("Commit message cannot be empty.", commitBody.Message);
+
+        // 3. POST /api/git/commit in non-git directory returns failure rather than false success
+        using var commitFailReq = new HttpRequestMessage(HttpMethod.Post, "/api/git/commit");
+        commitFailReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        commitFailReq.Content = JsonContent.Create(new GitCommitRequest("Initial commit"));
+        var commitFailRes = await client.SendAsync(commitFailReq);
+        Assert.Equal(HttpStatusCode.OK, commitFailRes.StatusCode);
+        var commitFailBody = await commitFailRes.Content.ReadFromJsonAsync<GitCommitResponse>();
+        Assert.NotNull(commitFailBody);
+        Assert.False(commitFailBody!.Committed);
+        Assert.NotNull(commitFailBody.Message);
     }
 
     private sealed class TempWorkspace : IDisposable

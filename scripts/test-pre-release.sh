@@ -105,6 +105,7 @@ show_pre_release_plan() {
 
     local i=1
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
+    print_plan_phase "$i" "Shell script line endings check" "node scripts/check-shell-line-endings.js" "Shell scripts (.sh) must use LF line endings to avoid bash syntax errors."; i=$((i + 1))
     print_plan_phase "$i" "Secret scan" "node scripts/scan-secrets.js" "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
     print_plan_phase "$i" "Dependency-audit self-test" "./scripts/Test-DependencyAudit.ps1 (via pwsh)" "The dependency-audit helpers behave correctly (reliable fallback + hard failure)."; i=$((i + 1))
@@ -615,6 +616,10 @@ fi
 run_phase "Asset drift check" \
     "node ./scripts/sync-assets.js -Check" \
     node "./scripts/sync-assets.js" "-Check"
+
+run_phase "Shell script line endings check" \
+    "node scripts/check-shell-line-endings.js" \
+    node scripts/check-shell-line-endings.js
 
 # Early, fast tripwire: catch real credentials before they reach the public repo.
 run_phase "Secret scan" \
