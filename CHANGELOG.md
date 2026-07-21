@@ -25,6 +25,32 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   pin (preferred — `ssh-keygen -lf <server_host_key>`) or `ALLOW_UNPINNED_HOST_KEY = 'TRUE'`.
   See [SFTP connector](docs/reference/connectors/services/sftp.md).
 
+**Cached schema reads re-check egress policy**
+- The Workstation editor's schema endpoint served table and column names straight from its cache
+  without consulting the connector that enforces egress policy, so a host blocked after the cache
+  warmed kept being completed in the editor. Policy is now re-checked on every request and a denied
+  host returns `403`.
+
+### Added
+
+**Real column types for MOCKDB and SQLite**
+- The schema and session explorers previously showed `ANY` for every MOCKDB and SQLite column. Both
+  now report real declared types, including nullability and primary keys.
+- **Note:** the schema cache is consulted before the connector, so an existing workstation keeps
+  showing `ANY` until its cached entry ages out (14-day maximum) or `%LOCALAPPDATA%/ETL-SQL/SchemaCache`
+  is cleared.
+
+**Editor CLI rejects unknown options**
+- `etl-sql-editor` previously ignored an unrecognised flag and then treated its value as the
+  workspace path, so `--profile dev` silently opened a folder named `dev`. Unknown options now fail
+  with usage. `--profile` was removed from the documented command shape; local connection profiles
+  were deliberately not built.
+
+**`WAITFOR FILE UNLOCKED` no longer reports a false syntax error**
+- The linter grammar modelled only `WAITFOR DELAY | TIME | (condition)`, so a valid
+  `WAITFOR FILE UNLOCKED` statement was flagged as a syntax error in the editor and completion
+  stopped offering next tokens. The parser always accepted it.
+
 ### Changed
 
 **Connector assemblies**
@@ -34,6 +60,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `ConnectorRetryPolicy`) — alongside the existing `.Common` and `.Files`. Hosts now reference only
   the connector groups they register, so a host no longer drags in every provider SDK transitively.
   Provider namespaces are unchanged, so scripts and connection syntax are unaffected.
+
+**Release gate**
+- `Test-PreRelease.ps1` now fails when `THIRD-PARTY-INVENTORY.md` no longer matches the package
+  graph, so the licence review and NOTICES cannot silently drift.
+- Ten build and publish scripts were renamed from `under_scores` to `hyphens`
+  (`publish-release.ps1`, `build-msi.ps1`, `build-linux-packages.sh` and so on). Anything invoking
+  them by path needs updating; `scripts/README.md` lists all 90 scripts.
 
 ## [0.16.0] — 2026-07-19
 

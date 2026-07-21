@@ -12,101 +12,9 @@ Release focus: promote the actionable roadmap work into the sprint, finish the w
 improve authoring surfaces, and close the maintainability work that makes future connector and Portal
 changes safer.
 
-### Architecture and Maintainability
-
-- [x] **Split connector implementations into independently deployable projects.**
-      Create a small connector contracts/registry layer if needed, move provider-specific code out of
-      monolithic assemblies, and keep host dependency graphs explicit.
-      Done: `ETL-SQL.Connectors` is split into per-domain projects — `.Common` (exception wrapper,
-      timeouts, the provider-agnostic connection-string builder), `.Files`, `.Cloud` (S3, Azure Blob,
-      SharePoint), `.Messaging` (Kafka, SMTP), `.Remote` (FTP, SFTP, Directory, Active Directory) and
-      `.Databases` (the ten database connectors plus `DatabaseConnectionStringBuilder` and
-      `ConnectorRetryPolicy`). The monolith retains only the MockDb/Orchestrator/Portal/Rest
-      built-ins and now carries **zero** third-party package references.
-      Contracts and the registry already lived in `ETL-SQL.Core`, so no new layer was needed, and
-      registration stays explicit per host — no global mutable registry was introduced, since
-      `ConnectorRegistry.Instance` is already a documented flaky-test source.
-      Host graphs are explicit: each host references only the groups it registers, so the Portal no
-      longer pulls in provider SDKs it never used. Tier assignments are pinned by
-      `ArchitectureBoundaryTests`.
-      Gotcha worth remembering: `ActiveDirectoryConnector` resolved
-      `System.DirectoryServices.Protocols` transitively via `Microsoft.Data.SqlClient`. Moving the
-      database connectors out broke it, so the package is now pinned centrally and referenced
-      explicitly. Before moving any connector, check for `using` namespaces with no matching
-      `PackageReference` — they are riding on a sibling's transitive dependency and fail silently on
-      extraction.
-- [x] **Thin Portal controllers.**
-      Move parsing, AST/DTO conversion, validation orchestration, and report/workflow service
-      composition out of MVC controller methods into application services that can be tested without
-      HTTP plumbing.
-      Audited by measurement, then closed the one real remainder. 88 application services already
-      exist, and the two largest controllers are long because they have many endpoints, not because
-      the methods are fat: `AdminController` is 43 endpoints over 1478 lines and `ReportsController`
-      35 over 1213 — about 34 lines per endpoint each.
-      Parsing appeared in a controller exactly once. `OrchestratorController.GetJobDag` lexed,
-      parsed, built the graph and converted it to DTOs inline; that now lives in
-      `ScriptDagProjectionService`, which returns a `ScriptDagProjection` rather than an
-      `IActionResult` so the parsed/failed distinction stays a domain fact and the controller keeps
-      the status-code mapping. Covered by `ScriptDagProjectionServiceTests` with no HTTP involved.
-      Finding worth a separate decision: the endpoint's 422 branch is close to unreachable. The
-      ETL-SQL parser is error-tolerant — it records syntax problems as `Diagnostics` and returns a
-      best-effort `Script` instead of throwing — so a malformed job script currently renders a
-      partial graph with 200, and only an unexpected exception produces 422. `Evaluator`, the
-      language server and `PortalScriptSourceControlService` all treat error-severity diagnostics as
-      failure. Behaviour was deliberately left unchanged here rather than altered inside a refactor.
-- [x] **Review architecture documentation.**
-      After layering changes settle, refresh `/docs/architecture` and source-boundary docs so the
-      documented module ownership and dependency rules match the code.
-      Done, driven off the connector split above. The dependency graph in each doc was re-derived
-      from the `.csproj` files rather than edited by hand, so it states what the build actually does:
-      * `Engine.md` tier diagram listed a single `ETL-SQL.Connectors → Core, Engine`. It now lists
-        the six connector projects with their real edges, and records that only the built-ins project
-        depends on `Engine` while every extracted group depends on `Core` + `.Common` alone.
-      * `Engine.md` host lines said "Connectors" as if every host took all of them. `Connectors*` is
-        now defined by a table: App/TUI/Orchestrator/Orchestrator.Service reference all six,
-        LanguageServer omits `.Cloud`, and Portal references only the built-ins.
-      * The `ETL-SQL.Connectors` section listed 13 connectors including a `MailKitConnector` that
-        does not exist, and omitted ten that do (MySql, Sqlite, Mongodb, Neo4j, BigQuery, Snowflake,
-        Kafka, S3, SharePoint, Directory/AD). Replaced with a per-project table generated from the
-        actual connector classes and package references.
-      * `Connectors_Standards.md` had no project-placement rule, so a new connector could be dropped
-        into the monolith and silently re-monolithise the graph. Added a Project Placement block to
-        the new-connector checklist covering group choice, package placement, the transitive-`using`
-        trap, the no-Engine/no-cross-group rule, and when a helper belongs in `.Common`.
-      Not changed: `Connectors.md` and the rest of `standards/` describe connector behaviour and
-      contracts, which the split did not alter. Version badges ("Applies to ETL-SQL 0.16.0") are left
-      to the release version bump rather than edited here.
-- [x] **Scripts audit/cleanup**  The scripts folder has so many useful scripts but its getting cluttered
-      and hard to find what you're looking for.  How can we improve?  Does everything still work?  Are
-      we using them all to their full potential (at release for example)?  Rename to consistency - or _?
-      Update README.md with decisions.
-      Done. Nothing retired — the audit found no dead scripts, only undiscoverable ones.
-      * **Naming:** ten scripts used underscores; renamed to hyphens to match documentation
-        filenaming. References updated in live files (scripts, `release.yml`, the workflow template,
-        `.gitignore`, `CLAUDE.md`, current docs); history keeps the old names deliberately. Verified
-        rather than assumed — every referenced path resolves and all nine modified PowerShell
-        scripts parse. PowerShell `Verb-Noun` PascalCase names were **left alone**: that is
-        PowerShell's own convention, the `.ps1`/`.sh` pairs already split that way on purpose, and
-        renaming them would churn every documented release command.
-      * **Discoverability:** 21 of 90 scripts were missing from `scripts/README.md`, including
-        `Invoke-Release.ps1` itself. All 90 are now listed with descriptions taken from each
-        script's own header, grouped by purpose, and the one-shot migration helpers left over from
-        the docs restructure are explicitly marked as not routine.
-      * **Release coverage:** the apparent orphans were mostly false positives — name-based
-        reachability undercounts, because `Test-AllSamples.ps1` runs as a phase inside
-        `Test-PreRelease.ps1` and `Test-HaSoakContracts.ps1` aggregates nine HA scripts. One real
-        gap: nothing checked `THIRD-PARTY-INVENTORY.md` against the package graph, and it had
-        already drifted silently after the connector split. `Test-PreRelease.ps1` now runs
-        `generate-third-party-inventory.js --check`.
-      * **Deliberately not added:** a `Test-VulnerablePackages.ps1` phase. The "NuGet dependency
-        audit" phase already fails on vulnerable *and* deprecated packages via
-        `scripts/lib/DependencyAudit.ps1`, with a per-project fallback for a solution-level CPM bug
-        the standalone script would hit — it is the weaker of the two.
-
-
 ### Visual Reporting and Dashboard Designer
 
-- [x] **Snapshot-backed layout designing.**
+- [ ] **Snapshot-backed layout designing.**
       Allow the Report Designer to load and deserialize the last successfully compiled `.etlsnap`
       package. Visuals should render on the grid canvas with historical snapshot data instead of empty
       wireframe placeholders, giving a live-like design experience without hitting production
@@ -114,6 +22,21 @@ changes safer.
       Snapshot rows are real data: apply the same row-level security as viewing
       (RLS-filtered/sampled/redacted snapshot), so a designer never sees rows they could not see in the
       report. Cap or sample large snapshots to avoid loading millions of rows into the browser canvas.
+      **Reopened after verification — the rendering half exists, the production half does not.**
+      * Present: `designer.js` renders a supplied package (`_renderSnapshotCardBody` reads
+        `opts.snapshotPackage.sampleRows`, with a category filter and an ECharts path), and
+        `tools/ui-sandbox/stories/snapshot-designer.story.js` drives it from fixtures.
+      * Missing: nothing in production supplies `snapshotPackage`. `src/ETL-SQL.Portal/wwwroot/designer.html`
+        never mentions snapshots, and `DesignerController` has zero snapshot references, so the
+        Portal designer still renders wireframe placeholders. The sandbox story is the only consumer.
+      * Missing: the RLS requirement is therefore unmet — not violated, just unreachable. The
+        existing snapshot endpoints on `ExecutionController`
+        (`reports/{id}/snapshot/rows/{visualIndex}`) are the *viewing* path and gate on
+        `ResolveReadableSnapshotKeyAsync`; whatever wires the designer must go through an
+        equivalently gated path rather than reading `.etlsnap` off disk.
+      * Remaining work: a designer-facing endpoint that resolves the last compiled snapshot for a
+        report under the caller's identity, sampling/capping rows server-side, plus the
+        `designer.html` wiring to pass it through. The client rendering is already done.
 
 ### Developer Experience: Portal and VS Code
 
@@ -121,153 +44,13 @@ changes safer.
 > `TEST CONNECTION` rely on the same capability: schema introspection. Build one shared, cached,
 > ACL-gated schema-snapshot service (see `docs/architecture/decisions/PortalEditorStrategy.md` B1)
 > and make it the single dependency for all three rather than three parallel introspection paths.
-- [x] **Column data types in the schema and session explorers.**
-      The explorers render a type column per column, but it reads `ANY` for any source whose data
-      source has no catalog provider — `MetadataManager.GetColumnDetailsAsync` falls back to
-      `new ColumnMetadata(name, "ANY")` when `GetCatalogProvider()` is null or returns nothing.
-      MOCKDB is the visible case: `MockSqlDataSource` exposes column names only, so the whole dev
-      loop shows `ANY`. Give MockDb a catalog provider (declare types in `MockDataSeeder` rather
-      than inferring them from row values — every numeric is `decimal` at runtime, so inference
-      would misreport), then audit the real connectors for the same gap.
-      Downstream: `SELECT ... INTO #temp` already inherits source types for bare column references
-      (`WorkstationMetadataService`), so temp tables get real types for free once the source does.
-      Done: `MockDataSeeder` now declares a catalog schema (`GetDeclaredSchema`, a default interface
-      member so alternate seeders need no change) and `MockSqlDataSource.GetCatalogProvider` serves
-      it, so MOCKDB reports real types instead of `ANY`. Types are declared, not inferred, exactly
-      as the note above requires — `SaleID`/`LogID`/`WeightGrams` are seeded as `long` and
-      `Quantity`/`StockLevel` as `int`, a distinction that no longer exists at runtime where every
-      numeric is `decimal`. Nullability (`ManagerID`) and intended primary keys are declared too.
-      Aliased tables (`Orders`, `Employee_Log`, `DemoDb.dbo.Employee`, `hr.departments`) resolve to
-      the same declaration, so a qualified spelling does not silently fall back to `ANY`.
-      Covered by `MockDbColumnTypeTests` (16 cases).
-      Two things worth knowing that came out of it:
-      * **A warm cache masks the fix.** `GetColumnDetailsAsync` consults the on-disk schema cache
-        *before* the catalog provider, and that cache is machine-global
-        (`%LOCALAPPDATA%/ETL-SQL/SchemaCache`), keyed by connection string, with a 14-day max age.
-        An existing workstation will keep showing `ANY` for MOCKDB until its entry ages out or is
-        cleared. Worth a release note, and an argument for an explicit "refresh schema" action.
-      * **`MetadataManager` tests are order-dependent through that same cache** unless
-        `SchemaCacheDirectory` is pointed at a temp directory — a stale entry from any earlier run is
-        served ahead of live metadata. `MockDbColumnTypeTests` isolates it; other metadata tests
-        should do the same.
-      Connector audit (the second half) — done as an audit; one connector fixed, six triaged:
-      * **Fixed: SQLite.** `SqliteDataSource` already ran `PRAGMA table_info`, which returns the
-        declared type, NOT NULL flag and primary-key position, and discarded everything but the
-        name. `SqliteCatalogProvider` now surfaces all of it plus foreign keys from
-        `PRAGMA foreign_key_list`, at no extra query cost. An untyped column (SQLite permits one)
-        reports `ANY` rather than a guess. Covered by `SqliteCatalogProviderTests` against a real
-        on-disk database — the engine is embedded, so this is a unit test, not an integration one.
-      * **Deferred, needs a live database: Oracle, Snowflake, BigQuery, ODBC.** All four can supply
-        types (`ALL_TAB_COLUMNS`, `INFORMATION_SCHEMA.COLUMNS`, `GetSchema`), but none can be
-        verified without a real server, and the dialect details are easy to get subtly wrong —
-        Oracle's `ALL_` vs `USER_` scope, BigQuery's dataset-qualified `INFORMATION_SCHEMA`. Writing
-        four unverifiable providers would look like progress while shipping untested query text.
-        These belong with the Docker integration lane, not here.
-      * **Not applicable: MongoDB, Neo4j.** Both are schemaless — a type is a property of a document
-        or node, not of a collection. A provider could only sample and infer, which is exactly the
-        failure this item warned about for MockDb. `ANY` is the honest answer for a source with no
-        declared schema; a sampled guess presented as a type would be worse than no type.
-- [x] **Optional Portal git write-back.**
-      When a git backend is configured, save commits on behalf of the user to preserve the
-      source-controlled-report promise.
-      Verified already shipped, not newly built. `PortalScriptSourceControlService` gates on
-      `PortalSourceControlConfig` (`Enabled`, `Provider`, `RepositoryRoot`, `Remote`, `Branch`,
-      `PushOnSave`), commits through `CommitScriptAsync`, and attributes the commit to the user via
-      `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` while the Portal remains the committer. `PushOnSave`
-      optionally pushes.
-      Reachable, not just registered: `ReportsController` calls `CommitScriptAsync` on save,
-      `ReportScriptSaveService` drives validation and revision checks, and the service is registered
-      in `Program.cs`.
-      Beyond the original ask: `ValidateScriptTextForCommit` refuses to commit scripts containing
-      plaintext credentials (committing one to git is precisely where a leaked password becomes
-      permanent), `IsBaseRevisionCurrent` detects concurrent edits, and repository writes are
-      serialized. Covered by `PortalScriptSourceControlServiceTests`.
-      
+
 ### Developer Experience: Local Browser Script Editor
 > Plans for unified workspace layouts, stateful execution loops, lineage hovers, and browser printing are defined in the [Unified Script Editor Roadmap](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
 
-- [x] **Installed CLI integration.**
-      Finish the installed CLI command shape and packaging polish for the standalone Workstation
-      Editor binary: `etl-sql-editor <path-or-folder> [--port <n>] [--open] [--readonly]`.
-
-      Accept a script file, a folder/workspace root, or no path. Pick an available loopback port when
-      omitted, print the URL, and optionally open the browser when `--open` is set.
-      Done: file/folder/no-path launch, `--port`/`-p`, `--open`, `--readonly`, loopback binding,
-      session token, and packaging are implemented in `ETL-SQL.WorkstationEditor`.
-      `--profile <name>` was dropped from the command shape rather than implemented: it selects a
-      local connection profile, and local profiles were deliberately declined under **Local schema
-      autocomplete** (a workstation credential store is neither mobile like `ENC:` + script password
-      nor global like `SHARED:alias`). A flag with nothing to select does not belong in the
-      documented surface; if profiles are ever revisited, the flag comes back with them.
-- [x] **Local schema autocomplete.**
-      Back the shared schema snapshot contracts with local cache invalidation and
-      stale-while-revalidate behavior, cache by stable connection identity, and enforce local policy
-      on every request.
-      Closed after auditing the code against the original scope, which turned out to be largely
-      already built or deliberately not worth building:
-      * **Caching, TTL, invalidation and stale-while-revalidate: already shipped.** `MetadataManager`
-        has a configurable TTL, a `SoftRefreshInterval` documented as stale-while-revalidate
-        (`_ongoingRefreshes` serves the cached snapshot instantly and refreshes in the background),
-        a machine-bound encrypted on-disk cache with a 14-day max age, bounded memory, and a
-        per-document TTL. Nothing to add.
-      * **Stable connection identity: already correct where it matters.** The read path is
-        memory -> disk -> introspect, and the *disk* cache is keyed by a salted SHA-256 of the
-        connection string, so a second document or a renamed alias gets a disk hit rather than a
-        second database introspection. The in-memory key stays `{documentUri}:{alias}` on purpose —
-        two scripts may declare different databases under the same alias, and document scoping also
-        carries temp tables. Re-keying it would risk document-isolation regressions to save an
-        in-process copy, not a round trip.
-      * **Policy on every request: was a real gap, now fixed.** A cached schema read never touches
-        the connector that enforces egress policy, so a host blocked after the cache warmed kept
-        having its tables and columns completed. `/api/designer/schema` now re-checks on every
-        request via `IMetadataManager.GetConnectionHost` (which exposes only the host, never the
-        credential-bearing connection string) and returns `403` when denied. Covered by
-        `MetadataConnectionHostTests`.
-      * **Local connection profiles: deliberately not built.** They would be a third credential
-        mechanism that loses on both axes the existing two win on — `ENC:` + script password is
-        *mobile* (the script carries its own credentials anywhere), `SHARED:alias` is *global*
-        (admin-administered, credentials never reach the user). A workstation vault is neither, and
-        being DPAPI machine-scoped it would not even follow a user to a second machine. The only
-        gain was not retyping a connection, which `ENC:` already covers per script.
-- [x] **Browser smoke coverage.**
-      Extend smoke tests for installed CLI launch, selection execution, `.rptsql` preview, schema
-      autocomplete, cancellation, and result-grid interaction.
-      Audited each of the six. Five were already covered by `WorkstationEditorTests` — CLI launch
-      (option parsing and host startup), selection execution, `.rptsql` preview including its error
-      path, schema autocomplete (completions, star expansion, document connection metadata), and
-      cancellation (`Run_HonoursClientCancellation`).
-      Result-grid interaction was the real gap: the four existing browser-side tests cover admin
-      catalog, lineage, publish folders and subscription history, and none touched the grid.
-      `scripts/test-result-grid-ui.mjs` now covers what the grid actually decides — filter matching
-      (case-insensitive, across columns, on display text, tolerant of null cells and missing rows),
-      cell formatting (null renders empty while `0`/`false`/`''` survive), and CSV escaping (commas,
-      embedded quotes doubled per RFC 4180, newlines, escaped headers). Wired into the same lane
-      block as its siblings.
-      `filterRows`, `toCsv` and `formatResultCell` were exported from the canonical `designer.js` to
-      make this possible. Testing them directly rather than through the DOM is deliberate: the
-      `scripts/*.mjs` tests run as bare `node <file>` with no root `package.json`, so no npm
-      dependency is available — which is why the sibling tests hand-roll a DOM. jsdom exists only
-      under the VS Code extension's `node_modules` and is not resolvable from the repo root; pulling
-      it in would mean introducing root `node_modules` and a licence-audit obligation for test
-      scaffolding. The rendering wrapper around these helpers remains uncovered.
 - [ ] **Result rendering UX.**
       Keep the query editor and result area stable after a run, jump/focus directly to the results, and
       virtualize large result sets so the page does not shift or become sluggish.
-### Misc
-- [x] **Tables can have numbers set to positive or negative only** Following above, #temp tables can declare
-      integer length and/or sign. INT(5, +) would error if the number is over 5 digit or negative. INT(1)
-      would fail if over 8 digits. If the number of digits exceeds the size of an INT it also fails.  
-      Done: FLATFILE fixed-width connector previously supported `INT(N,+)` and `INT(N,-)`. Extended
-      `InMemoryDataSource` (`#temp` tables) in `DataSources.cs` to enforce integer precision limits (`INT(N)`)
-      and sign constraints (`INT(N,+)`, `INT(N,-)`) during insert/update validation. Added unit tests in
-      `TempTableIntegerConstraintTests.cs`.
-- [x] **Installer add portal sub-choices**  The portal can be installed by subject.  Report, Orchestrator,..
-      we need to add the ability in the installer to pick and choose what you would like to install on the 
-      server/workstation.
-      Done: Added Portal module sub-choice properties (`INSTALL_PORTAL_REPORTING`, `INSTALL_PORTAL_DESIGNER`,
-      `INSTALL_PORTAL_SCHEDULING`, `INSTALL_PORTAL_OPERATIONS`) and interactive UI checkboxes in WiX
-      `Installer.wxs`. Post-install configuration in `configure-portal-jwt.ps1` updates `Portal:Modules` in
-      `appsettings.json`. Linux package `postinst` supports subject selection via `ETLSQL_PORTAL_MODULES`.
 
 ### Release Verification
 
