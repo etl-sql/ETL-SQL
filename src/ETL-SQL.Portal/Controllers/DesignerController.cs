@@ -30,6 +30,7 @@ public class DesignerController : ControllerBase
     private readonly PortalConfig _portalConfig;
     private readonly PortalConnectionCatalogService? _connectionCatalog;
     private readonly IMetadataManager? _metadata;
+    private readonly DesignerSnapshotService? _snapshots;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -41,7 +42,8 @@ public class DesignerController : ControllerBase
         PortalConfig? portalConfig = null,
         PortalDesignerPreviewService? previewService = null,
         PortalConnectionCatalogService? connectionCatalog = null,
-        IMetadataManager? metadata = null)
+        IMetadataManager? metadata = null,
+        DesignerSnapshotService? snapshots = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -53,6 +55,7 @@ public class DesignerController : ControllerBase
         _portalConfig = portalConfig ?? new PortalConfig();
         _connectionCatalog = connectionCatalog;
         _metadata = metadata;
+        _snapshots = snapshots;
     }
 
     // ── GET /api/session/metadata ─────────────────────────────────────────────
@@ -518,6 +521,43 @@ public class DesignerController : ControllerBase
         scriptBefore += beforeCursor;
 
         return (scriptBefore, prefix);
+    }
+
+    // ── GET /api/designer/snapshot/{reportId} ─────────────────────────────────
+    // Serves the last compiled .etlsnap so the canvas can lay visuals out against real historical
+    // data instead of wireframe placeholders, without touching a production database.
+    //
+    // A missing snapshot is a normal state, not an error: a report that has never run has none, and
+    // an identity-sensitive report never persists one (ExecutionJobService keeps those per-viewer),
+    // which is exactly what stops one designer seeing another's row-filtered data.
+
+    [HttpGet("snapshot/{reportId:int}")]
+    public async Task<IActionResult> GetDesignerSnapshot(int reportId, CancellationToken cancellationToken)
+    {
+        if (_snapshots is null) return NotFound(new { error = "Snapshot designing is not available." });
+
+        var result = await _snapshots.LoadForDesignerAsync(reportId, User, cancellationToken);
+
+        return result.Outcome switch
+        {
+            DesignerSnapshotService.SnapshotOutcome.Ok => Ok(new
+            {
+                reportName = result.Package!.ReportName,
+                builtAt = result.Package.BuiltAt,
+                sampleRows = result.Package.SampleRows,
+                columns = result.Package.Columns,
+                metadata = new
+                {
+                    isSampled = result.Package.Metadata.IsSampled,
+                    rlsEnforced = result.Package.Metadata.RlsEnforced,
+                    totalRows = result.Package.Metadata.TotalRows,
+                    returnedRows = result.Package.Metadata.ReturnedRows,
+                },
+            }),
+            DesignerSnapshotService.SnapshotOutcome.ReportNotFound => NotFound(),
+            DesignerSnapshotService.SnapshotOutcome.Forbidden => Forbid(),
+            _ => NotFound(new { error = "No snapshot available." }),
+        };
     }
 
     private int CurrentUserId =>

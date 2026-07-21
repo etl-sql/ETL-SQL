@@ -44,7 +44,16 @@ changes safer.
       `ExecutionController.ResolveReadableSnapshotKeyAsync` (folder permission + path containment +
       artifact existence) is both necessary and sufficient. An identity-sensitive report correctly
       yields "no snapshot available" in the designer.
-      **Blocked on one design decision: the manifest does not link a visual to its dataset.**
+      **Server and wiring now shipped (option b).** `DesignerSnapshotService` resolves the latest
+      snapshot behind the same folder-permission and path-containment gate the view path uses, loads
+      rows per visual, caps them at 500 per visual for a browser canvas, and reports
+      `isSampled`/`totalRows` so the canvas badge is honest. `GET /api/designer/snapshot/{reportId}`
+      exposes it, `designer.html` fetches it and passes `snapshotPackage`, and a failure there never
+      blocks opening the designer. Covered by `DesignerSnapshotServiceTests`.
+      Remaining: the render path is unverified against a real compiled `.etlsnap` — the tests cover
+      the gate and the absence cases, not a populated package end to end. Worth a pass once a
+      snapshot exists in a dev Portal.
+      **Design decision taken — the manifest does not link a visual to its dataset.**
       `VisualManifest` has 34 properties (`name`, `visualType`, `columns`, `rows`, `rowsSource`, …)
       and none identifies the `DATASET` that produced it; `DatasetManifest` separately records
       `TempTableName` and `RowCount`. Rows load per *visual index* (`SnapshotPackageService.LoadRowsAsync`),

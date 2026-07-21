@@ -60,6 +60,7 @@ let initialFolderId   = folderId;
 let initialReportVersion = null;
 let initialSourceRevision = null;
 let initialSourceControlEnabled = false;
+let initialSnapshot = null;
 
 if (reportId) {
   try {
@@ -79,10 +80,20 @@ if (reportId) {
   } catch (err) {
     console.warn('Designer: failed to load report', err);
   }
+
+  // Lay visuals out against the last compiled snapshot rather than empty placeholders. Absence is
+  // the normal case — a report that has never run has no snapshot, and an identity-sensitive report
+  // deliberately never persists a shared one — so a failure here must not block opening the designer.
+  try {
+    initialSnapshot = await apiJson(`/api/designer/snapshot/${reportId}`);
+  } catch {
+    initialSnapshot = null;
+  }
 }
 
 createDesigner(container, {
   designState:  initialState,
+  snapshotPackage: initialSnapshot,
   reportId,
   reportVersion: initialReportVersion,
   sourceRevision: initialSourceRevision,

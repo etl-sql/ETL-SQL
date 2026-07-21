@@ -3286,8 +3286,18 @@ export function createDesigner(container, opts = {}) {
             return;
         }
 
+        // Resolve the visual's own identity first, then its dataset. The snapshot manifest records
+        // visuals and datasets but never links them, so the server keys sample rows by visual name —
+        // the only identity both sides share. Dataset lookup stays as a fallback for packages keyed
+        // that way (the UI sandbox fixtures), and the first-entry fallback keeps a single-dataset
+        // report rendering rather than showing nothing.
+        const sampleRows = snapshotPackage.sampleRows;
+        const byVisual = [visual.name, visual.title, visual.id].find(k => k && sampleRows[k]);
         const dsName = visual.dataset;
-        let rows = (dsName && snapshotPackage.sampleRows[dsName]) || Object.values(snapshotPackage.sampleRows)[0] || [];
+        let rows = (byVisual && sampleRows[byVisual])
+            || (dsName && sampleRows[dsName])
+            || Object.values(sampleRows)[0]
+            || [];
         const type = (visual.type || '').toUpperCase();
 
         // Interactive Filter Slicers Simulation
