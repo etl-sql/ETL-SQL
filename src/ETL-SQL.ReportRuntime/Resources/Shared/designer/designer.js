@@ -3411,7 +3411,10 @@ export function createDesigner(container, opts = {}) {
         if (window.echarts && typeof window.echarts.init === 'function') {
             try {
                 const isDark = document.body.classList.contains('theme-dark');
-                const chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
+                let chart = window.echarts.getInstanceByDom(bodyEl);
+                if (!chart) {
+                    chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
+                }
                 
                 const sample = rows[0] || [];
                 const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
@@ -3449,7 +3452,7 @@ export function createDesigner(container, opts = {}) {
                         series: [{ type: 'bar', data: values, itemStyle: { color: VCOLOR[type] || '#3b82f6', borderRadius: 2 } }]
                     };
                 }
-                chart.setOption(option);
+                chart.setOption(option, true);
 
                 if (window.ResizeObserver) {
                     const ro = new ResizeObserver(() => { try { chart.resize(); } catch {} });
@@ -4082,9 +4085,12 @@ export function createDesigner(container, opts = {}) {
         if (btn) addVisual(btn.dataset.vtype);
     });
 
-    // ── Drag & Resize Interaction ────────────────────────────────────────────
+    // ── Drag, Resize & Marquee Interaction ─────────────────────────────────
     let isDragging = false;
     let isResizing = false;
+    let isMarquee = false;
+    let marqueeStartX = 0, marqueeStartY = 0;
+    let marqueeEl = null;
     let activeId = null;
     let activeCardEl = null;
     let ghostEl = null;
@@ -4095,12 +4101,84 @@ export function createDesigner(container, opts = {}) {
     let targetColSpan = 12, targetRowSpan = 4;
     let initialRect = null;
 
+    function handleMarqueeMove(e) {
+        if (!isMarquee || !marqueeEl) return;
+        const wrapRect = canvasWrap.getBoundingClientRect();
+        
+        const curX = e.clientX;
+        const curY = e.clientY;
+
+        const left = Math.min(marqueeStartX, curX) - wrapRect.left + canvasWrap.scrollLeft;
+        const top = Math.min(marqueeStartY, curY) - wrapRect.top + canvasWrap.scrollTop;
+        const width = Math.abs(curX - marqueeStartX);
+        const height = Math.abs(curY - marqueeStartY);
+
+        marqueeEl.style.left = `${left}px`;
+        marqueeEl.style.top = `${top}px`;
+        marqueeEl.style.width = `${width}px`;
+        marqueeEl.style.height = `${height}px`;
+
+        const mRect = marqueeEl.getBoundingClientRect();
+        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+            const cRect = card.getBoundingClientRect();
+            const intersects = !(mRect.right < cRect.left || mRect.left > cRect.right || mRect.bottom < cRect.top || mRect.top > cRect.bottom);
+            if (intersects) {
+                selVisualIds.add(card.dataset.vid);
+            } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                selVisualIds.delete(card.dataset.vid);
+            }
+        }
+
+        selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
+        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+            card.classList.toggle('selected', selVisualIds.has(card.dataset.vid));
+        }
+        renderAlignmentToolbar();
+    }
+
+    function handleMarqueeUp() {
+        if (marqueeEl) {
+            marqueeEl.style.display = 'none';
+        }
+        isMarquee = false;
+        document.removeEventListener('mousemove', handleMarqueeMove);
+        document.removeEventListener('mouseup', handleMarqueeUp);
+        renderTree();
+        renderProps();
+    }
+
     canvasGrid.addEventListener('mousedown', e => {
         const resizeHandle = e.target.closest('.etlsql-dsgn-vcard-resize');
         const card = e.target.closest('.etlsql-dsgn-visual-card');
         const delBtn = e.target.closest('[data-del]');
 
         if (delBtn) return; // Delete visual handler manages this
+
+        if (!card && !resizeHandle) {
+            isMarquee = true;
+            marqueeStartX = e.clientX;
+            marqueeStartY = e.clientY;
+
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                selectVisual(null);
+            }
+
+            if (!marqueeEl) {
+                marqueeEl = document.createElement('div');
+                marqueeEl.className = 'etlsql-dsgn-marquee';
+                canvasWrap.appendChild(marqueeEl);
+            }
+            const wrapRect = canvasWrap.getBoundingClientRect();
+            marqueeEl.style.left = `${e.clientX - wrapRect.left + canvasWrap.scrollLeft}px`;
+            marqueeEl.style.top = `${e.clientY - wrapRect.top + canvasWrap.scrollTop}px`;
+            marqueeEl.style.width = '0px';
+            marqueeEl.style.height = '0px';
+            marqueeEl.style.display = 'block';
+
+            document.addEventListener('mousemove', handleMarqueeMove);
+            document.addEventListener('mouseup', handleMarqueeUp);
+            return;
+        }
 
         if (card) {
             const vid = card.dataset.vid;

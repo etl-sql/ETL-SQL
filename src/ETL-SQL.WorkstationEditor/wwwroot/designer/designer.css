@@ -2182,3 +2182,12 @@ body.vscode-dark .cm-editor .cm-line::selection {
     gap: 6px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
+
+/* Rubberband Marquee Drag-Box Selection */
+.etlsql-dsgn-marquee {
+    position: absolute;
+    border: 1.5px dashed var(--portal-accent, #2563eb);
+    background: rgba(37, 99, 235, 0.12);
+    pointer-events: none;
+    z-index: 100;
+}
