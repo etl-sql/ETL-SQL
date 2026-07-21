@@ -796,21 +796,23 @@
                 // Hide all, show clicked
                 navDef.pages.forEach(n => {
                     const s = pageSections[n];
-                    if (s) s.style.display = 'none';
+                    if (s) s.style.display = (n === pageName) ? 'block' : 'none';
                 });
-                const target = pageSections[pageName];
-                if (target) target.style.display = 'block';
 
                 updateBodyTheme(manifest, pageName);
 
-                // Set active state BEFORE resize so it is never racing against
-                // event callbacks (e.g. ECharts force-layout rendering) that fire
-                // during chart.resize() and may themselves trigger re-renders.
-                nav.querySelectorAll('.nav-tab, .nav-btn, .nav-link').forEach(e => e.classList.remove('active'));
-                el.classList.add('active');
+                // Set active state on all matching data-page elements
+                document.querySelectorAll('[data-page]').forEach(item => {
+                    if (item.dataset.page === pageName) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
                 _lastActivePage = pageName;
 
                 // Defer resize to the next frame so the active class renders first.
+                const target = pageSections[pageName];
                 if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
 
                 // Notify portal of user-driven tab change so it can push a history entry
@@ -4055,7 +4057,10 @@
             page.style.display = page === targetPage ? 'block' : 'none';
         });
 
-        document.querySelectorAll('[data-page]').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('[data-page]').forEach(item => {
+            if (item.dataset.page === pageName) item.classList.add('active');
+            else item.classList.remove('active');
+        });
         _lastActivePage = pageName;
         resizeChartsIn(targetPage);
 

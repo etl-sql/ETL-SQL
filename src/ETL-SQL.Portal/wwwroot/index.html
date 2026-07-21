@@ -306,9 +306,9 @@ window.addEventListener('message', e => {
     const state = { view: 'report', id: currentReportId, page: currentActivePage,
                     folderId: currentFolderId, folderName: currentFolderName };
     if (e.data.userTriggered) {
-      history.pushState(state, '', window.location.pathname);
+      history.pushState(state, '', window.location.href);
     } else {
-      history.replaceState(state, '', window.location.pathname);
+      history.replaceState(state, '', window.location.href);
     }
   }
 });
