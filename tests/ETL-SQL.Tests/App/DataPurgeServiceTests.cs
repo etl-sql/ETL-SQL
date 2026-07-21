@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.CliCommands
 
             var localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var sessionDefault = Path.GetFullPath(Path.Combine(localApp, "ETL-SQL", "Sessions"));
-            var historyDefault = Path.GetFullPath(Path.Combine(localApp, "ETL-SQL", "etlsql.db"));
+            var historyDefault = Path.GetFullPath(ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore.DefaultDbPath());
 
             Assert.Contains(targets, t => t.Path == sessionDefault && t.IsDirectory);
             Assert.Contains(targets, t => t.Path == historyDefault && !t.IsDirectory);
