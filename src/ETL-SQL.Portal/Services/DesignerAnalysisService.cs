@@ -248,21 +248,31 @@ public sealed class DesignerAnalysisService
     private static (int col, int row, int colSpan, int rowSpan) FindSlotBounds(
         List<List<string>> grid, string slot)
     {
-        int minC = int.MaxValue, maxC = 0, minR = int.MaxValue, maxR = 0;
+        int minC = int.MaxValue, maxC = -1, minR = int.MaxValue, maxR = -1;
         for (int r = 0; r < grid.Count; r++)
         {
             for (int c = 0; c < grid[r].Count; c++)
             {
                 if (!string.Equals(grid[r][c], slot, StringComparison.OrdinalIgnoreCase)) continue;
-                if (c + 1 < minC) minC = c + 1;
-                if (c + 1 > maxC) maxC = c + 1;
-                if (r + 1 < minR) minR = r + 1;
-                if (r + 1 > maxR) maxR = r + 1;
+                if (c < minC) minC = c;
+                if (c > maxC) maxC = c;
+                if (r < minR) minR = r;
+                if (r > maxR) maxR = r;
             }
         }
-        return minC == int.MaxValue
-            ? (1, 1, GridCols, 4)
-            : (minC, minR, maxC - minC + 1, maxR - minR + 1);
+
+        if (minC == int.MaxValue || minR == int.MaxValue)
+            return (1, 1, GridCols, 4);
+
+        int totalSlotsInRow = Math.Max(1, grid[minR].Count);
+        int gridColStart = 1 + (int)Math.Round((double)minC * GridCols / totalSlotsInRow);
+        int gridColEnd = (int)Math.Round((double)(maxC + 1) * GridCols / totalSlotsInRow);
+        int colSpan = Math.Max(1, Math.Min(GridCols - gridColStart + 1, gridColEnd - gridColStart + 1));
+
+        int gridRowStart = 1 + minR * 4;
+        int rowSpan = Math.Max(1, (maxR - minR + 1) * 4);
+
+        return (gridColStart, gridRowStart, colSpan, rowSpan);
     }
 
     private static string NormalizeDatasetName(string name)

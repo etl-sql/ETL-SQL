@@ -247,6 +247,53 @@ public class DesignerControllerTests
             .ToList();
     }
 
+    [Fact]
+    public void Parse_ScalesStructureSlotsToGridColumns()
+    {
+        const string script = """
+            CREATE VISUAL BasicBar AS BAR (TITLE = 'Basic');
+            CREATE VISUAL GroupedBar AS BAR (TITLE = 'Grouped');
+            CREATE VISUAL FullBar AS BAR (TITLE = 'Full');
+
+            CREATE PAGE BarKitchenSink AS DASHBOARD (
+                LAYOUT (
+                    STRUCTURE = 'A B / C C',
+                    MAP (
+                        'A' = BasicBar,
+                        'B' = GroupedBar,
+                        'C' = FullBar
+                    )
+                )
+            );
+            """;
+        var controller = new DesignerController();
+        var parseResult = Assert.IsType<OkObjectResult>(controller.Parse(new ParseDesignerRequest(script)));
+        var parseResponse = Assert.IsType<ParseDesignerResponse>(parseResult.Value);
+
+        Assert.NotNull(parseResponse.DesignState);
+        Assert.Single(parseResponse.DesignState.Pages);
+        var page = parseResponse.DesignState.Pages[0];
+        Assert.Equal(3, page.Visuals.Count);
+
+        var basic = page.Visuals.Single(v => v.Name == "BasicBar");
+        Assert.Equal(1, basic.GridCol);
+        Assert.Equal(6, basic.GridColSpan);
+        Assert.Equal(1, basic.GridRow);
+        Assert.Equal(4, basic.GridRowSpan);
+
+        var grouped = page.Visuals.Single(v => v.Name == "GroupedBar");
+        Assert.Equal(7, grouped.GridCol);
+        Assert.Equal(6, grouped.GridColSpan);
+        Assert.Equal(1, grouped.GridRow);
+        Assert.Equal(4, grouped.GridRowSpan);
+
+        var full = page.Visuals.Single(v => v.Name == "FullBar");
+        Assert.Equal(1, full.GridCol);
+        Assert.Equal(12, full.GridColSpan);
+        Assert.Equal(5, full.GridRow);
+        Assert.Equal(4, full.GridRowSpan);
+    }
+
     private static IReadOnlyList<string> SplitLines(string script)
     {
         return script.Replace("\r\n", "\n", StringComparison.Ordinal)
