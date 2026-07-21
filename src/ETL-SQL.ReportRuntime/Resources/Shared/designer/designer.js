@@ -4062,7 +4062,7 @@ export function createDesigner(container, opts = {}) {
             const v = findVis(vid);
             if (!v) return;
 
-            selectVisual(vid, { skipCanvas: true });
+            selectVisual(vid, { skipCanvas: true, toggle: e.shiftKey || e.ctrlKey || e.metaKey });
 
             startX = e.clientX;
             startY = e.clientY;
@@ -4207,7 +4207,17 @@ export function createDesigner(container, opts = {}) {
                 v.gridColSpan = targetColSpan;
                 v.gridRowSpan = targetRowSpan;
 
-                if (v.type === 'CONTAINER' && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
+                if (selVisualIds.has(v.id) && selVisualIds.size > 1 && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
+                    for (const otherId of selVisualIds) {
+                        if (otherId !== v.id) {
+                            const other = findVis(otherId);
+                            if (other) {
+                                other.gridCol = Math.max(1, (other.gridCol || 1) + deltaCol);
+                                other.gridRow = Math.max(1, (other.gridRow || 1) + deltaRow);
+                            }
+                        }
+                    }
+                } else if (v.type === 'CONTAINER' && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
                     for (const child of curVis()) {
                         if (child.containerId === v.id) {
                             child.gridCol = Math.max(1, (child.gridCol || 1) + deltaCol);
