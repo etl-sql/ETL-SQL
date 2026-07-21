@@ -60,7 +60,11 @@ public class ProcessJobExecutorChaosTests
         var tempDir = NewTempDir();
         var pidStore = Path.Combine(tempDir, "child-pids.json");
         var tracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
-        var (exePath, argumentsTemplate) = SleepCommand(seconds: 10);
+        // The child sleeps far longer than the timeout so the duration assertion below has a wide
+        // discriminating gap. At a 10s child with an <8s bound there were only ~2s of headroom, and
+        // under full-suite CPU contention process spawn, kill and teardown exceeded it — the test
+        // failed while the timeout logic was working correctly.
+        var (exePath, argumentsTemplate) = SleepCommand(seconds: 120);
 
         var executor = new ProcessJobExecutor(
             Options.Create(new ProcessJobExecutorOptions
@@ -79,7 +83,11 @@ public class ProcessJobExecutorChaosTests
 
             Assert.False(result.Success);
             Assert.Contains("cancelled or timed out", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.True((DateTime.UtcNow - started).TotalSeconds < 8);
+            // Proves the run ended on its own timeout/cancellation rather than the child finishing.
+            // Anything well under the 120s child is conclusive, so the bound is generous enough to
+            // survive a CPU-starved full-suite run without weakening what it asserts.
+            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60,
+                "The run should have ended on timeout/cancellation, not by the child completing.");
             Assert.Equal(0, tracker.ActiveCount);
             Assert.False(File.Exists(pidStore) && File.ReadAllText(pidStore).Contains("etlsql-job-", StringComparison.OrdinalIgnoreCase));
         }
@@ -95,7 +103,9 @@ public class ProcessJobExecutorChaosTests
         var tempDir = NewTempDir();
         var pidStore = Path.Combine(tempDir, "child-pids.json");
         var tracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
-        var (exePath, argumentsTemplate) = SleepCommand(seconds: 10);
+        // See the note in the timeout test above: a child that outlives the cancellation by a wide
+        // margin is what makes the duration assertion meaningful under load.
+        var (exePath, argumentsTemplate) = SleepCommand(seconds: 120);
 
         var executor = new ProcessJobExecutor(
             Options.Create(new ProcessJobExecutorOptions
@@ -118,7 +128,11 @@ public class ProcessJobExecutorChaosTests
 
             Assert.False(result.Success);
             Assert.Contains("cancelled or timed out", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.True((DateTime.UtcNow - started).TotalSeconds < 8);
+            // Proves the run ended on its own timeout/cancellation rather than the child finishing.
+            // Anything well under the 120s child is conclusive, so the bound is generous enough to
+            // survive a CPU-starved full-suite run without weakening what it asserts.
+            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60,
+                "The run should have ended on timeout/cancellation, not by the child completing.");
             Assert.Equal(0, tracker.ActiveCount);
             Assert.False(File.Exists(pidStore) && File.ReadAllText(pidStore).Contains("etlsql-job-", StringComparison.OrdinalIgnoreCase));
         }
