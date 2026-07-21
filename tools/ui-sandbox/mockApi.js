@@ -615,6 +615,8 @@ function generateMockScript(state) {
           .join(', ');
         const dsName = v.dataset ? (v.dataset.startsWith('&') ? v.dataset : '&' + v.dataset) : '&sales';
         const layoutOpts = [];
+        if (v.gridColSpan && v.gridColSpan !== 12) layoutOpts.push(`COLSPAN = ${v.gridColSpan}`);
+        if (v.gridRowSpan && v.gridRowSpan !== 4) layoutOpts.push(`ROWSPAN = ${v.gridRowSpan}`);
         if (v.width || v.options?.WIDTH) layoutOpts.push(`WIDTH = '${v.width || v.options.WIDTH}'`);
         if (v.height || v.options?.HEIGHT) layoutOpts.push(`HEIGHT = '${v.height || v.options.HEIGHT}'`);
         const layoutClause = layoutOpts.length ? `,\n    LAYOUT (${layoutOpts.join(', ')})` : '';

@@ -105,6 +105,10 @@ public sealed class DesignerScriptGenerationService
                 sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
 
             var layoutOpts = new List<string>();
+            if (v.GridColSpan > 0 && v.GridColSpan != 12)
+                layoutOpts.Add($"COLSPAN = {v.GridColSpan}");
+            if (v.GridRowSpan > 0 && v.GridRowSpan != 4)
+                layoutOpts.Add($"ROWSPAN = {v.GridRowSpan}");
             if (v.Options.TryGetValue("WIDTH", out var w) && !string.IsNullOrWhiteSpace(w))
                 layoutOpts.Add($"WIDTH = '{EscapeStr(w)}'");
             if (v.Options.TryGetValue("HEIGHT", out var h) && !string.IsNullOrWhiteSpace(h))
