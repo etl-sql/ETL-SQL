@@ -1,4 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Portal.Services;
 
@@ -37,7 +43,7 @@ public sealed class DocumentationLibraryService
         var terms = SplitTerms(query);
         if (terms.Length == 0)
             return GetIndex()
-                .Take(Math.Clamp(limit, 1, 100))
+                .Take(Math.Clamp(limit, 1, 200))
                 .Select(entry => new DocumentationSearchResult(entry.Path, entry.Title, entry.Section, entry.Summary, 1))
                 .ToArray();
 
@@ -46,43 +52,114 @@ public sealed class DocumentationLibraryService
             .Where(result => result.Score > 0)
             .OrderByDescending(result => result.Score)
             .ThenBy(result => result.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(Math.Clamp(limit, 1, 100))
+            .Take(Math.Clamp(limit, 1, 200))
             .ToArray();
     }
 
     public async Task<DocumentationDocument?> GetDocumentAsync(string relativePath, CancellationToken ct = default)
     {
-        var root = FindDocsRoot();
-        if (root is null)
-            return null;
-
         var normalized = NormalizePath(relativePath);
-        if (string.IsNullOrWhiteSpace(normalized) || !normalized.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(normalized))
             return null;
 
-        var full = Path.GetFullPath(Path.Combine(root, normalized));
-        var rootFull = Path.GetFullPath(root);
-        if (!full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            return null;
-        if (!File.Exists(full))
-            return null;
+        if (!normalized.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            normalized += ".md";
 
-        var markdown = await File.ReadAllTextAsync(full, ct);
-        return new DocumentationDocument(
-            normalized.Replace('\\', '/'),
-            TitleFromMarkdown(markdown, Path.GetFileNameWithoutExtension(full)),
-            markdown);
+        // 1. Check local disk docs/ directory
+        var root = FindDocsRoot();
+        if (root is not null)
+        {
+            var full = Path.GetFullPath(Path.Combine(root, normalized));
+            var rootFull = Path.GetFullPath(root);
+            if (full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && File.Exists(full))
+            {
+                var markdown = await File.ReadAllTextAsync(full, ct);
+                return new DocumentationDocument(
+                    normalized.Replace('\\', '/'),
+                    TitleFromMarkdown(markdown, Path.GetFileNameWithoutExtension(full)),
+                    markdown);
+            }
+        }
+
+        // 2. Check embedded LanguageHelpRegistry
+        try
+        {
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            var topicName = Path.GetFileNameWithoutExtension(normalized);
+            var help = helpRegistry.GetHelp(topicName);
+
+            if (string.IsNullOrWhiteSpace(help) && normalized.Contains('/'))
+            {
+                var parts = normalized.Split('/');
+                help = helpRegistry.GetHelp(parts[0], topicName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(help))
+            {
+                return new DocumentationDocument(
+                    normalized.Replace('\\', '/'),
+                    TitleFromMarkdown(help, FormatTitle(topicName)),
+                    help);
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     private static IReadOnlyList<DocumentationEntry> BuildIndex()
     {
-        var root = FindDocsRoot();
-        if (root is null)
-            return Array.Empty<DocumentationEntry>();
+        var list = new List<DocumentationEntry>();
 
-        return Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
-            .Where(IsIndexable)
-            .Select(path => BuildEntry(root, path))
+        // 1. Index local disk files
+        var root = FindDocsRoot();
+        if (root is not null)
+        {
+            var diskEntries = Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
+                .Where(IsIndexable)
+                .Select(path => BuildEntry(root, path));
+            list.AddRange(diskEntries);
+        }
+
+        // 2. Index embedded LanguageHelpRegistry topics
+        try
+        {
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            foreach (var topic in helpRegistry.GetTopics())
+            {
+                var topHelp = helpRegistry.GetHelp(topic);
+                if (!string.IsNullOrWhiteSpace(topHelp))
+                {
+                    var section = CategorizeTopic(topic);
+                    var title = FormatTitle(topic);
+                    var summary = SummaryFromMarkdown(topHelp);
+                    var path = $"{section}/{topic}.md";
+                    if (!list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        list.Add(new DocumentationEntry(path, title, section, summary));
+                    }
+                }
+
+                foreach (var sub in helpRegistry.GetSubTopics(topic))
+                {
+                    var subHelp = helpRegistry.GetHelp(topic, sub);
+                    if (!string.IsNullOrWhiteSpace(subHelp))
+                    {
+                        var section = CategorizeSubTopic(topic, sub);
+                        var title = FormatTitle(sub);
+                        var summary = SummaryFromMarkdown(subHelp);
+                        var path = $"{section}/{sub}.md";
+                        if (!list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            list.Add(new DocumentationEntry(path, title, section, summary));
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return list
             .OrderBy(entry => entry.Section, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -168,13 +245,41 @@ public sealed class DocumentationLibraryService
             var dir = new DirectoryInfo(start);
             while (dir is not null)
             {
-                var candidate = Path.Combine(dir.FullName, "Docs");
-                if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "README.md")))
-                    return candidate;
+                var candidateDocs = Path.Combine(dir.FullName, "docs");
+                if (Directory.Exists(candidateDocs) && (File.Exists(Path.Combine(candidateDocs, "README.md")) || File.Exists(Path.Combine(candidateDocs, "syntax-index.md"))))
+                    return candidateDocs;
+
+                var candidateDocsCap = Path.Combine(dir.FullName, "Docs");
+                if (Directory.Exists(candidateDocsCap) && (File.Exists(Path.Combine(candidateDocsCap, "README.md")) || File.Exists(Path.Combine(candidateDocsCap, "syntax-index.md"))))
+                    return candidateDocsCap;
+
                 dir = dir.Parent;
             }
         }
 
         return null;
     }
+
+    private static string CategorizeTopic(string topic) => topic.ToUpperInvariant() switch
+    {
+        "FUNCTION" => "Functions",
+        "VISUAL" => "Visuals",
+        "CONNECTION" => "Connectors",
+        "VARIABLES" => "Variables",
+        "REPORT" => "Report-SQL",
+        _ => "Keywords"
+    };
+
+    private static string CategorizeSubTopic(string topic, string sub) => topic.ToUpperInvariant() switch
+    {
+        "FUNCTION" => "Functions",
+        "VISUAL" => "Visuals",
+        "CONNECTION" => "Connectors",
+        "VARIABLES" => "Variables",
+        "REPORT" => "Report-SQL",
+        _ => "Reference"
+    };
+
+    private static string FormatTitle(string raw) =>
+        string.IsNullOrWhiteSpace(raw) ? raw : raw.Replace('_', ' ');
 }
