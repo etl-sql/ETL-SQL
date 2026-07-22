@@ -36,9 +36,9 @@ jobs:
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
 
-      - name: Fast lane with coverage
+      - name: Engine lane with coverage
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
+        run: .\scripts\test-lane.ps1 -Lane engine -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
 
       - name: Generate coverage report
         run: >

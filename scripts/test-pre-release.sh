@@ -111,10 +111,12 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Dependency-audit self-test" "./scripts/Test-DependencyAudit.ps1 (via pwsh)" "The dependency-audit helpers behave correctly (reliable fallback + hard failure)."; i=$((i + 1))
     print_plan_phase "$i" "NuGet dependency audit" "scripts/lib/DependencyAudit.ps1 Invoke-NuGetDependencyAudit (via pwsh)" "Release should not ship known vulnerable or deprecated packages."; i=$((i + 1))
     print_plan_phase "$i" "SBOM generation" "node scripts/generate-sbom.js" "The released SBOM generates and its component version matches Directory.Build.props."; i=$((i + 1))
+    print_plan_phase "$i" "Third-party inventory drift" "node scripts/generate-third-party-inventory.js --check" "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
-    print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine and language server."; i=$((i + 1))
+    print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Bounded quick-feedback lane: smoke coverage plus language-server tests."; i=$((i + 1))
+    print_plan_phase "$i" "Engine lane" "./scripts/test-lane.sh --lane engine" "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane."; i=$((i + 1))
     print_plan_phase "$i" "Portal lane" "./scripts/test-lane.sh --lane portal" "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
@@ -149,6 +151,7 @@ show_pre_release_plan() {
     if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline."; i=$((i + 1))
         print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
@@ -362,6 +365,11 @@ cert_baseline_phase() {
 ha_soak_contract_phase() {
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
     "$pwsh" -NoProfile -File ./scripts/Test-HaSoakContracts.ps1
+}
+
+spill_allocation_budget_phase() {
+    local pwsh; pwsh="$(resolve_pwsh)" || return 1
+    "$pwsh" -NoProfile -File ./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild
 }
 
 # ---------------------------------------------------------------------------
@@ -642,6 +650,10 @@ run_phase "SBOM generation" \
     "node scripts/generate-sbom.js (component version must match Directory.Build.props)" \
     sbom_generation_phase
 
+run_phase "Third-party inventory drift" \
+    "node scripts/generate-third-party-inventory.js --check" \
+    node scripts/generate-third-party-inventory.js --check
+
 run_phase "Dotnet build" \
     "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" \
     dotnet build "ETL-SQL.slnx" "--configuration" "$CONFIGURATION" "--no-restore"
@@ -660,6 +672,10 @@ run_phase "Smoke lane" \
 run_phase "Fast lane" \
     "./scripts/test-lane.sh --lane fast --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "fast" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+
+run_phase "Engine lane" \
+    "./scripts/test-lane.sh --lane engine --configuration $CONFIGURATION --no-restore --no-build" \
+    bash "./scripts/test-lane.sh" "--lane" "engine" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
 run_phase "Portal lane" \
     "./scripts/test-lane.sh --lane portal --configuration $CONFIGURATION --no-restore --no-build" \
@@ -753,6 +769,10 @@ if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
     run_phase "Cert baseline regression check (standard)" \
         "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
         cert_baseline_phase "$RUN_DIR/cert-baseline-standard.md"
+
+    run_phase "Spill allocation budget (10M)" \
+        "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" \
+        spill_allocation_budget_phase
 fi
 
 if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then

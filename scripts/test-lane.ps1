@@ -117,7 +117,15 @@ switch ($Lane) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "fast" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
+        $smokeArgs = @{
+            Lane = "all"
+            Configuration = $Configuration
+        }
+        if ($NoRestore) { $smokeArgs.NoRestore = $true }
+        if ($NoBuild) { $smokeArgs.NoBuild = $true }
+        & (Join-Path $PSScriptRoot "test-smoke.ps1") @smokeArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
     }
     "engine" {
@@ -143,10 +151,10 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
     }
     "release" {
-        & $PSCommandPath -Lane "smoke" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
+        & $PSCommandPath -Lane "fast" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$CollectCoverage -ResultsDirectory $ResultsDirectory
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-        & $PSCommandPath -Lane "fast" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$CollectCoverage -ResultsDirectory $ResultsDirectory
+        & $PSCommandPath -Lane "engine" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$CollectCoverage -ResultsDirectory $ResultsDirectory
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         & $PSCommandPath -Lane "portal" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false

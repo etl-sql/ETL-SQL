@@ -63,12 +63,12 @@ function Get-TestRecords {
                 $pendingCategories.Add($match.Groups[1].Value)
             }
 
-            if ($line -match '\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)') {
+            if ($line -match '^\s*(public|internal)\s+(sealed\s+|partial\s+|abstract\s+)*\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)') {
                 $classCategories = @($pendingCategories)
                 $pendingCategories.Clear()
             }
 
-            if ($line -match '\[(Fact|Theory)(\(|\])') {
+            if ($line -match '\[([A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*Fact|[A-Za-z_][A-Za-z0-9_]*Theory|Fact|Theory)(\(|\])') {
                 $methodCategories = @($pendingCategories)
                 $pendingCategories.Clear()
                 $methodLine = ""
@@ -172,11 +172,10 @@ function Get-LanesForTest {
         $lanes.Add("perf")
     }
 
-    $isFastProject =
-        $Project -like "tests\ETL-SQL.Tests\*" -or
-        $Project -like "tests\ETL-SQL.LanguageServer.Tests\*"
-
-    if ($isFastProject -and $fastExclusionReasons.Count -eq 0) {
+    if (($Project -like "tests\ETL-SQL.Tests\*" -or $Project -like "tests\ETL-SQL.Portal.Tests\*") -and $isSmoke) {
+        $lanes.Add("fast")
+    }
+    elseif ($Project -like "tests\ETL-SQL.LanguageServer.Tests\*") {
         $lanes.Add("fast")
     }
 
@@ -287,7 +286,7 @@ else {
         $lines.Add(("| `{0}` | {1} |" -f $lane, $count))
     }
     $lines.Add("")
-    $lines.Add("## Fast-Lane Exclusions")
+    $lines.Add("## Engine-Lane Exclusions")
     $lines.Add("")
     $lines.Add("| Reason | Tests |")
     $lines.Add("| :--- | ---: |")
@@ -295,7 +294,7 @@ else {
         $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
     }
     $lines.Add("")
-    $lines.Add(("Tests excluded from ``fast``/``engine`` but not assigned to a targeted lane: **{0}**" -f $targetedLaneGapRows.Count))
+    $lines.Add(("Tests excluded from ``engine`` but not assigned to a targeted lane: **{0}**" -f $targetedLaneGapRows.Count))
     if ($targetedLaneGapRows.Count -gt 0) {
         $lines.Add("")
         $lines.Add("| File | Tests |")
@@ -324,7 +323,7 @@ else {
         $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
     }
     $lines.Add("")
-    $lines.Add("> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` filters, while the gap section highlights tests that name-based filters exclude from fast/engine but targeted lanes do not select. Run the lane to get authoritative pass/fail results.")
+    $lines.Add("> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` filters, while the gap section highlights tests that name-based filters exclude from engine but targeted lanes do not select. Run the lane to get authoritative pass/fail results.")
     $output = $lines -join [Environment]::NewLine
 }
 

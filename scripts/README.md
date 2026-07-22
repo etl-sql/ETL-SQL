@@ -17,7 +17,7 @@ than the operator front door.
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](./build-debug.ps1)** / **[`build-debug.sh`](./build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
 | **[`test-smoke.ps1`](./test-smoke.ps1)** / **[`test-smoke.sh`](./test-smoke.sh)** | PowerShell / Bash | Cross-platform | Executes targeted minimal smoke tests divided into specific categories (Core, Security, Reporting, Portal). |
-| **[`test-lane.ps1`](./test-lane.ps1)** / **[`test-lane.sh`](./test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `fast` lane stays focused on engine + language server checks; the `portal` and `full` lanes run Portal tests and Node UI smoke coverage. |
+| **[`test-lane.ps1`](./test-lane.ps1)** / **[`test-lane.sh`](./test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `fast` lane stays bounded to smoke + language-server checks; `engine` carries the broad `ETL-SQL.Tests` regression pass, and `portal`/`full` run Portal tests plus Node UI smoke coverage. |
 | **[`Get-TestLaneInventory.ps1`](./Get-TestLaneInventory.ps1)** | PowerShell | Cross-platform | Generates a static Markdown or JSON inventory of discovered xUnit tests by lane, category trait, and project. |
 | **[`Test-SltCorpus.ps1`](./Test-SltCorpus.ps1)** / **[`Test-SltCorpus.sh`](./Test-SltCorpus.sh)** | PowerShell / Bash | Cross-platform | Runs the SqlLogicTests corpus suite and pipes console logs + TRX file output to a timestamped folder in `slt_results/`. |
 | **[`Parse-SltResults.ps1`](./Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
@@ -191,7 +191,7 @@ To see what each lane currently contains without running tests:
 .\scripts\Get-TestLaneInventory.ps1 -Format Json -OutFile test-inventory.json
 ```
 
-The inventory is a static visibility report and includes fast-lane exclusion gaps. Use `test-lane.ps1` for authoritative pass/fail execution.
+The inventory is a static visibility report and includes engine-exclusion gaps. Use `test-lane.ps1` for authoritative pass/fail execution.
 
 ### 2.4 Running Local Pre-Release Validation
 Run this before pushing release tags or building release installers. It is designed to catch failures locally before spending GitHub-hosted runner time.
@@ -238,7 +238,7 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 > cert-baseline regression checks) via `pwsh`, so those phases require **PowerShell 7+ (`pwsh`)** on
 > `PATH` even on Linux/macOS. This keeps a single source of truth rather than a parallel Bash port.
 
-The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; secret scan; restore; dependency-audit self-test; NuGet dependency audit; SBOM generation; release build; format verify (auto-fixes drift); smoke lane; fast lane; portal lane; N→N+1 upgrade-path drill; sample scripts; SLT lane; VS Code npm ci/audit/compile/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
+The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; secret scan; restore; dependency-audit self-test; NuGet dependency audit; SBOM generation; third-party inventory drift; release build; format verify (auto-fixes drift); smoke lane; fast lane; engine lane; portal lane; N→N+1 upgrade-path drill; sample scripts; HA soak contract gate; SLT lane; VS Code npm ci/audit/compile/lint/build/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; spill allocation budget; publish artifacts; Windows MSI.
 
 Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build-msi.ps1`:
 

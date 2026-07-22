@@ -13,7 +13,7 @@ The testing foundation now has three complementary layers:
 
 | Layer | What it proves | Current status |
 | :--- | :--- | :--- |
-| Unit / functional xUnit tests | Parser, evaluator, handlers, functions, security rules, reporting, portal APIs, language tooling | Broad coverage. Use `fast` for engine/language-server confidence and `portal` for Portal/API changes. |
+| Unit / functional xUnit tests | Parser, evaluator, handlers, functions, security rules, reporting, portal APIs, language tooling | Broad coverage. Use `fast` for bounded smoke/language-server confidence, `engine` for broad engine coverage, and `portal` for Portal/API changes. |
 | ETL scenario golden tests | Cross-feature ETL-SQL workflows that are easy to miss with isolated tests | 27 scenarios currently cover staged ETL, cleansing, JSON extraction, file round trip, lineage tags/source columns, `WHAT_IF`, loops, `TRY...CATCH`, transactions, DML audit, merge, hash-change detection, set ops, recursive CTE, pivot/unpivot, semi/anti joins, and modular scripts. |
 | SQL Logic Tests | SQL compatibility semantics: SELECT, joins, NULLs, aggregates, DML, set ops, windows, type coercion | Full SLT corpus is explicit/deployment-only. Custom ETL-SQL SLT files cover function and DML areas that SQLite SLT does not. |
 
@@ -31,13 +31,13 @@ Result on 2026-06-01: 27 passed, 0 failed, 0 skipped.
 
 Result on 2026-06-01: engine performance tests 44 passed; dedicated perf project 5 passed.
 
-The integration-folder audit is complete as of 2026-06-01. Metadata-only connector tests, UI/editor tests, local file/format tests, and local engine/orchestration/security tests have been moved back into fast-covered folders. `Get-TestLaneInventory.ps1` now reports 0 test methods that are excluded from `fast`/`engine` by name but not selected by a targeted lane.
+The integration-folder audit was completed as of 2026-06-01. Metadata-only connector tests, UI/editor tests, local file/format tests, and local engine/orchestration/security tests were moved back into normal engine coverage. `Get-TestLaneInventory.ps1` reports tests that are excluded from `engine` by name or category but not selected by a targeted lane.
 
 ```powershell
 .\scripts\test-lane.ps1 -Lane fast -NoRestore
 ```
 
-Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; portal 70 passed; lineage UI smoke passed.
+Result on 2026-07-22: 107 smoke test cases and 90 language-server test cases passed in 33.3 seconds with `-NoRestore -NoBuild`.
 
 ## Enterprise Certification Lane
 
@@ -130,12 +130,12 @@ Lane intent:
 | Lane | Scope |
 | :--- | :--- |
 | `smoke` | Hand-picked core/security/reporting/portal smoke tests |
-| `fast` | Engine and Language Server tests excluding explicit integration/performance/scale categories |
-| `engine` | `ETL-SQL.Tests` only, with the fast filter |
+| `fast` | Bounded quick feedback: all smoke categories plus the Language Server test project |
+| `engine` | Broad `ETL-SQL.Tests` regression coverage excluding explicit integration/performance/scale categories and integration/performance name patterns |
 | `portal` | Portal tests and Node UI smoke checks |
 | `integration` | External-boundary tests tagged `Category=Integration` |
 | `perf` | Performance tests tagged `Category=Performance` in `tests\ETL-SQL.Tests` and `tests\ETL-SQL.PerfTests` |
-| `release` | Smoke + fast + portal + fuzz smoke + SLT, without benchmarks or installer packaging |
+| `release` | Fast (including smoke) + engine + portal + fuzz smoke + SLT, without benchmarks or installer packaging |
 | `full` | Normal xUnit projects, excluding deployment-only SLT and benchmark executable |
 | `benchmarks` | BenchmarkDotNet executable |
 | `slt` | SQL Logic Test corpus with `ETL_SQL_RUN_SLT=1` set by the lane script |
@@ -147,7 +147,7 @@ To inspect lane organization without running the suite, generate a static invent
 .\scripts\Get-TestLaneInventory.ps1 -Format Json -OutFile test-inventory.json
 ```
 
-The inventory reports discovered xUnit test methods by lane, category trait, project, and fast-lane exclusion reason. It is a visibility tool, not a pass/fail gate; `test-lane.ps1` remains authoritative for execution.
+The inventory reports discovered xUnit test methods by lane, category trait, project, and engine-exclusion reason. It is a visibility tool, not a pass/fail gate; `test-lane.ps1` remains authoritative for execution.
 
 ## Local Pre-Release Validation
 
@@ -210,29 +210,37 @@ The script writes timestamped JSON/Markdown reports and phase logs under `releas
 | 4 | Dependency-audit self-test | Always |
 | 5 | NuGet dependency audit | Always |
 | 6 | SBOM generation | Always |
-| 7 | Dotnet build | Always |
-| 8 | Format verify | Always |
-| 9 | Smoke lane | Always |
-| 10 | Fast lane | Always |
-| 11 | N->N+1 upgrade-path drill | Always |
-| 12 | Sample scripts | Always |
-| 13 | HA soak contract gate | Always |
-| 14 | SLT lane | `-IncludeSlt` |
-| 15 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
-| 16 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
-| 17 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
-| 18 | VS Code VSIX package | Default; skipped by `-SkipNode` or `-Quick` |
-| 19 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
-| 20 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
-| 21 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
-| 22 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
-| 23 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
-| 24 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
-| 25 | Spill allocation budget (10M) | `-IncludeStandardScale`; disabled by `-Quick` |
-| 26 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
-| 27 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
+| 7 | Third-party inventory drift | Always |
+| 8 | Dotnet build | Always |
+| 9 | Format verify | Always |
+| 10 | Smoke lane | Always |
+| 11 | Fast lane | Always |
+| 12 | Engine lane | Always |
+| 13 | Portal lane | Always |
+| 14 | N->N+1 upgrade-path drill | Always |
+| 15 | Sample scripts | Always |
+| 16 | HA soak contract gate | Always |
+| 17 | SLT lane | `-IncludeSlt` |
+| 18 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
+| 19 | VS Code UI npm ci | Default; skipped by `-SkipNode` or `-Quick` |
+| 20 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
+| 21 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
+| 22 | VS Code lint | Default; skipped by `-SkipNode` or `-Quick` |
+| 23 | VS Code UI lint | Default; skipped by `-SkipNode` or `-Quick` |
+| 24 | VS Code UI build | Default; skipped by `-SkipNode` or `-Quick` |
+| 25 | VS Code UI unit tests | Default; skipped by `-SkipNode` or `-Quick` |
+| 26 | VS Code VSIX package | Default; skipped by `-SkipNode` or `-Quick` |
+| 27 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
+| 28 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
+| 29 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
+| 30 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
+| 31 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
+| 32 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 33 | Spill allocation budget (10M) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 34 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
+| 35 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
 
-`fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
+`fast` is the bounded quick-feedback lane. `full` runs the normal xUnit test projects and skips the benchmark executable, deployment-only SLT corpus, and Portal tests tagged `Integration` so `dotnet test` output stays meaningful.
 
 For release claim tracking, see [Release_Capability_Matrix.md](../architecture/roadmaps/Release_Capability_Matrix.md). Keep release notes aligned with the strongest automated evidence in that matrix.
 

@@ -10,8 +10,8 @@ Status meanings:
 
 | Capability | Status | Required evidence before release | Current proof |
 | :--- | :---: | :--- | :--- |
-| Core parser and evaluator correctness | Green | Fast lane passes; SLT lane passes for SQL compatibility claims. | `.\scripts\test-lane.ps1 -Lane fast`; optional `-Lane slt` |
-| Zero-trust file and credential guardrails | Green | Smoke/fast security tests pass; samples do not require unsafe paths or secrets. | `.\scripts\test-smoke.ps1 -Lane security`; fast lane |
+| Core parser and evaluator correctness | Green | Engine lane passes; SLT lane passes for SQL compatibility claims. | `.\scripts\test-lane.ps1 -Lane engine`; optional `-Lane slt` |
+| Zero-trust file and credential guardrails | Green | Smoke and engine security tests pass; samples do not require unsafe paths or secrets. | `.\scripts\test-smoke.ps1 -Lane security`; engine lane |
 | WHAT_IF dry-run behavior | Green | DML and staged MERGE are suppressed in focused tests and scenario tests. | `StmtWhatIfTests`; `tests/etl_scenarios/what_if_suppresses_destructive_dml`; `tests/etl_scenarios/what_if_suppresses_merge_upsert` |
 | ETL control flow loops | Green | At least one scenario proves loop output, plus focused statement tests. | `tests/etl_scenarios/loop_control_flow_materializes_expected_rows` |
 | Loop BREAK/CONTINUE control flow | Green | Scenario proves skipped iterations and early loop exit materialize the expected rows. | `tests/etl_scenarios/while_break_continue_filters_rows` |
@@ -40,7 +40,7 @@ Status meanings:
 | Multi-step lineage source metadata | Green | Scenario proves external source-table metadata survives stage-to-publish lineage. | `tests/etl_scenarios/lineage_multistep_source_tags_survive_publish` |
 | SQL logic compatibility | Green | SLT corpus passes on the release branch. | `.\scripts\test-lane.ps1 -Lane slt -NoRestore` passed on 2026-06-01: 7 passed, 0 failed, 0 skipped. |
 | Connector integration boundaries | Green | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\test-lane.ps1 -Lane integration -NoRestore` passed on 2026-06-01: 97 passed, 0 failed, 0 skipped. |
-| Portal behavior | Green | Portal tests are part of the fast lane and dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
+| Portal behavior | Green | Portal smoke tests are part of the fast lane; broad Portal coverage is in the dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
 | Published samples | Green | Sample runner passes in pre-release validation. | `.\scripts\Test-AllSamples.ps1`; pre-release script |
 | Scale certification | Green | Smoke certification passes locally; standard tier passes before public release claims about scale. | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` passed on 2026-06-01: 13 scenarios passed at 10x row scale. |
 | Installers and packaged artifacts | Green | Installer build requested and validated for each platform being released. | `.\scripts\publish-release.ps1 -Platforms win-x64` passed on 2026-06-01 and produced ZIP/VSIX assets. `.\scripts\build-msi.ps1` passed on 2026-06-01 with local WiX Toolset v3.14 and produced `ETL-SQL-Enterprise-v0.9.0.msi`. |

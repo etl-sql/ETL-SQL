@@ -98,7 +98,8 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
-    $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Default local correctness lane across engine and language server." })
+    $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
+    $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine"; Reason = "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane." })
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
     $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
@@ -658,6 +659,11 @@ try {
     Invoke-LoggedPhase "Fast lane" `
         ".\scripts\test-lane.ps1 -Lane fast -Configuration $Configuration -NoRestore -NoBuild" `
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "fast" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Engine lane" `
+        ".\scripts\test-lane.ps1 -Lane engine -Configuration $Configuration -NoRestore -NoBuild" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "engine" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Portal lane" `

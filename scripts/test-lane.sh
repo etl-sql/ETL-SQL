@@ -75,6 +75,10 @@ invoke_dotnet_test() {
 
 invoke_lineage_ui_smoke() {
     node "$REPO_ROOT/scripts/test-lineage-ui.mjs"
+    node "$REPO_ROOT/scripts/test-publish-folders.mjs"
+    node "$REPO_ROOT/scripts/test-subscription-history-ui.mjs"
+    node "$REPO_ROOT/scripts/test-result-grid-ui.mjs"
+    node "$REPO_ROOT/scripts/test-admin-catalog-ui.mjs"
 }
 
 case "$LANE" in
@@ -85,7 +89,11 @@ case "$LANE" in
         bash "$SCRIPT_DIR/test-smoke.sh" "${smoke_args[@]}"
         ;;
     fast)
-        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
+        smoke_args=("--lane" "all" "--configuration" "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then smoke_args+=("--no-restore"); fi
+        if [ "$NO_BUILD" = true ]; then smoke_args+=("--no-build"); fi
+        bash "$SCRIPT_DIR/test-smoke.sh" "${smoke_args[@]}"
+
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         ;;
     engine)
@@ -97,6 +105,7 @@ case "$LANE" in
         ;;
     integration)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Integration"
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=Integration"
         ;;
     perf)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Performance"
@@ -105,16 +114,11 @@ case "$LANE" in
     full)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
-        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
         invoke_lineage_ui_smoke
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" ""
         ;;
     release)
-        smoke_args=(--lane smoke --configuration "$CONFIGURATION")
-        if [ "$NO_RESTORE" = true ]; then smoke_args+=(--no-restore); fi
-        if [ "$NO_BUILD" = true ]; then smoke_args+=(--no-build); fi
-        bash "$SCRIPT_DIR/test-lane.sh" "${smoke_args[@]}"
-
         fast_args=(--lane fast --configuration "$CONFIGURATION")
         if [ "$NO_RESTORE" = true ]; then fast_args+=(--no-restore); fi
         if [ "$NO_BUILD" = true ]; then fast_args+=(--no-build); fi
@@ -122,6 +126,14 @@ case "$LANE" in
             fast_args+=(--collect-coverage --results-directory "$RESULTS_DIRECTORY")
         fi
         bash "$SCRIPT_DIR/test-lane.sh" "${fast_args[@]}"
+
+        engine_args=(--lane engine --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then engine_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then engine_args+=(--no-build); fi
+        if [ "$COLLECT_COVERAGE" = true ]; then
+            engine_args+=(--collect-coverage --results-directory "$RESULTS_DIRECTORY")
+        fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${engine_args[@]}"
 
         portal_args=(--lane portal --configuration "$CONFIGURATION")
         if [ "$NO_RESTORE" = true ]; then portal_args+=(--no-restore); fi

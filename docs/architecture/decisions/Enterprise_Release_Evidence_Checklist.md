@@ -23,7 +23,7 @@ secret values, connection strings, private keys, `ENC:` payloads, or `SECRET:` r
 
 | Gate | Command or Evidence | Required Artifact | Pass Criteria |
 | :--- | :--- | :--- | :--- |
-| Functional fast and Portal lanes | `.\scripts\test-lane.ps1 -Lane fast -NoRestore`; `.\scripts\test-lane.ps1 -Lane portal -NoRestore` | Test transcripts and result summaries | No failed tests; skipped tests are explained. |
+| Functional fast, engine, and Portal lanes | `.\scripts\test-lane.ps1 -Lane fast -NoRestore`; `.\scripts\test-lane.ps1 -Lane engine -NoRestore`; `.\scripts\test-lane.ps1 -Lane portal -NoRestore` | Test transcripts and result summaries | No failed tests; skipped tests are explained. |
 | Full pre-release lane | `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` | Pre-release transcript, packaged artifact list, installer hashes | No failed phases; packaging output matches expected version. |
 | Migration and upgrade | `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain` plus N to N+1 upgrade-path evidence | Migration logs and upgrade-path summary | Forward migrations succeed without data loss or manual catalog edits. |
 | Enterprise hardening | `.\scripts\Test-EnterpriseHardeningCertification.ps1` on Windows and Linux | Certification transcript and policy/audit evidence | Enrollment, signed policy, standalone behavior, boundary enforcement, and security delivery pass. |
