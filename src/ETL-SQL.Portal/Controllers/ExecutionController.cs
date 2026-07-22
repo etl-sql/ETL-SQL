@@ -24,7 +24,8 @@ public class ExecutionController(
     PortalConfig portalConfig,
     FolderPermissionService folderPermissions,
     ETL_SQL.Core.Storage.IArtifactStorage artifacts,
-    SnapshotPackageService snapshotPackages) : ControllerBase
+    SnapshotPackageService snapshotPackages,
+    LineageStewardNotificationService stewardNotifications) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -437,6 +438,13 @@ public class ExecutionController(
                             $"report:{id}:interaction",
                             scriptPath,
                             DateTime.UtcNow);
+                        await stewardNotifications.NotifyAsync(
+                            CurrentUserId,
+                            id,
+                            $"report:{id}:interaction",
+                            scriptPath,
+                            lineage,
+                            HttpContext.RequestAborted);
                     }
                 }
             }

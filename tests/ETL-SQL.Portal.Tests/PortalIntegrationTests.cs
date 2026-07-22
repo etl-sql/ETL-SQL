@@ -9,6 +9,7 @@ using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -624,7 +625,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"lineage_{suffix}.rptsql");
-        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Lineage Catalog';\n");
+        await File.WriteAllTextAsync(scriptPath,
+            $"SELECT OrderId INTO #stage_{suffix} FROM sales.Orders_{suffix};\n" +
+            "SET REPORT TITLE = 'Lineage Catalog';\n");
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
@@ -639,6 +642,8 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var stageName = $"#stage_{suffix}";
         var visualTarget = $"report:SalesCard_{suffix}";
         var stewardQueueTarget = $"warehouse.Customer_{suffix}";
+        var cycleA = $"cycle.A_{suffix}";
+        var cycleB = $"cycle.B_{suffix}";
 
         using (var scope = _factory.Services.CreateScope())
         {
@@ -684,9 +689,23 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
                 SourceFile = scriptPath,
                 Line = 15
             };
+            var cycleEntryA = new LineageEntry(cycleA, "SELECT")
+            {
+                SourceTables = new List<string> { cycleB },
+                Metadata = new Dictionary<string, string> { ["steward"] = "CycleSteward" },
+                SourceFile = scriptPath,
+                Line = 20
+            };
+            var cycleEntryB = new LineageEntry(cycleB, "SELECT")
+            {
+                SourceTables = new List<string> { cycleA },
+                Metadata = new Dictionary<string, string> { ["steward"] = "CycleSteward" },
+                SourceFile = scriptPath,
+                Line = 21
+            };
 
             await catalog.SaveLineageAsync(
-                new[] { stageEntry, visualEntry, stewardQueueEntry },
+                new[] { stageEntry, visualEntry, stewardQueueEntry, cycleEntryA, cycleEntryB },
                 $"report:{reportId}:manual-session",
                 scriptPath,
                 DateTime.UtcNow);
@@ -695,6 +714,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
                 $"report:{reportId}:old-session",
                 scriptPath,
                 DateTime.UtcNow.AddDays(-10));
+
+            var notifier = scope.ServiceProvider.GetRequiredService<LineageStewardNotificationService>();
+            await notifier.NotifyAsync(1, reportId, $"report:{reportId}:manual-session", scriptPath, [stewardQueueEntry], CancellationToken.None);
         }
 
         var sourceRes = await AuthGet(token, $"/api/catalog/lineage/source?name={Uri.EscapeDataString($"sales.Orders_{suffix}")}");
@@ -770,6 +792,81 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Contains(queue["items"]!.AsArray(), r =>
             r!["targetTable"]!.GetValue<string>() == stewardQueueTarget &&
             r["steward"]!.GetValue<string>() == "DataSteward");
+
+        var impactRes = await AuthGet(token, $"/api/catalog/impact?kind=table&name={Uri.EscapeDataString($"sales.Orders_{suffix}")}&direction=downstream&depth=4");
+        Assert.Equal(HttpStatusCode.OK, impactRes.StatusCode);
+        var impact = await impactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(impact!["summary"]!["tables"]!.GetValue<int>() >= 2);
+        Assert.Contains(impact["tables"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == visualTarget);
+        Assert.Contains(impact["reports"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == $"Lineage Report {suffix}");
+
+        var reportImpactRes = await AuthGet(token, $"/api/catalog/impact?kind=report&name={Uri.EscapeDataString($"Lineage Report {suffix}")}&direction=both&depth=4");
+        Assert.Equal(HttpStatusCode.OK, reportImpactRes.StatusCode);
+        var reportImpact = await reportImpactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Contains(reportImpact!["tables"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == $"sales.Orders_{suffix}");
+
+        var stewardImpactRes = await AuthGet(token, "/api/catalog/impact?kind=steward&name=DataSteward&direction=both&depth=2");
+        Assert.Equal(HttpStatusCode.OK, stewardImpactRes.StatusCode);
+        var stewardImpact = await stewardImpactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Contains(stewardImpact!["stewards"]!.AsArray(), r =>
+            r!["type"]!.GetValue<string>() == "Steward" &&
+            r["name"]!.GetValue<string>() == "DataSteward");
+
+        var cycleImpactRes = await AuthGet(token, $"/api/catalog/impact?kind=table&name={Uri.EscapeDataString(cycleA)}&direction=both&depth=8");
+        Assert.Equal(HttpStatusCode.OK, cycleImpactRes.StatusCode);
+        var cycleImpact = await cycleImpactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(cycleImpact!["summary"]!["tables"]!.GetValue<int>() <= 2);
+        Assert.Contains(cycleImpact["tables"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == cycleA);
+        Assert.Contains(cycleImpact["tables"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == cycleB);
+
+        var validationRes = await AuthPost(token, "/api/reports/validate", new { scriptPath });
+        Assert.Equal(HttpStatusCode.OK, validationRes.StatusCode);
+        var validation = await validationRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(validation!["isValid"]!.GetValue<bool>());
+        Assert.NotNull(validation["impact"]);
+        Assert.True(validation["impact"]!["reportCount"]!.GetValue<int>() >= 1);
+        Assert.Contains(validation["impact"]!["sources"]!.AsArray(), r =>
+            r!["source"]!.GetValue<string>() == $"sales.Orders_{suffix}");
+
+        var privateDatasetName = $"#private_impact_{suffix}";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = privateDatasetName,
+                FolderPath = "/private-impact",
+                ParquetFilePath = $"private_impact_{suffix}.parquet",
+                SourceQuery = "SELECT 1",
+                AccessLevel = DatasetAccessLevel.Private
+            });
+        }
+
+        var viewerToken = await GetFreshViewerTokenAsync();
+        var privateDatasetImpactRes = await AuthGet(viewerToken, $"/api/catalog/impact?kind=dataset&name={Uri.EscapeDataString(privateDatasetName)}");
+        Assert.Equal(HttpStatusCode.OK, privateDatasetImpactRes.StatusCode);
+        var privateDatasetImpact = await privateDatasetImpactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Empty(privateDatasetImpact!["datasets"]!.AsArray());
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.True(await db.AuditLogs.AnyAsync(a =>
+                a.Action == "STEWARD_LINEAGE_IMPACT" &&
+                a.ResourceType == "Steward" &&
+                a.ResourceId == "DataSteward" &&
+                a.Detail != null &&
+                a.Detail.Contains(stewardQueueTarget)));
+            Assert.True(await db.AuditOutboxMessages.AnyAsync(a =>
+                a.Action == "STEWARD_LINEAGE_IMPACT" &&
+                a.ResourceType == "Steward" &&
+                a.ResourceId == "DataSteward"));
+        }
     }
 
     [Fact]

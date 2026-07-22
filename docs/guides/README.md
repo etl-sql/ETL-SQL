@@ -5,6 +5,7 @@
 | Page | Description |
 | :--- | :--- |
 | [ETL-SQL FAQ & Troubleshooting Guide](faq.md) | Common questions, gotchas, and their solutions. If you're stuck, start here. |
+| [Data Stewardship and Impact Analysis](data-stewardship-impact.md) | How administrators, stewards, and publishers use lineage tags, stewardship views, and impact checks. |
 | [ETL-SQL User Manual: Thinking in Pipelines](getting-started.md) | Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" to "Multi-Context Data Flow." It is a **narrative onboarding** — the... |
 | [Logging and Performance Tuning](logging-and-performance.md) | ## 6. Logging |
 | [ETL-SQL Migration Guide (v0.16.0)](migration-guide.md) | ETL-SQL v0.16.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for... |

@@ -37,8 +37,9 @@ public class ReportsController : ControllerBase
     private readonly ETL_SQL.Core.Storage.IArtifactStorage artifacts;
     private readonly ReportStructureService reportStructure;
     private readonly ReportDependencyService reportDependencies;
+    private readonly LineageImpactService lineageImpact;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact)
     {
         this.db = db;
         this.audit = audit;
@@ -52,6 +53,7 @@ public class ReportsController : ControllerBase
         this.artifacts = artifacts;
         this.reportStructure = reportStructure;
         this.reportDependencies = reportDependencies;
+        this.lineageImpact = lineageImpact;
     }
 
     private int CurrentUserId =>
@@ -328,7 +330,10 @@ public class ReportsController : ControllerBase
                 ["Script path must be within the configured ScriptRootPath"]));
 
         var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
-        return validation.IsValid ? Ok(validation) : BadRequest(validation);
+        if (!validation.IsValid)
+            return BadRequest(validation);
+
+        return Ok(validation with { Impact = await BuildValidationImpactAsync(resolved) });
     }
 
     // ── GET /api/reports/{id} ─────────────────────────────────────────────────
@@ -984,6 +989,43 @@ public class ReportsController : ControllerBase
             if (metadata.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
                 return value;
         return null;
+    }
+
+    private async Task<ReportValidationImpactDto?> BuildValidationImpactAsync(string resolvedScriptPath)
+    {
+        var sources = (await scriptInspection.ReadScriptSourceTablesAsync(resolvedScriptPath))
+            .Where(s => !s.StartsWith("#", StringComparison.Ordinal))
+            .Take(10)
+            .ToList();
+        if (sources.Count == 0)
+            return null;
+
+        var items = new List<ReportValidationImpactSourceDto>();
+        var reportCount = 0;
+        var datasetCount = 0;
+        var subscriptionCount = 0;
+        var jobCount = 0;
+
+        foreach (var source in sources)
+        {
+            var impact = await lineageImpact.AnalyzeAsync(
+                "table",
+                source,
+                null,
+                "downstream",
+                4,
+                100,
+                IsAdmin,
+                CurrentUserId,
+                HttpContext.RequestAborted);
+            items.Add(new ReportValidationImpactSourceDto(source, impact.Summary));
+            reportCount += impact.Summary.Reports;
+            datasetCount += impact.Summary.Datasets;
+            subscriptionCount += impact.Summary.Subscriptions;
+            jobCount += impact.Summary.Jobs;
+        }
+
+        return new ReportValidationImpactDto(items, reportCount, datasetCount, subscriptionCount, jobCount);
     }
 
     private static string? SerializeMetadata(IReadOnlyDictionary<string, string> metadata) =>

@@ -33,6 +33,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+**Stewardship catalog impact analysis**
+- Added `/api/catalog/impact` for upstream, downstream, and bidirectional impact analysis by table,
+  column, job, script, dataset, report, subscription, owner, and steward.
+- Added Portal Lineage Impact mode and pre-publish report validation impact summaries so publishers
+  can review affected reports, datasets, subscriptions, jobs, owners, and stewards before changes.
+- Added auditable `STEWARD_LINEAGE_IMPACT` hooks for report execution and persisted ad hoc
+  interaction lineage changes that affect steward-owned assets.
+- Added [Data Stewardship and Impact Analysis](docs/guides/data-stewardship-impact.md) as the
+  operator and publisher usage guide.
+
 **Real column types for MOCKDB and SQLite**
 - The schema and session explorers previously showed `ANY` for every MOCKDB and SQLite column. Both
   now report real declared types, including nullability and primary keys.

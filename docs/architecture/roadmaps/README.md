@@ -7,7 +7,7 @@
 | [Arrow Columnar Format Strategy](Arrow_Columnar_Strategy.md) | > [!NOTE] |
 | [ETL-SQL Connector Upgrade Notes](Connector_Upgrade_Strategy.md) | > [!NOTE] |
 | [Data Lake Connectors Strategy](DataLake_Connectors_Strategy.md) | > [!IMPORTANT] |
-| [Data Stewardship & Lineage Governance Strategy](Data_Stewardship_Strategy.md) | **Status:** Backlog strategy |
+| [Data Stewardship & Lineage Governance Strategy](Data_Stewardship_Strategy.md) | **Status:** Active v0.17.0 implementation |
 | [ETL-SQL Engine Architecture Separation Plan](Engine_Upgrade_Strategy.md) | > [!IMPORTANT] |
 | [ETL-SQL Enterprise Platform Strategy](Enterprise_Platform_Strategy.md) | **Status:** Active product strategy |
 | [Fuzzy Matching Strategy](FuzzyMatching_Strategy.md) | **Status:** Phases 1–4 shipped; Phase 5 deferred |

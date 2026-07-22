@@ -36,28 +36,6 @@ changes safer.
       Add an explicit "Unnest / Detach from Container" action button on card headers when a visual is nested inside
       a `CONTAINER`, simplifying container extraction alongside the existing property dropdown.
 
-### Data Stewardship: Phase 3 - Impact Analysis
-
-- [ ] **Upstream/downstream impact queries.**
-      Add impact-analysis query shapes for tables, columns, jobs, scripts, datasets, reports,
-      subscriptions, owners, and stewards.
-
-- [ ] **Portal impact views.**
-      Surface affected owners, stewards, reports, subscriptions, schedules, and published datasets
-      before destructive changes, schema changes, report publishes, and dataset publishes.
-
-- [ ] **Script validation impact summary.**
-      Add pre-publish impact summaries to script/report validation output so script-first workflows
-      can review impact without relying on Portal-only state.
-
-- [ ] **Steward notification hooks.**
-      Add auditable notification hooks for stewards when upstream lineage changes affect assets they
-      own or review.
-
-- [ ] **Impact-analysis tests.**
-      Cover graph traversal direction, cycle handling, missing/deleted targets, report/dataset/job
-      joins, authorization boundaries, and Portal/API rendering of high-impact changes.
-
 ### Release Verification
 
 - [ ] Run the fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.

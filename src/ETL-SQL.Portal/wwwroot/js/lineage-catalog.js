@@ -30,7 +30,7 @@ const memoryStorage = (() => {
  *
  * @param {Object}   opts
  * @param {Element}  opts.host                  Container the view renders into.
- * @param {Object}   opts.catalogApi            { lineage(kind, args): Promise<row[]>, stewardship(args): Promise<object> }.
+ * @param {Object}   opts.catalogApi            { lineage(kind, args): Promise<row[]>, stewardship(args): Promise<object>, impact(args): Promise<object> }.
  * @param {Function} opts.renderDag             (container, {nodes, edges}) → { dispose }.
  * @param {Function} opts.renderLineageRow      (row, { timeAgo, formatBuiltAt }) → html string.
  * @param {Function} opts.lineageRowsToCsv      (rows) → csv string.
@@ -78,6 +78,12 @@ export function createLineageCatalog(opts = {}) {
     stewardshipDomain: '',
     stewardshipStaleDays: 30,
     stewardship: null,
+    impactKind: 'table',
+    impactName: '',
+    impactColumn: '',
+    impactDirection: 'downstream',
+    impactDepth: 4,
+    impact: null,
   };
   let dagInstance = null;
 
@@ -334,6 +340,84 @@ export function createLineageCatalog(opts = {}) {
       .join('');
   }
 
+  async function loadImpactResults() {
+    const $results = $('#lineageResults');
+    if (!state.impactName) {
+      state.impact = null;
+      $results.innerHTML = renderLineageEmpty('Enter a table, column, job, script, dataset, report, owner, or steward.');
+      return;
+    }
+    $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading impact analysis…</span></div>`;
+    try {
+      state.impact = await catalogApi.impact({
+        kind: state.impactKind,
+        name: state.impactName,
+        column: state.impactColumn,
+        direction: state.impactDirection,
+        depth: state.impactDepth,
+        limit: state.limit,
+      });
+      renderImpactResults();
+    } catch (err) {
+      state.impact = null;
+      $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Impact query failed</h2>
+        <p>${esc(err.message)}</p>
+      </div>`;
+    }
+  }
+
+  function renderImpactResults() {
+    const data = state.impact || {};
+    const summary = data.summary || {};
+    const $results = $('#lineageResults');
+    if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+    const sections = [
+      ['Tables', data.tables],
+      ['Columns', data.columns],
+      ['Reports', data.reports],
+      ['Datasets', data.datasets],
+      ['Subscriptions', data.subscriptions],
+      ['Jobs', data.jobs],
+      ['Owners and stewards', data.stewards],
+    ];
+    const total = sections.reduce((n, [, items]) => n + (Array.isArray(items) ? items.length : 0), 0);
+    $results.innerHTML = `
+      <div class="stewardship-overview impact-overview" aria-label="Impact summary">
+        ${renderStewardshipMetric('Tables', summary.tables)}
+        ${renderStewardshipMetric('Columns', summary.columns)}
+        ${renderStewardshipMetric('Reports', summary.reports)}
+        ${renderStewardshipMetric('Datasets', summary.datasets)}
+        ${renderStewardshipMetric('Jobs', summary.jobs)}
+      </div>
+      ${total
+        ? `<div class="impact-sections">${sections.map(([title, items]) => renderImpactSection(title, items)).join('')}</div>`
+        : renderLineageEmpty('No upstream or downstream impact was found for this target.')}`;
+  }
+
+  function renderImpactSection(title, items) {
+    items = Array.isArray(items) ? items : [];
+    if (!items.length) return '';
+    return `<section class="impact-section">
+      <h3>${esc(title)}</h3>
+      <div class="impact-list">${items.map(renderImpactItem).join('')}</div>
+    </section>`;
+  }
+
+  function renderImpactItem(item) {
+    const detail = item.detail ? `<span>${esc(item.detail)}</span>` : '';
+    const seen = item.lastSeen ? `<span>${esc(timeAgo(item.lastSeen))}</span>` : '';
+    const count = item.count ? `<span>${Number(item.count).toLocaleString()} observations</span>` : '';
+    return `<article class="impact-row">
+      <div>
+        <strong>${esc(item.name)}</strong>
+        <small>${esc(item.type)}</small>
+      </div>
+      <div>${detail}${seen}${count}</div>
+    </article>`;
+  }
+
   function exportLineageCsv() {
     if (!state.rows.length) return;
     const csv = lineageRowsToCsv(state.rows);
@@ -367,6 +451,7 @@ export function createLineageCatalog(opts = {}) {
         <div class="lineage-mode-toggle" role="tablist" aria-label="Catalog mode">
           <button type="button" class="lineage-mode-btn ${state.mode === 'history' ? 'active' : ''}" data-lineage-mode="history" aria-selected="${state.mode === 'history'}">History</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'stewardship' ? 'active' : ''}" data-lineage-mode="stewardship" aria-selected="${state.mode === 'stewardship'}">Stewardship</button>
+          <button type="button" class="lineage-mode-btn ${state.mode === 'impact' ? 'active' : ''}" data-lineage-mode="impact" aria-selected="${state.mode === 'impact'}">Impact</button>
         </div>
         <form id="lineageSearchForm" class="lineage-query" autocomplete="off" ${state.mode === 'history' ? '' : 'hidden'}>
           <select id="lineageKind" class="library-sort" aria-label="Lineage query type">
@@ -417,6 +502,30 @@ export function createLineageCatalog(opts = {}) {
           <input id="stewardshipStaleDays" class="lineage-input stewardship-days" type="number" min="1" max="3660" value="${escAttr(state.stewardshipStaleDays)}" aria-label="Stale after days">
           <button class="btn btn-primary" type="submit">Search</button>
         </form>
+        <form id="impactSearchForm" class="lineage-query stewardship-query" autocomplete="off" ${state.mode === 'impact' ? '' : 'hidden'}>
+          <select id="impactKind" class="library-sort" aria-label="Impact target type">
+            <option value="table"${state.impactKind === 'table' ? ' selected' : ''}>Table</option>
+            <option value="column"${state.impactKind === 'column' ? ' selected' : ''}>Column</option>
+            <option value="job"${state.impactKind === 'job' ? ' selected' : ''}>Job</option>
+            <option value="script"${state.impactKind === 'script' ? ' selected' : ''}>Script</option>
+            <option value="dataset"${state.impactKind === 'dataset' ? ' selected' : ''}>Dataset</option>
+            <option value="report"${state.impactKind === 'report' ? ' selected' : ''}>Report</option>
+            <option value="owner"${state.impactKind === 'owner' ? ' selected' : ''}>Owner</option>
+            <option value="steward"${state.impactKind === 'steward' ? ' selected' : ''}>Steward</option>
+          </select>
+          <label class="library-search lineage-search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="impactName" type="search" placeholder="Impact target" value="${escAttr(state.impactName)}">
+          </label>
+          <input id="impactColumn" class="lineage-input lineage-column" type="search" placeholder="Column" value="${escAttr(state.impactColumn)}" ${state.impactKind === 'table' || state.impactKind === 'column' ? '' : 'hidden'}>
+          <select id="impactDirection" class="library-sort" aria-label="Impact direction">
+            <option value="downstream"${state.impactDirection === 'downstream' ? ' selected' : ''}>Downstream</option>
+            <option value="upstream"${state.impactDirection === 'upstream' ? ' selected' : ''}>Upstream</option>
+            <option value="both"${state.impactDirection === 'both' ? ' selected' : ''}>Both</option>
+          </select>
+          <input id="impactDepth" class="lineage-input stewardship-days" type="number" min="1" max="8" value="${escAttr(state.impactDepth)}" aria-label="Traversal depth">
+          <button class="btn btn-primary" type="submit">Analyze</button>
+        </form>
       </div>
       <div id="lineageResults">${state.mode === 'stewardship' && state.stewardship ? '' : renderLineageEmpty()}</div>`;
 
@@ -465,9 +574,28 @@ export function createLineageCatalog(opts = {}) {
       await loadStewardshipResults();
     });
 
+    $('#impactKind')?.addEventListener('change', e => {
+      state.impactKind = e.target.value;
+      state.impactColumn = '';
+      state.impact = null;
+      render();
+    });
+    $('#impactSearchForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      state.impactKind = $('#impactKind').value;
+      state.impactName = $('#impactName').value.trim();
+      state.impactColumn = $('#impactColumn').value.trim();
+      state.impactDirection = $('#impactDirection').value;
+      state.impactDepth = Math.max(1, Math.min(8, Number($('#impactDepth').value || 4)));
+      await loadImpactResults();
+    });
+
     if (state.mode === 'stewardship') {
       if (state.stewardship) renderStewardshipResults();
       else loadStewardshipResults();
+    } else if (state.mode === 'impact') {
+      if (state.impact) renderImpactResults();
+      else if (state.impactName) loadImpactResults();
     } else if (state.query) {
       loadLineageResults();
     }

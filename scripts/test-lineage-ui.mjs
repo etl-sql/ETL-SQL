@@ -293,6 +293,13 @@ try {
     await vscodeStoryTemp.cleanup();
   }
 
+  const lineageCatalogStory = await fs.readFile(path.resolve('tools/ui-sandbox/stories/lineage-catalog.story.js'), 'utf8');
+  for (const expectedText of ["{ id: 'impact'", 'async function impact', 'catalogApi: { lineage, impact }']) {
+    if (!lineageCatalogStory.includes(expectedText)) {
+      throw new Error(`Lineage catalog story missing impact coverage marker: ${expectedText}`);
+    }
+  }
+
   console.log('lineage-ui smoke passed');
 } finally {
   await fs.rm(tempModule, { force: true });

@@ -1,0 +1,155 @@
+# Data Stewardship and Impact Analysis
+
+This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing dashboards, changing scripts, or making schema-impacting changes.
+
+## Prerequisites
+
+- Portal or Orchestrator must persist lineage through the configured `ILineageCatalogStore`.
+- Scripts should use durable stewardship tags such as `@owner`, `@steward`, `@contact`, `@domain`, `@classification`, `@quality`, `@pii`, `@phi`, `@pci`, `@sensitive`, and `@freshness`.
+- Organization-specific tags should use `org_`, `x_`, or `custom_` prefixes.
+- Report publishers need at least read access to the relevant Portal folders to see report and subscription impact.
+
+## Script-First Metadata
+
+Stewardship starts in `.etlsql` and `.rptsql` files. Keep ownership and classification close to the transformation or published asset so the metadata is diffable, reviewable, and promoted with the script.
+
+```sql
+/* @owner: FinanceOps
+   @steward: Maria Chen
+   @contact: finance-data@example.com
+   @domain: finance
+   @classification: restricted
+   @quality: gold
+   @pii: false
+   @freshness: 1d */
+
+SELECT
+  order_id,
+  customer_id,
+  net_amount
+INTO #orders_curated
+FROM sales.Orders
+WHERE order_date >= RELDATE('D-30');
+```
+
+Use `CREATE TAG` when metadata is attached to a specific table or column rather than the whole script.
+
+```sql
+CREATE TAG FOR TABLE #orders_curated (
+  owner = 'FinanceOps',
+  steward = 'Maria Chen',
+  classification = 'restricted',
+  quality = 'gold'
+);
+
+CREATE TAG FOR TABLE #orders_curated COLUMN customer_id (
+  pii = 'true',
+  classification = 'restricted'
+);
+```
+
+## Finding Metadata Gaps
+
+Administrators can query missing stewardship metadata directly from scripts. This is the preferred CI/CD and release-gate pattern because it does not require manual Portal review.
+
+```sql
+SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing_stewardship;
+
+SELECT
+  target_table,
+  target_column,
+  missing_tags,
+  job_name,
+  script_path
+FROM #missing_stewardship;
+```
+
+For centralized review against a production Orchestrator or Portal catalog:
+
+```sql
+SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 500 INTO #missing_stewardship;
+```
+
+Treat missing `owner`, `steward`, `contact`, `classification`, or `quality` on published outputs as a release issue unless the asset is intentionally temporary.
+
+## Portal Stewardship Review
+
+Open the Portal Lineage catalog and switch to Stewardship mode.
+
+Use the available views for:
+
+- **All** - searchable lineage and tag inventory.
+- **Missing** - assets missing required stewardship metadata.
+- **Sensitive** - assets tagged as PII, PHI, PCI, sensitive, confidential, or restricted.
+- **Stale** - assets outside their `@freshness` window or the selected stale-after-days threshold.
+- **Queue** - assets assigned to a steward.
+
+The backing API is:
+
+```text
+GET /api/catalog/stewardship?view=missing&q=orders&staleAfterDays=30
+GET /api/catalog/stewardship?view=queue&steward=Maria%20Chen
+GET /api/catalog/stewardship?view=sensitive
+```
+
+Use these endpoints for automation when a workflow needs the same posture data shown in Portal.
+
+## Running Impact Analysis
+
+Open the Portal Lineage catalog and switch to Impact mode. Enter a target, select a direction, and run the analysis before changing upstream tables, scripts, datasets, or report definitions.
+
+Supported target types:
+
+- **Table** - a physical, connector-qualified, or temp table name.
+- **Column** - a table or table-column target; use the column field when the table name is separate.
+- **Job** - an Orchestrator or report refresh job name.
+- **Script** - a script path recorded in lineage history.
+- **Dataset** - a published dataset name.
+- **Report** - a report name or folder-qualified report path.
+- **Subscription** - a subscription id or `Subscription #id`.
+- **Owner** or **Steward** - tag values assigned in lineage metadata.
+
+The backing API is:
+
+```text
+GET /api/catalog/impact?kind=table&name=sales.Orders&direction=downstream&depth=4
+GET /api/catalog/impact?kind=report&name=/Finance/Margin%20Dashboard&direction=both&depth=4
+GET /api/catalog/impact?kind=steward&name=Maria%20Chen&direction=both&depth=2
+```
+
+The response includes summary counts and affected tables, columns, reports, datasets, subscriptions, jobs, owners, and stewards.
+
+## Steward Notification Hooks
+
+When Portal report execution or persisted ad hoc interaction lineage changes affect steward-owned assets, Portal writes `STEWARD_LINEAGE_IMPACT` rows to the durable audit log and audit outbox. The row resource is the steward name, and the detail payload includes the report id, job name, script path, impacted targets, and lineage entry count.
+
+Use the audit log for human review and the audit outbox for integration with external notification delivery, SIEM, ticketing, or governance workflow systems.
+
+## Pre-Publish Validation
+
+Report validation includes impact data for valid `.rptsql` files when source tables can be statically read from the script.
+
+```text
+POST /api/reports/validate
+Content-Type: application/json
+
+{ "scriptPath": "reports/finance/margin-dashboard.rptsql" }
+```
+
+For each source table, the response `impact` object summarizes downstream reports, datasets, subscriptions, and jobs. Publishers should review this before accepting a report change that modifies source tables, filters, joins, visual mappings, or published datasets.
+
+## Release Gate Checklist
+
+- Required stewardship tags are present on published outputs.
+- Sensitive and restricted assets have an owner, steward, contact, classification, and quality.
+- Stale assets have an accepted freshness reason or an active remediation task.
+- Impact analysis has been reviewed for changed tables, scripts, datasets, reports, and steward-owned assets.
+- High-impact changes have a documented owner or steward acknowledgement in the release record or a `STEWARD_LINEAGE_IMPACT` audit trail.
+
+## References
+
+- [Lineage](../reference/statements/session-control/lineage.md)
+- [Report-SQL Guide](report-sql.md)
+- [Portal User Guide](portal-user.md)
+- [Governance Core](../administration/platform/governance.md)
+- [Data Stewardship Strategy](../architecture/roadmaps/Data_Stewardship_Strategy.md)

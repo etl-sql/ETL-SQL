@@ -73,6 +73,57 @@ async function lineage(kind, args = {}) {
   return rows;
 }
 
+async function impact(args = {}) {
+  await sleep(250);
+  const target = args.name || 'edw.Sales';
+  return {
+    request: {
+      kind: args.kind || 'table',
+      name: target,
+      column: args.column || null,
+      direction: args.direction || 'downstream',
+      depth: args.depth || 4,
+      limit: args.limit || 100,
+    },
+    summary: {
+      tables: 4,
+      columns: 3,
+      reports: 2,
+      datasets: 1,
+      subscriptions: 1,
+      jobs: 2,
+      stewards: 2,
+    },
+    tables: [
+      { type: 'Table', name: target, detail: null, lastSeen: '2026-05-31T02:10:00Z', count: 1 },
+      { type: 'Table', name: 'mart.SalesSummary', detail: null, lastSeen: '2026-05-31T02:10:03Z', count: 4 },
+      { type: 'Table', name: 'mart.ExecutiveKpis', detail: null, lastSeen: '2026-05-31T02:12:00Z', count: 1 },
+    ],
+    columns: [
+      { type: 'Column', name: 'mart.SalesSummary.total_revenue', detail: null, lastSeen: null, count: null },
+      { type: 'Column', name: 'mart.ExecutiveKpis.revenue_yoy', detail: null, lastSeen: null, count: null },
+    ],
+    reports: [
+      { type: 'Report', name: 'Executive Sales', detail: '/Finance', lastSeen: '2026-05-31T02:10:03Z', count: null },
+      { type: 'Report', name: 'Executive KPIs', detail: '/Finance', lastSeen: '2026-05-31T02:12:00Z', count: null },
+    ],
+    datasets: [
+      { type: 'Dataset', name: '&sales_snapshot', detail: '/Finance', lastSeen: '2026-05-31T02:15:00Z', count: null },
+    ],
+    subscriptions: [
+      { type: 'Subscription', name: 'Subscription #19', detail: 'Executive KPIs', lastSeen: '2026-05-31T08:00:00Z', count: null },
+    ],
+    jobs: [
+      { type: 'Job', name: 'nightly_sales_refresh', detail: 'samples/integration/sales.rptsql', lastSeen: '2026-05-31T02:10:03Z', count: null },
+      { type: 'Job', name: 'kpi_rollup', detail: 'samples/integration/kpis.rptsql', lastSeen: '2026-05-31T02:12:00Z', count: null },
+    ],
+    stewards: [
+      { type: 'Owner', name: 'finance', detail: null, lastSeen: null, count: null },
+      { type: 'Steward', name: 'Maria Chen', detail: null, lastSeen: null, count: null },
+    ],
+  };
+}
+
 function formatBuiltAt(value) {
   return value ? new Date(value).toLocaleString() : 'Never run';
 }
@@ -97,6 +148,7 @@ export default {
     { id: 'table', label: 'Target-table query (results)' },
     { id: 'graph', label: 'Results as graph' },
     { id: 'tag',   label: 'Tag query (pii)' },
+    { id: 'impact', label: 'Impact analysis' },
     { id: 'blank', label: 'Initial state (before search)' },
   ],
   async mount(stage, fixtureId, ctx) {
@@ -109,7 +161,7 @@ export default {
 
     const catalog = catMod.createLineageCatalog({
       host: stage,
-      catalogApi: { lineage },
+      catalogApi: { lineage, impact },
       renderDag: designer.renderDag,
       renderLineageRow: lineageUi.renderLineageRow,
       lineageRowsToCsv: lineageUi.lineageRowsToCsv,
@@ -122,7 +174,12 @@ export default {
 
     // Pre-seed a query so the explorer shows populated results instead of the
     // blank "pick a query and Search" state. (Edit the form and Search to explore.)
-    if (fixtureId === 'tag') {
+    if (fixtureId === 'impact') {
+      catalog.state.mode = 'impact';
+      catalog.state.impactKind = 'table';
+      catalog.state.impactName = 'edw.Sales';
+      catalog.state.impactDirection = 'downstream';
+    } else if (fixtureId === 'tag') {
       catalog.state.kind = 'tag';
       catalog.state.query = 'pii';
     } else if (fixtureId !== 'blank') {
@@ -134,6 +191,8 @@ export default {
     catalog.render();
     ctx.stat(fixtureId === 'blank'
       ? 'the view as it first appears — choose a query type, type a name, and Search'
+      : fixtureId === 'impact'
+        ? 'pre-seeded impact analysis · change the target/direction and Analyze'
       : 'pre-seeded query · change the kind/name and Search, or toggle Table/Graph');
 
     return { dispose() { catalog.dispose(); }, resize() {} };

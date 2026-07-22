@@ -878,6 +878,15 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             $"report:{job.ReportId}:{job.Id}",
             scriptPath,
             DateTime.UtcNow);
+
+        var notifications = scope.ServiceProvider.GetRequiredService<LineageStewardNotificationService>();
+        await notifications.NotifyAsync(
+            job.UserId,
+            job.ReportId,
+            $"report:{job.ReportId}:{job.Id}",
+            scriptPath,
+            entries,
+            CancellationToken.None);
     }
 
     /// <summary>Keeps the newest <see cref="ResourcesConfig.SnapshotRetentionPerReport"/>

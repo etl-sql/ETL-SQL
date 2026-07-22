@@ -4,6 +4,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -296,6 +297,33 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
                 .ToList());
 
         return Ok(result);
+    }
+
+    [HttpGet("impact")]
+    public async Task<IActionResult> Impact(
+        [FromServices] LineageImpactService impact,
+        [FromQuery] string kind,
+        [FromQuery] string name,
+        [FromQuery] string? column = null,
+        [FromQuery] string direction = "downstream",
+        [FromQuery] int depth = 4,
+        [FromQuery] int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        name = name?.Trim() ?? "";
+        if (name.Length == 0)
+            return BadRequest(new { error = "Impact target name is required." });
+
+        return Ok(await impact.AnalyzeAsync(
+            kind,
+            name,
+            column,
+            direction,
+            depth,
+            limit,
+            IsAdmin,
+            CurrentUserId,
+            cancellationToken));
     }
 
     private IQueryable<Folder> VisibleFoldersQuery()

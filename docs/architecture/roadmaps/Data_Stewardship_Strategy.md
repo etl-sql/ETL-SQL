@@ -1,6 +1,6 @@
 # Data Stewardship & Lineage Governance Strategy
 
-**Status:** Backlog strategy
+**Status:** Active v0.17.0 implementation
 **Date:** 2026-06-19
 **Scope:** Product work that turns ETL-SQL lineage and tags from captured metadata into governed, visible, policy-aware stewardship workflows.
 
@@ -23,6 +23,8 @@ Already available:
 - Standard stewardship tags such as `@owner`, `@steward`, `@contact`, `@domain`, `@quality`, `@classification`, `@pii`, `@phi`, `@pci`, and `@sensitive`.
 - Cross-run lineage history through `ILineageCatalogStore`, backed by SQLite for single-node deployments and PostgreSQL in HA deployments.
 - Portal lineage/dependency surfaces and catalog APIs.
+- Portal stewardship and impact-analysis views backed by `/api/catalog/stewardship` and
+  `/api/catalog/impact`.
 - Governance Core: organization policy, named secrets, and durable audit outbox.
 - OpenLineage export for external catalog integration.
 
@@ -32,7 +34,7 @@ Already available:
 
 1. **Stewardship workflow:** Tags identify owners and stewards, but there is no workflow for certification, review, assignment, or stale ownership cleanup.
 2. **Tag-driven policy enforcement:** Governance Core does not yet enforce rules directly from lineage tags, such as blocking unrestricted export of `@pii=true` data.
-3. **Impact analysis:** The lineage graph exists, but downstream impact needs to be a normal pre-publish and pre-change workflow.
+3. **Impact workflow hardening:** Impact analysis is available, but workflow-specific approval gates and long-running catalog drift workflows remain.
 4. **Portal visibility:** Administrators need dashboards for missing owners, sensitive data inventory, stale lineage, uncertified assets, and steward-owned review queues.
 5. **Quality integration:** Validation/`EXPECT` results should feed stewardship status, freshness, and quality history.
 6. **External catalog lifecycle:** Export exists, but long-running bidirectional catalog synchronization needs stable IDs, conflict rules, and reconciliation reports.
@@ -63,14 +65,32 @@ Shipped in v0.17.0:
 - Stale-lineage posture uses `@freshness` when present and otherwise falls back to a configurable
   stale-after-days window.
 
-### Phase 3 - Certification & Review Workflow
+### Phase 3 - Impact Analysis
+
+Shipped in v0.17.0:
+
+- `/api/catalog/impact` supports upstream, downstream, and bidirectional impact analysis for tables,
+  columns, jobs, scripts, datasets, reports, subscriptions, owners, and stewards.
+- Portal Lineage catalog includes an Impact mode that summarizes affected tables, columns, reports,
+  datasets, subscriptions, jobs, owners, and stewards.
+- Report validation includes pre-publish impact summaries for source tables detected in valid
+  `.rptsql` scripts.
+- Report execution and persisted ad hoc interaction lineage emit `STEWARD_LINEAGE_IMPACT` audit and
+  audit-outbox events for affected stewards.
+- Tests cover Portal/API impact analysis, report and dataset joins, private dataset authorization,
+  cycle-safe traversal, pre-publish validation summaries, steward audit hooks, and the UI sandbox
+  Impact fixture.
+- Publisher and administrator usage is documented in
+  [Data Stewardship and Impact Analysis](../../guides/data-stewardship-impact.md).
+
+### Phase 4 - Certification & Review Workflow
 
 - Add certification states for datasets, reports, and key lineage targets: draft, reviewed, certified, deprecated, stale.
 - Require review for sensitive tag changes, restricted classifications, and promotion to `@quality=gold`.
 - Record certification, review comments, and state changes in the Governance audit trail.
 - Ensure certification can be exported/imported as script-first metadata for source control and environment promotion.
 
-### Phase 4 - Tag-Driven Policy Enforcement
+### Phase 5 - Tag-Driven Policy Enforcement
 
 - Extend Governance Core policy rules to evaluate lineage/tag metadata.
 - Support policies such as:
@@ -79,13 +99,6 @@ Shipped in v0.17.0:
   - block publishing uncategorized sensitive datasets;
   - require certified upstream lineage for production reports.
 - Evaluate policy at lint/publish time and again at execution time where runtime lineage changes the decision.
-
-### Phase 5 - Impact Analysis
-
-- Add upstream/downstream impact queries by table, column, dataset, report, job, script, and tag.
-- Show affected owners, stewards, reports, subscriptions, schedules, and published datasets before destructive or schema-changing actions.
-- Add pre-publish impact summaries to Portal and script validation output.
-- Add notification hooks for stewards when upstream lineage changes.
 
 ### Phase 6 - Quality & Freshness Stewardship
 

@@ -418,6 +418,8 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.ReferenceImpactService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportScriptInspectionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportStructureService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportDependencyService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.LineageImpactService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.LineageStewardNotificationService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<IDatasetRegistry>(sp =>

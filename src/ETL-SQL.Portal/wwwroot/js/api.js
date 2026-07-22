@@ -299,6 +299,11 @@ export const catalogApi = {
         if (steward) p.set('steward', steward);
         if (domain) p.set('domain', domain);
         return apiJson(`/api/catalog/stewardship?${p}`);
+    },
+    impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 } = {}) {
+        const p = new URLSearchParams({ kind, name, direction, depth, limit });
+        if (column) p.set('column', column);
+        return apiJson(`/api/catalog/impact?${p}`);
     }
 };
 

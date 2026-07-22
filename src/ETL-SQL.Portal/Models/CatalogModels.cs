@@ -88,3 +88,38 @@ public record StewardshipAssetDto(
     string? Classification,
     string? Quality,
     string? Freshness);
+
+public record LineageImpactRequestDto(
+    string Kind,
+    string Name,
+    string? Column,
+    string Direction,
+    int Depth,
+    int Limit);
+
+public record LineageImpactSummaryDto(
+    int Tables,
+    int Columns,
+    int Reports,
+    int Datasets,
+    int Subscriptions,
+    int Jobs,
+    int Stewards);
+
+public record LineageImpactItemDto(
+    string Type,
+    string Name,
+    string? Detail,
+    DateTime? LastSeen,
+    long? Count);
+
+public record LineageImpactDto(
+    LineageImpactRequestDto Request,
+    LineageImpactSummaryDto Summary,
+    IReadOnlyList<LineageImpactItemDto> Tables,
+    IReadOnlyList<LineageImpactItemDto> Columns,
+    IReadOnlyList<LineageImpactItemDto> Reports,
+    IReadOnlyList<LineageImpactItemDto> Datasets,
+    IReadOnlyList<LineageImpactItemDto> Subscriptions,
+    IReadOnlyList<LineageImpactItemDto> Jobs,
+    IReadOnlyList<LineageImpactItemDto> Stewards);

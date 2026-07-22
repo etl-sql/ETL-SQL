@@ -416,6 +416,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .stewardship-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 220px; min-height: 22px; border-radius: 999px; border: 1px solid var(--portal-border);
   background: var(--portal-surface-subtle); color: var(--portal-text-soft); padding: 0 8px; font-size: .75em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stewardship-chip b { color: var(--portal-text); font-weight: 700; }
+.impact-sections { display: grid; gap: 12px; padding-bottom: 8px; }
+.impact-section { display: grid; gap: 8px; }
+.impact-section h3 { margin: 0; font-size: .94em; color: var(--portal-text); }
+.impact-list { display: grid; gap: 7px; }
+.impact-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(170px, 280px); gap: 12px; align-items: center;
+  border: 1px solid var(--portal-border); background: var(--portal-surface); border-radius: var(--portal-radius-sm); padding: 10px 12px; }
+.impact-row strong { display: block; color: var(--portal-text); overflow-wrap: anywhere; }
+.impact-row small { color: var(--portal-muted); text-transform: uppercase; font-size: .7em; font-weight: 700; letter-spacing: .02em; }
+.impact-row > div:last-child { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; color: var(--portal-muted); font-size: .78em; text-align: right; }
 .lineage-result-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
 .lineage-result-row {
   display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) minmax(150px, 220px);
@@ -735,6 +744,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .stewardship-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stewardship-row { grid-template-columns: 1fr; }
   .stewardship-row-meta { justify-items: start; text-align: left; }
+  .impact-row { grid-template-columns: 1fr; }
+  .impact-row > div:last-child { justify-content: flex-start; text-align: left; }
   .lineage-result-row { grid-template-columns: 1fr; }
   .lineage-report { justify-items: start; text-align: left; }
   .report-grid { grid-template-columns: 1fr; }

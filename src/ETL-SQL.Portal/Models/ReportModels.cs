@@ -39,7 +39,19 @@ public record ReportScriptValidationDto(
     DateTime? LastModified,
     IReadOnlyDictionary<string, string> Metadata,
     IReadOnlyList<ReportParameterDto> Parameters,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    ReportValidationImpactDto? Impact = null);
+
+public record ReportValidationImpactDto(
+    IReadOnlyList<ReportValidationImpactSourceDto> Sources,
+    int ReportCount,
+    int DatasetCount,
+    int SubscriptionCount,
+    int JobCount);
+
+public record ReportValidationImpactSourceDto(
+    string Source,
+    LineageImpactSummaryDto Summary);
 
 public record CreateReportShareLinkRequest(DateTime? ExpiresAt);
 
