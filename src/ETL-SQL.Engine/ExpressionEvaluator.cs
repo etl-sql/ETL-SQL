@@ -356,11 +356,20 @@ public class ExpressionEvaluator
         // Fast paths to avoid async state machine for primitives
         if (expr is LiteralExpression lit)
         {
-            if (lit.Value is string s && s.StartsWith("__HEX_BLOB__", StringComparison.Ordinal))
+            if (lit.Value is string s)
             {
-                return new ValueTask<object?>(ParseHex(s.Substring(12)));
+                if (s.StartsWith("__HEX_BLOB__", StringComparison.Ordinal))
+                {
+                    return new ValueTask<object?>(ParseHex(s.Substring(12)));
+                }
+                var val = (decryptSensitive && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : s;
+                if (val is string strVal && strVal.Contains("${"))
+                {
+                    val = InterpolateStringVariables(strVal);
+                }
+                return new ValueTask<object?>(val);
             }
-            return new ValueTask<object?>((decryptSensitive && lit.Value is string enc && enc.StartsWith("ENC:")) ? _context.DecryptValue(enc) : lit.Value);
+            return new ValueTask<object?>(lit.Value);
         }
 
         if (expr is IdentifierExpression id)
@@ -1027,6 +1036,39 @@ public class ExpressionEvaluator
         }
 
         return val;
+    }
+
+    /// <summary>Performs inline variable interpolation for string literals containing ${@var} or ${var}.</summary>
+    private string InterpolateStringVariables(string input)
+    {
+        if (string.IsNullOrEmpty(input) || !input.Contains("${")) return input;
+
+        return System.Text.RegularExpressions.Regex.Replace(input, @"\$\{(@?[a-zA-Z_][a-zA-Z0-9_]*)\}", match =>
+        {
+            var varName = match.Groups[1].Value;
+            if (!varName.StartsWith("@", StringComparison.Ordinal))
+            {
+                varName = "@" + varName;
+            }
+
+            if (_context.VarContext.ContainsVariable(varName))
+            {
+                var val = _context.VarContext.GetVariable(varName);
+                if (val != null)
+                {
+                    if (_context.VarContext.VariableMetadata.TryGetValue(varName, out var meta) && meta.IsSensitive)
+                    {
+                        if (val is string enc && enc.StartsWith("ENC:", StringComparison.Ordinal))
+                        {
+                            return _context.DecryptValue(enc) ?? string.Empty;
+                        }
+                    }
+                    return val.ToString() ?? string.Empty;
+                }
+                return string.Empty;
+            }
+            return match.Value;
+        });
     }
 
     /// <summary>Evaluates a parameter reference (? or ?n).</summary>

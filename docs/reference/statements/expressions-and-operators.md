@@ -123,6 +123,25 @@ SELECT SYSDATE AT TIME ZONE @tz;
 > [!NOTE]
 > Timezone IDs are OS-dependent. On Windows, they follow the *Registry Time Zone* names. On Linux/macOS, the engine automatically attempts to map these to *IANA* names (e.g., `America/New_York`), but using the native OS names is recommended for maximum reliability.
 
+### 14.8 String Variable Interpolation `${@var}` / `${var}`
+
+String literals support inline variable interpolation using the `${@varName}` or `${varName}` syntax. During expression evaluation, any matching `${...}` pattern is evaluated and replaced with the value of the declared variable in the current execution context scope.
+
+```sql
+DECLARE @date_str VARCHAR = '2026-07-22';
+DECLARE @filename VARCHAR = 'data_out_${@date_str}.csv';
+-- Resolves @filename to 'data_out_2026-07-22.csv'
+
+COPY FILE 'C:\tmp\data.csv' TO 'C:\tmp\sent\data_${date_str}.csv';
+-- Copies file to 'C:\tmp\sent\data_2026-07-22.csv'
+```
+
+**Behavior & Rules:**
+- Supports both `${@var}` (with `@` prefix) and `${var}` (without `@` prefix).
+- Works across all statement options, file paths, dynamic connection settings, and expressions.
+- If the variable is declared sensitive (`PASSWORD`), encrypted values are decrypted automatically during string interpolation.
+- If the variable does not exist in current scope, the `${...}` placeholder remains intact as literal text (preventing conflicts with shell scripts or regex string patterns).
+
 ## References
 
 - [Statement Reference](README.md)

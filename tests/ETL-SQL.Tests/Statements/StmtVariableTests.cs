@@ -136,5 +136,25 @@ namespace ETL_SQL.Tests.Statements
             Assert.Contains(results.Rows, r => r["Name"].ToString() == "@inner");
             Assert.DoesNotContain(results.Rows, r => r["Name"].ToString() == "@outer");
         }
+
+        [Fact]
+        public async Task TestVariableInterpolation_InStringLiteral()
+        {
+            var eval = await GetEvaluator();
+            var sql = @"
+                DECLARE @date_str STRING = '2026-07-22';
+                DECLARE @filename STRING = 'data_out_${@date_str}.csv';
+                DECLARE @path STRING = 'C:\tmp\sent\${date_str}_export.csv';
+                SELECT @filename AS Filename, @path AS Path;
+            ";
+
+            await eval.Evaluate(Parse(sql));
+
+            var results = eval.LastResult;
+            Assert.NotNull(results);
+            Assert.Single(results.Rows);
+            Assert.Equal("data_out_2026-07-22.csv", results.Rows[0]["Filename"]?.ToString());
+            Assert.Equal(@"C:\tmp\sent\2026-07-22_export.csv", results.Rows[0]["Path"]?.ToString());
+        }
     }
 }
