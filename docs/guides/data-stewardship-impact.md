@@ -72,9 +72,39 @@ SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 500 INTO #missing_stewa
 
 Treat missing `owner`, `steward`, `contact`, `classification`, or `quality` on published outputs as a release issue unless the asset is intentionally temporary.
 
+## Finding Protected Data
+
+Use `SHOW PROTECTED DATA` as the first audit step when you need to find where PII, PHI, PCI, sensitive, confidential, or restricted data appears in extracts and reports.
+
+```sql
+SHOW PROTECTED DATA AT prod_portal LIMIT 500 INTO #protected_data;
+
+SELECT
+  target_table,
+  target_column,
+  protection_tags,
+  owner,
+  steward,
+  job_name,
+  source_file
+FROM #protected_data;
+```
+
+The command reads the lineage catalog and includes rows tagged with truthy `@pii`, `@phi`, `@pci`, or `@sensitive`, plus rows classified as `confidential` or `restricted`.
+
+The packaged starter report at `samples/08_Reporting/protected_data_audit.rptsql` builds a dashboard from `SHOW PROTECTED DATA`, `SHOW LINEAGE HISTORY FOR MISSING TAGS`, and optional Portal steward-impact audit events.
+
 ## Portal Stewardship Review
 
-Open the Portal Lineage catalog and switch to Stewardship mode.
+Open the Portal Lineage catalog and switch to Audit mode for the combined steward workflow, or Stewardship mode when you need a focused metadata queue.
+
+Audit mode combines:
+
+- **Protected inventory** - lineage tagged as PII, PHI, PCI, sensitive, confidential, or restricted.
+- **Steward queue** - missing metadata, stale assets, and sensitive assets assigned to stewards.
+- **Affected reports and datasets** - inferred report, dataset, and subscription dependencies from protected lineage.
+- **Recent steward-impact events** - `STEWARD_LINEAGE_IMPACT` audit rows.
+- **Audit outbox health** - pending and failed durable audit outbox counts from operational metrics.
 
 Use the available views for:
 
@@ -124,6 +154,14 @@ The response includes summary counts and affected tables, columns, reports, data
 When Portal report execution or persisted ad hoc interaction lineage changes affect steward-owned assets, Portal writes `STEWARD_LINEAGE_IMPACT` rows to the durable audit log and audit outbox. The row resource is the steward name, and the detail payload includes the report id, job name, script path, impacted targets, and lineage entry count.
 
 Use the audit log for human review and the audit outbox for integration with external notification delivery, SIEM, ticketing, or governance workflow systems.
+
+Portal administrators can query recent steward-impact audit events from script:
+
+```sql
+EXECUTE prod_portal BEGIN
+  SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+END;
+```
 
 ## Pre-Publish Validation
 

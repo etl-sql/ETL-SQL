@@ -12,6 +12,7 @@ EXECUTE portal BEGIN
   SHOW EFFECTIVE PERMISSIONS FOR USER 'username' [INTO #perms];
   SHOW PORTAL USAGE METRICS [INTO #metrics];
   SHOW PORTAL OPERATIONAL METRICS [INTO #ops];
+  SHOW PORTAL AUDIT [ACTION 'STEWARD_LINEAGE_IMPACT'] [LIMIT 100] [INTO #audit];
   SHOW REPORT HISTORY 'ReportName' [INTO #history];
   SHOW REPORT DEPENDENCIES 'ReportName' [INTO #deps];
   SHOW CATALOG SEARCH 'search_term' [INTO #results];
@@ -71,6 +72,12 @@ EXECUTE portal BEGIN
 END;
 SELECT activeExecutions, queuedExecutions, averageExecutionDurationMs FROM #ops;
 
+-- Review steward lineage-impact audit events
+EXECUTE portal BEGIN
+  SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+END;
+SELECT timestamp, username, resourceType, resourceId, detail FROM #steward_events;
+
 -- Review the publish and refresh history for a report
 EXECUTE portal BEGIN
   SHOW REPORT HISTORY 'Sales Dashboard' INTO #history;
@@ -96,6 +103,7 @@ SELECT report_name, folder, relevance_score FROM #results ORDER BY relevance_sco
 - `SHOW EFFECTIVE PERMISSIONS FOR USER` resolves the combined permissions from all individual user grants and group memberships. The `granted_via` column indicates whether the access came from a direct user grant or a group.
 - `SHOW PORTAL USAGE METRICS` returns report view counts, unique viewers, refresh health, and subscription delivery failures for the requested period.
 - `SHOW PORTAL OPERATIONAL METRICS` returns live queue depth, execution caps, recent failure counts, storage size, schema status, and last-24-hour execution load/resource buckets.
+- `SHOW PORTAL AUDIT` returns Portal audit rows and supports `ACTION 'name'` plus `LIMIT n` to narrow the review.
 - `SHOW CATALOG SEARCH` performs a full-text search across report names, descriptions, and tags. The search term supports simple keyword matching; multiple words are treated as an AND query.
 - `SHOW REPORT HISTORY` covers publish events, refresh cycles, validation runs, and permission changes for the named report.
 - `SHOW REPORT DEPENDENCIES` lists the datasets, connector types, and external scripts the report depends on, along with their current availability status.

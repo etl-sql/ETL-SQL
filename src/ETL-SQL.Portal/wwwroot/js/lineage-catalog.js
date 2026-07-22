@@ -31,6 +31,7 @@ const memoryStorage = (() => {
  * @param {Object}   opts
  * @param {Element}  opts.host                  Container the view renders into.
  * @param {Object}   opts.catalogApi            { lineage(kind, args): Promise<row[]>, stewardship(args): Promise<object>, impact(args): Promise<object> }.
+ * @param {Object}   [opts.adminApi]            { auditLog(page, pageSize, action): Promise<object>, operationalMetrics(): Promise<object> }.
  * @param {Function} opts.renderDag             (container, {nodes, edges}) → { dispose }.
  * @param {Function} opts.renderLineageRow      (row, { timeAgo, formatBuiltAt }) → html string.
  * @param {Function} opts.lineageRowsToCsv      (rows) → csv string.
@@ -47,6 +48,7 @@ export function createLineageCatalog(opts = {}) {
   const {
     host,
     catalogApi,
+    adminApi = {},
     renderDag,
     renderLineageRow,
     lineageRowsToCsv,
@@ -84,6 +86,8 @@ export function createLineageCatalog(opts = {}) {
     impactDirection: 'downstream',
     impactDepth: 4,
     impact: null,
+    auditLimit: 50,
+    stewardAudit: null,
   };
   let dagInstance = null;
 
@@ -340,6 +344,225 @@ export function createLineageCatalog(opts = {}) {
       .join('');
   }
 
+  async function loadStewardAuditResults() {
+    const $results = $('#lineageResults');
+    $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading steward audit…</span></div>`;
+    try {
+      const [protectedResult, stewardshipResult, auditResult, opsResult] = await Promise.allSettled([
+        catalogApi.protectedData ? catalogApi.protectedData({ limit: state.limit }) : Promise.resolve([]),
+        catalogApi.stewardship({
+          view: 'all',
+          q: state.stewardshipQuery,
+          steward: state.stewardshipSteward,
+          domain: state.stewardshipDomain,
+          staleAfterDays: state.stewardshipStaleDays,
+          limit: state.limit,
+        }),
+        adminApi.auditLog ? adminApi.auditLog(1, state.auditLimit, 'STEWARD_LINEAGE_IMPACT') : Promise.resolve({ items: [] }),
+        adminApi.operationalMetrics ? adminApi.operationalMetrics() : Promise.resolve(null),
+      ]);
+
+      const protectedRows = protectedResult.status === 'fulfilled' && Array.isArray(protectedResult.value)
+        ? filterProtectedAuditRows(protectedResult.value)
+        : [];
+      const stewardship = stewardshipResult.status === 'fulfilled' ? stewardshipResult.value : {};
+      state.stewardship = stewardship;
+      const auditPage = auditResult.status === 'fulfilled' ? auditResult.value : { items: [] };
+      const operational = opsResult.status === 'fulfilled' ? opsResult.value : null;
+
+      state.stewardAudit = {
+        protectedRows,
+        stewardship,
+        auditEvents: Array.isArray(auditPage?.items) ? auditPage.items : [],
+        operational,
+        errors: [
+          protectedResult.status === 'rejected' ? `Protected inventory: ${protectedResult.reason?.message || protectedResult.reason}` : '',
+          stewardshipResult.status === 'rejected' ? `Stewardship: ${stewardshipResult.reason?.message || stewardshipResult.reason}` : '',
+          auditResult.status === 'rejected' ? `Audit events: ${auditResult.reason?.message || auditResult.reason}` : '',
+          opsResult.status === 'rejected' ? `Outbox health: ${opsResult.reason?.message || opsResult.reason}` : '',
+        ].filter(Boolean),
+      };
+      render();
+    } catch (err) {
+      state.stewardAudit = null;
+      $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Audit workflow failed</h2>
+        <p>${esc(err.message)}</p>
+      </div>`;
+    }
+  }
+
+  function renderStewardAuditResults() {
+    const data = state.stewardAudit || {};
+    const protectedRows = Array.isArray(data.protectedRows) ? data.protectedRows : [];
+    const stewardship = data.stewardship || {};
+    const items = Array.isArray(stewardship.items) ? stewardship.items : [];
+    const summary = stewardship.summary || {};
+    const auditEvents = Array.isArray(data.auditEvents) ? data.auditEvents : [];
+    const operational = data.operational || {};
+    const staleProtected = protectedRows.filter(row => isStaleAuditRow(row, state.stewardshipStaleDays));
+    const impact = buildAuditImpact(protectedRows);
+    const $results = $('#lineageResults');
+    if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+
+    $results.innerHTML = `
+      ${data.errors?.length ? `<div class="steward-audit-errors">${data.errors.map(esc).join(' · ')}</div>` : ''}
+      <div class="steward-audit-grid" aria-label="Steward audit summary">
+        ${renderStewardshipMetric('Protected', protectedRows.length)}
+        ${renderStewardshipMetric('Missing metadata', summary.missingMetadataAssets)}
+        ${renderStewardshipMetric('Stale protected', staleProtected.length)}
+        ${renderStewardshipMetric('Impact events', auditEvents.length)}
+        ${renderStewardshipMetric('Outbox pending', operational.auditOutboxPending)}
+        ${renderStewardshipMetric('Outbox failed', operational.auditOutboxFailed)}
+      </div>
+      <div class="steward-audit-actions" aria-label="Audit workflow shortcuts">
+        <button class="btn btn-outline" type="button" data-audit-shortcut="sensitive">Protected queue</button>
+        <button class="btn btn-outline" type="button" data-audit-shortcut="missing">Metadata gaps</button>
+        <button class="btn btn-outline" type="button" data-audit-shortcut="stale">Stale assets</button>
+        <button class="btn btn-outline" type="button" data-audit-shortcut="impact">Impact search</button>
+      </div>
+      <div class="steward-audit-layout">
+        <section class="steward-audit-section">
+          <h3>Protected inventory</h3>
+          ${protectedRows.length ? `<div class="stewardship-result-list">${protectedRows.slice(0, 8).map(renderProtectedAuditRow).join('')}</div>` : renderLineageEmpty('No protected lineage is currently recorded.')}
+        </section>
+        <section class="steward-audit-section">
+          <h3>Steward queue</h3>
+          ${items.length ? `<div class="stewardship-result-list">${items.slice(0, 8).map(renderStewardshipAsset).join('')}</div>` : renderLineageEmpty('No stewardship queue items match the current filters.')}
+        </section>
+        <section class="steward-audit-section">
+          <h3>Affected reports and datasets</h3>
+          ${renderAuditImpactList(impact)}
+        </section>
+        <section class="steward-audit-section">
+          <h3>Recent steward-impact events</h3>
+          ${auditEvents.length ? `<div class="impact-list">${auditEvents.map(renderAuditEvent).join('')}</div>` : renderLineageEmpty('No steward-impact audit events were found.')}
+        </section>
+      </div>`;
+
+    $results.querySelectorAll('[data-audit-shortcut]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.auditShortcut;
+        if (target === 'impact') {
+          state.mode = 'impact';
+          const first = protectedRows[0];
+          state.impactKind = 'table';
+          state.impactName = first?.targetTable || '';
+          render();
+          return;
+        }
+        state.mode = 'stewardship';
+        state.stewardshipView = target;
+        render();
+      });
+    });
+  }
+
+  function filterProtectedAuditRows(rows) {
+    const query = (state.stewardshipQuery || '').toLowerCase();
+    const steward = state.stewardshipSteward || '';
+    const domain = state.stewardshipDomain || '';
+    return rows.filter(row => {
+      if (steward && !equalsIgnoreCase(row.steward, steward))
+        return false;
+      if (domain && !equalsIgnoreCase(row.domain, domain))
+        return false;
+      if (!query) return true;
+      const haystack = [
+        row.targetTable,
+        row.targetColumn,
+        row.owner,
+        row.steward,
+        row.domain,
+        row.classification,
+        row.quality,
+        row.protectionReason,
+        ...(Array.isArray(row.sourceTables) ? row.sourceTables : []),
+        ...Object.entries(row.tags || {}).map(([k, v]) => `${k}:${v}`),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
+  function equalsIgnoreCase(left, right) {
+    return String(left || '').toLowerCase() === String(right || '').toLowerCase();
+  }
+
+  function renderProtectedAuditRow(row) {
+    const target = `${row.targetTable || ''}${row.targetColumn ? `.${row.targetColumn}` : ''}`;
+    const sources = Array.isArray(row.sourceTables) && row.sourceTables.length ? row.sourceTables.join(', ') : 'No source recorded';
+    const protectionTags = Array.isArray(row.protectionTags) ? row.protectionTags.join(', ') : row.protectionReason || '';
+    return `<article class="stewardship-row steward-audit-row">
+      <div class="stewardship-row-main">
+        <div class="stewardship-row-title">
+          <code>${esc(target)}</code>
+          <span class="stewardship-badge stewardship-badge-danger">protected</span>
+          ${isStaleAuditRow(row, state.stewardshipStaleDays) ? '<span class="stewardship-badge">stale</span>' : ''}
+        </div>
+        <div class="lineage-detail">Protection: ${esc(protectionTags || 'classified')}</div>
+        <div class="lineage-detail">Sources: ${esc(sources)}</div>
+        <div class="lineage-detail">Steward: ${esc(row.steward || 'Unassigned')} &middot; Owner: ${esc(row.owner || 'Unassigned')} &middot; Domain: ${esc(row.domain || 'Unassigned')}</div>
+      </div>
+      <div class="stewardship-row-meta">
+        <strong>${esc(timeAgo(row.runAt))}</strong>
+        <span>${esc(row.classification || 'Unclassified')}</span>
+        <span>${esc(row.jobName || 'Ad hoc')}</span>
+      </div>
+    </article>`;
+  }
+
+  function renderAuditEvent(event) {
+    return `<article class="impact-row">
+      <div>
+        <strong>${esc(event.resourceId || event.resourceType || event.action || 'Audit event')}</strong>
+        <small>${esc(event.action || 'Audit')}</small>
+      </div>
+      <div>
+        ${event.username ? `<span>${esc(event.username)}</span>` : ''}
+        ${event.timestamp ? `<span>${esc(timeAgo(event.timestamp))}</span>` : ''}
+        ${event.detail ? `<span>${esc(event.detail)}</span>` : ''}
+      </div>
+    </article>`;
+  }
+
+  function renderAuditImpactList(impact) {
+    const rows = [
+      ...impact.reports.map(name => ({ type: 'Report', name })),
+      ...impact.datasets.map(name => ({ type: 'Dataset', name })),
+      ...impact.subscriptions.map(name => ({ type: 'Subscription', name })),
+    ];
+    if (!rows.length) return renderLineageEmpty('No affected reports, datasets, or subscriptions were inferred from protected lineage.');
+    return `<div class="impact-list">${rows.slice(0, 12).map(row => `<article class="impact-row">
+      <div><strong>${esc(row.name)}</strong><small>${esc(row.type)}</small></div>
+      <div><span>Protected lineage dependency</span></div>
+    </article>`).join('')}</div>`;
+  }
+
+  function buildAuditImpact(rows) {
+    const reports = new Set();
+    const datasets = new Set();
+    const subscriptions = new Set();
+    for (const row of rows) {
+      if (row.reportName) reports.add(row.folderPath ? `${row.folderPath}/${row.reportName}` : row.reportName);
+      if ((row.targetTable || '').toLowerCase().startsWith('report:')) reports.add(row.targetTable.slice(7));
+      if ((row.targetTable || '').toLowerCase().startsWith('dataset:')) datasets.add(row.targetTable.slice(8));
+      if ((row.jobName || '').toLowerCase().startsWith('subscription')) subscriptions.add(row.jobName);
+    }
+    return {
+      reports: [...reports].sort((a, b) => a.localeCompare(b)),
+      datasets: [...datasets].sort((a, b) => a.localeCompare(b)),
+      subscriptions: [...subscriptions].sort((a, b) => a.localeCompare(b)),
+    };
+  }
+
+  function isStaleAuditRow(row, staleDays) {
+    if (!row?.runAt) return false;
+    const runAt = new Date(row.runAt).getTime();
+    if (!Number.isFinite(runAt)) return false;
+    return Date.now() - runAt > Math.max(1, Number(staleDays || 30)) * 86400000;
+  }
+
   async function loadImpactResults() {
     const $results = $('#lineageResults');
     if (!state.impactName) {
@@ -437,7 +660,18 @@ export function createLineageCatalog(opts = {}) {
     prepare();
     state.savedViews = loadLineageViews();
     const valueLabel = state.kind === 'tag' ? 'Tag key' : state.kind === 'source-file' ? 'Source file' : 'Name';
-    const stewardship = state.stewardship || {};
+    const stewardship = state.stewardAudit?.stewardship || state.stewardship || {};
+    const isStewardshipMode = state.mode === 'stewardship';
+    const isAuditMode = state.mode === 'audit';
+    const isImpactMode = state.mode === 'impact';
+    const title = isAuditMode ? 'Steward audit' : isStewardshipMode ? 'Stewardship' : isImpactMode ? 'Impact' : 'Lineage';
+    const subtitle = isAuditMode
+      ? 'Protected data, metadata gaps, stale assets, impact, and audit delivery'
+      : isStewardshipMode
+        ? 'Metadata gaps, sensitive assets, stale lineage, and steward queues'
+        : isImpactMode
+          ? 'Upstream and downstream blast radius across reports, datasets, jobs, and stewards'
+        : 'Cross-run history with report context';
     const savedOptions = state.savedViews
       .map(v => `<option value="${escAttr(v.name)}"${v.name === state.selectedView ? ' selected' : ''}>${esc(v.name)}</option>`)
       .join('');
@@ -445,12 +679,13 @@ export function createLineageCatalog(opts = {}) {
       <div class="library-toolbar lineage-toolbar">
         <div class="library-title">
           <span class="library-kicker">Catalog</span>
-          <h2>${state.mode === 'stewardship' ? 'Stewardship' : 'Lineage'}</h2>
-          <span class="folder-count">${state.mode === 'stewardship' ? 'Metadata gaps, sensitive assets, stale lineage, and steward queues' : 'Cross-run history with report context'}</span>
+          <h2>${esc(title)}</h2>
+          <span class="folder-count">${esc(subtitle)}</span>
         </div>
         <div class="lineage-mode-toggle" role="tablist" aria-label="Catalog mode">
           <button type="button" class="lineage-mode-btn ${state.mode === 'history' ? 'active' : ''}" data-lineage-mode="history" aria-selected="${state.mode === 'history'}">History</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'stewardship' ? 'active' : ''}" data-lineage-mode="stewardship" aria-selected="${state.mode === 'stewardship'}">Stewardship</button>
+          <button type="button" class="lineage-mode-btn ${state.mode === 'audit' ? 'active' : ''}" data-lineage-mode="audit" aria-selected="${state.mode === 'audit'}">Audit</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'impact' ? 'active' : ''}" data-lineage-mode="impact" aria-selected="${state.mode === 'impact'}">Impact</button>
         </div>
         <form id="lineageSearchForm" class="lineage-query" autocomplete="off" ${state.mode === 'history' ? '' : 'hidden'}>
@@ -526,6 +761,23 @@ export function createLineageCatalog(opts = {}) {
           <input id="impactDepth" class="lineage-input stewardship-days" type="number" min="1" max="8" value="${escAttr(state.impactDepth)}" aria-label="Traversal depth">
           <button class="btn btn-primary" type="submit">Analyze</button>
         </form>
+        <form id="auditSearchForm" class="lineage-query stewardship-query" autocomplete="off" ${state.mode === 'audit' ? '' : 'hidden'}>
+          <label class="library-search lineage-search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="auditQuery" type="search" placeholder="Search assets or tags" value="${escAttr(state.stewardshipQuery)}">
+          </label>
+          <select id="auditSteward" class="library-sort lineage-saved" aria-label="Filter by steward">
+            <option value="">All stewards</option>
+            ${renderStewardshipFacetOptions(stewardship.stewards, state.stewardshipSteward)}
+          </select>
+          <select id="auditDomain" class="library-sort lineage-saved" aria-label="Filter by domain">
+            <option value="">All domains</option>
+            ${renderStewardshipFacetOptions(stewardship.domains, state.stewardshipDomain)}
+          </select>
+          <input id="auditStaleDays" class="lineage-input stewardship-days" type="number" min="1" max="3660" value="${escAttr(state.stewardshipStaleDays)}" aria-label="Stale after days">
+          <input id="auditLimit" class="lineage-input stewardship-days" type="number" min="1" max="500" value="${escAttr(state.auditLimit)}" aria-label="Audit event limit">
+          <button class="btn btn-primary" type="submit">Refresh</button>
+        </form>
       </div>
       <div id="lineageResults">${state.mode === 'stewardship' && state.stewardship ? '' : renderLineageEmpty()}</div>`;
 
@@ -590,9 +842,22 @@ export function createLineageCatalog(opts = {}) {
       await loadImpactResults();
     });
 
+    $('#auditSearchForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      state.stewardshipQuery = $('#auditQuery').value.trim();
+      state.stewardshipSteward = $('#auditSteward').value;
+      state.stewardshipDomain = $('#auditDomain').value;
+      state.stewardshipStaleDays = Math.max(1, Math.min(3660, Number($('#auditStaleDays').value || 30)));
+      state.auditLimit = Math.max(1, Math.min(500, Number($('#auditLimit').value || 50)));
+      await loadStewardAuditResults();
+    });
+
     if (state.mode === 'stewardship') {
       if (state.stewardship) renderStewardshipResults();
       else loadStewardshipResults();
+    } else if (state.mode === 'audit') {
+      if (state.stewardAudit) renderStewardAuditResults();
+      else loadStewardAuditResults();
     } else if (state.mode === 'impact') {
       if (state.impact) renderImpactResults();
       else if (state.impactName) loadImpactResults();

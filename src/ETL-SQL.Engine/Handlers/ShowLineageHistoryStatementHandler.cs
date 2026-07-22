@@ -181,6 +181,52 @@ public class ShowLineageHistoryForMissingTagsStatementHandler : IStatementHandle
     }
 }
 
+public class ShowProtectedDataStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(ShowProtectedDataStatement);
+    private readonly ILineageCatalogStore _catalog;
+    private readonly IConfiguration? _config;
+
+    public ShowProtectedDataStatementHandler(ILineageCatalogStore catalog, IConfiguration? config = null)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        var stmt = (ShowProtectedDataStatement)statement;
+
+        if (stmt.At != null)
+        {
+            await LineageHistoryRouting.RouteToRemoteAsync(stmt, stmt.At, context);
+            return;
+        }
+
+        int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
+        var limit = stmt.Limit ?? defaultLimit;
+        var scanLimit = Math.Max(limit * 20, 1000);
+        var protectedEntries = LineageProtectedData
+            .FromHistory(await _catalog.GetRecentLineageAsync(scanLimit))
+            .Take(limit);
+        var table = await LineageHistoryRouting.BuildProtectedDataTable(protectedEntries);
+
+        if (stmt.IntoTable != null)
+        {
+            if (!context.Connections.ContainsKey(stmt.IntoTable))
+                context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+            var dest = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+            await dest.WriteBatches(new[] { table }.ToAsyncEnumerable());
+        }
+        else
+        {
+            context.LastResult = table;
+            context.LastResultSets.Add(table);
+            context.OnResultSet?.Invoke(table);
+        }
+    }
+}
+
 internal static class LineageHistoryRouting
 {
     internal static async Task RouteToRemoteAsync(Statement stmt, string atConn, IExecutionContext context)
@@ -237,6 +283,41 @@ internal static class LineageHistoryRouting
             row["RunAt"] = e.RunAt;
             row["JobName"] = e.JobName;
             row["ScriptPath"] = e.ScriptPath;
+            await table.AddRowAsync(row);
+        }
+        return table;
+    }
+
+    internal static async Task<DataTable> BuildProtectedDataTable(IEnumerable<ProtectedLineageHistoryEntry> entries)
+    {
+        var table = new DataTable();
+        table.SetColumns(new[]
+        {
+            "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "Operation",
+            "ProtectionTags", "ProtectionReason", "Owner", "Steward", "Contact", "Domain",
+            "Classification", "Quality", "Tags", "SourceFile", "Line"
+        });
+        foreach (var e in entries)
+        {
+            var row = new Row();
+            row["Id"] = e.Id;
+            row["RunAt"] = e.RunAt;
+            row["JobName"] = e.JobName;
+            row["TargetTable"] = e.TargetTable;
+            row["TargetColumn"] = e.TargetColumn;
+            row["SourceTables"] = string.Join(", ", e.SourceTables);
+            row["Operation"] = e.Operation;
+            row["ProtectionTags"] = string.Join(", ", e.ProtectionTags);
+            row["ProtectionReason"] = e.ProtectionReason;
+            row["Owner"] = e.Owner;
+            row["Steward"] = e.Steward;
+            row["Contact"] = e.Contact;
+            row["Domain"] = e.Domain;
+            row["Classification"] = e.Classification;
+            row["Quality"] = e.Quality;
+            row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+            row["SourceFile"] = e.SourceFile;
+            row["Line"] = e.Line;
             await table.AddRowAsync(row);
         }
         return table;

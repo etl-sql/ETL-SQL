@@ -266,7 +266,7 @@
 
 <script src="/js/echarts.min.js?v=0.16.0"></script>
 <script type="module">
-import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js?v=0.16.0';
+import { adminApi, auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js?v=0.16.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.16.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.16.0';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js?v=0.16.0';
@@ -864,7 +864,7 @@ function showLineageCatalog() {
   if (!lineageCatalog) {
     lineageCatalog = createLineageCatalog({
       host: document.getElementById('mainContent'),
-      catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
+      adminApi, catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
       openReport, timeAgo, formatBuiltAt,
       prepare: () => { setSidebarViewActive('lineage'); clearFolderSelection(); },
     });

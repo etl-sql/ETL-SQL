@@ -1,0 +1,205 @@
+SET REPORT TITLE = 'Protected Data Stewardship Audit';
+SET REPORT DESCRIPTION = 'Script-first inventory of protected lineage, metadata gaps, and steward-impact audit events.';
+
+DECLARE @stale_before DATETIME = '2026-06-22' INPUT;
+
+-- Local catalog mode. For centralized review, replace these two statements with:
+-- SHOW PROTECTED DATA AT prod_portal LIMIT 500 INTO #protected_data;
+-- SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_portal LIMIT 500 INTO #missing_metadata;
+SHOW PROTECTED DATA LIMIT 500 INTO #protected_data;
+SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 500 INTO #missing_metadata;
+
+-- Optional Portal audit mode. Uncomment when a PORTAL connection named prod_portal is available:
+-- EXECUTE prod_portal BEGIN
+--   SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+-- END;
+CREATE TABLE #steward_events (
+  Id INT,
+  UserId INT,
+  Username STRING,
+  Action STRING,
+  ResourceType STRING,
+  ResourceId STRING,
+  Timestamp DATETIME,
+  Detail STRING,
+  CorrelationId STRING
+);
+
+SELECT Classification, COUNT(*) AS AssetCount
+INTO #classification_counts
+FROM #protected_data
+GROUP BY Classification;
+
+SELECT Steward, COUNT(*) AS AssetCount
+INTO #steward_counts
+FROM #protected_data
+WHERE Steward IS NOT NULL
+GROUP BY Steward;
+
+SELECT
+  TargetTable,
+  TargetColumn,
+  ProtectionTags,
+  Owner,
+  Steward,
+  Classification,
+  RunAt,
+  JobName
+INTO #stale_protected
+FROM #protected_data
+WHERE RunAt < @stale_before;
+
+SELECT 'Report' AS AssetType, TargetTable AS AssetName, COUNT(*) AS LineageRows
+INTO #affected_reports
+FROM #protected_data
+WHERE TargetTable LIKE 'report:%'
+GROUP BY TargetTable;
+
+SELECT 'Dataset' AS AssetType, TargetTable AS AssetName, COUNT(*) AS LineageRows
+INTO #affected_datasets
+FROM #protected_data
+WHERE TargetTable LIKE 'dataset:%'
+GROUP BY TargetTable;
+
+CREATE TABLE #affected_subscriptions (
+  SubscriptionId STRING,
+  ReportName STRING,
+  Evidence STRING
+);
+
+CREATE VISUAL ProtectedCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #protected_data),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Protected Assets', ICON = 'shield_alert', COLOR = '#b42318')
+);
+
+CREATE VISUAL MissingMetadataCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #missing_metadata),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Metadata Gaps', ICON = 'badge_alert', COLOR = '#b54708')
+);
+
+CREATE VISUAL StewardImpactCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #steward_events),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Steward Impact Events', ICON = 'activity', COLOR = '#175cd3')
+);
+
+CREATE VISUAL StaleProtectedCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #stale_protected),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Stale Protected Assets', ICON = 'history', COLOR = '#6941c6')
+);
+
+CREATE VISUAL ProtectedByClassification AS BAR (
+  TITLE = 'Protected Assets by Classification',
+  SOURCE = #classification_counts,
+  MAPPINGS (X = Classification, Y = AssetCount)
+);
+
+CREATE VISUAL ProtectedBySteward AS HBAR (
+  TITLE = 'Protected Assets by Steward',
+  SOURCE = #steward_counts,
+  MAPPINGS (X = Steward, Y = AssetCount)
+);
+
+CREATE VISUAL ProtectedInventory AS TABLE (
+  TITLE = 'Protected Lineage Inventory',
+  SOURCE = (
+    SELECT
+      TargetTable,
+      TargetColumn,
+      ProtectionTags,
+      Owner,
+      Steward,
+      Contact,
+      Domain,
+      Classification,
+      Quality,
+      JobName,
+      SourceFile,
+      Line
+    FROM #protected_data
+    ORDER BY RunAt DESC
+  ),
+  STYLE (HEIGHT = '420px')
+);
+
+CREATE VISUAL MissingMetadata AS TABLE (
+  TITLE = 'Missing Stewardship Metadata',
+  SOURCE = #missing_metadata,
+  STYLE (HEIGHT = '320px')
+);
+
+CREATE VISUAL StaleProtectedAssets AS TABLE (
+  TITLE = 'Stale Protected Assets',
+  SOURCE = #stale_protected,
+  STYLE (HEIGHT = '320px')
+);
+
+CREATE VISUAL AffectedReports AS TABLE (
+  TITLE = 'Affected Reports',
+  SOURCE = #affected_reports,
+  STYLE (HEIGHT = '240px')
+);
+
+CREATE VISUAL AffectedDatasets AS TABLE (
+  TITLE = 'Affected Datasets',
+  SOURCE = #affected_datasets,
+  STYLE (HEIGHT = '240px')
+);
+
+CREATE VISUAL AffectedSubscriptions AS TABLE (
+  TITLE = 'Affected Subscriptions',
+  SOURCE = #affected_subscriptions,
+  STYLE (HEIGHT = '240px')
+);
+
+CREATE VISUAL StewardImpactEvents AS TABLE (
+  TITLE = 'Recent Steward Impact Audit Events',
+  SOURCE = #steward_events,
+  STYLE (HEIGHT = '320px')
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B C D / E F F F / G G G G',
+    MAP (
+      'A' = ProtectedCount,
+      'B' = MissingMetadataCount,
+      'C' = StewardImpactCount,
+      'D' = StaleProtectedCount,
+      'E' = ProtectedByClassification,
+      'F' = ProtectedBySteward,
+      'G' = ProtectedInventory
+    )
+  )
+);
+
+CREATE PAGE Gaps AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+      'A' = MissingMetadata,
+      'B' = StaleProtectedAssets,
+      'C' = StewardImpactEvents
+    )
+  )
+);
+
+CREATE PAGE Impact AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B / C C',
+    MAP (
+      'A' = AffectedReports,
+      'B' = AffectedDatasets,
+      'C' = AffectedSubscriptions
+    )
+  )
+);
+
+CREATE NAVIGATION StewardAuditNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview,
+  PAGES (Overview, Gaps, Impact)
+);

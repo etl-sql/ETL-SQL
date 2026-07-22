@@ -121,6 +121,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case ShowLineageHistoryForTableStatement s: await FetchLineageHistoryForTableAsync(s, context); break;
                 case ShowLineageHistoryForTagStatement s: await FetchLineageHistoryForTagAsync(s, context); break;
                 case ShowLineageHistoryForMissingTagsStatement s: await FetchLineageHistoryForMissingTagsAsync(s, context); break;
+                case ShowProtectedDataStatement s: await FetchProtectedDataAsync(s, context); break;
                 default:
                     throw new ExecutionException(
                         $"Statement type '{statement.GetType().Name}' is not supported inside an ORCHESTRATOR block.");
@@ -329,6 +330,20 @@ namespace ETL_SQL.Connectors.Orchestrator
             await WriteResultAsync(table, stmt.IntoTable, context);
         }
 
+        private async Task FetchProtectedDataAsync(ShowProtectedDataStatement stmt, IExecutionContext context)
+        {
+            var url = $"api/lineage/history/protected-data?limit={stmt.Limit ?? 100}";
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            var entries = await resp.Content.ReadFromJsonAsync<ProtectedLineageHistoryEntry[]>(_json) ?? [];
+            var table = await BuildProtectedDataTableAsync(entries);
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
         private static async Task<DataTable> BuildMissingMetadataTableAsync(LineageMissingMetadataEntryDto[] entries)
         {
             var table = new DataTable();
@@ -349,6 +364,53 @@ namespace ETL_SQL.Connectors.Orchestrator
                 row["RunAt"] = e.RunAt;
                 row["JobName"] = e.JobName;
                 row["ScriptPath"] = e.ScriptPath;
+                await table.AddRowAsync(row);
+            }
+            return table;
+        }
+
+        private static async Task<DataTable> BuildProtectedDataTableAsync(ProtectedLineageHistoryEntry[] entries)
+        {
+            var table = new DataTable();
+            table.AddColumn("Id");
+            table.AddColumn("RunAt");
+            table.AddColumn("JobName");
+            table.AddColumn("TargetTable");
+            table.AddColumn("TargetColumn");
+            table.AddColumn("SourceTables");
+            table.AddColumn("Operation");
+            table.AddColumn("ProtectionTags");
+            table.AddColumn("ProtectionReason");
+            table.AddColumn("Owner");
+            table.AddColumn("Steward");
+            table.AddColumn("Contact");
+            table.AddColumn("Domain");
+            table.AddColumn("Classification");
+            table.AddColumn("Quality");
+            table.AddColumn("Tags");
+            table.AddColumn("SourceFile");
+            table.AddColumn("Line");
+            foreach (var e in entries)
+            {
+                var row = new Row();
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["Operation"] = e.Operation;
+                row["ProtectionTags"] = string.Join(", ", e.ProtectionTags);
+                row["ProtectionReason"] = e.ProtectionReason;
+                row["Owner"] = e.Owner;
+                row["Steward"] = e.Steward;
+                row["Contact"] = e.Contact;
+                row["Domain"] = e.Domain;
+                row["Classification"] = e.Classification;
+                row["Quality"] = e.Quality;
+                row["Tags"] = JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = e.Line;
                 await table.AddRowAsync(row);
             }
             return table;

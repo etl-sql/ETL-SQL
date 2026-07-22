@@ -568,6 +568,10 @@ public class SystemParser : ParserComponent
         {
             stmt = ParseShowLineage(startToken);
         }
+        else if (MatchIdentifier("PROTECTED"))
+        {
+            stmt = ParseShowProtectedData(startToken);
+        }
         else if (Match(TokenType.VERSION)) stmt = new ShowVersionStatement();
         else if (Match(TokenType.SAFE))
         {
@@ -694,13 +698,20 @@ public class SystemParser : ParserComponent
                 Match(TokenType.METRICS);
                 stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
             }
+            else if (MatchIdentifier("AUDIT"))
+            {
+                string? action = null;
+                if (MatchIdentifier("ACTION"))
+                    action = Consume(TokenType.STRING_LITERAL, "Expected action string literal after SHOW PORTAL AUDIT ACTION").Value;
+                stmt = new ShowPortalAuditStatement(action, ParseOptionalLimit());
+            }
             else if (MatchIdentifier("OPERATIONAL"))
             {
                 Match(TokenType.METRICS);
                 stmt = new ShowPortalOperationalMetricsStatement();
             }
             else
-                throw new SyntaxException("Expected USAGE or OPERATIONAL after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected USAGE, AUDIT, or OPERATIONAL after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
         }
         else if (Match(TokenType.USAGE))
         {
@@ -781,6 +792,7 @@ public class SystemParser : ParserComponent
                 ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
                 ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
                 ShowPortalOperationalMetricsStatement spom => spom with { IntoTable = tempTable },
+                ShowPortalAuditStatement spaudit => spaudit with { IntoTable = tempTable },
                 ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
                 ShowPortalSmtpConnectionsStatement ssmtp => ssmtp with { IntoTable = tempTable },
                 LineageStatement lin => lin with { IntoTable = tempTable },
@@ -788,6 +800,7 @@ public class SystemParser : ParserComponent
                 ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },
                 ShowLineageHistoryForMissingTagsStatement slhm => slhm with { IntoTable = tempTable },
                 ShowLineageHistoryForJobStatement slhj => slhj with { IntoTable = tempTable },
+                ShowProtectedDataStatement spd => spd with { IntoTable = tempTable },
                 _ => stmt
             };
         }
@@ -887,6 +900,14 @@ public class SystemParser : ParserComponent
             return new ShowLineageHistoryForMissingTagsStatement { At = at, Limit = limit };
         }
         throw new SyntaxException("Expected TABLE, TAG, JOB, or MISSING TAGS after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
+    }
+
+    private Statement ParseShowProtectedData(Token startToken)
+    {
+        ConsumeIdentifierValue("DATA", "Expected DATA after SHOW PROTECTED");
+        string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
+        var limit = ParseOptionalLimit();
+        return new ShowProtectedDataStatement { At = at, Limit = limit };
     }
 
     private LineageStatement ParseShowLineageCore(Token startToken)

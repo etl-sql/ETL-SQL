@@ -425,6 +425,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .impact-row strong { display: block; color: var(--portal-text); overflow-wrap: anywhere; }
 .impact-row small { color: var(--portal-muted); text-transform: uppercase; font-size: .7em; font-weight: 700; letter-spacing: .02em; }
 .impact-row > div:last-child { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; color: var(--portal-muted); font-size: .78em; text-align: right; }
+.steward-audit-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.steward-audit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.steward-audit-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; align-items: start; padding-bottom: 8px; }
+.steward-audit-section { display: grid; gap: 8px; min-width: 0; }
+.steward-audit-section h3 { margin: 0; color: var(--portal-text); font-size: .94em; }
+.steward-audit-row { border-left: 4px solid var(--portal-danger); }
+.steward-audit-errors { border: 1px solid #f2a6a6; background: var(--portal-danger-soft); color: var(--portal-danger);
+  border-radius: var(--portal-radius-sm); padding: 9px 11px; margin-bottom: 10px; font-size: .84em; overflow-wrap: anywhere; }
 .lineage-result-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
 .lineage-result-row {
   display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) minmax(150px, 220px);
@@ -742,6 +750,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .lineage-mode-btn { flex: 1; }
   .stewardship-days { width: 100%; }
   .stewardship-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steward-audit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steward-audit-layout { grid-template-columns: 1fr; }
+  .steward-audit-actions .btn { flex: 1 1 140px; }
   .stewardship-row { grid-template-columns: 1fr; }
   .stewardship-row-meta { justify-items: start; text-align: left; }
   .impact-row { grid-template-columns: 1fr; }

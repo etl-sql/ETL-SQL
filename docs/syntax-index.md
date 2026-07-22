@@ -1019,6 +1019,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW EFFECTIVE PERMISSIONS` | Portal | Shows resolved portal permissions |
 | `SHOW PORTAL USAGE METRICS` | Portal | Shows usage and refresh health metrics |
 | `SHOW PORTAL OPERATIONAL METRICS` | Portal | Shows live queue, resource, load, and schema health metrics |
+| `SHOW PORTAL AUDIT`  | Portal   | Lists Portal audit rows, optionally filtered by action |
 | `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
@@ -1027,6 +1028,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW LINEAGE HISTORY FOR TABLE` | Lineage | Cross-run catalog: all lineage entries that wrote to a table; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR TAG`   | Lineage | Cross-run catalog: all entries whose tags match a key/value; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR MISSING TAGS` | Lineage | Cross-run stewardship catalog: newest targets missing owner/steward/contact/classification/quality metadata; supports `AT <connection>` |
+| `SHOW PROTECTED DATA` | Lineage | Cross-run protected-data audit for PII/PHI/PCI/sensitive/confidential/restricted lineage; supports `AT <connection>` |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
 | `SHOW BUNDLES`           | Orch  | Alias for `SHOW PUBLISHED BUNDLES` |
 | `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |

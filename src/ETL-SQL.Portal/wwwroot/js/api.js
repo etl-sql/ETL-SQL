@@ -300,6 +300,9 @@ export const catalogApi = {
         if (domain) p.set('domain', domain);
         return apiJson(`/api/catalog/stewardship?${p}`);
     },
+    protectedData({ limit = 100 } = {}) {
+        return apiJson(`/api/catalog/protected-data?limit=${limit}`);
+    },
     impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 } = {}) {
         const p = new URLSearchParams({ kind, name, direction, depth, limit });
         if (column) p.set('column', column);
@@ -409,6 +412,7 @@ export const adminApi = {
     // audit
     auditLog: (page = 1, pageSize = 50, action = '', userId = '') =>
         apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}`),
+    operationalMetrics: () => apiJson('/api/admin/metrics/operational'),
 
     // smtp
     listSmtp: () => apiJson('/api/admin/smtp'),

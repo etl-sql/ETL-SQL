@@ -190,6 +190,39 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task ProtectedData_FindsTruthyAndProtectedClassificationTags()
+        {
+            await _store.InitializeAsync();
+            var catalog = (ILineageCatalogStore)_store;
+
+            await catalog.SaveLineageAsync(
+                new[]
+                {
+                    MakeEntry("Customers", tags: new Dictionary<string, string> { ["pii"] = "true" }),
+                    MakeEntry("Claims", tags: new Dictionary<string, string> { ["phi"] = "yes" }),
+                    MakeEntry("Payments", tags: new Dictionary<string, string> { ["pci"] = "1" }),
+                    MakeEntry("Contracts", tags: new Dictionary<string, string> { ["classification"] = "confidential" }),
+                    MakeEntry("Users", tags: new Dictionary<string, string> { ["classification"] = "restricted" }),
+                    MakeEntry("Public", tags: new Dictionary<string, string> { ["classification"] = "public" })
+                },
+                "ProtectedScan",
+                null,
+                DateTime.UtcNow);
+
+            var protectedRows = LineageProtectedData
+                .FromHistory(await catalog.GetRecentLineageAsync())
+                .ToList();
+
+            Assert.Equal(5, protectedRows.Count);
+            Assert.Contains(protectedRows, e => e.TargetTable == "Customers" && e.ProtectionTags.Contains("@pii=true"));
+            Assert.Contains(protectedRows, e => e.TargetTable == "Claims" && e.ProtectionTags.Contains("@phi=true"));
+            Assert.Contains(protectedRows, e => e.TargetTable == "Payments" && e.ProtectionTags.Contains("@pci=true"));
+            Assert.Contains(protectedRows, e => e.TargetTable == "Contracts" && e.ProtectionTags.Contains("@classification=confidential"));
+            Assert.Contains(protectedRows, e => e.TargetTable == "Users" && e.ProtectionTags.Contains("@classification=restricted"));
+            Assert.DoesNotContain(protectedRows, e => e.TargetTable == "Public");
+        }
+
+        [Fact]
         public async Task GetMissingMetadata_ReturnsLatestTargetsMissingRequiredStewardshipTags()
         {
             await _store.InitializeAsync();
@@ -426,6 +459,38 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("ProdOrch", hist.At);
             Assert.Equal(100, hist.Limit);
             Assert.Equal("#r", hist.IntoTable);
+        }
+
+        [Fact]
+        public void Parser_ShowProtectedData_WithLimitAndInto_Parses()
+        {
+            var script = ParseScript("SHOW PROTECTED DATA LIMIT 25 INTO #protected;");
+            var stmt = Assert.Single(script.Statements);
+            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
+            Assert.Equal(25, protectedData.Limit);
+            Assert.Equal("#protected", protectedData.IntoTable);
+        }
+
+        [Fact]
+        public void Parser_ShowProtectedData_WithAtLimitAndInto_Parses()
+        {
+            var script = ParseScript("SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;");
+            var stmt = Assert.Single(script.Statements);
+            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
+            Assert.Equal("ProdPortal", protectedData.At);
+            Assert.Equal(100, protectedData.Limit);
+            Assert.Equal("#protected", protectedData.IntoTable);
+        }
+
+        [Fact]
+        public void Parser_ShowPortalAudit_WithActionLimitAndInto_Parses()
+        {
+            var script = ParseScript("SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 50 INTO #audit;");
+            var stmt = Assert.Single(script.Statements);
+            var audit = Assert.IsType<ShowPortalAuditStatement>(stmt);
+            Assert.Equal("STEWARD_LINEAGE_IMPACT", audit.Action);
+            Assert.Equal(50, audit.Limit);
+            Assert.Equal("#audit", audit.IntoTable);
         }
     }
 }

@@ -299,6 +299,14 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return Ok(result);
     }
 
+    [HttpGet("protected-data")]
+    public async Task<IActionResult> ProtectedData([FromQuery] int limit = 100)
+    {
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000));
+        return Ok(LineageProtectedData.FromHistory(entries).Take(limit).ToList());
+    }
+
     [HttpGet("impact")]
     public async Task<IActionResult> Impact(
         [FromServices] LineageImpactService impact,
@@ -442,11 +450,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .ToList();
 
         var isRestricted = HasTagValue(tags, "classification", "restricted");
-        var isSensitive = isRestricted
-            || HasTruthyTag(tags, "pii")
-            || HasTruthyTag(tags, "phi")
-            || HasTruthyTag(tags, "pci")
-            || HasTruthyTag(tags, "sensitive");
+        var isSensitive = LineageProtectedData.IsProtected(tags);
 
         var (isStale, staleReason) = GetStaleState(entry.RunAt, tags, staleAfterDays);
 

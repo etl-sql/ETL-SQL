@@ -1877,6 +1877,13 @@ public sealed record ShowLineageHistoryForJobStatement : Statement
     public string? At { get; set; }
 }
 
+public sealed record ShowProtectedDataStatement : Statement
+{
+    public int? Limit { get; init; }
+    public string? IntoTable { get; init; }
+    public string? At { get; set; }
+}
+
 public sealed record ShowVariablesStatement : Statement
 {
     public bool IsLocalOnly { get; init; }
@@ -2670,6 +2677,8 @@ public sealed record ShowEffectivePortalPermissionsStatement(string TargetType, 
 public sealed record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
 
 public sealed record ShowPortalOperationalMetricsStatement(string? IntoTable = null) : Statement;
+
+public sealed record ShowPortalAuditStatement(string? Action, int? Limit, string? IntoTable = null) : Statement;
 
 public sealed record ShowActivePortalSessionsStatement(string? IntoTable = null) : Statement;
 

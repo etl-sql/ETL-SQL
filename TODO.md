@@ -69,7 +69,7 @@ changes safer.
       be loaded with the included `SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT'` block when a
       Portal admin connection is available.
 
-- [ ] **Portal steward audit page.**
+- [x] **Portal steward audit page.**
       Add a steward-focused Portal page or Lineage mode that combines protected inventory, missing
       metadata, stale protected assets, impact, and audit/outbox events into one workflow.
 

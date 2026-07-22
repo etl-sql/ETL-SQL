@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
@@ -176,9 +177,11 @@ namespace ETL_SQL.Connectors.Portal
                 case ShowPortalFavoritesStatement s: await ShowFavoritesAsync(s, context); break;
                 case ShowPortalRecentReportsStatement s: await ShowRecentReportsAsync(s, context); break;
                 case SearchPortalCatalogStatement s: await SearchCatalogAsync(s, context); break;
+                case ShowProtectedDataStatement s: await ShowProtectedDataAsync(s, context); break;
                 case ShowEffectivePortalPermissionsStatement s: await ShowEffectivePermissionsAsync(s, context); break;
                 case ShowPortalUsageMetricsStatement s: await ShowUsageMetricsAsync(s, context); break;
                 case ShowPortalOperationalMetricsStatement s: await ShowOperationalMetricsAsync(s, context); break;
+                case ShowPortalAuditStatement s: await ShowAuditAsync(s, context); break;
 
                 case CreatePortalRefreshJobStatement s: await CreatePortalRefreshJobAsync(s, context); break;
                 case DropPortalRefreshJobStatement s: await DropPortalRefreshJobAsync(s, context); break;
@@ -760,6 +763,12 @@ namespace ETL_SQL.Connectors.Portal
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/catalog/search?q={query}&limit={limit}", null), stmt.IntoTable, context);
         }
 
+        private async Task ShowProtectedDataAsync(ShowProtectedDataStatement stmt, IExecutionContext context)
+        {
+            var limit = stmt.Limit ?? 100;
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/catalog/protected-data?limit={limit}", null), stmt.IntoTable, context);
+        }
+
         private async Task ShowEffectivePermissionsAsync(ShowEffectivePortalPermissionsStatement stmt, IExecutionContext context)
         {
             var targetType = stmt.TargetType.ToUpperInvariant();
@@ -781,6 +790,25 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task ShowOperationalMetricsAsync(ShowPortalOperationalMetricsStatement stmt, IExecutionContext context) =>
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/metrics/operational", null), stmt.IntoTable, context);
+
+        private async Task ShowAuditAsync(ShowPortalAuditStatement stmt, IExecutionContext context)
+        {
+            var limit = stmt.Limit ?? 50;
+            var url = $"api/admin/audit?pageSize={limit}";
+            if (!string.IsNullOrWhiteSpace(stmt.Action))
+                url += $"&action={Uri.EscapeDataString(stmt.Action)}";
+
+            var json = await SendJsonAsync(HttpMethod.Get, url, null);
+            if (json.ValueKind == JsonValueKind.Object
+                && json.TryGetProperty("items", out var items)
+                && items.ValueKind == JsonValueKind.Array)
+            {
+                await PublishJsonResultAsync(items.Clone(), stmt.IntoTable, context);
+                return;
+            }
+
+            await PublishJsonResultAsync(json, stmt.IntoTable, context);
+        }
 
         // ── Refresh Jobs ──────────────────────────────────────────────────────────
 

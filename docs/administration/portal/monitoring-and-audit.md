@@ -72,12 +72,22 @@ Every significant action is written to the audit log. Open **Admin → Audit Log
 | `DELETE_SUBSCRIPTION` | Subscription deleted |
 | `CREATE_SMTP` | SMTP connection added |
 | `DELETE_SMTP` | SMTP connection removed |
+| `STEWARD_LINEAGE_IMPACT` | Report execution or persisted ad hoc lineage affected steward-owned assets |
 | `REFRESH_TOKEN_REUSE` | A revoked refresh token was replayed (theft signal); all of the user's sessions were invalidated |
 | `UPDATE_ORCHESTRATOR_SETTINGS` | Admin changed the Orchestrator URL or API key via the Settings tab |
 
 ### 10.2 Exporting the Audit Log
 
 Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV file. You can also filter by action type and user before exporting. The export includes each row's **correlation id** — the HTTP request trace identifier or the background operation id (e.g. `delivery-<id>` for subscription deliveries) — so every event can be tied back to the operation that produced it.
+
+Portal administration scripts can query the same audit rows:
+
+```sql
+EXECUTE prod_portal BEGIN
+  SHOW PORTAL AUDIT LIMIT 100 INTO #audit;
+  SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+END;
+```
 
 ### 10.3 Audit Guarantees, Retention, and the Tamper-Evidence Boundary
 
@@ -86,4 +96,3 @@ Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV
 - **The audit table is not tamper-proof — by design.** It lives in the writable portal database, so an attacker (or administrator) with database access can alter it. The supported enterprise posture is to **export or forward audit data to external append-only storage on a schedule** (the CSV endpoint, or log forwarding per the security guide) and treat the in-portal table as the operational view. Tamper-evident hash chaining inside the portal database is a deliberate non-goal for this release (see `ROADMAP.md`).
 
 ---
-

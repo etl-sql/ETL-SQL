@@ -12,6 +12,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added `SHOW PROTECTED DATA [AT <portal_or_orchestrator>] [LIMIT n] [INTO #temp]` to inventory protected lineage tagged as PII, PHI, PCI, sensitive, confidential, or restricted from local, Portal, or Orchestrator catalogs.
+- Added `SHOW PORTAL AUDIT [ACTION '...'] [LIMIT n] [INTO #temp]` for script-first Portal audit review, including steward-impact lineage events.
+- Added `samples/08_Reporting/protected_data_audit.rptsql` as a starter protected-data stewardship dashboard.
+- Added Portal Lineage Audit mode for a steward-focused workflow that combines protected inventory, metadata queues, stale protected assets, inferred impact, steward-impact audit rows, and audit outbox health.
+
 ### Security
 
 **SFTP host-key verification is now closed by default**

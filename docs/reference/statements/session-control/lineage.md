@@ -355,5 +355,18 @@ SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 100 INTO #missing;
 Returns the newest catalog targets missing one or more required stewardship tags:
 `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`.
 
+### SHOW PROTECTED DATA
+
+```sql
+-- Local catalog
+SHOW PROTECTED DATA LIMIT 100 INTO #protected;
+
+-- Remote Orchestrator or Portal
+SHOW PROTECTED DATA AT ProdOrch LIMIT 100 INTO #protected;
+SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;
+```
+
+Returns protected lineage entries from the local or remote lineage catalog. A row is protected when it has a truthy `@pii`, `@phi`, `@pci`, or `@sensitive` tag, or `@classification` is `confidential` or `restricted`. Result columns include `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `ProtectionTags`, `Owner`, `Steward`, `Contact`, `Domain`, `Classification`, `Quality`, `Tags`, `SourceFile`, and `Line`.
+
 References:
 - [Specialized Operations](../../../administration/platform/README.md)
