@@ -4666,6 +4666,28 @@ export function createDesigner(container, opts = {}) {
             ghostEl.style.gridColumn = `${newCol} / span ${newColSpan}`;
             ghostEl.style.gridRow    = `${newRow} / span ${startRowSpan}`;
 
+            // Highlight hover container drop zones
+            let hoverContainerId = null;
+            if (v.type !== 'CONTAINER') {
+                const containers = curVis().filter(c => c.type === 'CONTAINER');
+                const parentContainer = containers.find(c => {
+                    const cColStart = c.gridCol || 1;
+                    const cColEnd = cColStart + (c.gridColSpan || 12) - 1;
+                    const cRowStart = c.gridRow || 1;
+                    const cRowEnd = cRowStart + (c.gridRowSpan || 4) - 1;
+                    return targetCol >= cColStart && targetCol <= cColEnd && targetRow >= cRowStart && targetRow <= cRowEnd;
+                });
+                if (parentContainer) hoverContainerId = parentContainer.id;
+            }
+
+            for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
+                if (card.dataset.vid === hoverContainerId) {
+                    card.classList.add('drop-zone-hover');
+                } else {
+                    card.classList.remove('drop-zone-hover');
+                }
+            }
+
         } else if (isResizing) {
             if (!ghostEl) {
                 ghostEl = document.createElement('div');
@@ -4712,6 +4734,10 @@ export function createDesigner(container, opts = {}) {
         if (ghostEl) {
             ghostEl.remove();
             ghostEl = null;
+        }
+
+        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
+            card.classList.remove('drop-zone-hover');
         }
 
         if (activeId && activeCardEl) {
