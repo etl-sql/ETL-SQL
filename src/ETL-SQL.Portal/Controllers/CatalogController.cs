@@ -31,6 +31,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
 
         limit = Math.Clamp(limit, 1, 100);
         var pattern = LikePattern(q);
+        var queryTokens = q.Split([' ', '_', '-', '/', '\\', '.', ','], StringSplitOptions.RemoveEmptyEntries);
 
         var folders = await VisibleFoldersQuery()
             .AsNoTracking()
@@ -41,9 +42,11 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .ToListAsync();
 
         var remaining = limit - folders.Count;
-        var reports = remaining <= 0
-            ? new List<Report>()
-            : await VisibleReportsQuery()
+        List<Report> reports;
+
+        if (remaining > 0)
+        {
+            var likeReports = await VisibleReportsQuery()
                 .AsNoTracking()
                 .Include(r => r.Folder)
                 .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
@@ -57,21 +60,96 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
                     || (r.Domain != null && EF.Functions.Like(r.Domain, pattern, @"\"))
                     || (r.Steward != null && EF.Functions.Like(r.Steward, pattern, @"\"))
                     || (r.Certification != null && EF.Functions.Like(r.Certification, pattern, @"\")))
-                .OrderBy(r => r.Folder.Path)
-                .ThenBy(r => r.Name)
-                .Take(remaining)
+                .Take(remaining * 2)
                 .ToListAsync();
+
+            var allCandidates = likeReports.Count < remaining
+                ? await VisibleReportsQuery()
+                    .AsNoTracking()
+                    .Include(r => r.Folder)
+                    .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+                    .OrderByDescending(r => r.LastViewedAt)
+                    .Take(100)
+                    .ToListAsync()
+                : likeReports;
+
+            reports = allCandidates
+                .Select(r => new { Report = r, Score = ComputeFuzzyScore(r, queryTokens) })
+                .Where(x => x.Score > 0.05)
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Report.Name)
+                .Select(x => x.Report)
+                .DistinctBy(r => r.Id)
+                .Take(remaining)
+                .ToList();
+        }
+        else
+        {
+            reports = new List<Report>();
+        }
+
         var favoriteIds = await GetFavoriteReportIdsAsync();
 
         var results = folders
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null))
-            .Concat(reports
-                .Select(r => ToCatalogResult(r, favoriteIds)))
+            .Concat(reports.Select(r => ToCatalogResult(r, favoriteIds)))
             .ToList();
 
         return Ok(results);
+    }
+
+    [HttpGet("consumer-home")]
+    public async Task<IActionResult> ConsumerHome([FromQuery] int limit = 10)
+    {
+        limit = Math.Clamp(limit, 1, 30);
+        var favoriteIds = await GetFavoriteReportIdsAsync();
+
+        var favReports = await (
+                from favorite in db.ReportFavorites.AsNoTracking()
+                join report in VisibleReportsQuery() on favorite.ReportId equals report.Id
+                where favorite.UserId == CurrentUserId
+                orderby favorite.CreatedAt descending
+                select report)
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Take(limit)
+            .ToListAsync();
+
+        var recentReports = await VisibleReportsQuery()
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Where(r => r.LastViewedAt != null)
+            .OrderByDescending(r => r.LastViewedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        var featuredReports = await VisibleReportsQuery()
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Where(r => r.Certification != null || r.Steward != null)
+            .OrderByDescending(r => r.UpdatedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        var popularReports = await VisibleReportsQuery()
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .OrderByDescending(r => r.LastRefreshCompletedAt ?? r.UpdatedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        var favDtos = favReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
+        var recentDtos = recentReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
+        var featuredDtos = featuredReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
+        var popularDtos = popularReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
+
+        return Ok(new ConsumerHomeDto(favDtos, recentDtos, featuredDtos, popularDtos));
     }
 
     [HttpGet("recent")]
@@ -582,5 +660,72 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             isStale,
             scriptChanged,
             favoriteIds.Contains(r.Id));
+    }
+
+    private static double ComputeFuzzyScore(Report r, string[] tokens)
+    {
+        if (tokens.Length == 0) return 0;
+        var textTargets = new[]
+        {
+            r.Name,
+            r.Description,
+            r.Folder?.Path,
+            r.Tags,
+            r.Category,
+            r.Owner,
+            r.Contact,
+            r.Domain,
+            r.Steward,
+            r.Certification
+        };
+
+        double totalScore = 0;
+        foreach (var token in tokens)
+        {
+            double bestTokenScore = 0;
+            foreach (var target in textTargets)
+            {
+                if (string.IsNullOrWhiteSpace(target)) continue;
+                var words = target.Split([' ', '_', '-', '/', '\\', '.', ','], StringSplitOptions.RemoveEmptyEntries);
+                foreach (var word in words)
+                {
+                    if (word.Equals(token, StringComparison.OrdinalIgnoreCase))
+                        bestTokenScore = Math.Max(bestTokenScore, 1.0);
+                    else if (word.Contains(token, StringComparison.OrdinalIgnoreCase) || token.Contains(word, StringComparison.OrdinalIgnoreCase))
+                        bestTokenScore = Math.Max(bestTokenScore, 0.85);
+                    else if (token.Length >= 3 && word.Length >= 3)
+                    {
+                        int dist = ComputeLevenshtein(token.ToLowerInvariant(), word.ToLowerInvariant());
+                        if (dist <= 2)
+                        {
+                            double sim = 1.0 - ((double)dist / Math.Max(token.Length, word.Length));
+                            bestTokenScore = Math.Max(bestTokenScore, sim * 0.75);
+                        }
+                    }
+                }
+            }
+            totalScore += bestTokenScore;
+        }
+
+        return totalScore / tokens.Length;
+    }
+
+    private static int ComputeLevenshtein(string a, string b)
+    {
+        int n = a.Length, m = b.Length;
+        if (n == 0) return m;
+        if (m == 0) return n;
+        var d = new int[n + 1, m + 1];
+        for (int i = 0; i <= n; d[i, 0] = i++) { }
+        for (int j = 0; j <= m; d[0, j] = j++) { }
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = (b[j - 1] == a[i - 1]) ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+            }
+        }
+        return d[n, m];
     }
 }

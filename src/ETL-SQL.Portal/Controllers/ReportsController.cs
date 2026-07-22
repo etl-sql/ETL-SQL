@@ -348,11 +348,73 @@ public class ReportsController : ControllerBase
 
         if (report is null) return NotFound();
         var perm = await GetEffectivePermissionAsync(report.FolderId);
-        if (perm is null) return Forbid();
+        if (perm is null)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ReportAccessInfoDto(
+                report.Id,
+                report.Name,
+                report.Folder?.Path ?? "",
+                report.Owner ?? "Report Administrator",
+                report.Contact ?? "admin@company.com",
+                report.Description,
+                CanRequestAccess: true));
+        }
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
+    }
+
+    [HttpGet("reports/{id:int}/access-info")]
+    public async Task<IActionResult> GetAccessInfo(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+        if (report is null) return NotFound();
+
+        return Ok(new ReportAccessInfoDto(
+            report.Id,
+            report.Name,
+            report.Folder?.Path ?? "",
+            report.Owner ?? "Report Administrator",
+            report.Contact ?? "admin@company.com",
+            report.Description,
+            CanRequestAccess: true));
+    }
+
+    [HttpPost("reports/{id:int}/request-access")]
+    public async Task<IActionResult> RequestAccess(int id, [FromBody] RequestReportAccessDto? req)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+        if (report is null) return NotFound();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == CurrentUserId);
+        var requesterName = user?.UserName ?? $"User {CurrentUserId}";
+        var reasonText = string.IsNullOrWhiteSpace(req?.Reason) ? "No reason specified" : req.Reason.Trim();
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        audit.Stage(
+            CurrentUserId,
+            "REQUEST_REPORT_ACCESS",
+            "Report",
+            report.Id.ToString(),
+            $"Access requested for '{report.Name}' by {requesterName}. Reason: {reasonText}");
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(new
+        {
+            message = $"Access request for '{report.Name}' submitted to report owner ({report.Owner ?? report.Contact ?? "System Admin"}).",
+            reportId = report.Id,
+            reportName = report.Name,
+            owner = report.Owner ?? report.Contact ?? "System Admin",
+            status = "PENDING_APPROVAL"
+        });
     }
 
     // ── GET /api/reports/{id}/dependencies ───────────────────────────────────

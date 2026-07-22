@@ -719,6 +719,26 @@
             <div class="header-subtitle">${escHtml(manifest.description || 'Interactive Data Insight')}</div>
         `;
 
+        const badges = [];
+        if (manifest.owner) badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner)}</span>`);
+        if (manifest.steward) badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
+        if (manifest.certification) badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
+        if (manifest.lastRefreshed) badges.push(`<span class="header-badge fresh" title="Last Refreshed">🕒 ${escHtml(manifest.lastRefreshed)}</span>`);
+        if (manifest.tags) {
+            const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
+            tagList.forEach(t => {
+                const tagStr = t.trim();
+                if (tagStr) badges.push(`<span class="header-badge tag" title="Tag">🏷️ ${escHtml(tagStr)}</span>`);
+            });
+        }
+
+        if (badges.length > 0) {
+            const badgeContainer = document.createElement('div');
+            badgeContainer.className = 'header-badges';
+            badgeContainer.innerHTML = badges.join('');
+            left.appendChild(badgeContainer);
+        }
+
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 

@@ -123,3 +123,21 @@ public record LineageImpactDto(
     IReadOnlyList<LineageImpactItemDto> Subscriptions,
     IReadOnlyList<LineageImpactItemDto> Jobs,
     IReadOnlyList<LineageImpactItemDto> Stewards);
+
+public record ConsumerHomeDto(
+    IReadOnlyList<CatalogSearchResultDto> Favorites,
+    IReadOnlyList<CatalogSearchResultDto> Recent,
+    IReadOnlyList<CatalogSearchResultDto> Featured,
+    IReadOnlyList<CatalogSearchResultDto> Popular);
+
+public record ReportAccessInfoDto(
+    int ReportId,
+    string ReportName,
+    string FolderPath,
+    string Owner,
+    string Contact,
+    string? Description,
+    bool CanRequestAccess);
+
+public record RequestReportAccessDto(
+    string? Reason);

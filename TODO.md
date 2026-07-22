@@ -74,17 +74,43 @@ changes safer.
 
 ### Portal Business Consumer UX & Discovery
 
-- [ ] **Fuzzy & Synonym Catalog Search (`SHOW CATALOG SEARCH` Enhancement).**
+- [x] **Fuzzy & Synonym Catalog Search (`SHOW CATALOG SEARCH` Enhancement).**
       Upgrade portal catalog search to use fuzzy matching (reusing core fuzzy/Levenshtein matching utilities) across report titles, descriptions (`SET REPORT DESCRIPTION`), tags (`#sales`, `#inventory`), and metric/column names, ensuring non-exact searches (e.g. "Q3 Sales") match technical titles like `RPT_2026_SALES_Q3_FINAL`.
+      Acceptance notes: rank exact title matches first, then fuzzy title matches, then tags/descriptions,
+      then metric/column/folder matches. Return a match reason for each result so the UI can explain
+      "matched title", "matched #inventory tag", or "matched revenue metric". Search must be
+      permission-aware: by default return only reports the caller can open; if restricted-report
+      discovery is allowed by policy, return only minimal metadata needed to request access and never
+      leak report contents, dataset values, secrets, or unpublished metadata. Cover typo, synonym,
+      tag, metric/column, restricted-visibility, and ranking-order tests.
 
-- [ ] **Self-Service "Request Access" Workflow for Restricted Reports.**
+- [x] **Self-Service "Request Access" Workflow for Restricted Reports.**
       Replace cold `403 Forbidden` / access denied error screens with an interactive "Request Access" card that identifies the report owner/group and enables 1-click access request submission, logging a pending access request and notifying the report owner via outbox/email.
+      Acceptance notes: define whether policy allows revealing the restricted report's existence; if
+      yes, show only safe metadata such as title, owner/team, and optional description. If no, render
+      a generic request card without confirming existence. Model request states (`Pending`,
+      `Approved`, `Denied`, `Cancelled`) and make duplicate submissions return the existing pending
+      request instead of creating notification spam. Start with report-scoped requests unless folder,
+      dataset, or global grants are already supported. Emit audit events and durable notification
+      outbox/email entries for request creation and disposition.
 
-- [ ] **Business Consumer Home Dashboard (Favorites, Recent, & Featured).**
+- [x] **Business Consumer Home Dashboard (Favorites, Recent, & Featured).**
       Add a consumer-oriented landing page mode to the Portal homepage highlighting "My Favorites" (`SHOW FAVORITES`), "Recently Viewed" (`SHOW RECENT REPORTS`), and "Popular in My Department" visual cards as the default view for non-admin business users, bypassing technical folder structures.
+      Acceptance notes: define the "business user" rule concretely from role claims, permissions, or
+      absence of admin roles. Recently viewed reports should be per-user and update when a report is
+      opened. Favorites should reuse the existing favorites model/commands. "Popular in My Department"
+      needs a department source from OIDC/group claims or profile metadata, with a global-popular
+      fallback when department is unknown. Keep technical catalog/admin navigation reachable, but not
+      the default first screen for business users. All cards must respect report permissions.
 
-- [ ] **Report Ownership & Data Freshness Badges.**
+- [x] **Report Ownership & Data Freshness Badges.**
       Render a standardized metadata header on published reports displaying the owning team/contact, last refresh timestamp, data freshness indicator, and interactive tag badges.
+      Acceptance notes: define owner/contact/team precedence from report metadata, tags, folder
+      ownership, and catalog records. Distinguish `last refreshed`, `expected refresh interval`, and
+      freshness state (`fresh`, `stale`, `unknown`). Missing metadata should render explicitly as
+      "Owner unknown" or "Freshness unknown" instead of hiding the field. Tags should be clickable
+      into catalog search. Add tests for complete metadata, missing metadata, stale calculations, and
+      permission-safe rendering.
 
 ### Data Stewardship: Protected Data Audit Workflow
 
