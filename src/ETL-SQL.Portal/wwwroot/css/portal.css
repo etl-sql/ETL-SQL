@@ -260,9 +260,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .portal-legal-link:hover {
   color: var(--portal-accent-hover); text-decoration: underline;
 }
-  color: var(--portal-accent); background: var(--portal-surface);
-  border-color: var(--portal-border-soft); text-decoration: none;
-}
 
 /* Content area below topbar */
 .app-body { display: flex; overflow: hidden; flex: 1; }
