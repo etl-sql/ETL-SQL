@@ -19,6 +19,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added `SHOW PORTAL AUDIT [ACTION '...'] [LIMIT n] [INTO #temp]` for script-first Portal audit review, including steward-impact lineage events.
 - Added `samples/08_Reporting/protected_data_audit.rptsql` as a starter protected-data stewardship dashboard.
 - Added Portal Lineage Audit mode for a steward-focused workflow that combines protected inventory, classifier suggestions, metadata queues, stale protected assets, inferred impact, steward-impact audit rows, and audit outbox health.
+- Added tag-driven governance policy lint and Portal runtime gates for public dataset stewardship metadata, restricted/confidential public datasets, protected dataset exports, and `@quality=gold` promotion metadata.
 
 ### Security
 

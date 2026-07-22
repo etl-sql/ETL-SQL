@@ -72,6 +72,13 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
             var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
             if (IsFreshEnough(existing, stmt.Ttl))
             {
+                TagGovernanceRuntimePolicy.EnforceDatasetPublish(
+                    stmt.TempTableName,
+                    stmt.AccessLevel,
+                    TagGovernanceRuntimePolicy.CollectGlobalTags(context),
+                    stmt.Line,
+                    stmt.Column);
+
                 _logger.Debug(
                     "Dataset '{Name}' is within TTL (last refresh: {Time}). Loading from Parquet cache.",
                     stmt.TempTableName, existing!.LastRefresh);
@@ -94,7 +101,16 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
 
         // ── 5. Portal persistence (Parquet write → registry → refresh job) ──────
         if (registry != null)
+        {
+            TagGovernanceRuntimePolicy.EnforceDatasetPublish(
+                stmt.TempTableName,
+                stmt.AccessLevel,
+                TagGovernanceRuntimePolicy.CollectDatasetTags(stmt, context),
+                stmt.Line,
+                stmt.Column);
+
             await PersistToPortal(stmt, registry, folderPath, rowCount, context);
+        }
 
         // ── 6. Register AST in report context (for ManifestBuilder) ───────────
         RegisterReportContext(stmt, context);

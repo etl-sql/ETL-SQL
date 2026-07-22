@@ -46,6 +46,13 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 $"PUBLISH DATASET '{stmt.DatasetName}' requires the transport credential the file was exported with: ENCRYPT = PASSWORD or KEYFILE.",
                 null, stmt.Line, stmt.Column);
 
+        TagGovernanceRuntimePolicy.EnforceDatasetPublish(
+            stmt.DatasetName,
+            stmt.AccessLevel,
+            TagGovernanceRuntimePolicy.CollectGlobalTags(context),
+            stmt.Line,
+            stmt.Column);
+
         if (await registry.Exists(stmt.DatasetName))
             throw new ExecutionException(
                 $"PUBLISH DATASET '{stmt.DatasetName}': a dataset with that global name already exists.",

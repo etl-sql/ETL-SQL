@@ -78,7 +78,7 @@ changes safer.
       and optional sampled values. Suggestions should create reviewable findings, not silently set
       `@pii`/`@classification`.
 
-- [ ] **Tag-driven governance policy gates.**
+- [x] **Tag-driven governance policy gates.**
       Add lint/publish/execution policy checks for sensitive exports, restricted published datasets,
       missing owner/steward/contact/classification/quality, and promotion to `@quality=gold`.
 

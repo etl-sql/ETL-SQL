@@ -72,6 +72,19 @@ SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 500 INTO #missing_stewa
 
 Treat missing `owner`, `steward`, `contact`, `classification`, or `quality` on published outputs as a release issue unless the asset is intentionally temporary.
 
+## Governance Gates
+
+ETL-SQL enforces tag-driven governance at authoring and publish boundaries:
+
+- `LINT` flags public datasets that are missing `@owner`, `@steward`, `@contact`, `@classification`, or `@quality`.
+- `LINT` flags public datasets carrying `@classification=confidential` or `@classification=restricted`.
+- `LINT` flags protected `EXPORT DATASET` statements that omit a portable transport credential (`ENCRYPT = PASSWORD` or `ENCRYPT = KEYFILE`).
+- Portal `CREATE DATASET` and `PUBLISH DATASET` reject public datasets without complete stewardship metadata.
+- Portal `CREATE DATASET` and `PUBLISH DATASET` reject public datasets classified as confidential or restricted.
+- `@quality=gold` requires complete stewardship metadata; lint reports this during authoring and Portal runtime rejects incomplete gold dataset publication.
+
+Private datasets can carry protected classifications, but they still need complete stewardship metadata before promotion to `@quality=gold`.
+
 ## Finding Protected Data
 
 Use `SHOW PROTECTED DATA` as the first audit step when you need to find where PII, PHI, PCI, sensitive, confidential, or restricted data appears in extracts and reports.
