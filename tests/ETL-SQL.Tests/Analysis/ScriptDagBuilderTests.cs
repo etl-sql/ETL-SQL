@@ -1,4 +1,5 @@
 using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
@@ -86,5 +87,39 @@ SELECT 1;");
         var dag = Build(string.Empty);
         Assert.Empty(dag.Nodes);
         Assert.Empty(dag.Edges);
+    }
+
+    [Fact]
+    public void ClassifiesEtlAndReportAuthoringStatements()
+    {
+        var dag = Build("""
+            CREATE CONNECTION vendor AS SFTP(HOST='sftp.example.invalid', USER='etl', PASSWORD='SECRET:sftp_password');
+            SEND FILE 'C:\tmp\out.csv' TO '/inbox/out.csv' AT vendor;
+            MOVE FILE 'C:\tmp\out.csv' TO 'C:\tmp\sent\out.csv';
+            CREATE DATASET &sales AS (SELECT 1 AS amount);
+            CREATE VISUAL SalesCard AS CARD (SOURCE = &sales);
+            CREATE CONTAINER Drawer AS DRAWER ();
+            CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = SalesCard));
+            """);
+
+        Assert.Collection(
+            dag.Nodes,
+            n => Assert.Equal(("CONNECT vendor", "connection"), (n.Label, n.Type)),
+            n => Assert.Equal(("SEND FILE → vendor", "outbound"), (n.Label, n.Type)),
+            n => Assert.Equal(("MOVE FILE", "destructive"), (n.Label, n.Type)),
+            n => Assert.Equal(("DATASET &sales", "dataset"), (n.Label, n.Type)),
+            n => Assert.Equal(("VISUAL SalesCard", "visual"), (n.Label, n.Type)),
+            n => Assert.Equal(("CONTAINER Drawer", "container"), (n.Label, n.Type)),
+            n => Assert.Equal(("PAGE Overview", "page"), (n.Label, n.Type)));
+    }
+
+    [Fact]
+    public void ProjectionReturnsParseFailureWithoutThrowing()
+    {
+        var projection = new ScriptDagProjectionService().Project("CREATE CONNECTION c AS;");
+
+        Assert.False(projection.Parsed);
+        Assert.Contains("Could not parse script for flow preview", projection.Error);
+        Assert.Empty(projection.Dag.Nodes);
     }
 }

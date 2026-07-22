@@ -1161,6 +1161,18 @@ body.vscode-dark .cm-editor .cm-line::selection {
 .etlsql-script-workbench-preview.active {
     display: flex;
 }
+.etlsql-script-workbench-flow {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--portal-surface, #ffffff);
+}
+.etlsql-script-workbench-flow.active {
+    display: flex;
+}
 .etlsql-script-workbench-preview-toolbar {
     display: flex;
     align-items: center;
@@ -1179,6 +1191,11 @@ body.vscode-dark .cm-editor .cm-line::selection {
     width: 100%;
     border: 0;
     background: #ffffff;
+}
+.etlsql-script-workbench-flow-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .etlsql-script-workbench-toolbar {

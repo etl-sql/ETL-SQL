@@ -31,6 +31,7 @@ public class DesignerController : ControllerBase
     private readonly PortalConnectionCatalogService? _connectionCatalog;
     private readonly IMetadataManager? _metadata;
     private readonly DesignerSnapshotService? _snapshots;
+    private readonly ScriptDagProjectionService _scriptDag;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -43,7 +44,8 @@ public class DesignerController : ControllerBase
         PortalDesignerPreviewService? previewService = null,
         PortalConnectionCatalogService? connectionCatalog = null,
         IMetadataManager? metadata = null,
-        DesignerSnapshotService? snapshots = null)
+        DesignerSnapshotService? snapshots = null,
+        ScriptDagProjectionService? scriptDag = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -56,6 +58,7 @@ public class DesignerController : ControllerBase
         _connectionCatalog = connectionCatalog;
         _metadata = metadata;
         _snapshots = snapshots;
+        _scriptDag = scriptDag ?? new ScriptDagProjectionService();
     }
 
     // ── GET /api/session/metadata ─────────────────────────────────────────────
@@ -86,6 +89,29 @@ public class DesignerController : ControllerBase
         }
 
         return Ok(new { connections, variables = Array.Empty<object>(), tempTables });
+    }
+
+    // ── POST /api/script/dag and /api/designer/dag ───────────────────────────
+
+    [HttpPost("/api/script/dag")]
+    [HttpPost("dag")]
+    [EnableRateLimiting("designer")]
+    public IActionResult ScriptDag([FromBody] ScriptDagRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            return Ok(_scriptDag.Project(req.Script));
+        }
+        finally
+        {
+            gate?.Release();
+        }
     }
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────

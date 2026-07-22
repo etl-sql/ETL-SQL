@@ -248,6 +248,21 @@ public class DesignerControllerTests
     }
 
     [Fact]
+    public void ScriptDag_ReturnsDesignTimeFlow()
+    {
+        var controller = new DesignerController();
+
+        var result = Assert.IsType<OkObjectResult>(
+            controller.ScriptDag(new ScriptDagRequest(
+                "CREATE CONNECTION m AS MOCKDB();\nSELECT UserID INTO #staging FROM m.Users;")));
+        var response = Assert.IsType<ETL_SQL.Portal.Services.ScriptDagProjection>(result.Value);
+
+        Assert.True(response.Parsed);
+        Assert.Contains(response.Dag.Nodes, n => n.Label == "CONNECT m" && n.Type == "connection");
+        Assert.Contains(response.Dag.Nodes, n => n.Label == "SELECT INTO #staging" && n.Type == "io");
+    }
+
+    [Fact]
     public async Task Analyze_MatchesCliAnalysisDiagnostics()
     {
         const string script = """

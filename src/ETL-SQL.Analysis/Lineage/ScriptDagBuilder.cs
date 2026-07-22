@@ -5,7 +5,7 @@ using ETL_SQL.Core;
 namespace ETL_SQL.Analysis.Lineage;
 
 /// <summary>A single node in a script flow DAG.</summary>
-/// <param name="Type">dataset | visual | page | table | statement | conditional | loop | io | procedure | connection</param>
+/// <param name="Type">dataset | visual | page | container | table | statement | conditional | loop | io | outbound | destructive | procedure | connection</param>
 public sealed record ScriptDagNode(string Id, string Label, string Type, int Line);
 
 /// <summary>A directed edge between two flow nodes.</summary>
@@ -61,11 +61,19 @@ public static class ScriptDagBuilder
     private static (string Label, string Type) Classify(Statement statement) => statement switch
     {
         InsertStatement s => ($"INSERT → {s.TargetTable.TableName}", "io"),
+        UpdateStatement s => ($"UPDATE {s.TargetTable.TableName}", "destructive"),
+        DeleteStatement s => ($"DELETE {s.TargetTable.TableName}", "destructive"),
+        MergeStatement s => ($"MERGE → {s.TargetTable.TableName}", "destructive"),
         SelectStatement s => s.IntoTable is not null
             ? ($"SELECT INTO {s.IntoTable.TableName}", "io")
             : ("SELECT", "statement"),
         CreateTableStatement s => ($"CREATE {s.TargetTable.TableName}", "statement"),
         CreateConnectionStatement s => ($"CONNECT {s.ConnectionName}", "connection"),
+        FileTransferStatement s => (s.Type == FileTransferType.Send
+            ? $"SEND FILE → {s.ConnectionName}"
+            : $"RECEIVE FILE ← {s.ConnectionName}", "outbound"),
+        FileOperationStatement s => ($"{s.Type.ToString().ToUpperInvariant()} FILE", s.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename ? "destructive" : "io"),
+        DirectoryOperationStatement s => ($"{s.Type.ToString().ToUpperInvariant()} DIRECTORY", s.Type is DirectoryOpType.Delete or DirectoryOpType.Move or DirectoryOpType.Rename or DirectoryOpType.DeleteContents ? "destructive" : "io"),
         IfStatement => ("IF", "conditional"),
         WhileStatement => ("WHILE", "loop"),
         ForStatement s => ($"FOR @{s.VariableName}", "loop"),
@@ -74,8 +82,13 @@ public static class ScriptDagBuilder
         ExecuteStatement s => ($"CALL {s.ProcedureName}", "procedure"),
         RunScriptStatement => ("RUN SCRIPT", "io"),
         BulkInsertStatement s => ($"BULK INSERT → {s.TargetTable.TableName}", "io"),
+        ExportStatement s => ($"EXPORT → {s.TargetPath}", "outbound"),
+        ExportReportStatement s => ($"EXPORT REPORT → {s.OutputPath.ToSql()}", "outbound"),
         CreateDatasetStatement s => ($"DATASET {s.TempTableName}", "dataset"),
         RefreshPortalDatasetStatement s => ($"REFRESH {s.DatasetName}", "dataset"),
+        CreateVisualStatement s => ($"VISUAL {s.Name}", "visual"),
+        CreatePageStatement s => ($"PAGE {s.Name}", "page"),
+        CreateContainerStatement s => ($"CONTAINER {s.Name}", "container"),
         _ => (statement.GetType().Name.Replace("Statement", string.Empty, StringComparison.Ordinal), "statement"),
     };
 }

@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using MediatR;
@@ -33,6 +34,8 @@ namespace ETL_SQL.LSP
     public class DesignerLspHandler(ILogger<DesignerLspHandler> logger)
         : IDesignerParseHandler, IDesignerGenerateHandler, IScriptDagHandler
     {
+        private readonly ScriptDagProjectionService _scriptDagProjection = new();
+
         private static readonly JsonSerializerOptions _json = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -85,19 +88,22 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(request.script))
-                    return Task.FromResult(new ScriptDagResponse());
-
-                var tokens = new Lexer(request.script).Tokenize();
-                var ast = new CoreParser(tokens, request.script).Parse();
-                var dag = ScriptDagBuilder.Build(ast);
+                var projected = _scriptDagProjection.Project(request.script);
+                if (!projected.Parsed)
+                    return Task.FromResult(new ScriptDagResponse { error = projected.Error });
 
                 return Task.FromResult(new ScriptDagResponse
                 {
-                    nodes = dag.Nodes
-                        .Select(n => new ScriptDagNodeDto { id = n.Id, label = n.Label, type = n.Type, line = n.Line })
+                    nodes = projected.Dag.Nodes
+                        .Select(n => new ScriptDagNodeDto
+                        {
+                            id = n.Id,
+                            label = n.Label,
+                            type = n.Type,
+                            line = GetLine(n.Meta)
+                        })
                         .ToList(),
-                    edges = dag.Edges
+                    edges = projected.Dag.Edges
                         .Select(e => new ScriptDagEdgeDto { source = e.Source, target = e.Target })
                         .ToList(),
                 });
@@ -107,6 +113,13 @@ namespace ETL_SQL.LSP
                 logger.LogWarning(ex, "LSP: etlsql/scriptDag failed");
                 return Task.FromResult(new ScriptDagResponse { error = ex.Message });
             }
+        }
+
+        private static int GetLine(object? meta)
+        {
+            if (meta == null) return 0;
+            var property = meta.GetType().GetProperty("line") ?? meta.GetType().GetProperty("Line");
+            return property?.GetValue(meta) is int line ? line : 0;
         }
 
         // ── Conversion: Script → DesignState ──────────────────────────────────

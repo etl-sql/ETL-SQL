@@ -14,7 +14,7 @@ changes safer.
 
 ### Visual Reporting and Dashboard Designer Enhancements
 
-- [ ] **Design-Time Script DAG Preview for Authoring.**
+- [x] **Design-Time Script DAG Preview for Authoring.**
       Add a read-only "Flow" / "DAG" pane to the script editor surfaces so authors can see the
       expected pipeline shape before execution. The script remains the source of truth; the diagram
       is derived from parsed `.etlsql` / `.rptsql` text and node clicks jump back to source lines.

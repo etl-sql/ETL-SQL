@@ -31,12 +31,15 @@ const _TYPE_COLOR = {
     dataset:     '#10b981',
     visual:      '#3b82f6',
     page:        '#8b5cf6',
+    container:   '#334155',
     table:       '#64748b',
     column:      '#94a3b8',
     statement:   '#475569',
     conditional: '#f59e0b',
     loop:        '#f97316',
     io:          '#14b8a6',
+    outbound:    '#0f766e',
+    destructive: '#dc2626',
     procedure:   '#a855f7',
     connection:  '#0ea5e9',
 };
@@ -47,7 +50,7 @@ function _nodeColor(type) {
 
 function _nodeSymbol(type) {
     if (type === 'visual')                          return 'diamond';
-    if (type === 'page')                            return 'roundRect';
+    if (type === 'page' || type === 'container')    return 'roundRect';
     if (type === 'dataset' || type === 'table')     return 'roundRect';
     if (type === 'column')                          return 'circle';
     return 'circle';
@@ -55,6 +58,7 @@ function _nodeSymbol(type) {
 
 function _nodeSize(type) {
     if (type === 'page')   return 44;
+    if (type === 'container') return 40;
     if (type === 'column') return 18;
     return 36;
 }
@@ -1469,6 +1473,14 @@ export async function createScriptEditor(container, opts = {}) {
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
+        gotoLine: (line, column = 1) => {
+            if (!view) return;
+            const safeLine = Math.max(1, Math.min(view.state.doc.lines, Number(line) || 1));
+            const docLine = view.state.doc.line(safeLine);
+            const pos = Math.min(docLine.to, docLine.from + Math.max(0, (Number(column) || 1) - 1));
+            view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+            view.focus();
+        },
         analyze: () => runAnalysis(view.state.doc.toString()),
         dispose: () => {
             clearTimeout(analyzeTimer);
@@ -2095,6 +2107,7 @@ const _TOOLBAR_ICONS = {
     tidy: '<path d="M3 4h10"/><path d="M5 8h6"/><path d="M7 12h2"/><path d="M12 2l1.5 1.5L12 5"/>',
     split: '<path d="M2.5 3.5h11v9h-11z"/><path d="M8 3.5v9"/>',
     suggest: '<path d="m8 2 1.6 3.9L13.5 7.5 9.6 9.1 8 13l-1.6-3.9L2.5 7.5l3.9-1.6z"/>',
+    flow: '<circle cx="3.5" cy="4" r="1.8"/><circle cx="12.5" cy="4" r="1.8"/><circle cx="8" cy="12" r="1.8"/><path d="M5.3 4h5.4"/><path d="M4.5 5.6 7 10.4"/><path d="M11.5 5.6 9 10.4"/>',
     runSelected: '<path d="M2.5 3.5h3"/><path d="M2.5 12.5h3"/><path d="m7.5 3.5 6 4.5-6 4.5z"/>',
     run: '<path d="m4 2.5 9 5.5-9 5.5z"/>',
     preview: '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8"/><circle cx="8" cy="8" r="1.9"/>',
@@ -2149,6 +2162,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ${toolbarButton({ attr: 'data-toggle-theme', icon: 'theme', title: 'Toggle dark/light mode' })}
                 ${toolbarButton({ attr: 'data-command-palette', icon: 'commands', title: 'Command palette', key: 'Ctrl+Shift+P' })}
                 ${opts.editor?.completeUrl ? toolbarButton({ attr: 'data-suggest', icon: 'suggest', title: 'Suggest completions', key: 'Ctrl+Space' }) : ''}
+                ${opts.dagUrl ? toolbarButton({ attr: 'data-flow', icon: 'flow', title: 'Preview script flow' }) : ''}
                 ${opts.previewApiUrl ? toolbarButton({ attr: 'data-preview', icon: 'preview', title: 'Preview report' }) : ''}
                 ${opts.onApply ? toolbarButton({ attr: 'data-apply', icon: 'apply', title: 'Update designer from script' }) : ''}
                 ${toolbarButton({ attr: 'data-format', icon: 'format', title: 'Format document', key: 'Shift+Alt+F' })}
@@ -2206,6 +2220,18 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     <button type="button" class="btn btn-sm" data-preview-close>Close</button>
                 </div>
                 <iframe data-preview-frame title="Report preview" sandbox="allow-scripts allow-same-origin"></iframe>
+            </div>` : ''}
+
+            ${opts.dagUrl ? `
+            <div class="etlsql-script-workbench-flow" data-flow-overlay>
+                <div class="etlsql-script-workbench-preview-toolbar">
+                    <strong>Flow</strong>
+                    <span class="etlsql-script-workbench-preview-status" data-flow-status></span>
+                    <span class="etlsql-script-workbench-spacer"></span>
+                    <button type="button" class="btn btn-sm" data-flow-refresh title="Rebuild the flow preview">Refresh</button>
+                    <button type="button" class="btn btn-sm" data-flow-close>Close</button>
+                </div>
+                <div class="etlsql-script-workbench-flow-body" data-flow-body></div>
             </div>` : ''}
 
             <div class="etlsql-script-command-palette" data-palette hidden>
@@ -2953,11 +2979,80 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         previewOverlay?.classList.remove('active');
     }
 
+    // ── Design-time flow preview ──────────────────────────────────────────────
+    const flowOverlay = container.querySelector('[data-flow-overlay]');
+    const flowBody = container.querySelector('[data-flow-body]');
+    const flowStatusEl = container.querySelector('[data-flow-status]');
+    let flowDagInstance = null;
+
+    function setFlowStatus(text, kind) {
+        if (!flowStatusEl) return;
+        flowStatusEl.textContent = text || '';
+        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        flowStatusEl.style.color = colors[kind] || colors.neutral;
+    }
+
+    async function refreshFlow() {
+        if (!opts.dagUrl || !flowBody) return;
+        setFlowStatus('Building flow...', 'pending');
+        flowDagInstance?.dispose?.();
+        flowDagInstance = null;
+        flowBody.innerHTML = '<div class="etlsql-dag-empty">Building flow preview...</div>';
+        try {
+            const script = editor.getValue();
+            if (!script.trim()) {
+                flowBody.innerHTML = '<div class="etlsql-dag-empty">No script flow yet.</div>';
+                setFlowStatus('Nothing to diagram.', 'neutral');
+                return;
+            }
+
+            const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
+            const res = await fetcher(opts.dagUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, documentUri: getDocumentUri() }),
+            });
+            if (!res?.ok) throw new Error(await res.text());
+            const data = await res.json();
+            if (data?.error || data?.parsed === false) {
+                throw new Error(data.error || 'Script flow could not be parsed.');
+            }
+            const graph = data?.dag || data || {};
+            flowDagInstance = renderDag(flowBody, {
+                nodes: graph.nodes ?? graph.Nodes ?? [],
+                edges: graph.edges ?? graph.Edges ?? [],
+            }, {
+                theme: document.body.classList.contains('theme-dark') ? 'vscode' : 'portal',
+                onNodeClick: (_nodeId, meta) => {
+                    const line = meta?.line ?? meta?.Line;
+                    if (line) editor.gotoLine?.(line);
+                },
+            });
+            const nodeCount = (graph.nodes ?? graph.Nodes ?? []).length;
+            const edgeCount = (graph.edges ?? graph.Edges ?? []).length;
+            setFlowStatus(`${nodeCount} node${nodeCount === 1 ? '' : 's'}, ${edgeCount} edge${edgeCount === 1 ? '' : 's'}.`, 'neutral');
+        } catch (e) {
+            flowBody.innerHTML = `<div class="etlsql-dag-empty">Flow preview failed: ${escapeHtml(e?.message || e)}</div>`;
+            setFlowStatus('Flow failed.', 'error');
+        }
+    }
+
+    function openFlow() {
+        if (!flowOverlay) return;
+        flowOverlay.classList.add('active');
+        refreshFlow();
+    }
+
+    function closeFlow() {
+        flowOverlay?.classList.remove('active');
+    }
+
     function commandItems() {
         return [
             { id: 'run', label: 'ETL-SQL: Run Script', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('script') },
             { id: 'run-selected', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('selection') },
             { id: 'cancel-run', label: 'ETL-SQL: Cancel Running Script', enabled: root.classList.contains('is-running'), action: cancelRun },
+            { id: 'flow', label: 'ETL-SQL: Preview Script Flow', enabled: Boolean(opts.dagUrl), action: openFlow },
             { id: 'preview', label: 'ETL-SQL: Preview Report', enabled: Boolean(opts.previewApiUrl), action: openPreview },
             { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
@@ -3147,6 +3242,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-run]')?.addEventListener('click', () => run('script'));
     container.querySelector('[data-run-selected]')?.addEventListener('click', () => run('selection'));
     container.querySelector('[data-cancel-run]')?.addEventListener('click', cancelRun);
+    container.querySelector('[data-flow]')?.addEventListener('click', openFlow);
+    container.querySelector('[data-flow-refresh]')?.addEventListener('click', refreshFlow);
+    container.querySelector('[data-flow-close]')?.addEventListener('click', closeFlow);
     container.querySelector('[data-preview]')?.addEventListener('click', openPreview);
     container.querySelector('[data-preview-refresh]')?.addEventListener('click', refreshPreview);
     container.querySelector('[data-preview-close]')?.addEventListener('click', closePreview);
@@ -3198,6 +3296,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         dispose() {
             runAbort?.abort();
             if (_previewMessageHandler) window.removeEventListener('message', _previewMessageHandler);
+            flowDagInstance?.dispose?.();
             editor.dispose();
             resultsPanel.dispose();
         },
@@ -4734,6 +4833,7 @@ export function createDesigner(container, opts = {}) {
             // write-back is a separate roadmap item, so only schema + session are enabled.
             sidebar: { schema: true, session: true },
             runUrl: apiBase + '/api/designer/run',
+            dagUrl: apiBase + '/api/designer/dag',
             connectionRef: opts.connectionRef || null,
             documentUri: opts.documentUri || 'portal-designer',
             editor: {

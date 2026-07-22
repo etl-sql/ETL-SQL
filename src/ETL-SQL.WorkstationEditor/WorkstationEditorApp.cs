@@ -48,6 +48,7 @@ public static class WorkstationEditorApp
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new WorkstationWorkspace(options.WorkspaceRoot, options.ReadOnly));
         builder.Services.AddSingleton<WorkstationAnalysisService>();
+        builder.Services.AddSingleton<ScriptDagProjectionService>();
         builder.Services.AddSingleton<IMetadataManager, MetadataManager>();
         builder.Services.AddSingleton<ILanguageService, GrammarLanguageService>();
         builder.Services.AddSingleton<WorkstationMetadataService>();
@@ -252,6 +253,9 @@ public static class WorkstationEditorApp
 
         app.MapPost("/api/analyze", async (AnalyzeRequest request, WorkstationAnalysisService analysis) =>
             Results.Json(await analysis.AnalyzeAsync(request), JsonOptions));
+
+        app.MapPost("/api/script/dag", (ScriptDagRequest request, ScriptDagProjectionService dag) =>
+            Results.Json(dag.Project(request.Script), JsonOptions));
 
         app.MapPost("/api/complete", async (CompleteRequest request, WorkstationCompletionService completion, CancellationToken cancellationToken) =>
             Results.Json(await completion.CompleteAsync(request, cancellationToken), JsonOptions));

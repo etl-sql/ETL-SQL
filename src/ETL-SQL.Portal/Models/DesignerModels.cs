@@ -14,6 +14,10 @@ public record AnalyzeDesignerRequest(
 
 public record AnalyzeDesignerResponse(IReadOnlyList<AnalysisDiagnostic> Diagnostics);
 
+public record ScriptDagRequest(
+    string Script,
+    string? DocumentUri = null);
+
 public record CompleteDesignerRequest(
     string Script,
     int Line,

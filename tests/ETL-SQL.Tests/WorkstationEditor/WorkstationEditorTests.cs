@@ -145,6 +145,30 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task ScriptDag_ReturnsDesignTimeFlow()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var dag = new HttpRequestMessage(HttpMethod.Post, "/api/script/dag");
+        dag.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        dag.Content = JsonContent.Create(new ScriptDagRequest(
+            "CREATE CONNECTION m AS MOCKDB();\nSELECT UserID INTO #staging FROM m.Users;",
+            "pipeline.etlsql"));
+
+        var response = await client.SendAsync(dag);
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"parsed\":true", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CONNECT m", body, StringComparison.Ordinal);
+        Assert.Contains("SELECT INTO #staging", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Completion_ReturnsLanguageSuggestions()
     {
         using var temp = new TempWorkspace();

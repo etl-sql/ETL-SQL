@@ -52,3 +52,5 @@ public sealed class WorkstationAnalysisService(
 public sealed record AnalyzeRequest(string? Script, string? DocumentUri);
 
 public sealed record AnalyzeResponse(IReadOnlyList<AnalysisDiagnostic> Diagnostics);
+
+public sealed record ScriptDagRequest(string? Script, string? DocumentUri);

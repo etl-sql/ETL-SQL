@@ -64,6 +64,7 @@ internal static class EditorShell
         showSidebar: true,
         runUrl: '/api/run',
         previewApiUrl: '/api/preview',
+        dagUrl: '/api/script/dag',
         authFetch,
         onExit: async () => {
           if (confirm('Stop Workstation Editor process and exit?')) {
