@@ -86,7 +86,7 @@ public class ProcessJobExecutorChaosTests
             // Proves the run ended on its own timeout/cancellation rather than the child finishing.
             // Anything well under the 120s child is conclusive, so the bound is generous enough to
             // survive a CPU-starved full-suite run without weakening what it asserts.
-            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60,
+            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60, // flaky-time-bound-ok: 60s is far below the 120s child sleep being ruled out
                 "The run should have ended on timeout/cancellation, not by the child completing.");
             Assert.Equal(0, tracker.ActiveCount);
             Assert.False(File.Exists(pidStore) && File.ReadAllText(pidStore).Contains("etlsql-job-", StringComparison.OrdinalIgnoreCase));
@@ -131,7 +131,7 @@ public class ProcessJobExecutorChaosTests
             // Proves the run ended on its own timeout/cancellation rather than the child finishing.
             // Anything well under the 120s child is conclusive, so the bound is generous enough to
             // survive a CPU-starved full-suite run without weakening what it asserts.
-            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60,
+            Assert.True((DateTime.UtcNow - started).TotalSeconds < 60, // flaky-time-bound-ok: 60s is far below the 120s child sleep being ruled out
                 "The run should have ended on timeout/cancellation, not by the child completing.");
             Assert.Equal(0, tracker.ActiveCount);
             Assert.False(File.Exists(pidStore) && File.ReadAllText(pidStore).Contains("etlsql-job-", StringComparison.OrdinalIgnoreCase));

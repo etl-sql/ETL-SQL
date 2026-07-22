@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Guardrail against the "sleep-then-assert" flaky-test anti-pattern (v0.15.0 debt).
+// Guardrail against timing-sensitive flaky-test anti-patterns (v0.15.0/v0.17.0 debt).
 //
 // Flags `await Task.Delay(<literal ms>)` in test files that is the SOLE synchronization before a
 // POSITIVE assertion (asserting an async action *did* happen) — the shape that flaked in CI
@@ -12,6 +12,11 @@
 // A site that is genuinely fine but still matches can be annotated on the delay line with a
 // trailing `// flaky-delay-ok: <reason>` comment; the check then skips it (and requires a reason).
 //
+// Also flags unreviewed wall-clock upper-bound assertions such as `ElapsedMilliseconds < 1000`.
+// These can be valid when they distinguish cancellation/timeout from a much longer competing
+// operation, but they need enough headroom for saturated CI. Annotate reviewed assertions with
+// `// flaky-time-bound-ok: <reason>`.
+//
 // Reference fix patterns: SchedulerServiceTests.WaitUntilAsync, LinterTests ConcurrencyTracker.
 //
 // Usage: node scripts/check-flaky-test-delays.mjs   (exit 1 if any un-annotated candidate is found)
@@ -23,6 +28,9 @@ const POSITIVE_ASSERT = /(Assert\.(NotNull|True|Equal|Contains|Single|NotEmpty|I
 const NEGATIVE_ASSERT = /(Assert\.(Empty|Null|False|DoesNotContain|ThrowsAsync|Throws)\b|Times\.Never)/;
 const LOOP_HINT = /\b(while|for|foreach|do)\s*[\(\{]|\b(deadline|Stopwatch|ElapsedMilliseconds|TickCount|DateTime(Offset)?\.(Now|UtcNow))\b/;
 const DELAY = /await\s+Task\.Delay\(\s*\d/; // literal-ms delay only
+const TIME_UPPER_BOUND = /Assert\.True\([^;\n]*(?:Elapsed(?:Milliseconds)?|Total(?:Seconds|Milliseconds))[^;\n]*(?:<|<=)|Assert\.True\([^;\n]*(?:<|<=)[^;\n]*(?:Elapsed(?:Milliseconds)?|Total(?:Seconds|Milliseconds))/;
+const FRESHNESS_BOUND = /\b(DateTime(?:Offset)?\.(?:Now|UtcNow)|LastRun|CreatedDate|Updated(?:At|Date)|Timestamp)\b/;
+const PERF_OR_SCALE_TEST = /[\\/]ETL-SQL\.PerfTests[\\/]|[\\/]Scale[\\/]|[\\/]Hardening[\\/]Performance[\\/]/;
 
 const files = [];
 for await (const f of glob('tests/**/*.cs')) files.push(f);
@@ -52,15 +60,32 @@ for (const file of files.sort()) {
       findings.push({ file, line: i + 1, text: line.trim() });
     }
   }
+
+  if (PERF_OR_SCALE_TEST.test(file)) continue;
+
+  for (let i = 0; i < lines.length; i++) {
+    const statementLines = [];
+    for (let j = i; j < Math.min(lines.length, i + 3); j++) {
+      statementLines.push(lines[j]);
+      if (lines[j].includes(';')) break;
+    }
+
+    const statement = statementLines.join(' ');
+    if (!TIME_UPPER_BOUND.test(statement)) continue;
+    if (FRESHNESS_BOUND.test(statement)) continue;
+    if (/\/\/\s*flaky-time-bound-ok:\s*\S/.test(statement)) continue;
+
+    findings.push({ file, line: i + 1, text: lines[i].trim() });
+  }
 }
 
 if (findings.length === 0) {
-  console.log('OK: no sleep-then-assert flaky-test candidates found.');
+  console.log('OK: no timing-sensitive flaky-test candidates found.');
   process.exit(0);
 }
 
-console.error(`Found ${findings.length} sleep-then-assert candidate(s). Convert to poll-for-condition`);
-console.error('(see SchedulerServiceTests.WaitUntilAsync), or annotate the delay line with');
-console.error('`// flaky-delay-ok: <reason>` if it is genuinely safe.\n');
+console.error(`Found ${findings.length} timing-sensitive flaky-test candidate(s). Convert to an`);
+console.error('observable condition where possible, widen the discriminating gap, or annotate reviewed');
+console.error('sites with `// flaky-delay-ok: <reason>` or `// flaky-time-bound-ok: <reason>`.\n');
 for (const f of findings) console.error(`  ${f.file}:${f.line}  ${f.text}`);
 process.exit(1);

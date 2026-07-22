@@ -32,11 +32,14 @@ namespace ETL_SQL.Tests.UI
 
             var sw = Stopwatch.StartNew();
             while (!e.IsRunning && sw.ElapsedMilliseconds < 3000) await Task.Delay(10);
-            Assert.True(e.IsRunning); // the run is in flight, not completed
+            Assert.True(e.IsRunning, "The run should enter the running state before cancellation.");
 
             e.CancelRun();           // cancels the token → WAITFOR's Task.Delay throws
+            var cancelSw = Stopwatch.StartNew();
             await run;               // completes promptly once cancelled (well under the 30s delay)
-            Assert.True(sw.ElapsedMilliseconds < 10_000);
+            cancelSw.Stop();
+            Assert.True(cancelSw.ElapsedMilliseconds < 10_000, // flaky-time-bound-ok: distinguishes cancellation from the 30s WAITFOR delay
+                $"Cancellation should complete well before the 30s WAITFOR delay; actual {cancelSw.ElapsedMilliseconds}ms.");
             Assert.False(e.IsRunning);
 
             // The editor is reusable after a cancellation: a fresh run completes normally.
@@ -54,7 +57,7 @@ namespace ETL_SQL.Tests.UI
             var first = e.RunScript();
             var sw = Stopwatch.StartNew();
             while (!e.IsRunning && sw.ElapsedMilliseconds < 3000) await Task.Delay(10);
-            Assert.True(e.IsRunning);
+            Assert.True(e.IsRunning, "The first run should enter the running state before the second run is attempted.");
 
             var second = e.RunScript();    // must be rejected while the first is running
             Assert.True(second.IsCompleted);
