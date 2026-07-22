@@ -112,6 +112,15 @@ changes safer.
       into catalog search. Add tests for complete metadata, missing metadata, stale calculations, and
       permission-safe rendering.
 
+- [ ] **Report Owner Access Approval Queue UI & 1-Click Grant.**
+      Add an access request inbox view for report owners and admins (`GET /api/reports/access-requests/pending`) allowing owners to view pending user access requests and approve (`POST /api/reports/access-requests/{id}/approve`) or deny them with 1-click, automatically updating folder/report ACLs upon approval.
+
+- [ ] **Interactive Tag Badge Filtering.**
+      Make report header tag badges (`🏷️ #sales`) interactive in `report-runtime.js`, so clicking a tag badge automatically navigates to a catalog search filtered by that tag.
+
+- [ ] **"Request Data Refresh" Button on Stale Reports.**
+      Add an interactive "Request Data Refresh" button on report headers when the freshness indicator displays `Stale`, allowing business consumers to trigger an on-demand snapshot build or notify the report owner via audit outbox.
+
 ### Data Stewardship: Protected Data Audit Workflow
 
 - [x] **Script-first protected-data audit command.**
