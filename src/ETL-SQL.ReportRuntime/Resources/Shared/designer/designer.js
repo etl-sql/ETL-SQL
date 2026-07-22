@@ -2699,6 +2699,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     toggleThemeBtn?.addEventListener('click', () => {
         const isDark = document.body.classList.toggle('theme-dark');
         localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
+        renderCanvas();
     });
 
     const openDirBtn = container.querySelector('[data-open-directory]');
@@ -3316,6 +3317,7 @@ export function createDesigner(container, opts = {}) {
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
         <button class="btn btn-sm" id="dsgn-tidy" title="Compact empty row gaps and tidy layout">🧹 Tidy Layout</button>
+        <button class="btn btn-sm" id="dsgn-theme-toggle" title="Toggle dark/light theme mode">🌓 Theme</button>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
         <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
@@ -3584,9 +3586,10 @@ export function createDesigner(container, opts = {}) {
             try {
                 const isDark = document.body.classList.contains('theme-dark');
                 let chart = window.echarts.getInstanceByDom(bodyEl);
-                if (!chart) {
-                    chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
+                if (chart) {
+                    chart.dispose();
                 }
+                chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
                 
                 const sample = rows[0] || [];
                 const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
@@ -4450,6 +4453,11 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
     topbar.querySelector('#dsgn-tidy')?.addEventListener('click', tidyLayout);
+    topbar.querySelector('#dsgn-theme-toggle')?.addEventListener('click', () => {
+        const isDark = document.body.classList.toggle('theme-dark');
+        localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
+        renderCanvas();
+    });
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
         scriptOverlay.classList.contains('active') ? closeScript() : openScript());
