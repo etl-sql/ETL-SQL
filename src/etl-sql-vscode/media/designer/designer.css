@@ -922,6 +922,80 @@ body.vscode-dark .cm-editor .cm-line::selection {
     z-index: 10;
 }
 
+.etlsql-theme-select {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: var(--portal-radius-sm, 6px) !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    outline: none !important;
+    transition: background-color 0.15s, border-color 0.15s !important;
+    height: 30px !important;
+}
+.etlsql-theme-select:hover {
+    background: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.etlsql-theme-select option {
+    background: #182336 !important;
+    color: #ffffff !important;
+}
+
+/* Modern flat-chrome button style for the report builder topbar */
+.etlsql-designer-topbar .btn {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #cbd5e1 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: var(--portal-radius-sm, 6px) !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s !important;
+    height: 30px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.etlsql-designer-topbar .btn:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.etlsql-designer-topbar .btn.btn-primary {
+    background: var(--portal-accent, #2563eb) !important;
+    color: #ffffff !important;
+    border-color: var(--portal-accent, #2563eb) !important;
+    font-weight: 600 !important;
+}
+
+.etlsql-designer-topbar .btn.btn-primary:hover {
+    background: var(--portal-accent-hover, #1d4ed8) !important;
+    border-color: var(--portal-accent-hover, #1d4ed8) !important;
+}
+
+.etlsql-designer-topbar .etlsql-dsgn-name-input {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: var(--portal-radius-sm, 6px) !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    height: 30px !important;
+    outline: none !important;
+    transition: background-color 0.15s, border-color 0.15s !important;
+}
+
+.etlsql-designer-topbar .etlsql-dsgn-name-input:focus {
+    border-color: var(--portal-accent, #2563eb) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
 .etlsql-designer-sidebar {
     grid-area: sidebar;
     overflow-y: auto;

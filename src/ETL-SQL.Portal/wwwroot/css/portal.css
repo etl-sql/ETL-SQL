@@ -62,6 +62,96 @@ body.theme-dark {
   --portal-topbar-active: rgba(255, 255, 255, .08);
 }
 
+body.theme-midnight {
+  --portal-bg: #090d16;
+  --portal-bg-soft: #0f172a;
+  --portal-surface: #1e293b;
+  --portal-surface-subtle: #0f172a;
+  --portal-surface-raised: #1e293b;
+  --portal-text: #f8fafc;
+  --portal-text-soft: #cbd5e1;
+  --portal-muted: #64748b;
+  --portal-border: #334155;
+  --portal-border-soft: #1e293b;
+  --portal-accent: #38bdf8;
+  --portal-accent-hover: #7dd3fc;
+  --portal-accent-soft: rgba(56, 189, 248, 0.15);
+  --portal-success: #34d399;
+  --portal-success-soft: rgba(52, 211, 153, 0.15);
+  --portal-warning: #fbbf24;
+  --portal-warning-soft: rgba(251, 191, 36, 0.15);
+  --portal-danger: #f87171;
+  --portal-danger-hover: #fca5a5;
+  --portal-danger-soft: rgba(248, 113, 113, 0.15);
+  --portal-focus-ring: #38bdf8;
+  --portal-focus: rgba(56, 189, 248, 0.36);
+  --portal-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --portal-shadow-md: 0 14px 30px rgba(0, 0, 0, .5);
+  --portal-topbar: #030712;
+  --portal-topbar-muted: #9ca3af;
+  --portal-topbar-active: rgba(255, 255, 255, .08);
+}
+
+body.theme-dracula {
+  --portal-bg: #1e1f29;
+  --portal-bg-soft: #282a36;
+  --portal-surface: #343746;
+  --portal-surface-subtle: #282a36;
+  --portal-surface-raised: #343746;
+  --portal-text: #f8f8f2;
+  --portal-text-soft: #bd93f9;
+  --portal-muted: #6272a4;
+  --portal-border: #44475a;
+  --portal-border-soft: #282a36;
+  --portal-accent: #ff79c6;
+  --portal-accent-hover: #ff92df;
+  --portal-accent-soft: rgba(255, 121, 198, 0.15);
+  --portal-success: #50fa7b;
+  --portal-success-soft: rgba(80, 250, 123, 0.15);
+  --portal-warning: #f1fa8c;
+  --portal-warning-soft: rgba(241, 250, 140, 0.15);
+  --portal-danger: #ff5555;
+  --portal-danger-hover: #ff6e6e;
+  --portal-danger-soft: rgba(255, 85, 85, 0.15);
+  --portal-focus-ring: #ff79c6;
+  --portal-focus: rgba(255, 121, 198, 0.36);
+  --portal-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --portal-shadow-md: 0 14px 30px rgba(0, 0, 0, .5);
+  --portal-topbar: #191a21;
+  --portal-topbar-muted: #bd93f9;
+  --portal-topbar-active: rgba(255, 255, 255, .08);
+}
+
+body.theme-nord {
+  --portal-bg: #2e3440;
+  --portal-bg-soft: #3b4252;
+  --portal-surface: #434c5e;
+  --portal-surface-subtle: #3b4252;
+  --portal-surface-raised: #434c5e;
+  --portal-text: #eceff4;
+  --portal-text-soft: #d8dee9;
+  --portal-muted: #4c566a;
+  --portal-border: #4c566a;
+  --portal-border-soft: #3b4252;
+  --portal-accent: #88c0d0;
+  --portal-accent-hover: #8fbcbb;
+  --portal-accent-soft: rgba(136, 192, 208, 0.15);
+  --portal-success: #a3be8c;
+  --portal-success-soft: rgba(163, 190, 140, 0.15);
+  --portal-warning: #ebcb8b;
+  --portal-warning-soft: rgba(235, 203, 139, 0.15);
+  --portal-danger: #bf616a;
+  --portal-danger-hover: #d08770;
+  --portal-danger-soft: rgba(191, 97, 106, 0.15);
+  --portal-focus-ring: #88c0d0;
+  --portal-focus: rgba(136, 192, 208, 0.36);
+  --portal-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --portal-shadow-md: 0 14px 30px rgba(0, 0, 0, .5);
+  --portal-topbar: #2e3440;
+  --portal-topbar-muted: #d8dee9;
+  --portal-topbar-active: rgba(255, 255, 255, .08);
+}
+
 body.theme-dark .login-wrap {
   background: linear-gradient(180deg, #0b0f19 0%, #111827 100%);
 }

@@ -3317,7 +3317,13 @@ export function createDesigner(container, opts = {}) {
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
         <button class="btn btn-sm" id="dsgn-tidy" title="Compact empty row gaps and tidy layout">🧹 Tidy Layout</button>
-        <button class="btn btn-sm" id="dsgn-theme-toggle" title="Toggle dark/light theme mode">🌓 Theme</button>
+        <select id="dsgn-theme-select" class="etlsql-theme-select" title="Select canvas theme">
+            <option value="light">☀️ Light</option>
+            <option value="dark">🌑 Dark</option>
+            <option value="midnight">🌌 Midnight</option>
+            <option value="dracula">🧛 Dracula</option>
+            <option value="nord">❄️ Nord</option>
+        </select>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
         <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
@@ -3327,6 +3333,7 @@ export function createDesigner(container, opts = {}) {
     `;
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
+    topbar.querySelector('#dsgn-theme-select').value = localStorage.getItem('portal-theme') || 'light';
     if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
 
     function setScmStatus(text, kind) {
@@ -3584,7 +3591,10 @@ export function createDesigner(container, opts = {}) {
         // Render live chart via ECharts
         if (window.echarts && typeof window.echarts.init === 'function') {
             try {
-                const isDark = document.body.classList.contains('theme-dark');
+                const isDark = document.body.classList.contains('theme-dark') || 
+                               document.body.classList.contains('theme-midnight') || 
+                               document.body.classList.contains('theme-dracula') || 
+                               document.body.classList.contains('theme-nord');
                 let chart = window.echarts.getInstanceByDom(bodyEl);
                 if (chart) {
                     chart.dispose();
@@ -4453,9 +4463,13 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
     topbar.querySelector('#dsgn-tidy')?.addEventListener('click', tidyLayout);
-    topbar.querySelector('#dsgn-theme-toggle')?.addEventListener('click', () => {
-        const isDark = document.body.classList.toggle('theme-dark');
-        localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
+    topbar.querySelector('#dsgn-theme-select')?.addEventListener('change', e => {
+        const themes = ['light', 'dark', 'midnight', 'dracula', 'nord'];
+        const nextTheme = e.target.value;
+        
+        themes.forEach(t => document.body.classList.remove('theme-' + t));
+        document.body.classList.add('theme-' + nextTheme);
+        localStorage.setItem('portal-theme', nextTheme);
         renderCanvas();
     });
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
