@@ -111,7 +111,8 @@ public sealed class DesignerScriptGenerationService
         }
         else
         {
-            sb.AppendLine($"CREATE VISUAL {name} AS {v.Type.ToUpper()} (");
+            var typeKeyword = GetVisualTypeKeyword(v.Type);
+            sb.AppendLine($"CREATE VISUAL {name} AS {typeKeyword} (");
             if (!string.IsNullOrWhiteSpace(v.Title))
                 sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
             if (!string.IsNullOrWhiteSpace(v.Dataset))
@@ -149,17 +150,13 @@ public sealed class DesignerScriptGenerationService
             if (interactions.Count > 0)
                 sb.AppendLine($"    INTERACTIONS ({string.Join(", ", interactions)}),");
 
-            var layoutOpts = new List<string>();
-            if (v.GridColSpan > 0 && v.GridColSpan != 12)
-                layoutOpts.Add($"COLSPAN = {v.GridColSpan}");
-            if (v.GridRowSpan > 0 && v.GridRowSpan != 4)
-                layoutOpts.Add($"ROWSPAN = {v.GridRowSpan}");
+            var styleOpts = new List<string>();
             if (v.Options != null && v.Options.TryGetValue("WIDTH", out var w) && !string.IsNullOrWhiteSpace(w))
-                layoutOpts.Add($"WIDTH = '{EscapeStr(w)}'");
+                styleOpts.Add($"WIDTH = '{EscapeStr(w)}'");
             if (v.Options != null && v.Options.TryGetValue("HEIGHT", out var h) && !string.IsNullOrWhiteSpace(h))
-                layoutOpts.Add($"HEIGHT = '{EscapeStr(h)}'");
-            if (layoutOpts.Count > 0)
-                sb.AppendLine($"    LAYOUT ({string.Join(", ", layoutOpts)}),");
+                styleOpts.Add($"HEIGHT = '{EscapeStr(h)}'");
+            if (styleOpts.Count > 0)
+                sb.AppendLine($"    STYLE ({string.Join(", ", styleOpts)}),");
 
             sb.Append(");");
         }
@@ -242,4 +239,18 @@ public sealed class DesignerScriptGenerationService
     private static string EscapeStr(string s) => s.Replace("'", "''");
 
     private static string EscapeStructure(string s) => s.Replace("'", "''");
+
+    private static string GetVisualTypeKeyword(string type)
+    {
+        var upper = (type ?? "").ToUpperInvariant();
+        return upper switch
+        {
+            "HORIZONTALBAR" => "HBAR",
+            "HEATMAP" => "HEATMAP",
+            "DATEPICKER" => "DATEPICKER",
+            "RELDATEPICKER" => "RELDATEPICKER",
+            "MULTISELECT" => "MULTISELECT",
+            _ => upper
+        };
+    }
 }

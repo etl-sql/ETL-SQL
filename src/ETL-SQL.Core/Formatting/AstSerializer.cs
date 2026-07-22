@@ -986,6 +986,10 @@ public static class AstSerializer
             sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => $"{m.Role} = {m.Column}"))} ),");
         if (s.Options.Count > 0)
             sb.AppendLine($"    OPTIONS ( {string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
+        if (s.StyleName != null)
+            sb.AppendLine($"    STYLE = {s.StyleName},");
+        else if (s.Styles.Count > 0)
+            sb.AppendLine($"    STYLE ( {string.Join(", ", s.Styles.Select(st => $"{st.Key} = '{st.Value.Replace("'", "''")}'"))} ),");
         foreach (var axis in s.AxisOptions)
             sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.Actions.Count > 0)

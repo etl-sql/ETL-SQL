@@ -239,6 +239,11 @@ public sealed class DesignerAnalysisService
             o => o.Value,
             StringComparer.OrdinalIgnoreCase);
 
+        foreach (var style in v.Styles)
+        {
+            options[style.Key.ToUpper()] = style.Value;
+        }
+
         foreach (var act in v.Actions)
         {
             options[$"action:{act.Trigger.ToUpper()}"] = act.ToSql();
