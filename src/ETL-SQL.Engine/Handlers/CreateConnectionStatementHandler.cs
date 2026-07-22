@@ -136,7 +136,7 @@ public class CreateConnectionStatementHandler(
         }
 
         IDataSource ds;
-        if (!Path.IsPathRooted(target) && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase) || target.StartsWith("mock:", StringComparison.OrdinalIgnoreCase)))
+        if (context.IsMockMode || (!Path.IsPathRooted(target) && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase) || target.StartsWith("mock:", StringComparison.OrdinalIgnoreCase))))
         {
             var mock = _connectorRegistry.GetConnector("MOCKDB");
             if (mock != null) connector = mock;

@@ -376,6 +376,12 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     /// </summary>
     bool InteractiveMode { get; set; }
 
+    /// <summary>
+    /// Whether the engine is in dry-run mock mode for testing and preview.
+    /// Redirects remote connections to mock database providers.
+    /// </summary>
+    bool IsMockMode { get; set; }
+
     IEvaluationContext EvaluationContext => this;
     IDataContext DataContext => this;
     IQueryContext QueryContext => this;

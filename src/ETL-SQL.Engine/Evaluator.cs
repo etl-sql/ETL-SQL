@@ -300,6 +300,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// <summary>Whether the engine is in interactive mode (e.g. Notebooks/REPL).</summary>
     public bool InteractiveMode { get; set; } = false;
 
+    /// <summary>Whether the engine is in dry-run mock mode for testing and preview.</summary>
+    public bool IsMockMode { get; set; } = false;
+
     public IServiceProvider ServiceProvider => _serviceProvider;
 
     public int JoinSpillThreshold { get => _options.JoinSpillThreshold; set => _options.JoinSpillThreshold = value; }

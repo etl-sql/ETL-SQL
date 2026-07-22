@@ -515,9 +515,9 @@ public class SystemParser : ParserComponent
         {
             stmt = new ShowViewsStatement();
         }
-        else if (Match(TokenType.COLUMNS))
+        else if (Match(TokenType.COLUMNS) || Match(TokenType.SCHEMA) || MatchIdentifier("SCHEMA"))
         {
-            Consume(TokenType.FOR, "Expected FOR after SHOW COLUMNS");
+            Consume(TokenType.FOR, "Expected FOR after SHOW COLUMNS or SHOW SCHEMA");
             stmt = new ShowColumnsStatement(ParseTableReference());
         }
         else if (Match(TokenType.VARIABLES) || (_parser.Current.Type == TokenType.LOCAL && _parser.Peek.Type == TokenType.VARIABLES))

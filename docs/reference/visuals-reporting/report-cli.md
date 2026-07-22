@@ -30,6 +30,8 @@ Flags:
 |------|---------|-------------|
 | `--output`, `-o` | `<script>.report.<ext>` | Override the output file path. |
 | `--format`, `-f` | `md` | Output format: `md`, `json`, or `pdf`. |
+| `--mock` | `false` | Run evaluation in dry-run mock mode using stubbed connection data. |
+| `--json` | `false` | Output build results and diagnostics in structured JSON format. |
 
 ### PDF export modes
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -91,6 +91,29 @@ SHOW COLUMNS FOR #employees;";
             Assert.Contains("id", colNames);
             Assert.Contains("name", colNames);
             Assert.Contains("salary", colNames);
+        }
+
+        [Fact]
+        public async Task ShowSchema_ForTempTable_ReturnsColumnsAndMetadata()
+        {
+            // Syntax: SHOW SCHEMA FOR <table>
+            var script = @"
+CREATE TABLE #products (id INT, name VARCHAR(100), price DECIMAL);
+SHOW SCHEMA FOR #products;";
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse(script));
+
+            Assert.NotNull(eval.LastResult);
+            var cols = eval.LastResult!.ColumnNames.ToArray();
+            Assert.Contains("ColumnName", cols);
+            Assert.Contains("DataType", cols);
+            Assert.Contains("IsNullable", cols);
+            Assert.Contains("Tags", cols);
+
+            var colNames = eval.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+            Assert.Contains("id", colNames);
+            Assert.Contains("name", colNames);
+            Assert.Contains("price", colNames);
         }
 
         [Fact]

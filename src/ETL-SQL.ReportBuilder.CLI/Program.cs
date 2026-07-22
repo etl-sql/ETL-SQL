@@ -48,6 +48,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             string? outputPath = null;
             string format = "md";
             bool isInteraction = false;
+            bool isMock = false;
             var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var runPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -62,6 +63,12 @@ namespace ETL_SQL.ReportBuilder.CLI
                     case "--format":
                     case "-f":
                         format = i + 1 < args.Length ? args[++i].ToLowerInvariant() : "md";
+                        break;
+                    case "--mock":
+                        isMock = true;
+                        break;
+                    case "--json":
+                        format = "json";
                         break;
                     case "--interaction":
                         isInteraction = true;
@@ -94,7 +101,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             // and the "Selection" to be the state with current parameters.
             // However, the CLI doesn't have a "warm" session.
             // So we treat the provided parameters as the interaction values if it's an interaction.
-            var (evaluator, err) = await EvaluateScriptFile(scriptPath, isInteraction ? null : parameters);
+            var (evaluator, err) = await EvaluateScriptFile(scriptPath, isInteraction ? null : parameters, isMock);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
             var builder = new ManifestBuilder(evaluator);
@@ -257,7 +264,7 @@ namespace ETL_SQL.ReportBuilder.CLI
         /// Returns the evaluator (with populated VisualDefinitions etc.) on success,
         /// or (null, error-message) on failure.
         /// </summary>
-        private static async Task<(Evaluator? evaluator, string? error)> EvaluateScriptFile(string scriptPath, Dictionary<string, string>? parameters = null)
+        private static async Task<(Evaluator? evaluator, string? error)> EvaluateScriptFile(string scriptPath, Dictionary<string, string>? parameters = null, bool isMock = false)
         {
             string scriptText;
             try { scriptText = await File.ReadAllTextAsync(scriptPath); }
@@ -271,6 +278,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             var provider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
             evaluator.RedirectOutput = true;
+            evaluator.IsMockMode = isMock;
 
             // Inject parameters before evaluation
             if (parameters != null)
@@ -527,6 +535,8 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("Options:");
             Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf).");
             Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
+            Console.WriteLine("  --mock            Run evaluation in dry-run mock mode using stubbed connection data.");
+            Console.WriteLine("  --json            Output build results/diagnostics in structured JSON format.");
             Console.WriteLine("  --parameter, -p   Pass a variable to the script (e.g. -p @region=West).");
             Console.WriteLine("  --run-page        Mark a paginated page as run so AUTO/ON_RUN result visuals load.");
             Console.WriteLine("  --manifest, -m    Path to reports.json for multi-report hosting.");

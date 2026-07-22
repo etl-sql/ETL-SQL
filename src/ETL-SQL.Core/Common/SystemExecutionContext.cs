@@ -125,6 +125,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public bool IsPersistentSession { get; set; }
     public bool IsResuming { get; set; }
     public bool InteractiveMode { get; set; }
+    public bool IsMockMode { get; set; }
     public List<object?>? Parameters { get; set; }
     public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
     public string ScriptHashPolicy { get; set; } = "Warn";

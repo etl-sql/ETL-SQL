@@ -28,13 +28,39 @@ public class ShowColumnsStatementHandler : IStatementHandler
         var table = new DataTable();
         table.AddColumn("ColumnName");
         table.AddColumn("DataType");
+        table.AddColumn("IsNullable");
+        table.AddColumn("Tags");
+
+        var inMemory = source as InMemoryDataSource;
 
         foreach (var col in columns)
         {
             var row = new Row();
             row["ColumnName"] = col;
-            // DataType info might not be available in all IDataSource implementations yet
-            row["DataType"] = "UNKNOWN";
+            string dataType = "UNKNOWN";
+            string isNullable = "TRUE";
+            string tags = "";
+
+            if (inMemory != null && inMemory.Schema.TryGetValue(col, out var colDef))
+            {
+                dataType = colDef.DataType ?? "VARCHAR";
+                isNullable = colDef.IsNullable ? "TRUE" : "FALSE";
+            }
+
+            if (context.LineageTracker != null)
+            {
+                var colLineage = context.LineageTracker.GetFullLineage().FirstOrDefault(l =>
+                    string.Equals(l.TargetTable, stmt.Table.ToSql(), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(l.TargetColumn, col, StringComparison.OrdinalIgnoreCase));
+                if (colLineage?.Metadata != null && colLineage.Metadata.Count > 0)
+                {
+                    tags = System.Text.Json.JsonSerializer.Serialize(colLineage.Metadata);
+                }
+            }
+
+            row["DataType"] = dataType;
+            row["IsNullable"] = isNullable;
+            row["Tags"] = tags;
             await table.AddRowAsync(row);
         }
 

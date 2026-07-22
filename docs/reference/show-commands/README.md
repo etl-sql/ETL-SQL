@@ -24,6 +24,7 @@
 | [SHOW REPORT HISTORY](show-report-history.md) | Displays portal report refresh and execution history rows for a named report. |
 | [SHOW REPORT](show-report.md) | Displays portal report metadata for a named report. |
 | [SHOW SAVED VIEWS FOR REPORT](show-saved-views.md) | Displays saved parameter views for a named portal report. |
+| [SHOW SCHEMA](show-schema.md) | Displays column names, data types, nullability, and tags for a table or dataset. |
 | [SHOW SHARE LINKS FOR REPORT](show-share-links.md) | Displays active portal share links for a named report. |
 | [SHOW SUBSCRIPTIONS](show-subscriptions.md) | Displays defined report subscriptions. |
 | [SHOW TABLES](show-tables.md) | Displays tables available on a connection or in the engine session. |
