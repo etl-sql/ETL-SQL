@@ -73,7 +73,7 @@ changes safer.
       Add a steward-focused Portal page or Lineage mode that combines protected inventory, missing
       metadata, stale protected assets, impact, and audit/outbox events into one workflow.
 
-- [ ] **Protected-data classifier suggestions.**
+- [x] **Protected-data classifier suggestions.**
       Add non-authoritative suggestions from column names, known patterns, source catalog metadata,
       and optional sampled values. Suggestions should create reviewable findings, not silently set
       `@pii`/`@classification`.

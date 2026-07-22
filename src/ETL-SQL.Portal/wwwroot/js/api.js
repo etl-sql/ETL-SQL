@@ -303,6 +303,9 @@ export const catalogApi = {
     protectedData({ limit = 100 } = {}) {
         return apiJson(`/api/catalog/protected-data?limit=${limit}`);
     },
+    protectedDataSuggestions({ limit = 100 } = {}) {
+        return apiJson(`/api/catalog/protected-data/suggestions?limit=${limit}`);
+    },
     impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 } = {}) {
         const p = new URLSearchParams({ kind, name, direction, depth, limit });
         if (column) p.set('column', column);

@@ -1882,6 +1882,7 @@ public sealed record ShowProtectedDataStatement : Statement
     public int? Limit { get; init; }
     public string? IntoTable { get; init; }
     public string? At { get; set; }
+    public bool Suggestions { get; init; }
 }
 
 public sealed record ShowVariablesStatement : Statement

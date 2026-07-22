@@ -305,6 +305,15 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(LineageProtectedData.FromHistory(entries).Take(limit));
             }).WithName("getLineageHistoryProtectedData");
 
+            app.MapGet("/api/lineage/history/protected-data/suggestions", async (HttpContext ctx,
+                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                limit = Math.Clamp(limit, 1, 1000);
+                var entries = await catalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000));
+                return Results.Ok(LineageProtectedData.SuggestFromHistory(entries).Take(limit));
+            }).WithName("getLineageHistoryProtectedDataSuggestions");
+
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
                 SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg) =>
             {

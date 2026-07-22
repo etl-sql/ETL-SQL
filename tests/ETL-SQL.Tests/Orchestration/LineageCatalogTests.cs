@@ -223,6 +223,50 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public void ProtectedDataSuggestions_FindReviewableFindingsWithoutChangingTags()
+        {
+            var now = DateTime.UtcNow;
+            var entries = new[]
+            {
+                new LineageHistoryEntry(
+                    1, now, "CustomerLoad", "scripts/customers.etlsql", "Customers", "EmailAddress",
+                    new[] { "crm.Customers" }, "SELECT",
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    "scripts/customers.etlsql", 12,
+                    new[] { "customer_email" }),
+                new LineageHistoryEntry(
+                    2, now, "PaymentLoad", "scripts/payments.etlsql", "Payments", "ExternalId",
+                    new[] { "pay.Cards" }, "SELECT",
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    "scripts/payments.etlsql", 14),
+                new LineageHistoryEntry(
+                    3, now, "FeedLoad", "scripts/feed.etlsql", "Feed", "ExternalId",
+                    new[] { "api.Feed" }, "SELECT",
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["format"] = "email" },
+                    "scripts/feed.etlsql", 20),
+                new LineageHistoryEntry(
+                    4, now, "OverrideLoad", "scripts/override.etlsql", "Overrides", "CustomerEmail",
+                    new[] { "crm.Customers" }, "SELECT",
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["pii"] = "false" },
+                    "scripts/override.etlsql", 30)
+            };
+
+            var samples = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Payments.ExternalId"] = new[] { "4111-1111-1111-1111" }
+            };
+
+            var suggestions = LineageProtectedData.SuggestFromHistory(entries, samples).ToList();
+
+            Assert.Contains(suggestions, s => s.TargetTable == "Customers" && s.SuggestedTag == "@pii" && s.EvidenceKind == "TargetColumn");
+            Assert.Contains(suggestions, s => s.TargetTable == "Payments" && s.SuggestedTag == "@pci" && s.EvidenceKind == "SampleValue");
+            Assert.Contains(suggestions, s => s.TargetTable == "Payments" && s.SuggestedTag == "@classification" && s.SuggestedValue == "restricted");
+            Assert.Contains(suggestions, s => s.TargetTable == "Feed" && s.SuggestedTag == "@pii" && s.EvidenceKind == "CatalogMetadata");
+            Assert.DoesNotContain(suggestions, s => s.TargetTable == "Overrides" && s.SuggestedTag == "@pii");
+            Assert.Equal("false", entries[3].Tags["pii"]);
+        }
+
+        [Fact]
         public async Task GetMissingMetadata_ReturnsLatestTargetsMissingRequiredStewardshipTags()
         {
             await _store.InitializeAsync();
@@ -480,6 +524,18 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("ProdPortal", protectedData.At);
             Assert.Equal(100, protectedData.Limit);
             Assert.Equal("#protected", protectedData.IntoTable);
+        }
+
+        [Fact]
+        public void Parser_ShowProtectedDataSuggestions_WithAtLimitAndInto_Parses()
+        {
+            var script = ParseScript("SHOW PROTECTED DATA SUGGESTIONS AT ProdPortal LIMIT 100 INTO #suggestions;");
+            var stmt = Assert.Single(script.Statements);
+            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
+            Assert.True(protectedData.Suggestions);
+            Assert.Equal("ProdPortal", protectedData.At);
+            Assert.Equal(100, protectedData.Limit);
+            Assert.Equal("#suggestions", protectedData.IntoTable);
         }
 
         [Fact]

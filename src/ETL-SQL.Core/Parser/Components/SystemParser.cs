@@ -905,9 +905,10 @@ public class SystemParser : ParserComponent
     private Statement ParseShowProtectedData(Token startToken)
     {
         ConsumeIdentifierValue("DATA", "Expected DATA after SHOW PROTECTED");
+        var suggestions = MatchIdentifier("SUGGESTIONS");
         string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
         var limit = ParseOptionalLimit();
-        return new ShowProtectedDataStatement { At = at, Limit = limit };
+        return new ShowProtectedDataStatement { At = at, Limit = limit, Suggestions = suggestions };
     }
 
     private LineageStatement ParseShowLineageCore(Token startToken)

@@ -1029,6 +1029,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW LINEAGE HISTORY FOR TAG`   | Lineage | Cross-run catalog: all entries whose tags match a key/value; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR MISSING TAGS` | Lineage | Cross-run stewardship catalog: newest targets missing owner/steward/contact/classification/quality metadata; supports `AT <connection>` |
 | `SHOW PROTECTED DATA` | Lineage | Cross-run protected-data audit for PII/PHI/PCI/sensitive/confidential/restricted lineage; supports `AT <connection>` |
+| `SHOW PROTECTED DATA SUGGESTIONS` | Lineage | Reviewable protected-data classifier findings from names, metadata hints, and supported samples; supports `AT <connection>` |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
 | `SHOW BUNDLES`           | Orch  | Alias for `SHOW PUBLISHED BUNDLES` |
 | `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |

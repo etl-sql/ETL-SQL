@@ -360,13 +360,17 @@ Returns the newest catalog targets missing one or more required stewardship tags
 ```sql
 -- Local catalog
 SHOW PROTECTED DATA LIMIT 100 INTO #protected;
+SHOW PROTECTED DATA SUGGESTIONS LIMIT 100 INTO #protected_review;
 
 -- Remote Orchestrator or Portal
 SHOW PROTECTED DATA AT ProdOrch LIMIT 100 INTO #protected;
 SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;
+SHOW PROTECTED DATA SUGGESTIONS AT ProdPortal LIMIT 100 INTO #protected_review;
 ```
 
 Returns protected lineage entries from the local or remote lineage catalog. A row is protected when it has a truthy `@pii`, `@phi`, `@pci`, or `@sensitive` tag, or `@classification` is `confidential` or `restricted`. Result columns include `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `ProtectionTags`, `Owner`, `Steward`, `Contact`, `Domain`, `Classification`, `Quality`, `Tags`, `SourceFile`, and `Line`.
+
+Use `SHOW PROTECTED DATA SUGGESTIONS` for non-authoritative review findings. Suggestions come from target/source column names, catalog metadata such as `@format` or `@semantic_type`, and supported sampled-value callers. The command never writes or changes tags. Result columns include `SuggestedTag`, `SuggestedValue`, `Confidence`, `EvidenceKind`, `Evidence`, `Reason`, and `ExistingTags` so a steward can decide whether to add tags in source-controlled scripts.
 
 References:
 - [Specialized Operations](../../../administration/platform/README.md)

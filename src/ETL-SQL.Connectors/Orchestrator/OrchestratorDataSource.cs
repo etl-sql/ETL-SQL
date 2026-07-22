@@ -332,15 +332,19 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task FetchProtectedDataAsync(ShowProtectedDataStatement stmt, IExecutionContext context)
         {
-            var url = $"api/lineage/history/protected-data?limit={stmt.Limit ?? 100}";
+            var path = stmt.Suggestions ? "api/lineage/history/protected-data/suggestions" : "api/lineage/history/protected-data";
+            var url = $"{path}?limit={stmt.Limit ?? 100}";
             var resp = await SendHttpAsync(() => _http.GetAsync(url));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
                 throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
             }
-            var entries = await resp.Content.ReadFromJsonAsync<ProtectedLineageHistoryEntry[]>(_json) ?? [];
-            var table = await BuildProtectedDataTableAsync(entries);
+            var table = stmt.Suggestions
+                ? await BuildProtectedDataSuggestionsTableAsync(
+                    await resp.Content.ReadFromJsonAsync<ProtectedDataSuggestionEntry[]>(_json) ?? [])
+                : await BuildProtectedDataTableAsync(
+                    await resp.Content.ReadFromJsonAsync<ProtectedLineageHistoryEntry[]>(_json) ?? []);
             await WriteResultAsync(table, stmt.IntoTable, context);
         }
 
@@ -409,6 +413,49 @@ namespace ETL_SQL.Connectors.Orchestrator
                 row["Classification"] = e.Classification;
                 row["Quality"] = e.Quality;
                 row["Tags"] = JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = e.Line;
+                await table.AddRowAsync(row);
+            }
+            return table;
+        }
+
+        private static async Task<DataTable> BuildProtectedDataSuggestionsTableAsync(ProtectedDataSuggestionEntry[] entries)
+        {
+            var table = new DataTable();
+            table.AddColumn("Id");
+            table.AddColumn("RunAt");
+            table.AddColumn("JobName");
+            table.AddColumn("TargetTable");
+            table.AddColumn("TargetColumn");
+            table.AddColumn("SourceTables");
+            table.AddColumn("SourceColumns");
+            table.AddColumn("SuggestedTag");
+            table.AddColumn("SuggestedValue");
+            table.AddColumn("Confidence");
+            table.AddColumn("EvidenceKind");
+            table.AddColumn("Evidence");
+            table.AddColumn("Reason");
+            table.AddColumn("ExistingTags");
+            table.AddColumn("SourceFile");
+            table.AddColumn("Line");
+            foreach (var e in entries)
+            {
+                var row = new Row();
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["SourceColumns"] = string.Join(", ", e.SourceColumns);
+                row["SuggestedTag"] = e.SuggestedTag;
+                row["SuggestedValue"] = e.SuggestedValue;
+                row["Confidence"] = e.Confidence;
+                row["EvidenceKind"] = e.EvidenceKind;
+                row["Evidence"] = e.Evidence;
+                row["Reason"] = e.Reason;
+                row["ExistingTags"] = JsonSerializer.Serialize(e.ExistingTags);
                 row["SourceFile"] = e.SourceFile;
                 row["Line"] = e.Line;
                 await table.AddRowAsync(row);

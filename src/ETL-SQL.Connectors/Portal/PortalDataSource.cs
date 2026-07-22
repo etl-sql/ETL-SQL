@@ -766,7 +766,8 @@ namespace ETL_SQL.Connectors.Portal
         private async Task ShowProtectedDataAsync(ShowProtectedDataStatement stmt, IExecutionContext context)
         {
             var limit = stmt.Limit ?? 100;
-            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/catalog/protected-data?limit={limit}", null), stmt.IntoTable, context);
+            var path = stmt.Suggestions ? "api/catalog/protected-data/suggestions" : "api/catalog/protected-data";
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"{path}?limit={limit}", null), stmt.IntoTable, context);
         }
 
         private async Task ShowEffectivePermissionsAsync(ShowEffectivePortalPermissionsStatement stmt, IExecutionContext context)

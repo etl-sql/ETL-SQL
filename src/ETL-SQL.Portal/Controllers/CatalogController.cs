@@ -307,6 +307,14 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return Ok(LineageProtectedData.FromHistory(entries).Take(limit).ToList());
     }
 
+    [HttpGet("protected-data/suggestions")]
+    public async Task<IActionResult> ProtectedDataSuggestions([FromQuery] int limit = 100)
+    {
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000));
+        return Ok(LineageProtectedData.SuggestFromHistory(entries).Take(limit).ToList());
+    }
+
     [HttpGet("impact")]
     public async Task<IActionResult> Impact(
         [FromServices] LineageImpactService impact,

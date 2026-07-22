@@ -206,10 +206,12 @@ public class ShowProtectedDataStatementHandler : IStatementHandler
         int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
         var limit = stmt.Limit ?? defaultLimit;
         var scanLimit = Math.Max(limit * 20, 1000);
-        var protectedEntries = LineageProtectedData
-            .FromHistory(await _catalog.GetRecentLineageAsync(scanLimit))
-            .Take(limit);
-        var table = await LineageHistoryRouting.BuildProtectedDataTable(protectedEntries);
+        var recent = await _catalog.GetRecentLineageAsync(scanLimit);
+        var table = stmt.Suggestions
+            ? await LineageHistoryRouting.BuildProtectedDataSuggestionsTable(
+                LineageProtectedData.SuggestFromHistory(recent).Take(limit))
+            : await LineageHistoryRouting.BuildProtectedDataTable(
+                LineageProtectedData.FromHistory(recent).Take(limit));
 
         if (stmt.IntoTable != null)
         {
@@ -316,6 +318,39 @@ internal static class LineageHistoryRouting
             row["Classification"] = e.Classification;
             row["Quality"] = e.Quality;
             row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+            row["SourceFile"] = e.SourceFile;
+            row["Line"] = e.Line;
+            await table.AddRowAsync(row);
+        }
+        return table;
+    }
+
+    internal static async Task<DataTable> BuildProtectedDataSuggestionsTable(IEnumerable<ProtectedDataSuggestionEntry> entries)
+    {
+        var table = new DataTable();
+        table.SetColumns(new[]
+        {
+            "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "SourceColumns",
+            "SuggestedTag", "SuggestedValue", "Confidence", "EvidenceKind", "Evidence", "Reason",
+            "ExistingTags", "SourceFile", "Line"
+        });
+        foreach (var e in entries)
+        {
+            var row = new Row();
+            row["Id"] = e.Id;
+            row["RunAt"] = e.RunAt;
+            row["JobName"] = e.JobName;
+            row["TargetTable"] = e.TargetTable;
+            row["TargetColumn"] = e.TargetColumn;
+            row["SourceTables"] = string.Join(", ", e.SourceTables);
+            row["SourceColumns"] = string.Join(", ", e.SourceColumns);
+            row["SuggestedTag"] = e.SuggestedTag;
+            row["SuggestedValue"] = e.SuggestedValue;
+            row["Confidence"] = e.Confidence;
+            row["EvidenceKind"] = e.EvidenceKind;
+            row["Evidence"] = e.Evidence;
+            row["Reason"] = e.Reason;
+            row["ExistingTags"] = System.Text.Json.JsonSerializer.Serialize(e.ExistingTags);
             row["SourceFile"] = e.SourceFile;
             row["Line"] = e.Line;
             await table.AddRowAsync(row);

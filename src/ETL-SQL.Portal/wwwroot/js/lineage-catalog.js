@@ -348,8 +348,9 @@ export function createLineageCatalog(opts = {}) {
     const $results = $('#lineageResults');
     $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading steward audit…</span></div>`;
     try {
-      const [protectedResult, stewardshipResult, auditResult, opsResult] = await Promise.allSettled([
+      const [protectedResult, suggestionsResult, stewardshipResult, auditResult, opsResult] = await Promise.allSettled([
         catalogApi.protectedData ? catalogApi.protectedData({ limit: state.limit }) : Promise.resolve([]),
+        catalogApi.protectedDataSuggestions ? catalogApi.protectedDataSuggestions({ limit: state.limit }) : Promise.resolve([]),
         catalogApi.stewardship({
           view: 'all',
           q: state.stewardshipQuery,
@@ -365,6 +366,9 @@ export function createLineageCatalog(opts = {}) {
       const protectedRows = protectedResult.status === 'fulfilled' && Array.isArray(protectedResult.value)
         ? filterProtectedAuditRows(protectedResult.value)
         : [];
+      const suggestions = suggestionsResult.status === 'fulfilled' && Array.isArray(suggestionsResult.value)
+        ? filterSuggestionAuditRows(suggestionsResult.value)
+        : [];
       const stewardship = stewardshipResult.status === 'fulfilled' ? stewardshipResult.value : {};
       state.stewardship = stewardship;
       const auditPage = auditResult.status === 'fulfilled' ? auditResult.value : { items: [] };
@@ -372,11 +376,13 @@ export function createLineageCatalog(opts = {}) {
 
       state.stewardAudit = {
         protectedRows,
+        suggestions,
         stewardship,
         auditEvents: Array.isArray(auditPage?.items) ? auditPage.items : [],
         operational,
         errors: [
           protectedResult.status === 'rejected' ? `Protected inventory: ${protectedResult.reason?.message || protectedResult.reason}` : '',
+          suggestionsResult.status === 'rejected' ? `Classifier suggestions: ${suggestionsResult.reason?.message || suggestionsResult.reason}` : '',
           stewardshipResult.status === 'rejected' ? `Stewardship: ${stewardshipResult.reason?.message || stewardshipResult.reason}` : '',
           auditResult.status === 'rejected' ? `Audit events: ${auditResult.reason?.message || auditResult.reason}` : '',
           opsResult.status === 'rejected' ? `Outbox health: ${opsResult.reason?.message || opsResult.reason}` : '',
@@ -396,6 +402,7 @@ export function createLineageCatalog(opts = {}) {
   function renderStewardAuditResults() {
     const data = state.stewardAudit || {};
     const protectedRows = Array.isArray(data.protectedRows) ? data.protectedRows : [];
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
     const stewardship = data.stewardship || {};
     const items = Array.isArray(stewardship.items) ? stewardship.items : [];
     const summary = stewardship.summary || {};
@@ -410,6 +417,7 @@ export function createLineageCatalog(opts = {}) {
       ${data.errors?.length ? `<div class="steward-audit-errors">${data.errors.map(esc).join(' · ')}</div>` : ''}
       <div class="steward-audit-grid" aria-label="Steward audit summary">
         ${renderStewardshipMetric('Protected', protectedRows.length)}
+        ${renderStewardshipMetric('Suggestions', suggestions.length)}
         ${renderStewardshipMetric('Missing metadata', summary.missingMetadataAssets)}
         ${renderStewardshipMetric('Stale protected', staleProtected.length)}
         ${renderStewardshipMetric('Impact events', auditEvents.length)}
@@ -426,6 +434,10 @@ export function createLineageCatalog(opts = {}) {
         <section class="steward-audit-section">
           <h3>Protected inventory</h3>
           ${protectedRows.length ? `<div class="stewardship-result-list">${protectedRows.slice(0, 8).map(renderProtectedAuditRow).join('')}</div>` : renderLineageEmpty('No protected lineage is currently recorded.')}
+        </section>
+        <section class="steward-audit-section">
+          <h3>Classifier suggestions</h3>
+          ${suggestions.length ? `<div class="stewardship-result-list">${suggestions.slice(0, 8).map(renderSuggestionAuditRow).join('')}</div>` : renderLineageEmpty('No protected-data classifier suggestions were found.')}
         </section>
         <section class="steward-audit-section">
           <h3>Steward queue</h3>
@@ -485,6 +497,26 @@ export function createLineageCatalog(opts = {}) {
     });
   }
 
+  function filterSuggestionAuditRows(rows) {
+    const query = (state.stewardshipQuery || '').toLowerCase();
+    return rows.filter(row => {
+      if (!query) return true;
+      const haystack = [
+        row.targetTable,
+        row.targetColumn,
+        row.suggestedTag,
+        row.suggestedValue,
+        row.evidenceKind,
+        row.evidence,
+        row.reason,
+        ...(Array.isArray(row.sourceTables) ? row.sourceTables : []),
+        ...(Array.isArray(row.sourceColumns) ? row.sourceColumns : []),
+        ...Object.entries(row.existingTags || {}).map(([k, v]) => `${k}:${v}`),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
   function equalsIgnoreCase(left, right) {
     return String(left || '').toLowerCase() === String(right || '').toLowerCase();
   }
@@ -507,6 +539,27 @@ export function createLineageCatalog(opts = {}) {
       <div class="stewardship-row-meta">
         <strong>${esc(timeAgo(row.runAt))}</strong>
         <span>${esc(row.classification || 'Unclassified')}</span>
+        <span>${esc(row.jobName || 'Ad hoc')}</span>
+      </div>
+    </article>`;
+  }
+
+  function renderSuggestionAuditRow(row) {
+    const target = `${row.targetTable || ''}${row.targetColumn ? `.${row.targetColumn}` : ''}`;
+    const confidence = Math.round(Number(row.confidence || 0) * 100);
+    return `<article class="stewardship-row steward-audit-row">
+      <div class="stewardship-row-main">
+        <div class="stewardship-row-title">
+          <code>${esc(target)}</code>
+          <span class="stewardship-badge stewardship-badge-warn">review</span>
+          <span class="stewardship-badge">${esc(row.suggestedTag)}=${esc(row.suggestedValue)}</span>
+        </div>
+        <div class="lineage-detail">${esc(row.reason || 'Classifier suggestion')}</div>
+        <div class="lineage-detail">Evidence: ${esc(row.evidenceKind || 'Rule')} &middot; ${esc(row.evidence || '')}</div>
+      </div>
+      <div class="stewardship-row-meta">
+        <strong>${confidence}%</strong>
+        <span>${esc(timeAgo(row.runAt))}</span>
         <span>${esc(row.jobName || 'Ad hoc')}</span>
       </div>
     </article>`;

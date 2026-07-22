@@ -1,12 +1,14 @@
 SET REPORT TITLE = 'Protected Data Stewardship Audit';
-SET REPORT DESCRIPTION = 'Script-first inventory of protected lineage, metadata gaps, and steward-impact audit events.';
+SET REPORT DESCRIPTION = 'Script-first inventory of protected lineage, classifier suggestions, metadata gaps, and steward-impact audit events.';
 
 DECLARE @stale_before DATETIME = '2026-06-22' INPUT;
 
 -- Local catalog mode. For centralized review, replace these two statements with:
 -- SHOW PROTECTED DATA AT prod_portal LIMIT 500 INTO #protected_data;
+-- SHOW PROTECTED DATA SUGGESTIONS AT prod_portal LIMIT 500 INTO #protected_suggestions;
 -- SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_portal LIMIT 500 INTO #missing_metadata;
 SHOW PROTECTED DATA LIMIT 500 INTO #protected_data;
+SHOW PROTECTED DATA SUGGESTIONS LIMIT 500 INTO #protected_suggestions;
 SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 500 INTO #missing_metadata;
 
 -- Optional Portal audit mode. Uncomment when a PORTAL connection named prod_portal is available:
@@ -79,6 +81,12 @@ CREATE VISUAL MissingMetadataCount AS CARD (
   STYLE (TITLE = 'Metadata Gaps', ICON = 'badge_alert', COLOR = '#b54708')
 );
 
+CREATE VISUAL SuggestionsCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #protected_suggestions),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Classifier Suggestions', ICON = 'sparkles', COLOR = '#0f766e')
+);
+
 CREATE VISUAL StewardImpactCount AS CARD (
   SOURCE = (SELECT COUNT(*) AS Value FROM #steward_events),
   MAPPINGS (VALUE = Value),
@@ -131,6 +139,25 @@ CREATE VISUAL MissingMetadata AS TABLE (
   STYLE (HEIGHT = '320px')
 );
 
+CREATE VISUAL ClassifierSuggestions AS TABLE (
+  TITLE = 'Classifier Suggestions for Review',
+  SOURCE = (
+    SELECT
+      TargetTable,
+      TargetColumn,
+      SuggestedTag,
+      SuggestedValue,
+      Confidence,
+      EvidenceKind,
+      Evidence,
+      Reason,
+      JobName
+    FROM #protected_suggestions
+    ORDER BY Confidence DESC
+  ),
+  STYLE (HEIGHT = '320px')
+);
+
 CREATE VISUAL StaleProtectedAssets AS TABLE (
   TITLE = 'Stale Protected Assets',
   SOURCE = #stale_protected,
@@ -163,26 +190,28 @@ CREATE VISUAL StewardImpactEvents AS TABLE (
 
 CREATE PAGE Overview AS DASHBOARD (
   LAYOUT (
-    STRUCTURE = 'A B C D / E F F F / G G G G',
+    STRUCTURE = 'A B C D E / F G G G G / H H H H H',
     MAP (
       'A' = ProtectedCount,
       'B' = MissingMetadataCount,
-      'C' = StewardImpactCount,
-      'D' = StaleProtectedCount,
-      'E' = ProtectedByClassification,
-      'F' = ProtectedBySteward,
-      'G' = ProtectedInventory
+      'C' = SuggestionsCount,
+      'D' = StewardImpactCount,
+      'E' = StaleProtectedCount,
+      'F' = ProtectedByClassification,
+      'G' = ProtectedBySteward,
+      'H' = ProtectedInventory
     )
   )
 );
 
 CREATE PAGE Gaps AS DASHBOARD (
   LAYOUT (
-    STRUCTURE = 'A / B / C',
+    STRUCTURE = 'A / B / C / D',
     MAP (
       'A' = MissingMetadata,
-      'B' = StaleProtectedAssets,
-      'C' = StewardImpactEvents
+      'B' = ClassifierSuggestions,
+      'C' = StaleProtectedAssets,
+      'D' = StewardImpactEvents
     )
   )
 );

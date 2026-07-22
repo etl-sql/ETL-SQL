@@ -92,6 +92,25 @@ FROM #protected_data;
 
 The command reads the lineage catalog and includes rows tagged with truthy `@pii`, `@phi`, `@pci`, or `@sensitive`, plus rows classified as `confidential` or `restricted`.
 
+Use classifier suggestions when you are looking for likely protected data that has not been tagged yet:
+
+```sql
+SHOW PROTECTED DATA SUGGESTIONS AT prod_portal LIMIT 500 INTO #protected_review;
+
+SELECT
+  target_table,
+  target_column,
+  suggested_tag,
+  suggested_value,
+  confidence,
+  evidence_kind,
+  evidence,
+  reason
+FROM #protected_review;
+```
+
+Suggestions are review findings only. They are derived from column names, source-column names, catalog metadata hints, and supported sampled-value callers, and they never set `@pii`, `@phi`, `@pci`, `@sensitive`, or `@classification` automatically.
+
 The packaged starter report at `samples/08_Reporting/protected_data_audit.rptsql` builds a dashboard from `SHOW PROTECTED DATA`, `SHOW LINEAGE HISTORY FOR MISSING TAGS`, and optional Portal steward-impact audit events.
 
 ## Portal Stewardship Review
@@ -101,6 +120,7 @@ Open the Portal Lineage catalog and switch to Audit mode for the combined stewar
 Audit mode combines:
 
 - **Protected inventory** - lineage tagged as PII, PHI, PCI, sensitive, confidential, or restricted.
+- **Classifier suggestions** - likely protected data that needs steward review before tags are added to scripts.
 - **Steward queue** - missing metadata, stale assets, and sensitive assets assigned to stewards.
 - **Affected reports and datasets** - inferred report, dataset, and subscription dependencies from protected lineage.
 - **Recent steward-impact events** - `STEWARD_LINEAGE_IMPACT` audit rows.
@@ -120,6 +140,7 @@ The backing API is:
 GET /api/catalog/stewardship?view=missing&q=orders&staleAfterDays=30
 GET /api/catalog/stewardship?view=queue&steward=Maria%20Chen
 GET /api/catalog/stewardship?view=sensitive
+GET /api/catalog/protected-data/suggestions?limit=100
 ```
 
 Use these endpoints for automation when a workflow needs the same posture data shown in Portal.
