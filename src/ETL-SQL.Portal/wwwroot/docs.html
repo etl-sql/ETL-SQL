@@ -118,9 +118,16 @@
   applyPortalBranding();
 
   if (auth.isLoggedIn()) {
-    const user = auth.getUser();
+    const token = auth.getToken();
+    let payload = {};
+    if (token) {
+      try {
+        payload = JSON.parse(atob(token.split('.')[1]));
+      } catch {}
+    }
+
     const userEl = document.getElementById('topbarUser');
-    if (userEl && user) userEl.textContent = user.username || user.name || '';
+    if (userEl) userEl.textContent = payload.sub || payload.unique_name || payload.name || '';
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
@@ -128,14 +135,19 @@
       logoutBtn.addEventListener('click', () => auth.logout());
     }
 
-    if (auth.hasRole('Admin')) {
-      const adminNav = document.getElementById('adminNav');
-      if (adminNav) adminNav.style.display = 'inline-block';
-      const orchNav = document.getElementById('orchestratorNav');
-      if (orchNav) orchNav.style.display = 'inline-block';
-    }
+    const rolesRaw = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
+    const roles = Array.isArray(rolesRaw) ? rolesRaw : [rolesRaw];
+
+    const isAdmin = roles.includes('Admin') || roles.includes('admin');
+    const isOrch = isAdmin || roles.includes('Orchestrator') || roles.includes('orchestrator');
+
+    const adminNav = document.getElementById('adminNav');
+    if (adminNav) adminNav.style.display = isAdmin ? 'inline-block' : 'none';
+
+    const orchNav = document.getElementById('orchestratorNav');
+    if (orchNav) orchNav.style.display = isOrch ? 'inline-block' : 'none';
   }
 </script>
-<script src="/js/docs.js?v=0.16.0"></script>
+<script type="module" src="/js/docs.js?v=0.16.0"></script>
 </body>
 </html>

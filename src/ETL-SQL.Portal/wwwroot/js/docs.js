@@ -1,3 +1,5 @@
+import { auth } from '/js/api.js?v=0.17.0';
+
 (function () {
   const searchInput = document.getElementById('search');
   const resultsContainer = document.getElementById('results');
@@ -6,6 +8,13 @@
 
   let activePath = null;
   let activeSection = 'All';
+
+  function getAuthHeaders() {
+    const headers = {};
+    const token = auth.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }
 
   function escapeHtml(value) {
     return String(value || '')
@@ -113,7 +122,10 @@
     if (section && section !== 'All') params.set('section', section);
 
     try {
-      const response = await fetch(`/api/docs/search?${params.toString()}`);
+      const response = await fetch(`/api/docs/search?${params.toString()}`, {
+        headers: getAuthHeaders()
+      });
+
       if (!response.ok) {
         resultsContainer.innerHTML = '<p class="docs-empty" style="padding:12px;">Documentation service unavailable.</p>';
         return [];
@@ -154,7 +166,10 @@
     documentPane.innerHTML = '<div class="loading-state">Loading document…</div>';
 
     try {
-      const response = await fetch(`/api/docs/document?path=${encodeURIComponent(path)}`);
+      const response = await fetch(`/api/docs/document?path=${encodeURIComponent(path)}`, {
+        headers: getAuthHeaders()
+      });
+
       if (!response.ok) {
         documentPane.innerHTML = '<p class="docs-empty">Document not found.</p>';
         return;
@@ -178,12 +193,14 @@
 
   // Event handlers
   let timer = null;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      loadResults(searchInput.value.trim(), activeSection);
-    }, 150);
-  });
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        loadResults(searchInput.value.trim(), activeSection);
+      }, 150);
+    });
+  }
 
   if (categoryNav) {
     categoryNav.addEventListener('click', event => {
@@ -198,10 +215,12 @@
     });
   }
 
-  resultsContainer.addEventListener('click', event => {
-    const item = event.target.closest('[data-path]');
-    if (item) openDocument(item.dataset.path);
-  });
+  if (resultsContainer) {
+    resultsContainer.addEventListener('click', event => {
+      const item = event.target.closest('[data-path]');
+      if (item) openDocument(item.dataset.path);
+    });
+  }
 
   // Initial load
   loadResults('', 'All').then(items => {
