@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
@@ -136,6 +137,50 @@ public class ShowLineageHistoryForJobStatementHandler : IStatementHandler
     }
 }
 
+public class ShowLineageHistoryForMissingTagsStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(ShowLineageHistoryForMissingTagsStatement);
+    private readonly ILineageCatalogStore _catalog;
+    private readonly IConfiguration? _config;
+
+    public ShowLineageHistoryForMissingTagsStatementHandler(ILineageCatalogStore catalog, IConfiguration? config = null)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        var stmt = (ShowLineageHistoryForMissingTagsStatement)statement;
+
+        if (stmt.At != null)
+        {
+            await LineageHistoryRouting.RouteToRemoteAsync(stmt, stmt.At, context);
+            return;
+        }
+
+        int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
+        var entries = await _catalog.GetMissingMetadataAsync(
+            StewardshipTagCatalog.RequiredStewardshipTags.ToArray(),
+            stmt.Limit ?? defaultLimit);
+        var table = await LineageHistoryRouting.BuildMissingMetadataTable(entries);
+
+        if (stmt.IntoTable != null)
+        {
+            if (!context.Connections.ContainsKey(stmt.IntoTable))
+                context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+            var dest = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+            await dest.WriteBatches(new[] { table }.ToAsyncEnumerable());
+        }
+        else
+        {
+            context.LastResult = table;
+            context.LastResultSets.Add(table);
+            context.OnResultSet?.Invoke(table);
+        }
+    }
+}
+
 internal static class LineageHistoryRouting
 {
     internal static async Task RouteToRemoteAsync(Statement stmt, string atConn, IExecutionContext context)
@@ -173,6 +218,25 @@ internal static class LineageHistoryRouting
             row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
             row["SourceFile"] = e.SourceFile;
             row["Line"] = e.Line;
+            await table.AddRowAsync(row);
+        }
+        return table;
+    }
+
+    internal static async Task<DataTable> BuildMissingMetadataTable(IEnumerable<LineageMissingMetadataEntry> entries)
+    {
+        var table = new DataTable();
+        table.SetColumns(new[] { "TargetTable", "TargetColumn", "MissingTags", "PresentTags", "RunAt", "JobName", "ScriptPath" });
+        foreach (var e in entries)
+        {
+            var row = new Row();
+            row["TargetTable"] = e.TargetTable;
+            row["TargetColumn"] = e.TargetColumn;
+            row["MissingTags"] = string.Join(", ", e.MissingTags.Select(t => "@" + t));
+            row["PresentTags"] = System.Text.Json.JsonSerializer.Serialize(e.PresentTags);
+            row["RunAt"] = e.RunAt;
+            row["JobName"] = e.JobName;
+            row["ScriptPath"] = e.ScriptPath;
             await table.AddRowAsync(row);
         }
         return table;

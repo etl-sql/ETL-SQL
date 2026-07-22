@@ -292,6 +292,13 @@ export const catalogApi = {
         if (from)  p.set('from', from);
         if (to)    p.set('to', to);
         return apiJson(`/api/catalog/lineage/${kind}?${p}`);
+    },
+    stewardship({ view = 'all', q = null, steward = null, domain = null, staleAfterDays = 30, limit = 100 } = {}) {
+        const p = new URLSearchParams({ view, staleAfterDays, limit });
+        if (q) p.set('q', q);
+        if (steward) p.set('steward', steward);
+        if (domain) p.set('domain', domain);
+        return apiJson(`/api/catalog/stewardship?${p}`);
     }
 };
 

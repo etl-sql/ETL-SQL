@@ -2087,9 +2087,13 @@ export function formatResultCell(value) {
 // Toolbar iconography. Inline stroke SVGs (currentColor, 16px) keep the workbench
 // self-contained — no icon font or sprite sheet to ship to VS Code / Player / Portal.
 const _TOOLBAR_ICONS = {
+    back: '<path d="M10 3 5 8l5 5"/><path d="M5.5 8H14"/><path d="M2.5 3.5v9"/>',
     sidebar: '<path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z"/><path d="M6.5 2v12"/>',
     theme: '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/>',
     commands: '<path d="m4 5 3 3-3 3"/><path d="M8.5 11h4"/>',
+    addPage: '<path d="M3.5 2.5h6L12.5 5.5v8h-9z"/><path d="M9.5 2.5v3h3"/><path d="M8 8v4"/><path d="M6 10h4"/>',
+    tidy: '<path d="M3 4h10"/><path d="M5 8h6"/><path d="M7 12h2"/><path d="M12 2l1.5 1.5L12 5"/>',
+    split: '<path d="M2.5 3.5h11v9h-11z"/><path d="M8 3.5v9"/>',
     suggest: '<path d="m8 2 1.6 3.9L13.5 7.5 9.6 9.1 8 13l-1.6-3.9L2.5 7.5l3.9-1.6z"/>',
     runSelected: '<path d="M2.5 3.5h3"/><path d="M2.5 12.5h3"/><path d="m7.5 3.5 6 4.5-6 4.5z"/>',
     run: '<path d="m4 2.5 9 5.5-9 5.5z"/>',
@@ -2098,6 +2102,7 @@ const _TOOLBAR_ICONS = {
     save: '<path d="M3 2.5h7.5L13.5 5.5V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5"/><path d="M5 2.5v4h5v-4"/><path d="M5 13.5v-4h6v4"/>',
     close: '<path d="m4 4 8 8"/><path d="m12 4-8 8"/>',
     cancel: '<rect x="4" y="4" width="8" height="8" rx="1"/>',
+    commit: '<circle cx="4" cy="8" r="1.75"/><circle cx="12" cy="4" r="1.75"/><circle cx="12" cy="12" r="1.75"/><path d="M5.75 8h1.5c1.8 0 2.6-1.2 3.1-2.5"/><path d="M5.75 8h1.5c1.8 0 2.6 1.2 3.1 2.5"/>',
     format: '<path d="M2 3.5h12"/><path d="M2 7.5h8"/><path d="M2 11.5h12"/><path d="M2 15.5h6"/>',
     formatSettings: '<path d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/><path d="M8 1v2m0 10v2m-6-7h2m10 0h2m-2.1-4.9-1.4 1.4m-7 7-1.4 1.4m0-9.8 1.4 1.4m7 7 1.4 1.4"/>',
 };
@@ -3319,25 +3324,28 @@ export function createDesigner(container, opts = {}) {
     const topbar = document.createElement('div');
     topbar.className = 'etlsql-designer-topbar';
     topbar.innerHTML = `
-        <button class="btn btn-sm" id="dsgn-back">← Reports</button>
+        ${toolbarButton({ attr: 'id="dsgn-back"', icon: 'back', title: 'Back to reports' })}
         <input id="dsgn-name" class="etlsql-dsgn-name-input" type="text" placeholder="Report name" />
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
-        <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
-        <button class="btn btn-sm" id="dsgn-tidy" title="Compact empty row gaps and tidy layout">🧹 Tidy Layout</button>
+        <span class="etlsql-toolbar-divider"></span>
+        ${toolbarButton({ attr: 'id="dsgn-add-page"', icon: 'addPage', title: 'Add page' })}
+        ${toolbarButton({ attr: 'id="dsgn-tidy"', icon: 'tidy', title: 'Tidy layout' })}
         <select id="dsgn-theme-select" class="etlsql-theme-select" title="Select canvas theme">
-            <option value="light">☀️ Light</option>
-            <option value="dark">🌑 Dark</option>
-            <option value="midnight">🌌 Midnight</option>
-            <option value="dracula">🧛 Dracula</option>
-            <option value="nord">❄️ Nord</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="midnight">Midnight</option>
+            <option value="dracula">Dracula</option>
+            <option value="nord">Nord</option>
         </select>
-        <button class="btn btn-sm" id="dsgn-split-toggle" title="Toggle side-by-side script and canvas split screen editing">🥞 Split</button>
-        <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
-        <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
-        <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
-        <button class="btn btn-sm" id="dsgn-commit" title="Commit the saved script to source control (Git)" style="display:none">Commit</button>
+        <span class="etlsql-toolbar-divider"></span>
+        ${toolbarButton({ attr: 'id="dsgn-split-toggle"', icon: 'split', title: 'Toggle split script and canvas view' })}
+        ${toolbarButton({ attr: 'id="dsgn-script-toggle"', icon: 'commands', title: 'Open script editor' })}
+        ${toolbarButton({ attr: 'id="dsgn-preview-toggle"', icon: 'preview', title: 'Preview report' })}
+        <span class="etlsql-toolbar-divider"></span>
+        ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', primary: true })}
+        ${toolbarButton({ attr: 'id="dsgn-commit" style="display:none"', icon: 'commit', title: 'Commit saved script to source control' })}
         <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
-        <button class="btn btn-sm" id="dsgn-cancel">Cancel</button>
+        ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing' })}
     `;
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
@@ -3443,6 +3451,14 @@ export function createDesigner(container, opts = {}) {
     // ── Render ────────────────────────────────────────────────────────────────
 
     let activeSnapshotFilter = null;
+    const snapshotResizeObservers = new Set();
+
+    function disconnectSnapshotResizeObservers() {
+        for (const observer of snapshotResizeObservers) {
+            try { observer.disconnect(); } catch {}
+        }
+        snapshotResizeObservers.clear();
+    }
 
     function tidyLayout() {
         const page = curPage();
@@ -3857,6 +3873,7 @@ export function createDesigner(container, opts = {}) {
                 if (window.ResizeObserver) {
                     const ro = new ResizeObserver(() => { try { chart.resize(); } catch {} });
                     ro.observe(bodyEl);
+                    snapshotResizeObservers.add(ro);
                 }
                 return;
             } catch (err) {
@@ -3872,6 +3889,7 @@ export function createDesigner(container, opts = {}) {
     }
 
     function renderCanvas() {
+        disconnectSnapshotResizeObservers();
         canvasGrid.innerHTML = '';
         const visuals = curVis();
         if (!visuals.length) {
@@ -3973,7 +3991,7 @@ export function createDesigner(container, opts = {}) {
         for (const ds of state.datasets) {
             const row = document.createElement('div');
             row.className = 'etlsql-dsgn-ds-item';
-            row.innerHTML = `<span>#${esc(ds.name)}</span><button data-dsid="${ds.id}" title="Remove">✕</button>`;
+            row.innerHTML = `<span>#${esc(ds.name)}</span><button data-dsid="${esc(ds.id)}" title="Remove">✕</button>`;
             list.appendChild(row);
         }
     }
@@ -4457,7 +4475,7 @@ export function createDesigner(container, opts = {}) {
     }
 
     // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
-    window.addEventListener('message', (event) => {
+    const previewMessageHandler = (event) => {
         if (event.source !== previewFrame?.contentWindow) return;
         if (event.data?.type !== 'previewReady') return;
         if (_pendingManifest) {
@@ -4467,7 +4485,8 @@ export function createDesigner(container, opts = {}) {
                 dark: document.body.classList.contains('theme-dark'),
             }, '*');
         }
-    });
+    };
+    window.addEventListener('message', previewMessageHandler);
 
     async function refreshPreview() {
         setPreviewStatus('Building preview…', 'pending');
@@ -4566,8 +4585,12 @@ export function createDesigner(container, opts = {}) {
     async function commitScript() {
         if (!reportId) return;
         const commitBtn = topbar.querySelector('#dsgn-commit');
-        const prevLabel = commitBtn ? commitBtn.textContent : 'Commit';
-        if (commitBtn) { commitBtn.disabled = true; commitBtn.textContent = 'Committing…'; }
+        const prevTitle = commitBtn?.getAttribute('title') || 'Commit saved script to source control';
+        if (commitBtn) {
+            commitBtn.disabled = true;
+            commitBtn.setAttribute('aria-busy', 'true');
+            commitBtn.setAttribute('title', 'Committing to source control');
+        }
         setScmStatus('Committing to source control…', 'pending');
         try {
             const res = await apiJson(`/api/reports/${reportId}/script-source/commit`, 'POST', {});
@@ -4580,7 +4603,11 @@ export function createDesigner(container, opts = {}) {
         } catch (e) {
             setScmStatus(`Commit failed: ${e.message}`, 'error');
         } finally {
-            if (commitBtn) { commitBtn.disabled = false; commitBtn.textContent = prevLabel || 'Commit'; }
+            if (commitBtn) {
+                commitBtn.disabled = false;
+                commitBtn.removeAttribute('aria-busy');
+                commitBtn.setAttribute('title', prevTitle);
+            }
         }
     }
 
@@ -5062,5 +5089,14 @@ export function createDesigner(container, opts = {}) {
     // ── Initial render ────────────────────────────────────────────────────────
     renderAll();
 
-    return { dispose: () => { closeScript(); container.innerHTML = ''; } };
+    return {
+        dispose: () => {
+            window.removeEventListener('message', previewMessageHandler);
+            disconnectSnapshotResizeObservers();
+            clearTimeout(cursorTimeout);
+            clearTimeout(syncTimeout);
+            closeScript();
+            container.innerHTML = '';
+        }
+    };
 }

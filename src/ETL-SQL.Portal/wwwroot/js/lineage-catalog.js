@@ -30,7 +30,7 @@ const memoryStorage = (() => {
  *
  * @param {Object}   opts
  * @param {Element}  opts.host                  Container the view renders into.
- * @param {Object}   opts.catalogApi            { lineage(kind, args): Promise<row[]> }.
+ * @param {Object}   opts.catalogApi            { lineage(kind, args): Promise<row[]>, stewardship(args): Promise<object> }.
  * @param {Function} opts.renderDag             (container, {nodes, edges}) → { dispose }.
  * @param {Function} opts.renderLineageRow      (row, { timeAgo, formatBuiltAt }) → html string.
  * @param {Function} opts.lineageRowsToCsv      (rows) → csv string.
@@ -59,7 +59,26 @@ export function createLineageCatalog(opts = {}) {
     viewKey = 'etlsql_lineage_views',
   } = opts;
 
-  const state = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '', view: 'table' };
+  const state = {
+    mode: 'history',
+    kind: 'table',
+    query: '',
+    column: '',
+    tagValue: '',
+    from: '',
+    to: '',
+    limit: 100,
+    rows: [],
+    savedViews: [],
+    selectedView: '',
+    view: 'table',
+    stewardshipView: 'missing',
+    stewardshipQuery: '',
+    stewardshipSteward: '',
+    stewardshipDomain: '',
+    stewardshipStaleDays: 30,
+    stewardship: null,
+  };
   let dagInstance = null;
 
   const $ = sel => host.querySelector(sel);
@@ -223,6 +242,98 @@ export function createLineageCatalog(opts = {}) {
     dagInstance = renderDag(container, { nodes, edges });
   }
 
+  async function loadStewardshipResults() {
+    const $results = $('#lineageResults');
+    $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading stewardship inventory…</span></div>`;
+    try {
+      state.stewardship = await catalogApi.stewardship({
+        view: state.stewardshipView,
+        q: state.stewardshipQuery,
+        steward: state.stewardshipSteward,
+        domain: state.stewardshipDomain,
+        staleAfterDays: state.stewardshipStaleDays,
+        limit: state.limit,
+      });
+      renderStewardshipResults();
+    } catch (err) {
+      state.stewardship = null;
+      $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Stewardship query failed</h2>
+        <p>${esc(err.message)}</p>
+      </div>`;
+    }
+  }
+
+  function renderStewardshipResults() {
+    const data = state.stewardship || {};
+    const summary = data.summary || {};
+    const items = Array.isArray(data.items) ? data.items : [];
+    const $results = $('#lineageResults');
+    if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+    $results.innerHTML = `
+      <div class="stewardship-overview" aria-label="Stewardship summary">
+        ${renderStewardshipMetric('Assets', summary.totalAssets)}
+        ${renderStewardshipMetric('Sensitive', summary.sensitiveAssets)}
+        ${renderStewardshipMetric('Missing metadata', summary.missingMetadataAssets)}
+        ${renderStewardshipMetric('Stale', summary.staleAssets)}
+        ${renderStewardshipMetric('Queue', summary.stewardQueueAssets)}
+      </div>
+      ${items.length
+        ? `<div class="stewardship-result-list">${items.map(renderStewardshipAsset).join('')}</div>`
+        : renderLineageEmpty('No stewardship assets match the current filters.')}`;
+  }
+
+  function renderStewardshipMetric(label, value) {
+    return `<div class="stewardship-metric">
+      <span>${esc(label)}</span>
+      <strong>${Number(value || 0).toLocaleString()}</strong>
+    </div>`;
+  }
+
+  function renderStewardshipAsset(item) {
+    const tags = item.tags || {};
+    const missing = Array.isArray(item.missingTags) ? item.missingTags : [];
+    const sourceList = Array.isArray(item.sourceTables) && item.sourceTables.length
+      ? item.sourceTables.join(', ')
+      : 'No source recorded';
+    const badges = [
+      item.isRestricted ? '<span class="stewardship-badge stewardship-badge-danger">restricted</span>' : '',
+      item.isSensitive ? '<span class="stewardship-badge stewardship-badge-warn">sensitive</span>' : '',
+      item.isStale ? '<span class="stewardship-badge">stale</span>' : '',
+      missing.length ? `<span class="stewardship-badge">${missing.length} missing</span>` : '',
+    ].filter(Boolean).join('');
+    const tagChips = Object.entries(tags).slice(0, 8)
+      .map(([key, value]) => `<span class="stewardship-chip"><b>@${esc(key)}</b>${esc(value)}</span>`)
+      .join('');
+    const missingText = missing.length
+      ? `<div class="stewardship-gap">Missing: ${missing.map(t => `@${esc(t)}`).join(', ')}</div>`
+      : '';
+    return `<article class="stewardship-row">
+      <div class="stewardship-row-main">
+        <div class="stewardship-row-title">
+          <code>${esc(item.targetTable)}${item.targetColumn ? `.${esc(item.targetColumn)}` : ''}</code>
+          ${badges}
+        </div>
+        <div class="lineage-detail">Sources: ${esc(sourceList)}</div>
+        <div class="lineage-detail">Steward: ${esc(item.steward || 'Unassigned')} &middot; Owner: ${esc(item.owner || 'Unassigned')} &middot; Domain: ${esc(item.domain || 'Unassigned')}</div>
+        ${missingText}
+        ${tagChips ? `<div class="stewardship-tags">${tagChips}</div>` : ''}
+      </div>
+      <div class="stewardship-row-meta">
+        <strong>${esc(timeAgo(item.runAt))}</strong>
+        <span>${esc(formatBuiltAt(item.runAt))}</span>
+        <span>${esc(item.staleReason || 'Fresh')}</span>
+      </div>
+    </article>`;
+  }
+
+  function renderStewardshipFacetOptions(values, selected) {
+    return (Array.isArray(values) ? values : [])
+      .map(v => `<option value="${escAttr(v.value)}"${v.value === selected ? ' selected' : ''}>${esc(v.value)} (${Number(v.count || 0).toLocaleString()})</option>`)
+      .join('');
+  }
+
   function exportLineageCsv() {
     if (!state.rows.length) return;
     const csv = lineageRowsToCsv(state.rows);
@@ -242,6 +353,7 @@ export function createLineageCatalog(opts = {}) {
     prepare();
     state.savedViews = loadLineageViews();
     const valueLabel = state.kind === 'tag' ? 'Tag key' : state.kind === 'source-file' ? 'Source file' : 'Name';
+    const stewardship = state.stewardship || {};
     const savedOptions = state.savedViews
       .map(v => `<option value="${escAttr(v.name)}"${v.name === state.selectedView ? ' selected' : ''}>${esc(v.name)}</option>`)
       .join('');
@@ -249,10 +361,14 @@ export function createLineageCatalog(opts = {}) {
       <div class="library-toolbar lineage-toolbar">
         <div class="library-title">
           <span class="library-kicker">Catalog</span>
-          <h2>Lineage</h2>
-          <span class="folder-count">Cross-run history with report context</span>
+          <h2>${state.mode === 'stewardship' ? 'Stewardship' : 'Lineage'}</h2>
+          <span class="folder-count">${state.mode === 'stewardship' ? 'Metadata gaps, sensitive assets, stale lineage, and steward queues' : 'Cross-run history with report context'}</span>
         </div>
-        <form id="lineageSearchForm" class="lineage-query" autocomplete="off">
+        <div class="lineage-mode-toggle" role="tablist" aria-label="Catalog mode">
+          <button type="button" class="lineage-mode-btn ${state.mode === 'history' ? 'active' : ''}" data-lineage-mode="history" aria-selected="${state.mode === 'history'}">History</button>
+          <button type="button" class="lineage-mode-btn ${state.mode === 'stewardship' ? 'active' : ''}" data-lineage-mode="stewardship" aria-selected="${state.mode === 'stewardship'}">Stewardship</button>
+        </div>
+        <form id="lineageSearchForm" class="lineage-query" autocomplete="off" ${state.mode === 'history' ? '' : 'hidden'}>
           <select id="lineageKind" class="library-sort" aria-label="Lineage query type">
             <option value="table"${state.kind === 'table' ? ' selected' : ''}>Target table</option>
             <option value="source"${state.kind === 'source' ? ' selected' : ''}>Source table</option>
@@ -278,18 +394,48 @@ export function createLineageCatalog(opts = {}) {
           <button class="btn btn-outline" id="lineageSaveViewBtn" type="button">Save View</button>
           <button class="btn btn-outline" id="lineageDeleteViewBtn" type="button" ${state.selectedView ? '' : 'disabled'}>Delete</button>
         </form>
+        <form id="stewardshipSearchForm" class="lineage-query stewardship-query" autocomplete="off" ${state.mode === 'stewardship' ? '' : 'hidden'}>
+          <select id="stewardshipView" class="library-sort" aria-label="Stewardship view">
+            <option value="all"${state.stewardshipView === 'all' ? ' selected' : ''}>All assets</option>
+            <option value="sensitive"${state.stewardshipView === 'sensitive' ? ' selected' : ''}>Sensitive</option>
+            <option value="missing"${state.stewardshipView === 'missing' ? ' selected' : ''}>Missing metadata</option>
+            <option value="stale"${state.stewardshipView === 'stale' ? ' selected' : ''}>Stale lineage</option>
+            <option value="queue"${state.stewardshipView === 'queue' ? ' selected' : ''}>Steward queue</option>
+          </select>
+          <label class="library-search lineage-search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="stewardshipQuery" type="search" placeholder="Search assets or tags" value="${escAttr(state.stewardshipQuery)}">
+          </label>
+          <select id="stewardshipSteward" class="library-sort lineage-saved" aria-label="Filter by steward">
+            <option value="">All stewards</option>
+            ${renderStewardshipFacetOptions(stewardship.stewards, state.stewardshipSteward)}
+          </select>
+          <select id="stewardshipDomain" class="library-sort lineage-saved" aria-label="Filter by domain">
+            <option value="">All domains</option>
+            ${renderStewardshipFacetOptions(stewardship.domains, state.stewardshipDomain)}
+          </select>
+          <input id="stewardshipStaleDays" class="lineage-input stewardship-days" type="number" min="1" max="3660" value="${escAttr(state.stewardshipStaleDays)}" aria-label="Stale after days">
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
       </div>
-      <div id="lineageResults">${renderLineageEmpty()}</div>`;
+      <div id="lineageResults">${state.mode === 'stewardship' && state.stewardship ? '' : renderLineageEmpty()}</div>`;
+
+    host.querySelectorAll('[data-lineage-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.mode = btn.dataset.lineageMode;
+        render();
+      });
+    });
 
     const $form = $('#lineageSearchForm');
-    $('#lineageKind').addEventListener('change', e => {
+    $('#lineageKind')?.addEventListener('change', e => {
       state.kind = e.target.value;
       state.column = '';
       state.tagValue = '';
       state.rows = [];
       render();
     });
-    $form.addEventListener('submit', async e => {
+    $form?.addEventListener('submit', async e => {
       e.preventDefault();
       state.kind = $('#lineageKind').value;
       state.query = $('#lineageQuery').value.trim();
@@ -299,17 +445,32 @@ export function createLineageCatalog(opts = {}) {
       state.to = $('#lineageTo').value;
       await loadLineageResults();
     });
-    $('#lineageExportBtn').addEventListener('click', exportLineageCsv);
-    $('#lineageViewToggle').addEventListener('click', () => {
+    $('#lineageExportBtn')?.addEventListener('click', exportLineageCsv);
+    $('#lineageViewToggle')?.addEventListener('click', () => {
       state.view = state.view === 'graph' ? 'table' : 'graph';
       $('#lineageViewToggle').textContent = state.view === 'graph' ? 'Table' : 'Graph';
       if (state.rows.length) renderLineageResults(state.rows);
     });
-    $('#lineageSavedView').addEventListener('change', applySelectedLineageView);
-    $('#lineageSaveViewBtn').addEventListener('click', saveCurrentLineageView);
-    $('#lineageDeleteViewBtn').addEventListener('click', deleteSelectedLineageView);
+    $('#lineageSavedView')?.addEventListener('change', applySelectedLineageView);
+    $('#lineageSaveViewBtn')?.addEventListener('click', saveCurrentLineageView);
+    $('#lineageDeleteViewBtn')?.addEventListener('click', deleteSelectedLineageView);
 
-    if (state.query) loadLineageResults();
+    $('#stewardshipSearchForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      state.stewardshipView = $('#stewardshipView').value;
+      state.stewardshipQuery = $('#stewardshipQuery').value.trim();
+      state.stewardshipSteward = $('#stewardshipSteward').value;
+      state.stewardshipDomain = $('#stewardshipDomain').value;
+      state.stewardshipStaleDays = Math.max(1, Math.min(3660, Number($('#stewardshipStaleDays').value || 30)));
+      await loadStewardshipResults();
+    });
+
+    if (state.mode === 'stewardship') {
+      if (state.stewardship) renderStewardshipResults();
+      else loadStewardshipResults();
+    } else if (state.query) {
+      loadLineageResults();
+    }
   }
 
   return {

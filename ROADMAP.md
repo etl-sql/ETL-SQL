@@ -17,16 +17,7 @@ Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/archi
 
 ### Future Candidate Phases
 
-- [ ] **Phase 1: Stewardship Catalog**
-  - Define governed tag metadata, validation, required scopes, aliases, and deprecation rules.
-  - Add queries and documentation for missing owner, steward, contact, classification, and quality
-    metadata.
-- [ ] **Phase 2: Portal Stewardship Views**
-  - Add searchable tag catalog, sensitive-data inventory, missing-owner views, stale-lineage views, and
-    per-steward queues.
-- [ ] **Phase 3: Impact Analysis**
-  - Surface upstream and downstream impact for tables, columns, jobs, scripts, datasets, reports,
-    subscriptions, owners, and stewards.
+Phase 2 and Phase 3 have been promoted to `TODO.md` for active v0.17.0 implementation.
 
 ---
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Diagnostics;
 using ETL_SQL.WorkstationEditor;
 using Xunit;
 
@@ -691,6 +692,64 @@ public sealed class WorkstationEditorTests
         Assert.NotNull(commitFailBody.Message);
     }
 
+    [Fact]
+    public async Task GitCommit_WithTrailingBackslashMessage_CommitsSuccessfully()
+    {
+        using var temp = new TempWorkspace();
+        RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+        RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var commitReq = new HttpRequestMessage(HttpMethod.Post, "/api/git/commit");
+        commitReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        commitReq.Content = JsonContent.Create(new GitCommitRequest(@"Path C:\"));
+
+        var commitRes = await client.SendAsync(commitReq);
+        Assert.Equal(HttpStatusCode.OK, commitRes.StatusCode);
+        var commitBody = await commitRes.Content.ReadFromJsonAsync<GitCommitResponse>();
+
+        Assert.NotNull(commitBody);
+        Assert.True(commitBody!.Committed, commitBody.Message);
+        Assert.False(string.IsNullOrWhiteSpace(commitBody.SourceRevision));
+    }
+
+    private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            psi.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start git.");
+        if (!process.WaitForExit(5000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new InvalidOperationException($"git {string.Join(' ', arguments)} timed out.");
+        }
+
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {output}{error}");
+        }
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         public TempWorkspace()
@@ -704,7 +763,14 @@ public sealed class WorkstationEditorTests
         public void Dispose()
         {
             if (Directory.Exists(Root))
+            {
+                foreach (var path in Directory.EnumerateFileSystemEntries(Root, "*", SearchOption.AllDirectories))
+                {
+                    try { File.SetAttributes(path, FileAttributes.Normal); } catch { }
+                }
+
                 Directory.Delete(Root, recursive: true);
+            }
         }
     }
 }

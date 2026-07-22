@@ -87,7 +87,7 @@ public class UnknownTagLintRule : ILintRule
         if (metadata is null) return;
         foreach (var key in metadata.Keys)
         {
-            if (!LanguageMetadata.StandardTags.Contains(key))
+            if (!StewardshipTagCatalog.IsKnownOrCustom(key))
             {
                 results.Add(new LintResult
                 {

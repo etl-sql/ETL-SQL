@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Lineage;
 using ETL_SQL.Tests.Core;
@@ -143,6 +144,25 @@ namespace ETL_SQL.Tests.Analysis.Statements
                 CREATE TAG FOR TABLE T (owner = 'bob');");
 
             Assert.Equal("bob", eval.LineageTracker.GetTableMetadata("T")["owner"]);
+        }
+
+        [Fact]
+        public async Task CreateTag_InvalidStandardValue_Throws()
+        {
+            var eval = NewEval();
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+                TestHelpers.Execute(eval, "CREATE TAG FOR TABLE T (classification = 'secret');"));
+
+            Assert.Contains("@classification", ex.Message);
+        }
+
+        [Fact]
+        public async Task CreateTag_CustomOrganizationTag_IsAllowed()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval, "CREATE TAG FOR TABLE T (org_retention_policy = 'finance-local');");
+
+            Assert.Equal("finance-local", eval.LineageTracker.GetTableMetadata("T")["org_retention_policy"]);
         }
 
         [Fact]

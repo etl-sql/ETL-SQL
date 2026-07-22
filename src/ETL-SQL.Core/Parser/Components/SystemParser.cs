@@ -786,6 +786,7 @@ public class SystemParser : ParserComponent
                 LineageStatement lin => lin with { IntoTable = tempTable },
                 ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
                 ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },
+                ShowLineageHistoryForMissingTagsStatement slhm => slhm with { IntoTable = tempTable },
                 ShowLineageHistoryForJobStatement slhj => slhj with { IntoTable = tempTable },
                 _ => stmt
             };
@@ -876,7 +877,16 @@ public class SystemParser : ParserComponent
             var limit = ParseOptionalLimit();
             return new ShowLineageHistoryForJobStatement { JobName = jobName, At = at, Limit = limit };
         }
-        throw new SyntaxException("Expected TABLE, TAG, or JOB after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
+        if (_parser.Current.Value.Equals("MISSING", StringComparison.OrdinalIgnoreCase))
+        {
+            Advance();
+            if (!Match(TokenType.TAGS))
+                ConsumeIdentifierValue("TAGS", "Expected TAGS after SHOW LINEAGE HISTORY FOR MISSING");
+            string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
+            var limit = ParseOptionalLimit();
+            return new ShowLineageHistoryForMissingTagsStatement { At = at, Limit = limit };
+        }
+        throw new SyntaxException("Expected TABLE, TAG, JOB, or MISSING TAGS after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
     }
 
     private LineageStatement ParseShowLineageCore(Token startToken)

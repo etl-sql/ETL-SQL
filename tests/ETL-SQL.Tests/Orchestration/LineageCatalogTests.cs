@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Orchestrator.Storage;
 using Xunit;
 
@@ -189,6 +190,48 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task GetMissingMetadata_ReturnsLatestTargetsMissingRequiredStewardshipTags()
+        {
+            await _store.InitializeAsync();
+            var catalog = (ILineageCatalogStore)_store;
+
+            await catalog.SaveLineageAsync(
+                new[]
+                {
+                    MakeEntry("Complete", tags: new Dictionary<string, string>
+                    {
+                        ["owner"] = "sales",
+                        ["steward"] = "steward@example.com",
+                        ["contact"] = "sales@example.com",
+                        ["classification"] = "internal",
+                        ["quality"] = "gold"
+                    }),
+                    MakeEntry("Missing", tags: new Dictionary<string, string>
+                    {
+                        ["owner"] = "finance",
+                        ["classification"] = "restricted"
+                    })
+                },
+                "StewardshipScan",
+                "scripts/stewardship.etlsql",
+                DateTime.UtcNow);
+
+            var results = (await catalog.GetMissingMetadataAsync(
+                StewardshipTagCatalog.RequiredStewardshipTags,
+                limit: 10)).ToList();
+
+            var row = Assert.Single(results);
+            Assert.Equal("Missing", row.TargetTable);
+            Assert.Contains("steward", row.MissingTags);
+            Assert.Contains("contact", row.MissingTags);
+            Assert.Contains("quality", row.MissingTags);
+            Assert.DoesNotContain("owner", row.MissingTags);
+            Assert.DoesNotContain("classification", row.MissingTags);
+            Assert.Equal("finance", row.PresentTags["owner"]);
+            Assert.Equal("StewardshipScan", row.JobName);
+        }
+
+        [Fact]
         public async Task GetHistoryForSource_ReturnsExactSourceMatches()
         {
             await _store.InitializeAsync();
@@ -316,6 +359,17 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("pii", hist.TagKey);
             Assert.Equal("true", hist.TagValue);
             Assert.Equal(25, hist.Limit);
+        }
+
+        [Fact]
+        public void Parser_ShowLineageHistoryForMissingTags_WithAtLimitAndInto_Parses()
+        {
+            var script = ParseScript("SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 25 INTO #missing;");
+            var stmt = Assert.Single(script.Statements);
+            var hist = Assert.IsType<ShowLineageHistoryForMissingTagsStatement>(stmt);
+            Assert.Equal("ProdOrch", hist.At);
+            Assert.Equal(25, hist.Limit);
+            Assert.Equal("#missing", hist.IntoTable);
         }
 
         [Fact]

@@ -118,6 +118,43 @@ public class DesignerControllerTests
     }
 
     [Fact]
+    public void Generate_PreservesInlineVisualSource()
+    {
+        var controller = new DesignerController();
+        var state = new DesignerStateDto(
+            [
+                new DesignerPageDto(
+                    "p1",
+                    "Inline",
+                    "Dashboard",
+                    [
+                        new DesignerVisualDto(
+                            "v1",
+                            "InlineCard",
+                            "CARD",
+                            1,
+                            1,
+                            12,
+                            2,
+                            "Inline",
+                            null,
+                            new Dictionary<string, string> { ["VALUE"] = "Total" },
+                            new Dictionary<string, string>
+                            {
+                                ["inline_source"] = "(SELECT SUM(Amount) AS Total FROM #sales)"
+                            })
+                    ])
+            ],
+            []);
+
+        var result = Assert.IsType<OkObjectResult>(controller.Generate(new GenerateDesignerRequest(state)));
+        var response = Assert.IsType<GenerateDesignerResponse>(result.Value);
+
+        Assert.Contains("SOURCE = (SELECT SUM(Amount) AS Total FROM #sales)", response.Script);
+        Assert.DoesNotContain("INLINE_SOURCE", response.Script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void GenerateAndParse_SupportsContainersAndButtons()
     {
         var controller = new DesignerController();

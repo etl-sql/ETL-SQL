@@ -12,16 +12,51 @@ Release focus: promote the actionable roadmap work into the sprint, finish the w
 improve authoring surfaces, and close the maintainability work that makes future connector and Portal
 changes safer.
 
-### Review Workflow and Data Stewardship
+### Visual Reporting and Dashboard Designer Enhancements
 
-- [ ] **Phase 1: Stewardship Catalog.**
-      Define the governed tag catalog for standard stewardship metadata (`@owner`, `@steward`,
-      `@contact`, `@domain`, `@classification`, `@quality`, `@pii`, `@phi`, `@pci`, and
-      `@sensitive`) with type, allowed values, aliases, required scopes, and deprecation metadata.
-      Add lint/runtime validation for those standard tags while preserving an escape hatch for custom
-      organization tags. Add catalog queries for missing owner, steward, contact, classification, and
-      quality metadata. Document the administrator posture and script-first usage in the stewardship
-      strategy/reference docs.
+- [ ] **Canvas Keyboard Shortcuts & Ergonomics.**
+      Add canvas-level keyboard listener to `createDesigner` handling `Delete` / `Backspace` to remove
+      selected visual cards, `Ctrl+S` / `Cmd+S` to trigger report save, `Escape` to clear visual
+      selection, and Arrow keys (`Up`/`Down`/`Left`/`Right`) to nudge visual grid positions (`gridCol`/`gridRow`).
+
+- [ ] **Unsaved Changes Guard (`beforeunload`).**
+      Track designer dirty state (`isDirty`) when canvas visual cards move, resize, delete, or when script text
+      is modified. Attach a `beforeunload` listener prompting the user before navigating away or closing the tab.
+
+- [ ] **Dynamic Column Autocomplete in Properties Panel.**
+      Upgrade mapping input fields in `renderProps` from plain text inputs to use a `<datalist>` or interactive
+      dropdown pre-populated with actual dataset columns (from loaded `.etlsnap` packages or `/api/designer/schema`),
+      while preserving custom expression entry.
+
+- [ ] **Canvas Layout Undo / Redo Stack.**
+      Maintain a 20-step history stack of `DesignState` snapshots for visual card additions, movements, resizes,
+      and deletions, supporting `Ctrl+Z` / `Ctrl+Y` undo/redo actions on the grid canvas.
+
+- [ ] **Explicit Container Detachment UX.**
+      Add an explicit "Unnest / Detach from Container" action button on card headers when a visual is nested inside
+      a `CONTAINER`, simplifying container extraction alongside the existing property dropdown.
+
+### Data Stewardship: Phase 3 - Impact Analysis
+
+- [ ] **Upstream/downstream impact queries.**
+      Add impact-analysis query shapes for tables, columns, jobs, scripts, datasets, reports,
+      subscriptions, owners, and stewards.
+
+- [ ] **Portal impact views.**
+      Surface affected owners, stewards, reports, subscriptions, schedules, and published datasets
+      before destructive changes, schema changes, report publishes, and dataset publishes.
+
+- [ ] **Script validation impact summary.**
+      Add pre-publish impact summaries to script/report validation output so script-first workflows
+      can review impact without relying on Portal-only state.
+
+- [ ] **Steward notification hooks.**
+      Add auditable notification hooks for stewards when upstream lineage changes affect assets they
+      own or review.
+
+- [ ] **Impact-analysis tests.**
+      Cover graph traversal direction, cycle handling, missing/deleted targets, report/dataset/job
+      joins, authorization boundaries, and Portal/API rendering of high-impact changes.
 
 ### Release Verification
 

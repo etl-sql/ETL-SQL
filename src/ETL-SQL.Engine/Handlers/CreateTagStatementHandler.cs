@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
@@ -36,7 +37,13 @@ public class CreateTagStatementHandler : IStatementHandler
         foreach (var kv in stmt.Tags)
         {
             var val = Stringify(await context.EvaluateValue(kv.Value, row));
-            if (val != null) tags[kv.Key] = val;
+            if (val != null)
+            {
+                var validation = StewardshipTagCatalog.Validate(kv.Key, val);
+                if (!validation.IsValid)
+                    throw new ExecutionException($"CREATE TAG: {validation.Message}");
+                tags[validation.CanonicalName] = val;
+            }
         }
 
         if (tags.Count == 0) return;

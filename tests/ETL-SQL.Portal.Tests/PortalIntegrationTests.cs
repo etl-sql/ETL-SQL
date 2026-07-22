@@ -638,6 +638,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var reportId = report!["id"]!.GetValue<int>();
         var stageName = $"#stage_{suffix}";
         var visualTarget = $"report:SalesCard_{suffix}";
+        var stewardQueueTarget = $"warehouse.Customer_{suffix}";
 
         using (var scope = _factory.Services.CreateScope())
         {
@@ -669,9 +670,23 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
                 SourceFile = scriptPath,
                 Line = 11
             };
+            var stewardQueueEntry = new LineageEntry(stewardQueueTarget, "SELECT")
+            {
+                SourceTables = new List<string> { $"crm.Customer_{suffix}" },
+                Metadata = new Dictionary<string, string>
+                {
+                    ["owner"] = "MarketingOps",
+                    ["steward"] = "DataSteward",
+                    ["domain"] = "crm",
+                    ["classification"] = "restricted",
+                    ["pii"] = "true"
+                },
+                SourceFile = scriptPath,
+                Line = 15
+            };
 
             await catalog.SaveLineageAsync(
-                new[] { stageEntry, visualEntry },
+                new[] { stageEntry, visualEntry, stewardQueueEntry },
                 $"report:{reportId}:manual-session",
                 scriptPath,
                 DateTime.UtcNow);
@@ -725,6 +740,36 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, sourceFileRes.StatusCode);
         var sourceFileRows = await sourceFileRes.Content.ReadFromJsonAsync<JsonArray>(_json);
         Assert.True(sourceFileRows!.Count >= 2);
+
+        var missingRes = await AuthGet(token, $"/api/catalog/stewardship?view=missing&q={Uri.EscapeDataString(suffix)}");
+        Assert.Equal(HttpStatusCode.OK, missingRes.StatusCode);
+        var missing = await missingRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(missing!["summary"]!["missingMetadataAssets"]!.GetValue<int>() >= 1);
+        Assert.Contains(missing["items"]!.AsArray(), r =>
+            r!["targetTable"]!.GetValue<string>() == stageName &&
+            r["missingTags"]!.AsArray().Any(t => t!.GetValue<string>() == "steward"));
+
+        var sensitiveRes = await AuthGet(token, $"/api/catalog/stewardship?view=sensitive&q={Uri.EscapeDataString(suffix)}");
+        Assert.Equal(HttpStatusCode.OK, sensitiveRes.StatusCode);
+        var sensitive = await sensitiveRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Contains(sensitive!["items"]!.AsArray(), r =>
+            r!["targetTable"]!.GetValue<string>() == stewardQueueTarget &&
+            r["isRestricted"]!.GetValue<bool>());
+
+        var staleRes = await AuthGet(token, $"/api/catalog/stewardship?view=stale&q=old_stage&staleAfterDays=1");
+        Assert.Equal(HttpStatusCode.OK, staleRes.StatusCode);
+        var stale = await staleRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Contains(stale!["items"]!.AsArray(), r =>
+            r!["targetTable"]!.GetValue<string>() == "#old_stage" &&
+            r["isStale"]!.GetValue<bool>());
+
+        var queueRes = await AuthGet(token, "/api/catalog/stewardship?view=queue&steward=DataSteward");
+        Assert.Equal(HttpStatusCode.OK, queueRes.StatusCode);
+        var queue = await queueRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(queue!["summary"]!["stewardQueueAssets"]!.GetValue<int>() >= 1);
+        Assert.Contains(queue["items"]!.AsArray(), r =>
+            r!["targetTable"]!.GetValue<string>() == stewardQueueTarget &&
+            r["steward"]!.GetValue<string>() == "DataSteward");
     }
 
     [Fact]

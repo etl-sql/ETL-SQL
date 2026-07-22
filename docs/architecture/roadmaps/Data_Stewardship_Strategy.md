@@ -43,17 +43,25 @@ Already available:
 
 ### Phase 1 - Stewardship Catalog
 
-- Define a governed tag catalog with type, allowed values, aliases, required scopes, and deprecation metadata.
-- Add lint/runtime validation for standard stewardship tags while preserving an escape hatch for custom organization tags.
-- Add catalog queries for missing owner/steward/contact/classification/quality metadata.
-- Document the administrator posture in `Administrators_Guide.md` and the script posture in `docs/reference/statements/lineage.md`.
+Shipped in v0.17.0:
+
+- A governed tag catalog defines type, allowed values, aliases, required scopes, and deprecation metadata.
+- Lint and `CREATE TAG` runtime validation use the standard catalog while preserving `org_`, `x_`, and
+  `custom_` organization tags.
+- `SHOW LINEAGE HISTORY FOR MISSING TAGS` queries missing owner/steward/contact/classification/quality metadata.
+- Administrator and script-first usage is documented in the platform and lineage references.
 
 ### Phase 2 - Portal Stewardship Views
 
-- Add searchable tag and lineage inventory views for administrators and stewards.
-- Add dashboards for PII/restricted inventory, missing owner/steward, stale lineage, uncertified datasets/reports, and quality/freshness breaches.
-- Add per-steward work queues filtered by `@steward`, `@domain`, and group membership.
-- Keep all views backed by existing lineage/tag APIs where possible; add APIs only for missing query shapes.
+Shipped in v0.17.0:
+
+- The Portal Lineage catalog includes a Stewardship mode with searchable lineage/tag inventory.
+- Sensitive and restricted inventory, missing metadata, stale lineage, and steward queue views are
+  backed by `/api/catalog/stewardship`.
+- The stewardship API summarizes total, sensitive, missing-metadata, stale, and queue assets and
+  returns steward/domain/classification/quality facets.
+- Stale-lineage posture uses `@freshness` when present and otherwise falls back to a configurable
+  stale-after-days window.
 
 ### Phase 3 - Certification & Review Workflow
 

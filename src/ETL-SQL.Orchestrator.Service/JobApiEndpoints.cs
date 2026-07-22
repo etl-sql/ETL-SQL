@@ -286,6 +286,16 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(entries);
             }).WithName("getLineageHistoryForTag");
 
+            app.MapGet("/api/lineage/history/missing-tags", async (HttpContext ctx,
+                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var entries = await catalog.GetMissingMetadataAsync(
+                    ETL_SQL.Common.StewardshipTagCatalog.RequiredStewardshipTags.ToArray(),
+                    Math.Clamp(limit, 1, 1000));
+                return Results.Ok(entries);
+            }).WithName("getLineageHistoryMissingTags");
+
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
                 SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg) =>
             {

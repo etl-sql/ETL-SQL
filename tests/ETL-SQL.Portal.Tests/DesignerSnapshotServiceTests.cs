@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -51,16 +52,20 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
             new Claim(ClaimTypes.Role, "Publisher"),
         ], "test"));
 
-    private DesignerSnapshotService NewService(PortalDbContext db)
+    private DesignerSnapshotService NewService(PortalDbContext db) => NewServices(db).Service;
+
+    private TestServices NewServices(PortalDbContext db)
     {
         var config = new PortalConfig { ScriptRootPath = _scratch, SnapshotDirectory = _scratch };
         var storage = new InMemoryArtifactStorage();
-        return new DesignerSnapshotService(
+        var packages = new SnapshotPackageService(config, storage, NullLogger<SnapshotPackageService>.Instance);
+        var service = new DesignerSnapshotService(
             db,
             config,
             new FolderPermissionService(db),
             storage,
-            new SnapshotPackageService(config, storage, NullLogger<SnapshotPackageService>.Instance));
+            packages);
+        return new TestServices(service, packages, config);
     }
 
     [Fact]
@@ -113,10 +118,119 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForDesigner_ReturnsInlineRows_WithHonestSamplingMetadata()
+    {
+        await using var db = await NewDbAsync();
+        var services = NewServices(db);
+        var builtAt = new DateTime(2026, 7, 22, 12, 0, 0, DateTimeKind.Utc);
+        var report = await CreateReportSnapshotAsync(
+            db,
+            services,
+            "inline.etlsnap",
+            builtAt,
+            CreateManifest("InlineSales", 600));
+
+        var result = await services.Service.LoadForDesignerAsync(report.Id, User());
+
+        Assert.Equal(DesignerSnapshotService.SnapshotOutcome.Ok, result.Outcome);
+        Assert.NotNull(result.Package);
+        Assert.Equal("Snapshot Report", result.Package!.ReportName);
+        Assert.Equal(builtAt, result.Package.BuiltAt);
+        Assert.True(result.Package.Metadata.IsSampled);
+        Assert.Equal(600, result.Package.Metadata.TotalRows);
+        Assert.Equal(DesignerSnapshotService.MaxRowsPerVisual, result.Package.Metadata.ReturnedRows);
+        Assert.False(result.Package.Metadata.RlsEnforced);
+        Assert.Equal(new[] { "CustomerId", "Amount" }, result.Package.Columns["InlineSales"]);
+        Assert.Equal("customer-00000", result.Package.SampleRows["InlineSales"][0][0]);
+        Assert.Equal("499", result.Package.SampleRows["InlineSales"][^1][1]);
+    }
+
+    [Fact]
+    public async Task LoadForDesigner_ReturnsArrowBackedRows_WithHonestSamplingMetadata()
+    {
+        await using var db = await NewDbAsync();
+        var services = NewServices(db);
+        var report = await CreateReportSnapshotAsync(
+            db,
+            services,
+            "arrow.etlsnap",
+            new DateTime(2026, 7, 22, 13, 0, 0, DateTimeKind.Utc),
+            CreateManifest("ArrowSales", SnapshotPackageService.ArrowRowThreshold));
+
+        var result = await services.Service.LoadForDesignerAsync(report.Id, User());
+
+        Assert.Equal(DesignerSnapshotService.SnapshotOutcome.Ok, result.Outcome);
+        Assert.NotNull(result.Package);
+        Assert.True(result.Package!.Metadata.IsSampled);
+        Assert.Equal(SnapshotPackageService.ArrowRowThreshold, result.Package.Metadata.TotalRows);
+        Assert.Equal(DesignerSnapshotService.MaxRowsPerVisual, result.Package.Metadata.ReturnedRows);
+        Assert.Equal(new[] { "CustomerId", "Amount" }, result.Package.Columns["ArrowSales"]);
+        Assert.Equal("customer-00000", result.Package.SampleRows["ArrowSales"][0][0]);
+        Assert.Equal("499", result.Package.SampleRows["ArrowSales"][^1][1]);
+    }
+
+    [Fact]
     public void MaxRowsPerVisual_IsBoundedForABrowserCanvas()
     {
         // The cap is the whole reason this is safe to load into a design surface. If it is ever
         // raised to something unbounded, a 50-million-row snapshot reaches the browser.
         Assert.InRange(DesignerSnapshotService.MaxRowsPerVisual, 1, 5000);
     }
+
+    private async Task<Report> CreateReportSnapshotAsync(
+        PortalDbContext db,
+        TestServices services,
+        string key,
+        DateTime builtAt,
+        ReportManifest manifest)
+    {
+        await services.Packages.SaveAsync(manifest, key);
+
+        var folder = new Folder { Name = "Reports", Path = "/reports", OwnerId = 1 };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report
+        {
+            Name = "Snapshot Report",
+            FolderId = folder.Id,
+            ScriptPath = "snapshot.rptsql",
+            CreatedBy = 1
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        db.ReportSnapshots.Add(new ReportSnapshot
+        {
+            ReportId = report.Id,
+            ManifestPath = Path.Combine(services.Config.SnapshotDirectory, key),
+            BuiltAt = builtAt,
+            BuiltBy = 1
+        });
+        await db.SaveChangesAsync();
+        return report;
+    }
+
+    private static ReportManifest CreateManifest(string visualName, int rowCount) => new()
+    {
+        Source = "snapshot.rptsql",
+        Title = "Snapshot Report",
+        Visuals =
+        {
+            new VisualManifest
+            {
+                Name = visualName,
+                VisualType = "TABLE",
+                Columns = ["CustomerId", "Amount"],
+                Rows = Enumerable.Range(0, rowCount)
+                    .Select(i => new List<string?> { $"customer-{i:D5}", i.ToString() })
+                    .ToList()
+            }
+        }
+    };
+
+    private sealed record TestServices(
+        DesignerSnapshotService Service,
+        SnapshotPackageService Packages,
+        PortalConfig Config);
 }

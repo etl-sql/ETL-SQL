@@ -117,9 +117,9 @@ Tags are attached to columns and tables using inline SQL comments with the `/* @
 
 | Tag | Type | Values | Purpose |
 | :--- | :--- | :--- | :--- |
-| `@freshness` | string | e.g. `daily`, `hourly`, `real-time` | How often this data is refreshed |
+| `@freshness` | duration | e.g. `30m`, `1h`, `7d` | Maximum acceptable age for this data |
 | `@sla` | string | e.g. `4h`, `T+1` | Delivery SLA |
-| `@quality` | string | `high` / `medium` / `low` / `unverified` | Confidence in data quality |
+| `@quality` | string | `gold` / `silver` / `bronze` | Confidence in data quality |
 | `@nullable` | boolean | `true` / `false` | Whether this column can contain NULLs |
 
 #### Documentation
@@ -138,7 +138,20 @@ Tags are attached to columns and tables using inline SQL comments with the `/* @
 | `@source_system` | string | e.g. `Salesforce`, `SAP` | Originating system |
 | `@source_table` | string | e.g. `dbo.Orders` | Originating table |
 | `@source_column` | string | e.g. `cust_id` | Original column name in the source system |
-| `@load_pattern` | string | `full_load` / `incremental` / `streaming` | How data is loaded |
+| `@load_pattern` | string | `full` / `incremental` / `cdc` | How data is loaded |
+
+### Governed Stewardship Catalog
+
+The standard tag catalog is typed and shared by linting, runtime `CREATE TAG` validation, editor
+metadata hints, and durable lineage catalog queries. Standard tag values are checked case
+insensitively. `@classification` accepts `public`, `internal`, `confidential`, or `restricted`;
+`@quality` accepts `gold`, `silver`, or `bronze`; boolean tags accept `true` or `false`; and
+duration tags use a number followed by `s`, `m`, `h`, or `d`.
+
+Custom organization tags are allowed when their names start with `org_`, `x_`, or `custom_`.
+Those tags are intentionally not type-checked by the built-in catalog. The deprecated
+`@sensitivity` alias is recognized for compatibility, but linting warns to use
+`@classification` instead.
 
 ### Tag Syntax
 
@@ -204,6 +217,24 @@ FROM LINEAGE
 WHERE TargetTable = '#customer_summary'
   AND TransformationKind <> 'PassThrough';
 ```
+
+## Durable Stewardship Queries
+
+Persisted lineage history can be queried for stewardship gaps across runs. This uses the
+`ILineageCatalogStore` backing the Orchestrator/Portal lineage catalog and returns the newest row
+per target table or column that is missing one or more required stewardship tags:
+`@owner`, `@steward`, `@contact`, `@classification`, and `@quality`.
+
+```sql
+-- Query the local lineage catalog
+SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing_stewardship;
+
+-- Query a remote Orchestrator/Portal administration connection
+SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 100 INTO #missing_stewardship;
+```
+
+The result includes `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`, `RunAt`,
+`JobName`, and `ScriptPath`.
 
 ## LINEAGE_TAGS Virtual Table
 
@@ -310,6 +341,19 @@ SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100
 ```
 
 Returns all entries whose `Tags` JSON contains the given key, optionally filtered to a specific value.
+
+### SHOW LINEAGE HISTORY FOR MISSING TAGS
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 100 INTO #missing;
+```
+
+Returns the newest catalog targets missing one or more required stewardship tags:
+`@owner`, `@steward`, `@contact`, `@classification`, and `@quality`.
 
 References:
 - [Specialized Operations](../../../administration/platform/README.md)

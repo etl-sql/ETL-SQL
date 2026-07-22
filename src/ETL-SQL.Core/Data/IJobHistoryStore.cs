@@ -24,6 +24,16 @@ public record LineageHistoryEntry(
     string? DerivedFromDescriptions = null
 );
 
+public record LineageMissingMetadataEntry(
+    string TargetTable,
+    string? TargetColumn,
+    IReadOnlyList<string> MissingTags,
+    IReadOnlyDictionary<string, string> PresentTags,
+    DateTime RunAt,
+    string? JobName,
+    string? ScriptPath
+);
+
 public interface ILineageCatalogStore
 {
     Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt);
@@ -44,6 +54,8 @@ public interface ILineageCatalogStore
         return all;
     }
     Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100);
+    Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(IReadOnlyCollection<string> requiredTags, int limit = 100);
+    Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(int limit = 1000);
     Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100);
     Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100);
     Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100);

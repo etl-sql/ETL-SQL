@@ -1862,6 +1862,13 @@ public sealed record ShowLineageHistoryForTagStatement : Statement
     public string? At { get; set; }
 }
 
+public sealed record ShowLineageHistoryForMissingTagsStatement : Statement
+{
+    public int? Limit { get; init; }
+    public string? IntoTable { get; init; }
+    public string? At { get; set; }
+}
+
 public sealed record ShowLineageHistoryForJobStatement : Statement
 {
     public string JobName { get; init; } = string.Empty;

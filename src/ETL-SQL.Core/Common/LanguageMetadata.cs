@@ -121,19 +121,9 @@ public static class LanguageMetadata
     /// Standard governance tag names recognized for intellisense and documentation hints.
     /// These appear after /* @... */ in column and table annotations.
     /// </summary>
-    public static readonly HashSet<string> StandardTags = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Security & privacy
-        "pii", "phi", "pci", "sensitive", "classification", "encrypted_at_rest",
-        // Ownership
-        "owner", "domain", "steward", "contact", "tags", "category", "certification", "trusted",
-        // Quality
-        "freshness", "sla", "quality", "nullable",
-        // Documentation
-        "d", "example", "unit", "format",
-        // Source
-        "source_system", "source_table", "source_column", "load_pattern"
-    };
+    public static readonly HashSet<string> StandardTags = new(
+        StewardshipTagCatalog.StandardTagNames,
+        StringComparer.OrdinalIgnoreCase);
 
     public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
     {

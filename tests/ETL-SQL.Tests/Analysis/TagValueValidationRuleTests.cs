@@ -29,6 +29,13 @@ namespace ETL_SQL.Tests.Analysis
             return await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext());
         }
 
+        private static async Task<System.Collections.Generic.List<LintResult>> LintUnknownTags(string sql)
+        {
+            var linter = new Linter();
+            linter.AddRule(new UnknownTagLintRule());
+            return await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext());
+        }
+
         [Fact]
         public async Task Classification_InvalidValue_IsWarning()
         {
@@ -106,6 +113,29 @@ namespace ETL_SQL.Tests.Analysis
             // @owner / @sla are free-form strings — never flagged.
             var results = await Lint("SELECT Id /* @owner: anyone; @sla: by 6am; */ FROM #t;");
             Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task DeprecatedAlias_IsWarning()
+        {
+            var results = await Lint("SELECT Id /* @sensitivity: restricted; */ FROM #t;");
+            var r = Assert.Single(results);
+            Assert.Contains("deprecated alias", r.Message);
+            Assert.Contains("@classification", r.Message);
+        }
+
+        [Fact]
+        public async Task CustomOrganizationTag_IsNotUnknown()
+        {
+            var results = await LintUnknownTags("SELECT Id /* @org_retention_policy: finance-local; */ FROM #t;");
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task UnprefixedCustomTag_IsUnknown()
+        {
+            var results = await LintUnknownTags("SELECT Id /* @retention_policy: finance-local; */ FROM #t;");
+            Assert.Single(results);
         }
 
         [Fact]

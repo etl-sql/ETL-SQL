@@ -120,6 +120,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case ShowJobHistoryStatement s: await FetchJobHistoryAsync(s, context); break;
                 case ShowLineageHistoryForTableStatement s: await FetchLineageHistoryForTableAsync(s, context); break;
                 case ShowLineageHistoryForTagStatement s: await FetchLineageHistoryForTagAsync(s, context); break;
+                case ShowLineageHistoryForMissingTagsStatement s: await FetchLineageHistoryForMissingTagsAsync(s, context); break;
                 default:
                     throw new ExecutionException(
                         $"Statement type '{statement.GetType().Name}' is not supported inside an ORCHESTRATOR block.");
@@ -312,6 +313,45 @@ namespace ETL_SQL.Connectors.Orchestrator
             var entries = await resp.Content.ReadFromJsonAsync<LineageHistoryEntryDto[]>(_json) ?? [];
             var table = await BuildLineageHistoryTableAsync(entries);
             await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task FetchLineageHistoryForMissingTagsAsync(ShowLineageHistoryForMissingTagsStatement stmt, IExecutionContext context)
+        {
+            var url = $"api/lineage/history/missing-tags?limit={stmt.Limit ?? 100}";
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            var entries = await resp.Content.ReadFromJsonAsync<LineageMissingMetadataEntryDto[]>(_json) ?? [];
+            var table = await BuildMissingMetadataTableAsync(entries);
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private static async Task<DataTable> BuildMissingMetadataTableAsync(LineageMissingMetadataEntryDto[] entries)
+        {
+            var table = new DataTable();
+            table.AddColumn("TargetTable");
+            table.AddColumn("TargetColumn");
+            table.AddColumn("MissingTags");
+            table.AddColumn("PresentTags");
+            table.AddColumn("RunAt");
+            table.AddColumn("JobName");
+            table.AddColumn("ScriptPath");
+            foreach (var e in entries)
+            {
+                var row = new Row();
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["MissingTags"] = string.Join(", ", e.MissingTags.Select(t => "@" + t));
+                row["PresentTags"] = JsonSerializer.Serialize(e.PresentTags);
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["ScriptPath"] = e.ScriptPath;
+                await table.AddRowAsync(row);
+            }
+            return table;
         }
 
         private static async Task<DataTable> BuildLineageHistoryTableAsync(LineageHistoryEntryDto[] entries)
@@ -624,5 +664,14 @@ namespace ETL_SQL.Connectors.Orchestrator
             string TargetTable, string? TargetColumn,
             string[] SourceTables, string Operation,
             Dictionary<string, string> Tags, string? SourceFile, int Line);
+
+        private sealed record LineageMissingMetadataEntryDto(
+            string TargetTable,
+            string? TargetColumn,
+            string[] MissingTags,
+            Dictionary<string, string> PresentTags,
+            DateTime RunAt,
+            string? JobName,
+            string? ScriptPath);
     }
 }

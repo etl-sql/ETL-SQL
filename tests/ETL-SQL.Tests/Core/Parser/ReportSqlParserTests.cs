@@ -728,6 +728,32 @@ CREATE VISUAL T AS TABLE (
         }
 
         [Fact]
+        public void ToSql_TableMappingsWithCellFormatting_PreservesOptions()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        revenue FORMAT 'C2' DATA_BAR COLOR '#4472C4' AS 'Revenue',
+        score COLOR_SCALE FROM '#FF0000' TO '#00FF00',
+        logo_url IMAGE WIDTH 48 AS 'Logo',
+        product_url HYPERLINK LABEL 'View' AS 'Link',
+        SPARKLINE(jan, feb, mar) AREA AS 'Trend'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            var serialized = stmt.ToSql();
+
+            Assert.Contains("revenue FORMAT 'C2' DATA_BAR COLOR '#4472C4' AS 'Revenue'", serialized);
+            Assert.Contains("score COLOR_SCALE FROM '#FF0000' TO '#00FF00'", serialized);
+            Assert.Contains("logo_url IMAGE WIDTH 48 AS 'Logo'", serialized);
+            Assert.Contains("product_url HYPERLINK LABEL 'View' AS 'Link'", serialized);
+            Assert.Contains("SPARKLINE(jan, feb, mar) AREA AS 'Trend'", serialized);
+        }
+
+        [Fact]
         public void ParseMatrixMappings_MultipleValues_ParsesAllRoles()
         {
             var sql = @"

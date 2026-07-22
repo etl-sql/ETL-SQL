@@ -1825,6 +1825,75 @@ namespace ETL_SQL.Orchestrator.Storage
             return await ReadLineageHistoryAsync(cmd);
         }
 
+        public async Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(
+            IReadOnlyCollection<string> requiredTags,
+            int limit = 100)
+        {
+            if (requiredTags.Count == 0) return Array.Empty<LineageMissingMetadataEntry>();
+
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                FROM LineageHistory
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT @scanLimit;";
+            cmd.AddParam("@scanLimit", Math.Max(limit * 20, limit));
+
+            var latestByTarget = (await ReadLineageHistoryAsync(cmd))
+                .GroupBy(
+                    e => $"{e.TargetTable}\u001f{e.TargetColumn ?? string.Empty}",
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First());
+
+            var required = requiredTags
+                .Select(ETL_SQL.Common.StewardshipTagCatalog.Canonicalize)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return latestByTarget
+                .Select(e =>
+                {
+                    var tags = new Dictionary<string, string>(e.Tags, StringComparer.OrdinalIgnoreCase);
+                    var missing = required
+                        .Where(tag => !tags.ContainsKey(tag))
+                        .ToList();
+                    return (entry: e, missing, tags);
+                })
+                .Where(x => x.missing.Count > 0)
+                .Take(limit)
+                .Select(x => new LineageMissingMetadataEntry(
+                    x.entry.TargetTable,
+                    x.entry.TargetColumn,
+                    x.missing,
+                    x.tags,
+                    x.entry.RunAt,
+                    x.entry.JobName,
+                    x.entry.ScriptPath))
+                .ToList();
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                FROM LineageHistory
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT @limit;";
+            cmd.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100)
         {
             await EnsureInitializedAsync();

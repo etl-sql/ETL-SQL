@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
@@ -222,6 +223,81 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
+    [HttpGet("stewardship")]
+    public async Task<IActionResult> Stewardship(
+        [FromQuery] string view = "all",
+        [FromQuery] string? q = null,
+        [FromQuery] string? steward = null,
+        [FromQuery] string? domain = null,
+        [FromQuery] int staleAfterDays = 30,
+        [FromQuery] int limit = 100)
+    {
+        limit = Math.Clamp(limit, 1, 500);
+        staleAfterDays = Math.Clamp(staleAfterDays, 1, 3660);
+        view = NormalizeStewardshipView(view);
+
+        var scanLimit = Math.Max(limit * 20, 1000);
+        var latestTargets = (await lineageCatalog.GetRecentLineageAsync(scanLimit))
+            .GroupBy(
+                e => $"{e.TargetTable}\u001f{e.TargetColumn ?? string.Empty}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        var allItems = latestTargets
+            .Select(e => ToStewardshipAsset(e, staleAfterDays))
+            .ToList();
+
+        var normalizedQuery = q?.Trim();
+        var normalizedSteward = steward?.Trim();
+        var normalizedDomain = domain?.Trim();
+
+        var filtered = allItems.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(normalizedQuery))
+            filtered = filtered.Where(i => MatchesStewardshipQuery(i, normalizedQuery));
+        if (!string.IsNullOrWhiteSpace(normalizedSteward))
+            filtered = filtered.Where(i => string.Equals(i.Steward, normalizedSteward, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(normalizedDomain))
+            filtered = filtered.Where(i => string.Equals(i.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase));
+
+        filtered = view switch
+        {
+            "sensitive" => filtered.Where(i => i.IsSensitive || i.IsRestricted),
+            "missing" => filtered.Where(i => i.MissingTags.Count > 0),
+            "stale" => filtered.Where(i => i.IsStale),
+            "queue" => filtered.Where(i => !string.IsNullOrWhiteSpace(i.Steward) && (i.MissingTags.Count > 0 || i.IsStale || i.IsSensitive || i.IsRestricted)),
+            _ => filtered
+        };
+
+        var queueScope = allItems.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(normalizedSteward))
+            queueScope = queueScope.Where(i => string.Equals(i.Steward, normalizedSteward, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(normalizedDomain))
+            queueScope = queueScope.Where(i => string.Equals(i.Domain, normalizedDomain, StringComparison.OrdinalIgnoreCase));
+
+        var result = new StewardshipCatalogDto(
+            new StewardshipSummaryDto(
+                allItems.Count,
+                allItems.Count(i => i.IsSensitive || i.IsRestricted),
+                allItems.Count(i => i.MissingTags.Count > 0),
+                allItems.Count(i => i.IsStale),
+                queueScope.Count(i => !string.IsNullOrWhiteSpace(i.Steward) && (i.MissingTags.Count > 0 || i.IsStale || i.IsSensitive || i.IsRestricted))),
+            BuildFacet(allItems.Select(i => i.Steward)),
+            BuildFacet(allItems.Select(i => i.Domain)),
+            BuildFacet(allItems.Select(i => i.Classification)),
+            BuildFacet(allItems.Select(i => i.Quality)),
+            filtered
+                .OrderByDescending(i => i.IsRestricted)
+                .ThenByDescending(i => i.IsSensitive)
+                .ThenByDescending(i => i.MissingTags.Count)
+                .ThenByDescending(i => i.IsStale)
+                .ThenByDescending(i => i.RunAt)
+                .Take(limit)
+                .ToList());
+
+        return Ok(result);
+    }
+
     private IQueryable<Folder> VisibleFoldersQuery()
     {
         if (IsAdmin)
@@ -323,6 +399,110 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             ? entries
             : entries.Where(e => string.Equals(e.TargetColumn, column, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static string NormalizeStewardshipView(string? view)
+    {
+        view = view?.Trim().ToLowerInvariant();
+        return view is "sensitive" or "missing" or "stale" or "queue" ? view : "all";
+    }
+
+    private static StewardshipAssetDto ToStewardshipAsset(LineageHistoryEntry entry, int staleAfterDays)
+    {
+        var tags = new Dictionary<string, string>(entry.Tags, StringComparer.OrdinalIgnoreCase);
+        var missing = StewardshipTagCatalog.RequiredStewardshipTags
+            .Where(tag => !tags.ContainsKey(tag) || string.IsNullOrWhiteSpace(tags[tag]))
+            .ToList();
+
+        var isRestricted = HasTagValue(tags, "classification", "restricted");
+        var isSensitive = isRestricted
+            || HasTruthyTag(tags, "pii")
+            || HasTruthyTag(tags, "phi")
+            || HasTruthyTag(tags, "pci")
+            || HasTruthyTag(tags, "sensitive");
+
+        var (isStale, staleReason) = GetStaleState(entry.RunAt, tags, staleAfterDays);
+
+        return new StewardshipAssetDto(
+            entry.TargetTable,
+            entry.TargetColumn,
+            entry.RunAt,
+            entry.JobName,
+            entry.ScriptPath,
+            entry.SourceTables,
+            tags,
+            missing,
+            isSensitive,
+            isRestricted,
+            isStale,
+            staleReason,
+            GetTag(tags, "owner"),
+            GetTag(tags, "steward"),
+            GetTag(tags, "contact"),
+            GetTag(tags, "domain"),
+            GetTag(tags, "classification"),
+            GetTag(tags, "quality"),
+            GetTag(tags, "freshness"));
+    }
+
+    private static (bool IsStale, string Reason) GetStaleState(DateTime runAt, IReadOnlyDictionary<string, string> tags, int staleAfterDays)
+    {
+        var now = DateTime.UtcNow;
+        var freshness = GetTag(tags, "freshness");
+        if (!string.IsNullOrWhiteSpace(freshness) && TryParseFreshness(freshness, out var freshnessWindow))
+        {
+            var staleByFreshness = runAt.ToUniversalTime().Add(freshnessWindow) < now;
+            return (staleByFreshness, staleByFreshness ? $"Freshness window {freshness} expired" : "Fresh");
+        }
+
+        var staleByDefault = runAt.ToUniversalTime().AddDays(staleAfterDays) < now;
+        return (staleByDefault, staleByDefault ? $"No lineage in {staleAfterDays} days" : "Fresh");
+    }
+
+    private static bool TryParseFreshness(string value, out TimeSpan span)
+    {
+        span = TimeSpan.Zero;
+        value = value.Trim();
+        if (value.Length < 2 || !double.TryParse(value[..^1], out var amount)) return false;
+        span = char.ToLowerInvariant(value[^1]) switch
+        {
+            's' => TimeSpan.FromSeconds(amount),
+            'm' => TimeSpan.FromMinutes(amount),
+            'h' => TimeSpan.FromHours(amount),
+            'd' => TimeSpan.FromDays(amount),
+            _ => TimeSpan.Zero
+        };
+        return span > TimeSpan.Zero;
+    }
+
+    private static bool MatchesStewardshipQuery(StewardshipAssetDto item, string query)
+    {
+        static bool Contains(string? value, string query) =>
+            value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+        return Contains(item.TargetTable, query)
+            || Contains(item.TargetColumn, query)
+            || Contains(item.JobName, query)
+            || Contains(item.ScriptPath, query)
+            || item.SourceTables.Any(s => Contains(s, query))
+            || item.Tags.Any(t => Contains(t.Key, query) || Contains(t.Value, query));
+    }
+
+    private static IReadOnlyList<StewardshipFacetDto> BuildFacet(IEnumerable<string?> values) =>
+        values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .GroupBy(v => v!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new StewardshipFacetDto(g.Key, g.Count()))
+            .OrderBy(f => f.Value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static bool HasTruthyTag(IReadOnlyDictionary<string, string> tags, string key) =>
+        tags.TryGetValue(key, out var value) && value.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasTagValue(IReadOnlyDictionary<string, string> tags, string key, string expected) =>
+        tags.TryGetValue(key, out var value) && value.Equals(expected, StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetTag(IReadOnlyDictionary<string, string> tags, string key) =>
+        tags.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
     private static int? TryParseReportId(string? jobName)
     {

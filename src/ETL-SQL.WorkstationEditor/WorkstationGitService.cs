@@ -10,11 +10,11 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return new GitStatusResponse(null, [], [], [], false);
 
-        var (branchExit, branch, _) = RunGitCommand(root, "rev-parse --abbrev-ref HEAD");
+        var (branchExit, branch, _) = RunGitCommand(root, "rev-parse", "--abbrev-ref", "HEAD");
         if (branchExit != 0 || string.IsNullOrWhiteSpace(branch))
             return new GitStatusResponse(null, [], [], [], false);
 
-        var (statusExit, statusOutput, _) = RunGitCommand(root, "status --porcelain");
+        var (statusExit, statusOutput, _) = RunGitCommand(root, "status", "--porcelain");
         if (statusExit != 0)
             return new GitStatusResponse(null, [], [], [], false);
 
@@ -52,7 +52,7 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
             return new GitCommitResponse(false, null, "Commit message cannot be empty.");
 
         // 1. Stage all changes
-        var (addExit, _, addError) = RunGitCommand(root, "add -A");
+        var (addExit, _, addError) = RunGitCommand(root, "add", "-A");
         if (addExit != 0)
         {
             string errorMsg = string.IsNullOrWhiteSpace(addError) ? "git add failed." : addError.Trim();
@@ -60,8 +60,7 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         }
 
         // 2. Commit
-        string safeComment = comment.Replace("\"", "\\\"");
-        var (commitExit, commitOutput, commitError) = RunGitCommand(root, $"commit -m \"{safeComment}\"");
+        var (commitExit, commitOutput, commitError) = RunGitCommand(root, "commit", "-m", comment);
         string combinedOutput = $"{commitOutput}\n{commitError}";
 
         if (combinedOutput.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
@@ -74,33 +73,41 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         }
 
         // 3. Resolve HEAD revision
-        var (revExit, revOutput, _) = RunGitCommand(root, "rev-parse --short HEAD");
+        var (revExit, revOutput, _) = RunGitCommand(root, "rev-parse", "--short", "HEAD");
         if (revExit != 0 || string.IsNullOrWhiteSpace(revOutput))
             return new GitCommitResponse(false, null, "Could not resolve commit HEAD revision.");
 
         return new GitCommitResponse(true, revOutput.Trim(), "Committed successfully.");
     }
 
-    private static (int ExitCode, string Output, string Error) RunGitCommand(string workingDir, string arguments)
+    private static (int ExitCode, string Output, string Error) RunGitCommand(string workingDir, params string[] arguments)
     {
         try
         {
             var psi = new ProcessStartInfo
             {
                 FileName = "git",
-                Arguments = arguments,
                 WorkingDirectory = workingDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            foreach (var argument in arguments)
+            {
+                psi.ArgumentList.Add(argument);
+            }
 
             using var process = Process.Start(psi);
             if (process == null) return (-1, string.Empty, "Failed to start git process.");
+            if (!process.WaitForExit(3000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return (-1, string.Empty, "git command timed out.");
+            }
+
             string output = process.StandardOutput.ReadToEnd();
             string error = process.StandardError.ReadToEnd();
-            process.WaitForExit(3000);
             return (process.ExitCode, output, error);
         }
         catch (Exception ex)
