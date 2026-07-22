@@ -239,6 +239,15 @@ public sealed class DesignerAnalysisService
             o => o.Value,
             StringComparer.OrdinalIgnoreCase);
 
+        foreach (var act in v.Actions)
+        {
+            options[$"action:{act.Trigger.ToUpper()}"] = act.ToSql();
+        }
+        foreach (var inter in v.Interactions)
+        {
+            options[$"interaction:{inter.Key.ToUpper()}"] = inter.Value;
+        }
+
         return new DesignerVisualDto(
             $"v_{v.Name}_{idx}",
             v.Name,

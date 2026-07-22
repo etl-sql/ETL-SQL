@@ -4099,6 +4099,18 @@ export function createDesigner(container, opts = {}) {
                     </div>`).join('')}
             </div>
             <div class="etlsql-dsgn-props-section">
+                <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
+                <label class="etlsql-dsgn-label">On Change
+                    <input type="text" id="pp-action-on-change" class="form-control" placeholder="e.g., SET_PARAMETER(@var, value)" value="${esc(v.options?.['action:ON_CHANGE'] || '')}">
+                </label>
+                <label class="etlsql-dsgn-label">On Click
+                    <input type="text" id="pp-action-on-click" class="form-control" placeholder="e.g., DRILL_DOWN(Target = Tbl, Key = region)" value="${esc(v.options?.['action:ON_CLICK'] || '')}">
+                </label>
+                <label class="etlsql-dsgn-label">On Select
+                    <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
+                </label>
+            </div>
+            <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Grid Position</div>
                 <div class="etlsql-dsgn-grid4">
                     <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
@@ -4117,6 +4129,9 @@ export function createDesigner(container, opts = {}) {
         on('#pp-ds',           e => { v.dataset = e.target.value || null; });
         on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
         on('#pp-height',       e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
+        on('#pp-action-on-change', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CHANGE'] = val; else delete v.options['action:ON_CHANGE']; });
+        on('#pp-action-on-click',  e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CLICK'] = val; else delete v.options['action:ON_CLICK']; });
+        on('#pp-interaction-on-select', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['interaction:ON_SELECT'] = val; else delete v.options['interaction:ON_SELECT']; });
         on('#pp-col',          e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-row',          e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });

@@ -219,6 +219,7 @@ public static class AstSerializer
         MergeDeleteClause _ => "THEN DELETE",
         MergeInsertClause n => FormatMergeInsert(n),
         MergeActionClause n => FormatMergeAction(n),
+        SetParameterAction n => $"SET_PARAMETER({n.ParameterName}, {n.ValueExpression})",
         DrillDownAction n => $"DRILL_DOWN(Target = {n.TargetVisual}, Key = ({string.Join(", ", n.KeyColumns)}))",
         DrillInAction n => $"DRILL_IN(HIERARCHY = ({string.Join(", ", n.Hierarchy)}))",
         RunScriptAction n => $"RUN_SCRIPT('{n.ScriptPath}'{FormatActionParameters(n.Parameters)})",

@@ -123,14 +123,40 @@ public sealed class DesignerScriptGenerationService
             if (mappings.Count > 0)
                 sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
 
+            var regularOpts = (v.Options ?? new Dictionary<string, string>())
+                .Where(o => !string.Equals(o.Key, "WIDTH", StringComparison.OrdinalIgnoreCase)
+                         && !string.Equals(o.Key, "HEIGHT", StringComparison.OrdinalIgnoreCase)
+                         && !string.Equals(o.Key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)
+                         && !string.Equals(o.Key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
+                         && !o.Key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
+                         && !o.Key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase))
+                .Select(o => $"{o.Key.ToUpper()} = '{EscapeStr(o.Value)}'")
+                .ToList();
+            if (regularOpts.Count > 0)
+                sb.AppendLine($"    OPTIONS ({string.Join(", ", regularOpts)}),");
+
+            var actions = (v.Options ?? new Dictionary<string, string>())
+                .Where(o => o.Key.StartsWith("action:", StringComparison.OrdinalIgnoreCase))
+                .Select(o => $"{o.Key["action:".Length..].ToUpper()} = {o.Value}")
+                .ToList();
+            if (actions.Count > 0)
+                sb.AppendLine($"    ACTIONS ({string.Join(", ", actions)}),");
+
+            var interactions = (v.Options ?? new Dictionary<string, string>())
+                .Where(o => o.Key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase))
+                .Select(o => $"{o.Key["interaction:".Length..].ToUpper()} = {o.Value}")
+                .ToList();
+            if (interactions.Count > 0)
+                sb.AppendLine($"    INTERACTIONS ({string.Join(", ", interactions)}),");
+
             var layoutOpts = new List<string>();
             if (v.GridColSpan > 0 && v.GridColSpan != 12)
                 layoutOpts.Add($"COLSPAN = {v.GridColSpan}");
             if (v.GridRowSpan > 0 && v.GridRowSpan != 4)
                 layoutOpts.Add($"ROWSPAN = {v.GridRowSpan}");
-            if (v.Options.TryGetValue("WIDTH", out var w) && !string.IsNullOrWhiteSpace(w))
+            if (v.Options != null && v.Options.TryGetValue("WIDTH", out var w) && !string.IsNullOrWhiteSpace(w))
                 layoutOpts.Add($"WIDTH = '{EscapeStr(w)}'");
-            if (v.Options.TryGetValue("HEIGHT", out var h) && !string.IsNullOrWhiteSpace(h))
+            if (v.Options != null && v.Options.TryGetValue("HEIGHT", out var h) && !string.IsNullOrWhiteSpace(h))
                 layoutOpts.Add($"HEIGHT = '{EscapeStr(h)}'");
             if (layoutOpts.Count > 0)
                 sb.AppendLine($"    LAYOUT ({string.Join(", ", layoutOpts)}),");
