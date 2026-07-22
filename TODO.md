@@ -12,94 +12,16 @@ Release focus: promote the actionable roadmap work into the sprint, finish the w
 improve authoring surfaces, and close the maintainability work that makes future connector and Portal
 changes safer.
 
-### Code Review Findings
+### Review Workflow and Data Stewardship
 
-- [x] **Fix Workstation Git commit failure reporting.**
-      `WorkstationGitService.Commit` stages with `git add -A`, runs `git commit -m ...`, then reports
-      success as long as `rev-parse --short HEAD` returns a revision. Because `RunGitCommand` discards
-      exit status and stderr, failures such as missing Git identity, index lock errors, or rejected
-      commits can still return `Committed = true` against the previous HEAD. Return exit code/stderr
-      from the helper, fail when `git add` or `git commit` fails, and add a temp-repository test that
-      proves failed commits are not reported as successful.
-
-- [x] **Bump Portal static asset cache keys for the v0.17.0 designer/runtime changes.**
-      Portal pages still load changed JavaScript and CSS with `?v=0.16.0` query strings
-      (`designer.html`, `orchestrator.html`, `index.html`, `admin.html`, `docs.html`, `login.html`,
-      and preview/runtime embeds). A browser with cached v0.16.0 designer assets can run old client
-      code against the new v0.17.0 endpoints until cache expiry or manual cache clearing. Update the
-      cache token to the release version or derive it from the product version during build/publish.
-
-- [x] **Repair the bash pre-release installer phase.**
-      `scripts/test-pre-release.sh --build-installers` calls `./scripts/publish-release.sh`, but the
-      repository contains `scripts/publish-release.ps1` and no `publish-release.sh` wrapper. The
-      Linux/macOS pre-release gate will fail as soon as the installer phase is enabled. Either add the
-      bash wrapper or invoke the PowerShell script through `pwsh`, matching the existing release
-      workflow behavior.
-
-- [x] **Normalize bash scripts to LF before release.**
-      `bash -n scripts/test-pre-release.sh` currently fails on Windows checkout text with
-      `syntax error near unexpected token $'in\r'`, despite `.gitattributes` pinning `*.sh` to LF.
-      Re-normalize the affected shell scripts and add a release verification step that catches CRLF
-      drift before Linux/macOS gates run.
-
-### Visual Reporting and Dashboard Designer
-
-- [ ] **Snapshot-backed layout designing.** — *implementation shipped, end-to-end verification outstanding*
-      Allow the Report Designer to load and deserialize the last successfully compiled `.etlsnap`
-      package. Visuals should render on the grid canvas with historical snapshot data instead of empty
-      wireframe placeholders, giving a live-like design experience without hitting production
-      databases.
-      Shipped: `DesignerSnapshotService` resolves the newest snapshot behind the same gate the view
-      path uses (folder permission, path containment on the script and the snapshot key, artifact
-      existence), loads rows per visual, caps at 500 rows per visual, and returns
-      `isSampled`/`totalRows` so the canvas badge is honest.
-      `GET /api/designer/snapshot/{reportId}` exposes it and `designer.html` passes it through; a
-      failure there never blocks opening the designer, since a report that has never run legitimately
-      has no snapshot. Covered by `DesignerSnapshotServiceTests`.
-      Row-level security needs no filtering: `ExecutionJobService` refuses to persist a shared
-      snapshot for an identity-sensitive report — if the script references identity or the run was
-      impersonated, none is written and the report stays per-viewer execution only — so any snapshot
-      that exists is identity-independent by construction and the permission gate is sufficient.
-      Sample rows are keyed by visual name because the manifest never links a visual to its dataset
-      (`VisualManifest` has 34 properties, none naming the `DATASET`). The render path resolves a
-      visual's own name/title/id, then its dataset, then the first entry. Chosen over adding the link
-      to the manifest because this works with snapshots that already exist, which is the whole point
-      of loading the last *already-compiled* package.
-      **Remaining: verify the render path against a real compiled `.etlsnap`.** The tests cover the
-      permission gate and the absence cases, not a populated package rendering end to end. Needs a
-      dev Portal with a report that has actually run.
-
-### Developer Experience: Portal and VS Code
-
-> Shared schema introspection: the Portal script editor's autocomplete and the Workstation editor
-> both resolve schema through the shared, cached, ACL-gated snapshot service
-> (`docs/architecture/decisions/PortalEditorStrategy.md` B1), which is shipped.
->
-> This note previously also named `TEST CONNECTION` as a consumer. It is not one and never was:
-> `TestConnectionStatementHandler` runs a layered network diagnostic (DNS → TCP → TLS) through
-> `ConnectionDiagnosticEngine` and does no schema introspection at all, and the B1 decision never
-> mentions it. Corrected so nobody plans work against a dependency that does not exist.
-
-### Developer Experience: Local Browser Script Editor
-> Design for the unified workbench — workspace layout, execution flow, the DAG swimlane and the
-> sandbox prototyping route — lives in the
-> [Unified Script Editor Roadmap](docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md).
-> That document is design intent, not a status record: its "Advanced Gaps & Customizations" section
-> describes six capabilities in present tense regardless of whether they exist. Audited against the
-> code — LSP hover, hover lineage, the stateful sidebar explorer and server lifecycle
-> (`POST /api/shutdown`) are shipped; the two below are not.
-
-- [x] **Formatter settings panel.**
-      A visual configuration sidebar for the editor's formatter (casing, spaces vs tabs, newlines)
-      that serializes to a local `.etlsql-formatter.json`. Nothing in the codebase references that
-      file today, so this is unbuilt rather than partially done — the formatter itself works, it is
-      only the settings surface and persistence that are missing.
-
-- [x] **Workstation git status surface.**
-      A branch indicator in the status bar and a staging/commit sidebar panel, explicitly excluding
-      diff viewers. The Portal already commits on save through
-      `PortalScriptSourceControlService`; the Workstation editor has no git surface at all, so this
-      is about showing state locally rather than adding a second commit path.
+- [ ] **Phase 1: Stewardship Catalog.**
+      Define the governed tag catalog for standard stewardship metadata (`@owner`, `@steward`,
+      `@contact`, `@domain`, `@classification`, `@quality`, `@pii`, `@phi`, `@pci`, and
+      `@sensitive`) with type, allowed values, aliases, required scopes, and deprecation metadata.
+      Add lint/runtime validation for those standard tags while preserving an escape hatch for custom
+      organization tags. Add catalog queries for missing owner, steward, contact, classification, and
+      quality metadata. Document the administrator posture and script-first usage in the stewardship
+      strategy/reference docs.
 
 ### Release Verification
 

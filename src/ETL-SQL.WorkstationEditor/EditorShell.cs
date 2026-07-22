@@ -16,61 +16,9 @@ internal static class EditorShell
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ETL-SQL Local Script Editor</title>
+  <link rel="stylesheet" href="/css/portal.css?v={{options.SessionToken}}">
   <link rel="stylesheet" href="/designer/designer.css?v={{options.SessionToken}}">
   <style>
-    /* Design tokens mirror src/ETL-SQL.Portal/wwwroot/css/portal.css so the local
-       editor and the hosted Portal share one visual language. Keep them in sync. */
-    :root {
-      --portal-bg: #f3f5f8;
-      --portal-bg-soft: #eef2f7;
-      --portal-surface: #ffffff;
-      --portal-surface-subtle: #f8fafc;
-      --portal-surface-raised: #ffffff;
-      --portal-text: #172033;
-      --portal-text-soft: #46556c;
-      --portal-muted: #5a6778;
-      --portal-text-muted: #5a6778;
-      --portal-border: #d9e0ea;
-      --portal-border-soft: #e8edf4;
-      --portal-accent: #2563eb;
-      --portal-accent-hover: #1d4ed8;
-      --portal-accent-soft: #e8f0ff;
-      --portal-danger: #b83535;
-      --portal-warning: #a05a00;
-      --portal-success: #117853;
-      --portal-focus-ring: #1d4ed8;
-      --portal-focus: rgba(37, 99, 235, .36);
-      --portal-shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
-      --portal-shadow-md: 0 14px 30px rgba(15, 23, 42, .12);
-      --portal-radius: 8px;
-      --portal-radius-sm: 5px;
-      --portal-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --portal-font-mono: Cascadia Code, Consolas, monospace;
-    }
-    body.theme-dark {
-      color-scheme: dark;
-      --portal-bg: #0b0f19;
-      --portal-bg-soft: #111827;
-      --portal-surface: #1f2937;
-      --portal-surface-subtle: #111827;
-      --portal-surface-raised: #1f2937;
-      --portal-text: #f9fafb;
-      --portal-text-soft: #d1d5db;
-      --portal-muted: #9ca3af;
-      --portal-text-muted: #9ca3af;
-      --portal-border: #374151;
-      --portal-border-soft: #1f2937;
-      --portal-accent: #3b82f6;
-      --portal-accent-hover: #60a5fa;
-      --portal-accent-soft: rgba(59, 130, 246, 0.15);
-      --portal-danger: #f87171;
-      --portal-warning: #fbbf24;
-      --portal-success: #34d399;
-      --portal-focus-ring: #60a5fa;
-      --portal-focus: rgba(96, 165, 250, .36);
-      --portal-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
-      --portal-shadow-md: 0 14px 30px rgba(0, 0, 0, .5);
-    }
     html, body {
       margin: 0;
       padding: 0;

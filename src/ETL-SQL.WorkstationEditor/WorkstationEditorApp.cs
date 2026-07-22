@@ -128,6 +128,22 @@ public static class WorkstationEditorApp
             });
         }
 
+        var cssRoot = FindPortalCssRoot();
+        if (cssRoot is not null)
+        {
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                RequestPath = "/css",
+                FileProvider = new PhysicalFileProvider(cssRoot),
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+                    ctx.Context.Response.Headers.Pragma = "no-cache";
+                    ctx.Context.Response.Headers.Expires = "0";
+                }
+            });
+        }
+
         app.MapGet("/favicon.ico", () => Results.NoContent());
 
         app.MapGet("/", (WorkstationWorkspace workspace, WorkstationEditorOptions editorOptions) =>
@@ -445,6 +461,21 @@ public static class WorkstationEditorApp
 
         var published = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         return Directory.Exists(Path.Combine(published, "designer")) ? published : null;
+    }
+
+    private static string? FindPortalCssRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, "src", "ETL-SQL.Portal", "wwwroot", "css");
+            if (Directory.Exists(candidate))
+                return candidate;
+            current = current.Parent;
+        }
+
+        var published = Path.Combine(AppContext.BaseDirectory, "wwwroot", "css");
+        return Directory.Exists(published) ? published : null;
     }
 }
 
