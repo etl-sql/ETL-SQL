@@ -4116,15 +4116,103 @@ export function createDesigner(container, opts = {}) {
         }
     }
 
+    function extractDeclaredVariables() {
+        const vars = new Set(['@startDate', '@endDate', '@region', '@category', '@status', '@tenantId']);
+        for (const ds of state.datasets || []) {
+            const matches = (ds.query || '').match(/@([a-zA-Z0-9_]+)/g);
+            if (matches) matches.forEach(m => vars.add(m));
+        }
+        for (const page of state.pages || []) {
+            for (const vis of page.visuals || []) {
+                if (!vis.options) continue;
+                for (const val of Object.values(vis.options)) {
+                    if (typeof val === 'string') {
+                        const matches = val.match(/@([a-zA-Z0-9_]+)/g);
+                        if (matches) matches.forEach(m => vars.add(m));
+                    }
+                }
+            }
+        }
+        if (typeof editor !== 'undefined' && editor) {
+            const text = editor.getValue();
+            const matches = text.match(/@([a-zA-Z0-9_]+)/g);
+            if (matches) matches.forEach(m => vars.add(m));
+        }
+        return Array.from(vars).sort();
+    }
+
     function renderProps() {
         propsPanel.innerHTML = '';
         const v = selVisualId ? findVis(selVisualId) : null;
+        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
+
         if (!v) {
-            propsPanel.innerHTML = '<p class="etlsql-dsgn-props-empty">Select a visual on the canvas to edit its properties.</p>';
+            if (!state.reportStyle) state.reportStyle = { theme: 'light' };
+            const style = state.reportStyle;
+            const currentTheme = style.theme || 'light';
+            const themes = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
+
+            propsPanel.innerHTML = `
+                <div class="etlsql-dsgn-props-section">
+                    <div class="etlsql-dsgn-props-hdr">Report & Dashboard Style</div>
+                    <label class="etlsql-dsgn-label">Report Title
+                        <input type="text" id="pp-report-title" class="form-control" value="${esc(reportName)}" placeholder="Dashboard Title">
+                    </label>
+                    <label class="etlsql-dsgn-label">Report Theme
+                        <select id="pp-report-theme" class="form-control">
+                            ${themes.map(t => `<option value="${t}"${currentTheme === t ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}
+                        </select>
+                    </label>
+                    ${currentTheme === 'custom' || style.accent ? `
+                    <div class="etlsql-dsgn-color-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                        <label class="etlsql-dsgn-label">Accent Color
+                            <input type="color" id="pp-color-accent" class="form-control" value="${style.accent || '#2563eb'}">
+                        </label>
+                        <label class="etlsql-dsgn-label">Background
+                            <input type="color" id="pp-color-bg" class="form-control" value="${style.background || '#ffffff'}">
+                        </label>
+                        <label class="etlsql-dsgn-label">Card Surface
+                            <input type="color" id="pp-color-surface" class="form-control" value="${style.surface || '#ffffff'}">
+                        </label>
+                        <label class="etlsql-dsgn-label">Text Color
+                            <input type="color" id="pp-color-text" class="form-control" value="${style.text || '#1e293b'}">
+                        </label>
+                    </div>` : ''}
+                </div>
+                <p class="etlsql-dsgn-props-empty" style="margin-top:16px;">Click any visual card on the grid canvas to edit its properties, mappings, and events.</p>
+            `;
+
+            on('#pp-report-title', e => {
+                reportName = e.target.value;
+                const titleEl = topbar.querySelector('#dsgn-title-input');
+                if (titleEl) titleEl.value = reportName;
+                syncScriptFromGridDebounced();
+            });
+            on('#pp-report-theme', e => {
+                pushUndoState();
+                state.reportStyle.theme = e.target.value;
+                const themesList = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
+                themesList.forEach(t => document.body.classList.remove('theme-' + t));
+                document.body.classList.add('theme-' + e.target.value);
+                const selectEl = topbar.querySelector('#dsgn-theme-select');
+                if (selectEl) selectEl.value = e.target.value;
+                renderProps();
+                syncScriptFromGridDebounced();
+            });
+            const bindColor = (id, prop) => {
+                on(id, e => {
+                    pushUndoState();
+                    if (!state.reportStyle) state.reportStyle = {};
+                    state.reportStyle[prop] = e.target.value;
+                    syncScriptFromGridDebounced();
+                });
+            };
+            bindColor('#pp-color-accent', 'accent');
+            bindColor('#pp-color-bg', 'background');
+            bindColor('#pp-color-surface', 'surface');
+            bindColor('#pp-color-text', 'text');
             return;
         }
-
-        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
 
         if (v.type === 'CONTAINER') {
             const containerType = v.options?.CONTAINER_TYPE || 'BOX';
@@ -4236,6 +4324,9 @@ export function createDesigner(container, opts = {}) {
                 ${colOptions.map(c => `<option value="${esc(c)}"></option>`).join('')}
             </datalist>` : '';
 
+        const declaredVars = extractDeclaredVariables();
+        const varOpts = declaredVars.map(vname => `<option value="${esc(vname)}">${esc(vname)}</option>`).join('');
+
         propsPanel.innerHTML = `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Properties</div>
@@ -4281,6 +4372,12 @@ export function createDesigner(container, opts = {}) {
             </div>
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
+                <label class="etlsql-dsgn-label">Target Parameter (@var)
+                    <select id="pp-action-target-var" class="form-control">
+                        <option value="">— Select Target @Variable —</option>
+                        ${varOpts}
+                    </select>
+                </label>
                 <label class="etlsql-dsgn-label">On Change
                     <input type="text" id="pp-action-on-change" class="form-control" placeholder="e.g., SET_PARAMETER(@var, value)" value="${esc(v.options?.['action:ON_CHANGE'] || '')}">
                 </label>
@@ -4313,6 +4410,17 @@ export function createDesigner(container, opts = {}) {
         on('#pp-ds',           e => { v.dataset = e.target.value || null; });
         on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
         on('#pp-height',       e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
+        on('#pp-action-target-var', e => {
+            const selectedVar = e.target.value;
+            if (!selectedVar) return;
+            if (!v.options) v.options = {};
+            const col = mappings['Category'] || mappings['Value'] || 'value';
+            const actionStr = `SET_PARAMETER(${selectedVar}, ${col})`;
+            v.options['action:ON_CHANGE'] = actionStr;
+            const input = propsPanel.querySelector('#pp-action-on-change');
+            if (input) input.value = actionStr;
+            syncScriptFromGridDebounced();
+        });
         on('#pp-action-on-change', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CHANGE'] = val; else delete v.options['action:ON_CHANGE']; });
         on('#pp-action-on-click',  e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CLICK'] = val; else delete v.options['action:ON_CLICK']; });
         on('#pp-interaction-on-select', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['interaction:ON_SELECT'] = val; else delete v.options['interaction:ON_SELECT']; });

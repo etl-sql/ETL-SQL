@@ -67,7 +67,15 @@ public record GenerateDesignerResponse(string Script);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
-    List<DesignerDatasetDto> Datasets);
+    List<DesignerDatasetDto> Datasets,
+    DesignerReportStyleDto? ReportStyle = null);
+
+public record DesignerReportStyleDto(
+    string? Theme = null,
+    string? Accent = null,
+    string? Background = null,
+    string? Surface = null,
+    string? Text = null);
 
 public record DesignerPageDto(
     string Id,
