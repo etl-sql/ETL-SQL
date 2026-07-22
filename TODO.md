@@ -14,6 +14,24 @@ changes safer.
 
 ### Visual Reporting and Dashboard Designer Enhancements
 
+- [ ] **Design-Time Script DAG Preview for Authoring.**
+      Add a read-only "Flow" / "DAG" pane to the script editor surfaces so authors can see the
+      expected pipeline shape before execution. The script remains the source of truth; the diagram
+      is derived from parsed `.etlsql` / `.rptsql` text and node clicks jump back to source lines.
+      Reuse existing pieces first: `ETL-SQL.Analysis/Lineage/ScriptDagBuilder.cs` for the graph,
+      `ScriptDagProjectionService` / `DagDto` for Portal-shaped DTOs, the shared `renderDag`
+      browser renderer, the Workstation `/api/analyze` metadata pass, and the VS Code Visual Flow
+      panel plumbing. Extend only where needed to classify ETL-specific nodes more clearly:
+      connections, file reads/writes, `#temp` staging, datasets, report visuals/pages, SFTP/FTP/API
+      sends, `RUN SCRIPT`, conditionals, loops, and destructive or outbound actions. Show uncertainty
+      explicitly for unresolved dynamic SQL, variable paths, or parse errors instead of pretending
+      the graph is complete.
+      Implementation shape: add a shared `IScriptDagProjection` service in Analysis/Core-facing code,
+      expose `/api/script/dag` in Workstation and Portal designer endpoints, wire a Flow tab into
+      `createScriptEditorWorkbench`, and route VS Code webview requests through the existing LSP
+      custom-request pattern. Validation should include unit tests for `ScriptDagBuilder`
+      classifications, Portal/Workstation endpoint tests, and one Node renderer smoke test.
+
 - [x] **Canvas Keyboard Shortcuts & Ergonomics.**
       Add canvas-level keyboard listener to `createDesigner` handling `Delete` / `Backspace` to remove
       selected visual cards, `Ctrl+S` / `Cmd+S` to trigger report save, `Escape` to clear visual
@@ -53,6 +71,20 @@ changes safer.
 
 - [x] **Expandable Dataset Tree with Drag-and-Drop Mapping.**
       Expand dataset rows under `#dsgn-ds-list` to display dataset columns, allowing drag-and-drop of column pills directly into property panel mapping target slots.
+
+### Portal Business Consumer UX & Discovery
+
+- [ ] **Fuzzy & Synonym Catalog Search (`SHOW CATALOG SEARCH` Enhancement).**
+      Upgrade portal catalog search to use fuzzy matching (reusing core fuzzy/Levenshtein matching utilities) across report titles, descriptions (`SET REPORT DESCRIPTION`), tags (`#sales`, `#inventory`), and metric/column names, ensuring non-exact searches (e.g. "Q3 Sales") match technical titles like `RPT_2026_SALES_Q3_FINAL`.
+
+- [ ] **Self-Service "Request Access" Workflow for Restricted Reports.**
+      Replace cold `403 Forbidden` / access denied error screens with an interactive "Request Access" card that identifies the report owner/group and enables 1-click access request submission, logging a pending access request and notifying the report owner via outbox/email.
+
+- [ ] **Business Consumer Home Dashboard (Favorites, Recent, & Featured).**
+      Add a consumer-oriented landing page mode to the Portal homepage highlighting "My Favorites" (`SHOW FAVORITES`), "Recently Viewed" (`SHOW RECENT REPORTS`), and "Popular in My Department" visual cards as the default view for non-admin business users, bypassing technical folder structures.
+
+- [ ] **Report Ownership & Data Freshness Badges.**
+      Render a standardized metadata header on published reports displaying the owning team/contact, last refresh timestamp, data freshness indicator, and interactive tag badges.
 
 ### Data Stewardship: Protected Data Audit Workflow
 
