@@ -1785,6 +1785,8 @@ body.vscode-dark .cm-editor .cm-line::selection {
     white-space: nowrap;
 }
 
+.etlsql-dsgn-vcard-fold,
+.etlsql-dsgn-vcard-dup,
 .etlsql-dsgn-vcard-detach,
 .etlsql-dsgn-vcard-del {
     position: relative;
@@ -1799,10 +1801,57 @@ body.vscode-dark .cm-editor .cm-line::selection {
     transition: opacity 0.15s;
     line-height: 1;
 }
+.etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-fold,
+.etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-dup,
 .etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-detach,
 .etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-del { opacity: 1; }
+.etlsql-dsgn-vcard-fold:hover,
+.etlsql-dsgn-vcard-dup:hover,
 .etlsql-dsgn-vcard-detach:hover { background: var(--portal-accent-soft, #e8f0ff); color: var(--portal-accent, #2563eb); }
 .etlsql-dsgn-vcard-del:hover { background: var(--portal-border, #d9e0ea); color: #e11d48; }
+
+.etlsql-dsgn-role-badge {
+    font-size: 0.6875rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 500;
+    margin-left: 6px;
+}
+.etlsql-dsgn-role-badge.req-missing {
+    background: #ffe4e6;
+    color: #e11d48;
+}
+.etlsql-dsgn-role-badge.req-ok {
+    background: #dcfce7;
+    color: #16a34a;
+}
+.etlsql-dsgn-role-badge.optional {
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-dsgn-col-pill {
+    padding: 2px 8px;
+    margin: 2px 12px 2px 24px;
+    font-size: 0.75rem;
+    background: var(--portal-surface-subtle, #f8fafc);
+    border: 1px solid var(--portal-border, #e2e8f0);
+    border-radius: 4px;
+    cursor: grab;
+    user-select: none;
+    color: var(--portal-text, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.etlsql-dsgn-col-pill:hover {
+    background: var(--portal-accent-soft, #eff6ff);
+    border-color: var(--portal-accent, #2563eb);
+    color: var(--portal-accent, #2563eb);
+}
+.etlsql-dsgn-map-row input.drag-over {
+    border-color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-accent-soft, #eff6ff) !important;
+}
 
 .etlsql-dsgn-tree-item {
     padding: 4px 12px;

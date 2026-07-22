@@ -3253,9 +3253,12 @@ export function createDesigner(container, opts = {}) {
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
     const previewUrl = opts.previewUrl ?? '/designer-preview.html';
 
-    // ── Undo / Redo & Dirty state ─────────────────────────────────────────────
+    // ── Undo / Redo, Clipboard & Ergonomics state ─────────────────────────────
     const undoStack = [];
     const redoStack = [];
+    const collapsedContainers = new Set();
+    const expandedDsIds = new Set();
+    let clipboardVisuals = [];
     let isDirty = false;
 
     function pushUndoState() {
@@ -3276,6 +3279,54 @@ export function createDesigner(container, opts = {}) {
         if (!redoStack.length) return;
         undoStack.push(JSON.stringify(state.pages));
         state.pages = JSON.parse(redoStack.pop());
+        renderAll();
+    }
+
+    function duplicateVisual(id) {
+        const v = findVis(id);
+        if (!v) return;
+        pushUndoState();
+        const newId = uid();
+        const clone = JSON.parse(JSON.stringify(v));
+        clone.id = newId;
+        clone.name = (clone.type || 'vis').toLowerCase() + '_' + newId.slice(2);
+        clone.gridRow = (v.gridRow || 1) + (v.gridRowSpan || 4);
+        if (clone.gridRow > 50) clone.gridRow = (v.gridRow || 1) + 1;
+        const page = curPage();
+        if (page?.visuals) page.visuals.push(clone);
+        selectVisual(newId);
+        renderAll();
+    }
+
+    function copySelectedVisuals() {
+        if (selVisualIds.size === 0) return;
+        clipboardVisuals = Array.from(selVisualIds)
+            .map(id => findVis(id))
+            .filter(Boolean)
+            .map(v => JSON.parse(JSON.stringify(v)));
+    }
+
+    function pasteVisuals() {
+        if (!clipboardVisuals.length) return;
+        pushUndoState();
+        const page = curPage();
+        if (!page.visuals) page.visuals = [];
+        const newSelIds = [];
+
+        for (const orig of clipboardVisuals) {
+            const newId = uid();
+            const clone = JSON.parse(JSON.stringify(orig));
+            clone.id = newId;
+            clone.name = (clone.type || 'vis').toLowerCase() + '_' + newId.slice(2);
+            clone.gridRow = Math.max(1, (clone.gridRow || 1) + 1);
+            clone.gridCol = Math.min(12, Math.max(1, (clone.gridCol || 1) + 1));
+            page.visuals.push(clone);
+            newSelIds.push(newId);
+        }
+
+        selVisualIds.clear();
+        for (const id of newSelIds) selVisualIds.add(id);
+        selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
         renderAll();
     }
 
@@ -3937,15 +3988,16 @@ export function createDesigner(container, opts = {}) {
         canvasGrid.style.gridTemplateRows = `repeat(${rows}, 60px)`;
         for (const v of visuals) {
             const isContainer = v.type === 'CONTAINER';
+            const isFolded = isContainer && collapsedContainers.has(v.id);
             const card = document.createElement('div');
-            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '');
+            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '') + (isFolded ? ' is-folded' : '');
             if (v.containerId) {
                 card.classList.add('has-container');
                 card.dataset.containerId = v.containerId;
             }
             card.dataset.vid = v.id;
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
-            card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
+            card.style.gridRow    = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
             card.style.zIndex     = isContainer ? '1' : '2';
 
@@ -3961,12 +4013,16 @@ export function createDesigner(container, opts = {}) {
             }
 
             const badgeText = isContainer ? `📁 ${v.options?.CONTAINER_TYPE || 'BOX'}` : v.type;
+            const foldBtn = isContainer ? `<button class="etlsql-dsgn-vcard-fold" data-fold="${v.id}" title="${isFolded ? 'Expand container' : 'Collapse container'}">${isFolded ? '►' : '▼'}</button>` : '';
+            const dupBtn = `<button class="etlsql-dsgn-vcard-dup" data-dup="${v.id}" title="Duplicate visual">📋</button>`;
+            const detachBtn = v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container">↗</button>` : '';
+
             const cardHdr = document.createElement('div');
             cardHdr.className = 'etlsql-dsgn-vcard-hdr';
             cardHdr.innerHTML = `
                 <div class="etlsql-dsgn-vcard-badge">${badgeText}${badgeExtra}</div>
                 <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
-                ${v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container">↗</button>` : ''}
+                ${foldBtn}${dupBtn}${detachBtn}
                 <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
             `;
             card.appendChild(cardHdr);
@@ -4024,9 +4080,33 @@ export function createDesigner(container, opts = {}) {
         const list = sidebar.querySelector('#dsgn-ds-list');
         list.innerHTML = '';
         for (const ds of state.datasets) {
+            const isExpanded = expandedDsIds.has(ds.id);
             const row = document.createElement('div');
-            row.className = 'etlsql-dsgn-ds-item';
-            row.innerHTML = `<span>#${esc(ds.name)}</span><button data-dsid="${esc(ds.id)}" title="Remove">✕</button>`;
+            row.className = 'etlsql-dsgn-ds-block';
+
+            let cols = [];
+            if (opts.snapshotPackage && Array.isArray(opts.snapshotPackage.columns)) {
+                cols = opts.snapshotPackage.columns;
+            } else if (opts.getDatasetColumns) {
+                cols = opts.getDatasetColumns(ds.name) || [];
+            }
+
+            const toggleIcon = cols.length ? (isExpanded ? '▾' : '▸') : ' ';
+            row.innerHTML = `
+                <div class="etlsql-dsgn-ds-item" data-dstoggle="${esc(ds.id)}" style="cursor:pointer">
+                    <span>${toggleIcon} #${esc(ds.name)}</span>
+                    <button data-dsid="${esc(ds.id)}" title="Remove">✕</button>
+                </div>
+                ${isExpanded && cols.length ? `
+                    <div class="etlsql-dsgn-ds-cols">
+                        ${cols.map(c => `
+                            <div class="etlsql-dsgn-col-pill" draggable="true" data-col="${esc(c)}" title="Drag into a mapping field">
+                                📄 ${esc(c)}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
             list.appendChild(row);
         }
     }
@@ -4118,6 +4198,20 @@ export function createDesigner(container, opts = {}) {
             .map(d => `<option value="${esc(d.name)}"${v.dataset === d.name ? ' selected' : ''}>#${esc(d.name)}</option>`)
             .join('');
 
+        const REQUIRED_ROLES = {
+            SANKEY: ['Source', 'Target', 'Value'],
+            DONUT: ['Category', 'Value'], PIE: ['Category', 'Value'], FUNNEL: ['Category', 'Value'], SUNBURST: ['Category', 'Value'],
+            BAR: ['Category', 'Value'], HBAR: ['Category', 'Value'], LINE: ['Category', 'Value'], COMBO: ['Category', 'Value'],
+            WATERFALL: ['Category', 'Value'], CANDLESTICK: ['Category', 'Value'],
+            GAUGE: ['Value'], HEATMAP: ['Category', 'Value'], BOXPLOT: ['Category', 'Value'],
+            SCATTER: ['X', 'Y'], BUBBLE: ['X', 'Y'], SLICER: ['Category'], MULTISELECT: ['Category']
+        };
+
+        const reqList = REQUIRED_ROLES[v.type] || [];
+        const parentVis = v.containerId ? findVis(v.containerId) : null;
+        const parentType = parentVis?.options?.CONTAINER_TYPE;
+        const isTabbedParent = parentType === 'TABS' || parentType === 'ACCORDION';
+
         const containers = curVis().filter(c => c.type === 'CONTAINER' && c.id !== v.id);
         const cOpts = containers
             .map(c => `<option value="${c.id}"${v.containerId === c.id ? ' selected' : ''}>📁 ${esc(c.title || c.name)}</option>`)
@@ -4151,6 +4245,10 @@ export function createDesigner(container, opts = {}) {
                         <option value="">— none —</option>${cOpts}
                     </select>
                 </label>
+                ${isTabbedParent ? `
+                <label class="etlsql-dsgn-label">Tab / Section
+                    <input type="text" id="pp-container-section" class="form-control" placeholder="e.g., Tab 1" value="${esc(v.options?.CONTAINER_SECTION || '')}">
+                </label>` : ''}
                 <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
                 <label class="etlsql-dsgn-label">Dataset
                     <select id="pp-ds" class="form-control">
@@ -4162,11 +4260,18 @@ export function createDesigner(container, opts = {}) {
             </div>
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Mappings</div>
-                ${ROLES.map(r => `
-                    <div class="etlsql-dsgn-map-row">
-                        <span>${r}</span>
-                        <input type="text" data-role="${r}" class="form-control" value="${esc(mappings[r] || '')}" placeholder="column" ${colOptions.length ? `list="${datalistId}"` : ''}>
-                    </div>`).join('')}
+                ${ROLES.map(r => {
+                    const isReq = reqList.includes(r);
+                    const isFilled = Boolean(mappings[r]);
+                    const badge = isReq
+                        ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
+                        : '<span class="etlsql-dsgn-role-badge optional">Optional</span>';
+                    return `
+                        <div class="etlsql-dsgn-map-row">
+                            <span style="display:flex;align-items:center;justify-content:space-between;width:100%;">${r}${badge}</span>
+                            <input type="text" data-role="${r}" class="form-control${isReq && !isFilled ? ' is-required-missing' : ''}" value="${esc(mappings[r] || '')}" placeholder="column or expression" ${colOptions.length ? `list="${datalistId}"` : ''}>
+                        </div>`;
+                }).join('')}
                 ${datalistHtml}
             </div>
             <div class="etlsql-dsgn-props-section">
@@ -4194,8 +4299,11 @@ export function createDesigner(container, opts = {}) {
         `;
 
         on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',         e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); });
+        on('#pp-type',         e => { v.type  = e.target.value; renderCanvas(); renderTree(); renderProps(); });
+        on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); renderProps(); });
+        if (isTabbedParent) {
+            on('#pp-container-section', e => { if(!v.options) v.options = {}; if (e.target.value.trim()) v.options.CONTAINER_SECTION = e.target.value.trim(); else delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
+        }
         on('#pp-title',        e => { v.title = e.target.value; renderCanvas(); });
         on('#pp-ds',           e => { v.dataset = e.target.value || null; });
         on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
@@ -4209,13 +4317,31 @@ export function createDesigner(container, opts = {}) {
         on('#pp-rspan',        e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
 
         for (const role of ROLES) {
-            propsPanel.querySelector(`[data-role="${role}"]`)?.addEventListener('change', ev => {
+            const input = propsPanel.querySelector(`[data-role="${role}"]`);
+            if (!input) continue;
+            input.addEventListener('change', ev => {
                 if (!v.mappings) v.mappings = {};
                 if (ev.target.value) v.mappings[role] = ev.target.value;
                 else delete v.mappings[role];
+                renderProps();
+            });
+            input.addEventListener('dragover', e => {
+                e.preventDefault();
+                input.classList.add('drag-over');
+            });
+            input.addEventListener('dragleave', () => input.classList.remove('drag-over'));
+            input.addEventListener('drop', e => {
+                e.preventDefault();
+                input.classList.remove('drag-over');
+                const col = e.dataTransfer.getData('text/plain');
+                if (col) {
+                    input.value = col;
+                    input.dispatchEvent(new Event('change'));
+                }
             });
         }
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+    }
     }
 
     function renderAll() {
@@ -4705,6 +4831,16 @@ export function createDesigner(container, opts = {}) {
         const key = event.key;
         const mod = event.ctrlKey || event.metaKey;
 
+        if (mod && (key === 'c' || key === 'C')) {
+            event.preventDefault();
+            copySelectedVisuals();
+            return;
+        }
+        if (mod && (key === 'v' || key === 'V')) {
+            event.preventDefault();
+            pasteVisuals();
+            return;
+        }
         if (mod && (key === 's' || key === 'S')) {
             event.preventDefault();
             saveReport();
@@ -4730,22 +4866,55 @@ export function createDesigner(container, opts = {}) {
             deleteSelectedVisuals();
             return;
         }
-        if (selVisualId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
-            const v = findVis(selVisualId);
-            if (v) {
-                event.preventDefault();
-                pushUndoState();
-                if (key === 'ArrowLeft')  v.gridCol = Math.max(1, (v.gridCol || 1) - 1);
-                if (key === 'ArrowRight') v.gridCol = Math.min(12, (v.gridCol || 1) + 1);
-                if (key === 'ArrowUp')    v.gridRow = Math.max(1, (v.gridRow || 1) - 1);
-                if (key === 'ArrowDown')  v.gridRow = (v.gridRow || 1) + 1;
+        if (selVisualIds.size > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+            event.preventDefault();
+            pushUndoState();
+            const deltaCol = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0;
+            const deltaRow = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0;
+
+            let canMove = true;
+            for (const id of selVisualIds) {
+                const v = findVis(id);
+                if (!v) continue;
+                const newCol = (v.gridCol || 1) + deltaCol;
+                const newRow = (v.gridRow || 1) + deltaRow;
+                if (newCol < 1 || newCol + (v.gridColSpan || 12) - 1 > 12 || newRow < 1) {
+                    canMove = false;
+                    break;
+                }
+            }
+
+            if (canMove) {
+                for (const id of selVisualIds) {
+                    const v = findVis(id);
+                    if (v) {
+                        v.gridCol = (v.gridCol || 1) + deltaCol;
+                        v.gridRow = (v.gridRow || 1) + deltaRow;
+                    }
+                }
                 renderCanvas();
+                renderTree();
+                renderProps();
                 syncScriptFromGridDebounced();
             }
+            return;
         }
     });
 
     canvasGrid.addEventListener('click', e => {
+        const fold = e.target.closest('[data-fold]');
+        if (fold) {
+            const id = fold.dataset.fold;
+            if (collapsedContainers.has(id)) collapsedContainers.delete(id);
+            else collapsedContainers.add(id);
+            renderCanvas();
+            return;
+        }
+        const dup = e.target.closest('[data-dup]');
+        if (dup) {
+            duplicateVisual(dup.dataset.dup);
+            return;
+        }
         const detachBtn = e.target.closest('[data-detach]');
         if (detachBtn) {
             const v = findVis(detachBtn.dataset.detach);
@@ -4754,6 +4923,7 @@ export function createDesigner(container, opts = {}) {
                 v.containerId = null;
                 renderAll();
             }
+            return;
         }
     });
 

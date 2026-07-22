@@ -36,35 +36,38 @@ changes safer.
       Add an explicit "Unnest / Detach from Container" action button on card headers when a visual is nested inside
       a `CONTAINER`, simplifying container extraction alongside the existing property dropdown.
 
-- [ ] **Visual Card Duplication & Clipboard Ergonomics (`Ctrl+C` / `Ctrl+V` / Duplicate Button).**
+- [x] **Visual Card Duplication & Clipboard Ergonomics (`Ctrl+C` / `Ctrl+V` / Duplicate Button).**
       Add a `Duplicate` (`📋`) button on visual card headers and register global `Ctrl+C` / `Ctrl+V` canvas listeners to clone selected visuals into the grid layout with auto-offset grid coordinates.
 
-- [ ] **Multi-Select Keyboard Nudging for All Selected Cards.**
+- [x] **Multi-Select Keyboard Nudging for All Selected Cards.**
       Update Arrow key nudging (`Up`/`Down`/`Left`/`Right`) to move all cards in `selVisualIds` simultaneously by calculating and applying column/row offsets across the selection set.
 
-- [ ] **Contextual Role Mapping Hints & Validation.**
+- [x] **Contextual Role Mapping Hints & Validation.**
       Enhance `renderProps` mapping fields to visually highlight required versus optional roles per visual type (e.g. `Source`/`Target` for `SANKEY`, `Category`/`Value` for `DONUT`, `Value` for `GAUGE`) and surface subtle validation indicators when required roles are missing.
 
-- [ ] **Container Canvas Fold / Collapse Toggle (`▼` / `►`).**
+- [x] **Container Canvas Fold / Collapse Toggle (`▼` / `►`).**
       Add a fold/collapse button on container card headers in canvas mode to temporarily minimize container card bodies, saving vertical canvas grid space when editing large multi-container dashboards.
 
-- [ ] **Tab / Section Assignment for Tabbed Containers.**
+- [x] **Tab / Section Assignment for Tabbed Containers.**
       Add a `Tab / Section` assignment dropdown in `renderProps` when a visual's container is a `TABS` or `ACCORDION` layout, allowing explicit binding of child visuals to tab indices (`Tab 1`, `Tab 2`, etc.).
 
-- [ ] **Expandable Dataset Tree with Drag-and-Drop Mapping.**
+- [x] **Expandable Dataset Tree with Drag-and-Drop Mapping.**
       Expand dataset rows under `#dsgn-ds-list` to display dataset columns, allowing drag-and-drop of column pills directly into property panel mapping target slots.
 
 ### Data Stewardship: Protected Data Audit Workflow
 
-- [ ] **Script-first protected-data audit command.**
+- [x] **Script-first protected-data audit command.**
       Add `SHOW PROTECTED DATA [AT <portal_or_orchestrator>] [LIMIT n] [INTO #temp]` so new
       stewards can find PII, PHI, PCI, sensitive, confidential, and restricted lineage without
       memorizing multiple tag-specific `SHOW LINEAGE HISTORY FOR TAG ...` queries.
 
-- [ ] **Packaged protected-data audit report.**
+- [x] **Packaged protected-data audit report.**
       Add a runnable `.rptsql` sample/report that inventories protected lineage, missing metadata,
       stale protected assets, affected reports/datasets/subscriptions, and recent steward-impact
       audit events.
+      Implemented in `samples/08_Reporting/protected_data_audit.rptsql`; live Portal audit rows can
+      be loaded with the included `SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT'` block when a
+      Portal admin connection is available.
 
 - [ ] **Portal steward audit page.**
       Add a steward-focused Portal page or Lineage mode that combines protected inventory, missing
