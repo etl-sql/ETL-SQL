@@ -1,36 +1,53 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Documentation — ETL-SQL Portal</title>
-  <link rel="stylesheet" href="/css/portal.css?v=0.17.0">
+  <link rel="stylesheet" href="/css/portal.css?v=0.16.0">
   <style>
-    html, body { margin: 0; padding: 0; background: var(--portal-bg); color: var(--portal-text); font-family: var(--portal-font); }
-    .docs-body { padding: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .docs-shell { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; flex: 1; height: calc(100vh - 48px); overflow: hidden; }
-    .docs-sidebar { border-right: 1px solid var(--portal-border); background: var(--portal-surface); padding: 18px; overflow: auto; }
-    .docs-sidebar h1 { font-size: 20px; margin: 0 0 14px; color: var(--portal-text); }
-    .docs-search { width: 100%; box-sizing: border-box; border: 1px solid var(--portal-border); background: var(--portal-surface-subtle); color: var(--portal-text); border-radius: var(--portal-radius-sm); padding: 10px 12px; font-size: 14px; }
-    .docs-search:focus { outline: none; border-color: var(--portal-accent); box-shadow: 0 0 0 2px var(--portal-focus); }
-    .docs-list { display: grid; gap: 8px; margin-top: 16px; }
-    .docs-result { border: 1px solid var(--portal-border-soft); background: var(--portal-surface); border-radius: var(--portal-radius-sm); padding: 10px; text-align: left; cursor: pointer; color: var(--portal-text); transition: background .15s ease, border-color .15s ease; }
-    .docs-result:hover, .docs-result.active { border-color: var(--portal-accent); background: var(--portal-accent-soft); }
-    .docs-result-title { font-weight: 650; font-size: 14px; line-height: 1.25; color: var(--portal-text); }
-    .docs-result-meta { color: var(--portal-text-soft); font-size: 12px; margin-top: 3px; }
-    .docs-main { padding: 26px clamp(20px, 5vw, 64px); overflow: auto; background: var(--portal-bg); }
-    .docs-main article { max-width: 980px; background: var(--portal-surface); border: 1px solid var(--portal-border); border-radius: var(--portal-radius); padding: 28px; color: var(--portal-text); }
-    .docs-main h1, .docs-main h2, .docs-main h3 { line-height: 1.2; color: var(--portal-text); }
-    .docs-main pre { overflow: auto; background: var(--portal-bg-soft); color: var(--portal-text); padding: 14px; border-radius: var(--portal-radius-sm); border: 1px solid var(--portal-border-soft); }
-    .docs-main code { background: var(--portal-bg-soft); padding: 1px 4px; border-radius: 4px; color: var(--portal-accent); }
-    .docs-main pre code { background: transparent; padding: 0; color: inherit; }
-    .docs-empty { color: var(--portal-text-soft); }
-    @media (max-width: 800px) {
-      .docs-shell { grid-template-columns: 1fr; height: auto; overflow: visible; }
-      .docs-sidebar { border-right: 0; border-bottom: 1px solid var(--portal-border); max-height: 45vh; }
-      .docs-main { padding: 16px; }
-      .docs-main article { padding: 18px; }
+    .docs-article {
+      max-width: 960px;
+      line-height: 1.6;
+      color: var(--portal-text);
     }
+    .docs-article h1 { font-size: 1.75em; margin: 0 0 12px; color: var(--portal-text); border-bottom: 1px solid var(--portal-border-soft); padding-bottom: 8px; }
+    .docs-article h2 { font-size: 1.35em; margin: 24px 0 10px; color: var(--portal-text); }
+    .docs-article h3 { font-size: 1.1em; margin: 18px 0 8px; color: var(--portal-text); }
+    .docs-article p { margin: 0 0 14px; color: var(--portal-text-soft); }
+    .docs-article ul, .docs-article ol { margin: 0 0 14px; padding-left: 24px; color: var(--portal-text-soft); }
+    .docs-article li { margin-bottom: 4px; }
+    .docs-article pre {
+      background: var(--portal-bg-soft);
+      border: 1px solid var(--portal-border-soft);
+      border-radius: var(--portal-radius-sm);
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: var(--portal-font-mono, monospace);
+      font-size: .9em;
+      color: var(--portal-text);
+      margin: 0 0 16px;
+    }
+    .docs-article code {
+      background: var(--portal-bg-soft);
+      color: var(--portal-accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: .88em;
+      font-family: var(--portal-font-mono, monospace);
+    }
+    .docs-article pre code { background: transparent; padding: 0; color: inherit; }
+    .docs-article blockquote {
+      margin: 0 0 16px;
+      padding: 10px 16px;
+      border-left: 4px solid var(--portal-accent);
+      background: var(--portal-accent-soft);
+      border-radius: 0 var(--portal-radius-sm) var(--portal-radius-sm) 0;
+      color: var(--portal-text);
+    }
+    .docs-article blockquote p { margin: 0; color: inherit; }
+    .docs-empty { color: var(--portal-text-soft); font-size: .95em; }
+    .docs-item-section { font-size: .72em; text-transform: uppercase; letter-spacing: .05em; color: var(--portal-muted); margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -38,12 +55,13 @@
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
   <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu">☰</button>
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html">Reports</a>
+      <a href="/docs.html" class="active">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-      <a href="/docs.html" class="active">Docs</a>
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
@@ -52,25 +70,49 @@
   </header>
 
   <!-- ── App body ────────────────────────────────────────────────────────── -->
-  <div class="app-body docs-body">
-    <div class="docs-shell">
-      <aside class="docs-sidebar">
-        <h1>ETL-SQL Docs</h1>
-        <input id="search" class="docs-search" type="search" placeholder="Search documentation" autocomplete="off">
-        <div id="results" class="docs-list"></div>
-      </aside>
-      <main class="docs-main">
-        <article id="document">
-          <p class="docs-empty">Select a document or search the library.</p>
-        </article>
-      </main>
-    </div>
+  <div class="app-body">
+    <!-- Sidebar: Dictionary & Documentation tree -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-hdr">
+        <span>Help & Dictionary</span>
+        <span class="sidebar-hint">Language Reference</span>
+      </div>
+
+      <div style="padding: 10px 8px; border-bottom: 1px solid var(--portal-border-soft);">
+        <input id="search" class="form-control" type="search" placeholder="Search dictionary (e.g. SELECT, BAR, CAST)..." autocomplete="off" style="width:100%; box-sizing:border-box;">
+      </div>
+
+      <div class="sidebar-nav" id="categoryNav" aria-label="Documentation categories" style="flex-wrap: wrap; flex-direction: row; gap: 4px; padding: 8px;">
+        <button class="btn btn-sm btn-outline active" data-section="All">All</button>
+        <button class="btn btn-sm btn-outline" data-section="Keywords">Keywords</button>
+        <button class="btn btn-sm btn-outline" data-section="Visuals">Visuals</button>
+        <button class="btn btn-sm btn-outline" data-section="Functions">Functions</button>
+        <button class="btn btn-sm btn-outline" data-section="Connectors">Connectors</button>
+        <button class="btn btn-sm btn-outline" data-section="Report-SQL">Report-SQL</button>
+      </div>
+
+      <div class="sidebar-tree" id="results" role="tree" aria-label="Documentation topics">
+        <div class="loading-state loading-state-compact">Loading dictionary…</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="mainContent" style="padding: 24px 32px; overflow-y: auto;">
+      <article id="document" class="card docs-article" style="margin: 0 auto; padding: 32px;">
+        <p class="docs-empty">Select a documentation topic or search the dictionary.</p>
+      </article>
+    </main>
   </div>
 </div>
 
+<div class="portal-corner-links">
+  <span class="portal-brand-footer"></span>
+  <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
+</div>
+
 <script type="module">
-  import { auth } from '/js/api.js?v=0.17.0';
-  import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
+  import { auth } from '/js/api.js?v=0.16.0';
+  import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.16.0';
 
   initTheme();
   applyPortalBranding();
@@ -94,6 +136,6 @@
     }
   }
 </script>
-<script src="/js/docs.js?v=0.17.0"></script>
+<script src="/js/docs.js?v=0.16.0"></script>
 </body>
 </html>

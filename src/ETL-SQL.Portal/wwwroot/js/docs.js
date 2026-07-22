@@ -1,8 +1,11 @@
 (function () {
-  const search = document.getElementById('search');
-  const results = document.getElementById('results');
+  const searchInput = document.getElementById('search');
+  const resultsContainer = document.getElementById('results');
   const documentPane = document.getElementById('document');
+  const categoryNav = document.getElementById('categoryNav');
+
   let activePath = null;
+  let activeSection = 'All';
 
   function escapeHtml(value) {
     return String(value || '')
@@ -16,94 +19,195 @@
   function inlineMarkdown(value) {
     return escapeHtml(value)
       .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   }
 
   function markdownToHtml(markdown) {
     const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n');
     const out = [];
     let inCode = false;
+    let codeLang = '';
     let inList = false;
-    for (const line of lines) {
-      if (line.trim().startsWith('```')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(inCode ? '</code></pre>' : '<pre><code>');
-        inCode = !inCode;
-        continue;
-      }
-      if (inCode) {
-        out.push(escapeHtml(line) + '\n');
-        continue;
-      }
+    let inBlockquote = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const trimmed = line.trim();
+
+      if (trimmed.startsWith('```')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        if (inBlockquote) { out.push('</blockquote>'); inBlockquote = false; }
+
+        if (!inCode) {
+          codeLang = trimmed.substring(3).trim();
+          out.push(`<pre><code class="language-${escapeHtml(codeLang)}">`);
+          inCode = true;
+        } else {
+          out.push('</code></pre>');
+          inCode = false;
+        }
+        continue;
+      }
+
+      if (inCode) {
+        out.push(escapeHtml(line));
+        out.push('\n');
+        continue;
+      }
+
       if (!trimmed) {
         if (inList) { out.push('</ul>'); inList = false; }
+        if (inBlockquote) { out.push('</blockquote>'); inBlockquote = false; }
         continue;
       }
-      const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+
+      // Blockquotes / Alerts
+      if (trimmed.startsWith('>')) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        const quoteText = trimmed.replace(/^>\s*/, '');
+        if (!inBlockquote) {
+          out.push('<blockquote>');
+          inBlockquote = true;
+        }
+        out.push(`<p>${inlineMarkdown(quoteText)}</p>`);
+        continue;
+      } else if (inBlockquote) {
+        out.push('</blockquote>');
+        inBlockquote = false;
+      }
+
+      // Headings
+      const heading = /^(#{1,4})\s+(.+)$/.exec(trimmed);
       if (heading) {
         if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`);
+        const level = heading[1].length;
+        out.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
         continue;
       }
+
+      // Lists
       const bullet = /^[-*]\s+(.+)$/.exec(trimmed);
       if (bullet) {
         if (!inList) { out.push('<ul>'); inList = true; }
         out.push(`<li>${inlineMarkdown(bullet[1])}</li>`);
         continue;
       }
+
       if (inList) { out.push('</ul>'); inList = false; }
       out.push(`<p>${inlineMarkdown(trimmed)}</p>`);
     }
+
     if (inList) out.push('</ul>');
+    if (inBlockquote) out.push('</blockquote>');
     if (inCode) out.push('</code></pre>');
+
     return out.join('\n');
   }
 
-  async function loadResults(query) {
-    const url = query
-      ? `/api/docs/search?q=${encodeURIComponent(query)}&limit=50`
-      : '/api/docs/search?limit=50';
-    const response = await fetch(url);
-    if (!response.ok) {
-      results.innerHTML = '<p class="docs-empty">Documentation is unavailable.</p>';
+  async function loadResults(query = '', section = 'All') {
+    resultsContainer.innerHTML = '<div class="loading-state loading-state-compact">Searching...</div>';
+    const params = new URLSearchParams({ limit: '100' });
+    if (query) params.set('q', query);
+    if (section && section !== 'All') params.set('section', section);
+
+    try {
+      const response = await fetch(`/api/docs/search?${params.toString()}`);
+      if (!response.ok) {
+        resultsContainer.innerHTML = '<p class="docs-empty" style="padding:12px;">Documentation service unavailable.</p>';
+        return [];
+      }
+
+      const items = await response.json();
+      if (!items || items.length === 0) {
+        resultsContainer.innerHTML = '<p class="docs-empty" style="padding:12px;">No matching topics found.</p>';
+        return [];
+      }
+
+      resultsContainer.innerHTML = items.map(item => `
+        <div class="folder-item${item.path === activePath ? ' active' : ''}" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.title)}">
+          <span class="folder-icon" aria-hidden="true"></span>
+          <div style="min-width: 0; flex: 1;">
+            <div style="font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${escapeHtml(item.title)}</div>
+            <div class="docs-item-section">${escapeHtml(item.section)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      return items;
+    } catch {
+      resultsContainer.innerHTML = '<p class="docs-empty" style="padding:12px;">Unable to load topics.</p>';
       return [];
     }
-    const items = await response.json();
-    results.innerHTML = items.map(item => `
-      <button class="docs-result${item.path === activePath ? ' active' : ''}" data-path="${escapeHtml(item.path)}">
-        <div class="docs-result-title">${escapeHtml(item.title)}</div>
-        <div class="docs-result-meta">${escapeHtml(item.section)} / ${escapeHtml(item.path)}</div>
-      </button>
-    `).join('') || '<p class="docs-empty">No matching documents.</p>';
-    return items;
   }
 
   async function openDocument(path) {
+    if (!path) return;
     activePath = path;
-    const response = await fetch(`/api/docs/document?path=${encodeURIComponent(path)}`);
-    if (!response.ok) {
-      documentPane.innerHTML = '<p class="docs-empty">Document not found.</p>';
-      return;
+
+    // Highlight active item in sidebar
+    resultsContainer.querySelectorAll('.folder-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.path === path);
+    });
+
+    documentPane.innerHTML = '<div class="loading-state">Loading document…</div>';
+
+    try {
+      const response = await fetch(`/api/docs/document?path=${encodeURIComponent(path)}`);
+      if (!response.ok) {
+        documentPane.innerHTML = '<p class="docs-empty">Document not found.</p>';
+        return;
+      }
+
+      const doc = await response.json();
+      documentPane.innerHTML = `
+        <div style="font-size: .8em; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--portal-accent); margin-bottom: 6px;">
+          ${escapeHtml(doc.section)}
+        </div>
+        ${markdownToHtml(doc.markdown)}
+      `;
+
+      // Scroll document pane to top
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent) mainContent.scrollTop = 0;
+    } catch {
+      documentPane.innerHTML = '<p class="docs-empty">Error loading document.</p>';
     }
-    const doc = await response.json();
-    documentPane.innerHTML = markdownToHtml(doc.markdown);
-    await loadResults(search.value.trim());
   }
 
+  // Event handlers
   let timer = null;
-  search.addEventListener('input', () => {
+  searchInput.addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => loadResults(search.value.trim()), 150);
+    timer = setTimeout(() => {
+      loadResults(searchInput.value.trim(), activeSection);
+    }, 150);
   });
 
-  results.addEventListener('click', event => {
-    const button = event.target.closest('[data-path]');
-    if (button) openDocument(button.dataset.path);
+  if (categoryNav) {
+    categoryNav.addEventListener('click', event => {
+      const btn = event.target.closest('[data-section]');
+      if (!btn) return;
+
+      categoryNav.querySelectorAll('[data-section]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      activeSection = btn.dataset.section;
+      loadResults(searchInput.value.trim(), activeSection);
+    });
+  }
+
+  resultsContainer.addEventListener('click', event => {
+    const item = event.target.closest('[data-path]');
+    if (item) openDocument(item.dataset.path);
   });
 
-  loadResults('').then(items => {
-    const first = items.find(item => item.path === 'README.md') || items[0];
-    if (first) openDocument(first.path);
+  // Initial load
+  loadResults('', 'All').then(items => {
+    if (items && items.length > 0) {
+      const defaultItem = items.find(i => i.path.toLowerCase().includes('select')) || items[0];
+      if (defaultItem) openDocument(defaultItem.path);
+    }
   });
 })();
