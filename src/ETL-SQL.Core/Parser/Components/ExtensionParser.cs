@@ -216,8 +216,10 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
+        Expression? dateSuffix = null, suffixSeparator = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
+        bool destinationIsDirectory = false;
 
         bool ifExists = false;
         if (isFunctionStyle)
@@ -252,7 +254,11 @@ public class ExtensionParser : ParserComponent
         {
             while (true)
             {
-                if (Match(TokenType.TO)) { dest = ParseExpression(); }
+                if (Match(TokenType.TO))
+                {
+                    destinationIsDirectory = Match(TokenType.DIRECTORY);
+                    dest = ParseExpression();
+                }
                 else if (Match(TokenType.PASSWORD))
                 {
                     if (_parser.Current.Type == TokenType.LPAREN) { Advance(); password = ParseExpression(); Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value"); }
@@ -260,7 +266,7 @@ public class ExtensionParser : ParserComponent
                 }
                 else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
                 else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
-                else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
+                else if (Match(TokenType.WITH)) { ParseFileOperationOptions(ref overwrite, ref dateSuffix, ref suffixSeparator); }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                     source = ParseExpression();
@@ -272,7 +278,27 @@ public class ExtensionParser : ParserComponent
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName) { Line = startToken.Line, Column = startToken.Column };
+        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName, dateSuffix, suffixSeparator, destinationIsDirectory) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    private void ParseFileOperationOptions(ref Expression? overwrite, ref Expression? dateSuffix, ref Expression? suffixSeparator)
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after WITH");
+        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+        {
+            string key = Advance().Value;
+            Consume(TokenType.EQUALS, "Expected '=' after option name");
+            if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "OVERWRITE"))
+                overwrite = ParseExpression();
+            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "DATE_SUFFIX"))
+                dateSuffix = ParseExpression();
+            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "SUFFIX_SEPARATOR"))
+                suffixSeparator = ParseExpression();
+            else
+                ParseExpression();
+            if (!Match(TokenType.COMMA)) break;
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after WITH options");
     }
 
     public Statement ParseDirectoryOperation(Token startToken)

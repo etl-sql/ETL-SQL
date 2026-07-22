@@ -1232,10 +1232,13 @@ public sealed record FileOperationStatement : Statement
     public Expression? Password { get; }
     public Expression? KeyFile { get; }
     public Expression? PgpKey { get; }
+    public Expression? DateSuffix { get; }
+    public Expression? SuffixSeparator { get; }
+    public bool DestinationIsDirectory { get; }
     public bool IfExists { get; set; }
     public string? ConnectionName { get; }
 
-    public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false, string? connectionName = null)
+    public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false, string? connectionName = null, Expression? dateSuffix = null, Expression? suffixSeparator = null, bool destinationIsDirectory = false)
     {
         Type = type;
         Source = source;
@@ -1244,6 +1247,9 @@ public sealed record FileOperationStatement : Statement
         Password = password;
         KeyFile = keyFile;
         PgpKey = pgpKey;
+        DateSuffix = dateSuffix;
+        SuffixSeparator = suffixSeparator;
+        DestinationIsDirectory = destinationIsDirectory;
         IfExists = ifExists;
         ConnectionName = connectionName;
     }

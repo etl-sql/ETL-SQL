@@ -95,6 +95,55 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public async Task CopyFile_ToDirectoryWithDateSuffix_DerivesArchiveName()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "fs_suffix_source.csv";
+            string archiveDir = "fs_suffix_archive";
+            string expected = Path.Combine(archiveDir, $"fs_suffix_source_{DateTime.Now:yyyyMMdd}.csv");
+            await File.WriteAllTextAsync(src, "id,name\n1,Alice");
+            Directory.CreateDirectory(archiveDir);
+
+            try
+            {
+                await ExecuteAsync($"COPY FILE '{src}' TO DIRECTORY '{archiveDir}' WITH(DATE_SUFFIX='yyyyMMdd');", evaluator);
+
+                Assert.True(File.Exists(expected));
+                Assert.True(File.Exists(src));
+                Assert.Equal("id,name\n1,Alice", await File.ReadAllTextAsync(expected));
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (Directory.Exists(archiveDir)) Directory.Delete(archiveDir, true);
+            }
+        }
+
+        [Fact]
+        public async Task MoveFile_ToDirectoryWithDateSuffixAndSeparator_DerivesArchiveName()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "fs_suffix_move_source.csv";
+            string archiveDir = "fs_suffix_move_archive";
+            string expected = Path.Combine(archiveDir, $"fs_suffix_move_source-{DateTime.Now:yyyyMMdd}.csv");
+            await File.WriteAllTextAsync(src, "id,name\n1,Alice");
+            Directory.CreateDirectory(archiveDir);
+
+            try
+            {
+                await ExecuteAsync($"MOVE FILE '{src}' TO DIRECTORY '{archiveDir}' WITH(DATE_SUFFIX='yyyyMMdd', SUFFIX_SEPARATOR='-');", evaluator);
+
+                Assert.True(File.Exists(expected));
+                Assert.False(File.Exists(src));
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (Directory.Exists(archiveDir)) Directory.Delete(archiveDir, true);
+            }
+        }
+
+        [Fact]
         public async Task TestCreateDirectoryWithOverwrite()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

@@ -16,6 +16,7 @@
 | [ENCRYPT / DECRYPT](encrypt-file.md) | Encrypts or decrypts files on disk. Also covers `ENC:` credential values and session password management. |
 | [FILE Operations](file.md) | File-level management commands for copying, moving, renaming, deleting, compressing, encrypting, and decrypting individual files. |
 | [MERGE FILES](merge-files.md) | Concatenates multiple files (supports wildcards or array inputs) into a single destination file. |
+| [MOVE FILE](move-file.md) | Moves a file to another path or archive directory, with optional date suffix naming. |
 | [receive-file](receive-file.md) | Downloads a file from a remote server via an FTP or SFTP connection. |
 | [send-email](send-email.md) | Sends an email via an SMTP connection. |
 | [send-file](send-file.md) | Transfers a local file to a remote server via an FTP or SFTP connection. |

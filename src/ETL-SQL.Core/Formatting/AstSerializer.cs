@@ -591,12 +591,14 @@ public static class AstSerializer
     private static string FormatFileOperation(FileOperationStatement s)
     {
         var op = s.Type.ToString().ToUpper() + " FILE";
-        var dest = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
+        var dest = s.Destination != null ? " TO " + (s.DestinationIsDirectory ? "DIRECTORY " : "") + s.Destination.ToSql() : "";
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Password != null) opts.Add($"PASSWORD={s.Password.ToSql()}");
         if (s.KeyFile != null) opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
         if (s.PgpKey != null) opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
+        if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");
+        if (s.SuffixSeparator != null) opts.Add($"SUFFIX_SEPARATOR={s.SuffixSeparator.ToSql()}");
         var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
         return $"{op} {s.Source.ToSql()}{dest}{options};";
     }

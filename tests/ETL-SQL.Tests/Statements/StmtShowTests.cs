@@ -117,6 +117,32 @@ SHOW SCHEMA FOR #products;";
         }
 
         [Fact]
+        public async Task ShowSchema_ForFlatFileConnection_ReturnsHeaderColumns()
+        {
+            var csvPath = Path.Combine(Path.GetTempPath(), $"show_schema_file_{Guid.NewGuid():N}.csv");
+            await File.WriteAllTextAsync(csvPath, "id,name,last_modified\n1,Alice,2026-07-22");
+
+            try
+            {
+                var script = $@"
+CREATE CONNECTION mycsv AS FLATFILE('{csvPath}');
+SHOW SCHEMA FOR mycsv.customer;";
+                var eval = NewEval();
+                await eval.Evaluate(TestHelpers.Parse(script));
+
+                Assert.NotNull(eval.LastResult);
+                var colNames = eval.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+                Assert.Contains("id", colNames);
+                Assert.Contains("name", colNames);
+                Assert.Contains("last_modified", colNames);
+            }
+            finally
+            {
+                if (File.Exists(csvPath)) File.Delete(csvPath);
+            }
+        }
+
+        [Fact]
         public async Task ShowColumns_ReturnsExpectedSchema()
         {
             var script = @"

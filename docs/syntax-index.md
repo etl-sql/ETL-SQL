@@ -66,7 +66,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `REQUIRE VERSION` | Session | [Statement Reference](reference/statements/README.md) | [REQUIRE.md](reference/statements/session-control/require.md) |
 | `BULK INSERT` | File IO | [Statement Reference](reference/statements/README.md) | [BULK.INSERT.md](reference/file-operations/bulk-insert.md) |
 | `COPY FILE` | File IO | [File Operations](reference/file-operations/README.md) | [COPY.md](reference/file-operations/copy-file.md) |
-| `MOVE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
+| `MOVE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [move-file.md](reference/file-operations/move-file.md) |
 | `DELETE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
 | `ENCRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
 | `SEND FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [SEND/FILE.md](reference/file-operations/file.md) |

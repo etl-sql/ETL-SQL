@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Threading.Tasks;
@@ -38,6 +39,7 @@ public class FileOperationStatementHandler : IStatementHandler
 
             string remoteSource = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
             string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
+            remoteDest = await ApplyDestinationNamingOptionsAsync(stmt, context, remoteSource, remoteDest, remote: true);
             // Security Hardening: Count this as a file operation for runaway protection
             context.IncrementOperationCount(OperationType.FileSystem, remoteSource, 1);
 
@@ -105,6 +107,7 @@ public class FileOperationStatementHandler : IStatementHandler
         string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
         string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
         string? destVal = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "" : null;
+        destVal = await ApplyDestinationNamingOptionsAsync(stmt, context, source, destVal, remote: false);
         string? dest = destVal != null ? context.ResolvePath(destVal) : null;
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         var sourceAccess = stmt.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename
@@ -364,5 +367,87 @@ public class FileOperationStatementHandler : IStatementHandler
             throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
         }
         await Task.CompletedTask;
+    }
+
+    private static async Task<string?> ApplyDestinationNamingOptionsAsync(
+        FileOperationStatement stmt,
+        IExecutionContext context,
+        string source,
+        string? destination,
+        bool remote)
+    {
+        if (stmt.DateSuffix == null && !stmt.DestinationIsDirectory)
+            return destination;
+
+        if (stmt.Type is not (FileOpType.Copy or FileOpType.Move or FileOpType.Rename))
+            throw new ExecutionException("DATE_SUFFIX and TO DIRECTORY are only supported for COPY FILE, MOVE FILE, and RENAME FILE.", null, stmt.Line, stmt.Column);
+
+        if (string.IsNullOrWhiteSpace(destination))
+            throw new ExecutionException($"{stmt.Type}_FILE requires a destination when using DATE_SUFFIX or TO DIRECTORY.", null, stmt.Line, stmt.Column);
+
+        var finalDestination = destination;
+        if (stmt.DestinationIsDirectory)
+        {
+            var sourceFileName = remote
+                ? GetRemoteFileName(source)
+                : Path.GetFileName(source);
+            if (string.IsNullOrWhiteSpace(sourceFileName))
+                throw new ExecutionException($"{stmt.Type}_FILE could not derive a file name from source path '{source}'.", null, stmt.Line, stmt.Column);
+
+            finalDestination = remote
+                ? CombineRemotePath(destination, sourceFileName)
+                : Path.Combine(destination, sourceFileName);
+        }
+
+        if (stmt.DateSuffix == null)
+            return finalDestination;
+
+        var format = (await context.EvaluateValue(stmt.DateSuffix, new Row()))?.ToString();
+        if (string.IsNullOrWhiteSpace(format))
+            throw new ExecutionException("DATE_SUFFIX requires a non-empty date format.", null, stmt.Line, stmt.Column);
+
+        var separator = stmt.SuffixSeparator != null
+            ? (await context.EvaluateValue(stmt.SuffixSeparator, new Row()))?.ToString() ?? string.Empty
+            : "_";
+
+        var suffix = DateTime.Now.ToString(format, CultureInfo.InvariantCulture);
+        return remote
+            ? ApplySuffixToRemoteFileName(finalDestination, separator + suffix)
+            : ApplySuffixToLocalFileName(finalDestination, separator + suffix);
+    }
+
+    private static string ApplySuffixToLocalFileName(string path, string suffix)
+    {
+        var directory = Path.GetDirectoryName(path);
+        var name = Path.GetFileNameWithoutExtension(path);
+        var extension = Path.GetExtension(path);
+        var fileName = name + suffix + extension;
+        return string.IsNullOrEmpty(directory) ? fileName : Path.Combine(directory, fileName);
+    }
+
+    private static string ApplySuffixToRemoteFileName(string path, string suffix)
+    {
+        var slash = path.LastIndexOfAny(new[] { '/', '\\' });
+        var directory = slash >= 0 ? path[..(slash + 1)] : string.Empty;
+        var fileName = slash >= 0 ? path[(slash + 1)..] : path;
+        var dot = fileName.LastIndexOf('.');
+        return dot > 0
+            ? directory + fileName[..dot] + suffix + fileName[dot..]
+            : directory + fileName + suffix;
+    }
+
+    private static string GetRemoteFileName(string path)
+    {
+        var slash = path.LastIndexOfAny(new[] { '/', '\\' });
+        return slash >= 0 ? path[(slash + 1)..] : path;
+    }
+
+    private static string CombineRemotePath(string directory, string fileName)
+    {
+        if (string.IsNullOrEmpty(directory)) return fileName;
+        var separator = directory.Contains('\\') && !directory.Contains('/') ? "\\" : "/";
+        return directory.EndsWith("/") || directory.EndsWith("\\")
+            ? directory + fileName
+            : directory + separator + fileName;
     }
 }
