@@ -14,25 +14,25 @@ changes safer.
 
 ### Visual Reporting and Dashboard Designer Enhancements
 
-- [ ] **Canvas Keyboard Shortcuts & Ergonomics.**
+- [x] **Canvas Keyboard Shortcuts & Ergonomics.**
       Add canvas-level keyboard listener to `createDesigner` handling `Delete` / `Backspace` to remove
       selected visual cards, `Ctrl+S` / `Cmd+S` to trigger report save, `Escape` to clear visual
       selection, and Arrow keys (`Up`/`Down`/`Left`/`Right`) to nudge visual grid positions (`gridCol`/`gridRow`).
 
-- [ ] **Unsaved Changes Guard (`beforeunload`).**
+- [x] **Unsaved Changes Guard (`beforeunload`).**
       Track designer dirty state (`isDirty`) when canvas visual cards move, resize, delete, or when script text
       is modified. Attach a `beforeunload` listener prompting the user before navigating away or closing the tab.
 
-- [ ] **Dynamic Column Autocomplete in Properties Panel.**
+- [x] **Dynamic Column Autocomplete in Properties Panel.**
       Upgrade mapping input fields in `renderProps` from plain text inputs to use a `<datalist>` or interactive
       dropdown pre-populated with actual dataset columns (from loaded `.etlsnap` packages or `/api/designer/schema`),
       while preserving custom expression entry.
 
-- [ ] **Canvas Layout Undo / Redo Stack.**
+- [x] **Canvas Layout Undo / Redo Stack.**
       Maintain a 20-step history stack of `DesignState` snapshots for visual card additions, movements, resizes,
       and deletions, supporting `Ctrl+Z` / `Ctrl+Y` undo/redo actions on the grid canvas.
 
-- [ ] **Explicit Container Detachment UX.**
+- [x] **Explicit Container Detachment UX.**
       Add an explicit "Unnest / Detach from Container" action button on card headers when a visual is nested inside
       a `CONTAINER`, simplifying container extraction alongside the existing property dropdown.
 

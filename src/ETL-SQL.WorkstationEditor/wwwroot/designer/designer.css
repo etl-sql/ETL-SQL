@@ -1785,16 +1785,13 @@ body.vscode-dark .cm-editor .cm-line::selection {
     white-space: nowrap;
 }
 
+.etlsql-dsgn-vcard-detach,
 .etlsql-dsgn-vcard-del {
     position: relative;
-    top: auto;
-    right: auto;
     background: none;
     border: none;
     font-size: 0.7rem;
     color: var(--portal-muted, #7a8798);
-    cursor: pointer;
-}
     cursor: pointer;
     padding: 2px 5px;
     border-radius: 3px;
@@ -1802,7 +1799,9 @@ body.vscode-dark .cm-editor .cm-line::selection {
     transition: opacity 0.15s;
     line-height: 1;
 }
+.etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-detach,
 .etlsql-dsgn-visual-card:hover .etlsql-dsgn-vcard-del { opacity: 1; }
+.etlsql-dsgn-vcard-detach:hover { background: var(--portal-accent-soft, #e8f0ff); color: var(--portal-accent, #2563eb); }
 .etlsql-dsgn-vcard-del:hover { background: var(--portal-border, #d9e0ea); color: #e11d48; }
 
 .etlsql-dsgn-tree-item {

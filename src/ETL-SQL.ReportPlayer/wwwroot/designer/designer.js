@@ -3258,6 +3258,40 @@ export function createDesigner(container, opts = {}) {
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
     const previewUrl = opts.previewUrl ?? '/designer-preview.html';
 
+    // ── Undo / Redo & Dirty state ─────────────────────────────────────────────
+    const undoStack = [];
+    const redoStack = [];
+    let isDirty = false;
+
+    function pushUndoState() {
+        if (undoStack.length >= 20) undoStack.shift();
+        undoStack.push(JSON.stringify(state.pages));
+        redoStack.length = 0;
+        isDirty = true;
+    }
+
+    function undoCanvasState() {
+        if (!undoStack.length) return;
+        redoStack.push(JSON.stringify(state.pages));
+        state.pages = JSON.parse(undoStack.pop());
+        renderAll();
+    }
+
+    function redoCanvasState() {
+        if (!redoStack.length) return;
+        undoStack.push(JSON.stringify(state.pages));
+        state.pages = JSON.parse(redoStack.pop());
+        renderAll();
+    }
+
+    const beforeUnloadHandler = (e) => {
+        if (isDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    };
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+
     // ── Visual type registry ──────────────────────────────────────────────────
     const VCATEGORIES = [
         {
@@ -3937,6 +3971,7 @@ export function createDesigner(container, opts = {}) {
             cardHdr.innerHTML = `
                 <div class="etlsql-dsgn-vcard-badge">${badgeText}${badgeExtra}</div>
                 <div class="etlsql-dsgn-vcard-name" style="flex:1;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title || v.name)}</div>
+                ${v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container">↗</button>` : ''}
                 <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
             `;
             card.appendChild(cardHdr);
@@ -4093,6 +4128,20 @@ export function createDesigner(container, opts = {}) {
             .map(c => `<option value="${c.id}"${v.containerId === c.id ? ' selected' : ''}>📁 ${esc(c.title || c.name)}</option>`)
             .join('');
 
+        let colOptions = [];
+        if (v.dataset) {
+            if (opts.snapshotPackage && Array.isArray(opts.snapshotPackage.columns)) {
+                colOptions = opts.snapshotPackage.columns;
+            } else if (opts.getDatasetColumns) {
+                colOptions = opts.getDatasetColumns(v.dataset) || [];
+            }
+        }
+        const datalistId = `dsgn-col-list-${v.id}`;
+        const datalistHtml = colOptions.length ? `
+            <datalist id="${datalistId}">
+                ${colOptions.map(c => `<option value="${esc(c)}"></option>`).join('')}
+            </datalist>` : '';
+
         propsPanel.innerHTML = `
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Properties</div>
@@ -4121,8 +4170,9 @@ export function createDesigner(container, opts = {}) {
                 ${ROLES.map(r => `
                     <div class="etlsql-dsgn-map-row">
                         <span>${r}</span>
-                        <input type="text" data-role="${r}" class="form-control" value="${esc(mappings[r] || '')}" placeholder="column">
+                        <input type="text" data-role="${r}" class="form-control" value="${esc(mappings[r] || '')}" placeholder="column" ${colOptions.length ? `list="${datalistId}"` : ''}>
                     </div>`).join('')}
+                ${datalistHtml}
             </div>
             <div class="etlsql-dsgn-props-section">
                 <div class="etlsql-dsgn-props-hdr">Actions & Interactions</div>
@@ -4263,17 +4313,32 @@ export function createDesigner(container, opts = {}) {
     }
 
     function deleteVisual(id) {
+        pushUndoState();
         for (const page of state.pages) {
             const i = (page.visuals || []).findIndex(v => v.id === id);
             if (i >= 0) { page.visuals.splice(i, 1); break; }
         }
         if (selVisualId === id) selVisualId = null;
+        selVisualIds.delete(id);
         renderCanvas();
         renderTree();
         renderProps();
+        syncScriptFromGridDebounced();
+    }
+
+    function deleteSelectedVisuals() {
+        if (selVisualIds.size === 0) return;
+        pushUndoState();
+        for (const page of state.pages) {
+            page.visuals = (page.visuals || []).filter(v => !selVisualIds.has(v.id));
+        }
+        selVisualIds.clear();
+        selVisualId = null;
+        renderAll();
     }
 
     function addVisual(type) {
+        pushUndoState();
         const page = curPage();
         if (!page.visuals) page.visuals = [];
         const newId = uid();
@@ -4554,6 +4619,7 @@ export function createDesigner(container, opts = {}) {
             const script = r?.script ?? '';
             if (opts.onSaveScript) {
                 await opts.onSaveScript(script);
+                isDirty = false;
                 opts.onSave?.();
                 return;
             }
@@ -4565,6 +4631,7 @@ export function createDesigner(container, opts = {}) {
                     reportVersion);
                 reportVersion = saved?.version ?? reportVersion;
                 sourceRevision = saved?.sourceRevision ?? sourceRevision;
+                isDirty = false;
                 if (sourceControlEnabled) {
                     // Save writes the catalog + script artifact only. Committing to Git is a
                     // separate, explicit step, so stay on the page and surface the Commit action
@@ -4633,6 +4700,67 @@ export function createDesigner(container, opts = {}) {
     }
 
     // ── Event wiring ──────────────────────────────────────────────────────────
+
+    root.addEventListener('keydown', event => {
+        const tag = (event.target.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || event.target.isContentEditable || event.target.closest('.CodeMirror')) {
+            return;
+        }
+
+        const key = event.key;
+        const mod = event.ctrlKey || event.metaKey;
+
+        if (mod && (key === 's' || key === 'S')) {
+            event.preventDefault();
+            saveReport();
+            return;
+        }
+        if (mod && !event.shiftKey && (key === 'z' || key === 'Z')) {
+            event.preventDefault();
+            undoCanvasState();
+            return;
+        }
+        if (mod && (key === 'y' || key === 'Y' || (event.shiftKey && (key === 'z' || key === 'Z')))) {
+            event.preventDefault();
+            redoCanvasState();
+            return;
+        }
+        if (key === 'Escape') {
+            event.preventDefault();
+            selectVisual(null);
+            return;
+        }
+        if ((key === 'Delete' || key === 'Backspace') && selVisualIds.size > 0) {
+            event.preventDefault();
+            deleteSelectedVisuals();
+            return;
+        }
+        if (selVisualId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+            const v = findVis(selVisualId);
+            if (v) {
+                event.preventDefault();
+                pushUndoState();
+                if (key === 'ArrowLeft')  v.gridCol = Math.max(1, (v.gridCol || 1) - 1);
+                if (key === 'ArrowRight') v.gridCol = Math.min(12, (v.gridCol || 1) + 1);
+                if (key === 'ArrowUp')    v.gridRow = Math.max(1, (v.gridRow || 1) - 1);
+                if (key === 'ArrowDown')  v.gridRow = (v.gridRow || 1) + 1;
+                renderCanvas();
+                syncScriptFromGridDebounced();
+            }
+        }
+    });
+
+    canvasGrid.addEventListener('click', e => {
+        const detachBtn = e.target.closest('[data-detach]');
+        if (detachBtn) {
+            const v = findVis(detachBtn.dataset.detach);
+            if (v) {
+                pushUndoState();
+                v.containerId = null;
+                renderAll();
+            }
+        }
+    });
 
     topbar.querySelector('#dsgn-back').addEventListener('click',    () => opts.onCancel?.());
     topbar.querySelector('#dsgn-cancel').addEventListener('click',  () => opts.onCancel?.());
@@ -5096,6 +5224,7 @@ export function createDesigner(container, opts = {}) {
 
     return {
         dispose: () => {
+            window.removeEventListener('beforeunload', beforeUnloadHandler);
             window.removeEventListener('message', previewMessageHandler);
             disconnectSnapshotResizeObservers();
             clearTimeout(cursorTimeout);
