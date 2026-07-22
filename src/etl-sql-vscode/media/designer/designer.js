@@ -961,6 +961,12 @@ export async function createScriptEditor(container, opts = {}) {
         highlightSelectionMatches(),
         keymap.of(keymaps),
         _getRptsqlLang(cm),
+        ...(opts.onCursorActivity ? [cm.EditorView.updateListener.of(update => {
+            if (update.selectionSet || update.focusChanged) {
+                const pos = update.state.selection.main.head;
+                opts.onCursorActivity(pos, update.state.doc.toString());
+            }
+        })] : []),
         // Accept schema/session explorer drags. Scoped to our private MIME type so
         // ordinary text drag-and-drop keeps CodeMirror's default behaviour.
         EditorView.domEventHandlers({
@@ -2232,6 +2238,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     const editorOpts = {
         ...(opts.editor || {}),
         documentUri: getDocumentUri,
+        onCursorActivity: opts.editor?.onCursorActivity,
         // The workbench owns a Messages tab, so the editor's own inline diagnostics
         // list would be a third copy of the same information (gutter + underline).
         diagnosticsPanel: false,
@@ -3329,6 +3336,7 @@ export function createDesigner(container, opts = {}) {
             <option value="dracula">🧛 Dracula</option>
             <option value="nord">❄️ Nord</option>
         </select>
+        <button class="btn btn-sm" id="dsgn-split-toggle" title="Toggle side-by-side script and canvas split screen editing">🥞 Split</button>
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
         <button class="btn btn-sm" id="dsgn-preview-toggle" title="Render a live WYSIWYG preview of this report">👁 Preview</button>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
@@ -4153,6 +4161,7 @@ export function createDesigner(container, opts = {}) {
         renderTree();
         renderDatasets();
         renderProps();
+        syncScriptFromGridDebounced();
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
@@ -4179,6 +4188,13 @@ export function createDesigner(container, opts = {}) {
         renderTree();
         renderProps();
         renderAlignmentToolbar();
+
+        if (selVisualId && !opts.skipEditorSync) {
+            const v = findVis(selVisualId);
+            if (v && v.name) {
+                selectVisualInEditor(v.name);
+            }
+        }
     }
 
     function renderAlignmentToolbar() {
@@ -4284,6 +4300,111 @@ export function createDesigner(container, opts = {}) {
         renderProps();
     }
 
+    let isSplitActive = false;
+
+    function triggerChartResizes() {
+        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+            const chartBody = card.querySelector('.etlsql-dsgn-vcard-body');
+            if (chartBody && window.echarts) {
+                try {
+                    const chart = window.echarts.getInstanceByDom(chartBody);
+                    chart?.resize();
+                } catch {}
+            }
+        }
+    }
+
+    function selectVisualInEditor(visualName) {
+        if (!isSplitActive || !scriptEditor?.editor?.view) return;
+        const view = scriptEditor.editor.view;
+        const text = view.state.doc.toString();
+        
+        const patterns = [
+            `CREATE VISUAL ${visualName}`,
+            `CREATE CONTAINER ${visualName}`,
+            `CREATE BUTTON ${visualName}`
+        ];
+        
+        let foundIdx = -1;
+        let matchLength = 0;
+        
+        for (const pattern of patterns) {
+            const regex = new RegExp(`\\b${pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+            const match = text.match(regex);
+            if (match && match.index !== undefined) {
+                foundIdx = match.index;
+                matchLength = match[0].length;
+                break;
+            }
+        }
+        
+        if (foundIdx !== -1) {
+            const from = foundIdx;
+            const to = foundIdx + matchLength;
+            view.dispatch({
+                selection: { anchor: from, head: to },
+                scrollIntoView: true
+            });
+        }
+    }
+
+    let cursorTimeout = null;
+    function handleEditorCursorActivity(pos, text) {
+        if (!isSplitActive) return;
+        clearTimeout(cursorTimeout);
+        cursorTimeout = setTimeout(() => {
+            const regex = /\bCREATE\s+(VISUAL|CONTAINER|BUTTON)\s+(\w+)/gi;
+            let match;
+            let activeVisualName = null;
+            let bestDistance = Infinity;
+            
+            while ((match = regex.exec(text)) !== null) {
+                const matchIndex = match.index;
+                if (matchIndex <= pos) {
+                    const distance = pos - matchIndex;
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        activeVisualName = match[2];
+                    }
+                }
+            }
+            
+            if (activeVisualName) {
+                const v = curVis().find(vis => String(vis.name).toUpperCase() === activeVisualName.toUpperCase());
+                if (v && v.id !== selVisualId) {
+                    selectVisual(v.id, { skipEditorSync: true });
+                }
+            }
+        }, 100);
+    }
+
+    async function syncScriptFromGrid() {
+        if (!isSplitActive || !scriptEditor) return;
+        try {
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            if (r?.script) {
+                // Get scroll position and selection to restore them
+                const view = scriptEditor.editor.view;
+                const prevSel = view.state.selection.main;
+                scriptEditor.setValue(r.script);
+                // Try to restore selection safely if within bounds
+                try {
+                    const newLen = view.state.doc.length;
+                    const anchor = Math.min(prevSel.anchor, newLen);
+                    const head = Math.min(prevSel.head, newLen);
+                    view.dispatch({ selection: { anchor, head } });
+                } catch {}
+            }
+        } catch {}
+    }
+
+    let syncTimeout = null;
+    function syncScriptFromGridDebounced() {
+        if (!isSplitActive || !scriptEditor) return;
+        clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(syncScriptFromGrid, 400);
+    }
+
     // ── Script overlay ────────────────────────────────────────────────────────
 
     async function openScript() {
@@ -4311,6 +4432,7 @@ export function createDesigner(container, opts = {}) {
                 authFetch: _fetch,
                 connectionRef: opts.connectionRef || null,
                 documentUri: opts.documentUri || 'portal-designer',
+                onCursorActivity: handleEditorCursorActivity,
             },
             onApply: applyScriptText,
             onClose: closeScript,
@@ -4321,6 +4443,10 @@ export function createDesigner(container, opts = {}) {
         scriptOverlay.classList.remove('active');
         scriptEditor?.dispose();
         scriptEditor = null;
+        isSplitActive = false;
+        root.classList.remove('split-screen');
+        topbar.querySelector('#dsgn-split-toggle')?.classList.remove('active');
+        triggerChartResizes();
     }
 
     // ── Report preview ──────────────────────────────────────────────────────────
@@ -4386,9 +4512,13 @@ export function createDesigner(container, opts = {}) {
             if (r?.designState?.pages?.length) {
                 Object.assign(state, r.designState);
                 if (!state.datasets) state.datasets = [];
-                pageIdx = 0;
+                if (pageIdx >= state.pages.length) {
+                    pageIdx = 0;
+                }
                 selVisualId = null;
-                closeScript();
+                if (!isSplitActive) {
+                    closeScript();
+                }
                 renderAll();
             } else {
                 alert(r?.error || 'Could not parse script.');
@@ -4495,6 +4625,18 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
         scriptOverlay.classList.contains('active') ? closeScript() : openScript());
+    topbar.querySelector('#dsgn-split-toggle').addEventListener('click', async () => {
+        isSplitActive = !isSplitActive;
+        root.classList.toggle('split-screen', isSplitActive);
+        topbar.querySelector('#dsgn-split-toggle').classList.toggle('active', isSplitActive);
+        
+        if (isSplitActive) {
+            if (!scriptOverlay.classList.contains('active')) {
+                await openScript();
+            }
+        }
+        triggerChartResizes();
+    });
     topbar.querySelector('#dsgn-preview-toggle')?.addEventListener('click', () =>
         previewOverlay.classList.contains('active') ? closePreview() : openPreview());
     previewOverlay.querySelector('#dsgn-preview-refresh')?.addEventListener('click', refreshPreview);
@@ -4748,6 +4890,73 @@ export function createDesigner(container, opts = {}) {
                 } catch {}
             }
         }
+
+        // Draw grid snapping guides
+        let showVGuide = false;
+        let showHGuide = false;
+        let vGuideCol = 1;
+        let hGuideRow = 1;
+
+        if (isDragging || isResizing) {
+            const otherVis = curVis().filter(other => other.id !== activeId);
+            for (const other of otherVis) {
+                const otherColStart = other.gridCol || 1;
+                const otherColEnd = otherColStart + (other.gridColSpan || 12);
+                const otherRowStart = other.gridRow || 1;
+                const otherRowEnd = otherRowStart + (other.gridRowSpan || 4);
+
+                const targetColStart = targetCol;
+                const targetColEnd = targetCol + targetColSpan;
+                const targetRowStart = targetRow;
+                const targetRowEnd = targetRow + targetRowSpan;
+
+                if (targetColStart === otherColStart) {
+                    showVGuide = true; vGuideCol = targetColStart;
+                } else if (targetColEnd === otherColEnd) {
+                    showVGuide = true; vGuideCol = targetColEnd;
+                } else if (targetColStart === otherColEnd) {
+                    showVGuide = true; vGuideCol = targetColStart;
+                } else if (targetColEnd === otherColStart) {
+                    showVGuide = true; vGuideCol = targetColEnd;
+                }
+
+                if (targetRowStart === otherRowStart) {
+                    showHGuide = true; hGuideRow = targetRowStart;
+                } else if (targetRowEnd === otherRowEnd) {
+                    showHGuide = true; hGuideRow = targetRowEnd;
+                } else if (targetRowStart === otherRowEnd) {
+                    showHGuide = true; hGuideRow = targetRowStart;
+                } else if (targetRowEnd === otherRowStart) {
+                    showHGuide = true; hGuideRow = targetRowEnd;
+                }
+            }
+        }
+
+        let vGuideEl = canvasGrid.querySelector('.etlsql-dsgn-guide-v');
+        if (showVGuide) {
+            if (!vGuideEl) {
+                vGuideEl = document.createElement('div');
+                vGuideEl.className = 'etlsql-dsgn-guide-v';
+                canvasGrid.appendChild(vGuideEl);
+            }
+            vGuideEl.style.gridColumnStart = `${vGuideCol}`;
+            vGuideEl.style.display = 'block';
+        } else if (vGuideEl) {
+            vGuideEl.style.display = 'none';
+        }
+
+        let hGuideEl = canvasGrid.querySelector('.etlsql-dsgn-guide-h');
+        if (showHGuide) {
+            if (!hGuideEl) {
+                hGuideEl = document.createElement('div');
+                hGuideEl.className = 'etlsql-dsgn-guide-h';
+                canvasGrid.appendChild(hGuideEl);
+            }
+            hGuideEl.style.gridRowStart = `${hGuideRow}`;
+            hGuideEl.style.display = 'block';
+        } else if (hGuideEl) {
+            hGuideEl.style.display = 'none';
+        }
     }
 
     function handleMouseUp(e) {
@@ -4759,6 +4968,11 @@ export function createDesigner(container, opts = {}) {
         for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
             card.classList.remove('drop-zone-hover');
         }
+
+        const vGuide = canvasGrid.querySelector('.etlsql-dsgn-guide-v');
+        if (vGuide) vGuide.remove();
+        const hGuide = canvasGrid.querySelector('.etlsql-dsgn-guide-h');
+        if (hGuide) hGuide.remove();
 
         if (activeId && activeCardEl) {
             activeCardEl.classList.remove('dragging');
@@ -4813,6 +5027,7 @@ export function createDesigner(container, opts = {}) {
 
             renderCanvas();
             renderProps();
+            syncScriptFromGridDebounced();
         }
 
         isDragging = false;
