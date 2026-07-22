@@ -239,6 +239,15 @@ public sealed class DesignerAnalysisService
             o => o.Value,
             StringComparer.OrdinalIgnoreCase);
 
+        if (v.Source.InlineSelect != null)
+        {
+            options["inline_source"] = v.Source.ToSql().Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(v.Source.TempTableName))
+        {
+            options["inline_source"] = NormalizeDatasetName(v.Source.TempTableName);
+        }
+
         foreach (var style in v.Styles)
         {
             options[style.Key.ToUpper()] = style.Value;

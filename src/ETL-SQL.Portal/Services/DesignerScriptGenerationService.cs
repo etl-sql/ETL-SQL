@@ -115,8 +115,14 @@ public sealed class DesignerScriptGenerationService
             sb.AppendLine($"CREATE VISUAL {name} AS {typeKeyword} (");
             if (!string.IsNullOrWhiteSpace(v.Title))
                 sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
-            if (!string.IsNullOrWhiteSpace(v.Dataset))
+            if (v.Options != null && v.Options.TryGetValue("inline_source", out var inlineSrc) && !string.IsNullOrWhiteSpace(inlineSrc))
+            {
+                sb.AppendLine($"    SOURCE = {inlineSrc},");
+            }
+            else if (!string.IsNullOrWhiteSpace(v.Dataset))
+            {
                 sb.AppendLine($"    SOURCE = {NormalizeDatasetName(v.Dataset)},");
+            }
             var mappings = (v.Mappings ?? [])
                 .Where(m => !string.IsNullOrWhiteSpace(m.Value))
                 .Select(m => $"{m.Key.ToUpper()} = {m.Value}")
@@ -129,6 +135,7 @@ public sealed class DesignerScriptGenerationService
                          && !string.Equals(o.Key, "HEIGHT", StringComparison.OrdinalIgnoreCase)
                          && !string.Equals(o.Key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)
                          && !string.Equals(o.Key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
+                         && !string.Equals(o.Key, "inline_source", StringComparison.OrdinalIgnoreCase)
                          && !o.Key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
                          && !o.Key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase))
                 .Select(o => $"{o.Key.ToUpper()} = '{EscapeStr(o.Value)}'")

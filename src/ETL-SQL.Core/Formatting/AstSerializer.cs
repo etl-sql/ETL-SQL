@@ -230,6 +230,7 @@ public static class AstSerializer
         NavigatePageAction n => $"NAVIGATE_PAGE({n.TargetPage})",
         RefreshVisualsAction n => $"REFRESH_VISUALS({string.Join(", ", n.Targets)})",
         SetUiStateAction n => $"SET_UI_STATE({FormatActionTargets(n.Targets)}, {n.Key}, {n.Value})",
+        VisualMapping m => FormatMapping(m),
 
         _ => node is Statement ? "UNKNOWN STATEMENT" : node.GetType().Name
     };
@@ -983,7 +984,7 @@ public static class AstSerializer
         if (s.Source.InlineSelect != null || s.Source.TempTableName != null)
             sb.AppendLine($"    SOURCE = {s.Source.ToSql()},");
         if (s.Mappings.Count > 0)
-            sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => $"{m.Role} = {m.Column}"))} ),");
+            sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => FormatMapping(m)))} ),");
         if (s.Options.Count > 0)
             sb.AppendLine($"    OPTIONS ( {string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.StyleName != null)
@@ -1110,5 +1111,56 @@ public static class AstSerializer
             ? "(" + string.Join(", ", s.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.NotNull ? " NOT NULL" : "")}")) + ")"
             : "()";
         return $"EXPECT SCHEMA {target} {cols}{drift};";
+    }
+
+    private static string FormatMapping(VisualMapping m)
+    {
+        if (string.Equals(m.Role, "SPARKLINE", StringComparison.OrdinalIgnoreCase))
+        {
+            var cols = m.SparklineColumns != null ? string.Join(", ", m.SparklineColumns) : "";
+            var type = m.SparklineType != null ? m.SparklineType.ToUpperInvariant() : "LINE";
+            var alias = m.DisplayName != null ? $" AS '{m.DisplayName.Replace("'", "''")}'" : "";
+            return $"SPARKLINE({cols}) {type}{alias}";
+        }
+
+        if (m.Role != null && m.Role != "COLUMN" && !string.Equals(m.Role, m.Column, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{m.Role} = {m.Column}";
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(m.Column);
+        if (!string.IsNullOrEmpty(m.Format))
+            sb.Append($" FORMAT '{m.Format.Replace("'", "''")}'");
+        if (!string.IsNullOrEmpty(m.Align))
+            sb.Append($" ALIGN '{m.Align.Replace("'", "''")}'");
+        if (m.DataBar)
+        {
+            sb.Append(" DATA_BAR");
+            if (!string.IsNullOrEmpty(m.DataBarColor))
+                sb.Append($" COLOR '{m.DataBarColor.Replace("'", "''")}'");
+        }
+        if (!string.IsNullOrEmpty(m.ColorScaleFrom))
+        {
+            sb.Append($" COLOR_SCALE FROM '{m.ColorScaleFrom.Replace("'", "''")}'");
+            if (!string.IsNullOrEmpty(m.ColorScaleTo))
+                sb.Append($" TO '{m.ColorScaleTo.Replace("'", "''")}'");
+        }
+        if (m.CellRenderer == "image")
+        {
+            sb.Append(" IMAGE");
+            if (m.ImageWidth.HasValue)
+                sb.Append($" WIDTH {m.ImageWidth}");
+        }
+        else if (m.CellRenderer == "hyperlink")
+        {
+            sb.Append(" HYPERLINK");
+            if (!string.IsNullOrEmpty(m.HyperlinkLabel))
+                sb.Append($" LABEL '{m.HyperlinkLabel.Replace("'", "''")}'");
+        }
+        if (!string.IsNullOrEmpty(m.DisplayName))
+            sb.Append($" AS '{m.DisplayName.Replace("'", "''")}'");
+
+        return sb.ToString();
     }
 }
