@@ -4455,7 +4455,6 @@ export function createDesigner(container, opts = {}) {
         }
         propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
-    }
 
     function renderAll() {
         renderPageTabs();
