@@ -13,6 +13,7 @@
 | [Orchestrating Pipelines & DAGs](pipelines-and-dags.md) | ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or d... |
 | [ETL-SQL Portal: User Guide](portal-user.md) | The Portal is a web application that lets you browse, run, and subscribe to reports built with Report-SQL scripts. You don't need to know ETL-SQL s... |
 | [Report-SQL Scripting Guide](report-sql.md) | Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL... |
+| [Visual Report Builder Guide](report-builder.md) | Visual WYSIWYG dashboard authoring surface, 12-col grid canvas, drag-and-drop column pills, ergonomics, and split-screen authoring. |
 | [ETL-SQL Sample Guide](sample-guide.md) | This guide describes the provided sample scripts in the `samples/` folder. These samples are organized into topical subfolders (for example, `01_Ba... |
 | [Testing](testing.md) | For the overall lane model and cleanup guidance, see Test_Strategy.md. |
 | [VS Code Extension](vscode-extension.md) | ## VS Code Extension |

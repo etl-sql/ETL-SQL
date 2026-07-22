@@ -239,6 +239,7 @@ Use this map to find the right document for any task.
 | Pipeline mental model for new users | **[Getting Started](docs/guides/getting-started.md)** |
 | Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/sample-guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/report-sql.md)** |
+| Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/report-builder.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
 | Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
