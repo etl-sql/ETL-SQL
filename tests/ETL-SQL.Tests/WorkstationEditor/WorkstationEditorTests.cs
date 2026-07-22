@@ -533,12 +533,13 @@ public sealed class WorkstationEditorTests
     [InlineData("DROP TABLE m.Users;")]
     [InlineData("TRUNCATE TABLE m.Users;")]
     [InlineData("DELETE FROM m.Users;")]
+    [InlineData("DELETE FROM m.Users WHERE UserID = 1;")]
+    [InlineData("MERGE INTO m.Users AS t USING #updates AS s ON t.UserID = s.UserID WHEN MATCHED THEN UPDATE SET t.UserName = s.UserName;")]
     public void Guard_FlagsDestructiveStatements(string sql) =>
         Assert.NotEmpty(WorkstationRunGuard.FindDestructiveStatements(sql));
 
     [Theory]
     [InlineData("SELECT 1;")]
-    [InlineData("DELETE FROM m.Users WHERE UserID = 1;")]   // filtered delete is ordinary editing
     [InlineData("DROP TABLE #staging;")]                     // session-local, dies with the session
     [InlineData("SELECT UserID INTO #t FROM m.Users;")]
     public void Guard_AllowsNonDestructiveStatements(string sql) =>
@@ -719,7 +720,45 @@ public sealed class WorkstationEditorTests
         Assert.False(string.IsNullOrWhiteSpace(commitBody.SourceRevision));
     }
 
+    [Fact]
+    public async Task GitCommit_StagesOnlyEditableScriptFiles()
+    {
+        using var temp = new TempWorkspace();
+        RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+        RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1;");
+        await File.WriteAllTextAsync(Path.Combine(temp.Root, "local-secret.txt"), "PASSWORD=not-for-commit");
+        RunGit(temp.Root, "add", "local-secret.txt");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var commitReq = new HttpRequestMessage(HttpMethod.Post, "/api/git/commit");
+        commitReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        commitReq.Content = JsonContent.Create(new GitCommitRequest("Commit pipeline script"));
+
+        var commitRes = await client.SendAsync(commitReq);
+        Assert.Equal(HttpStatusCode.OK, commitRes.StatusCode);
+        var commitBody = await commitRes.Content.ReadFromJsonAsync<GitCommitResponse>();
+
+        Assert.NotNull(commitBody);
+        Assert.True(commitBody!.Committed, commitBody.Message);
+
+        var committedFiles = RunGitCapture(temp.Root, "show", "--name-only", "--format=", "HEAD");
+        Assert.Contains("pipeline.etlsql", committedFiles, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("local-secret.txt", committedFiles, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void RunGit(string workingDirectory, params string[] arguments)
+    {
+        _ = RunGitCapture(workingDirectory, arguments);
+    }
+
+    private static string RunGitCapture(string workingDirectory, params string[] arguments)
     {
         var psi = new ProcessStartInfo
         {
@@ -748,6 +787,8 @@ public sealed class WorkstationEditorTests
         {
             throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {output}{error}");
         }
+
+        return output;
     }
 
     private sealed class TempWorkspace : IDisposable

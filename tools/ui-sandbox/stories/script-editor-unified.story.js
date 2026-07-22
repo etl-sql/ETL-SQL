@@ -4,15 +4,15 @@ import { makeMockApi } from '../mockApi.js';
 
 const UNIFIED_SCRIPTS = {
   etl: `CREATE CONNECTION staging_db AS POSTGRES(
-  HOST = '127.0.0.1', 
-  DATABASE = 'staging', 
-  USER = 'SECRET:db_user', 
+  HOST = '127.0.0.1',
+  DATABASE = 'staging',
+  USER = 'SECRET:db_user',
   PASSWORD = 'SECRET:db_pass'
 );
 
 CREATE CONNECTION analytics_dw AS MSSQL(
-  SERVER = 'localhost', 
-  DATABASE = 'dw', 
+  SERVER = 'localhost',
+  DATABASE = 'dw',
   TRUSTED_CONNECTION = TRUE
 );
 
@@ -24,8 +24,8 @@ BEGIN TRY
   WHERE sale_date >= DATEADD(DAY, -7, GETDATE());
 
   -- 2. Validate and enrich data
-  UPDATE #raw_sales 
-  SET amount = 0 
+  UPDATE #raw_sales
+  SET amount = 0
   WHERE amount IS NULL OR amount < 0;
 
   -- 3. Load & Merge into enterprise data warehouse
@@ -89,7 +89,7 @@ export default {
   async mount(stage, fixtureId, ctx) {
     const value = UNIFIED_SCRIPTS[fixtureId] ?? '';
     const mod = await importFresh(DESIGNER_JS);
-    
+
     // Create seed configuration context
     const api = makeMockApi({
       files: [
@@ -123,7 +123,7 @@ export default {
       previewUrl: '/tools/ui-sandbox/designer-preview.html',
       connectionRef: 'demo',
       authFetch: api,
-      
+
       // Configuration for stateful sidebars
       workspaceRoot: 'C:/Users/chuck/scratch/ETL-SQL',
       sidebar,
@@ -132,7 +132,7 @@ export default {
         modified: ['etl/weekly_load.etlsql'],
         untracked: ['etl/new_enrichment.etlsql']
       },
-      
+
       editor: {
         value,
         analyzeUrl: '/api/designer/analyze',

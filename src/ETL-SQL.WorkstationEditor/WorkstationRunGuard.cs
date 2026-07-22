@@ -80,9 +80,10 @@ public static class WorkstationRunGuard
             $"DROP TABLE {Qualify(s.TargetTable)} (line {s.Line})",
         TruncateTableStatement s when IsPersistent(s.TargetTable.TableName) =>
             $"TRUNCATE TABLE {Qualify(s.TargetTable)} (line {s.Line})",
-        // An unfiltered DELETE empties the table; a filtered one is ordinary editing.
-        DeleteStatement s when IsPersistent(s.TargetTable.TableName) && s.WhereClause is null =>
-            $"DELETE FROM {Qualify(s.TargetTable)} with no WHERE (line {s.Line})",
+        DeleteStatement s when IsPersistent(s.TargetTable.TableName) =>
+            $"DELETE FROM {Qualify(s.TargetTable)} (line {s.Line})",
+        MergeStatement s when IsPersistent(s.TargetTable.TableName) =>
+            $"MERGE INTO {Qualify(s.TargetTable)} (line {s.Line})",
         _ => null
     };
 

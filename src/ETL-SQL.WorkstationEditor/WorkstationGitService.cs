@@ -4,6 +4,12 @@ namespace ETL_SQL.WorkstationEditor;
 
 public sealed class WorkstationGitService(WorkstationWorkspace workspace)
 {
+    private static readonly HashSet<string> CommitExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".etlsql",
+        ".rptsql"
+    };
+
     public GitStatusResponse GetStatus()
     {
         var root = workspace.Root;
@@ -51,16 +57,29 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         if (string.IsNullOrWhiteSpace(comment))
             return new GitCommitResponse(false, null, "Commit message cannot be empty.");
 
-        // 1. Stage all changes
-        var (addExit, _, addError) = RunGitCommand(root, "add", "-A");
+        var filesToStage = GetCommitCandidateFiles().ToList();
+        if (filesToStage.Count == 0)
+            return new GitCommitResponse(false, null, "No editable script changes to commit.");
+
+        var addArgs = new List<string> { "add", "--" };
+        addArgs.AddRange(filesToStage);
+
+        // 1. Stage only files the Workstation editor can own. The workspace may be a full repo with
+        // local debug output, generated artifacts, or secrets beside the scripts; a script editor
+        // commit button must not sweep those into source control.
+        var (addExit, _, addError) = RunGitCommand(root, addArgs.ToArray());
         if (addExit != 0)
         {
             string errorMsg = string.IsNullOrWhiteSpace(addError) ? "git add failed." : addError.Trim();
             return new GitCommitResponse(false, null, errorMsg);
         }
 
-        // 2. Commit
-        var (commitExit, commitOutput, commitError) = RunGitCommand(root, "commit", "-m", comment);
+        var commitArgs = new List<string> { "commit", "-m", comment, "--" };
+        commitArgs.AddRange(filesToStage);
+
+        // 2. Commit the same pathspec, so unrelated changes staged before the editor action do not
+        // slip into the Workstation-generated commit.
+        var (commitExit, commitOutput, commitError) = RunGitCommand(root, commitArgs.ToArray());
         string combinedOutput = $"{commitOutput}\n{commitError}";
 
         if (combinedOutput.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
@@ -80,7 +99,44 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         return new GitCommitResponse(true, revOutput.Trim(), "Committed successfully.");
     }
 
-    private static (int ExitCode, string Output, string Error) RunGitCommand(string workingDir, params string[] arguments)
+    private IEnumerable<string> GetCommitCandidateFiles()
+    {
+        var root = workspace.Root;
+        var (statusExit, statusOutput, _) = RunGitCommand(root, "status", "--porcelain", "--untracked-files=all", "--");
+        if (statusExit != 0) yield break;
+
+        foreach (var line in statusOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var file = ParseStatusPath(line);
+            if (string.IsNullOrWhiteSpace(file)) continue;
+            if (!CommitExtensions.Contains(Path.GetExtension(file))) continue;
+
+            string fullPath;
+            try
+            {
+                fullPath = workspace.ResolveEditablePath(file);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                continue;
+            }
+
+            if (File.Exists(fullPath))
+                yield return file.Replace('\\', '/');
+        }
+    }
+
+    private static string? ParseStatusPath(string line)
+    {
+        if (line.Length < 4) return null;
+        var file = line[3..].Trim();
+        var renameSeparator = file.IndexOf(" -> ", StringComparison.Ordinal);
+        if (renameSeparator >= 0)
+            file = file[(renameSeparator + 4)..].Trim();
+        return file.Trim('"');
+    }
+
+    internal static (int ExitCode, string Output, string Error) RunGitCommand(string workingDir, params string[] arguments)
     {
         try
         {
@@ -100,14 +156,16 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
 
             using var process = Process.Start(psi);
             if (process == null) return (-1, string.Empty, "Failed to start git process.");
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
             if (!process.WaitForExit(3000))
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
                 return (-1, string.Empty, "git command timed out.");
             }
 
-            string output = process.StandardOutput.ReadToEnd();
-            string error = process.StandardError.ReadToEnd();
+            string output = outputTask.GetAwaiter().GetResult();
+            string error = errorTask.GetAwaiter().GetResult();
             return (process.ExitCode, output, error);
         }
         catch (Exception ex)

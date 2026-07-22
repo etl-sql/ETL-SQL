@@ -23,7 +23,7 @@
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
     const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
-    
+
     let baselineManifest = null;
 
     // escHtml (defined below) escapes &<>"' for safe interpolation into innerHTML.
@@ -387,7 +387,7 @@
 
     function checkRequiredParameters(manifest) {
         if (!manifest.parameterMetadata) return true;
-        
+
         const missing = [];
         const required = [];
         for (const name in manifest.parameterMetadata) {
@@ -413,26 +413,26 @@
     function showRequiredParametersModal(requiredList, manifest) {
         const modal = document.createElement('div');
         modal.className = 'required-params-modal';
-        
+
         const content = document.createElement('div');
         content.className = 'modal-content';
-        
+
         const title = document.createElement('h2');
         title.textContent = 'Required Parameters';
         content.appendChild(title);
-        
+
         const desc = document.createElement('p');
         desc.textContent = 'Please provide values for the following mandatory fields to run this report:';
         content.appendChild(desc);
-        
+
         const grid = document.createElement('div');
         grid.className = 'params-grid';
-        
+
         const inputs = {};
         requiredList.forEach(meta => {
             const label = document.createElement('label');
             label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
-            
+
             const input = document.createElement('input');
             input.type = inputTypeForParameter(meta);
             const currentValue = getParam(manifest.parameters, meta.name) || '';
@@ -440,16 +440,16 @@
             else input.value = currentValue;
             input.placeholder = meta.defaultValue || '';
             input.className = 'modal-input';
-            
+
             grid.appendChild(label);
             grid.appendChild(input);
             inputs[meta.name] = input;
         });
         content.appendChild(grid);
-        
+
         const footer = document.createElement('div');
         footer.className = 'modal-footer';
-        
+
         const runBtn = document.createElement('button');
         runBtn.className = 'header-btn primary';
         runBtn.textContent = 'Run Report';
@@ -470,7 +470,7 @@
                     updates[name] = val;
                 }
             }
-            
+
             if (allOk) {
                 modal.remove();
                 postParameters(updates, false).then(m => {
@@ -478,7 +478,7 @@
                 });
             }
         };
-        
+
         footer.appendChild(runBtn);
         content.appendChild(footer);
         modal.appendChild(content);
@@ -613,7 +613,7 @@
 
     function renderAutoPanel(container, manifest) {
         if (!manifest.parameterMetadata) return;
-        
+
         // Identify parameters that are marked as INPUT but don't have a corresponding visual SLICER
         const visuals = manifest.visuals || [];
         const visualParams = new Set();
@@ -625,7 +625,7 @@
             ].includes(type)) {
                 const p = v.options && (v.options['data-parameter'] || v.options['PARAMETER'] || v.options['parameter']);
                 if (p) visualParams.add(p.toLowerCase());
-                
+
                 // Also check ACTIONS for SET_PARAMETER
                 (v.actions || []).forEach(a => {
                     if (a.type === 'SET_PARAMETER' && a.parameterName) {
@@ -646,34 +646,34 @@
 
         const panel = document.createElement('div');
         panel.className = 'auto-parameter-panel collapsed';
-        
+
         const toggle = document.createElement('div');
         toggle.className = 'panel-toggle';
         toggle.innerHTML = '<span>&#x2699;</span>';
         toggle.onclick = () => panel.classList.toggle('collapsed');
         panel.appendChild(toggle);
-        
+
         const content = document.createElement('div');
         content.className = 'panel-content';
-        
+
         const title = document.createElement('h4');
         title.textContent = 'Report Parameters';
         content.appendChild(title);
-        
+
         const list = document.createElement('div');
         list.className = 'panel-list';
-        
+
         autoParams.forEach(meta => {
             const item = document.createElement('div');
             item.className = 'panel-item';
-            
+
             const label = document.createElement('label');
             label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
             item.appendChild(label);
-            
+
             const inputGroup = document.createElement('div');
             inputGroup.className = 'input-group';
-            
+
             const input = document.createElement('input');
             input.type = inputTypeForParameter(meta);
             const currentValue = getParam(manifest.parameters, meta.name) || '';
@@ -681,7 +681,7 @@
             else input.value = currentValue;
             input.placeholder = meta.defaultValue || '';
             inputGroup.appendChild(input);
-            
+
             const applyBtn = document.createElement('button');
             applyBtn.innerHTML = '&#x2713;';
             applyBtn.onclick = () => {
@@ -694,11 +694,11 @@
                 });
             };
             inputGroup.appendChild(applyBtn);
-            
+
             item.appendChild(inputGroup);
             list.appendChild(item);
         });
-        
+
         content.appendChild(list);
         panel.appendChild(content);
         container.appendChild(panel);
@@ -774,7 +774,7 @@
         }
 
         const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
-        // Track the current page between refreshes/manifest updates. 
+        // Track the current page between refreshes/manifest updates.
         // We prioritize _lastActivePage (dynamic) over window.__INITIAL_PAGE__ (set at load).
         const requestedPage  = (_lastActivePage || window.__INITIAL_PAGE__ || '').trim();
         const pageToShow     = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
@@ -876,8 +876,8 @@
             elements.forEach(el => {
                 const paramKey = el.getAttribute('data-parameter');
                 if (paramKey && paramKey.toLowerCase() === name.toLowerCase()) {
-                    const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT') 
-                                    ? [el] 
+                    const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT')
+                                    ? [el]
                                     : Array.from(el.querySelectorAll('select, input'));
                     targets.forEach(t => {
                         if (t.multiple && t.tagName === 'SELECT') {
@@ -1054,7 +1054,7 @@
             return;
         }
         div.setAttribute('data-name', containerDef.name);
-        
+
         const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
         if (tag) div.setAttribute('data-tag', tag);
         const styles = containerDef.styles || {};
@@ -1070,17 +1070,17 @@
             div.classList.add('collapsible-inline');
             const header = document.createElement('div');
             header.className = 'container-header';
-            
+
             const title = document.createElement('span');
             title.className = 'container-title';
             title.textContent = containerDef.title || containerDef.name;
             header.appendChild(title);
-            
+
             const chevron = document.createElement('span');
             chevron.className = 'container-chevron';
             chevron.innerHTML = '&#x25B2;'; // UP
             header.appendChild(chevron);
-            
+
             const name = containerDef.name;
             const persisted = _uiStates[name];
             if (persisted && persisted.collapsed) {
@@ -1097,9 +1097,9 @@
                     if (grid) resizeChartsIn(grid);
                 }, 350);
             };
-            
+
             div.appendChild(header);
-            
+
             const content = document.createElement('div');
             content.className = 'container-content';
             renderLayout(content, containerDef, manifest, containerTheme);
@@ -1107,7 +1107,7 @@
         } else {
             renderLayout(div, containerDef, manifest, containerTheme);
         }
-        
+
         container.appendChild(div);
     }
 
@@ -1136,7 +1136,7 @@
         const trigger = document.createElement('div');
         trigger.className = 'drawer-trigger';
         trigger.title = containerDef.title || containerDef.name;
-        
+
         let iconHtml = '&#x2699;'; // Default GEAR
         if (containerDef.icon) {
             const icon = containerDef.icon.toUpperCase();
@@ -1161,18 +1161,18 @@
 
         const styles = containerDef.styles || {};
         const containerTheme = getStyle(styles, 'THEME') || pageTheme;
-        
+
         const header = document.createElement('div');
         header.className = 'drawer-header';
-        
+
         const title = document.createElement('div');
         title.className = 'drawer-title';
         title.textContent = containerDef.title || containerDef.name;
         header.appendChild(title);
-        
+
         const actions = document.createElement('div');
         actions.className = 'drawer-actions';
-        
+
         if (containerDef.isPinnable !== false) {
             const pinBtn = document.createElement('span');
             pinBtn.className = 'drawer-action-btn';
@@ -1188,7 +1188,7 @@
             };
             actions.appendChild(pinBtn);
         }
-        
+
         const closeBtn = document.createElement('span');
         closeBtn.className = 'drawer-action-btn';
         closeBtn.innerHTML = '&times;';
@@ -1203,15 +1203,15 @@
             }
         };
         actions.appendChild(closeBtn);
-        
+
         header.appendChild(actions);
         drawer.appendChild(header);
-        
+
         const content = document.createElement('div');
         content.className = 'drawer-content';
         renderLayout(content, containerDef, manifest, containerTheme);
         drawer.appendChild(content);
-        
+
         page.appendChild(drawer);
 
         trigger.onclick = () => {
@@ -1233,13 +1233,13 @@
             const rows = layoutDef.structure.split('/')
                 .map(r => r.trim().split(/\s+/).filter(s => s))
                 .filter(r => r.length > 0);
-            
+
             const maxCols = Math.max(...rows.map(r => r.length));
             const normalizedRows = rows.map(r => {
                 while (r.length < maxCols) r.push('.');
                 return r.join(' ');
             });
-            
+
             container.style.gridTemplateAreas = normalizedRows.map(r => `"${r}"`).join(' ');
 
             if (rows.length > 0) {
@@ -1310,10 +1310,10 @@
         card.className = 'visual-card';
         card.setAttribute('data-name', visual.name);
         card.setAttribute('data-visual-name', visual.name); // Compatibility
-        
+
         const tag = getOption(visual.options, 'TAG');
         if (tag) card.setAttribute('data-tag', tag);
-        
+
         card._visualData = visual;
 
         // Apply WIDTH / HEIGHT / TOOLTIP from styles
@@ -1346,7 +1346,7 @@
 
         const title = document.createElement('h3');
         title.textContent = visual.name;
-        
+
         // Hide redundant header if chart/card has its own title/label
         const specificTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'mapping:label');
         if (specificTitle) title.style.display = 'none';
@@ -1405,7 +1405,7 @@
         if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
             const empty = document.createElement('div');
             empty.className = 'empty-state';
-            empty.innerHTML = '<div class="empty-icon">\u2205</div>' + 
+            empty.innerHTML = '<div class="empty-icon">\u2205</div>' +
                               '<p>No data matches the current filters.</p>';
             card.appendChild(empty);
             container.appendChild(card);
@@ -1579,8 +1579,8 @@
             .catch(err => {
                 const parent = wrapper.parentElement;
                 if (parent) {
-                    const msg = !isWebMode && vscode 
-                        ? 'Maps only work in the Portal' 
+                    const msg = !isWebMode && vscode
+                        ? 'Maps only work in the Portal'
                         : 'Map load failed: ' + err.message;
                     parent.appendChild(noDataEl(msg));
                 }
@@ -1652,7 +1652,7 @@
                         const start = api.coord([api.value(1), categoryIndex]);
                         const end   = api.coord([api.value(2), categoryIndex]);
                         const height = api.size([0, 1])[1] * 0.6; // Bar height 60% of category height
-                        
+
                         return {
                             type: 'rect',
                             shape: {
@@ -1734,7 +1734,7 @@
                 option.series.forEach(s => {
                     if (!s.emphasis) s.emphasis = {};
                     // Disable hover focus/dimming as per user request
-                    s.emphasis.focus = 'none'; 
+                    s.emphasis.focus = 'none';
                 });
             }
 
@@ -1808,7 +1808,7 @@
                     }
                 });
             }
-            
+
             wrapper.addEventListener('contextmenu', e => {
                 const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
                 if (drillDowns.length > 0) {
@@ -1828,7 +1828,7 @@
                 // We map this to a cross-filter action if possible
                 const seriesName = params.name;
                 const mappingCol = (visual.options || {})['mapping:x'] || (visual.columns && visual.columns[0]);
-                
+
                 // For simple charts, series might correspond to a category
                 // This is a heuristic: if they clicked a legend item, they want to filter by that value
                 applyPageCrossFilter(container, seriesName, mappingCol, visual.name, { ctrlKey: false });
@@ -2647,7 +2647,7 @@
         const xCol = (currentVisual.options || {})['mapping:x'] || currentVisual.columns[0];
         const yCol = (currentVisual.options || {})['mapping:y'] || (currentVisual.columns.length > 1 ? currentVisual.columns[1] : null);
         const seriesCol = (currentVisual.options || {})['mapping:series'];
-        
+
         const xIdx = currentVisual.columns.indexOf(xCol);
         const yIdx = yCol ? currentVisual.columns.indexOf(yCol) : -1;
         const sIdx = seriesCol ? currentVisual.columns.indexOf(seriesCol) : -1;
@@ -2709,7 +2709,7 @@
 
         // ── Strategy B: Dimming (Pie / Scatter / Multi-Series Line) ──────────
         // Instead of new series, we modify the existing ones to dim non-selected items.
-        
+
         // Build a Set of selected X values for fast lookup
         const selectedKeys = new Set(currentVisual.highlightRows.map(r => String(r[xIdx])));
 
@@ -2725,10 +2725,10 @@
                     }
                 });
             });
-        } 
+        }
         else if (isScatter) {
             // For Scatter, data is usually [x, y, ...]
-            // This is harder because we don't have item names. 
+            // This is harder because we don't have item names.
             // We'll rely on dataIndex if rows match exactly, or just dim everything not in selectionMap.
             (option.series || []).forEach(s => {
                 s.data = s.data.map((point, idx) => {
@@ -2994,10 +2994,10 @@
     function renderSlicer(container, visual, manifest) {
         const wrapper = document.createElement('div');
         wrapper.className = 'slicer-wrapper';
-        
+
         const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
         const paramName = action ? action.parameterName : null;
-        
+
         const typeStr = visual.visualType.toLowerCase();
         const isMulti = typeStr === 'multiselect' || isOn(visual.options['MULTIPLE'] || visual.options['multiple']);
 
@@ -3074,16 +3074,16 @@
         uniqueOptions.forEach(optVal => {
             const item = document.createElement('label');
             item.className = 'multiselect-item';
-            
+
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = optVal;
             cb.checked = selected.has(optVal);
-            
+
             cb.addEventListener('change', () => {
                 if (cb.checked) selected.add(optVal);
                 else selected.delete(optVal);
-                
+
                 if (updateToggleText) updateToggleText();
 
                 const val = Array.from(selected).join(',');
@@ -3107,7 +3107,7 @@
             const toggle = document.createElement('button');
             toggle.type = 'button';
             toggle.className = 'multiselect-toggle';
-            
+
             updateToggleText = () => {
                 if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
                 else if (selected.size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
@@ -3372,7 +3372,7 @@
         const title = document.createElement('h2');
         title.textContent = 'Relative Date Syntax';
         title.style.marginTop = '0';
-        
+
         const desc = document.createElement('div');
         desc.style.fontSize = '14px';
         desc.style.lineHeight = '1.5';
@@ -3604,13 +3604,13 @@
             const val = String(row[0] ?? '');
             const label = document.createElement('label');
             label.className = 'checkbox-item';
-            
+
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = val;
             cb.checked = currentValues.includes(val);
             cb.className = 'multiselect-cb';
-            
+
             label.appendChild(cb);
             label.appendChild(document.createTextNode(' ' + val));
             list.appendChild(label);
@@ -3836,7 +3836,7 @@
         btnEl.className = 'report-btn';
         btnEl.textContent = btn.title || btn.name;
         btnEl.setAttribute('data-name', btn.name);
-        
+
         const tag = getOption(btn.options, 'TAG') || getStyle(styles, 'TAG');
         if (tag) btnEl.setAttribute('data-tag', tag);
         if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
@@ -3896,10 +3896,10 @@
 
         const consoleWrapper = document.createElement('div');
         consoleWrapper.className = 'pipeline-console collapsed';
-        
+
         const header = document.createElement('div');
         header.className = 'pipeline-header';
-        
+
         let statusColor = 'gray';
         let statusText = 'Completed';
         if (manifest.error) {
@@ -3910,28 +3910,28 @@
         header.innerHTML = `
             <span>Pipeline Console</span>
             <span style="color: ${statusColor}; font-weight: normal;">
-                ${statusText} 
+                ${statusText}
                 <span class="toggle-icon" style="margin-left: 8px;">&#x25B2;</span>
             </span>
         `;
-        
+
         const body = document.createElement('div');
         body.className = 'pipeline-body';
-        
+
         const leftPane = document.createElement('div');
         leftPane.className = 'pipeline-pane left-pane';
         leftPane.innerHTML = '<div class="pane-title">Execution Tree</div>';
-        
+
         const rightPane = document.createElement('div');
         rightPane.className = 'pipeline-pane';
         rightPane.innerHTML = '<div class="pane-title">Messages</div>';
-        
+
         body.appendChild(leftPane);
         body.appendChild(rightPane);
-        
+
         consoleWrapper.appendChild(header);
         consoleWrapper.appendChild(body);
-        
+
         let isCollapsed = true;
         header.addEventListener('click', () => {
             isCollapsed = !isCollapsed;
@@ -3943,23 +3943,23 @@
         // Render Execution Tree
         if (manifest.executionTree) {
             const treeRoot = document.createElement('div');
-            
+
             function renderNode(node, container) {
                 const el = document.createElement('div');
                 el.className = 'tree-node';
-                
+
                 const content = document.createElement('div');
                 content.className = 'tree-node-content';
-                
+
                 const hasChildren = node.children && node.children.length > 0;
                 const iconStr = hasChildren ? '&#x25BC;' : '&nbsp;';
-                
+
                 let timeStr = '';
                 if (node.durationMs != null) timeStr = `[${node.durationMs}ms]`;
-                
+
                 let rowsStr = '';
                 if (node.rowsProcessed != null) rowsStr = `(${node.rowsProcessed} rows)`;
-                
+
                 content.innerHTML = `
                     <span class="tree-icon" style="color:#888">${iconStr}</span>
                     <span class="node-name">${escHtml(node.name || 'Unnamed')}</span>
@@ -3968,15 +3968,15 @@
                         ${timeStr} ${rowsStr}
                     </span>
                 `;
-                
+
                 el.appendChild(content);
-                
+
                 if (hasChildren) {
                     const childrenContainer = document.createElement('div');
                     childrenContainer.className = 'tree-children';
                     node.children.forEach(child => renderNode(child, childrenContainer));
                     el.appendChild(childrenContainer);
-                    
+
                     content.querySelector('.tree-icon').addEventListener('click', (e) => {
                         e.stopPropagation();
                         const isHidden = childrenContainer.style.display === 'none';
@@ -3986,13 +3986,13 @@
                 }
                 container.appendChild(el);
             }
-            
+
             if (Array.isArray(manifest.executionTree)) {
                 manifest.executionTree.forEach(rootNode => renderNode(rootNode, treeRoot));
             } else {
                 renderNode(manifest.executionTree, treeRoot);
             }
-            
+
             leftPane.appendChild(treeRoot);
         } else {
             leftPane.innerHTML += '<div class="no-data">No execution tree available.</div>';
@@ -4003,10 +4003,10 @@
             manifest.messages.forEach(msg => {
                 const entry = document.createElement('div');
                 entry.className = 'log-entry';
-                
+
                 const time = new Date(msg.timestamp).toLocaleTimeString();
                 const colorClass = msg.color ? `log-${escHtml(msg.color)}` : 'log-white';
-                
+
                 entry.innerHTML = `
                     <span class="log-time">[${time}]</span>
                     <span class="${colorClass}">${escHtml(msg.message)}</span>
@@ -4022,13 +4022,13 @@
             errEntry.className = 'log-entry log-red';
             errEntry.innerHTML = `<br/><b>Fatal Error:</b><br/><pre>${escHtml(manifest.error)}</pre>`;
             rightPane.appendChild(errEntry);
-            
+
             // Auto-expand if there's an error
             isCollapsed = false;
             consoleWrapper.classList.remove('collapsed');
             header.querySelector('.toggle-icon').innerHTML = '&#x25BC;';
         }
-        
+
         root.appendChild(consoleWrapper);
     }
 
@@ -4146,16 +4146,16 @@
             // Push current parameter snapshot onto back-navigation stack
             _drillHistory.push(Object.assign({}, parameters));
             showDrillBackButton();
-            
+
             // Visual feedback: pulse target or entire page if navigating
             const targetName = action.target || action.targetVisual || action.targetPage;
             if (targetName) {
-                const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`) 
+                const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`)
                               || document.getElementById('page-' + targetName.toLowerCase());
                 if (targetEl) {
                     targetEl.classList.add('drilled-down');
                     setTimeout(() => targetEl.classList.remove('drilled-down'), 1500);
-                    
+
                     // If it's on the same page, scroll to it
                     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
@@ -4217,7 +4217,7 @@
             // Clear pending
             for (let k in pendingParameters) delete pendingParameters[k];
             updateStagedUI();
-            
+
             // Flush to server
             _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
         } else if (action.type === 'BACK') {
@@ -4252,17 +4252,17 @@
             if (!targetReport) return;
 
             const finalParams = resolveActionParameters(action, rowData, columns);
-            
+
             // Build query string
             const qs = Object.entries(finalParams)
                 .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
                 .join('&');
 
             if (vscode) {
-                vscode.postMessage({ 
-                    type: 'drillReport', 
-                    targetReport: targetReport, 
-                    parameters: finalParams 
+                vscode.postMessage({
+                    type: 'drillReport',
+                    targetReport: targetReport,
+                    parameters: finalParams
                 });
             } else {
                 // Determine target URL based on current environment
@@ -4314,7 +4314,7 @@
                 } else if (key === 'COLLAPSED') {
                     const isCollapsed = isOn(value);
                     const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
-                    
+
                     const name = container.getAttribute('data-name');
                     if (name) _uiStates[name] = { collapsed: isCollapsed };
 
@@ -4326,7 +4326,7 @@
                         const chevron = container.querySelector('.container-chevron');
                         if (chevron) chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
                     }
-                    
+
                     // Specific logic for drawers
                     if (container.classList.contains('collapsible-drawer')) {
                         if (isCollapsed) container.classList.remove('open');
@@ -4426,8 +4426,8 @@
         console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
 
         if (vscode) {
-            vscode.postMessage({ 
-                type: 'refreshReport', 
+            vscode.postMessage({
+                type: 'refreshReport',
                 parameters: params, // VS Code extension handles the dictionary
                 isInteraction: isInteraction,
                 pageName: pageName
@@ -4439,7 +4439,7 @@
             const res = await fetch(apiBase + '/parameters', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ 
+                body:    JSON.stringify({
                     params: paramList,
                     isInteraction: isInteraction,
                     pageName: pageName

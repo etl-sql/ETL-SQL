@@ -1437,7 +1437,7 @@ export async function createScriptEditor(container, opts = {}) {
         diagPanel = document.createElement('div');
         diagPanel.className = 'etlsql-editor-diagnostics';
         diagPanel.innerHTML = '<div class="etlsql-editor-diagnostics-status" data-kind="neutral" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;"><span>Diagnostics pending</span><span style="font-size:10px; color:var(--portal-text-muted, #9da7b1); padding-left:8px;">Toggle ▼</span></div><div class="etlsql-editor-diagnostics-list"></div>';
-        
+
         const statusHeader = diagPanel.querySelector('.etlsql-editor-diagnostics-status');
         statusHeader.addEventListener('click', () => {
             const isCollapsed = diagPanel.classList.toggle('collapsed');
@@ -1490,19 +1490,19 @@ function normalizeRunTrace(result, script) {
     const columns = Array.isArray(result?.columns) ? result.columns : [];
     const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
     const message = result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.');
-    
+
     const trace = [
         { type: 'clear', resetHistory: true },
         { type: 'status', status: isSuccess ? 'running' : 'failed' },
         { type: 'message', level: 'sys', text: 'Designer run started.' }
     ];
-    
+
     if (Array.isArray(result?.messages)) {
         result.messages.forEach(m => {
             trace.push({ type: 'message', level: 'info', text: typeof m === 'string' ? m : (m.text || m.message || '') });
         });
     }
-    
+
     if (Array.isArray(result?.diagnostics)) {
         result.diagnostics.forEach(d => {
             trace.push({ type: 'message', level: d.severity?.toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${d.message}` });
@@ -1585,7 +1585,7 @@ function renderCompactDag(nodes) {
     let html = `<div class="etlsql-compact-dag">`;
     html += `<svg class="etlsql-compact-dag-svg" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;"></svg>`;
     html += `<div class="etlsql-compact-dag-columns" style="display:flex; gap:60px; padding:20px; align-items:center; position:relative; z-index:1; height:100%;">`;
-    
+
     columns.forEach((col, colIdx) => {
         html += `<div class="etlsql-compact-dag-column" style="display:flex; flex-direction:column; gap:12px; justify-content:center;">`;
         if (col.type === 'single') {
@@ -1597,7 +1597,7 @@ function renderCompactDag(nodes) {
         }
         html += `</div>`;
     });
-    
+
     html += `</div></div>`;
     return html;
 }
@@ -1606,7 +1606,7 @@ function renderDagCapsule(node, col, row) {
     const statusClass = (node.status || '').toLowerCase();
     const rows = Number(node.rowsProcessed || 0).toLocaleString();
     const duration = node.durationMs != null ? `${Math.round(node.durationMs).toLocaleString()} ms` : '';
-    
+
     let statusIcon = '⚪';
     if (statusClass === 'completed' || statusClass === 'success') statusIcon = '✅';
     else if (statusClass === 'running') statusIcon = '🔄';
@@ -1631,7 +1631,7 @@ function updateDagLines(container) {
     if (!svg) return;
     svg.innerHTML = '';
     const containerRect = container.getBoundingClientRect();
-    
+
     const capsules = Array.from(container.querySelectorAll('.etlsql-dag-capsule'));
     const cols = {};
     capsules.forEach(cap => {
@@ -1639,24 +1639,24 @@ function updateDagLines(container) {
         if (!cols[col]) cols[col] = [];
         cols[col].push(cap);
     });
-    
+
     const sortedColKeys = Object.keys(cols).map(Number).sort((a,b)=>a-b);
     for (let i = 0; i < sortedColKeys.length - 1; i++) {
         const c1 = sortedColKeys[i];
         const c2 = sortedColKeys[i+1];
         const nodes1 = cols[c1];
         const nodes2 = cols[c2];
-        
+
         nodes1.forEach(n1 => {
             const r1 = n1.getBoundingClientRect();
             const x1 = r1.right - containerRect.left;
             const y1 = (r1.top + r1.bottom) / 2 - containerRect.top;
-            
+
             nodes2.forEach(n2 => {
                 const r2 = n2.getBoundingClientRect();
                 const x2 = r2.left - containerRect.left;
                 const y2 = (r2.top + r2.bottom) / 2 - containerRect.top;
-                
+
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const cp1x = x1 + (x2 - x1) / 3;
                 const cp2x = x1 + 2 * (x2 - x1) / 3;
@@ -1888,7 +1888,7 @@ export function createScriptResultsPanel(container) {
         let text = '';
         let mime = '';
         let ext = '';
-        
+
         if (format === 'json') {
             text = JSON.stringify(rows, null, 2);
             mime = 'application/json';
@@ -1982,7 +1982,7 @@ export function createScriptResultsPanel(container) {
         render();
     });
     container.querySelectorAll('[data-export]').forEach(btn => btn.addEventListener('click', () => exportResults(btn.dataset.export)));
-    
+
     // Window resize handler for SVG updating
     const onResize = () => {
         if (activeTab === 'pipeline') {
@@ -2161,7 +2161,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ${toolbarButton({ attr: 'data-run', icon: 'run', title: 'Run script', key: 'Ctrl+Shift+Enter', label: 'Run', primary: true })}
                 ${toolbarButton({ attr: 'data-cancel-run', icon: 'cancel', title: 'Cancel the running script', key: 'Esc', label: 'Cancel' })}
             </div>
-            
+
             ${hasSidebar ? `
             <div class="etlsql-script-workbench-body" style="display:flex; height: calc(100% - 38px); overflow:hidden; position:relative; z-index: 10;">
                 <aside class="etlsql-script-workbench-sidebar" data-sidebar>
@@ -2195,7 +2195,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results"></div>
             <div class="etlsql-script-workbench-results" data-results></div>
             `}
-            
+
             ${opts.previewApiUrl ? `
             <div class="etlsql-script-workbench-preview" data-preview-overlay>
                 <div class="etlsql-script-workbench-preview-toolbar">
@@ -2207,7 +2207,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 </div>
                 <iframe data-preview-frame title="Report preview" sandbox="allow-scripts allow-same-origin"></iframe>
             </div>` : ''}
-            
+
             <div class="etlsql-script-command-palette" data-palette hidden>
                 <div class="etlsql-script-command-box">
                     <input type="search" data-palette-filter placeholder="Run command" autocomplete="off">
@@ -2259,7 +2259,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         event.preventDefault();
         splitter.setPointerCapture(event.pointerId);
         const rect = content.getBoundingClientRect();
-        
+
         const toolbar = root.querySelector('.etlsql-script-workbench-toolbar');
         const toolbarHeight = (hasSidebar || !toolbar) ? 0 : toolbar.getBoundingClientRect().height;
 
@@ -2267,14 +2267,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             const minEditor = 100;
             const minResults = 36;
             const splitterHeight = 8;
-            
+
             const minY = rect.top + toolbarHeight + minEditor + (splitterHeight / 2);
             const maxY = rect.bottom - minResults - (splitterHeight / 2);
             const y = Math.max(minY, Math.min(maxY, moveEvent.clientY));
-            
+
             const editorHeight = y - (rect.top + toolbarHeight) - (splitterHeight / 2);
             const resultHeight = rect.bottom - y - (splitterHeight / 2);
-            
+
             if (hasSidebar) {
                 content.style.gridTemplateRows = `${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
             } else {
@@ -2657,7 +2657,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     <button type="button" class="btn btn-sm btn-primary" data-git-commit style="margin-top:4px; font-size:11px; font-weight:600; padding:4px; width: 100%;">Commit Changes</button>
                 `;
                 gitEl.innerHTML = gitHtml;
-                
+
                 const commitBtn = gitEl.querySelector('[data-git-commit]');
                 const commentInput = gitEl.querySelector('[data-git-comment]');
                 commitBtn?.addEventListener('click', async () => {
@@ -2829,7 +2829,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             }
             return;
         }
-        
+
         if (activeDirectoryHandle) {
             const requestedPath = prompt('Save new script as', currentFilePath || 'new-script.etlsql');
             if (!requestedPath) return;
@@ -3700,16 +3700,16 @@ export function createDesigner(container, opts = {}) {
         // Render live chart via ECharts
         if (window.echarts && typeof window.echarts.init === 'function') {
             try {
-                const isDark = document.body.classList.contains('theme-dark') || 
-                               document.body.classList.contains('theme-midnight') || 
-                               document.body.classList.contains('theme-dracula') || 
+                const isDark = document.body.classList.contains('theme-dark') ||
+                               document.body.classList.contains('theme-midnight') ||
+                               document.body.classList.contains('theme-dracula') ||
                                document.body.classList.contains('theme-nord');
                 let chart = window.echarts.getInstanceByDom(bodyEl);
                 if (chart) {
                     chart.dispose();
                 }
                 chart = window.echarts.init(bodyEl, isDark ? 'dark' : null);
-                
+
                 const sample = rows[0] || [];
                 const catIdx = (Array.isArray(sample) && sample.length >= 3) ? 1 : 0;
                 const valIdx = (Array.isArray(sample) && sample.length >= 2) ? sample.length - 1 : 0;
@@ -4629,16 +4629,16 @@ export function createDesigner(container, opts = {}) {
         if (!isSplitActive || !scriptEditor?.editor?.view) return;
         const view = scriptEditor.editor.view;
         const text = view.state.doc.toString();
-        
+
         const patterns = [
             `CREATE VISUAL ${visualName}`,
             `CREATE CONTAINER ${visualName}`,
             `CREATE BUTTON ${visualName}`
         ];
-        
+
         let foundIdx = -1;
         let matchLength = 0;
-        
+
         for (const pattern of patterns) {
             const regex = new RegExp(`\\b${pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
             const match = text.match(regex);
@@ -4648,7 +4648,7 @@ export function createDesigner(container, opts = {}) {
                 break;
             }
         }
-        
+
         if (foundIdx !== -1) {
             const from = foundIdx;
             const to = foundIdx + matchLength;
@@ -4668,7 +4668,7 @@ export function createDesigner(container, opts = {}) {
             let match;
             let activeVisualName = null;
             let bestDistance = Infinity;
-            
+
             while ((match = regex.exec(text)) !== null) {
                 const matchIndex = match.index;
                 if (matchIndex <= pos) {
@@ -4679,7 +4679,7 @@ export function createDesigner(container, opts = {}) {
                     }
                 }
             }
-            
+
             if (activeVisualName) {
                 const v = curVis().find(vis => String(vis.name).toUpperCase() === activeVisualName.toUpperCase());
                 if (v && v.id !== selVisualId) {
@@ -5043,7 +5043,7 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-theme-select')?.addEventListener('change', e => {
         const themes = ['light', 'dark', 'midnight', 'dracula', 'nord'];
         const nextTheme = e.target.value;
-        
+
         themes.forEach(t => document.body.classList.remove('theme-' + t));
         document.body.classList.add('theme-' + nextTheme);
         localStorage.setItem('portal-theme', nextTheme);
@@ -5056,7 +5056,7 @@ export function createDesigner(container, opts = {}) {
         isSplitActive = !isSplitActive;
         root.classList.toggle('split-screen', isSplitActive);
         topbar.querySelector('#dsgn-split-toggle').classList.toggle('active', isSplitActive);
-        
+
         if (isSplitActive) {
             if (!scriptOverlay.classList.contains('active')) {
                 await openScript();
@@ -5098,7 +5098,7 @@ export function createDesigner(container, opts = {}) {
     function handleMarqueeMove(e) {
         if (!isMarquee || !marqueeEl) return;
         const wrapRect = canvasWrap.getBoundingClientRect();
-        
+
         const curX = e.clientX;
         const curY = e.clientY;
 

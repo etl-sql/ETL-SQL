@@ -11,13 +11,17 @@ public sealed class WorkstationPreviewService(IServiceProvider services, ETL_SQL
 {
     private const int TimeoutSeconds = 30;
     private const int OperatorGrantMb = 128;
+    private const long SessionCeilingBytes = 256L * 1024 * 1024;
 
     public async Task<ReportManifest> BuildPreviewAsync(string scriptText, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(scriptText))
             throw new ArgumentException("Nothing to preview — the script is empty.");
 
-        var script = $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" + scriptText;
+        var script =
+            $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" +
+            $"SET MAX_SESSION_SIZE = {SessionCeilingBytes};\n" +
+            scriptText;
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
