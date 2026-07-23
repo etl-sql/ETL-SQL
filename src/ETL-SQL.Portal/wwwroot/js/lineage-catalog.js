@@ -471,6 +471,60 @@ export function createLineageCatalog(opts = {}) {
     });
   }
 
+  async function loadProtectedDataResults() {
+    const $results = $('#lineageResults');
+    $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading protected data & tags…</span></div>`;
+    try {
+      const [protectedResult, suggestionsResult] = await Promise.allSettled([
+        catalogApi.protectedData ? catalogApi.protectedData({ limit: state.limit }) : Promise.resolve([]),
+        catalogApi.protectedDataSuggestions ? catalogApi.protectedDataSuggestions({ limit: state.limit }) : Promise.resolve([]),
+      ]);
+
+      const protectedRows = protectedResult.status === 'fulfilled' && Array.isArray(protectedResult.value)
+        ? filterProtectedAuditRows(protectedResult.value)
+        : [];
+      const suggestions = suggestionsResult.status === 'fulfilled' && Array.isArray(suggestionsResult.value)
+        ? filterSuggestionAuditRows(suggestionsResult.value)
+        : [];
+
+      state.protectedData = { protectedRows, suggestions };
+      renderProtectedDataResults();
+    } catch (err) {
+      state.protectedData = null;
+      $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Protected data query failed</h2>
+        <p>${esc(err.message)}</p>
+      </div>`;
+    }
+  }
+
+  function renderProtectedDataResults() {
+    const data = state.protectedData || {};
+    const protectedRows = Array.isArray(data.protectedRows) ? data.protectedRows : [];
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    const $results = $('#lineageResults');
+    if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+
+    $results.innerHTML = `
+      <div class="steward-audit-grid" aria-label="Protected data summary">
+        ${renderStewardshipMetric('Protected assets', protectedRows.length)}
+        ${renderStewardshipMetric('Tag suggestions', suggestions.length)}
+        ${renderStewardshipMetric('Restricted', protectedRows.filter(r => r.isRestricted).length)}
+        ${renderStewardshipMetric('Sensitive', protectedRows.filter(r => r.isSensitive).length)}
+      </div>
+      <div class="steward-audit-layout">
+        <section class="steward-audit-section">
+          <h3>Protected & Classified Inventory</h3>
+          ${protectedRows.length ? `<div class="stewardship-result-list">${protectedRows.slice(0, 15).map(renderProtectedAuditRow).join('')}</div>` : renderLineageEmpty('No protected data or sensitive columns recorded.')}
+        </section>
+        <section class="steward-audit-section">
+          <h3>Classifier Tag Suggestions</h3>
+          ${suggestions.length ? `<div class="stewardship-result-list">${suggestions.slice(0, 15).map(renderSuggestionAuditRow).join('')}</div>` : renderLineageEmpty('No classifier tag suggestions found.')}
+        </section>
+      </div>`;
+  }
+
   function filterProtectedAuditRows(rows) {
     const query = (state.stewardshipQuery || '').toLowerCase();
     const steward = state.stewardshipSteward || '';
@@ -710,34 +764,46 @@ export function createLineageCatalog(opts = {}) {
 
   // ── Render shell + wiring ──────────────────────────────────────────────────
   function render() {
-    prepare();
+    prepare(state.mode);
     state.savedViews = loadLineageViews();
     const valueLabel = state.kind === 'tag' ? 'Tag key' : state.kind === 'source-file' ? 'Source file' : 'Name';
     const stewardship = state.stewardAudit?.stewardship || state.stewardship || {};
     const isStewardshipMode = state.mode === 'stewardship';
+    const isProtectedMode = state.mode === 'protected';
     const isAuditMode = state.mode === 'audit';
     const isImpactMode = state.mode === 'impact';
-    const title = isAuditMode ? 'Steward audit' : isStewardshipMode ? 'Stewardship' : isImpactMode ? 'Impact' : 'Lineage';
-    const subtitle = isAuditMode
-      ? 'Protected data, metadata gaps, stale assets, impact, and audit delivery'
-      : isStewardshipMode
-        ? 'Metadata gaps, sensitive assets, stale lineage, and steward queues'
-        : isImpactMode
-          ? 'Upstream and downstream blast radius across reports, datasets, jobs, and stewards'
-        : 'Cross-run history with report context';
+    const title = isProtectedMode
+      ? 'Protected Data & Tags'
+      : isAuditMode
+        ? 'Governance Audit Log'
+        : isStewardshipMode
+          ? 'Stewardship & Health'
+          : isImpactMode
+            ? 'Impact Analysis'
+            : 'Lineage Explorer';
+    const subtitle = isProtectedMode
+      ? 'PII classification, sensitive dataset discovery, and tag suggestions'
+      : isAuditMode
+        ? 'Protected data, metadata gaps, stale assets, impact, and audit delivery'
+        : isStewardshipMode
+          ? 'Metadata gaps, sensitive assets, stale lineage, and steward queues'
+          : isImpactMode
+            ? 'Upstream and downstream blast radius across reports, datasets, jobs, and stewards'
+          : 'Cross-run history with report context';
     const savedOptions = state.savedViews
       .map(v => `<option value="${escAttr(v.name)}"${v.name === state.selectedView ? ' selected' : ''}>${esc(v.name)}</option>`)
       .join('');
     host.innerHTML = `
       <div class="library-toolbar lineage-toolbar">
         <div class="library-title">
-          <span class="library-kicker">Catalog</span>
+          <span class="library-kicker">Data Governance</span>
           <h2>${esc(title)}</h2>
           <span class="folder-count">${esc(subtitle)}</span>
         </div>
         <div class="lineage-mode-toggle" role="tablist" aria-label="Catalog mode">
           <button type="button" class="lineage-mode-btn ${state.mode === 'history' ? 'active' : ''}" data-lineage-mode="history" aria-selected="${state.mode === 'history'}">History</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'stewardship' ? 'active' : ''}" data-lineage-mode="stewardship" aria-selected="${state.mode === 'stewardship'}">Stewardship</button>
+          <button type="button" class="lineage-mode-btn ${state.mode === 'protected' ? 'active' : ''}" data-lineage-mode="protected" aria-selected="${state.mode === 'protected'}">Protected</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'audit' ? 'active' : ''}" data-lineage-mode="audit" aria-selected="${state.mode === 'audit'}">Audit</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'impact' ? 'active' : ''}" data-lineage-mode="impact" aria-selected="${state.mode === 'impact'}">Impact</button>
         </div>
@@ -788,6 +854,21 @@ export function createLineageCatalog(opts = {}) {
             ${renderStewardshipFacetOptions(stewardship.domains, state.stewardshipDomain)}
           </select>
           <input id="stewardshipStaleDays" class="lineage-input stewardship-days" type="number" min="1" max="3660" value="${escAttr(state.stewardshipStaleDays)}" aria-label="Stale after days">
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
+        <form id="protectedSearchForm" class="lineage-query stewardship-query" autocomplete="off" ${state.mode === 'protected' ? '' : 'hidden'}>
+          <label class="library-search lineage-search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="protectedQuery" type="search" placeholder="Search protected assets or tags" value="${escAttr(state.stewardshipQuery)}">
+          </label>
+          <select id="protectedSteward" class="library-sort lineage-saved" aria-label="Filter by steward">
+            <option value="">All stewards</option>
+            ${renderStewardshipFacetOptions(stewardship.stewards, state.stewardshipSteward)}
+          </select>
+          <select id="protectedDomain" class="library-sort lineage-saved" aria-label="Filter by domain">
+            <option value="">All domains</option>
+            ${renderStewardshipFacetOptions(stewardship.domains, state.stewardshipDomain)}
+          </select>
           <button class="btn btn-primary" type="submit">Search</button>
         </form>
         <form id="impactSearchForm" class="lineage-query stewardship-query" autocomplete="off" ${state.mode === 'impact' ? '' : 'hidden'}>
@@ -905,9 +986,20 @@ export function createLineageCatalog(opts = {}) {
       await loadStewardAuditResults();
     });
 
+    $('#protectedSearchForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      state.stewardshipQuery = $('#protectedQuery')?.value?.trim() || '';
+      state.stewardshipSteward = $('#protectedSteward')?.value || '';
+      state.stewardshipDomain = $('#protectedDomain')?.value || '';
+      await loadProtectedDataResults();
+    });
+
     if (state.mode === 'stewardship') {
       if (state.stewardship) renderStewardshipResults();
       else loadStewardshipResults();
+    } else if (state.mode === 'protected') {
+      if (state.protectedData) renderProtectedDataResults();
+      else loadProtectedDataResults();
     } else if (state.mode === 'audit') {
       if (state.stewardAudit) renderStewardAuditResults();
       else loadStewardAuditResults();
@@ -921,6 +1013,12 @@ export function createLineageCatalog(opts = {}) {
 
   return {
     render,
+    setMode(m) {
+      if (m && state.mode !== m) {
+        state.mode = m;
+      }
+      render();
+    },
     dispose() { if (dagInstance) { dagInstance.dispose(); dagInstance = null; } },
     state,
   };

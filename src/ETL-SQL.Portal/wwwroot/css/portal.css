@@ -292,6 +292,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .sidebar-nav-icon-lineage::after { left: 10px; top: 10px; }
 .sidebar-nav-icon-subscriptions { border: 1.7px solid currentColor; border-radius: 4px; }
 .sidebar-nav-icon-subscriptions::before { content: ""; position: absolute; left: 3px; right: 3px; top: 4px; height: 1.6px; background: currentColor; box-shadow: 0 4px 0 currentColor; }
+.sidebar-nav-icon-stewardship::before { content: "⏱️"; font-size: 13px; position: absolute; inset: 0; line-height: 16px; }
+.sidebar-nav-icon-protected::before { content: "🛡️"; font-size: 13px; position: absolute; inset: 0; line-height: 16px; }
+.sidebar-nav-icon-impact::before { content: "⚡"; font-size: 13px; position: absolute; inset: 0; line-height: 16px; }
+.sidebar-nav-icon-audit::before { content: "📜"; font-size: 13px; position: absolute; inset: 0; line-height: 16px; }
 .sidebar-tree { flex: 1; overflow-y: auto; padding: 10px 8px 72px; }
 .sidebar-note { color: var(--portal-muted); font-size: .86em; padding: 10px 8px; }
 .sidebar-note-error { color: var(--portal-danger); }

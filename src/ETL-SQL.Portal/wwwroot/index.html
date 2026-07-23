@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -16,6 +16,7 @@
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
+      <a href="#governance" id="navGovernance">Governance</a>
       <a href="/docs.html" id="docsNav">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
@@ -30,34 +31,61 @@
   <div class="app-body">
     <!-- Sidebar: folder tree -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-nav" aria-label="Report views">
-        <a href="/index.html" class="sidebar-nav-item" id="navReportHome">
-          <span class="sidebar-nav-icon sidebar-nav-icon-library" aria-hidden="true"></span>
-          <span>Report Library</span>
-        </a>
-        <a href="#favorites" class="sidebar-nav-item" id="navFavorites">
-          <span class="sidebar-nav-icon sidebar-nav-icon-favorite" aria-hidden="true"></span>
-          <span>Favorites</span>
-        </a>
-        <a href="#recent" class="sidebar-nav-item" id="navRecent">
-          <span class="sidebar-nav-icon sidebar-nav-icon-recent" aria-hidden="true"></span>
-          <span>Recently Viewed</span>
-        </a>
-        <a href="#lineage" class="sidebar-nav-item" id="navLineage">
-          <span class="sidebar-nav-icon sidebar-nav-icon-lineage" aria-hidden="true"></span>
-          <span>Lineage</span>
-        </a>
-        <a href="#subscriptions" class="sidebar-nav-item" id="navSubscriptions">
-          <span class="sidebar-nav-icon sidebar-nav-icon-subscriptions" aria-hidden="true"></span>
-          <span>My Subscriptions</span>
-        </a>
+      <div id="reportsSidebarSection">
+        <div class="sidebar-nav" aria-label="Report views">
+          <a href="/index.html" class="sidebar-nav-item" id="navReportHome">
+            <span class="sidebar-nav-icon sidebar-nav-icon-library" aria-hidden="true"></span>
+            <span>Report Library</span>
+          </a>
+          <a href="#favorites" class="sidebar-nav-item" id="navFavorites">
+            <span class="sidebar-nav-icon sidebar-nav-icon-favorite" aria-hidden="true"></span>
+            <span>Favorites</span>
+          </a>
+          <a href="#recent" class="sidebar-nav-item" id="navRecent">
+            <span class="sidebar-nav-icon sidebar-nav-icon-recent" aria-hidden="true"></span>
+            <span>Recently Viewed</span>
+          </a>
+          <a href="#subscriptions" class="sidebar-nav-item" id="navSubscriptions">
+            <span class="sidebar-nav-icon sidebar-nav-icon-subscriptions" aria-hidden="true"></span>
+            <span>My Subscriptions</span>
+          </a>
+        </div>
+        <div class="sidebar-hdr">
+          <span>Folders</span>
+          <span class="sidebar-hint">Report library</span>
+        </div>
+        <div class="sidebar-tree" id="folderTree" role="tree" aria-label="Report folders">
+          <div class="loading-state loading-state-compact">Loading folders…</div>
+        </div>
       </div>
-      <div class="sidebar-hdr">
-        <span>Folders</span>
-        <span class="sidebar-hint">Report library</span>
-      </div>
-      <div class="sidebar-tree" id="folderTree" role="tree" aria-label="Report folders">
-        <div class="loading-state loading-state-compact">Loading folders…</div>
+
+      <div id="governanceSidebarSection" style="display:none">
+        <div class="sidebar-hdr">
+          <span>Governance</span>
+          <span class="sidebar-hint">Data & Catalog</span>
+        </div>
+        <div class="sidebar-nav" aria-label="Governance views">
+          <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
+            <span class="sidebar-nav-icon sidebar-nav-icon-lineage" aria-hidden="true"></span>
+            <span>Lineage Explorer</span>
+          </a>
+          <a href="#governance/stewardship" class="sidebar-nav-item" id="govNavStewardship">
+            <span class="sidebar-nav-icon sidebar-nav-icon-stewardship" aria-hidden="true"></span>
+            <span>Stewardship & Health</span>
+          </a>
+          <a href="#governance/protected" class="sidebar-nav-item" id="govNavProtected">
+            <span class="sidebar-nav-icon sidebar-nav-icon-protected" aria-hidden="true"></span>
+            <span>Protected Data & Tags</span>
+          </a>
+          <a href="#governance/impact" class="sidebar-nav-item" id="govNavImpact">
+            <span class="sidebar-nav-icon sidebar-nav-icon-impact" aria-hidden="true"></span>
+            <span>Impact Analysis</span>
+          </a>
+          <a href="#governance/audit" class="sidebar-nav-item" id="govNavAudit">
+            <span class="sidebar-nav-icon sidebar-nav-icon-audit" aria-hidden="true"></span>
+            <span>Governance Audit Log</span>
+          </a>
+        </div>
       </div>
     </aside>
 
@@ -369,10 +397,24 @@ async function init() {
     setReportHash('favorites');
     showFavorites();
   });
-  document.getElementById('navLineage').addEventListener('click', e => {
+  document.getElementById('navGovernance')?.addEventListener('click', e => {
     e.preventDefault();
-    setReportHash('lineage');
-    showLineageCatalog();
+    setReportHash('governance');
+    showGovernanceCatalog('history');
+  });
+
+  [
+    ['Lineage', 'lineage', 'history'],
+    ['Stewardship', 'stewardship', 'stewardship'],
+    ['Protected', 'protected', 'protected'],
+    ['Impact', 'impact', 'impact'],
+    ['Audit', 'audit', 'audit'],
+  ].forEach(([name, route, mode]) => {
+    document.getElementById(`govNav${name}`)?.addEventListener('click', e => {
+      e.preventDefault();
+      setReportHash(`governance/${route}`);
+      showGovernanceCatalog(mode);
+    });
   });
 
   wireSubscribeModal();
@@ -464,33 +506,66 @@ function setReportHash(hash) {
 }
 
 function openReportHashView() {
-  const view = window.location.hash.replace(/^#/, '').toLowerCase();
-  if (view === 'subscriptions') {
+  const rawHash = window.location.hash.replace(/^#/, '').toLowerCase();
+  const parts = rawHash.split('/');
+  const mainView = parts[0];
+  const subView = parts[1] || '';
+
+  if (mainView === 'subscriptions') {
     showMySubscriptions();
-  } else if (view === 'recent') {
+  } else if (mainView === 'recent') {
     showRecentlyViewed();
-  } else if (view === 'favorites') {
+  } else if (mainView === 'favorites') {
     showFavorites();
-  } else if (view === 'lineage') {
-    showLineageCatalog();
-  } else if (/^report-\d+$/.test(view)) {
-    const id = parseInt(view.split('-')[1], 10);
+  } else if (mainView === 'governance' || mainView === 'lineage') {
+    let mode = 'history';
+    if (subView === 'stewardship') mode = 'stewardship';
+    else if (subView === 'protected') mode = 'protected';
+    else if (subView === 'impact') mode = 'impact';
+    else if (subView === 'audit') mode = 'audit';
+    else if (subView === 'lineage') mode = 'history';
+    showGovernanceCatalog(mode);
+  } else if (/^report-\d+$/.test(mainView)) {
+    const id = parseInt(mainView.split('-')[1], 10);
     if (id > 0) openReport(id);
   } else {
     setSidebarViewActive('library');
   }
 }
 
-function setSidebarViewActive(view) {
-  const activeId = {
-    library: 'navReportHome',
-    favorites: 'navFavorites',
-    recent: 'navRecent',
-    lineage: 'navLineage',
-    subscriptions: 'navSubscriptions'
-  }[view];
-  document.querySelectorAll('.sidebar-nav-item').forEach(el =>
-    el.classList.toggle('active', el.id === activeId));
+function setSidebarViewActive(view, govMode = 'history') {
+  const isGov = view === 'governance' || view === 'lineage' || view === 'stewardship' || view === 'protected' || view === 'impact' || view === 'audit';
+
+  const reportsSection = document.getElementById('reportsSidebarSection');
+  const govSection = document.getElementById('governanceSidebarSection');
+
+  if (reportsSection) reportsSection.style.display = isGov ? 'none' : '';
+  if (govSection) govSection.style.display = isGov ? '' : 'none';
+
+  if (!isGov) {
+    const activeId = {
+      library: 'navReportHome',
+      favorites: 'navFavorites',
+      recent: 'navRecent',
+      subscriptions: 'navSubscriptions'
+    }[view];
+    document.querySelectorAll('#reportsSidebarSection .sidebar-nav-item').forEach(el =>
+      el.classList.toggle('active', el.id === activeId));
+  } else {
+    const activeGovId = {
+      history: 'govNavLineage',
+      stewardship: 'govNavStewardship',
+      protected: 'govNavProtected',
+      impact: 'govNavImpact',
+      audit: 'govNavAudit'
+    }[govMode] || 'govNavLineage';
+
+    document.querySelectorAll('#governanceSidebarSection .sidebar-nav-item').forEach(el =>
+      el.classList.toggle('active', el.id === activeGovId));
+  }
+
+  document.getElementById('navReports')?.classList.toggle('active', !isGov);
+  document.getElementById('navGovernance')?.classList.toggle('active', isGov);
 }
 
 function clearFolderSelection() {
@@ -860,16 +935,16 @@ function renderCatalogReportList(title, reports, emptyText) {
 // The catalog-wide "Lineage" sidebar view lives in js/lineage-catalog.js so it can
 // be unit-tested and previewed in the UI sandbox. This wrapper binds it to the portal.
 let lineageCatalog = null;
-function showLineageCatalog() {
+function showGovernanceCatalog(mode = 'history') {
   if (!lineageCatalog) {
     lineageCatalog = createLineageCatalog({
       host: document.getElementById('mainContent'),
       adminApi, catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
       openReport, timeAgo, formatBuiltAt,
-      prepare: () => { setSidebarViewActive('lineage'); clearFolderSelection(); },
+      prepare: (currentMode) => { setSidebarViewActive('governance', currentMode || mode); clearFolderSelection(); },
     });
   }
-  lineageCatalog.render();
+  lineageCatalog.setMode(mode);
 }
 
 function wireFavoriteButtons(root, onChanged = null) {
