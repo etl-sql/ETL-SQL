@@ -39,6 +39,11 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REMOVE_HIDDEN_CHARACTERS", RemoveHiddenCharacters, "REMOVE_HIDDEN_CHARACTERS(str[, char1, char2, ...]): Cleans invisible/whitespace characters. With no extra args, replaces whitespace-class characters (tab, newline, carriage return, vertical tab, form feed, NBSP and other Unicode spaces) with a single standard space and strips zero-width characters (zero-width space/joiner, BOM, soft hyphen). Pass one or more literal strings to replace ONLY those with a space (e.g. CHAR(13), CHAR(10)).");
             registry.RegisterWithHelp("REMOVE_HTML_CHARACTERS", RemoveHtmlCharacters, "REMOVE_HTML_CHARACTERS(str): Decodes literal HTML entities (e.g. &nbsp; &mdash; &#8217;), then normalizes typographic/\"smart\" Unicode characters to plain ASCII equivalents (curly quotes -> \" and ', en/em dashes -> -, ellipsis -> ..., bullet -> *, NBSP -> space) and strips zero-width characters. Fixes invisible mismatches that break string comparisons.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => args[0]?.ToString() == null ? null : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(args[0]!.ToString()!.ToLower()), "INITCAP(str): Capitalizes the first letter of each word.");
+            registry.RegisterWithHelp("CLEAN_STRING", CleanString, "CLEAN_STRING(str): Removes control characters, trims whitespace, and collapses multiple whitespace characters into single spaces.");
+            registry.RegisterWithHelp("MASK_EMAIL", MaskEmail, "MASK_EMAIL(email): Sanitizes an email address for governance/reporting (e.g. j***n@example.com).");
+            registry.RegisterWithHelp("MASK_PHONE", MaskPhone, "MASK_PHONE(phone): Sanitizes a phone number for governance/reporting (e.g. ***-***-1234).");
+            registry.RegisterWithHelp("MASK_SSN", MaskSsn, "MASK_SSN(ssn): Sanitizes an SSN for governance/reporting (e.g. ***-**-6789).");
+
 
             registry.RegisterWithHelp("STUFF", Stuff, "STUFF(str, start, len, new_str): Replaces a portion of a string with another string.");
             registry.RegisterWithHelp("STRING_ESCAPE", StringEscape, "STRING_ESCAPE(text, type): Escapes special characters (e.g. 'json').");
@@ -524,6 +529,61 @@ namespace ETL_SQL.Engine.Functions
                 else sb.Append(c);
             }
             return sb.ToString();
+        }
+
+        private static object? CleanString(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string raw = args[0]!.ToString() ?? "";
+            // Replace control characters with space
+            char[] chars = raw.Select(c => char.IsControl(c) ? ' ' : c).ToArray();
+            string cleaned = new string(chars);
+            // Collapse multiple spaces
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ").Trim();
+            return cleaned;
+        }
+
+        private static object? MaskEmail(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string email = args[0]!.ToString()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(email) || !email.Contains('@')) return "***@***.com";
+
+            var parts = email.Split('@', 2);
+            string user = parts[0];
+            string domain = parts[1];
+
+            if (user.Length <= 2)
+            {
+                return $"*@{domain}";
+            }
+
+            string maskedUser = $"{user[0]}***{user[^1]}";
+            return $"{maskedUser}@{domain}";
+        }
+
+        private static object? MaskPhone(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string phone = args[0]!.ToString()?.Trim() ?? "";
+            string digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
+
+            if (digitsOnly.Length < 4) return "***-***-****";
+
+            string last4 = digitsOnly[^4..];
+            return $"***-***-{last4}";
+        }
+
+        private static object? MaskSsn(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            string ssn = args[0]!.ToString()?.Trim() ?? "";
+            string digitsOnly = new string(ssn.Where(char.IsDigit).ToArray());
+
+            if (digitsOnly.Length < 4) return "***-**-****";
+
+            string last4 = digitsOnly[^4..];
+            return $"***-**-{last4}";
         }
     }
 }

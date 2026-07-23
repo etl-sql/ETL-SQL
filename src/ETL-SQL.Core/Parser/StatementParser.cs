@@ -44,6 +44,7 @@ public class StatementParser
         _dispatchMap[TokenType.CLEAR] = () => { var t = _parser.Previous; return SystemParser.ParseClear(t); };
         _dispatchMap[TokenType.TRUNCATE] = () => { var t = _parser.Previous; return DataParser.ParseTruncate(t); };
         _dispatchMap[TokenType.GENERATE] = () => { var t = _parser.Previous; return DataParser.ParseGenerate(t); };
+        _dispatchMap[TokenType.COMPARE] = () => { var t = _parser.Previous; return DataParser.ParseCompare(t); };
         _dispatchMap[TokenType.DELETE] = () => { var t = _parser.Previous; return DataParser.ParseDelete(t); };
         _dispatchMap[TokenType.DECLARE] = () => SystemParser.ParseDeclare();
         _dispatchMap[TokenType.RUN] = () => { var t = _parser.Previous; return SystemParser.ParseRun(t); };

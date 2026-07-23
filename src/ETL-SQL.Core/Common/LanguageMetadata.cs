@@ -12,7 +12,7 @@ public static class LanguageMetadata
         "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "WINDOW", "ORDER", "ASC", "DESC",
         "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET", "REPLACE",
         "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "FIRST", "NEXT", "ONLY", "AS",
-        "ROLLUP", "CUBE", "GROUPING"
+        "ROLLUP", "CUBE", "GROUPING", "COMPARE", "DATASETS", "CALENDAR"
     };
 
     public static readonly HashSet<string> DdlKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -167,7 +167,9 @@ public static class LanguageMetadata
         "PI", "DEGREES", "RADIANS", "COT", "REPEAT",
         "FILE_HASH", "FILE_SIZE", "FILE_MODIFIED",
         "PATH_COMBINE", "PATH_FILENAME", "PATH_EXTENSION", "PATH_DIRECTORY",
-        "CONNECTION_PROPERTY"
+        "CONNECTION_PROPERTY",
+        "SAME_PERIOD_LAST_YEAR", "START_OF_MONTH", "END_OF_MONTH", "START_OF_QUARTER", "END_OF_QUARTER", "START_OF_WEEK", "END_OF_WEEK",
+        "SAFE_DIVIDE", "CLEAN_STRING", "MASK_EMAIL", "MASK_PHONE", "MASK_SSN", "AGE_BUCKET", "VALUE_BUCKET"
     };
 
     public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";

@@ -46,6 +46,10 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("LOG10", (args, ctx) => args[0] == null ? null : (decimal)Math.Log10(Convert.ToDouble(args[0])), "LOG10(n): Returns the base-10 logarithm of n.");
             registry.RegisterWithHelp("RAND", (args, ctx) => (decimal)_random.NextDouble(), "RAND([seed]): Returns a random number between 0 and 1.");
 
+            registry.RegisterWithHelp("SAFE_DIVIDE", SafeDivide, "SAFE_DIVIDE(num, den[, fallback]): Returns num / den or fallback (default 0) if den is 0 or NULL.");
+            registry.RegisterWithHelp("AGE_BUCKET", AgeBucket, "AGE_BUCKET(days): Buckets days into '0-30', '31-60', '61-90', '91-120', or '120+'.");
+            registry.RegisterWithHelp("VALUE_BUCKET", ValueBucket, "VALUE_BUCKET(val, thresholds, labels): Categorizes a value into buckets defined by comma-separated thresholds and labels.");
+
             registry.RegisterWithHelp("SIN", (args, ctx) => args[0] == null ? null : (decimal)Math.Sin(Convert.ToDouble(args[0])), "SIN(f): Sine (input in radians).");
             registry.RegisterWithHelp("COS", (args, ctx) => args[0] == null ? null : (decimal)Math.Cos(Convert.ToDouble(args[0])), "COS(f): Cosine (input in radians).");
             registry.RegisterWithHelp("TAN", (args, ctx) => args[0] == null ? null : (decimal)Math.Tan(Convert.ToDouble(args[0])), "TAN(f): Tangent (input in radians).");
@@ -190,6 +194,56 @@ namespace ETL_SQL.Engine.Functions
             double avg = (double)nums.Average();
             double sum = nums.Sum(d => Math.Pow((double)d - avg, 2));
             return (decimal)(sum / (nums.Count - 1));
+        }
+
+        private static object? SafeDivide(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2) return null;
+            decimal fallback = args.Count >= 3 && decimal.TryParse(args[2]?.ToString(), out var fb) ? fb : 0m;
+            if (args[0] == null || args[1] == null) return fallback;
+            if (!decimal.TryParse(args[0]?.ToString(), out var num) || !decimal.TryParse(args[1]?.ToString(), out var den)) return fallback;
+            if (den == 0m) return fallback;
+            return num / den;
+        }
+
+        private static object? AgeBucket(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!decimal.TryParse(args[0]?.ToString(), out var days)) return null;
+
+            if (days < 0m) return "Current";
+            if (days <= 30m) return "0-30";
+            if (days <= 60m) return "31-60";
+            if (days <= 90m) return "61-90";
+            if (days <= 120m) return "91-120";
+            return "120+";
+        }
+
+        private static object? ValueBucket(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 3 || args[0] == null) return null;
+            if (!decimal.TryParse(args[0]?.ToString(), out var val)) return null;
+
+            var thresholdStrs = args[1]?.ToString()?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+            var labelStrs = args[2]?.ToString()?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+
+            var thresholds = new List<decimal>();
+            foreach (var t in thresholdStrs)
+            {
+                if (decimal.TryParse(t, out var d)) thresholds.Add(d);
+            }
+
+            if (thresholds.Count == 0 || labelStrs.Length == 0) return null;
+
+            for (int i = 0; i < thresholds.Count; i++)
+            {
+                if (val <= thresholds[i])
+                {
+                    return i < labelStrs.Length ? labelStrs[i] : labelStrs.Last();
+                }
+            }
+
+            return labelStrs.Length > thresholds.Count ? labelStrs[thresholds.Count] : labelStrs.Last();
         }
     }
 }

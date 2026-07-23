@@ -40,6 +40,14 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("TO_TIMESTAMP", ToTimestamp, "TO_TIMESTAMP(seconds): Converts Unix epoch seconds to a DATETIME.");
             registry.RegisterWithHelp("DATE_TRUNC", DateTrunc, "DATE_TRUNC(datepart, date): Truncates a date to the specified date part boundary.");
             registry.RegisterWithHelp("DATE_PART", DatePart, "DATE_PART(datepart, date): Returns an integer representing the specified date part.");
+
+            registry.RegisterWithHelp("SAME_PERIOD_LAST_YEAR", SamePeriodLastYear, "SAME_PERIOD_LAST_YEAR(date): Returns the corresponding date exactly 1 year prior.");
+            registry.RegisterWithHelp("START_OF_MONTH", StartOfMonth, "START_OF_MONTH(date): Returns the first day of the month for the given date.");
+            registry.RegisterWithHelp("END_OF_MONTH", EoMonth, "END_OF_MONTH(date[, months_to_add]): Alias for EOMONTH.");
+            registry.RegisterWithHelp("START_OF_QUARTER", StartOfQuarter, "START_OF_QUARTER(date): Returns the first day of the quarter for the given date.");
+            registry.RegisterWithHelp("END_OF_QUARTER", EndOfQuarter, "END_OF_QUARTER(date): Returns the last day of the quarter for the given date.");
+            registry.RegisterWithHelp("START_OF_WEEK", StartOfWeekFn, "START_OF_WEEK(date): Returns the start of the week for the given date.");
+            registry.RegisterWithHelp("END_OF_WEEK", EndOfWeekFn, "END_OF_WEEK(date): Returns the last day of the week for the given date.");
         }
 
         private static object? DateName(List<object?> args, IExecutionContext ctx)
@@ -223,6 +231,58 @@ namespace ETL_SQL.Engine.Functions
                 "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
                 _ => dt.Date
             };
+        }
+
+        private static object? SamePeriodLastYear(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            try
+            {
+                return dt.AddYears(-1);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static object? StartOfMonth(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            return new DateTime(dt.Year, dt.Month, 1);
+        }
+
+        private static object? StartOfQuarter(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            int qMonth = ((dt.Month - 1) / 3) * 3 + 1;
+            return new DateTime(dt.Year, qMonth, 1);
+        }
+
+        private static object? EndOfQuarter(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            int qEndMonth = ((dt.Month - 1) / 3) * 3 + 3;
+            int daysInMonth = DateTime.DaysInMonth(dt.Year, qEndMonth);
+            return new DateTime(dt.Year, qEndMonth, daysInMonth);
+        }
+
+        private static object? StartOfWeekFn(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            return GetStartOfWeek(dt);
+        }
+
+        private static object? EndOfWeekFn(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
+            return GetStartOfWeek(dt).AddDays(6);
         }
     }
 }

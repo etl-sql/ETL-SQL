@@ -264,6 +264,31 @@ namespace ETL_SQL.Tests.Functions
             await AssertEval(evaluator, "'100% pure orange juice' LIKE '100\\% pure %' ESCAPE '\\'", true);
         }
 
+        [Fact]
+        public async Task TestProductivityFunctions()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            // Date helpers
+            await AssertEval(ev, "SAME_PERIOD_LAST_YEAR('2026-05-15')", new DateTime(2025, 5, 15));
+            await AssertEval(ev, "START_OF_MONTH('2026-05-15')", new DateTime(2026, 5, 1));
+            await AssertEval(ev, "START_OF_QUARTER('2026-05-15')", new DateTime(2026, 4, 1));
+            await AssertEval(ev, "END_OF_QUARTER('2026-05-15')", new DateTime(2026, 6, 30));
+
+            // Math & Binning helpers
+            await AssertEval(ev, "SAFE_DIVIDE(10, 2)", 5m);
+            await AssertEval(ev, "SAFE_DIVIDE(10, 0, -1)", -1m);
+            await AssertEval(ev, "AGE_BUCKET(15)", "0-30");
+            await AssertEval(ev, "AGE_BUCKET(45)", "31-60");
+            await AssertEval(ev, "AGE_BUCKET(150)", "120+");
+
+            // String & Governance helpers
+            await AssertEval(ev, "CLEAN_STRING('  hello \t world \n ')", "hello world");
+            await AssertEval(ev, "MASK_EMAIL('john.doe@example.com')", "j***e@example.com");
+            await AssertEval(ev, "MASK_PHONE('555-867-5309')", "***-***-5309");
+            await AssertEval(ev, "MASK_SSN('123-45-6789')", "***-**-6789");
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

@@ -2044,6 +2044,16 @@ public sealed record GenerateStatement(Expression RowCount, TableReference Targe
     public override IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
 }
 
+public sealed record GenerateCalendarStatement(Expression StartDate, Expression EndDate, TableReference Target) : Statement
+{
+    public override IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
+}
+
+public sealed record CompareDatasetsStatement(TableReference SourceTable, TableReference BaselineTable, List<string> KeyColumns, List<string>? ExcludeColumns, TableReference TargetTable) : Statement
+{
+    public override IEnumerable<string> GetSourceTables() => new[] { SourceTable.TableName, BaselineTable.TableName };
+}
+
 public sealed record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
 {
     public Expression Substring { get; } = substring;

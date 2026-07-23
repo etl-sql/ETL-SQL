@@ -18,6 +18,19 @@ public class DataParser : ParserComponent
             return new GenerateJwtSecretStatement { Line = startToken.Line, Column = startToken.Column };
         }
 
+        if (Match(TokenType.CALENDAR) || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("CALENDAR", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_parser.Previous.Type == TokenType.IDENTIFIER) Advance();
+            Consume(TokenType.FROM, "Expected 'FROM' after GENERATE CALENDAR");
+            var startDate = ParseExpression();
+            Consume(TokenType.TO, "Expected 'TO' after start date");
+            var endDate = ParseExpression();
+            Consume(TokenType.INTO, "Expected 'INTO' after end date");
+            var calTarget = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+            if (Match(TokenType.SEMICOLON)) { }
+            return new GenerateCalendarStatement(startDate, endDate, calTarget) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         var rowCount = ParseExpression();
 
         Consume(TokenType.ROWS, "Expected 'ROWS' after count");
@@ -60,6 +73,55 @@ public class DataParser : ParserComponent
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
 
         return new GenerateStatement(rowCount, target, rules, options)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
+    }
+
+    public Statement ParseCompare(Token startToken)
+    {
+        if (Match(TokenType.DATASETS) || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("DATASETS", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_parser.Previous.Type == TokenType.IDENTIFIER) Advance();
+        }
+
+        var sourceTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        Consume(TokenType.WITH, "Expected 'WITH' after source table name");
+        var baselineTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+
+        Consume(TokenType.KEY, "Expected 'KEY' keyword in COMPARE DATASETS statement");
+        Consume(TokenType.LPAREN, "Expected '(' after KEY");
+
+        var keyCols = new List<string>();
+        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+        {
+            var keyCol = ConsumeIdentifier("Expected column name in KEY list").Value;
+            keyCols.Add(keyCol);
+            if (!Match(TokenType.COMMA)) break;
+        }
+        Consume(TokenType.RPAREN, "Expected ')' after KEY column list");
+
+        List<string>? excludeCols = null;
+        if (Match(TokenType.EXCLUDE))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after EXCLUDE");
+            excludeCols = new List<string>();
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                var exCol = ConsumeIdentifier("Expected column name in EXCLUDE list").Value;
+                excludeCols.Add(exCol);
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after EXCLUDE column list");
+        }
+
+        Consume(TokenType.INTO, "Expected 'INTO' before target diff table name");
+        var targetTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+
+        if (Match(TokenType.SEMICOLON)) { }
+
+        return new CompareDatasetsStatement(sourceTable, baselineTable, keyCols, excludeCols, targetTable)
         {
             Line = startToken.Line,
             Column = startToken.Column
