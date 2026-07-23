@@ -135,6 +135,7 @@ public class Report : IVersionedEntity
     public ICollection<ReportEmbedToken> EmbedTokens { get; set; } = [];
     public ICollection<SavedReportView> SavedViews { get; set; } = [];
     public ICollection<ReportAlert> Alerts { get; set; } = [];
+    public ICollection<ReportAcl> Acls { get; set; } = [];
 }
 
 public class ReportFavorite
@@ -628,4 +629,17 @@ public class DatasetAcl
     public int GroupId { get; set; }
     public Group Group { get; set; } = null!;
     public DatasetPermission Permission { get; set; }
+}
+
+public class ReportAcl
+{
+    public int Id { get; set; }
+    public int ReportId { get; set; }
+    public Report Report { get; set; } = null!;
+    public int? UserId { get; set; }
+    public PortalUser? User { get; set; }
+    public int? GroupId { get; set; }
+    public Group? Group { get; set; }
+    public FolderPermission Permission { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

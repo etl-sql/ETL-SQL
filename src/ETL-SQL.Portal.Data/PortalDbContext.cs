@@ -28,6 +28,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
     public DbSet<ReportAccessRequest> ReportAccessRequests => Set<ReportAccessRequest>();
+    public DbSet<ReportAcl> ReportAcls => Set<ReportAcl>();
     public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
@@ -144,6 +145,21 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.DecidedBy).WithMany().HasForeignKey(x => x.DecidedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Report).WithMany().HasForeignKey(x => x.ReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<ReportAcl>(e =>
+        {
+            e.HasIndex(x => new { x.ReportId, x.UserId })
+                .IsUnique()
+                .HasFilter("\"UserId\" IS NOT NULL");
+            e.HasIndex(x => new { x.ReportId, x.GroupId })
+                .IsUnique()
+                .HasFilter("\"GroupId\" IS NOT NULL");
+            e.HasOne(x => x.Report).WithMany(r => r.Acls).HasForeignKey(x => x.ReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -12,14 +12,50 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+No notable changes yet.
+
+## [0.17.0] — 2026-07-23
+
 ### Added
 
+- Added a design-time script DAG/Flow preview for `.etlsql` and `.rptsql` authoring surfaces, derived
+  from parsed script text and wired into existing shared DAG rendering paths.
+- Added report-designer ergonomics for keyboard deletion, save shortcuts, escape-to-clear,
+  grid nudging, undo/redo, duplication, multi-select movement, container detachment, container
+  collapse, tab/accordion child assignment, dynamic column mapping suggestions, and dataset-column
+  drag-and-drop mapping.
+- Added a business-consumer Portal home experience with favorites, recently viewed reports, featured
+  reports, popularity sections, and permission-aware catalog discovery.
+- Added fuzzy and synonym-aware Portal catalog search with match reasons across titles,
+  descriptions, tags, folders, and report metadata.
+- Added self-service report access requests, report-owner/admin approval and denial endpoints, and
+  report-level ACLs so approvals can grant one report without broadening folder access.
+- Added published-report metadata headers with owner/contact, freshness, last-refresh state, and
+  interactive tag badges that navigate or post catalog-search intents.
+- Added stale-report refresh requests: users with `Execute` can start a refresh, while read-only
+  consumers create an audited owner request without bypassing permissions.
+- Added one-click "My Default View" saving for current report parameter/slicer state, updating a
+  single per-user default saved view.
+- Added `DATE_SUFFIX` and `SUFFIX_SEPARATOR` file-operation options for common dated archive names
+  on copy/move flows.
+- Extended `SHOW SCHEMA`/`DESCRIBE` lookup so file-based connections can expose schema metadata to
+  authors and agents.
 - Added `SHOW PROTECTED DATA [AT <portal_or_orchestrator>] [LIMIT n] [INTO #temp]` to inventory protected lineage tagged as PII, PHI, PCI, sensitive, confidential, or restricted from local, Portal, or Orchestrator catalogs.
 - Added `SHOW PROTECTED DATA SUGGESTIONS [AT <portal_or_orchestrator>] [LIMIT n] [INTO #temp]` for reviewable classifier findings from column names, source-column names, catalog metadata hints, and supported sampled values without automatically changing tags.
 - Added `SHOW PORTAL AUDIT [ACTION '...'] [LIMIT n] [INTO #temp]` for script-first Portal audit review, including steward-impact lineage events.
 - Added `samples/08_Reporting/protected_data_audit.rptsql` as a starter protected-data stewardship dashboard.
 - Added Portal Lineage Audit mode for a steward-focused workflow that combines protected inventory, classifier suggestions, metadata queues, stale protected assets, inferred impact, steward-impact audit rows, and audit outbox health.
 - Added tag-driven governance policy lint and Portal runtime gates for public dataset stewardship metadata, restricted/confidential public datasets, protected dataset exports, and `@quality=gold` promotion metadata.
+
+### Performance
+
+- Reduced Portal catalog-search allocation pressure by replacing the Levenshtein two-dimensional
+  allocation with rolling buffers.
+- Cached request-scoped Portal group lookups by user to avoid repeated `UserGroups` queries during
+  catalog and permission checks.
+- Compiled repeated variable-interpolation regular expressions and optimized soft equality byte-array
+  comparison with span-based sequence comparison while preserving existing DateTime second-level
+  semantics.
 
 ### Security
 
@@ -39,6 +75,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   without consulting the connector that enforces egress policy, so a host blocked after the cache
   warmed kept being completed in the editor. Policy is now re-checked on every request and a denied
   host returns `403`.
+- Report access approval is now report-scoped by default through `ReportAcl` and audited atomically
+  with the grant/denial mutation.
 
 ### Added
 

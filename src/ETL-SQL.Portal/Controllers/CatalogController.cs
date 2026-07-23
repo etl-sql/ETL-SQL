@@ -516,10 +516,17 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             return db.Reports.Where(r => !r.IsDeleted);
 
         var userId = CurrentUserId;
-        return db.Reports.Where(r => !r.IsDeleted && db.FolderAcls.Any(a =>
-            a.FolderId == r.FolderId
-            && a.Permission >= FolderPermission.Read
-            && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
+        return db.Reports.Where(r => !r.IsDeleted && (
+            r.CreatedBy == userId
+            || db.FolderAcls.Any(a =>
+                a.FolderId == r.FolderId
+                && a.Permission >= FolderPermission.Read
+                && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId))
+            || db.ReportAcls.Any(a =>
+                a.ReportId == r.Id
+                && a.Permission >= FolderPermission.Read
+                && ((a.UserId.HasValue && a.UserId == userId)
+                    || (a.GroupId.HasValue && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId))))));
     }
 
     private static string LikePattern(string query) =>

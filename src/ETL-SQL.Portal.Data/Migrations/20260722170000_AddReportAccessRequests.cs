@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace ETLSQL.Portal.Data.Migrations
 {
-    /// <inheritdoc />
+    [Microsoft.EntityFrameworkCore.Infrastructure.DbContext(typeof(ETL_SQL.Portal.Data.PortalDbContext))]
+    [Microsoft.EntityFrameworkCore.Migrations.Migration("20260722170000_AddReportAccessRequests")]
     public partial class AddReportAccessRequests : Migration
     {
         /// <inheritdoc />

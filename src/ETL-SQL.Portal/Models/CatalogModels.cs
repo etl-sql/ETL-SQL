@@ -146,3 +146,21 @@ public record ReportAccessInfoDto(
 
 public record RequestReportAccessDto(
     string? Reason);
+
+public record PendingAccessRequestDto(
+    int Id,
+    int ReportId,
+    string ReportTitle,
+    int RequesterUserId,
+    string RequesterUserName,
+    string? RequesterEmail,
+    string? Reason,
+    string Status,
+    DateTime CreatedAt);
+
+public record ApproveReportAccessRequestDto(
+    ETL_SQL.Portal.Data.FolderPermission? Permission = ETL_SQL.Portal.Data.FolderPermission.Read,
+    string? DecisionReason = null);
+
+public record DenyReportAccessRequestDto(
+    string? DecisionReason = null);

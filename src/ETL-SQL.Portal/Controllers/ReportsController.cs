@@ -64,6 +64,9 @@ public class ReportsController : ControllerBase
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
+    private Task<FolderPermission?> GetEffectiveReportPermissionAsync(Report report) =>
+        folderPermissions.GetEffectiveReportPermissionAsync(report, User);
+
     /// <summary>
     /// Converts a stored <c>ScriptPath</c> — which may be absolute (older publish rows) or relative
     /// (uploads) — into a Scripts-area-relative key for <see cref="ETL_SQL.Core.Storage.IArtifactStorage"/>,
@@ -347,7 +350,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
 
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         if (perm is null)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new ReportAccessInfoDto(
@@ -375,7 +378,7 @@ public class ReportsController : ControllerBase
 
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         var pending = await db.ReportAccessRequests
             .AsNoTracking()
             .Where(r => r.ReportId == id
@@ -421,7 +424,7 @@ public class ReportsController : ControllerBase
 
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         if (perm is not null)
         {
             return Ok(new
@@ -995,7 +998,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         var views = await db.SavedReportViews.Where(v => v.ReportId == id && v.UserId == CurrentUserId).OrderBy(v => v.Name).ToListAsync();
         return Ok(views.Select(ToSavedViewDto));
@@ -1006,7 +1009,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
         if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
@@ -1029,6 +1032,11 @@ public class ReportsController : ControllerBase
     [HttpPut("reports/{id:int}/saved-views/{viewId:int}")]
     public async Task<IActionResult> UpdateSavedView(int id, int viewId, [FromBody] UpdateSavedReportViewRequest req)
     {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+
         var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NotFound();
         if (req.Name is not null) view.Name = req.Name;
@@ -1048,6 +1056,11 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/saved-views/{viewId:int}")]
     public async Task<IActionResult> DeleteSavedView(int id, int viewId)
     {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null) return Forbid();
+
         var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NoContent();
         db.SavedReportViews.Remove(view);
@@ -1428,6 +1441,208 @@ public class ReportsController : ControllerBase
             // Path escaped the area root (traversal) — same denial as the previous guard.
             return Forbid();
         }
+    }
+
+    [HttpGet("reports/access-requests/pending")]
+    public async Task<IActionResult> GetPendingAccessRequests()
+    {
+        var query = db.ReportAccessRequests
+            .AsNoTracking()
+            .Include(r => r.Report)
+            .Include(r => r.Requester)
+            .Where(r => r.Status == "Pending");
+
+        if (!IsAdmin)
+        {
+            var userReportIds = await db.Reports
+                .Where(r => r.CreatedBy == CurrentUserId)
+                .Select(r => r.Id)
+                .ToListAsync();
+            query = query.Where(r => userReportIds.Contains(r.ReportId));
+        }
+
+        var list = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new PendingAccessRequestDto(
+                r.Id,
+                r.ReportId,
+                r.Report.Name,
+                r.RequesterUserId,
+                r.Requester.UserName ?? r.Requester.Email ?? $"User {r.RequesterUserId}",
+                r.Requester.Email ?? "",
+                r.Reason,
+                r.Status,
+                r.CreatedAt))
+            .ToListAsync();
+
+        return Ok(list);
+    }
+
+    [HttpPost("reports/access-requests/{id:int}/approve")]
+    public async Task<IActionResult> ApproveAccessRequest(int id, [FromBody] ApproveReportAccessRequestDto? body)
+    {
+        var request = await db.ReportAccessRequests
+            .Include(r => r.Report)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+        if (request is null) return NotFound();
+
+        if (!IsAdmin && request.Report.CreatedBy != CurrentUserId)
+        {
+            return Forbid();
+        }
+
+        if (!string.Equals(request.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Access request is no longer pending.", requestId = request.Id, status = request.Status });
+
+        var permission = body?.Permission ?? FolderPermission.Read;
+        var existingAcl = await db.ReportAcls
+            .FirstOrDefaultAsync(a => a.ReportId == request.ReportId && a.UserId == request.RequesterUserId);
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var now = DateTime.UtcNow;
+        request.Status = "Approved";
+        request.DecidedByUserId = CurrentUserId;
+        request.DecidedAt = now;
+        request.DecisionReason = body?.DecisionReason ?? "Access granted";
+        request.UpdatedAt = now;
+
+        if (existingAcl is not null)
+        {
+            existingAcl.Permission = permission;
+        }
+        else
+        {
+            db.ReportAcls.Add(new ReportAcl
+            {
+                ReportId = request.ReportId,
+                UserId = request.RequesterUserId,
+                Permission = permission,
+                CreatedAt = now
+            });
+        }
+
+        audit.Stage(CurrentUserId, "APPROVE_REPORT_ACCESS", "ReportAccessRequest", request.Id.ToString(),
+            $"Granted {permission} access to user {request.RequesterUserId} for report {request.ReportId}");
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(new { message = "Access request approved.", requestId = request.Id, status = request.Status, permission = permission.ToString() });
+    }
+
+    [HttpPost("reports/access-requests/{id:int}/deny")]
+    public async Task<IActionResult> DenyAccessRequest(int id, [FromBody] DenyReportAccessRequestDto? body)
+    {
+        var request = await db.ReportAccessRequests
+            .Include(r => r.Report)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+        if (request is null) return NotFound();
+
+        if (!IsAdmin && request.Report.CreatedBy != CurrentUserId)
+        {
+            return Forbid();
+        }
+
+        if (!string.Equals(request.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Access request is no longer pending.", requestId = request.Id, status = request.Status });
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var now = DateTime.UtcNow;
+        request.Status = "Denied";
+        request.DecidedByUserId = CurrentUserId;
+        request.DecidedAt = now;
+        request.DecisionReason = body?.DecisionReason ?? "Access denied";
+        request.UpdatedAt = now;
+
+        audit.Stage(CurrentUserId, "DENY_REPORT_ACCESS", "ReportAccessRequest", request.Id.ToString(),
+            $"Denied access request for user {request.RequesterUserId} on report {request.ReportId}");
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(new { message = "Access request denied.", requestId = request.Id, status = request.Status });
+    }
+
+    [HttpPost("reports/{id:int}/saved-views/default")]
+    public async Task<IActionResult> SaveDefaultView(int id, [FromBody] Dictionary<string, string>? parameters)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (!perm.HasValue) return Forbid();
+
+        var paramsJson = System.Text.Json.JsonSerializer.Serialize(parameters ?? []);
+        const string defaultName = "My Default View";
+        var savedViews = await db.SavedReportViews
+            .Where(v => v.ReportId == id && v.UserId == CurrentUserId
+                && (v.IsDefault || v.Name == defaultName))
+            .ToListAsync();
+
+        var defaultView = savedViews.FirstOrDefault(v => v.Name == defaultName)
+            ?? savedViews.FirstOrDefault(v => v.IsDefault);
+
+        foreach (var v in savedViews)
+        {
+            if (!ReferenceEquals(v, defaultView))
+                v.IsDefault = false;
+        }
+
+        if (defaultView is null)
+        {
+            defaultView = new SavedReportView
+            {
+                ReportId = id,
+                UserId = CurrentUserId,
+                Name = defaultName,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.SavedReportViews.Add(defaultView);
+        }
+
+        defaultView.Name = defaultName;
+        defaultView.ParametersJson = paramsJson;
+        defaultView.IsDefault = true;
+        defaultView.UpdatedAt = DateTime.UtcNow;
+
+        audit.Stage(CurrentUserId, "SET_DEFAULT_REPORT_VIEW", "Report", id.ToString(), defaultName);
+        await db.SaveChangesAsync();
+
+        return Ok(new { message = "Default view saved successfully.", viewId = defaultView.Id, isDefault = true });
+    }
+
+    [HttpGet("reports/{id:int}/saved-views/default")]
+    public async Task<IActionResult> GetDefaultView(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (!perm.HasValue) return Forbid();
+
+        var defaultView = await db.SavedReportViews
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.ReportId == id && v.UserId == CurrentUserId && v.IsDefault);
+
+        if (defaultView is null) return NotFound();
+
+        Dictionary<string, string> paramsDict;
+        try
+        {
+            paramsDict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(defaultView.ParametersJson ?? "{}") ?? [];
+        }
+        catch
+        {
+            paramsDict = [];
+        }
+
+        return Ok(new { id = defaultView.Id, name = defaultView.Name, isDefault = defaultView.IsDefault, parameters = paramsDict });
     }
 
 }

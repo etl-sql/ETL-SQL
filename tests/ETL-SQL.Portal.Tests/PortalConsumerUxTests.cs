@@ -12,6 +12,7 @@ using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -19,10 +20,12 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Portal")]
 public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
 {
+    private readonly PortalWebFactory _factory;
     private readonly HttpClient _client;
 
     public PortalConsumerUxTests(PortalWebFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -209,6 +212,104 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         return report;
     }
 
+    [Fact]
+    public async Task ApproveAccessRequest_GrantsReportAcl_And_UpdatesStatus()
+    {
+        await EnsureAuthenticatedAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
+
+        var folder = new Folder { Name = "Secured", Path = "/Secured", OwnerId = 1 };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report { FolderId = folder.Id, Name = "Secured Sales", ScriptPath = "sales.rptsql", CreatedBy = 1 };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var requester = new PortalUser { UserName = "consumer1", Email = "consumer1@test.com" };
+        db.Users.Add(requester);
+        await db.SaveChangesAsync();
+
+        var req = new ReportAccessRequest { ReportId = report.Id, RequesterUserId = requester.Id, Status = "Pending", Reason = "Need Q3 data" };
+        db.ReportAccessRequests.Add(req);
+        await db.SaveChangesAsync();
+
+        var ownerCtrl = CreateReportsController(db, userId: 1, isAdmin: true);
+        var pendingRes = await ownerCtrl.GetPendingAccessRequests();
+        var pendingOk = Assert.IsType<OkObjectResult>(pendingRes);
+        var pendingList = Assert.IsAssignableFrom<IEnumerable<PendingAccessRequestDto>>(pendingOk.Value);
+        Assert.Contains(pendingList, p => p.Id == req.Id);
+
+        var approveRes = await ownerCtrl.ApproveAccessRequest(req.Id, new ApproveReportAccessRequestDto(FolderPermission.Read, "Approved for audit"));
+        Assert.IsType<OkObjectResult>(approveRes);
+
+        var updatedReq = await db.ReportAccessRequests.FindAsync(req.Id);
+        Assert.Equal("Approved", updatedReq?.Status);
+
+        var acl = await db.ReportAcls.FirstOrDefaultAsync(a => a.ReportId == report.Id && a.UserId == requester.Id);
+        Assert.NotNull(acl);
+        Assert.Equal(FolderPermission.Read, acl!.Permission);
+
+        var consumerCtrl = CreateReportsController(db, userId: requester.Id, isAdmin: false);
+        var accessInfo = await consumerCtrl.GetAccessInfo(report.Id);
+        var accessOk = Assert.IsType<OkObjectResult>(accessInfo);
+        var accessDto = Assert.IsType<ReportAccessInfoDto>(accessOk.Value);
+        Assert.Equal("HasAccess", accessDto.Status);
+    }
+
+    [Fact]
+    public async Task RequestDataRefresh_StaleReport_ReturnsRequestedOrStarted()
+    {
+        await using var db = await CreateDbAsync();
+
+        var folder = new Folder { Name = "Ops", Path = "/Ops", OwnerId = 1 };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report { FolderId = folder.Id, Name = "Stale Ops", ScriptPath = "ops.rptsql", CreatedBy = 1 };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+        db.ReportAcls.Add(new ReportAcl { ReportId = report.Id, UserId = 2, Permission = FolderPermission.Read });
+        await db.SaveChangesAsync();
+
+        var userCtrl = CreateExecutionController(db, userId: 2, isAdmin: false);
+        var res = await userCtrl.RequestDataRefresh(report.Id);
+        var okRes = Assert.IsType<OkObjectResult>(res);
+        Assert.NotNull(okRes.Value);
+    }
+
+    [Fact]
+    public async Task SaveDefaultView_PersistsDefaultView_PerUserAndReport()
+    {
+        await EnsureAuthenticatedAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        var folder = new Folder { Name = "Sales", Path = "/Sales", OwnerId = 1 };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report { FolderId = folder.Id, Name = "Regional Sales", ScriptPath = "regional.rptsql", CreatedBy = 1 };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var userCtrl = CreateReportsController(db, userId: 1, isAdmin: true);
+        var paramsDict = new Dictionary<string, string> { ["@region"] = "Midwest", ["@year"] = "2026" };
+
+        var saveRes = await userCtrl.SaveDefaultView(report.Id, paramsDict);
+        Assert.IsType<OkObjectResult>(saveRes);
+
+        var secondSaveRes = await userCtrl.SaveDefaultView(report.Id, new Dictionary<string, string> { ["@region"] = "West" });
+        Assert.IsType<OkObjectResult>(secondSaveRes);
+
+        var getRes = await userCtrl.GetDefaultView(report.Id);
+        var getOk = Assert.IsType<OkObjectResult>(getRes);
+        Assert.NotNull(getOk.Value);
+        Assert.Equal(1, await db.SavedReportViews.CountAsync(v => v.ReportId == report.Id && v.UserId == 1 && v.Name == "My Default View"));
+    }
+
     private static ReportsController CreateReportsController(PortalDbContext db, int userId, bool isAdmin = false)
     {
         var context = new DefaultHttpContext
@@ -228,6 +329,28 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             null!,
             null!,
             null!,
+            null!,
+            null!,
+            null!);
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+        return controller;
+    }
+
+    private static ExecutionController CreateExecutionController(PortalDbContext db, int userId, bool isAdmin = false)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = Principal(userId, isAdmin),
+            TraceIdentifier = $"test-{Guid.NewGuid():N}"
+        };
+        var audit = new AuditService(db, new HttpContextAccessor { HttpContext = context });
+        var controller = new ExecutionController(
+            db,
+            null!,
+            null!,
+            audit,
+            new PortalConfig(),
+            new FolderPermissionService(db),
             null!,
             null!,
             null!);

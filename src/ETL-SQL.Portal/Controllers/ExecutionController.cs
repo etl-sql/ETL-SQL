@@ -42,6 +42,8 @@ public class ExecutionController(
 
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
+    private Task<FolderPermission?> GetEffectiveReportPermissionAsync(Report report) =>
+        folderPermissions.GetEffectiveReportPermissionAsync(report, User);
 
     // ── 2.1  POST /api/reports/{id}/execute ──────────────────────────────────
 
@@ -51,7 +53,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
@@ -93,7 +95,7 @@ public class ExecutionController(
         if (report is null) return NotFound();
 
         // Editors (Manage) can preview-as their own reports; admins can run-as on any report.
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (!IsAdmin && (perm is null || perm < FolderPermission.Manage)) return Forbid();
 
         var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
@@ -169,7 +171,7 @@ public class ExecutionController(
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
@@ -265,7 +267,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return (null, null, null, NotFound());
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return (null, null, null, Forbid());
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
@@ -314,7 +316,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
@@ -341,6 +343,55 @@ public class ExecutionController(
         return Accepted(new RefreshResponse(jobId, alreadyRunning));
     }
 
+    [HttpPost("reports/{id:int}/request-refresh")]
+    public async Task<IActionResult> RequestDataRefresh(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectiveReportPermissionAsync(report);
+        if (perm is null)
+            return StatusCode(StatusCodes.Status403Forbidden, new { status = "Denied", message = "Permission denied." });
+
+        if (perm.Value >= FolderPermission.Execute)
+        {
+            if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+                return Forbid();
+
+            string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
+            if (existingJobId is not null)
+                return Ok(new { status = "AlreadyQueued", message = "A data refresh is already running.", jobId = existingJobId });
+
+            var jobId = await jobService.EnqueueRefreshAsync(
+                id,
+                CurrentUserId,
+                resolvedScriptPath,
+                isAdministrator: IsAdmin,
+                actorType: ActorType,
+                actorId: ActorId,
+                effectiveScopes: EffectiveScopes,
+                correlationId: HttpContext.TraceIdentifier);
+            await audit.LogAsync(CurrentUserId, "REFRESH_REPORT", "Report", id.ToString());
+            return Ok(new { status = "Started", message = "Data refresh started.", jobId });
+        }
+
+        var cutoff = DateTime.UtcNow.AddMinutes(-15);
+        var recentRequest = await db.AuditLogs
+            .AsNoTracking()
+            .AnyAsync(a => a.Action == "REQUEST_REPORT_DATA_REFRESH"
+                && a.UserId == CurrentUserId
+                && a.ResourceId == report.Id.ToString()
+                && a.Timestamp >= cutoff);
+
+        if (recentRequest)
+            return Ok(new { status = "AlreadyQueued", message = "A data refresh request is already pending or recently completed." });
+
+        await audit.LogAsync(CurrentUserId, "REQUEST_REPORT_DATA_REFRESH", "Report", report.Id.ToString(),
+            $"User {CurrentUserId} requested data refresh for stale report.");
+
+        return Ok(new { status = "Requested", message = "Data refresh requested from report owner." });
+    }
+
     // ── 2.3  POST /api/reports/{id}/parameter ────────────────────────────────
     // Applies a single parameter to the user's session without touching the snapshot.
 
@@ -350,7 +401,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         if (string.IsNullOrWhiteSpace(req.Name))
@@ -373,7 +424,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         // Empty params is valid for non-interaction calls (cross-filter deselect = reset to clean state).
@@ -400,7 +451,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         if (string.IsNullOrWhiteSpace(req.VisualName))
@@ -425,7 +476,7 @@ public class ExecutionController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         if (req.Visuals is null || req.Visuals.Count == 0 || req.Visuals.All(string.IsNullOrWhiteSpace))

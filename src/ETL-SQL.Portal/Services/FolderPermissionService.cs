@@ -6,7 +6,7 @@ namespace ETL_SQL.Portal.Services;
 
 public class FolderPermissionService(PortalDbContext db)
 {
-    private ISet<int>? _cachedUserGroupIds;
+    private readonly Dictionary<int, ISet<int>> _cachedUserGroupIdsByUser = [];
 
     public int GetUserId(ClaimsPrincipal user) =>
         int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -15,16 +15,18 @@ public class FolderPermissionService(PortalDbContext db)
 
     public async Task<ISet<int>> GetUserGroupIdsAsync(ClaimsPrincipal user)
     {
-        if (_cachedUserGroupIds is not null) return _cachedUserGroupIds;
-
         var userId = GetUserId(user);
+        if (_cachedUserGroupIdsByUser.TryGetValue(userId, out var cached))
+            return cached;
+
         var ids = await db.UserGroups
             .Where(ug => ug.UserId == userId)
             .Select(ug => ug.GroupId)
             .ToListAsync();
 
-        _cachedUserGroupIds = new HashSet<int>(ids);
-        return _cachedUserGroupIds;
+        var groupIds = new HashSet<int>(ids);
+        _cachedUserGroupIdsByUser[userId] = groupIds;
+        return groupIds;
     }
 
     public async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId, ClaimsPrincipal user)
@@ -41,6 +43,28 @@ public class FolderPermissionService(PortalDbContext db)
 
         var effective = await GetEffectivePermissionAsync(folderId, user);
         return effective.HasValue && effective.Value >= required;
+    }
+
+    public async Task<FolderPermission?> GetEffectiveReportPermissionAsync(Report report, ClaimsPrincipal user)
+    {
+        if (IsAdmin(user)) return FolderPermission.Manage;
+
+        var userId = GetUserId(user);
+        if (report.CreatedBy == userId) return FolderPermission.Manage;
+
+        var folderPerm = await GetEffectivePermissionAsync(report.FolderId, user);
+
+        var groupIds = await GetUserGroupIdsAsync(user);
+        var reportPerms = await db.ReportAcls
+            .Where(a => a.ReportId == report.Id && ((a.UserId.HasValue && a.UserId == userId) || (a.GroupId.HasValue && groupIds.Contains(a.GroupId.Value))))
+            .Select(a => a.Permission)
+            .ToListAsync();
+
+        FolderPermission? directPerm = reportPerms.Count > 0 ? (FolderPermission)reportPerms.Max(p => (int)p) : null;
+
+        if (!folderPerm.HasValue) return directPerm;
+        if (!directPerm.HasValue) return folderPerm;
+        return (FolderPermission)Math.Max((int)folderPerm.Value, (int)directPerm.Value);
     }
 
     public async Task<FolderPermission?> GetEffectivePermissionAsync(

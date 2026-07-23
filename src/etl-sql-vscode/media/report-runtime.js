@@ -729,7 +729,7 @@
             const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
             tagList.forEach(t => {
                 const tagStr = t.trim();
-                if (tagStr) badges.push(`<a class="header-badge tag" title="Search tag" href="/?search=${encodeURIComponent(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
+                if (tagStr) badges.push(`<a class="header-badge tag" title="Search tag '${escHtml(tagStr)}'" href="#" data-tag="${escHtml(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
             });
         }
 
@@ -737,11 +737,75 @@
             const badgeContainer = document.createElement('div');
             badgeContainer.className = 'header-badges';
             badgeContainer.innerHTML = badges.join('');
+            badgeContainer.querySelectorAll('a.header-badge.tag').forEach(el => {
+                el.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    const tagVal = el.getAttribute('data-tag');
+                    if (!tagVal) return;
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'etl-catalog-search', tag: tagVal, query: tagVal }, window.location.origin);
+                        return;
+                    }
+                    try {
+                        window.top.location.href = '/?search=' + encodeURIComponent(tagVal);
+                    } catch (_) {
+                        window.location.href = '/?search=' + encodeURIComponent(tagVal);
+                    }
+                });
+            });
             left.appendChild(badgeContainer);
         }
 
         const actions = document.createElement('div');
         actions.className = 'header-actions';
+
+        if (freshnessStatus === 'stale') {
+            const refreshBtn = document.createElement('button');
+            refreshBtn.className = 'header-btn warning';
+            refreshBtn.title = 'Request Data Refresh for Stale Report';
+            refreshBtn.textContent = '🔄 Request Refresh';
+            refreshBtn.addEventListener('click', async () => {
+                const reportId = manifest.id || window.__REPORT_ID__;
+                if (!reportId) return;
+                try {
+                    const base = window.__API_BASE__ || '';
+                    const res = await fetch(`${base}/api/reports/${reportId}/request-refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.message || 'Data refresh requested.');
+                } catch (e) {
+                    alert('Request failed: ' + e.message);
+                }
+            });
+            actions.appendChild(refreshBtn);
+        }
+
+        const defaultViewBtn = document.createElement('button');
+        defaultViewBtn.className = 'header-btn';
+        defaultViewBtn.title = 'Save Current Slicers as My Default View';
+        defaultViewBtn.textContent = '📌 Save Default View';
+        defaultViewBtn.addEventListener('click', async () => {
+            const reportId = manifest.id || window.__REPORT_ID__;
+            if (!reportId) {
+                alert('Report ID not found.');
+                return;
+            }
+            try {
+                const base = window.__API_BASE__ || '';
+                const res = await fetch(`${base}/api/reports/${reportId}/saved-views/default`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parameters || {})
+                });
+                if (res.ok) {
+                    alert('Saved current slicers as your default view.');
+                } else {
+                    alert('Failed to save default view.');
+                }
+            } catch (e) {
+                alert('Error saving default view: ' + e.message);
+            }
+        });
+        actions.appendChild(defaultViewBtn);
 
         if (vscode) {
             const openBtn = document.createElement('button');
