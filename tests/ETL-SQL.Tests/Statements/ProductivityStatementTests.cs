@@ -74,13 +74,55 @@ COMPARE DATASETS #today WITH #yesterday KEY (Id) INTO #diff;
         Assert.NotNull(updateRow);
         Assert.Equal("UPDATE", updateRow["_change_type"]?.ToString());
         Assert.Equal("Email", updateRow["_changed_columns"]?.ToString());
+        Assert.Equal("alice@old.com", updateRow["Email_old"]?.ToString());
+        Assert.Equal("alice@new.com", updateRow["Email_new"]?.ToString());
 
         var insertRow = rows.FirstOrDefault(r => r["Id"]?.ToString() == "4");
         Assert.NotNull(insertRow);
         Assert.Equal("INSERT", insertRow["_change_type"]?.ToString());
+        Assert.Null(insertRow["Email_old"]);
+        Assert.Equal("david@test.com", insertRow["Email_new"]?.ToString());
 
         var deleteRow = rows.FirstOrDefault(r => r["Id"]?.ToString() == "3");
         Assert.NotNull(deleteRow);
         Assert.Equal("DELETE", deleteRow["_change_type"]?.ToString());
+        Assert.Equal("charlie@test.com", deleteRow["Email_old"]?.ToString());
+        Assert.Null(deleteRow["Email_new"]);
+    }
+
+    [Fact]
+    public async Task TestFillDatesStatement()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+        string script = @"
+CREATE TABLE #sales (Region VARCHAR(20), OrderDate DATE, Quantity INT);
+INSERT INTO #sales VALUES ('East', '2026-05-01', 10);
+INSERT INTO #sales VALUES ('East', '2026-05-03', 30);
+INSERT INTO #sales VALUES ('West', '2026-05-02', 5);
+INSERT INTO #sales VALUES ('West', '2026-05-04', 15);
+
+FILL_DATES(#sales, DATE_COL = 'OrderDate', GAPS_FILL = 0, BY_GROUP = 'Region') INTO #filled;
+";
+        var parsed = new Parser(new Lexer(script).Tokenize()).Parse();
+        await evaluator.Evaluate(parsed);
+
+        var filled = evaluator.Connections["#filled"] as InMemoryDataSource;
+        Assert.NotNull(filled);
+
+        var batches = await filled.ReadBatches().ToListAsync();
+        var rows = batches.SelectMany(b => b.Rows).ToList();
+
+        Assert.Equal(6, rows.Count);
+
+        var eastGap = rows.Single(r =>
+            r["Region"]?.ToString() == "East"
+            && Convert.ToDateTime(r["OrderDate"]).Date == new DateTime(2026, 5, 2));
+        Assert.Equal(0, Convert.ToInt32(eastGap["Quantity"]));
+
+        var westGap = rows.Single(r =>
+            r["Region"]?.ToString() == "West"
+            && Convert.ToDateTime(r["OrderDate"]).Date == new DateTime(2026, 5, 3));
+        Assert.Equal(0, Convert.ToInt32(westGap["Quantity"]));
     }
 }

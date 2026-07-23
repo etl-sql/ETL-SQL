@@ -12,7 +12,7 @@ public static class LanguageMetadata
         "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "WINDOW", "ORDER", "ASC", "DESC",
         "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET", "REPLACE",
         "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "FIRST", "NEXT", "ONLY", "AS",
-        "ROLLUP", "CUBE", "GROUPING", "COMPARE", "DATASETS", "CALENDAR"
+        "ROLLUP", "CUBE", "GROUPING", "COMPARE", "DATASETS", "CALENDAR", "FILL_DATES"
     };
 
     public static readonly HashSet<string> DdlKeywords = new(StringComparer.OrdinalIgnoreCase)

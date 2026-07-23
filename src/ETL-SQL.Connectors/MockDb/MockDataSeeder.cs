@@ -335,25 +335,110 @@ namespace ETL_SQL.Connectors.MockDb
             tables["Dim_Numbers"] = numbers;
             tables["Tally"] = numbers;
 
-            // 8. Dates (Date dimension - 200 year range 1900-01-01 to 2100-01-01)
-            var datesSchema = new TableSchema(new[] { "DateKey", "Date", "Year", "Quarter", "Month", "MonthName", "Day", "DayOfWeek", "DayName", "IsWeekend", "FiscalYear" });
+            // 8. Dates (Ultimate Date dimension - 200 year range 1900-01-01 to 2100-01-01 + Sentinels)
+            var datesSchema = new TableSchema(new[] {
+                "DateKey", "Date", "FullDateISO", "Year", "Quarter", "YearQuarter",
+                "Month", "MonthName", "MonthShortName", "YearMonth", "Day", "DayOfWeek",
+                "DayName", "DayShortName", "DayOfYear", "ISOWeek", "IsWeekend", "IsWeekday",
+                "IsMonthStart", "IsMonthEnd", "IsQuarterStart", "IsQuarterEnd", "IsYearStart",
+                "IsYearEnd", "FiscalYear", "FiscalQuarter", "RelativeDays"
+            });
             var dates = new DataTable { Schema = datesSchema };
+
+            // Sentinel rows (-1 Unknown, -2 N/A)
+            dates.Rows.Add(new Row(datesSchema, new object?[] {
+                -1, new DateTime(1900, 1, 1), "1900-01-01", 1900, 1, "1900-Q1", 1, "Unknown", "Unk", 190001, 1, 0, "Unknown", "Unk", 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1900, "FQ1", -999999
+            }));
+            dates.Rows.Add(new Row(datesSchema, new object?[] {
+                -2, new DateTime(9999, 12, 31), "9999-12-31", 9999, 4, "9999-Q4", 12, "Not Applicable", "N/A", 999912, 31, 0, "N/A", "N/A", 365, 52, 0, 0, 0, 0, 0, 0, 0, 0, 9999, "FQ4", 999999
+            }));
+
             var startCalendar = new DateTime(1900, 1, 1);
             var endCalendar = new DateTime(2100, 1, 1);
+            var today = DateTime.Today;
+
             for (var d = startCalendar; d <= endCalendar; d = d.AddDays(1))
             {
                 int dateKey = d.Year * 10000 + d.Month * 100 + d.Day;
                 int quarter = ((d.Month - 1) / 3) + 1;
                 int isWeekend = (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) ? 1 : 0;
-                dates.Rows.Add(new Row(datesSchema, new object?[] { dateKey, d, d.Year, quarter, d.Month, d.ToString("MMMM"), d.Day, (int)d.DayOfWeek, d.ToString("dddd"), isWeekend, d.Year }));
+                int isWeekday = isWeekend == 1 ? 0 : 1;
+                int isMonthStart = d.Day == 1 ? 1 : 0;
+                int isMonthEnd = d.Day == DateTime.DaysInMonth(d.Year, d.Month) ? 1 : 0;
+                int isQuarterStart = (d.Day == 1 && (d.Month == 1 || d.Month == 4 || d.Month == 7 || d.Month == 10)) ? 1 : 0;
+                int isQuarterEnd = (isMonthEnd == 1 && (d.Month == 3 || d.Month == 6 || d.Month == 9 || d.Month == 12)) ? 1 : 0;
+                int isYearStart = (d.Day == 1 && d.Month == 1) ? 1 : 0;
+                int isYearEnd = (d.Day == 31 && d.Month == 12) ? 1 : 0;
+
+                dates.Rows.Add(new Row(datesSchema, new object?[] {
+                    dateKey,
+                    d,
+                    d.ToString("yyyy-MM-dd"),
+                    d.Year,
+                    quarter,
+                    $"{d.Year}-Q{quarter}",
+                    d.Month,
+                    d.ToString("MMMM"),
+                    d.ToString("MMM"),
+                    d.Year * 100 + d.Month,
+                    d.Day,
+                    (int)d.DayOfWeek,
+                    d.ToString("dddd"),
+                    d.ToString("ddd"),
+                    d.DayOfYear,
+                    System.Globalization.ISOWeek.GetWeekOfYear(d),
+                    isWeekend,
+                    isWeekday,
+                    isMonthStart,
+                    isMonthEnd,
+                    isQuarterStart,
+                    isQuarterEnd,
+                    isYearStart,
+                    isYearEnd,
+                    d.Year,
+                    $"FQ{quarter}",
+                    (d.Date - today).Days
+                }));
             }
             tables["Dates"] = dates;
             tables["DimDate"] = dates;
             tables["Dim_Date"] = dates;
 
-            // 9. Times (Time dimension - 1440 minutes in a day)
+            // 9. Times (Ultimate Time dimension - 1440 minutes + Sentinels)
             var times = new DataTable();
-            times.SetColumns(new[] { "TimeKey", "Time", "Hour", "Hour12", "Minute", "Second", "AmPm", "TimeOfDay" });
+            times.SetColumns(new[] {
+                "TimeKey", "Time", "FullTime24", "FullTime12", "HourMinute24", "HourMinute12",
+                "Hour", "Hour12", "Minute", "Second", "AmPm", "TimeOfDay",
+                "MinuteOfDay", "SecondOfDay", "HalfHour", "QuarterHour",
+                "HourBand", "HalfHourBand", "QuarterHourBand", "IsBusinessHours", "WorkShift"
+            });
+
+            // Sentinel row (-1 Unknown)
+            await times.AddRowAsync(new Row
+            {
+                ["TimeKey"] = -1,
+                ["Time"] = TimeSpan.Zero,
+                ["FullTime24"] = "00:00:00",
+                ["FullTime12"] = "12:00:00 AM",
+                ["HourMinute24"] = "00:00",
+                ["HourMinute12"] = "12:00 AM",
+                ["Hour"] = 0,
+                ["Hour12"] = 12,
+                ["Minute"] = 0,
+                ["Second"] = 0,
+                ["AmPm"] = "AM",
+                ["TimeOfDay"] = "Unknown",
+                ["MinuteOfDay"] = 0,
+                ["SecondOfDay"] = 0,
+                ["HalfHour"] = 0,
+                ["QuarterHour"] = 0,
+                ["HourBand"] = "Unknown",
+                ["HalfHourBand"] = "Unknown",
+                ["QuarterHourBand"] = "Unknown",
+                ["IsBusinessHours"] = 0,
+                ["WorkShift"] = "Unknown"
+            });
+
             for (int h = 0; h < 24; h++)
             {
                 for (int m = 0; m < 60; m++)
@@ -369,16 +454,57 @@ namespace ETL_SQL.Connectors.MockDb
                     };
                     var ts = new TimeSpan(h, m, 0);
 
+                    int minuteOfDay = h * 60 + m;
+                    int secondOfDay = minuteOfDay * 60;
+                    int halfHour = minuteOfDay / 30;
+                    int quarterHour = minuteOfDay / 15;
+
+                    int nextHour = (h + 1) % 24;
+                    string hourBand = $"{h:D2}:00 - {nextHour:D2}:00";
+
+                    int halfMStart = (m / 30) * 30;
+                    int halfMEnd = halfMStart + 30;
+                    int halfHEnd = halfMEnd == 60 ? nextHour : h;
+                    string halfMEndStr = halfMEnd == 60 ? "00" : halfMEnd.ToString("D2");
+                    string halfHourBand = $"{h:D2}:{halfMStart:D2} - {halfHEnd:D2}:{halfMEndStr}";
+
+                    int qMStart = (m / 15) * 15;
+                    int qMEnd = qMStart + 15;
+                    int qHEnd = qMEnd == 60 ? nextHour : h;
+                    string qMEndStr = qMEnd == 60 ? "00" : qMEnd.ToString("D2");
+                    string quarterHourBand = $"{h:D2}:{qMStart:D2} - {qHEnd:D2}:{qMEndStr}";
+
+                    int isBusinessHours = (h >= 8 && h < 17) ? 1 : 0;
+                    string shift = h switch
+                    {
+                        >= 7 and < 15 => "Shift 1 (Day)",
+                        >= 15 and < 23 => "Shift 2 (Evening)",
+                        _ => "Shift 3 (Night)"
+                    };
+
                     await times.AddRowAsync(new Row
                     {
                         ["TimeKey"] = h * 10000 + m * 100,
                         ["Time"] = ts,
+                        ["FullTime24"] = $"{h:D2}:{m:D2}:00",
+                        ["FullTime12"] = $"{h12:D2}:{m:D2}:00 {ampm}",
+                        ["HourMinute24"] = $"{h:D2}:{m:D2}",
+                        ["HourMinute12"] = $"{h12:D2}:{m:D2} {ampm}",
                         ["Hour"] = h,
                         ["Hour12"] = h12,
                         ["Minute"] = m,
                         ["Second"] = 0,
                         ["AmPm"] = ampm,
-                        ["TimeOfDay"] = tod
+                        ["TimeOfDay"] = tod,
+                        ["MinuteOfDay"] = minuteOfDay,
+                        ["SecondOfDay"] = secondOfDay,
+                        ["HalfHour"] = halfHour,
+                        ["QuarterHour"] = quarterHour,
+                        ["HourBand"] = hourBand,
+                        ["HalfHourBand"] = halfHourBand,
+                        ["QuarterHourBand"] = quarterHourBand,
+                        ["IsBusinessHours"] = isBusinessHours,
+                        ["WorkShift"] = shift
                     });
                 }
             }
@@ -386,63 +512,112 @@ namespace ETL_SQL.Connectors.MockDb
             tables["DimTime"] = times;
             tables["Dim_Time"] = times;
 
-            // 10. Geography (Sample ISO / US States)
+            // 10. Geography (Ultimate Geography dimension - ISO / US States & International Regions)
             var geo = new DataTable();
-            geo.SetColumns(new[] { "StateCode", "StateName", "CountryCode", "CountryName", "Region", "TimeZone" });
-            var sampleStates = new (string Code, string Name, string Reg, string TZ)[]
+            geo.SetColumns(new[] { "GeoKey", "StateCode", "StateName", "CountryCode", "CountryCode3", "CountryName", "Continent", "Region", "SubRegion", "TimeZone", "UtcOffsetHours", "IsDomestic" });
+
+            await geo.AddRowAsync(new Row
             {
-                ("CA", "California", "West", "PST"),
-                ("NY", "New York", "East", "EST"),
-                ("TX", "Texas", "South", "CST"),
-                ("FL", "Florida", "South", "EST"),
-                ("IL", "Illinois", "Midwest", "CST"),
-                ("WA", "Washington", "West", "PST")
+                ["GeoKey"] = -1, ["StateCode"] = "XX", ["StateName"] = "Unknown", ["CountryCode"] = "XX", ["CountryCode3"] = "UNK", ["CountryName"] = "Unknown", ["Continent"] = "Unknown", ["Region"] = "Unknown", ["SubRegion"] = "Unknown", ["TimeZone"] = "UTC", ["UtcOffsetHours"] = 0, ["IsDomestic"] = 0
+            });
+
+            var sampleStates = new (int Key, string Code, string Name, string C2, string C3, string CName, string Cont, string Reg, string SubReg, string TZ, int Offset, int Domestic)[]
+            {
+                (1, "CA", "California", "US", "USA", "United States", "North America", "West", "Pacific", "PST", -8, 1),
+                (2, "NY", "New York", "US", "USA", "United States", "North America", "East", "Middle Atlantic", "EST", -5, 1),
+                (3, "TX", "Texas", "US", "USA", "United States", "North America", "South", "West South Central", "CST", -6, 1),
+                (4, "FL", "Florida", "US", "USA", "United States", "North America", "South", "South Atlantic", "EST", -5, 1),
+                (5, "IL", "Illinois", "US", "USA", "United States", "North America", "Midwest", "East North Central", "CST", -6, 1),
+                (6, "WA", "Washington", "US", "USA", "United States", "North America", "West", "Pacific", "PST", -8, 1),
+                (7, "ON", "Ontario", "CA", "CAN", "Canada", "North America", "Americas", "Central Canada", "EST", -5, 0),
+                (8, "LND", "London", "GB", "GBR", "United Kingdom", "Europe", "EMEA", "Northern Europe", "GMT", 0, 0),
+                (9, "BY", "Bavaria", "DE", "DEU", "Germany", "Europe", "EMEA", "Western Europe", "CET", 1, 0)
             };
+
             foreach (var st in sampleStates)
             {
                 await geo.AddRowAsync(new Row
                 {
+                    ["GeoKey"] = st.Key,
                     ["StateCode"] = st.Code,
                     ["StateName"] = st.Name,
-                    ["CountryCode"] = "US",
-                    ["CountryName"] = "United States",
+                    ["CountryCode"] = st.C2,
+                    ["CountryCode3"] = st.C3,
+                    ["CountryName"] = st.CName,
+                    ["Continent"] = st.Cont,
                     ["Region"] = st.Reg,
-                    ["TimeZone"] = st.TZ
+                    ["SubRegion"] = st.SubReg,
+                    ["TimeZone"] = st.TZ,
+                    ["UtcOffsetHours"] = st.Offset,
+                    ["IsDomestic"] = st.Domestic
                 });
             }
             tables["Geography"] = geo;
             tables["DimGeography"] = geo;
+            tables["Dim_Geography"] = geo;
 
-            // 11. Currencies
+            // 11. Currencies (Ultimate Currency dimension - ISO 4217)
             var currencies = new DataTable();
-            currencies.SetColumns(new[] { "CurrencyCode", "CurrencyName", "Symbol" });
-            var sampleCurrencies = new (string Code, string Name, string Sym)[]
+            currencies.SetColumns(new[] { "CurrencyKey", "CurrencyCode", "NumericCode", "CurrencyName", "Symbol", "MinorUnitDigits", "CountryName", "IsBaseCurrency", "StandardFormatPattern" });
+
+            await currencies.AddRowAsync(new Row
             {
-                ("USD", "US Dollar", "$"),
-                ("EUR", "Euro", "€"),
-                ("GBP", "British Pound", "£"),
-                ("CAD", "Canadian Dollar", "$"),
-                ("AUD", "Australian Dollar", "$"),
-                ("JPY", "Japanese Yen", "¥")
+                ["CurrencyKey"] = -1, ["CurrencyCode"] = "XXX", ["NumericCode"] = 999, ["CurrencyName"] = "Unknown Currency", ["Symbol"] = "?", ["MinorUnitDigits"] = 2, ["CountryName"] = "Unknown", ["IsBaseCurrency"] = 0, ["StandardFormatPattern"] = "#,##0.00"
+            });
+
+            var sampleCurrencies = new (int Key, string Code, int NumCode, string Name, string Sym, int Digits, string Country, int BaseCurr, string Format)[]
+            {
+                (840, "USD", 840, "US Dollar", "$", 2, "United States", 1, "$#,##0.00"),
+                (978, "EUR", 978, "Euro", "€", 2, "Eurozone", 0, "€#,##0.00"),
+                (826, "GBP", 826, "British Pound", "£", 2, "United Kingdom", 0, "£#,##0.00"),
+                (124, "CAD", 124, "Canadian Dollar", "C$", 2, "Canada", 0, "C$#,##0.00"),
+                (36, "AUD", 36, "Australian Dollar", "A$", 2, "Australia", 0, "A$#,##0.00"),
+                (392, "JPY", 392, "Japanese Yen", "¥", 0, "Japan", 0, "¥#,##0"),
+                (756, "CHF", 756, "Swiss Franc", "CHF", 2, "Switzerland", 0, "CHF #,##0.00"),
+                (156, "CNY", 156, "Chinese Yuan", "¥", 2, "China", 0, "¥#,##0.00")
             };
+
             foreach (var c in sampleCurrencies)
             {
                 await currencies.AddRowAsync(new Row
                 {
+                    ["CurrencyKey"] = c.Key,
                     ["CurrencyCode"] = c.Code,
+                    ["NumericCode"] = c.NumCode,
                     ["CurrencyName"] = c.Name,
-                    ["Symbol"] = c.Sym
+                    ["Symbol"] = c.Sym,
+                    ["MinorUnitDigits"] = c.Digits,
+                    ["CountryName"] = c.Country,
+                    ["IsBaseCurrency"] = c.BaseCurr,
+                    ["StandardFormatPattern"] = c.Format
                 });
             }
             tables["Currencies"] = currencies;
             tables["DimCurrencies"] = currencies;
+            tables["Dim_Currencies"] = currencies;
 
-            // 12. Flags
+            // 12. Flags (Ultimate Flag / Boolean dimension)
             var flags = new DataTable();
-            flags.SetColumns(new[] { "FlagKey", "FlagValue", "FlagName", "YesNo", "ActiveInactive" });
-            await flags.AddRowAsync(new Row { ["FlagKey"] = 0, ["FlagValue"] = 0, ["FlagName"] = "False", ["YesNo"] = "No", ["ActiveInactive"] = "Inactive" });
-            await flags.AddRowAsync(new Row { ["FlagKey"] = 1, ["FlagValue"] = 1, ["FlagName"] = "True", ["YesNo"] = "Yes", ["ActiveInactive"] = "Active" });
+            flags.SetColumns(new[] { "FlagKey", "FlagValue", "FlagName", "YesNo", "YesNoChar", "ActiveInactive", "EnabledDisabled", "PassFail", "SuccessFailure", "IncludeExclude", "OnOff" });
+
+            await flags.AddRowAsync(new Row
+            {
+                ["FlagKey"] = -1, ["FlagValue"] = -1, ["FlagName"] = "Unknown", ["YesNo"] = "Unknown", ["YesNoChar"] = "U", ["ActiveInactive"] = "Unknown", ["EnabledDisabled"] = "Unknown", ["PassFail"] = "Unknown", ["SuccessFailure"] = "Unknown", ["IncludeExclude"] = "Unknown", ["OnOff"] = "Unknown"
+            });
+
+            await flags.AddRowAsync(new Row
+            {
+                ["FlagKey"] = 0, ["FlagValue"] = 0, ["FlagName"] = "False", ["YesNo"] = "No", ["YesNoChar"] = "N", ["ActiveInactive"] = "Inactive", ["EnabledDisabled"] = "Disabled", ["PassFail"] = "Fail", ["SuccessFailure"] = "Failure", ["IncludeExclude"] = "Exclude", ["OnOff"] = "Off"
+            });
+
+            await flags.AddRowAsync(new Row
+            {
+                ["FlagKey"] = 1, ["FlagValue"] = 1, ["FlagName"] = "True", ["YesNo"] = "Yes", ["YesNoChar"] = "Y", ["ActiveInactive"] = "Active", ["EnabledDisabled"] = "Enabled", ["PassFail"] = "Pass", ["SuccessFailure"] = "Success", ["IncludeExclude"] = "Include", ["OnOff"] = "On"
+            });
+
             tables["Flags"] = flags;
+            tables["DimFlags"] = flags;
+            tables["Dim_Flags"] = flags;
         }
     }
 }

@@ -2054,6 +2054,11 @@ public sealed record CompareDatasetsStatement(TableReference SourceTable, TableR
     public override IEnumerable<string> GetSourceTables() => new[] { SourceTable.TableName, BaselineTable.TableName };
 }
 
+public sealed record FillDatesStatement(TableReference SourceTable, string DateColumn, Expression GapFillValue, List<string> GroupColumns, TableReference TargetTable) : Statement
+{
+    public override IEnumerable<string> GetSourceTables() => new[] { SourceTable.TableName };
+}
+
 public sealed record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
 {
     public Expression Substring { get; } = substring;

@@ -12,6 +12,7 @@ Statement reference pages define the executable language surface.
 - [Execution Blocks](execution-blocks.md) - `RUN SCRIPT`, `EXEC`, and execution blocks.
 - [Procedures and Functions](procedures.md) - procedures and user-defined functions.
 - [Containerized Test Databases](use-docker.md) - `USE DOCKER` for ephemeral test databases.
+- [Data Prep Helpers](data-prep.md) - `GENERATE CALENDAR`, `FILL_DATES`, and `COMPARE DATASETS`.
 - [Session Control](session-control/help.md) - `HELP`, `LINT`, `EXPLAIN`, lineage, transactions, assertions, and diagnostics.
 
 Use the [Syntax Index](../../syntax-index.md) when you need to find the focused page for a command, clause, option, or visual type.

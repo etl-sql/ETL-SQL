@@ -94,6 +94,12 @@ namespace ETL_SQL.Connectors.MockDb
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
+            if (!string.IsNullOrWhiteSpace(_activeTable))
+            {
+                var declaredColumns = await GetColumnsAsync(_activeTable);
+                if (declaredColumns.Any()) return declaredColumns;
+            }
+
             await EnsureInitialized();
             await using var enumerator = ReadBatches(1).GetAsyncEnumerator();
             if (await enumerator.MoveNextAsync())
@@ -219,12 +225,24 @@ namespace ETL_SQL.Connectors.MockDb
         }
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
+            var declared = _seeder.GetDeclaredSchema();
+            if (declared.Count > 0)
+            {
+                return declared.Keys.Where(k => !k.Contains(".")).AsEnumerable();
+            }
+
             await EnsureInitialized();
             return _mockTables.Keys.Where(k => !k.Contains(".")).AsEnumerable();
         }
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
+            var declared = _seeder.GetDeclaredSchema();
+            if (declared.TryGetValue(tableName, out var columns))
+            {
+                return columns.Select(c => c.ColumnName);
+            }
+
             await EnsureInitialized();
             if (_mockTables.TryGetValue(tableName, out var dt))
             {

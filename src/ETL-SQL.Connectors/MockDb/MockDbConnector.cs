@@ -9,6 +9,8 @@ namespace ETL_SQL.Connectors.MockDb
 {
     public class MockDbConnector : IConnector
     {
+        private static readonly IMockDataSeeder SchemaSeeder = new MockDataSeeder();
+
         public string Name => "MOCKDB";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
@@ -26,17 +28,15 @@ namespace ETL_SQL.Connectors.MockDb
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
             => new MockSqlDataSource(context, connectionString, "MockDB", options, new MockDataSeeder());
 
-        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString)
-        {
-            var ds = new MockSqlDataSource(context, connectionString, "MockDB", null, new MockDataSeeder());
-            return await ds.GetTablesAsync();
-        }
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) =>
+            Task.FromResult(SchemaSeeder.GetDeclaredSchema().Keys.Where(k => !k.Contains(".")).AsEnumerable());
+
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName)
-        {
-            var ds = new MockSqlDataSource(context, connectionString, "MockDB", null, new MockDataSeeder());
-            return await ds.GetColumnsAsync(tableName);
-        }
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) =>
+            Task.FromResult(SchemaSeeder.GetDeclaredSchema().TryGetValue(tableName, out var columns)
+                ? columns.Select(c => c.ColumnName)
+                : Enumerable.Empty<string>());
+
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
     }
 }

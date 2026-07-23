@@ -128,6 +128,73 @@ public class DataParser : ParserComponent
         };
     }
 
+    public Statement ParseFillDates(Token startToken)
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after FILL_DATES");
+        var sourceTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+
+        string? dateColumn = null;
+        Expression? gapFill = null;
+        var groupColumns = new List<string>();
+
+        while (Match(TokenType.COMMA))
+        {
+            var option = ConsumeIdentifier("Expected FILL_DATES option name").Value;
+            Consume(TokenType.EQUALS, $"Expected '=' after {option}");
+            var value = ParseExpression();
+
+            if (option.Equals("DATE_COL", StringComparison.OrdinalIgnoreCase))
+            {
+                dateColumn = ExpressionToOptionString(value, "DATE_COL");
+            }
+            else if (option.Equals("GAPS_FILL", StringComparison.OrdinalIgnoreCase))
+            {
+                gapFill = value;
+            }
+            else if (option.Equals("BY_GROUP", StringComparison.OrdinalIgnoreCase))
+            {
+                var groups = ExpressionToOptionString(value, "BY_GROUP")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                groupColumns.AddRange(groups);
+            }
+            else
+            {
+                throw new SyntaxException($"Unknown FILL_DATES option: {option}", _parser.Current.Line, _parser.Current.Column);
+            }
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' after FILL_DATES options");
+        Consume(TokenType.INTO, "Expected 'INTO' after FILL_DATES(...)");
+        var targetTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        Match(TokenType.SEMICOLON);
+
+        if (string.IsNullOrWhiteSpace(dateColumn))
+        {
+            throw new SyntaxException("FILL_DATES requires DATE_COL = 'ColumnName'", startToken.Line, startToken.Column);
+        }
+
+        return new FillDatesStatement(
+            sourceTable,
+            dateColumn!,
+            gapFill ?? new LiteralExpression(0m, TokenType.NUMERIC),
+            groupColumns,
+            targetTable)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
+    }
+
+    private static string ExpressionToOptionString(Expression expression, string optionName)
+    {
+        return expression switch
+        {
+            LiteralExpression { Value: string s } => s,
+            IdentifierExpression c => c.Name,
+            _ => throw new SyntaxException($"{optionName} must be a string literal or identifier", expression.Line, expression.Column)
+        };
+    }
+
     public Statement ParseCreate(Token startToken)
     {
         bool orAlter = false, orReplace = false;

@@ -19,6 +19,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DELETE` | DML | [Statement Reference](reference/statements/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
 | `MERGE` | DML | [Statement Reference](reference/statements/README.md) | [MERGE.md](reference/statements/dml/merge.md) |
 | `TRUNCATE` | DML | [Statement Reference](reference/statements/README.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
+| `GENERATE CALENDAR` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `FILL_DATES` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
 | `DROP CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
