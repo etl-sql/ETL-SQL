@@ -132,6 +132,12 @@ changes safer.
 - [ ] **Compiled Regex Caching in `ExpressionEvaluator.cs`.**
       Compile `${@var}` interpolation regexes as `static readonly Regex` with `RegexOptions.Compiled`, accelerating inline variable substitution in tight expression loops.
 
+- [ ] **Portal Request-Scoped Group ID Caching in `FolderPermissionService.cs`.**
+      Cache user group IDs (`_cachedUserGroupIds`) on the scoped `FolderPermissionService` instance to eliminate duplicate DB queries to `UserGroups` during multi-folder and multi-report permission checks.
+
+- [ ] **High-Performance DateTime & SIMD Binary Equality in `EvaluationUtils.cs`.**
+      Optimize `IsSoftEqual` by replacing 6-property calendar conversions (`dta.Year == dtb.Year...`) with direct `DateTime` comparisons, and replace manual byte loops with SIMD-accelerated `MemoryExtensions.SequenceEqual`.
+
 ### Data Stewardship: Protected Data Audit Workflow
 
 - [x] **Script-first protected-data audit command.**
