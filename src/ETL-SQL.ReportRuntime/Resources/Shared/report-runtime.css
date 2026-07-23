@@ -30,9 +30,14 @@
   .header-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 500; background: #f0f4f8; color: #334155; }
   .header-badge.cert { background: #fef3c7; color: #92400e; }
   .header-badge.fresh { background: #dcfce7; color: #166534; }
+  .header-badge.fresh.stale { background: #fee2e2; color: #991b1b; }
+  .header-badge.fresh.unknown { background: #e5e7eb; color: #374151; }
+  .header-badge.tag { text-decoration: none; }
   .theme-dark .header-badge { background: #334155; color: #cbd5e1; }
   .theme-dark .header-badge.cert { background: #78350f; color: #fef3c7; }
   .theme-dark .header-badge.fresh { background: #14532d; color: #bbf7d0; }
+  .theme-dark .header-badge.fresh.stale { background: #7f1d1d; color: #fecaca; }
+  .theme-dark .header-badge.fresh.unknown { background: #374151; color: #d1d5db; }
 
   .header-actions { display: flex; align-items: center; gap: 6px; }
   .header-btn {

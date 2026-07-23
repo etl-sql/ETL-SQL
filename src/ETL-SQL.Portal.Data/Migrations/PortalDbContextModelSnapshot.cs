@@ -1070,6 +1070,56 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("ReportFavorites");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAccessRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DecidedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RequesterUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("RequesterUserId", "ReportId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.ToTable("ReportAccessRequests");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>
                 {
                     b.Property<int>("Id")
@@ -1751,6 +1801,32 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Navigation("Report");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAccessRequest", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.PortalUser", "DecidedBy")
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.Portal.Data.PortalUser", "Requester")
+                        .WithMany()
+                        .HasForeignKey("RequesterUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DecidedBy");
+
+                    b.Navigation("Report");
+
+                    b.Navigation("Requester");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>

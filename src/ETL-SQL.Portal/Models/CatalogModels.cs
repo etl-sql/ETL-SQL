@@ -19,7 +19,9 @@ public record CatalogSearchResultDto(
     bool? HasSnapshot,
     bool? IsStale,
     bool? ScriptChanged,
-    bool? IsFavorite);
+    bool? IsFavorite,
+    string? MatchReason = null,
+    double? Score = null);
 
 public record CatalogLineageHistoryDto(
     long Id,
@@ -131,13 +133,16 @@ public record ConsumerHomeDto(
     IReadOnlyList<CatalogSearchResultDto> Popular);
 
 public record ReportAccessInfoDto(
-    int ReportId,
-    string ReportName,
-    string FolderPath,
-    string Owner,
-    string Contact,
+    int? ReportId,
+    string? ReportName,
+    string? FolderPath,
+    string? Owner,
+    string? Contact,
     string? Description,
-    bool CanRequestAccess);
+    bool CanRequestAccess,
+    string Status = "Restricted",
+    int? ExistingRequestId = null,
+    string? ExistingRequestStatus = null);
 
 public record RequestReportAccessDto(
     string? Reason);

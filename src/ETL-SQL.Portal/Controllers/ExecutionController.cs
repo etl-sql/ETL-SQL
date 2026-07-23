@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
@@ -223,6 +224,7 @@ public class ExecutionController(
                 ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}",
             visualIndex => Url.Action(nameof(GetSnapshotArrowRows), new { id, visualIndex })
                 ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}.arrow");
+        json = EnrichManifestMetadata(json, resolved.Report!, resolved.Snapshot!);
         return Content(json, "application/json");
     }
 
@@ -258,16 +260,16 @@ public class ExecutionController(
             : File(table, "application/vnd.apache.arrow.stream");
     }
 
-    private async Task<(string? Key, IActionResult? Error)> ResolveReadableSnapshotKeyAsync(int id)
+    private async Task<(string? Key, Report? Report, ReportSnapshot? Snapshot, IActionResult? Error)> ResolveReadableSnapshotKeyAsync(int id)
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
-        if (report is null) return (null, NotFound());
+        if (report is null) return (null, null, null, NotFound());
 
         var perm = await GetEffectivePermissionAsync(report.FolderId);
-        if (perm is null) return (null, Forbid());
+        if (perm is null) return (null, null, null, Forbid());
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
-            return (null, Forbid());
+            return (null, null, null, Forbid());
 
         var snapshot = await db.ReportSnapshots
             .Where(s => s.ReportId == id)
@@ -275,16 +277,33 @@ public class ExecutionController(
             .FirstOrDefaultAsync();
 
         if (snapshot is null)
-            return (null, NotFound(new { error = "No snapshot available." }));
+            return (null, null, null, NotFound(new { error = "No snapshot available." }));
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
-            return (null, Forbid());
+            return (null, null, null, Forbid());
 
         if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
-            return (null, NotFound(new { error = "No snapshot available." }));
+            return (null, null, null, NotFound(new { error = "No snapshot available." }));
 
-        return (manifestKey, null);
+        return (manifestKey, report, snapshot, null);
+    }
+
+    private static string EnrichManifestMetadata(string json, Report report, ReportSnapshot snapshot)
+    {
+        var node = JsonNode.Parse(json)?.AsObject();
+        if (node is null)
+            return json;
+
+        node["owner"] = string.IsNullOrWhiteSpace(report.Owner) ? null : report.Owner;
+        node["contact"] = string.IsNullOrWhiteSpace(report.Contact) ? null : report.Contact;
+        node["steward"] = string.IsNullOrWhiteSpace(report.Steward) ? null : report.Steward;
+        node["certification"] = string.IsNullOrWhiteSpace(report.Certification) ? null : report.Certification;
+        node["tags"] = string.IsNullOrWhiteSpace(report.Tags) ? null : report.Tags;
+        node["lastRefreshed"] = snapshot.BuiltAt.ToUniversalTime().ToString("O");
+        node["freshnessStatus"] = report.ScriptLastModified > snapshot.BuiltAt ? "stale" : "fresh";
+
+        return node.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
     // ── 2.4  POST /api/reports/{id}/refresh ──────────────────────────────────

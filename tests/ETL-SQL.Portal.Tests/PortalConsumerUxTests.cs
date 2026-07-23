@@ -1,8 +1,17 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json.Nodes;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Portal.Controllers;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
+using ETL_SQL.Portal.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace ETL_SQL.Portal.Tests;
@@ -88,5 +97,177 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         await EnsureAuthenticatedAsync();
         var response = await _client.PostAsJsonAsync("/api/reports/99999/request-access", new RequestReportAccessDto("Need access"));
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AccessInfo_ForRestrictedReport_DoesNotLeakMetadata()
+    {
+        await using var db = await CreateDbAsync();
+        var report = await SeedReportAsync(db);
+        var controller = CreateReportsController(db, userId: 2);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetAccessInfo(report.Id));
+        var info = Assert.IsType<ReportAccessInfoDto>(result.Value);
+
+        Assert.Null(info.ReportId);
+        Assert.Null(info.ReportName);
+        Assert.Null(info.FolderPath);
+        Assert.Null(info.Description);
+        Assert.True(info.CanRequestAccess);
+        Assert.Equal("Restricted", info.Status);
+    }
+
+    [Fact]
+    public async Task RequestAccess_DeduplicatesPendingRequest()
+    {
+        await using var db = await CreateDbAsync();
+        var report = await SeedReportAsync(db);
+        var controller = CreateReportsController(db, userId: 2);
+
+        var first = Assert.IsType<OkObjectResult>(
+            await controller.RequestAccess(report.Id, new RequestReportAccessDto("Need Q3 sales")));
+        var second = Assert.IsType<OkObjectResult>(
+            await controller.RequestAccess(report.Id, new RequestReportAccessDto("Need Q3 sales again")));
+
+        Assert.Equal(1, await db.ReportAccessRequests.CountAsync(r => r.ReportId == report.Id && r.RequesterUserId == 2));
+        Assert.Contains("Access request submitted", first.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already pending", second.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Search_ReturnsMatchReason()
+    {
+        await using var db = await CreateDbAsync();
+        await SeedReportAsync(db, name: "RPT_2026_SALES_Q3_FINAL", tags: "#sales,#inventory");
+        var controller = CreateCatalogController(db, userId: 1, isAdmin: true);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Search("Slaes"));
+        var items = Assert.IsAssignableFrom<IEnumerable<CatalogSearchResultDto>>(result.Value);
+        var report = Assert.Single(items, i => i.Type == "Report");
+
+        Assert.True(report.Score > 0);
+        Assert.False(string.IsNullOrWhiteSpace(report.MatchReason));
+    }
+
+    [Fact]
+    public async Task Recent_IsScopedToCurrentUser()
+    {
+        await using var db = await CreateDbAsync();
+        var first = await SeedReportAsync(db, name: "User One Report");
+        var second = await SeedReportAsync(db, name: "User Two Report");
+        db.AuditLogs.AddRange(
+            new AuditLog { UserId = 1, Action = "VIEW_SNAPSHOT", ResourceType = "Report", ResourceId = first.Id.ToString(), Timestamp = DateTime.UtcNow.AddMinutes(-1) },
+            new AuditLog { UserId = 2, Action = "VIEW_SNAPSHOT", ResourceType = "Report", ResourceId = second.Id.ToString(), Timestamp = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var controller = CreateCatalogController(db, userId: 1, isAdmin: true);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Recent());
+        var items = Assert.IsAssignableFrom<IEnumerable<CatalogSearchResultDto>>(result.Value).ToList();
+
+        Assert.Contains(items, item => item.Id == first.Id);
+        Assert.DoesNotContain(items, item => item.Id == second.Id);
+    }
+
+    private static async Task<PortalDbContext> CreateDbAsync()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"portal-consumer-ux-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .Options;
+        var db = new PortalDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.Users.AddRange(
+            new PortalUser { Id = 1, UserName = "admin", NormalizedUserName = "ADMIN", Email = "admin@example.invalid" },
+            new PortalUser { Id = 2, UserName = "consumer", NormalizedUserName = "CONSUMER", Email = "consumer@example.invalid" });
+        await db.SaveChangesAsync();
+        return db;
+    }
+
+    private static async Task<Report> SeedReportAsync(
+        PortalDbContext db,
+        string name = "Restricted Sales",
+        string? tags = "#sales")
+    {
+        var folder = new Folder { Name = $"Folder {Guid.NewGuid():N}", Path = $"/Secure/{Guid.NewGuid():N}", OwnerId = 1 };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        var report = new Report
+        {
+            FolderId = folder.Id,
+            Name = name,
+            Description = "Executive restricted sales report",
+            Owner = "Finance",
+            Contact = "finance@example.invalid",
+            Tags = tags,
+            ScriptPath = "sales.rptsql",
+            ScriptLastModified = DateTime.UtcNow,
+            CreatedBy = 1
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+        return report;
+    }
+
+    private static ReportsController CreateReportsController(PortalDbContext db, int userId, bool isAdmin = false)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = Principal(userId, isAdmin),
+            TraceIdentifier = $"test-{Guid.NewGuid():N}"
+        };
+        var audit = new AuditService(db, new HttpContextAccessor { HttpContext = context });
+        var controller = new ReportsController(
+            db,
+            audit,
+            new PortalConfig(),
+            new EmptyLineageCatalogStore(),
+            new FolderPermissionService(db),
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!);
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+        return controller;
+    }
+
+    private static CatalogController CreateCatalogController(PortalDbContext db, int userId, bool isAdmin = false)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = Principal(userId, isAdmin),
+            TraceIdentifier = $"test-{Guid.NewGuid():N}"
+        };
+        var controller = new CatalogController(db, new EmptyLineageCatalogStore());
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+        return controller;
+    }
+
+    private static ClaimsPrincipal Principal(int userId, bool isAdmin = false)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userId.ToString()) };
+        if (isAdmin)
+            claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private sealed class EmptyLineageCatalogStore : ILineageCatalogStore
+    {
+        public Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt) => Task.CompletedTask;
+        public Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100) => Empty();
+        public Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100) => Empty();
+        public Task<IEnumerable<LineageMissingMetadataEntry>> GetMissingMetadataAsync(IReadOnlyCollection<string> requiredTags, int limit = 100) =>
+            Task.FromResult<IEnumerable<LineageMissingMetadataEntry>>([]);
+        public Task<IEnumerable<LineageHistoryEntry>> GetRecentLineageAsync(int limit = 1000) => Empty();
+        public Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100) => Empty();
+        public Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100) => Empty();
+        public Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100) => Empty();
+
+        private static Task<IEnumerable<LineageHistoryEntry>> Empty() =>
+            Task.FromResult<IEnumerable<LineageHistoryEntry>>([]);
     }
 }

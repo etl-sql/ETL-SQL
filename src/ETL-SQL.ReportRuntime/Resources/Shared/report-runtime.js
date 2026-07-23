@@ -702,8 +702,6 @@
     // ── Header & Actions ──────────────────────────────────────────────────
 
     function renderHeader(container, manifest) {
-        if (!vscode) return; // Only show in VS Code mode (preview)
-
         const header = document.createElement('header');
         header.className = 'report-header';
 
@@ -715,15 +713,18 @@
         `;
 
         const badges = [];
-        if (manifest.owner) badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner)}</span>`);
+        badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner || 'Owner unknown')}</span>`);
         if (manifest.steward) badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
         if (manifest.certification) badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
-        if (manifest.lastRefreshed) badges.push(`<span class="header-badge fresh" title="Last Refreshed">🕒 ${escHtml(manifest.lastRefreshed)}</span>`);
+        const rawFreshnessStatus = String(manifest.freshnessStatus || (manifest.lastRefreshed || manifest.builtAt ? 'fresh' : 'unknown')).toLowerCase();
+        const freshnessStatus = ['fresh', 'stale', 'unknown'].includes(rawFreshnessStatus) ? rawFreshnessStatus : 'unknown';
+        const freshnessText = manifest.lastRefreshed || manifest.builtAt || 'Freshness unknown';
+        badges.push(`<span class="header-badge fresh ${freshnessStatus}" title="Freshness: ${escHtml(freshnessStatus)}">🕒 ${escHtml(freshnessText)}</span>`);
         if (manifest.tags) {
             const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
             tagList.forEach(t => {
                 const tagStr = t.trim();
-                if (tagStr) badges.push(`<span class="header-badge tag" title="Tag">🏷️ ${escHtml(tagStr)}</span>`);
+                if (tagStr) badges.push(`<a class="header-badge tag" title="Search tag" href="/?search=${encodeURIComponent(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
             });
         }
 
@@ -737,39 +738,41 @@
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 
-        const openBtn = document.createElement('button');
-        openBtn.className = 'header-btn primary';
-        openBtn.title = 'Open interactive report in browser';
-        openBtn.textContent = 'Open';
-        openBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'serve' });
-        });
-        actions.appendChild(openBtn);
+        if (vscode) {
+            const openBtn = document.createElement('button');
+            openBtn.className = 'header-btn primary';
+            openBtn.title = 'Open interactive report in browser';
+            openBtn.textContent = 'Open';
+            openBtn.addEventListener('click', () => {
+                vscode.postMessage({ type: 'serve' });
+            });
+            actions.appendChild(openBtn);
 
-        const pdfBtn = document.createElement('button');
-        pdfBtn.className = 'header-btn';
-        pdfBtn.title = 'Export to PDF';
-        pdfBtn.textContent = 'PDF';
-        pdfBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportReport', format: 'pdf' });
-        });
-        actions.appendChild(pdfBtn);
+            const pdfBtn = document.createElement('button');
+            pdfBtn.className = 'header-btn';
+            pdfBtn.title = 'Export to PDF';
+            pdfBtn.textContent = 'PDF';
+            pdfBtn.addEventListener('click', () => {
+                vscode.postMessage({ type: 'exportReport', format: 'pdf' });
+            });
+            actions.appendChild(pdfBtn);
 
-        const mdBtn = document.createElement('button');
-        mdBtn.className = 'header-btn';
-        mdBtn.title = 'Export to Markdown';
-        mdBtn.textContent = 'MD';
-        mdBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportReport', format: 'markdown' });
-        });
-        actions.appendChild(mdBtn);
+            const mdBtn = document.createElement('button');
+            mdBtn.className = 'header-btn';
+            mdBtn.title = 'Export to Markdown';
+            mdBtn.textContent = 'MD';
+            mdBtn.addEventListener('click', () => {
+                vscode.postMessage({ type: 'exportReport', format: 'markdown' });
+            });
+            actions.appendChild(mdBtn);
 
-        const publishBtn = document.createElement('button');
-        publishBtn.className = 'header-btn';
-        publishBtn.title = 'Publish to Portal';
-        publishBtn.textContent = 'Publish';
-        publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
-        actions.appendChild(publishBtn);
+            const publishBtn = document.createElement('button');
+            publishBtn.className = 'header-btn';
+            publishBtn.title = 'Publish to Portal';
+            publishBtn.textContent = 'Publish';
+            publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
+            actions.appendChild(publishBtn);
+        }
 
         header.appendChild(left);
         header.appendChild(actions);

@@ -351,13 +351,14 @@ public class ReportsController : ControllerBase
         if (perm is null)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new ReportAccessInfoDto(
-                report.Id,
-                report.Name,
-                report.Folder?.Path ?? "",
-                report.Owner ?? "Report Administrator",
-                report.Contact ?? "admin@company.com",
-                report.Description,
-                CanRequestAccess: true));
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                CanRequestAccess: true,
+                Status: "Restricted"));
         }
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
@@ -374,14 +375,41 @@ public class ReportsController : ControllerBase
 
         if (report is null) return NotFound();
 
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var pending = await db.ReportAccessRequests
+            .AsNoTracking()
+            .Where(r => r.ReportId == id
+                && r.RequesterUserId == CurrentUserId
+                && r.Status == "Pending")
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (perm is null)
+        {
+            return Ok(new ReportAccessInfoDto(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                CanRequestAccess: true,
+                Status: "Restricted",
+                ExistingRequestId: pending?.Id,
+                ExistingRequestStatus: pending?.Status));
+        }
+
         return Ok(new ReportAccessInfoDto(
             report.Id,
             report.Name,
             report.Folder?.Path ?? "",
-            report.Owner ?? "Report Administrator",
-            report.Contact ?? "admin@company.com",
+            report.Owner ?? "Owner unknown",
+            report.Contact,
             report.Description,
-            CanRequestAccess: true));
+            CanRequestAccess: false,
+            Status: "HasAccess",
+            ExistingRequestId: pending?.Id,
+            ExistingRequestStatus: pending?.Status));
     }
 
     [HttpPost("reports/{id:int}/request-access")]
@@ -393,28 +421,116 @@ public class ReportsController : ControllerBase
 
         if (report is null) return NotFound();
 
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is not null)
+        {
+            return Ok(new
+            {
+                message = "You already have access to this report.",
+                reportId = report.Id,
+                reportName = report.Name,
+                owner = report.Owner ?? report.Contact ?? "Owner unknown",
+                status = "HasAccess",
+                requestId = (int?)null
+            });
+        }
+
+        var existing = await db.ReportAccessRequests
+            .Where(r => r.ReportId == id
+                && r.RequesterUserId == CurrentUserId
+                && r.Status == "Pending")
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync();
+        if (existing is not null)
+        {
+            return Ok(new
+            {
+                message = "Access request is already pending.",
+                reportId = (int?)null,
+                reportName = (string?)null,
+                owner = (string?)null,
+                status = "Pending",
+                requestId = existing.Id
+            });
+        }
+
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == CurrentUserId);
         var requesterName = user?.UserName ?? $"User {CurrentUserId}";
         var reasonText = string.IsNullOrWhiteSpace(req?.Reason) ? "No reason specified" : req.Reason.Trim();
+        if (reasonText.Length > 1000)
+            reasonText = reasonText[..1000];
+        var now = DateTime.UtcNow;
+        var accessRequest = new ReportAccessRequest
+        {
+            ReportId = report.Id,
+            RequesterUserId = CurrentUserId,
+            Status = "Pending",
+            Reason = reasonText,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
 
-        await using var tx = await db.Database.BeginTransactionAsync();
-        audit.Stage(
-            CurrentUserId,
-            "REQUEST_REPORT_ACCESS",
-            "Report",
-            report.Id.ToString(),
-            $"Access requested for '{report.Name}' by {requesterName}. Reason: {reasonText}");
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
+        await using (var tx = await db.Database.BeginTransactionAsync())
+        {
+            db.ReportAccessRequests.Add(accessRequest);
+            audit.Stage(
+                CurrentUserId,
+                "REQUEST_REPORT_ACCESS",
+                "Report",
+                report.Id.ToString(),
+                $"Access requested by {requesterName}. Reason: {reasonText}");
+            audit.Stage(
+                CurrentUserId,
+                "NOTIFY_REPORT_ACCESS_OWNER",
+                "Report",
+                report.Id.ToString(),
+                $"Notify owner/contact for access request by {requesterName}.");
+            try
+            {
+                await db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch (DbUpdateException ex) when (IsPendingAccessRequestConflict(ex))
+            {
+                await tx.RollbackAsync();
+                db.ChangeTracker.Clear();
+                var raceExisting = await db.ReportAccessRequests
+                    .AsNoTracking()
+                    .Where(r => r.ReportId == id
+                        && r.RequesterUserId == CurrentUserId
+                        && r.Status == "Pending")
+                    .OrderByDescending(r => r.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                return Ok(new
+                {
+                    message = "Access request is already pending.",
+                    reportId = (int?)null,
+                    reportName = (string?)null,
+                    owner = (string?)null,
+                    status = "Pending",
+                    requestId = raceExisting?.Id
+                });
+            }
+        }
 
         return Ok(new
         {
-            message = $"Access request for '{report.Name}' submitted to report owner ({report.Owner ?? report.Contact ?? "System Admin"}).",
-            reportId = report.Id,
-            reportName = report.Name,
-            owner = report.Owner ?? report.Contact ?? "System Admin",
-            status = "PENDING_APPROVAL"
+            message = "Access request submitted.",
+            reportId = (int?)null,
+            reportName = (string?)null,
+            owner = (string?)null,
+            status = "Pending",
+            requestId = accessRequest.Id
         });
+    }
+
+    private static bool IsPendingAccessRequestConflict(DbUpdateException ex)
+    {
+        var text = ex.ToString();
+        return text.Contains("IX_ReportAccessRequests_RequesterUserId_ReportId", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("ReportAccessRequests", StringComparison.OrdinalIgnoreCase)
+                && text.Contains("unique", StringComparison.OrdinalIgnoreCase);
     }
 
     // ── GET /api/reports/{id}/dependencies ───────────────────────────────────

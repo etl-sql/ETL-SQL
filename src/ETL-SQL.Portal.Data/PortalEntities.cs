@@ -147,6 +147,23 @@ public class ReportFavorite
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+public class ReportAccessRequest
+{
+    public int Id { get; set; }
+    public int ReportId { get; set; }
+    public Report Report { get; set; } = null!;
+    public int RequesterUserId { get; set; }
+    public PortalUser Requester { get; set; } = null!;
+    public string Status { get; set; } = "Pending";
+    public string? Reason { get; set; }
+    public string? DecisionReason { get; set; }
+    public int? DecidedByUserId { get; set; }
+    public PortalUser? DecidedBy { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DecidedAt { get; set; }
+}
+
 public class ReportShareLink
 {
     public int Id { get; set; }

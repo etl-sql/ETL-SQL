@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
@@ -42,7 +43,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .ToListAsync();
 
         var remaining = limit - folders.Count;
-        List<Report> reports;
+        List<(Report Report, CatalogMatch Match)> reports;
 
         if (remaining > 0)
         {
@@ -63,29 +64,33 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
                 .Take(remaining * 2)
                 .ToListAsync();
 
-            var allCandidates = likeReports.Count < remaining
+            var fallbackCandidates = likeReports.Count == 0
                 ? await VisibleReportsQuery()
                     .AsNoTracking()
                     .Include(r => r.Folder)
                     .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-                    .OrderByDescending(r => r.LastViewedAt)
-                    .Take(100)
+                    .OrderByDescending(r => r.UpdatedAt)
+                    .Take(500)
                     .ToListAsync()
-                : likeReports;
+                : [];
+
+            var allCandidates = likeReports
+                .Concat(fallbackCandidates)
+                .DistinctBy(r => r.Id)
+                .ToList();
+            var lineageTerms = await BuildReportLineageTermsAsync(allCandidates.Select(r => r.Id).ToHashSet());
 
             reports = allCandidates
-                .Select(r => new { Report = r, Score = ComputeFuzzyScore(r, queryTokens) })
-                .Where(x => x.Score > 0.05)
-                .OrderByDescending(x => x.Score)
+                .Select(r => (Report: r, Match: ComputeCatalogMatch(r, queryTokens, lineageTerms.TryGetValue(r.Id, out var terms) ? terms : [])))
+                .Where(x => x.Match.Score > 0.05)
+                .OrderByDescending(x => x.Match.Score)
                 .ThenBy(x => x.Report.Name)
-                .Select(x => x.Report)
-                .DistinctBy(r => r.Id)
                 .Take(remaining)
                 .ToList();
         }
         else
         {
-            reports = new List<Report>();
+            reports = new List<(Report Report, CatalogMatch Match)>();
         }
 
         var favoriteIds = await GetFavoriteReportIdsAsync();
@@ -93,8 +98,8 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         var results = folders
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null))
-            .Concat(reports.Select(r => ToCatalogResult(r, favoriteIds)))
+                null, null, null, null, null, null, null, null, null, "matched folder", 1.0))
+            .Concat(reports.Select(r => ToCatalogResult(r.Report, favoriteIds, r.Match.Reason, r.Match.Score)))
             .ToList();
 
         return Ok(results);
@@ -118,14 +123,35 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .Take(limit)
             .ToListAsync();
 
-        var recentReports = await VisibleReportsQuery()
+        var recentReportIds = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.UserId == CurrentUserId
+                && log.Action == "VIEW_SNAPSHOT"
+                && log.ResourceType == "Report"
+                && log.ResourceId != null)
+            .GroupBy(log => log.ResourceId!)
+            .Select(g => new { ResourceId = g.Key, LastViewedAt = g.Max(log => log.Timestamp) })
+            .OrderByDescending(x => x.LastViewedAt)
+            .Take(limit * 4)
+            .ToListAsync();
+        var recentIds = recentReportIds
+            .Select(x => int.TryParse(x.ResourceId, out var reportId) ? reportId : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        var recentReports = recentIds.Count == 0
+            ? []
+            : await VisibleReportsQuery()
             .AsNoTracking()
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .Where(r => r.LastViewedAt != null)
-            .OrderByDescending(r => r.LastViewedAt)
-            .Take(limit)
+            .Where(r => recentIds.Contains(r.Id))
             .ToListAsync();
+        var recentOrder = recentIds.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+        recentReports = recentReports
+            .OrderBy(r => recentOrder.TryGetValue(r.Id, out var idx) ? idx : int.MaxValue)
+            .Take(limit)
+            .ToList();
 
         var featuredReports = await VisibleReportsQuery()
             .AsNoTracking()
@@ -136,13 +162,44 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .Take(limit)
             .ToListAsync();
 
-        var popularReports = await VisibleReportsQuery()
+        var popularReportIds = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.Action == "VIEW_SNAPSHOT"
+                && log.ResourceType == "Report"
+                && log.ResourceId != null)
+            .GroupBy(log => log.ResourceId!)
+            .Select(g => new { ResourceId = g.Key, ViewCount = g.Count(), LastViewedAt = g.Max(log => log.Timestamp) })
+            .OrderByDescending(x => x.ViewCount)
+            .ThenByDescending(x => x.LastViewedAt)
+            .Take(limit * 4)
+            .ToListAsync();
+        var popularIds = popularReportIds
+            .Select(x => int.TryParse(x.ResourceId, out var reportId) ? reportId : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        var popularReports = popularIds.Count == 0
+            ? await VisibleReportsQuery()
+                .AsNoTracking()
+                .Include(r => r.Folder)
+                .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+                .OrderByDescending(r => r.LastRefreshCompletedAt ?? r.UpdatedAt)
+                .Take(limit)
+                .ToListAsync()
+            : await VisibleReportsQuery()
             .AsNoTracking()
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .OrderByDescending(r => r.LastRefreshCompletedAt ?? r.UpdatedAt)
-            .Take(limit)
+            .Where(r => popularIds.Contains(r.Id))
             .ToListAsync();
+        if (popularIds.Count > 0)
+        {
+            var popularOrder = popularIds.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+            popularReports = popularReports
+                .OrderBy(r => popularOrder.TryGetValue(r.Id, out var idx) ? idx : int.MaxValue)
+                .Take(limit)
+                .ToList();
+        }
 
         var favDtos = favReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
         var recentDtos = recentReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
@@ -157,15 +214,36 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     {
         limit = Math.Clamp(limit, 1, 100);
 
-        var reports = await VisibleReportsQuery()
+        var recentReportIds = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.UserId == CurrentUserId
+                && log.Action == "VIEW_SNAPSHOT"
+                && log.ResourceType == "Report"
+                && log.ResourceId != null)
+            .GroupBy(log => log.ResourceId!)
+            .Select(g => new { ResourceId = g.Key, LastViewedAt = g.Max(log => log.Timestamp) })
+            .OrderByDescending(x => x.LastViewedAt)
+            .Take(limit * 4)
+            .ToListAsync();
+        var recentIds = recentReportIds
+            .Select(x => int.TryParse(x.ResourceId, out var reportId) ? reportId : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        var reports = recentIds.Count == 0
+            ? []
+            : await VisibleReportsQuery()
             .AsNoTracking()
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .Where(r => r.LastViewedAt != null)
-            .OrderByDescending(r => r.LastViewedAt)
+            .Where(r => recentIds.Contains(r.Id))
+            .ToListAsync();
+        var recentOrder = recentIds.Select((id, idx) => (id, idx)).ToDictionary(x => x.id, x => x.idx);
+        reports = reports
+            .OrderBy(r => recentOrder.TryGetValue(r.Id, out var idx) ? idx : int.MaxValue)
             .ThenBy(r => r.Name)
             .Take(limit)
-            .ToListAsync();
+            .ToList();
         var favoriteIds = await GetFavoriteReportIdsAsync();
 
         return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
@@ -634,7 +712,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return int.TryParse(idText, out var id) ? id : null;
     }
 
-    private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds)
+    private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds, string? matchReason = null, double? score = null)
     {
         var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
         var isStale = snapshot is not null && r.ScriptLastModified > snapshot.BuiltAt;
@@ -659,55 +737,103 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             snapshot is not null,
             isStale,
             scriptChanged,
-            favoriteIds.Contains(r.Id));
+            favoriteIds.Contains(r.Id),
+            matchReason,
+            score);
     }
 
-    private static double ComputeFuzzyScore(Report r, string[] tokens)
+    private async Task<Dictionary<int, IReadOnlyList<string>>> BuildReportLineageTermsAsync(ISet<int> reportIds)
     {
-        if (tokens.Length == 0) return 0;
-        var textTargets = new[]
+        if (reportIds.Count == 0)
+            return [];
+
+        var entries = await lineageCatalog.GetRecentLineageAsync(Math.Max(1000, reportIds.Count * 20));
+        return entries
+            .Select(e => new { ReportId = TryParseReportId(e.JobName), Entry = e })
+            .Where(x => x.ReportId.HasValue && reportIds.Contains(x.ReportId.Value))
+            .GroupBy(x => x.ReportId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.SelectMany(x => new[]
+                    {
+                        x.Entry.TargetTable,
+                        x.Entry.TargetColumn,
+                        x.Entry.TransformationKind,
+                        x.Entry.TransformationExpression,
+                        x.Entry.DerivedFromDescriptions
+                    }
+                    .Concat(x.Entry.SourceTables)
+                    .Concat(x.Entry.SourceColumns ?? [])
+                    .Concat(x.Entry.FunctionsApplied ?? [])
+                    .Concat(x.Entry.Tags.SelectMany(tag => new[] { tag.Key, tag.Value })))
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+    }
+
+    private sealed record CatalogMatch(double Score, string Reason);
+
+    private static CatalogMatch ComputeCatalogMatch(Report r, string[] tokens, IReadOnlyList<string> lineageTerms)
+    {
+        if (tokens.Length == 0) return new CatalogMatch(0, "no match");
+
+        var weightedTargets = new (string? Text, double Weight, string Reason)[]
         {
-            r.Name,
-            r.Description,
-            r.Folder?.Path,
-            r.Tags,
-            r.Category,
-            r.Owner,
-            r.Contact,
-            r.Domain,
-            r.Steward,
-            r.Certification
-        };
+            (r.Name, 1.00, "matched title"),
+            (r.Description, 0.78, "matched description"),
+            (r.Tags, 0.74, "matched tag"),
+            (r.Category, 0.68, "matched category"),
+            (r.Owner, 0.64, "matched owner"),
+            (r.Contact, 0.62, "matched contact"),
+            (r.Domain, 0.60, "matched domain"),
+            (r.Steward, 0.60, "matched steward"),
+            (r.Certification, 0.58, "matched certification"),
+            (r.Folder?.Path, 0.45, "matched folder")
+        }.Concat(lineageTerms.Select(term => ((string?)term, 0.52, "matched metric or column"))).ToArray();
 
         double totalScore = 0;
+        string bestReason = "matched report";
         foreach (var token in tokens)
         {
             double bestTokenScore = 0;
-            foreach (var target in textTargets)
+            string? tokenReason = null;
+            foreach (var target in weightedTargets)
             {
-                if (string.IsNullOrWhiteSpace(target)) continue;
-                var words = target.Split([' ', '_', '-', '/', '\\', '.', ','], StringSplitOptions.RemoveEmptyEntries);
+                if (string.IsNullOrWhiteSpace(target.Item1)) continue;
+                var words = target.Item1.Split([' ', '_', '-', '/', '\\', '.', ',', ':', ';'], StringSplitOptions.RemoveEmptyEntries);
                 foreach (var word in words)
                 {
-                    if (word.Equals(token, StringComparison.OrdinalIgnoreCase))
-                        bestTokenScore = Math.Max(bestTokenScore, 1.0);
+                    double candidate = 0;
+                    if (target.Item1.Equals(token, StringComparison.OrdinalIgnoreCase))
+                        candidate = 1.25;
+                    else if (word.Equals(token, StringComparison.OrdinalIgnoreCase))
+                        candidate = 1.0;
                     else if (word.Contains(token, StringComparison.OrdinalIgnoreCase) || token.Contains(word, StringComparison.OrdinalIgnoreCase))
-                        bestTokenScore = Math.Max(bestTokenScore, 0.85);
+                        candidate = 0.85;
                     else if (token.Length >= 3 && word.Length >= 3)
                     {
                         int dist = ComputeLevenshtein(token.ToLowerInvariant(), word.ToLowerInvariant());
                         if (dist <= 2)
                         {
                             double sim = 1.0 - ((double)dist / Math.Max(token.Length, word.Length));
-                            bestTokenScore = Math.Max(bestTokenScore, sim * 0.75);
+                            candidate = sim * 0.75;
                         }
+                    }
+
+                    candidate *= target.Item2;
+                    if (candidate > bestTokenScore)
+                    {
+                        bestTokenScore = candidate;
+                        tokenReason = target.Item3;
                     }
                 }
             }
+            if (bestTokenScore > 0 && tokenReason is not null)
+                bestReason = tokenReason;
             totalScore += bestTokenScore;
         }
 
-        return totalScore / tokens.Length;
+        return new CatalogMatch(totalScore / tokens.Length, bestReason);
     }
 
     private static int ComputeLevenshtein(string a, string b)

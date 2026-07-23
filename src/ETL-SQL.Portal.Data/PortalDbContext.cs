@@ -27,6 +27,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
+    public DbSet<ReportAccessRequest> ReportAccessRequests => Set<ReportAccessRequest>();
     public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
@@ -128,6 +129,22 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => new { x.UserId, x.ReportId }).IsUnique();
             e.HasOne(x => x.User).WithMany(u => u.ReportFavorites).HasForeignKey(x => x.UserId);
             e.HasOne(x => x.Report).WithMany(r => r.Favorites).HasForeignKey(x => x.ReportId);
+        });
+
+        builder.Entity<ReportAccessRequest>(e =>
+        {
+            e.HasIndex(x => new { x.RequesterUserId, x.ReportId })
+                .IsUnique()
+                .HasFilter("\"Status\" = 'Pending'");
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.Reason).HasMaxLength(1000);
+            e.Property(x => x.DecisionReason).HasMaxLength(1000);
+            e.HasOne(x => x.Requester).WithMany().HasForeignKey(x => x.RequesterUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.DecidedBy).WithMany().HasForeignKey(x => x.DecidedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Report).WithMany().HasForeignKey(x => x.ReportId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<ReportShareLink>(e =>
