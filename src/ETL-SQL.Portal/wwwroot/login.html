@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -21,7 +21,7 @@
     <!-- Login form -->
     <div id="loginForm">
       <label for="username">Username</label>
-      <input id="username" type="text" autocomplete="username">
+      <input id="username" type="text" autocomplete="username" autofocus>
 
       <label for="password">Password</label>
       <input id="password" type="password" autocomplete="current-password">
@@ -96,6 +96,13 @@ function clearError() { $err.classList.remove('show'); }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
 document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('username')?.focus();
+document.getElementById('username')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('password').value) doLogin();
+    else document.getElementById('password').focus();
+  }
+});
 document.getElementById('password').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
