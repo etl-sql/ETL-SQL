@@ -22,14 +22,14 @@ public class MockDbDimensionTests
         // Verify Numbers
         Assert.True(tables.ContainsKey("Numbers"));
         var numbers = tables["Numbers"];
-        Assert.Equal(1000, numbers.Rows.Count);
+        Assert.Equal(1000000, numbers.Rows.Count);
         Assert.Equal(1, Convert.ToInt32(numbers.Rows[0]["Number"]));
-        Assert.Equal(1000, Convert.ToInt32(numbers.Rows[999]["Number"]));
+        Assert.Equal(1000000, Convert.ToInt32(numbers.Rows[999999]["Number"]));
 
         // Verify Dates
         Assert.True(tables.ContainsKey("Dates"));
         var dates = tables["Dates"];
-        Assert.True(dates.Rows.Count >= 3650); // 10 years of dates
+        Assert.True(dates.Rows.Count >= 73000); // 200 years of dates (1900 to 2100)
         Assert.True(tables.ContainsKey("DimDate"));
 
         // Verify Times

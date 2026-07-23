@@ -323,44 +323,29 @@ namespace ETL_SQL.Connectors.MockDb
             tables["departments"] = deptTable;
             tables["hr.departments"] = deptTable;
 
-            // 7. Numbers (Tally dimension)
-            var numbers = new DataTable();
-            numbers.SetColumns(new[] { "Number", "IsEven", "IsOdd" });
-            for (int i = 1; i <= 1000; i++)
+            // 7. Numbers (Tally dimension - 1,000,000 numbers)
+            var numbersSchema = new TableSchema(new[] { "Number", "IsEven", "IsOdd" });
+            var numbers = new DataTable { Schema = numbersSchema };
+            for (int i = 1; i <= 1000000; i++)
             {
-                await numbers.AddRowAsync(new Row
-                {
-                    ["Number"] = i,
-                    ["IsEven"] = i % 2 == 0 ? 1 : 0,
-                    ["IsOdd"] = i % 2 != 0 ? 1 : 0
-                });
+                numbers.Rows.Add(new Row(numbersSchema, new object?[] { i, i % 2 == 0 ? 1 : 0, i % 2 != 0 ? 1 : 0 }));
             }
             tables["Numbers"] = numbers;
             tables["DimNumbers"] = numbers;
             tables["Dim_Numbers"] = numbers;
             tables["Tally"] = numbers;
 
-            // 8. Dates (Date dimension - 10 year range 2020-2029)
-            var dates = new DataTable();
-            dates.SetColumns(new[] { "DateKey", "Date", "Year", "Quarter", "Month", "MonthName", "Day", "DayOfWeek", "DayName", "IsWeekend", "FiscalYear" });
-            var startCalendar = new DateTime(2020, 1, 1);
-            var endCalendar = new DateTime(2029, 12, 31);
+            // 8. Dates (Date dimension - 200 year range 1900-01-01 to 2100-01-01)
+            var datesSchema = new TableSchema(new[] { "DateKey", "Date", "Year", "Quarter", "Month", "MonthName", "Day", "DayOfWeek", "DayName", "IsWeekend", "FiscalYear" });
+            var dates = new DataTable { Schema = datesSchema };
+            var startCalendar = new DateTime(1900, 1, 1);
+            var endCalendar = new DateTime(2100, 1, 1);
             for (var d = startCalendar; d <= endCalendar; d = d.AddDays(1))
             {
-                await dates.AddRowAsync(new Row
-                {
-                    ["DateKey"] = d.Year * 10000 + d.Month * 100 + d.Day,
-                    ["Date"] = d,
-                    ["Year"] = d.Year,
-                    ["Quarter"] = ((d.Month - 1) / 3) + 1,
-                    ["Month"] = d.Month,
-                    ["MonthName"] = d.ToString("MMMM"),
-                    ["Day"] = d.Day,
-                    ["DayOfWeek"] = (int)d.DayOfWeek,
-                    ["DayName"] = d.ToString("dddd"),
-                    ["IsWeekend"] = (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) ? 1 : 0,
-                    ["FiscalYear"] = d.Year
-                });
+                int dateKey = d.Year * 10000 + d.Month * 100 + d.Day;
+                int quarter = ((d.Month - 1) / 3) + 1;
+                int isWeekend = (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) ? 1 : 0;
+                dates.Rows.Add(new Row(datesSchema, new object?[] { dateKey, d, d.Year, quarter, d.Month, d.ToString("MMMM"), d.Day, (int)d.DayOfWeek, d.ToString("dddd"), isWeekend, d.Year }));
             }
             tables["Dates"] = dates;
             tables["DimDate"] = dates;
