@@ -121,6 +121,9 @@ changes safer.
 - [ ] **"Request Data Refresh" Button on Stale Reports.**
       Add an interactive "Request Data Refresh" button on report headers when the freshness indicator displays `Stale`, allowing business consumers to trigger an on-demand snapshot build or notify the report owner via audit outbox.
 
+- [ ] **1-Click "Set as My Default View" for Saved Slicer States.**
+      Add a 📌 "Set as My Default View" button next to report parameters/slicers in `report-runtime.js` and Portal header views, allowing business users to save their parameter selections via `/api/reports/{id}/saved-views` so reports open in their preferred parameter state automatically.
+
 ### Data Stewardship: Protected Data Audit Workflow
 
 - [x] **Script-first protected-data audit command.**
