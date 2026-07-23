@@ -124,6 +124,14 @@ changes safer.
 - [ ] **1-Click "Set as My Default View" for Saved Slicer States.**
       Add a 📌 "Set as My Default View" button next to report parameters/slicers in `report-runtime.js` and Portal header views, allowing business users to save their parameter selections via `/api/reports/{id}/saved-views` so reports open in their preferred parameter state automatically.
 
+### Comprehensive Engine & Portal Performance Optimizations
+
+- [ ] **0-Allocation `ComputeLevenshtein` in Catalog Search.**
+      Replace 2D array allocations (`new int[n+1, m+1]`) in `CatalogController.cs` with stack-allocated or pooled 1D rolling buffers (`Span<int>`), eliminating thousands of heap allocations per search request.
+
+- [ ] **Compiled Regex Caching in `ExpressionEvaluator.cs`.**
+      Compile `${@var}` interpolation regexes as `static readonly Regex` with `RegexOptions.Compiled`, accelerating inline variable substitution in tight expression loops.
+
 ### Data Stewardship: Protected Data Audit Workflow
 
 - [x] **Script-first protected-data audit command.**
