@@ -1,6 +1,6 @@
 # ETL-SQL Lineage & Governance Architecture
 
-**Applies to ETL-SQL 0.16.0**
+**Applies to ETL-SQL 0.17.0**
 
 This document covers the lineage and governance subsystem: what is tracked automatically, how to query it during and after a run, how to export it, and how it connects to Orchestrator execution history.
 

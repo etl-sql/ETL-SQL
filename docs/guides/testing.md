@@ -290,7 +290,7 @@ pwsh -File tools\ui-sandbox\serve.ps1
 
 It serves a Storybook-style harness that imports the canonical/source files directly and drives each component with fixture data (and a mock `fetch` for API-backed surfaces) — no Docker, no portal build, no catalog DB. Pick a story + fixture from the sidebar; edits show on **↻ Reload**. See [`tools/ui-sandbox/README.md`](../../README.md) for the story list and how to add one.
 
-The **data contracts** these components consume *are* covered by automated tests — e.g. the structure/lineage DTOs and the cross-script dataset bridge are asserted in `PortalIntegrationTests` (Portal lane, no Docker). The sandbox covers the **rendering** those tests don't. Automated browser coverage (Playwright) is tracked in `TODO.md`.
+The **data contracts** these components consume *are* covered by automated tests — e.g. the structure/lineage DTOs and the cross-script dataset bridge are asserted in `PortalIntegrationTests` (Portal lane, no Docker). The sandbox covers the **rendering** those tests don't. Automated browser coverage (Playwright) remains a future QA improvement and should be promoted to `ROADMAP.md` or `TODO.md` when it becomes active release work.
 
 ## Code Coverage
 

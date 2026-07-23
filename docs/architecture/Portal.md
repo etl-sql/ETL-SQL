@@ -44,6 +44,7 @@ All portal state lives in a single SQLite database managed by EF Core with migra
 PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ──< Report ──< ReportSnapshot
                                                                          ├──< Subscription ──> PortalUser
                                                                          ├──< ReportFavorite ──> PortalUser
+                                                                         ├──< ReportAcl ──> PortalUser / Group
                                                                          ├──< ReportShareLink
                                                                          ├──< ReportEmbedToken
                                                                          ├──< SavedReportView
@@ -65,7 +66,11 @@ AdminServiceRun         (per-run ledger for the native admin background services
 
 - **Soft-delete on `Report`** — `IsDeleted = true` hides records from all queries. Snapshots are preserved on disk after soft-deletion; hard deletion is a manual operation.
 
-- **`FolderAcl` is group-based only** — individual user permissions are not supported. All access control flows through group membership, which simplifies bulk permission changes (change the group, not every user).
+- **Folder and report ACLs** — `FolderAcl` remains group-based for broad catalog access.
+  `ReportAcl` adds report-scoped user or group grants for self-service access approvals, so an owner
+  can approve one restricted report without granting the entire folder. Effective report permission
+  combines admin status, folder ownership, folder ACLs, report creator ownership, and report-level
+  ACLs.
 
 - **`Subscription.ScriptPath`** — the Orchestrator job script is generated at subscription-creation time and stored as a `.etlsql` file under `ScriptRootPath`. This path is recorded so the job file can be cleaned up on subscription deletion.
 
@@ -114,6 +119,11 @@ var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
 ### Role-Based Authorization
 
 Three ASP.NET Identity roles — `Admin`, `Publisher`, `Viewer` — are seeded on first run. Controllers use `[Authorize(Roles = "...")]` attributes. Folder-level ACLs are checked inline in controller actions via `GetEffectivePermissionAsync()`, which walks the `FolderAcl` table for groups the current user belongs to.
+
+Report-opening, catalog, execution, refresh, and saved-view paths use effective report permission,
+which layers report-level ACLs over folder ACLs. Access-request approval defaults to report-scoped
+`Read` and may grant higher `FolderPermission` levels only when an owner or administrator chooses
+that scope explicitly.
 
 ---
 

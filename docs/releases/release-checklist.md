@@ -156,7 +156,7 @@ and the safeguards added:
 | VS Code lint passed on Windows, failed on Linux CI (v0.16.0) | unquoted `--ignore-pattern` globs are shell-expanded by POSIX `sh` but not `cmd` | eslint ignores moved into `eslint.config.js` (OS-agnostic) |
 | Doc link check passed locally, failed on CI (v0.16.0) | 101 `file:///` links used absolute paths that resolved only against the dev's own checkout | converted to repo-relative; `DocSanityTests` now catches any re-introduction on CI |
 | Flaky memory-governor test — passed one CI run, failed the next (v0.16.0) | the external-join repartition assertion rode a borderline partition-planner estimate | build data sized to exceed `maxPartitions × budget`, forcing the columnar-repartition path deterministically |
-| `Set-Version` silently skipped doc version baselines (v0.16.0) | its hardcoded `Docs/...` paths did not survive the docs IA restructure and it only **warned** (SKIP) | paths repointed to `docs/...` in `Set-Version.ps1`/`set-version.sh`; **TODO: make Set-Version fail, not warn, on a missing expected target** |
+| `Set-Version` silently skipped doc version baselines (v0.16.0) | its hardcoded `Docs/...` paths did not survive the docs IA restructure and it only **warned** (SKIP) | paths repointed to `docs/...` in `Set-Version.ps1`/`set-version.sh`; keep missing expected targets visible during release review |
 
 Principle: any file that embeds the version should read it from `Directory.Build.props`, not hardcode
 it (`Set-Version.ps1` cannot find every hardcoded copy).

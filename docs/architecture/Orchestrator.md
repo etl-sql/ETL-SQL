@@ -1,6 +1,6 @@
 # ETL-SQL Orchestrator Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.16.0**
+**Applies to ETL-SQL 0.17.0**
 
 This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in the `SHOW JOB HISTORY` table.
 
@@ -238,7 +238,7 @@ When `AtTime` is set (e.g., `'22:00'`) and `Unit = DAY`, the next run is calcula
 
 ### 3.4 Execution lease (duplicate-run prevention)
 
-Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding SQLite's single-writer guarantee, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. Note the lease coordinates only processes sharing the same SQLite file; it is not a cross-host distributed lock (see the P3.1 topology decision in TODO.md).
+Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding the configured relational job store's write guarantees, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. For multi-node HA posture and failure certification, see [HA Topology Failure Certification](decisions/HA_Topology_Failure_Certification.md).
 
 ### 3.5 Node capacity and quarantine
 

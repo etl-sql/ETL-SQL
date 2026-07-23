@@ -1,5 +1,11 @@
 # Workstation and Portal Unified Script Editor Roadmap
 
+> [!NOTE]
+> **Partly shipped.** v0.17.0 delivered the design-time Flow/DAG preview and major visual designer
+> ergonomics. Treat the remaining advanced workbench ideas in this document as candidate design
+> backlog, not active sprint scope, until they are promoted to `TODO.md` or the top-level
+> `ROADMAP.md`.
+
 This document defines the architecture, design patterns, and implementation plan for the unified web-based coding area of **ETL-SQL**. It aligns the **Portal Script Editor**, the standalone local **Workstation Editor**, and the visual panels in **VS Code Webviews** into a single, high-fidelity development workspace.
 
 ---

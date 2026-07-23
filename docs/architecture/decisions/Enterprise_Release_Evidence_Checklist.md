@@ -2,10 +2,10 @@
 
 Status: Prepared checklist, not release evidence.
 
-This checklist defines the evidence required before the v0.16.0 enterprise release-suite TODO can be
-closed. Fast tests are useful contract checks, but the enterprise release gate requires current
-operator evidence from the full functional, performance, migration, recovery, enterprise
-certification, and standalone regression suites.
+This checklist defines the evidence required before closing an enterprise release-suite verification
+item. Fast tests are useful contract checks, but the enterprise release gate requires current operator
+evidence from the full functional, performance, migration, recovery, enterprise certification, and
+standalone regression suites.
 
 ## Evidence Record
 
@@ -46,6 +46,6 @@ secret values, connection strings, private keys, `ENC:` payloads, or `SECRET:` r
 ## References
 
 - [Enterprise Release Gates](Enterprise_Release_Gates.md)
-- [Testing Guide](../../../Testing.md)
+- [Testing Guide](../../guides/testing.md)
 - [HA Topology Failure Certification](HA_Topology_Failure_Certification.md)
 - [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md)

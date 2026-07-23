@@ -7,7 +7,7 @@
 | [Arrow Columnar Format Strategy](Arrow_Columnar_Strategy.md) | > [!NOTE] |
 | [ETL-SQL Connector Upgrade Notes](Connector_Upgrade_Strategy.md) | > [!NOTE] |
 | [Data Lake Connectors Strategy](DataLake_Connectors_Strategy.md) | > [!IMPORTANT] |
-| [Data Stewardship & Lineage Governance Strategy](Data_Stewardship_Strategy.md) | **Status:** Active v0.17.0 implementation |
+| [Data Stewardship & Lineage Governance Strategy](Data_Stewardship_Strategy.md) | **Status:** v0.17.0 core shipped; later review, quality, and external-catalog lifecycle phases remain candidate work |
 | [ETL-SQL Engine Architecture Separation Plan](Engine_Upgrade_Strategy.md) | > [!IMPORTANT] |
 | [ETL-SQL Enterprise Platform Strategy](Enterprise_Platform_Strategy.md) | **Status:** Active product strategy |
 | [Fuzzy Matching Strategy](FuzzyMatching_Strategy.md) | **Status:** Phases 1–4 shipped; Phase 5 deferred |
@@ -24,4 +24,4 @@
 | [Source Boundary Migration Plan](Source_Boundary_Migration_Plan.md) | > [!NOTE] |
 | [Subscription Parameters Strategy](SubscriptionParameters_Strategy.md) | > [!IMPORTANT] |
 | [Test Strategy](Test_Strategy.md) | ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration,... |
-| [Workstation and Portal Unified Script Editor Roadmap](Workstation_and_Portal_Editor_Roadmap.md) | This document defines the architecture, design patterns, and implementation plan for the unified web-based coding area of **ETL-SQL**. It aligns th... |
+| [Workstation and Portal Unified Script Editor Roadmap](Workstation_and_Portal_Editor_Roadmap.md) | **Partly shipped.** v0.17.0 delivered the design-time Flow/DAG preview and major visual designer |

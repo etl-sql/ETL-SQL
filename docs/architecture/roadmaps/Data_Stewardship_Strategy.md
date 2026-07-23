@@ -1,6 +1,6 @@
 # Data Stewardship & Lineage Governance Strategy
 
-**Status:** Active v0.17.0 implementation
+**Status:** v0.17.0 core shipped; later review, quality, and external-catalog lifecycle phases remain candidate work
 **Date:** 2026-06-19
 **Scope:** Product work that turns ETL-SQL lineage and tags from captured metadata into governed, visible, policy-aware stewardship workflows.
 
@@ -30,18 +30,21 @@ Already available:
 
 ---
 
-## Obvious Gaps
+## Remaining Gaps
 
-1. **Stewardship workflow:** Tags identify owners and stewards, but there is no workflow for certification, review, assignment, or stale ownership cleanup.
-2. **Tag-driven policy enforcement:** Governance Core does not yet enforce rules directly from lineage tags, such as blocking unrestricted export of `@pii=true` data.
-3. **Impact workflow hardening:** Impact analysis is available, but workflow-specific approval gates and long-running catalog drift workflows remain.
-4. **Portal visibility:** Administrators need dashboards for missing owners, sensitive data inventory, stale lineage, uncertified assets, and steward-owned review queues.
-5. **Quality integration:** Validation/`EXPECT` results should feed stewardship status, freshness, and quality history.
-6. **External catalog lifecycle:** Export exists, but long-running bidirectional catalog synchronization needs stable IDs, conflict rules, and reconciliation reports.
+1. **Certification workflow:** Tags identify owners and stewards, and v0.17.0 surfaces inventory,
+   impact, and policy gates, but explicit certification/review state transitions for datasets,
+   reports, and key lineage targets remain future work.
+2. **Impact workflow hardening:** Impact analysis is available, but workflow-specific approval gates
+   and long-running catalog drift workflows remain.
+3. **Quality integration:** Validation/`EXPECT` results should feed stewardship status, freshness,
+   and quality history.
+4. **External catalog lifecycle:** Export exists, but long-running bidirectional catalog
+   synchronization needs stable IDs, conflict rules, and reconciliation reports.
 
 ---
 
-## Sprint Candidate: Data Stewardship Core
+## Shipped Core: Data Stewardship
 
 ### Phase 1 - Stewardship Catalog
 
@@ -92,13 +95,15 @@ Shipped in v0.17.0:
 
 ### Phase 5 - Tag-Driven Policy Enforcement
 
-- Extend Governance Core policy rules to evaluate lineage/tag metadata.
-- Support policies such as:
+- Shipped in v0.17.0: Governance Core policy rules evaluate lineage/tag metadata for lint, publish,
+  and execution gates.
+- Supported policies include:
   - block export of `@pii=true` unless the destination is encrypted or approved;
   - require `@owner` and `@steward` on restricted outputs;
   - block publishing uncategorized sensitive datasets;
   - require certified upstream lineage for production reports.
-- Evaluate policy at lint/publish time and again at execution time where runtime lineage changes the decision.
+- Policies are evaluated at lint/publish time and again at execution time where runtime lineage
+  changes the decision.
 
 ### Phase 6 - Quality & Freshness Stewardship
 

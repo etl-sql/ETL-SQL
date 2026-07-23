@@ -31,6 +31,73 @@ Completed in the first cleanup pass:
 - Normalized marker/style artifacts across visual reference pages and smaller statement reference pages.
 - Standardized the syntax index on `docs/syntax-index.md` and started demoting the legacy grammar monolith from active navigation.
 
+## v0.17.0 Documentation Audit - 2026-07-23
+
+### What Went Well
+
+- The documentation reconfigure has a coherent reader-oriented information architecture:
+  `guides/`, `reference/`, `cookbooks/`, `administration/`, `architecture/`, `releases/`, and
+  `templates/` all have clear roles.
+- v0.17.0 feature work is represented in both `CHANGELOG.md` and
+  `docs/releases/v0.17.0.md`, and completed sprint feature details have been removed from the
+  active `TODO.md`.
+- User-facing docs already cover the biggest v0.17.0 surfaces: catalog search and business
+  discovery, report badges/freshness, access requests, report-builder ergonomics, protected-data
+  stewardship, SFTP host-key verification, date-suffix file operations, and file-based
+  `SHOW SCHEMA`.
+- The top-level `ROADMAP.md` is correctly empty now that all intentionally scheduled v0.17.0
+  feature work has shipped or moved to release verification.
+- `docs/architecture/Portal.md` now reflects report-level ACLs and the effective report permission
+  model introduced during the consumer UX work.
+- `docs/architecture/roadmaps/Data_Stewardship_Strategy.md` now distinguishes shipped v0.17.0
+  stewardship core from remaining candidate phases.
+
+### Remaining Gaps
+
+- Several architecture strategy files are explicitly historical or partially stale. This is
+  acceptable only because they are marked as strategy/backlog, but they should not be used as
+  implementation truth without a source audit:
+  - `docs/architecture/roadmaps/Report_SQL_Strategy.md`
+  - `docs/architecture/roadmaps/Portal_Strategy.md`
+  - `docs/architecture/roadmaps/Lineage_Strategy.md`
+  - `docs/architecture/roadmaps/Engine_Upgrade_Strategy.md`
+- `docs/architecture/roadmaps/Workstation_and_Portal_Editor_Roadmap.md` still reads like an active
+  roadmap and does not yet separate what shipped in v0.17.0 (design-time DAG preview and designer
+  ergonomics) from remaining ideas such as hover lineage, formatter settings, git sidebar, and
+  shutdown lifecycle UX.
+- `docs/architecture/README.md`, `docs/architecture/decisions/README.md`, and
+  `docs/architecture/roadmaps/README.md` appear generated or summary-like; their descriptions are
+  only as good as the first lines/status blocks of target files. Regenerate or hand-edit them after
+  each architecture-doc status update.
+- The testing guide still identifies browser rendering coverage as manual sandbox QA. That is now
+  documented as future QA improvement rather than being incorrectly tracked by the active release
+  `TODO.md`.
+- The enterprise release evidence checklist has been generalized so it applies to current and future
+  enterprise release-suite verification, not just v0.16.0.
+
+### Planned Feature Review
+
+The top-level roadmap is empty, but planned/candidate work still exists inside strategy documents.
+Nothing from the v0.17.0 sprint appears missing from implementation after this pass. Remaining
+candidate work that may deserve an explicit future roadmap decision:
+
+- **Stewardship:** certification/review state transitions, quality/freshness evidence from
+  validation results, and bidirectional external catalog synchronization
+  (`Data_Stewardship_Strategy.md`).
+- **Unified editor:** hover lineage visualizer, stateful session explorer, formatter settings panel,
+  deeper Git sidebar, and server lifecycle controls
+  (`Workstation_and_Portal_Editor_Roadmap.md`).
+- **Report-SQL historical backlog:** reconcile `Report_SQL_Strategy.md` against current
+  `docs/guides/report-sql.md`, `docs/guides/report-builder.md`, and reporting source. Many listed
+  items have shipped, while a few may still be real candidates, such as `DECLARE @style STYLE`,
+  responsive layout refinements, and multi-report hosting details.
+- **Subscription parameters:** `SubscriptionParameters_Strategy.md` contains a full phased plan with
+  checked subitems; it should be reconciled against current Portal subscription syntax and docs
+  before using it for new work.
+- **Script security:** `ScriptSecurity_Strategy.md` still lists hash-pinning follow-ups for
+  Orchestrator/Portal. Confirm whether current published-script hash and stale-script behavior fully
+  closes that plan.
+
 ## P0: Navigation And Entry Points
 
 - `docs/README.md` is present.
