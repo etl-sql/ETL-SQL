@@ -22,6 +22,7 @@ namespace ETL_SQL.Engine;
 public class ExpressionEvaluator
 {
     private static readonly TableSchema _scalarSchema = new TableSchema(new[] { "Value" });
+    private static readonly Regex _interpolationRegex = new(@"\$\{(@?[a-zA-Z_][a-zA-Z0-9_]*)\}", RegexOptions.Compiled);
     private readonly IExecutionContext _context;
     private readonly ILogger _logger;
     private static readonly ConcurrentDictionary<(Type, string), MemberInfo?> _reflectionCache = new();
@@ -1043,7 +1044,7 @@ public class ExpressionEvaluator
     {
         if (string.IsNullOrEmpty(input) || !input.Contains("${")) return input;
 
-        return System.Text.RegularExpressions.Regex.Replace(input, @"\$\{(@?[a-zA-Z_][a-zA-Z0-9_]*)\}", match =>
+        return _interpolationRegex.Replace(input, match =>
         {
             var varName = match.Groups[1].Value;
             if (!varName.StartsWith("@", StringComparison.Ordinal))

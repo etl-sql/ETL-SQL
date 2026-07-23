@@ -6,6 +6,8 @@ namespace ETL_SQL.Portal.Services;
 
 public class FolderPermissionService(PortalDbContext db)
 {
+    private ISet<int>? _cachedUserGroupIds;
+
     public int GetUserId(ClaimsPrincipal user) =>
         int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -13,13 +15,16 @@ public class FolderPermissionService(PortalDbContext db)
 
     public async Task<ISet<int>> GetUserGroupIdsAsync(ClaimsPrincipal user)
     {
+        if (_cachedUserGroupIds is not null) return _cachedUserGroupIds;
+
         var userId = GetUserId(user);
         var ids = await db.UserGroups
             .Where(ug => ug.UserId == userId)
             .Select(ug => ug.GroupId)
             .ToListAsync();
 
-        return new HashSet<int>(ids);
+        _cachedUserGroupIds = new HashSet<int>(ids);
+        return _cachedUserGroupIds;
     }
 
     public async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId, ClaimsPrincipal user)

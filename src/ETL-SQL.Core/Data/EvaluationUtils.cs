@@ -38,12 +38,7 @@ public static class EvaluationUtils
             {
                 if (a is byte[] bytesA && b is byte[] bytesB)
                 {
-                    if (bytesA.Length != bytesB.Length) return false;
-                    for (int i = 0; i < bytesA.Length; i++)
-                    {
-                        if (bytesA[i] != bytesB[i]) return false;
-                    }
-                    return true;
+                    return bytesA.AsSpan().SequenceEqual(bytesB.AsSpan());
                 }
                 return false;
             }
@@ -56,7 +51,8 @@ public static class EvaluationUtils
             if (a is long la && b is long lb) return la == lb;
             if (a is double dbla && b is double dblb) return dbla == dblb;
 
-            if (a is DateTime dta && b is DateTime dtb) return dta.Year == dtb.Year && dta.Month == dtb.Month && dta.Day == dtb.Day && dta.Hour == dtb.Hour && dta.Minute == dtb.Minute && dta.Second == dtb.Second;
+            if (a is DateTime dta && b is DateTime dtb)
+                return dta.Ticks / TimeSpan.TicksPerSecond == dtb.Ticks / TimeSpan.TicksPerSecond;
 
             // Support ON/OFF boolean literals vs string equivalents
             if (a is bool ba && b is string sb1 && (sb1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sb1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))

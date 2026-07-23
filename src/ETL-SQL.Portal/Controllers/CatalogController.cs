@@ -841,17 +841,29 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         int n = a.Length, m = b.Length;
         if (n == 0) return m;
         if (m == 0) return n;
-        var d = new int[n + 1, m + 1];
-        for (int i = 0; i <= n; d[i, 0] = i++) { }
-        for (int j = 0; j <= m; d[0, j] = j++) { }
-        for (int i = 1; i <= n; i++)
+
+        if (n > m)
         {
-            for (int j = 1; j <= m; j++)
-            {
-                int cost = (b[j - 1] == a[i - 1]) ? 0 : 1;
-                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
-            }
+            (a, b) = (b, a);
+            (n, m) = (m, n);
         }
-        return d[n, m];
+
+        Span<int> v0 = n + 1 <= 256 ? stackalloc int[n + 1] : new int[n + 1];
+        Span<int> v1 = n + 1 <= 256 ? stackalloc int[n + 1] : new int[n + 1];
+
+        for (int i = 0; i <= n; i++) v0[i] = i;
+
+        for (int j = 1; j <= m; j++)
+        {
+            v1[0] = j;
+            for (int i = 1; i <= n; i++)
+            {
+                int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
+                v1[i] = Math.Min(Math.Min(v1[i - 1] + 1, v0[i] + 1), v0[i - 1] + cost);
+            }
+            v1.CopyTo(v0);
+        }
+
+        return v0[n];
     }
 }

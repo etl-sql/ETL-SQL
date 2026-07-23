@@ -114,29 +114,58 @@ changes safer.
 
 - [ ] **Report Owner Access Approval Queue UI & 1-Click Grant.**
       Add an access request inbox view for report owners and admins (`GET /api/reports/access-requests/pending`) allowing owners to view pending user access requests and approve (`POST /api/reports/access-requests/{id}/approve`) or deny them with 1-click, automatically updating folder/report ACLs upon approval.
+      Clarification before implementation: access requests are currently report-scoped
+      (`ReportAccessRequest`), but effective Portal permissions are folder/group-scoped through
+      `FolderAcl`. Do not silently approve by granting folder access unless that broader exposure is
+      intentional. Decision: add report-level ACL support and have approval grant only the requested
+      report. Use the same `FolderPermission` levels (`Read`, `Execute`, `Manage`) for consistency,
+      with business-user access approvals defaulting to `Read` unless an owner/admin explicitly chooses
+      a higher permission. Effective report permission should combine admin, folder owner/folder ACL,
+      report owner/creator, and report-level ACL grants. The approval queue should show enough context
+      for owners/admins to understand the grant scope, update request states (`Approved`/`Denied`),
+      emit audit events, and avoid duplicate notification spam.
 
 - [ ] **Interactive Tag Badge Filtering.**
       Make report header tag badges (`🏷️ #sales`) interactive in `report-runtime.js`, so clicking a tag badge automatically navigates to a catalog search filtered by that tag.
+      Clarification before implementation: the runtime already renders tag badges as links to
+      `/?search=<tag>`. Confirm this is the correct Portal catalog route/query contract; if not, wire
+      the badges to the actual catalog search route (for example `/catalog?search=` or `/catalog?q=`)
+      and add a small browser/runtime test that clicking a tag lands on filtered catalog results.
 
 - [ ] **"Request Data Refresh" Button on Stale Reports.**
       Add an interactive "Request Data Refresh" button on report headers when the freshness indicator displays `Stale`, allowing business consumers to trigger an on-demand snapshot build or notify the report owner via audit outbox.
+      Clarification before implementation: existing refresh execution requires `Execute` permission.
+      For users with `Execute`, the button may call the existing refresh endpoint. For read-only
+      business consumers, do not bypass permissions; create a durable/audited refresh request or owner
+      notification instead. Define the response states clearly (`Requested`, `AlreadyQueued`,
+      `Started`, `Denied`) and make duplicate requests coalesce rather than creating notification spam.
 
 - [ ] **1-Click "Set as My Default View" for Saved Slicer States.**
       Add a 📌 "Set as My Default View" button next to report parameters/slicers in `report-runtime.js` and Portal header views, allowing business users to save their parameter selections via `/api/reports/{id}/saved-views` so reports open in their preferred parameter state automatically.
+      Clarification before implementation: saved views and `IsDefault` already exist. Focus this work
+      on capturing the current runtime parameter/slicer state, creating or updating a user default via
+      `/api/reports/{id}/saved-views`, and applying that default when the report opens. Add tests that
+      only one default saved view exists per user/report and that updating the default does not expose
+      another user's saved view.
 
 ### Comprehensive Engine & Portal Performance Optimizations
 
-- [ ] **0-Allocation `ComputeLevenshtein` in Catalog Search.**
+- [x] **0-Allocation `ComputeLevenshtein` in Catalog Search.**
       Replace 2D array allocations (`new int[n+1, m+1]`) in `CatalogController.cs` with stack-allocated or pooled 1D rolling buffers (`Span<int>`), eliminating thousands of heap allocations per search request.
 
-- [ ] **Compiled Regex Caching in `ExpressionEvaluator.cs`.**
+- [x] **Compiled Regex Caching in `ExpressionEvaluator.cs`.**
       Compile `${@var}` interpolation regexes as `static readonly Regex` with `RegexOptions.Compiled`, accelerating inline variable substitution in tight expression loops.
 
-- [ ] **Portal Request-Scoped Group ID Caching in `FolderPermissionService.cs`.**
+- [x] **Portal Request-Scoped Group ID Caching in `FolderPermissionService.cs`.**
       Cache user group IDs (`_cachedUserGroupIds`) on the scoped `FolderPermissionService` instance to eliminate duplicate DB queries to `UserGroups` during multi-folder and multi-report permission checks.
 
-- [ ] **High-Performance DateTime & SIMD Binary Equality in `EvaluationUtils.cs`.**
+- [x] **High-Performance DateTime & SIMD Binary Equality in `EvaluationUtils.cs`.**
       Optimize `IsSoftEqual` by replacing 6-property calendar conversions (`dta.Year == dtb.Year...`) with direct `DateTime` comparisons, and replace manual byte loops with SIMD-accelerated `MemoryExtensions.SequenceEqual`.
+      Clarification before implementation: the current DateTime equality semantics ignore fractional
+      seconds/ticks by comparing only year/month/day/hour/minute/second. A raw `DateTime == DateTime`
+      comparison would be a behavior change. Preserve the existing second-level semantics unless the
+      tests and docs are intentionally updated. Byte-array comparison can safely use
+      `ReadOnlySpan<byte>.SequenceEqual` / `MemoryExtensions.SequenceEqual`.
 
 ### Data Stewardship: Protected Data Audit Workflow
 
