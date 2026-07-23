@@ -107,6 +107,60 @@ namespace ETL_SQL.Connectors.MockDb
                     Col("DeptID", "INT", primaryKey: true),
                     Col("DeptName", "VARCHAR"),
                     Col("Budget", "DECIMAL(18,2)")
+                ],
+                ["Numbers"] =
+                [
+                    Col("Number", "INT", primaryKey: true),
+                    Col("IsEven", "INT"),
+                    Col("IsOdd", "INT")
+                ],
+                ["Dates"] =
+                [
+                    Col("DateKey", "INT", primaryKey: true),
+                    Col("Date", "DATE"),
+                    Col("Year", "INT"),
+                    Col("Quarter", "INT"),
+                    Col("Month", "INT"),
+                    Col("MonthName", "VARCHAR"),
+                    Col("Day", "INT"),
+                    Col("DayOfWeek", "INT"),
+                    Col("DayName", "VARCHAR"),
+                    Col("IsWeekend", "INT"),
+                    Col("FiscalYear", "INT")
+                ],
+                ["Times"] =
+                [
+                    Col("TimeKey", "INT", primaryKey: true),
+                    Col("Time", "TIME"),
+                    Col("Hour", "INT"),
+                    Col("Hour12", "INT"),
+                    Col("Minute", "INT"),
+                    Col("Second", "INT"),
+                    Col("AmPm", "VARCHAR"),
+                    Col("TimeOfDay", "VARCHAR")
+                ],
+                ["Geography"] =
+                [
+                    Col("StateCode", "VARCHAR", primaryKey: true),
+                    Col("StateName", "VARCHAR"),
+                    Col("CountryCode", "VARCHAR"),
+                    Col("CountryName", "VARCHAR"),
+                    Col("Region", "VARCHAR"),
+                    Col("TimeZone", "VARCHAR")
+                ],
+                ["Currencies"] =
+                [
+                    Col("CurrencyCode", "VARCHAR", primaryKey: true),
+                    Col("CurrencyName", "VARCHAR"),
+                    Col("Symbol", "VARCHAR")
+                ],
+                ["Flags"] =
+                [
+                    Col("FlagKey", "INT", primaryKey: true),
+                    Col("FlagValue", "INT"),
+                    Col("FlagName", "VARCHAR"),
+                    Col("YesNo", "VARCHAR"),
+                    Col("ActiveInactive", "VARCHAR")
                 ]
             };
 
@@ -118,7 +172,16 @@ namespace ETL_SQL.Connectors.MockDb
                 ["Orders"] = "Sales",
                 ["Employee_Log"] = "Employee",
                 ["DemoDb.dbo.Employee"] = "Employee",
-                ["hr.departments"] = "departments"
+                ["hr.departments"] = "departments",
+                ["DimDate"] = "Dates",
+                ["Dim_Date"] = "Dates",
+                ["DimTime"] = "Times",
+                ["Dim_Time"] = "Times",
+                ["DimNumbers"] = "Numbers",
+                ["Dim_Numbers"] = "Numbers",
+                ["Tally"] = "Numbers",
+                ["DimGeography"] = "Geography",
+                ["DimCurrencies"] = "Currencies"
             };
 
         public IReadOnlyDictionary<string, IReadOnlyList<CatalogColumn>> GetDeclaredSchema()
@@ -259,6 +322,142 @@ namespace ETL_SQL.Connectors.MockDb
             }
             tables["departments"] = deptTable;
             tables["hr.departments"] = deptTable;
+
+            // 7. Numbers (Tally dimension)
+            var numbers = new DataTable();
+            numbers.SetColumns(new[] { "Number", "IsEven", "IsOdd" });
+            for (int i = 1; i <= 1000; i++)
+            {
+                await numbers.AddRowAsync(new Row
+                {
+                    ["Number"] = i,
+                    ["IsEven"] = i % 2 == 0 ? 1 : 0,
+                    ["IsOdd"] = i % 2 != 0 ? 1 : 0
+                });
+            }
+            tables["Numbers"] = numbers;
+            tables["DimNumbers"] = numbers;
+            tables["Dim_Numbers"] = numbers;
+            tables["Tally"] = numbers;
+
+            // 8. Dates (Date dimension - 10 year range 2020-2029)
+            var dates = new DataTable();
+            dates.SetColumns(new[] { "DateKey", "Date", "Year", "Quarter", "Month", "MonthName", "Day", "DayOfWeek", "DayName", "IsWeekend", "FiscalYear" });
+            var startCalendar = new DateTime(2020, 1, 1);
+            var endCalendar = new DateTime(2029, 12, 31);
+            for (var d = startCalendar; d <= endCalendar; d = d.AddDays(1))
+            {
+                await dates.AddRowAsync(new Row
+                {
+                    ["DateKey"] = d.Year * 10000 + d.Month * 100 + d.Day,
+                    ["Date"] = d,
+                    ["Year"] = d.Year,
+                    ["Quarter"] = ((d.Month - 1) / 3) + 1,
+                    ["Month"] = d.Month,
+                    ["MonthName"] = d.ToString("MMMM"),
+                    ["Day"] = d.Day,
+                    ["DayOfWeek"] = (int)d.DayOfWeek,
+                    ["DayName"] = d.ToString("dddd"),
+                    ["IsWeekend"] = (d.DayOfWeek == DayOfWeek.Saturday || d.DayOfWeek == DayOfWeek.Sunday) ? 1 : 0,
+                    ["FiscalYear"] = d.Year
+                });
+            }
+            tables["Dates"] = dates;
+            tables["DimDate"] = dates;
+            tables["Dim_Date"] = dates;
+
+            // 9. Times (Time dimension - 1440 minutes in a day)
+            var times = new DataTable();
+            times.SetColumns(new[] { "TimeKey", "Time", "Hour", "Hour12", "Minute", "Second", "AmPm", "TimeOfDay" });
+            for (int h = 0; h < 24; h++)
+            {
+                for (int m = 0; m < 60; m++)
+                {
+                    int h12 = h % 12 == 0 ? 12 : h % 12;
+                    string ampm = h < 12 ? "AM" : "PM";
+                    string tod = h switch
+                    {
+                        >= 5 and < 12 => "Morning",
+                        >= 12 and < 17 => "Afternoon",
+                        >= 17 and < 21 => "Evening",
+                        _ => "Night"
+                    };
+                    var ts = new TimeSpan(h, m, 0);
+
+                    await times.AddRowAsync(new Row
+                    {
+                        ["TimeKey"] = h * 10000 + m * 100,
+                        ["Time"] = ts,
+                        ["Hour"] = h,
+                        ["Hour12"] = h12,
+                        ["Minute"] = m,
+                        ["Second"] = 0,
+                        ["AmPm"] = ampm,
+                        ["TimeOfDay"] = tod
+                    });
+                }
+            }
+            tables["Times"] = times;
+            tables["DimTime"] = times;
+            tables["Dim_Time"] = times;
+
+            // 10. Geography (Sample ISO / US States)
+            var geo = new DataTable();
+            geo.SetColumns(new[] { "StateCode", "StateName", "CountryCode", "CountryName", "Region", "TimeZone" });
+            var sampleStates = new (string Code, string Name, string Reg, string TZ)[]
+            {
+                ("CA", "California", "West", "PST"),
+                ("NY", "New York", "East", "EST"),
+                ("TX", "Texas", "South", "CST"),
+                ("FL", "Florida", "South", "EST"),
+                ("IL", "Illinois", "Midwest", "CST"),
+                ("WA", "Washington", "West", "PST")
+            };
+            foreach (var st in sampleStates)
+            {
+                await geo.AddRowAsync(new Row
+                {
+                    ["StateCode"] = st.Code,
+                    ["StateName"] = st.Name,
+                    ["CountryCode"] = "US",
+                    ["CountryName"] = "United States",
+                    ["Region"] = st.Reg,
+                    ["TimeZone"] = st.TZ
+                });
+            }
+            tables["Geography"] = geo;
+            tables["DimGeography"] = geo;
+
+            // 11. Currencies
+            var currencies = new DataTable();
+            currencies.SetColumns(new[] { "CurrencyCode", "CurrencyName", "Symbol" });
+            var sampleCurrencies = new (string Code, string Name, string Sym)[]
+            {
+                ("USD", "US Dollar", "$"),
+                ("EUR", "Euro", "€"),
+                ("GBP", "British Pound", "£"),
+                ("CAD", "Canadian Dollar", "$"),
+                ("AUD", "Australian Dollar", "$"),
+                ("JPY", "Japanese Yen", "¥")
+            };
+            foreach (var c in sampleCurrencies)
+            {
+                await currencies.AddRowAsync(new Row
+                {
+                    ["CurrencyCode"] = c.Code,
+                    ["CurrencyName"] = c.Name,
+                    ["Symbol"] = c.Sym
+                });
+            }
+            tables["Currencies"] = currencies;
+            tables["DimCurrencies"] = currencies;
+
+            // 12. Flags
+            var flags = new DataTable();
+            flags.SetColumns(new[] { "FlagKey", "FlagValue", "FlagName", "YesNo", "ActiveInactive" });
+            await flags.AddRowAsync(new Row { ["FlagKey"] = 0, ["FlagValue"] = 0, ["FlagName"] = "False", ["YesNo"] = "No", ["ActiveInactive"] = "Inactive" });
+            await flags.AddRowAsync(new Row { ["FlagKey"] = 1, ["FlagValue"] = 1, ["FlagName"] = "True", ["YesNo"] = "Yes", ["ActiveInactive"] = "Active" });
+            tables["Flags"] = flags;
         }
     }
 }
