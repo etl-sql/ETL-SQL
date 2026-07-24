@@ -33,7 +33,7 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 
 ### Parser / Tag Pipeline
 
-- [ ] Make comment-tag splitting quote-aware in `Parser.ParseMetadataTags` (`src/ETL-SQL.Core/Parser/Parser.cs:1865`).
+- [x] Make comment-tag splitting quote-aware in `Parser.ParseMetadataTags` (`src/ETL-SQL.Core/Parser/Parser.cs:1865`).
       Today `tagContent.Split(';')` splits on **every** `;`, so a `;` inside a quoted tag value breaks parsing,
       and a comma between tags silently swallows the following `@tag` into the previous value. Replace the naive
       split with a small top-level scanner that tracks `'`/`"` quote state and only splits on `;` outside quotes.

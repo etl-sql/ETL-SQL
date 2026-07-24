@@ -1865,24 +1865,65 @@ public class Parser : IParser
     public void ParseMetadataTags(string tagContent, Dictionary<string, string> metadata)
     {
         // Expected format: @tag: value; @tag2: value2;
-        var parts = tagContent.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var part in parts)
+        // Quote-aware: a value whose first non-whitespace character is ' or " runs to the
+        // matching close quote — ';', ',' and '@' inside it are literal, and a doubled
+        // same-kind quote stands for a literal quote (SQL style; no backslash escaping,
+        // which would collide with @expect MATCHES regexes). Values are stored verbatim,
+        // quotes included — consumers strip them. A quote appearing mid-value in an
+        // unquoted value is literal (e.g. @d: John's column). Outside quotes, tags end
+        // at ';' or at a ',' that directly precedes the next '@tag'.
+        int i = 0;
+        int n = tagContent.Length;
+        while (i < n)
         {
-            if (!part.StartsWith("@")) continue;
+            while (i < n && tagContent[i] != '@') i++;
+            if (i >= n) break;
+            i++;
 
-            var colonIndex = part.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                var tagName = part.Substring(1, colonIndex - 1).Trim();
-                var tagValue = part.Substring(colonIndex + 1).Trim();
-                metadata[tagName] = tagValue;
-            }
-            else
+            int nameStart = i;
+            while (i < n && tagContent[i] != ':' && tagContent[i] != ';' && tagContent[i] != ',') i++;
+            var tagName = tagContent[nameStart..i].Trim();
+
+            if (i >= n || tagContent[i] != ':')
             {
                 // Handle @tag (boolean existence or just key name)
-                metadata[part.Substring(1).Trim()] = "true";
+                if (tagName.Length > 0) metadata[tagName] = "true";
+                if (i < n) i++;
+                continue;
             }
+            i++; // ':'
+
+            while (i < n && char.IsWhiteSpace(tagContent[i])) i++;
+            int valueStart = i;
+            if (i < n && (tagContent[i] == '\'' || tagContent[i] == '"'))
+            {
+                char quote = tagContent[i];
+                i++;
+                while (i < n)
+                {
+                    if (tagContent[i] == quote)
+                    {
+                        if (i + 1 < n && tagContent[i + 1] == quote) { i += 2; continue; }
+                        i++;
+                        break;
+                    }
+                    i++;
+                }
+            }
+            while (i < n && tagContent[i] != ';')
+            {
+                if (tagContent[i] == ',' && NextTagFollows(tagContent, i + 1)) break;
+                i++;
+            }
+            if (tagName.Length > 0) metadata[tagName] = tagContent[valueStart..i].Trim();
+            if (i < n) i++; // ';' or ','
         }
+    }
+
+    private static bool NextTagFollows(string content, int index)
+    {
+        while (index < content.Length && char.IsWhiteSpace(content[index])) index++;
+        return index < content.Length && content[index] == '@';
     }
 
     public Expression ParseExpression() => _expressionParser.ParseExpression();
