@@ -64,8 +64,19 @@ public static class StewardshipTagCatalog
         new("format", StewardshipTagValueKind.String, ["column"], [], []),
         new("source_system", StewardshipTagValueKind.String, ["table"], [], []),
         new("source_table", StewardshipTagValueKind.String, ["table"], [], []),
-        new("source_column", StewardshipTagValueKind.String, ["column"], [], [])
+        new("source_column", StewardshipTagValueKind.String, ["column"], [], []),
+        // Data-quality rule pair (numbered variants @expect_1/@fail_1 resolve to these base
+        // definitions). The @expect rule grammar is too rich for the value-kind validator —
+        // ColumnRuleValidationRule in Analysis runs the real ColumnRuleParser.
+        new("expect", StewardshipTagValueKind.String, ["column"], [], []),
+        new("fail", StewardshipTagValueKind.Enum, ["column"], ["THROW", "WARN", "QUARANTINE"], [])
     ];
+
+    // @expect_1/@fail_1 … pair numbered rules with numbered actions on one column; they share
+    // the base tag's definition so catalog lookups, lint, and the stewardship read side treat
+    // them as first-class.
+    private static readonly Regex NumberedRuleTagPattern =
+        new(@"^(expect|fail)_\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Dictionary<string, StewardshipTagDefinition> ByName =
         Definitions.ToDictionary(d => d.Name, StringComparer.OrdinalIgnoreCase);
@@ -83,8 +94,7 @@ public static class StewardshipTagCatalog
     public static IReadOnlyCollection<string> RequiredStewardshipTags =>
         ["owner", "steward", "contact", "classification", "quality"];
 
-    public static bool IsKnown(string tagName) =>
-        ByName.ContainsKey(tagName) || ByAlias.ContainsKey(tagName);
+    public static bool IsKnown(string tagName) => Resolve(tagName) is not null;
 
     public static bool IsCustomOrganizationTag(string tagName) =>
         tagName.StartsWith("org_", StringComparison.OrdinalIgnoreCase)
@@ -93,12 +103,13 @@ public static class StewardshipTagCatalog
 
     public static bool IsKnownOrCustom(string tagName) => IsKnown(tagName) || IsCustomOrganizationTag(tagName);
 
-    public static StewardshipTagDefinition? Resolve(string tagName) =>
-        ByName.TryGetValue(tagName, out var definition)
-            ? definition
-            : ByAlias.TryGetValue(tagName, out definition)
-                ? definition
-                : null;
+    public static StewardshipTagDefinition? Resolve(string tagName)
+    {
+        if (ByName.TryGetValue(tagName, out var definition)) return definition;
+        if (ByAlias.TryGetValue(tagName, out definition)) return definition;
+        var numbered = NumberedRuleTagPattern.Match(tagName);
+        return numbered.Success ? ByName[numbered.Groups[1].Value] : null;
+    }
 
     public static string Canonicalize(string tagName) => Resolve(tagName)?.Name ?? tagName;
 
@@ -109,7 +120,8 @@ public static class StewardshipTagCatalog
             return new StewardshipTagValidationResult(tagName, tagName, true, null);
 
         var canonical = definition.Name;
-        var isAlias = !tagName.Equals(canonical, StringComparison.OrdinalIgnoreCase);
+        var isAlias = !tagName.Equals(canonical, StringComparison.OrdinalIgnoreCase)
+                      && !NumberedRuleTagPattern.IsMatch(tagName);
         if (isAlias)
         {
             return new StewardshipTagValidationResult(
@@ -120,7 +132,9 @@ public static class StewardshipTagCatalog
                 IsDeprecated: true);
         }
 
-        value ??= string.Empty;
+        // The comment-tag layer preserves outer quotes on values (@fail: 'THROW'); strip one
+        // matching pair before kind validation so quoted and bare values validate identically.
+        value = ETL_SQL.Core.Quality.ColumnRuleParser.Unquote(value ?? string.Empty);
         return definition.ValueKind switch
         {
             StewardshipTagValueKind.Boolean when !IsBoolean(value) =>
