@@ -65,25 +65,26 @@
           <span class="sidebar-hint">Data & Catalog</span>
         </div>
         <div class="sidebar-nav" aria-label="Governance views">
-          <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
-            <span class="sidebar-nav-icon sidebar-nav-icon-lineage" aria-hidden="true"></span>
-            <span>Lineage Explorer</span>
+          <a href="#governance/overview" class="sidebar-nav-item" id="govNavOverview">
+            <span>📊 Overview</span>
           </a>
           <a href="#governance/stewardship" class="sidebar-nav-item" id="govNavStewardship">
-            <span class="sidebar-nav-icon sidebar-nav-icon-stewardship" aria-hidden="true"></span>
-            <span>Stewardship & Health</span>
-          </a>
-          <a href="#governance/protected" class="sidebar-nav-item" id="govNavProtected">
-            <span class="sidebar-nav-icon sidebar-nav-icon-protected" aria-hidden="true"></span>
-            <span>Protected Data & Tags</span>
-          </a>
-          <a href="#governance/impact" class="sidebar-nav-item" id="govNavImpact">
-            <span class="sidebar-nav-icon sidebar-nav-icon-impact" aria-hidden="true"></span>
-            <span>Impact Analysis</span>
+            <span>📋 Task Workqueue</span>
           </a>
           <a href="#governance/audit" class="sidebar-nav-item" id="govNavAudit">
-            <span class="sidebar-nav-icon sidebar-nav-icon-audit" aria-hidden="true"></span>
-            <span>Governance Audit Log</span>
+            <span>🛡️ Exceptions Ledger</span>
+          </a>
+          <a href="#governance/badges" class="sidebar-nav-item" id="govNavBadges">
+            <span>🏷️ Badge Manager</span>
+          </a>
+          <a href="#governance/glossary" class="sidebar-nav-item" id="govNavGlossary">
+            <span>📖 Glossary & Terms</span>
+          </a>
+          <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
+            <span>🔗 Lineage Search</span>
+          </a>
+          <a href="#governance/settings" class="sidebar-nav-item" id="govNavSettings">
+            <span>⚙️ Settings & Policies</span>
           </a>
         </div>
       </div>
@@ -298,6 +299,7 @@ import { adminApi, auth, authApi, catalogApi, foldersApi, reportsApi, subscripti
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.16.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.16.0';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js?v=0.16.0';
+import { createGovernancePortal } from '/js/governance-portal.js?v=0.16.0';
 import { createLineageCatalog } from '/js/lineage-catalog.js?v=0.16.0';
 import { renderDag } from '/designer/designer.js?v=0.16.0';
 
@@ -404,11 +406,13 @@ async function init() {
   });
 
   [
-    ['Lineage', 'lineage', 'history'],
+    ['Overview', 'overview', 'overview'],
     ['Stewardship', 'stewardship', 'stewardship'],
-    ['Protected', 'protected', 'protected'],
-    ['Impact', 'impact', 'impact'],
     ['Audit', 'audit', 'audit'],
+    ['Badges', 'badges', 'badges'],
+    ['Glossary', 'glossary', 'glossary'],
+    ['Lineage', 'lineage', 'lineage'],
+    ['Settings', 'settings', 'settings'],
   ].forEach(([name, route, mode]) => {
     document.getElementById(`govNav${name}`)?.addEventListener('click', e => {
       e.preventDefault();
@@ -518,12 +522,13 @@ function openReportHashView() {
   } else if (mainView === 'favorites') {
     showFavorites();
   } else if (mainView === 'governance' || mainView === 'lineage') {
-    let mode = 'history';
+    let mode = 'overview';
     if (subView === 'stewardship') mode = 'stewardship';
-    else if (subView === 'protected') mode = 'protected';
-    else if (subView === 'impact') mode = 'impact';
     else if (subView === 'audit') mode = 'audit';
-    else if (subView === 'lineage') mode = 'history';
+    else if (subView === 'badges') mode = 'badges';
+    else if (subView === 'glossary') mode = 'glossary';
+    else if (subView === 'lineage') mode = 'lineage';
+    else if (subView === 'settings') mode = 'settings';
     showGovernanceCatalog(mode);
   } else if (/^report-\d+$/.test(mainView)) {
     const id = parseInt(mainView.split('-')[1], 10);
@@ -533,8 +538,12 @@ function openReportHashView() {
   }
 }
 
-function setSidebarViewActive(view, govMode = 'history') {
-  const isGov = view === 'governance' || view === 'lineage' || view === 'stewardship' || view === 'protected' || view === 'impact' || view === 'audit';
+function setSidebarViewActive(view, govMode = 'overview') {
+  const isGov = ['governance', 'lineage', 'overview', 'stewardship', 'audit', 'badges', 'glossary', 'settings'].includes(view) ||
+                view.startsWith('governance/') || view.startsWith('lineage/');
+
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.style.display = '';
 
   const reportsSection = document.getElementById('reportsSidebarSection');
   const govSection = document.getElementById('governanceSidebarSection');
@@ -553,12 +562,14 @@ function setSidebarViewActive(view, govMode = 'history') {
       el.classList.toggle('active', el.id === activeId));
   } else {
     const activeGovId = {
-      history: 'govNavLineage',
+      overview: 'govNavOverview',
       stewardship: 'govNavStewardship',
-      protected: 'govNavProtected',
-      impact: 'govNavImpact',
-      audit: 'govNavAudit'
-    }[govMode] || 'govNavLineage';
+      audit: 'govNavAudit',
+      badges: 'govNavBadges',
+      glossary: 'govNavGlossary',
+      lineage: 'govNavLineage',
+      settings: 'govNavSettings'
+    }[govMode] || 'govNavOverview';
 
     document.querySelectorAll('#governanceSidebarSection .sidebar-nav-item').forEach(el =>
       el.classList.toggle('active', el.id === activeGovId));
@@ -932,19 +943,39 @@ function renderCatalogReportList(title, reports, emptyText) {
   });
 }
 
-// The catalog-wide "Lineage" sidebar view lives in js/lineage-catalog.js so it can
-// be unit-tested and previewed in the UI sandbox. This wrapper binds it to the portal.
+// The catalog-wide "Lineage" sidebar view lives in js/governance-portal.js
+let governancePortal = null;
 let lineageCatalog = null;
-function showGovernanceCatalog(mode = 'history') {
-  if (!lineageCatalog) {
-    lineageCatalog = createLineageCatalog({
-      host: document.getElementById('mainContent'),
-      adminApi, catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
-      openReport, timeAgo, formatBuiltAt,
-      prepare: (currentMode) => { setSidebarViewActive('governance', currentMode || mode); clearFolderSelection(); },
-    });
+function showGovernanceCatalog(mode = 'overview') {
+  if (mode === 'lineage') {
+    if (governancePortal) { governancePortal.dispose(); governancePortal = null; }
+    if (!lineageCatalog) {
+      lineageCatalog = createLineageCatalog({
+        host: document.getElementById('mainContent'),
+        adminApi, catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
+        openReport, timeAgo, formatBuiltAt,
+        prepare: (currentMode) => {
+          setSidebarViewActive('governance', 'lineage');
+          clearFolderSelection();
+        }
+      });
+    }
+    lineageCatalog.setMode('history');
+  } else {
+    if (lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
+    if (!governancePortal) {
+      governancePortal = createGovernancePortal({
+        host: document.getElementById('mainContent'),
+        catalogApi, adminApi, renderLineageRow, lineageRowsToCsv,
+        openReport, timeAgo, formatBuiltAt,
+        prepare: (tabName) => {
+          setSidebarViewActive('governance', tabName);
+          clearFolderSelection();
+        }
+      });
+    }
+    governancePortal.setTab(mode);
   }
-  lineageCatalog.setMode(mode);
 }
 
 function wireFavoriteButtons(root, onChanged = null) {

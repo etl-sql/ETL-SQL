@@ -931,7 +931,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
 
     // FleetReader: a scoped, read-only role for the fleet aggregator — authorizes only
     // GET /api/fleet/status and nothing else (see Departmental_Isolation.md fleet trust boundary).
-    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader" })
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader", "GovernanceViewer", "DataSteward", "GovernanceManager" })
     {
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new PortalRole(role));

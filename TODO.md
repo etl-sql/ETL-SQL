@@ -11,6 +11,9 @@ release notes, or the relevant implementation/design document.
 Feature implementation for this sprint has moved to `CHANGELOG.md` and
 `docs/releases/v0.17.0.md`. Only release verification remains open here.
 
+- [x] Redesign Portal Governance into a data-steward-first dashboard.
+      See [Governance_Dashboard_Strategy.md](docs/architecture/roadmaps/Governance_Dashboard_Strategy.md).
+
 ### Release Verification
 
 - [ ] Run the fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.

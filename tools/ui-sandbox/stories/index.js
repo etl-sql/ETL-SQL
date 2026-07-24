@@ -13,8 +13,10 @@ import connectionsAdmin from './connections-admin.story.js';
 import policyAuthorityAdmin from './policy-authority-admin.story.js';
 import snapshotDesigner from './snapshot-designer.story.js';
 import lineageDag from './lineage-dag.story.js';
+import portalGovernance from './governance.story.js';
 
 export const stories = [
+  portalGovernance,
   scriptEditor,
   scriptEditorUnified,
   designer,
@@ -30,3 +32,4 @@ export const stories = [
   policyAuthorityAdmin,
   lineageDag
 ];
+
