@@ -22,6 +22,7 @@ export function createGovernancePortal(opts = {}) {
     editingCatId: null,
     // Live items loaded from backend API
     stewardshipItems: [],
+    loaded: false,
     auditEvents: [],
     // In-memory governance states
     settings: {
@@ -124,6 +125,7 @@ export function createGovernancePortal(opts = {}) {
           ]
         };
       });
+      state.loaded = true;
     } catch (err) {
       console.error('Failed to load live stewardship catalog items:', err);
       // Fallback to static mock items if API fails/is empty
@@ -134,13 +136,14 @@ export function createGovernancePortal(opts = {}) {
         { id: 'asset-5', path: 'patient_health_audit.etlsql', meta: 'Steward: Chuck · Domain: Healthcare', badges: ['Untagged PHI', 'Needs Review'], assignedBadges: ['HIPAA Scoped'], evidence: [{ num: 12, text: 'SELECT diagnosis_code, patient_ssn FROM records;', hl: true }] },
         { id: 'asset-7', path: 'inventory_reorder_trigger.etlsql', meta: 'Steward: Chuck · Domain: Logistics', badges: ['Glossary Review'], assignedBadges: [], evidence: [{ num: 8, text: 'SELECT lead_time_days AS ltd FROM warehouse;', hl: true }] }
       ];
+      state.loaded = true;
     }
   }
 
   const render = async () => {
     prepare(state.tab);
     
-    if (state.stewardshipItems.length === 0) {
+    if (!state.loaded) {
       await loadStewardshipData();
     }
 
@@ -660,8 +663,8 @@ export function createGovernancePortal(opts = {}) {
         const styleClass = b.toLowerCase().includes('cert') ? 'cert' : b.toLowerCase().includes('trust') ? 'trust' : b.toLowerCase().includes('gdpr') ? 'gdpr' : 'hipaa';
         return `
           <span class="steward-badge-tag ${styleClass}">
-            ★ ${b}
-            <button class="remove-badge-btn" title="Remove Badge" data-remove-badge-name="${b}" data-remove-badge-asset="${item.id}">×</button>
+            ★ ${esc(b)}
+            <button class="remove-badge-btn" title="Remove Badge" data-remove-badge-name="${esc(b)}" data-remove-badge-asset="${item.id}">×</button>
           </span>
         `;
       }).join(' ');
@@ -713,13 +716,13 @@ export function createGovernancePortal(opts = {}) {
             ${filteredQueue.slice(0, 3).map(item => `
               <div class="queue-item" id="item-${item.id}">
                 <div class="queue-item-header">
-                  <span class="asset-path">${item.path}</span>
+                  <span class="asset-path">${esc(item.path)}</span>
                   <span class="score-badge ${item.scoreClass}">Score: ${item.score}/100</span>
                 </div>
                 <div class="queue-item-meta">
-                  <span>${item.meta}</span>
+                  <span>${esc(item.meta)}</span>
                   <span style="color:var(--portal-border, #374151);">|</span>
-                  ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${b}</span>`).join(' ')}
+                  ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${esc(b)}</span>`).join(' ')}
                   ${item.assignedBadges && item.assignedBadges.length ? 
                     `<span style="color:var(--portal-border, #374151);">|</span>` + renderAssignedBadges(item) : ''
                   }
@@ -733,7 +736,7 @@ export function createGovernancePortal(opts = {}) {
                   ${item.evidence.map(line => `
                     <div class="code-line ${line.hl ? 'code-hl' : ''}">
                       <span class="code-num">${line.num}</span>
-                      <span class="code-text">${line.text}</span>
+                      <span class="code-text">${esc(line.text)}</span>
                     </div>
                   `).join('')}
                 </div>
@@ -747,7 +750,7 @@ export function createGovernancePortal(opts = {}) {
       html += `
         <div class="gov-filters-bar">
           <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter by asset path..." value="${state.searchFilter}">
+            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter by asset path..." value="${esc(state.searchFilter)}">
             <button class="gov-search-clear" id="btnSearchClear" style="display:${state.searchFilter?'block':'none'}">×</button>
           </div>
           <select class="gov-filter-select" id="badgeFilter">
@@ -769,7 +772,7 @@ export function createGovernancePortal(opts = {}) {
             <table class="dense-table">
               <thead>
                 <tr>
-                  <th width="30"><input type="checkbox" onclick="alert('Toggled selection on all rows.')"></th>
+                  <th width="30"><input type="checkbox" id="chkSelectAllRows" title="Select all rows"></th>
                   <th>Asset Path</th>
                   <th width="80">Score</th>
                   <th>Violation Badges</th>
@@ -781,14 +784,14 @@ export function createGovernancePortal(opts = {}) {
               <tbody>
                 ${filteredQueue.map(item => `
                   <tr>
-                    <td><input type="checkbox" value="${item.id}"></td>
-                    <td class="asset-path">${item.path}</td>
+                    <td><input type="checkbox" class="wq-row-check" value="${item.id}"></td>
+                    <td class="asset-path">${esc(item.path)}</td>
                     <td><span class="score-badge ${item.scoreClass}">${item.score}</span></td>
                     <td>
-                      ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${b}</span>`).join(' ')}
+                      ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${esc(b)}</span>`).join(' ')}
                     </td>
                     <td>${renderAssignedBadges(item)}</td>
-                    <td>${item.meta.replace('Steward: ', '').replace('Domain: ', '')}</td>
+                    <td>${esc(item.meta.replace('Steward: ', '').replace('Domain: ', ''))}</td>
                     <td style="text-align:right;">
                       <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-toggle-evidence="${item.id}">Code</button>
                       <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-mark-reviewed="${item.id}">Verify</button>
@@ -801,7 +804,7 @@ export function createGovernancePortal(opts = {}) {
                         ${item.evidence.map(line => `
                           <div class="code-line ${line.hl ? 'code-hl' : ''}">
                             <span class="code-num">${line.num}</span>
-                            <span class="code-text">${line.text}</span>
+                            <span class="code-text">${esc(line.text)}</span>
                           </div>
                         `).join('')}
                       </div>
@@ -817,7 +820,7 @@ export function createGovernancePortal(opts = {}) {
       html += `
         <div class="gov-filters-bar">
           <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter exceptions..." value="${state.searchFilter}">
+            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter exceptions..." value="${esc(state.searchFilter)}">
           </div>
           <select class="gov-filter-select" id="categoryFilter">
             <option value="all" ${state.categoryFilter === 'all' ? 'selected' : ''}>All Resolution Types</option>
@@ -845,10 +848,10 @@ export function createGovernancePortal(opts = {}) {
               <tbody>
                 ${filteredRisks.map(risk => `
                   <tr>
-                    <td class="asset-path">${risk.asset}</td>
-                    <td><span class="exception-tag ${risk.category}">${risk.categoryLabel}</span></td>
-                    <td style="font-style: italic;">"${risk.reason}"</td>
-                    <td>${risk.steward} · ${risk.date}</td>
+                    <td class="asset-path">${esc(risk.asset)}</td>
+                    <td><span class="exception-tag ${esc(risk.category)}">${esc(risk.categoryLabel)}</span></td>
+                    <td style="font-style: italic;">"${esc(risk.reason)}"</td>
+                    <td>${esc(risk.steward)} · ${esc(risk.date)}</td>
                     <td style="text-align:right;">
                       <button class="gov-btn gov-btn-danger" style="padding:2px 8px; font-size:11px;" data-reenable-risk="${risk.id}">Re-Enable</button>
                     </td>
@@ -863,7 +866,7 @@ export function createGovernancePortal(opts = {}) {
       html += `
         <div class="gov-filters-bar">
           <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter assets to badge..." value="${state.searchFilter}">
+            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter assets to badge..." value="${esc(state.searchFilter)}">
           </div>
           <button class="gov-btn" id="btnResetFilters">Clear All</button>
         </div>
@@ -883,13 +886,13 @@ export function createGovernancePortal(opts = {}) {
                 <tbody>
                   ${scoredQueue.filter(item => item.path.toLowerCase().includes(state.searchFilter.toLowerCase())).map(item => `
                     <tr>
-                      <td class="asset-path">${item.path}</td>
+                      <td class="asset-path">${esc(item.path)}</td>
                       <td>${item.assignedBadges && item.assignedBadges.length ? renderAssignedBadges(item) : '<span style="color:var(--portal-muted, #9ca3af); font-style:italic; font-size:11px;">None</span>'}</td>
                       <td style="text-align:right;">
                         <select class="gov-filter-select" style="padding: 3px 6px; font-size:11px;" data-assign-badge-to="${item.id}">
                           <option value="">+ Assign Badge</option>
                           ${state.badgeDefinitions.filter(def => !item.assignedBadges.includes(def.name)).map(def => `
-                            <option value="${def.name}">${def.name}</option>
+                            <option value="${esc(def.name)}">${esc(def.name)}</option>
                           `).join('')}
                           ${item.assignedBadges.length ? '<option value="__CLEAR__">- Clear Badges</option>' : ''}
                         </select>
@@ -906,9 +909,9 @@ export function createGovernancePortal(opts = {}) {
               ${state.badgeDefinitions.map(def => `
                 <div style="background:var(--portal-bg, #0b0f19); border: 1px solid var(--portal-border, #374151); padding: 12px; border-radius:6px;">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="steward-badge-tag ${def.color}">★ ${def.name}</span>
+                    <span class="steward-badge-tag ${def.color}">★ ${esc(def.name)}</span>
                   </div>
-                  <p style="font-size:12px; margin:6px 0 0 0; color:var(--portal-muted, #9ca3af);">${def.desc}</p>
+                  <p style="font-size:12px; margin:6px 0 0 0; color:var(--portal-muted, #9ca3af);">${esc(def.desc)}</p>
                 </div>
               `).join('')}
             </div>
@@ -919,7 +922,7 @@ export function createGovernancePortal(opts = {}) {
       html += `
         <div class="gov-filters-bar">
           <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Search glossary..." value="${state.searchFilter}">
+            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Search glossary..." value="${esc(state.searchFilter)}">
           </div>
           <button class="gov-btn gov-btn-primary" id="btnAddNewTerm" style="margin-left:auto;">➕ Define Term</button>
         </div>
@@ -945,12 +948,12 @@ export function createGovernancePortal(opts = {}) {
               <tbody>
                 ${filteredGlossary.map(t => `
                   <tr>
-                    <td style="font-weight:700; color:var(--portal-accent, #3b82f6);">${t.term}</td>
-                    <td><code>${t.type}</code></td>
-                    <td>${t.aliases.split(',').map(a => `<span class="badge-pill" style="margin-right:2px;">${a.trim()}</span>`).join('')}</td>
-                    <td>${t.formula && t.formula !== 'N/A' ? `<code>${t.formula}</code>` : t.formula}</td>
-                    <td style="font-size:12px;">${t.desc}</td>
-                    <td>${t.steward}</td>
+                    <td style="font-weight:700; color:var(--portal-accent, #3b82f6);">${esc(t.term)}</td>
+                    <td><code>${esc(t.type)}</code></td>
+                    <td>${t.aliases.split(',').map(a => `<span class="badge-pill" style="margin-right:2px;">${esc(a.trim())}</span>`).join('')}</td>
+                    <td>${t.formula && t.formula !== 'N/A' ? `<code>${esc(t.formula)}</code>` : esc(t.formula)}</td>
+                    <td style="font-size:12px;">${esc(t.desc)}</td>
+                    <td>${esc(t.steward)}</td>
                     <td style="text-align:right;">
                       <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-edit-term="${t.id}">Edit</button>
                       <button class="gov-btn gov-btn-danger" style="padding:2px 8px; font-size:11px;" data-delete-term="${t.id}">Delete</button>
@@ -1026,9 +1029,9 @@ export function createGovernancePortal(opts = {}) {
                 <tbody>
                   ${state.resolutionCategories.map(cat => `
                     <tr>
-                      <td style="font-weight:600;">${cat.label}</td>
-                      <td><span class="exception-tag ${cat.color}">${cat.color}</span></td>
-                      <td>${cat.expiry}</td>
+                      <td style="font-weight:600;">${esc(cat.label)}</td>
+                      <td><span class="exception-tag ${esc(cat.color)}">${esc(cat.color)}</span></td>
+                      <td>${esc(cat.expiry)}</td>
                       <td style="text-align:right;">
                         <button class="gov-btn" style="padding:1px 6px; font-size:10px;" data-edit-cat="${cat.id}">Edit</button>
                         <button class="gov-btn gov-btn-danger" style="padding:1px 6px; font-size:10px;" data-delete-cat="${cat.id}">Del</button>
@@ -1191,6 +1194,12 @@ export function createGovernancePortal(opts = {}) {
       render();
     });
 
+    // Select-all toggle for the workqueue table. Bound here (not an inline onclick)
+    // because the Portal CSP sets script-src-attr 'none', which blocks inline handlers.
+    host.querySelector('#chkSelectAllRows')?.addEventListener('change', (e) => {
+      host.querySelectorAll('.wq-row-check').forEach(cb => { cb.checked = e.target.checked; });
+    });
+
     // Evidence
     host.querySelectorAll('[data-toggle-evidence]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1247,7 +1256,7 @@ export function createGovernancePortal(opts = {}) {
           host.querySelector('#modalAssetPath').value = asset.path;
           host.querySelector('#modalReason').value = '';
           const select = host.querySelector('#modalCategory');
-          select.innerHTML = state.resolutionCategories.map(cat => `<option value="${cat.value}">${cat.label}</option>`).join('');
+          select.innerHTML = state.resolutionCategories.map(cat => `<option value="${esc(cat.value)}">${esc(cat.label)}</option>`).join('');
           host.querySelector('#modalBackdrop').classList.add('open');
         }
       });
