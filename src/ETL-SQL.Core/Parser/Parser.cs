@@ -673,8 +673,115 @@ public class Parser : IParser
             };
         }
 
+        var onFailureActions = ParseOnFailureClauses();
+        if (onFailureActions != null)
+        {
+            selectStmt = selectStmt with
+            {
+                OnFailureActions = onFailureActions,
+                EndLine = LastTokenEndLine,
+                EndColumn = LastTokenEndColumn
+            };
+        }
+
         return selectStmt;
     }
+
+    /// <summary>
+    /// Parses trailing <c>ON FAILURE &lt;ACTION&gt; [TO &lt;table&gt;] [WITH (RETENTION = '…')]</c>
+    /// blocks (data-quality action routing). <c>FAILURE</c>, <c>QUARANTINE</c>, and <c>WARN</c> are
+    /// contextual identifiers (mirroring <c>EXPECT SCHEMA … ON DRIFT WARN</c>); a lone <c>ON</c> not
+    /// followed by <c>FAILURE</c> is left untouched. Returns null when no clause is present.
+    /// </summary>
+    private List<FailureActionClause>? ParseOnFailureClauses()
+    {
+        List<FailureActionClause>? clauses = null;
+        while (Current.Type == TokenType.ON && IsContextualKeyword(Peek, "FAILURE"))
+        {
+            var clauseToken = Current;
+            Advance(); // ON
+            Advance(); // FAILURE
+
+            ETL_SQL.Core.Quality.FailAction action;
+            if (Match(TokenType.THROW))
+            {
+                action = ETL_SQL.Core.Quality.FailAction.Throw;
+            }
+            else if (IsContextualKeyword(Current, "QUARANTINE"))
+            {
+                Advance();
+                action = ETL_SQL.Core.Quality.FailAction.Quarantine;
+            }
+            else if (IsContextualKeyword(Current, "WARN"))
+            {
+                Advance();
+                action = ETL_SQL.Core.Quality.FailAction.Warn;
+            }
+            else
+            {
+                throw new SyntaxException("Expected THROW, WARN, or QUARANTINE after ON FAILURE",
+                    Current.Line, Current.Column);
+            }
+
+            string? target = null;
+            if (Current.Type == TokenType.TO)
+            {
+                if (action == ETL_SQL.Core.Quality.FailAction.Throw)
+                    throw new SyntaxException("ON FAILURE THROW does not take a TO target",
+                        Current.Line, Current.Column);
+                Advance();
+                target = ConsumeIdentifier("Expected target table after ON FAILURE ... TO").Value;
+                while (Match(TokenType.DOT))
+                    target += "." + ConsumeIdentifier("Expected name after '.' in ON FAILURE target").Value;
+            }
+            else if (action == ETL_SQL.Core.Quality.FailAction.Quarantine)
+            {
+                throw new SyntaxException(
+                    "ON FAILURE QUARANTINE requires TO <table> — quarantined rows have nowhere else to go",
+                    Current.Line, Current.Column);
+            }
+
+            ETL_SQL.Core.Quality.RetentionInterval? retention = null;
+            if (Current.Type == TokenType.WITH && Peek.Type == TokenType.LPAREN)
+            {
+                if (target == null)
+                    throw new SyntaxException(
+                        "WITH (RETENTION = ...) requires a TO <table> target on the ON FAILURE clause",
+                        Current.Line, Current.Column);
+                Advance(); // WITH
+                Advance(); // (
+                var optionName = ConsumeIdentifier("Expected option name inside ON FAILURE WITH (...)").Value;
+                if (!optionName.Equals("RETENTION", StringComparison.OrdinalIgnoreCase))
+                    throw new SyntaxException(
+                        $"Unknown ON FAILURE option '{optionName}' — only RETENTION is supported",
+                        Previous.Line, Previous.Column);
+                Consume(TokenType.EQUALS, "Expected '=' after RETENTION");
+                var intervalToken = Consume(TokenType.STRING_LITERAL,
+                    "Expected an interval string after RETENTION = (e.g. '30 DAYS')");
+                if (!ETL_SQL.Core.Quality.RetentionInterval.TryParse(intervalToken.Value, out retention))
+                    throw new SyntaxException(
+                        $"RETENTION interval '{intervalToken.Value}' is not valid — use '<n> MINUTES|HOURS|DAYS|WEEKS'",
+                        intervalToken.Line, intervalToken.Column);
+                Consume(TokenType.RPAREN, "Expected ')' after RETENTION option");
+            }
+
+            clauses ??= new List<FailureActionClause>();
+            if (clauses.Any(c => c.Action == action))
+                throw new SyntaxException($"Duplicate ON FAILURE {action.ToString().ToUpperInvariant()} clause — " +
+                    "at most one routing clause per action", clauseToken.Line, clauseToken.Column);
+            clauses.Add(new FailureActionClause(action, target, retention)
+            {
+                Line = clauseToken.Line,
+                Column = clauseToken.Column,
+                EndLine = LastTokenEndLine,
+                EndColumn = LastTokenEndColumn
+            });
+        }
+        return clauses;
+    }
+
+    private static bool IsContextualKeyword(Token token, string word) =>
+        token.Type == TokenType.IDENTIFIER && token.Value.Equals(word, StringComparison.OrdinalIgnoreCase);
 
     private static void RejectBareAggregateIdentifiers(IEnumerable<SelectColumn> columns)
     {

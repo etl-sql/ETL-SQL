@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
@@ -347,6 +348,11 @@ public sealed record SelectStatement : Statement
     public bool OrderByAllDescending { get; init; }
     /// <summary><c>USING SAMPLE</c> clause; null when absent.</summary>
     public SampleClause? Sample { get; init; }
+    /// <summary>
+    /// Trailing <c>ON FAILURE &lt;ACTION&gt; [TO &lt;table&gt;] [WITH (RETENTION = '…')]</c> blocks
+    /// routing <c>@fail</c> data-quality actions (at most one clause per action). Null when absent.
+    /// </summary>
+    public IReadOnlyList<FailureActionClause>? OnFailureActions { get; init; }
 
     public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)
     {
@@ -400,6 +406,15 @@ public sealed record GroupingSetClause : AstNode
 
 /// <summary><c>USING SAMPLE n PERCENT|ROWS [REPEATABLE (seed)]</c> — random row sampling.</summary>
 public sealed record SampleClause(decimal Count, bool IsPercent, int? Seed) : AstNode;
+
+/// <summary>
+/// One trailing <c>ON FAILURE &lt;ACTION&gt; [TO &lt;table&gt;] [WITH (RETENTION = '…')]</c> block on a
+/// SELECT carrying <c>@expect</c>/<c>@fail</c> rules. <c>QUARANTINE</c> requires a <see cref="Target"/>;
+/// <c>WARN</c> optionally takes one (none = diagnostic-only); <c>THROW</c> never does. Validation is
+/// symmetric (design decision 5): a <c>@fail</c> action without its clause and a clause without any
+/// matching <c>@fail</c> rule are both hard errors.
+/// </summary>
+public sealed record FailureActionClause(FailAction Action, string? Target, RetentionInterval? Retention) : AstNode;
 
 public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
 
