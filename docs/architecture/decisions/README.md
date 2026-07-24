@@ -10,6 +10,7 @@
 | [Portal and Orchestrator Capacity Planning](Capacity_Planning.md) | Use this guide to turn an expected user base and job schedule into a starter server plan for |
 | [Portal and Orchestrator Capacity Testing](Capacity_Testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
 | [Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design](ConcurrentPostgresFailureSoak.md) | **Status:** Implementation in progress; Slice A topology harness is implemented. |
+| [Column & Job Data-Quality Rules — Design Specification](DataQualityRules.md) | > **Status:** 📋 **PROPOSED** (design only; not yet implemented). |
 | [Departmental Isolation Topology](Departmental_Isolation.md) | This document defines how to run **multiple isolated ETL-SQL environments** — for example |
 | [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md) | This guide defines supported RPO/RTO targets, recovery-set contents, restore-drill expectations, and |
 | [Enterprise Release Evidence Checklist](Enterprise_Release_Evidence_Checklist.md) | Status: Prepared checklist, not release evidence. |
