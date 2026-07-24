@@ -26,7 +26,7 @@
 Extend the engine's verification surface from **schema** (`EXPECT SCHEMA … ON DRIFT WARN`) and
 **boolean assertions** (`ASSERT`) to **column-value** and **job-metric** data quality:
 
-- **Column rules** declared inline on SELECT columns via tags — `SELECT UserId /* @expect: 'NOT NULL'; @on_fail: 'THROW'; */` — with pluggable fail actions (`THROW` / `WARN` / `QUARANTINE`).
+- **Column rules** declared inline on SELECT columns via tags — `SELECT UserId /* @expect: 'NOT NULL'; @fail: 'THROW'; */` — with pluggable fail actions (`THROW` / `WARN` / `QUARANTINE`).
 - **Job rules** declared with `ASSERT JOB` over run metrics collected **in-stream during execution** — e.g. `ROW_COUNT WITHIN 0.2 OF HISTORICAL`, `NULL_PERCENT(Email) < 0.02`, `QUARANTINE_PERCENT < 0.01` — with alerting.
 - A **webhook** connector so failures can notify Slack / Teams / generic endpoints.
 
@@ -34,7 +34,7 @@ This closes the data-quality half of the stewardship+quality sprint; DQ failures
 governance findings and are designed to feed the same lineage/stewardship read side the Governance
 dashboard already consumes.
 
-**Why tags, not new column syntax:** `@expect`/`@on_fail` are registered stewardship tags, so the
+**Why tags, not new column syntax:** `@expect`/`@fail` are registered stewardship tags, so the
 rules themselves are **steward-visible governance metadata** — they surface everywhere tags already
 do (tag catalog, lineage/stewardship read side, Governance dashboard). A data steward can see *what
 rules protect a column* without reading engine internals, and — because DQ outcomes are persisted
@@ -45,8 +45,8 @@ steward picture; either half alone is not.
 
 - **`ASSERT` is boolean-only, hard-fail.** `AssertStatement(Expression Condition, Expression? Message)` (`src/ETL-SQL.Core/Ast.cs:1327`), parsed by `FlowParser.ParseAssert` (`src/ETL-SQL.Core/Parser/Components/FlowParser.cs:279`), dispatched via `_dispatchMap[TokenType.ASSERT]` (`StatementParser.cs:79`), handled by `AssertStatementHandler` (throws `ExecutionException`). No severity, no action clause, no column/job awareness.
 - **Trailing-action prior art exists.** `EXPECT SCHEMA … ON DRIFT WARN` (`ExpectSchemaStatement { bool WarnOnDrift }`, `Ast.cs:1343`) parses its trailing clause at `FlowParser.cs:331` by matching `TokenType.ON` then `DRIFT`/`WARN` as **contextual identifiers**. `ON` is a real keyword token; `FAILURE`/`WARN`/`THROW`/`QUARANTINE` can be matched the same way. `ExpectSchemaStatementHandler.cs:125` is the WARN-vs-THROW pattern to reuse. No statement currently parses *multiple stacked* action blocks.
-- **The comment-tag pipeline already supports the proposed syntax with no lexer/parser change.** `/* @tag: val; */` and `-- @tag: val` lex to a single `TokenType.COLUMN_TAG` (`Lexer.ReadCommentOrTag`, `Lexer.cs:273`); plain comments are discarded. `Parser.ParseMetadataTags` (`Parser.cs:1865`) splits on `;`, parses `@name: value` **keeping the value verbatim including quotes**, and binds trailing tags positionally to the preceding column (`Parser.cs:1777`). `SelectColumn(Expression, alias, Dictionary<string,string>? metadata)` (`Ast.cs:77`) is the landing spot — `@expect`/`@on_fail` arrive as `Metadata["expect"]` / `Metadata["on_fail"]`.
-- **Tag governance + validation seams exist.** `StewardshipTagCatalog.Definitions` (`src/ETL-SQL.Core/Common/StewardshipTagCatalog.cs:40`) is the first-class vocabulary (owner/steward/pii/…); `UnknownTagLintRule` flags anything absent from it. `TagValueValidationRule` validates values; `TagGovernanceRuntimePolicy` (`src/ETL-SQL.Engine/Handlers/TagGovernanceRuntimePolicy.cs`) reads tag values and throws `ExecutionException` at runtime — the closest analog to `@on_fail`.
+- **The comment-tag pipeline already supports the proposed syntax with no lexer/parser change.** `/* @tag: val; */` and `-- @tag: val` lex to a single `TokenType.COLUMN_TAG` (`Lexer.ReadCommentOrTag`, `Lexer.cs:273`); plain comments are discarded. `Parser.ParseMetadataTags` (`Parser.cs:1865`) splits on `;`, parses `@name: value` **keeping the value verbatim including quotes**, and binds trailing tags positionally to the preceding column (`Parser.cs:1777`). `SelectColumn(Expression, alias, Dictionary<string,string>? metadata)` (`Ast.cs:77`) is the landing spot — `@expect`/`@fail` arrive as `Metadata["expect"]` / `Metadata["fail"]`.
+- **Tag governance + validation seams exist.** `StewardshipTagCatalog.Definitions` (`src/ETL-SQL.Core/Common/StewardshipTagCatalog.cs:40`) is the first-class vocabulary (owner/steward/pii/…); `UnknownTagLintRule` flags anything absent from it. `TagValueValidationRule` validates values; `TagGovernanceRuntimePolicy` (`src/ETL-SQL.Engine/Handlers/TagGovernanceRuntimePolicy.cs`) reads tag values and throws `ExecutionException` at runtime — the closest analog to `@fail`.
 - **Severity channels already present.** `ExecutionException` carries an int `Severity` (default 16) + `ErrorNumber`/`State`/`Line` (`src/ETL-SQL.Core/Common/Exceptions/ETLException.cs`); `DiagnosticSeverity { Error, Warning, Info, Hint }` flows into `ExecutionResult.Diagnostics` (`ExecutionResult.cs:16`) — the right surface for a structured non-fatal WARN.
 - **A real streaming row pipeline exists.** Query execution is `IAsyncEnumerable<Row>`; the projection step `ProjectRows(...)` in `src/ETL-SQL.Engine/Engines/SelectExecutionEngine.cs:724` (invoked at `:608`/`:706`) is the natural inline validation hook. Write-side precedent: `InMemoryDataSource.WriteBatchesCore` calls `IDataValidator.ValidateCheckConstraint(Expression, Row)` per row (`DataSources.cs`; impl `DataConstraintValidator.cs`).
 - **Pushdown runs upstream of the hook.** `SemiJoinPushdownOptimizer` and `PredicatePushdownOptimizer` rewrite the plan before execution (`SelectExecutionEngine.cs:65-69`). They move *filters* toward sources; output rows still flow through `ProjectRows`. Column rules validate **output rows**, so upstream predicate pushdown does not change rule semantics — but any current or future path that bypasses local projection entirely must be **pinned to the local path** when rules are present (§4).
@@ -58,16 +58,18 @@ steward picture; either half alone is not.
 ## Design decisions (locked)
 
 1. **Full scope**: column rules **+** `ASSERT JOB` **+** webhook connector.
-2. **Rules are steward-facing governance metadata.** `@expect`/`@on_fail` are first-class catalog tags precisely so stewards can see which rules protect which columns through the existing stewardship surfaces; per-run DQ metrics (decision 8) complete that picture with observed impact.
+2. **Rules are steward-facing governance metadata.** `@expect`/`@fail` are first-class catalog tags precisely so stewards can see which rules protect which columns through the existing stewardship surfaces; per-run DQ metrics (decision 8) complete that picture with observed impact.
 3. **`UNIQUE_FIRST`/`UNIQUE_LAST` require an explicit `BY <key>`** — reject without one. Source/spill/parallel order is not stable, so "first" is otherwise non-deterministic.
 4. **`QUARANTINE` is legal only at a sink/materialization boundary** (top-level SELECT, `INSERT … SELECT`, `SELECT … INTO`) — a parse/lint error on nested subquery/CTE columns, because it is a filter with a side effect that would silently change downstream row counts.
-5. **Rule tags are first-class and validation is symmetric.** `expect`/`on_fail` are registered in the tag catalog; malformed/unknown rules are **hard errors** (lint + parse), never silently ignored. Symmetry: `@on_fail: 'QUARANTINE'` with no matching `ON FAILURE QUARANTINE TO …` clause is a hard error, **and an `ON FAILURE <ACTION>` clause with zero matching `@on_fail` rules is equally a hard error**. A formatter or tool that strips comments therefore breaks the script *loudly* (orphaned `ON FAILURE` clause) instead of silently disabling enforcement. This is the primary mitigation for the "comments are strippable" failure mode; `WARN`/`THROW`-only rules with no `ON FAILURE` clause remain silently strippable — a documented residual limitation.
+5. **Rule tags are first-class and validation is symmetric.** `expect`/`fail` and their numbered variants (e.g. `@expect_1`/`@fail_1`, `@expect_2`/`@fail_2`) are registered in the tag catalog; malformed/unknown rules are **hard errors** (lint + parse), never silently ignored. This allows mapping multiple distinct rules and different actions to a single column. Symmetry: `@fail: 'QUARANTINE'` with no matching `ON FAILURE QUARANTINE TO …` clause is a hard error, **and an `ON FAILURE <ACTION>` clause with zero matching `@fail` rules is equally a hard error**. A formatter or tool that strips comments therefore breaks the script *loudly* (orphaned `ON FAILURE` clause) instead of silently disabling enforcement. This is the primary mitigation for the "comments are strippable" failure mode; `WARN`/`THROW`-only rules with no `ON FAILURE` clause remain silently strippable — a documented residual limitation.
 6. **Job metrics are collected in-stream during the run, never by post-run re-scan.** A metrics collector wraps the sink-side row stream and computes `ROW_COUNT`, per-column null counts, and quarantine/warn tallies in the same pass. This makes `NULL_PERCENT` near-free, works for **write-only sinks** (Kafka, webhook, SMTP) where a post-run query is impossible, and produces the persisted DQ metrics as a by-product.
 7. **The UNIQUE pre-pass is spill-once, single source read.** When any UNIQUE rule is present, the input stream is materialized once to spill storage; both the duplicate-key pre-pass and the main validation pass read from the spill. The source is **never read twice** — a second read is impossible or inconsistent for non-rewindable sources (Kafka, paginated REST), and even for rewindable sources two reads can observe different data.
 8. **DQ outcomes are persisted per run.** Rows quarantined, rows warned, and per-rule failure counts are recorded on the run's job-history record and exposed on `ExecutionResult`. Without this there is no trend visibility and `ASSERT JOB` could never assert on quarantine rate — the most natural job-level DQ metric.
 9. **The webhook connector inherits REST egress enforcement wholesale.** Arbitrary outbound POST with `SECRET:` access is otherwise an exfiltration primitive. Host validation, per-redirect-hop re-validation, and the proxy-disabled handler are mandatory, and the connector must satisfy `docs/architecture/standards/Connectors_Standards.md` (10 inviolable rules + checklist).
 10. **Documentation and LSP support are part of each slice's definition of done**, not a trailing phase. `docs/reference/` is the embedded runtime help (filenames are lookup keywords) — new surface that ships without reference docs is invisible to users at the point of use.
 11. **v1 quarantine is replay-ready by construction.** Quarantine captures the **pre-projection input row**, requires an **enclosing section label**, and carries `__dq_status`/`__dq_row_id`/`__dq_run_id` plus a **reserved, always-NULL `__dq_origin_row_id`** from day one — so the v2 remediation workflow (label replay with source substitution, designed below) needs no breaking change to quarantine tables written by v1. Because the target schema is fixed on first write (§ Determinism), the v2 re-quarantine linkage column must exist in v1's schema even though only v2 ever populates it; adding it later would break v1-created tables.
+12. **Quarantine table schema drift is verified, not ignored.** If the target schema of a durable quarantine table does not match the incoming pre-projection schema, the engine will attempt an additive migration (adding columns that are missing) or fail validation safely if data types are incompatible, alerting the steward.
+13. **Quarantine and warn targets support configurable data retention.** Both `ON FAILURE QUARANTINE TO` and `ON FAILURE WARN TO` clauses accept a retention configuration (e.g. `WITH (RETENTION = '30 DAYS')`) to allow the engine to prune older records automatically. Retention is especially critical for warn tables, which have no lifecycle state machine to provide natural pruning.
 
 ---
 
@@ -76,28 +78,59 @@ steward picture; either half alone is not.
 ### Column rules
 
 ```sql
--- Actions bind by name: @on_fail picks the action; the trailing ON FAILURE
--- clause supplies that action's routing target. A quarantining statement must
--- sit inside a section label — the v2 replay re-entry point (lint Error without one).
+-- Actions bind by name: @fail picks the action; the trailing ON FAILURE
+-- clause supplies that action's routing target. A column can contain multiple
+-- numbered rule/action pairs (e.g. @expect_1, @fail_1). 
+-- A quarantining statement must sit inside a section label.
 import_users:
 SELECT
-    UserId  /* @expect: 'UNIQUE, NOT NULL'; @on_fail: 'THROW'; */,
-    Email   /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @on_fail: 'QUARANTINE'; */,
-    Age     /* @expect: '>= 0'; @on_fail: 'WARN'; */,
-    Region  /* @expect: "IN ('NA','EMEA','APAC')"; @on_fail: 'QUARANTINE'; */,
-    RegionId /* @expect: 'EXISTS IN dim_region(Id)'; @on_fail: 'QUARANTINE'; */,
-    EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @on_fail: 'QUARANTINE'; */
+    UserId   /* @expect: 'NOT NULL'; @fail: 'THROW'; 
+                @expect_1: 'UNIQUE'; @fail_1: 'QUARANTINE'; */,
+    Email    /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */,
+    Age      /* @expect: '>= 0'; @fail: 'WARN'; 
+                @expect_1: '<= 120'; @fail_1: 'WARN'; */,
+    Region   /* @expect: "IN ('NA','EMEA','APAC')"; @fail: 'QUARANTINE'; */,
+    RegionId /* @expect: 'EXISTS IN dim_region(Id)'; @fail: 'QUARANTINE'; */,
+    EventId  /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */
 INTO clean_users
 FROM raw_users
-ON FAILURE QUARANTINE TO quarantine_users;   -- multiple ON FAILURE blocks allowed
+ON FAILURE QUARANTINE TO quarantine_users WITH (RETENTION = '30 DAYS')
+ON FAILURE WARN TO warning_log_users WITH (RETENTION = '30 DAYS')  -- optional; omit TO for diagnostic-only
+ON FAILURE THROW;   -- Up to 3 distinct routing targets are allowed
 ```
 
 - **Rules** (combinable with top-level commas — the most-used forms from the dbt/GE/Soda field, per the competitive review): `UNIQUE`, `UNIQUE WITH (<col>, …)` (composite key declared on one column, unique over the tuple), `UNIQUE_FIRST BY <expr>`, `UNIQUE_LAST BY <expr>`, `NOT NULL`, `MATCHES <regex>`, `IN (<list>)`, `EXISTS IN <table>(<column>)` (relationship/FK check), `EXPR <predicate>` (cross-column boolean over the full row, e.g. `EXPR StartDate <= EndDate`), and numeric `>= <= > < =`.
 - **NULL semantics (defined, not implied)**: `NOT NULL` is the only rule that fails on NULL. Every other rule **skips NULL values** (SQL `CHECK`-constraint convention, matching dbt `accepted_values`) — pair with `NOT NULL` explicitly to reject them. Without this rule, every nullable column would double-fail.
 - **Rules evaluate against the projected (post-expression) value.** `SELECT UPPER(Email) /* @expect: 'MATCHES …' */` validates the uppercased value; `__dq_value` records that projected value.
-- **Actions** (`@on_fail`): `THROW` (error, `ExecutionException`), `WARN` (aggregated structured diagnostic + log, row passes), `QUARANTINE` (row removed from output, written to the `TO` target). Default when `@expect` is present but `@on_fail` is omitted: **`WARN`** (fail-safe, not silent). **One `@on_fail` per column** — every rule on that column shares the action (per-rule actions are a noted v2 extension).
-- **`ON FAILURE <ACTION> [TO <table>]`** trailing blocks route each action. Validation is symmetric (design decision 5): a `QUARANTINE` tag without a matching clause **and** a clause without any matching tag are both hard errors.
+- **Actions** (`@fail`): `THROW` (error, `ExecutionException`), `WARN` (row passes through; aggregated diagnostic always emitted; row optionally captured to a warn table), `QUARANTINE` (row removed from output, written to the `TO` target). Default when `@expect` is present but `@fail` is omitted: **`WARN`** (fail-safe, not silent).
+- **Numbered Suffixes**: Multiple rule-action pairs are supported on a single column by adding a matching integer suffix (e.g. `@expect_1` pairs with `@fail_1`). The un-suffixed `@expect` pairs with the un-suffixed `@fail`. If an action is omitted for a numbered expectation, it defaults to `WARN`.
+- **`ON FAILURE <ACTION> [TO <table>] [WITH (<options>)]`** trailing blocks route each action. Up to three blocks are supported concurrently (`QUARANTINE`, `WARN`, `THROW`). `TO` is **required** for `QUARANTINE` (the row has nowhere else to go) and **optional** for `WARN` (omitting `TO` produces diagnostic-only mode — the aggregated warning fires but no row is written to a table). `THROW` never takes a `TO` target. Symmetric validation (design decision 5) applies: a `QUARANTINE` or `WARN` tag without a matching `ON FAILURE` clause, and a clause without any matching tag, are both hard errors.
+- **Retention Options**: Both `ON FAILURE QUARANTINE TO` and `ON FAILURE WARN TO` targets accept `WITH (RETENTION = '<interval>')` (e.g. `'30 DAYS'`). The engine prunes rows older than the interval on each run. Warn tables have no lifecycle pruning beyond retention, so the linter emits a `Diagnostic(Info)` when a `WARN TO` target is declared without a `RETENTION` option, recommending one be set.
 - **Quarantine targets should be durable.** `TO` accepts a `#temp` table or a durable table on a named connection. `#temp` evaporates when the run ends — legal for in-script triage, but the linter emits an **Info** diagnostic recommending a durable target, and all documentation examples quarantine to durable tables. "Remediation is the builder's job" only works if the rows survive the run.
+
+### WARN table schema
+
+When `ON FAILURE WARN TO <table>` is declared, each failing-but-passing row is captured to the warn table. The schema is identical to the quarantine table with three differences:
+
+| Column | Quarantine | Warn |
+|---|---|---|
+| All pre-projection input columns | ✓ | ✓ — same capture, same diagnostic richness |
+| `__dq_rule` | ✓ | ✓ |
+| `__dq_column` | ✓ | ✓ |
+| `__dq_value` | Projected value that failed | Projected value that triggered warn |
+| `__dq_reason` | ✓ | ✓ |
+| `__dq_ts` | ✓ | ✓ |
+| `__dq_run_id` | ✓ | ✓ |
+| `__dq_row_id` | Hash of input row + run_id | ✓ — same hash, same deduplication semantics |
+| `__dq_status` | `'quarantined'` (lifecycle: released/replayed/discarded) | **`'warned'` (fixed — no lifecycle transitions; row is already in the target)** |
+| `__dq_origin_row_id` | NULL in v1; v2 replay linkage | **Always NULL — replay concept does not apply to warns** |
+| **`__dq_target_written`** | *(absent)* | **`1` (BIT, always) — confirms the row reached the main target despite the rule failure** |
+
+Key behavioral notes:
+- **`__dq_status` is immutable for warn rows.** The engine rejects any UPDATE to `__dq_status` on a warn-table row — it is evidence, not a disposition field.
+- **No replay manifest is written** for warn records. `REPLAY QUARANTINE` does not apply to warn tables.
+- **PII masking applies to the warn table the same as quarantine.** If a source column carries `@pii`, the captured value in `__dq_value` is masked in engine diagnostics and alert payloads; the full value is preserved only inside the warn table itself, which inherits the same stewardship tags and access controls as its source columns.
+- **Retention is more critical for warn tables than quarantine**, because warn rows have no lifecycle event that naturally prunes them. The linter nudges toward `WITH (RETENTION = ...)` on every `WARN TO` target.
 
 ### Job rules
 
@@ -130,14 +163,14 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
 
 ### 2. Trailing `ON FAILURE` clause — Core parser + AST
 
-- Extend `SelectStatement` with `IReadOnlyList<FailureActionClause>? OnFailureActions`; add `FailureActionClause(FailAction Action, string? Target)`.
-- Parse after the query body, before `;`, mirroring `ParseExpectSchema`'s `ON DRIFT WARN` (`FlowParser.cs:331`). `QUARANTINE`/`WARN` may take `TO <table>`; `THROW` may not.
+- Extend `SelectStatement` with `IReadOnlyList<FailureActionClause>? OnFailureActions`; add `FailureActionClause(FailAction Action, string? Target, RetentionInterval? Retention)`.
+- Parse after the query body, before `;`, mirroring `ParseExpectSchema`'s `ON DRIFT WARN` (`FlowParser.cs:331`). `QUARANTINE` **requires** `TO <table>`; `WARN` **optionally** takes `TO <table>` (no `TO` = diagnostic-only mode, no row capture); `THROW` never takes `TO`.
 
 ### 3. First-class tags + validators — Analysis
 
-- Register in `StewardshipTagCatalog.Definitions` (column scope): `expect` as `String`, `on_fail` as `Enum` with allowed `THROW`/`WARN`/`QUARANTINE`. (The rule grammar itself is too rich for the value-kind validator — hence a dedicated linter.) Catalog registration is what makes the rules visible on the stewardship/lineage read side.
+- Register in `StewardshipTagCatalog.Definitions` (column scope): `expect` as `String`, `fail` as `Enum` with allowed `THROW`/`WARN`/`QUARANTINE`. (The rule grammar itself is too rich for the value-kind validator — hence a dedicated linter.) Catalog registration is what makes the rules visible on the stewardship/lineage read side.
 - `ColumnRuleValidationRule.cs` (model on `TagValueValidationRule.cs`): run `ColumnRuleParser`; `Diagnostic(Error)` on malformed rules, bad regex, `UNIQUE_FIRST/LAST` missing `BY`, unknown action.
-- `QuarantineBoundaryRule.cs`: `Diagnostic(Error)` when `@on_fail: 'QUARANTINE'` is on a non-sink SELECT, when a `QUARANTINE` action lacks a `TO` target, when a quarantining statement has **no enclosing section label** (`SectionLabelStatement`, `Ast.cs:1549` — the label is the v2 replay re-entry point, required from v1), **and — symmetric check — when any `ON FAILURE <ACTION>` clause has no matching `@on_fail` rule in the statement** (the comment-stripping tripwire). `Diagnostic(Info)` when quarantining to a `#temp` target (recommend durable). The linter may also warn when a `UNIQUE_FIRST/LAST` `BY` key isn't provably unique.
+- `QuarantineBoundaryRule.cs`: `Diagnostic(Error)` when `@fail: 'QUARANTINE'` is on a non-sink SELECT, when a `QUARANTINE` action lacks a `TO` target, when a quarantining statement has **no enclosing section label** (`SectionLabelStatement`, `Ast.cs:1549` — the label is the v2 replay re-entry point, required from v1), **and — symmetric check — when any `ON FAILURE <ACTION>` clause has no matching `@fail` rule in the statement** (the comment-stripping tripwire). `Diagnostic(Info)` when quarantining to a `#temp` target (recommend durable); `Diagnostic(Info)` when a `WARN TO` target is declared without a `RETENTION` option (warn tables have no lifecycle pruning). The linter may also warn when a `UNIQUE_FIRST/LAST` `BY` key isn't provably unique.
 
 ### 4. Runtime enforcement — Engine
 
@@ -149,6 +182,9 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
   - **UNIQUE rules run over a single spill materialization** (design decision 7). The validating iterator spills the upstream stream once (respecting `JoinSpillThreshold`-class thresholds and the `MemoryGovernor`); the duplicate-key set is built from the spill via `ExternalAggregateEngine.ApplyAggregationExternal(groupBy=[col], HAVING COUNT(*)>1)` (composite `UNIQUE WITH` groups by the column tuple — same engine, multi-column key) — for `UNIQUE_FIRST/LAST BY key` also aggregating `MIN/MAX(orderKey)` per group so only the keeper survives — then the main pass streams from the same spill. Cost is one extra disk write/read of the stream, documented. One pre-pass per unique column in v1 (single-pass batching is a noted optimization).
   - **Rules pin execution to the local path.** Upstream predicate/semi-join pushdown is unaffected (it moves filters, and rules validate output rows), but any plan shape that would bypass local projection entirely is disabled for statements carrying `@expect` rules, with a regression test guarding the pin.
 - **QUARANTINE routing**: resolve the `TO` target via `context.ResolveDataSourceAsync` (auto-create for `#temp`), write with `WriteBatches(append:true)`. **The captured row is the pre-projection input row** — every input column the statement saw, available directly in the `ProjectRows` wrapper — not the projected output row. This is what makes v2 replay possible (re-feed the row through the statement) and it is also better for stewards: they fix the *cause* (the source value), not the symptom. Rows are **augmented** with `__dq_rule`, `__dq_column`, `__dq_value` (the projected value that failed), `__dq_reason`, `__dq_ts`, `__dq_run_id`, `__dq_status` (always `'quarantined'` when written — the v2 disposition column, shipped in v1 so remediation never breaks the schema), `__dq_row_id` — a deterministic hash of the captured row content + run id, the stable identity replay-once semantics key on — and a **reserved `__dq_origin_row_id`** written as NULL in v1. The latter is the forward-compat hook for decision 11: v2 replay populates it when an edited-but-still-failing row re-quarantines (linking the new row back to the original `__dq_row_id`), and because the quarantine schema is frozen on first write (§ Determinism), the column must be present in v1-created tables or v2 could not write to them. The engine routes and annotates; the **remediation workflow ships as v2** (designed below) — v1 users remediate by hand against the same schema.
+- **WARN routing**: two modes depending on whether `TO` is present:
+  - **Diagnostic-only** (`ON FAILURE WARN` with no `TO`): the aggregated end-of-stream `Diagnostic(Warning)` fires (count + N capped samples); no row is written anywhere. This is the lightest mode — no storage overhead, message visible in the run log and LSP output.
+  - **Row-capture** (`ON FAILURE WARN TO <table>`): in addition to the aggregated diagnostic, each individually failing row is written to the warn table in the same `WriteBatches(append:true)` pattern as quarantine. The captured row is the **pre-projection input row** augmented with the same `__dq_*` columns as quarantine, except `__dq_status` is always `'warned'` (immutable), `__dq_origin_row_id` is always NULL (no replay), and `__dq_target_written` is always `1` (confirms the row reached the main target). Retention pruning fires at the end of the run when a `RETENTION` interval is configured. No replay manifest is written for warn records.
 
 ### 5. Webhook connector — new `src/ETL-SQL.Connectors.Messaging/Webhook/`
 
@@ -345,9 +381,9 @@ script was never actually modular.
 Each slice ships its docs and LSP support **in the same PR** as the feature:
 
 - **Slice B**: reference entry for the `WEBHOOK` connection type (options, `FORMAT` payloads, egress-policy behavior, `SECRET:` usage); connector listed in the docs library map if applicable.
-- **Slice A**: reference entries for `@expect` / `@on_fail` tags (full rule grammar, actions, defaults) and the `ON FAILURE` clause; guide-level "data quality rules" walkthrough whose examples quarantine to **durable** tables; documented limitations (comment-strippability residual, spill-once cost, one action per column). LSP: tag-name/value completions for `expect`/`on_fail`, diagnostics surfaced from the new lint rules.
+- **Slice A**: reference entries for `@expect` / `@fail` tags (full rule grammar, actions, defaults) and the `ON FAILURE` clause; guide-level "data quality rules" walkthrough whose examples quarantine to **durable** tables; documented limitations (comment-strippability residual, spill-once cost, one action per column). LSP: tag-name/value completions for `expect`/`fail`, diagnostics surfaced from the new lint rules.
 - **Slice C**: reference entry for `ASSERT JOB` (predicates, `HISTORICAL` semantics incl. cold start, `ALERT`/`CRITICAL_FAILURE`); administration-guide note on the persisted DQ metrics columns. LSP: `ASSERT JOB` grammar in completions/diagnostics.
-- Stewardship docs: note that `expect`/`on_fail` appear in the tag catalog and what the per-run DQ metrics mean for stewards.
+- Stewardship docs: note that `expect`/`fail` appear in the tag catalog and what the per-run DQ metrics mean for stewards.
 
 ## Sequencing
 
@@ -374,7 +410,7 @@ Built on `release/v0.17.0` (feature branches off the active release branch; no d
 
 - **Unit**: `ColumnRuleParser` (comma-in-regex, `IN` lists, `UNIQUE_FIRST BY`, `UNIQUE WITH` tuples, `EXISTS IN t(c)`, `EXPR` predicates, malformed → error); each rule's pass/fail; **NULL skips every rule except NOT NULL**; case-sensitivity for MATCHES/IN/EXISTS IN; decimal compares; **NonBacktracking-incompatible regex (backreference/lookaround) → lint Error**; WARN aggregation (count + capped samples, single diagnostic per rule/column); **`@pii` column samples masked in diagnostics and alert payloads**.
 - **Parser**: `ON FAILURE` clauses (single/multiple/`TO`); `ASSERT JOB` grammar; `UNIQUE_FIRST` without `BY` → `SyntaxException`.
-- **Linter**: malformed `@expect`; `@on_fail: 'QUARANTINE'` on nested SELECT; QUARANTINE without target; **quarantining statement without an enclosing section label**; **orphaned `ON FAILURE` clause with zero matching rules (symmetric check)** — all Errors; `#temp` quarantine target → Info.
+- **Linter**: malformed `@expect`; `@fail: 'QUARANTINE'` on nested SELECT; QUARANTINE without target; **quarantining statement without an enclosing section label**; **orphaned `ON FAILURE` clause with zero matching rules (symmetric check)** — all Errors; `#temp` quarantine target → Info.
 - **Engine**: THROW/WARN/QUARANTINE end-to-end incl. `__dq_*` columns, projected-value semantics, and **pre-projection input-row capture** (quarantine row carries input columns absent from the projection); UNIQUE over a dataset above the spill threshold (deterministic, single source read verified with a read-counting fake source); zero-rules ⇒ no extra pass; pushdown-pin regression test.
 - **Metrics**: collector tallies (rows/nulls/quarantined/warned) incl. write-only sink; multi-sink `NULL_PERCENT` ambiguity error; persisted DQ metrics round-trip on SQLite **and** PostgreSQL history stores (additive migration).
 - **Connector**: webhook sink vs a mock HTTP endpoint; payload per FORMAT; SECRET redaction in logs/errors; **egress-denied host and denied redirect hop are rejected**.
@@ -390,7 +426,6 @@ Built on `release/v0.17.0` (feature branches off the active release branch; no d
 - **`FRESHNESS(<col>) < <interval>` predicate** for `ASSERT JOB` (v2) — data-recency checks are table stakes across dbt/Soda/Monte Carlo; small predicate on existing infrastructure.
 - **`WITHIN <n> SIGMA OF HISTORICAL`** (v2) — stddev-based tolerance that self-tunes per job, matching Deequ/Elementary practice; nearly free since run history is already stored.
 - **Alert-state dedup + recovery notifications** (v2) — alert on pass→fail and fail→pass *transitions* with an optional re-alert interval, using the persisted per-run DQ state; prevents a nightly-failing job from posting to Slack forever.
-- **Per-rule `@on_fail` granularity** (v1 = one action per column) and per-predicate criticality for `ASSERT JOB` (v1 = a single `THROW` escalation).
 - **Qualified `NULL_PERCENT(target.col)`** for multi-sink runs (v1 errors on ambiguity).
 - **Single-pass batching of multiple UNIQUE columns** (optimization).
 - **Deep Governance-dashboard findings integration** (a follow-on that reuses the lineage/stewardship read side; the persisted per-run DQ metrics from §6 are its designed feed).

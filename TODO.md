@@ -31,3 +31,14 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
       — that document is the authoritative list; the entries above are the commands, not a substitute for it.
 - [ ] Confirm `CHANGELOG.md`, release notes, sample inventory, and docs reflect v0.17.0 behavior.
 
+### Parser / Tag Pipeline
+
+- [ ] Make comment-tag splitting quote-aware in `Parser.ParseMetadataTags` (`src/ETL-SQL.Core/Parser/Parser.cs:1865`).
+      Today `tagContent.Split(';')` splits on **every** `;`, so a `;` inside a quoted tag value breaks parsing,
+      and a comma between tags silently swallows the following `@tag` into the previous value. Replace the naive
+      split with a small top-level scanner that tracks `'`/`"` quote state and only splits on `;` outside quotes.
+      Prerequisite for the Data Quality `@expect`/`@on_fail` rule tags — values contain commas, parens, operators,
+      and (for `MATCHES`) regexes. Rule: values are quoted; `;`/`,`/`@` inside quotes are literal; **no** backslash
+      escaping (it collides with `MATCHES` regexes); a same-kind literal quote is doubled (SQL `''`). See the tag
+      value grammar note in [DataQualityRules.md](docs/architecture/decisions/DataQualityRules.md).
+
