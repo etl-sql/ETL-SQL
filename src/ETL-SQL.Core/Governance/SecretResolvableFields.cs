@@ -46,6 +46,19 @@ public static class SecretResolvableFields
     private static volatile Dictionary<string, HashSet<string>> _connectorFields =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Built-in connector-scoped designations that hold in every deployment, independent of
+    // organization configuration. A webhook endpoint URL embeds its auth token (Slack/Teams
+    // incoming webhooks) — the URL IS the credential, so SECRET: must resolve on it and display
+    // surfaces must mask it. Keyed by canonical name and each registered alias, because the
+    // resolver and lint see the connector type as typed in the script.
+    private static readonly Dictionary<string, HashSet<string>> BuiltInConnectorFields =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["WEBHOOK"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
+            ["SLACK"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
+            ["TEAMS"] = new(StringComparer.OrdinalIgnoreCase) { "URL" },
+        };
+
     public static bool IsResolvable(string key) =>
         CredentialKeys.Contains(key) || _organizationFields.Contains(key);
 
@@ -59,11 +72,15 @@ public static class SecretResolvableFields
     /// <summary>True when the organization designated this metadata field as sensitive (globally).</summary>
     public static bool IsOrganizationDesignated(string key) => _organizationFields.Contains(key);
 
-    /// <summary>True when the organization designated the field as sensitive for this connector type.</summary>
-    public static bool IsConnectorDesignated(string key, string? connectorType) =>
-        connectorType != null
-        && _connectorFields.TryGetValue(connectorType.Trim(), out var fields)
-        && fields.Contains(key);
+    /// <summary>True when the field is sensitive for this connector type — built-in (e.g. the
+    /// WEBHOOK URL, which embeds its auth token) or organization-designated via "TYPE:FIELD".</summary>
+    public static bool IsConnectorDesignated(string key, string? connectorType)
+    {
+        if (connectorType == null) return false;
+        var type = connectorType.Trim();
+        return (BuiltInConnectorFields.TryGetValue(type, out var builtIn) && builtIn.Contains(key))
+            || (_connectorFields.TryGetValue(type, out var fields) && fields.Contains(key));
+    }
 
     public static IReadOnlyCollection<string> OrganizationFields => _organizationFields;
 

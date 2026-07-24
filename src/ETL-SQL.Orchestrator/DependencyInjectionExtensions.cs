@@ -144,6 +144,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, ParquetConnector>();
             services.AddSingleton<IConnector, AvroConnector>();
             services.AddSingleton<IConnector, SmtpConnector>();
+            services.AddSingleton<IConnector, ETL_SQL.Connectors.Webhook.WebhookConnector>();
             services.AddSingleton<IConnector, SnowflakeConnector>();
             services.AddSingleton<IConnector, BigQueryConnector>();
             services.AddSingleton<IConnector, PortalConnector>();

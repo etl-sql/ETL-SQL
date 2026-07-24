@@ -12,7 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-No notable changes yet.
+### Added
+
+- Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
+  JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
+  opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on
+  `URL` for webhook connections, and the URL is masked to scheme + host in `SHOW CONNECTION`, logs,
+  and error messages. Every request and redirect hop passes egress-policy validation; only 307/308
+  redirects are followed so a delivery is never silently downgraded to a body-less GET.
 
 ## [0.17.0] — 2026-07-23
 

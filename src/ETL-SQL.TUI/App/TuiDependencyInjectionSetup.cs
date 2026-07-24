@@ -137,6 +137,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, ParquetConnector>();
             services.AddSingleton<IConnector, AvroConnector>();
             services.AddSingleton<IConnector, SmtpConnector>();
+            services.AddSingleton<IConnector, ETL_SQL.Connectors.Webhook.WebhookConnector>();
             services.AddSingleton<IConnector, RestConnector>();
             services.AddSingleton<IConnector, OdbcConnector>();
             services.AddSingleton<IConnector, PortalConnector>();

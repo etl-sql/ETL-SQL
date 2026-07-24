@@ -64,7 +64,7 @@ Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
 - **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY`, `PORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
+- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `WEBHOOK`/`SLACK`/`TEAMS`, `DIRECTORY`, `PORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 
 > [!NOTE]

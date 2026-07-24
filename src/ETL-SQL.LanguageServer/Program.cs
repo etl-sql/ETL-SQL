@@ -77,6 +77,7 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.Odbc.OdbcConnector());
                         registry.Register(new ETL_SQL.Connectors.Rest.RestConnector());
                         registry.Register(new ETL_SQL.Connectors.Email.SmtpConnector());
+                        registry.Register(new ETL_SQL.Connectors.Webhook.WebhookConnector());
                         registry.Register(new ETL_SQL.Connectors.SftpConnector());
                         registry.Register(new ETL_SQL.Connectors.AzureBlobConnector());
                         registry.Register(new ETL_SQL.Connectors.FtpConnector());
