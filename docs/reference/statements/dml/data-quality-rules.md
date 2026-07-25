@@ -110,8 +110,8 @@ with those rows substituted for the original source table. Missing manifests and
 shapes, such as join-source quarantines, fail before replay starts.
 
 After the replayed section completes successfully, consumed rows move from `released` to
-`replayed`. A failed replay leaves released rows eligible for retry. Replay lease fencing is still
-follow-up v2 work.
+`replayed`. A failed replay leaves released rows eligible for retry. Orchestrator-hosted replay
+takes a cluster lock on the quarantine target before scanning released rows.
 
 ## Requirements and limits
 

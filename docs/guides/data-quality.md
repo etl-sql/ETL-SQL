@@ -118,8 +118,8 @@ release/replay lifecycle.
 `REPLAY QUARANTINE <table>` resolves the orchestrator manifest, rejects non-replayable quarantine
 targets, builds a replacement source stream from rows marked `released`, strips engine-owned
 `__dq_*` evidence columns, and resumes the recorded section. After the replayed section completes
-successfully, consumed rows move to `__dq_status = 'replayed'`; replay lease fencing remains
-follow-up v2 work.
+successfully, consumed rows move to `__dq_status = 'replayed'`. Orchestrator-hosted replay takes a
+cluster lock on the quarantine target so concurrent replays cannot consume the same released set.
 
 ## Rules that need to see every row
 

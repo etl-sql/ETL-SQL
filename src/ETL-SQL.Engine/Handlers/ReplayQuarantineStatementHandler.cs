@@ -66,12 +66,37 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
                 $"Quarantine target '{target}' is not replayable: no section label was recorded.",
                 null, stmt.Line, stmt.Column);
 
-        var replayScript = ResolveReplayScript(evaluator, manifest.SectionLabel!, stmt);
-        var (replaySource, releasedRows) = await BuildReplaySourceAsync(context, stmt.QuarantineTable, manifest);
-        if (releasedRows > 0)
+        var leaseOwner = BuildLeaseOwner(evaluator);
+        var leaseAcquired = await provider.TryAcquireQuarantineReplayLeaseAsync(
+            context.JobName!,
+            manifest.QuarantineTarget,
+            leaseOwner,
+            TimeSpan.FromMinutes(30),
+            context.CancellationToken);
+        if (!leaseAcquired)
+            throw new ExecutionException(
+                $"Quarantine target '{target}' is already being replayed by another owner.",
+                null, stmt.Line, stmt.Column);
+
+        long releasedRows = 0;
+        try
         {
-            await ReplayReleasedRowsAsync(evaluator, replayScript, manifest, replaySource);
-            await MarkReleasedRowsReplayedAsync(evaluator, stmt);
+            var replayScript = ResolveReplayScript(evaluator, manifest.SectionLabel!, stmt);
+            var replaySourceResult = await BuildReplaySourceAsync(context, stmt.QuarantineTable, manifest);
+            releasedRows = replaySourceResult.ReleasedRows;
+            if (releasedRows > 0)
+            {
+                await ReplayReleasedRowsAsync(evaluator, replayScript, manifest, replaySourceResult.Source);
+                await MarkReleasedRowsReplayedAsync(evaluator, stmt);
+            }
+        }
+        finally
+        {
+            await provider.ReleaseQuarantineReplayLeaseAsync(
+                context.JobName!,
+                manifest.QuarantineTarget,
+                leaseOwner,
+                context.CancellationToken);
         }
 
         var result = BuildResult(manifest, releasedRows, releasedRows > 0 ? "replayed" : "ready");
@@ -101,6 +126,9 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
             $"Cannot replay quarantine: checkpoint label '{sectionLabel}' is not defined in the active script.",
             null, stmt.Line, stmt.Column);
     }
+
+    private static string BuildLeaseOwner(Evaluator evaluator) =>
+        $"{Environment.MachineName}:{Environment.ProcessId}:{evaluator.SessionId ?? "session"}:{Guid.NewGuid():N}";
 
     private static async Task ReplayReleasedRowsAsync(
         Evaluator evaluator,

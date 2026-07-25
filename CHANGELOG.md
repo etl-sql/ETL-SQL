@@ -56,7 +56,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   with clear errors, builds a source stream from rows marked `released` with `__dq_*` evidence
   columns stripped, and resumes the recorded section label with that stream substituted for the
   original source. After a successful replay, consumed rows move from `released` to `replayed`;
-  replay leasing remains a separate remediation slice.
+  replay is fenced by the orchestrator cluster-lock store so concurrent stewards cannot consume the
+  same released row set twice.
 
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and

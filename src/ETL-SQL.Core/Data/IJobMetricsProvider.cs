@@ -102,4 +102,19 @@ public interface IJobMetricsProvider
         QuarantineReplayManifest manifest,
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
+
+    Task<bool> TryAcquireQuarantineReplayLeaseAsync(
+        string jobName,
+        string quarantineTarget,
+        string owner,
+        TimeSpan ttl,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
+
+    Task ReleaseQuarantineReplayLeaseAsync(
+        string jobName,
+        string quarantineTarget,
+        string owner,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

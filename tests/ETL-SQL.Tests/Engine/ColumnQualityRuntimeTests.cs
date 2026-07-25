@@ -259,6 +259,8 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal("#src", row["SourceTable"]);
             Assert.Equal(1L, row["ReleasedRows"]);
             Assert.Equal("replayed", row["Status"]);
+            Assert.Equal(1, provider.LeasesAcquired);
+            Assert.Equal(1, provider.LeasesReleased);
 
             await Run(eval, "SELECT * FROM #clean WHERE Id = 10;");
             var cleanRow = Assert.Single(eval.LastResult!.Rows);
@@ -301,6 +303,27 @@ namespace ETL_SQL.Tests.Engine
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #q;"));
             Assert.Contains("not replayable", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("single-table", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ReplayQuarantine_FailsWhenReplayLeaseIsHeld()
+        {
+            var provider = new CapturingMetricsProvider { AllowLeaseAcquire = false };
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+            await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #q;"));
+            Assert.Contains("already being replayed", ex.Message);
+            Assert.Equal(1, provider.LeasesAcquired);
+            Assert.Equal(0, provider.LeasesReleased);
         }
 
         [Fact]
@@ -853,6 +876,9 @@ namespace ETL_SQL.Tests.Engine
         private sealed class CapturingMetricsProvider : IJobMetricsProvider
         {
             public List<QuarantineReplayManifest> Manifests { get; } = [];
+            public bool AllowLeaseAcquire { get; init; } = true;
+            public int LeasesAcquired { get; private set; }
+            public int LeasesReleased { get; private set; }
             private readonly Dictionary<string, QuarantineReplayManifest> _manifestsByJobAndTarget =
                 new(StringComparer.OrdinalIgnoreCase);
 
@@ -877,6 +903,27 @@ namespace ETL_SQL.Tests.Engine
             {
                 Manifests.Add(manifest);
                 _manifestsByJobAndTarget[$"{manifest.JobName}:{NormalizeTarget(manifest.QuarantineTarget)}"] = manifest;
+                return Task.CompletedTask;
+            }
+
+            public Task<bool> TryAcquireQuarantineReplayLeaseAsync(
+                string jobName,
+                string quarantineTarget,
+                string owner,
+                TimeSpan ttl,
+                CancellationToken cancellationToken = default)
+            {
+                LeasesAcquired++;
+                return Task.FromResult(AllowLeaseAcquire);
+            }
+
+            public Task ReleaseQuarantineReplayLeaseAsync(
+                string jobName,
+                string quarantineTarget,
+                string owner,
+                CancellationToken cancellationToken = default)
+            {
+                LeasesReleased++;
                 return Task.CompletedTask;
             }
 

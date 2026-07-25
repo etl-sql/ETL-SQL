@@ -8,8 +8,8 @@
 > [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
 > v2 design below. The quarantine replay manifest foundation, `UPDATE`-time disposition
-> enforcement, and `REPLAY QUARANTINE` source-substitution replay are now built; replay leasing,
-> and the Portal steward grid remain pending.
+> enforcement, and `REPLAY QUARANTINE` source-substitution replay with cluster-lock fencing are now
+> built; the Portal steward grid remains pending.
 >
 > **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
 > end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
@@ -45,8 +45,8 @@
 > and returns a ready summary without mutating data.
 > Rev 9 (2026-07-25): single-table source-substitution replay implemented — released rows are
 > stripped of `__dq_*` evidence columns, substituted for the recorded source table, and run through
-> the existing resume-at-label machinery. Successful replay flips consumed rows to `replayed`;
-> replay lease fencing remains a follow-up slice.
+> the existing resume-at-label machinery. Successful replay flips consumed rows to `replayed`, and
+> orchestrator-hosted replay is fenced by the cluster-lock store.
 
 ## Goal
 
@@ -274,8 +274,8 @@ when someone adds an earlier table read to the section.
 **As built so far:** orchestrator-hosted runs persist that manifest through the
 `IJobMetricsProvider`/job-state seam on first quarantine write. The stored payload includes the
 captured input column list as well as the fingerprint, and records a non-replayable reason for
-unsupported shapes such as joins. The replay statement now consumes that manifest; replay lease
-fencing remains the next remediation slice.
+unsupported shapes such as joins. The replay statement now consumes that manifest and takes a
+cluster lock through the orchestrator metrics seam before scanning released rows.
 
 `REPLAY QUARANTINE <quarantine_table>;` (script statement; the Portal **Replay** button enqueues
 the same as an orchestrator run) resolves the manifest and re-runs the job via the existing
@@ -287,7 +287,8 @@ recorded source table is fed from `<quarantine_table> WHERE __dq_status = 'relea
 or marked non-replayable, builds an in-memory source stream from released rows with `__dq_*`
 evidence columns stripped, and resumes the recorded section label through the existing evaluator
 resume path. After a successful replay, it flips consumed rows from `released` to `replayed`.
-It does not yet take the replay lease.
+It takes the replay lease before scanning released rows and releases it when replay finishes or
+fails.
 
 - **current rules re-apply naturally** — no rule snapshot, no drift; if rules changed and a row
   still fails, it lands back in quarantine, which is the correct outcome;

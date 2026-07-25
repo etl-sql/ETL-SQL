@@ -13,10 +13,11 @@ namespace ETL_SQL.Orchestrator.Storage;
 /// previous runs' recorded metrics from the job-history store for
 /// <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> baselines.
 /// </summary>
-public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetricsProvider
+public sealed class JobHistoryMetricsProvider(IJobHistoryStore store, IClusterLockStore? locks = null) : IJobMetricsProvider
 {
     private const string AlertStatePrefix = "dq:assert-alert:";
     private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
+    private const string QuarantineReplayLockPrefix = "dq:quarantine-replay:";
 
     public async Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
         string jobName, int limit, CancellationToken cancellationToken = default)
@@ -108,6 +109,29 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetr
             JsonSerializer.Serialize(manifest));
     }
 
+    public async Task<bool> TryAcquireQuarantineReplayLeaseAsync(
+        string jobName,
+        string quarantineTarget,
+        string owner,
+        TimeSpan ttl,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (locks == null) return true;
+        return await locks.TryAcquireLockAsync(QuarantineReplayLockName(jobName, quarantineTarget), owner, ttl);
+    }
+
+    public async Task ReleaseQuarantineReplayLeaseAsync(
+        string jobName,
+        string quarantineTarget,
+        string owner,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (locks != null)
+            await locks.ReleaseLockAsync(QuarantineReplayLockName(jobName, quarantineTarget), owner);
+    }
+
     private static bool IsCompletedSuccessfully(JobHistoryEntry entry) =>
         entry.EndTime.HasValue
         && (entry.Status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
@@ -115,4 +139,7 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetr
 
     private static string NormalizeStateKeyPart(string value) =>
         value.Trim().TrimStart('#').ToLowerInvariant();
+
+    private static string QuarantineReplayLockName(string jobName, string quarantineTarget) =>
+        QuarantineReplayLockPrefix + NormalizeStateKeyPart(jobName) + ":" + NormalizeStateKeyPart(quarantineTarget);
 }
