@@ -175,8 +175,33 @@ the same rule failing on 30% of rows after a source change is an incident. Sampl
 persisted to history, and values from `@pii`-tagged columns are masked in warnings and logs — they
 survive only inside the capture table, which needs the same access controls as its source.
 
+## Putting a ceiling on the whole run
+
+Column rules judge rows. [`ASSERT JOB`](../reference/statements/session-control/assert-job.md)
+judges the *load*, using those same in-stream metrics:
+
+```sql
+ASSERT JOB import_csv (
+    ROW_COUNT WITHIN 0.2 OF HISTORICAL,
+    NULL_PERCENT(Email) < 0.02,
+    QUARANTINE_PERCENT < 0.01
+)
+ON FAILURE ALERT alerts_webhook
+ON CRITICAL_FAILURE THROW;
+```
+
+This is the natural companion to quarantining. A handful of quarantined rows is routine; 40% of the
+feed suddenly failing means something upstream broke, and that is a run you want stopped and
+announced rather than quietly half-loaded. `ROW_COUNT WITHIN 0.2 OF HISTORICAL` catches the other
+common failure — a feed that "succeeds" while delivering a fraction of its usual volume.
+
+Historical baselines use the mean of recent completed runs and deliberately **skip** themselves
+until the job has enough history (default 3 runs), so a newly deployed job does not alert-storm on
+its first execution.
+
 ## Related
 
 - [Data Quality Rules reference](../reference/statements/dml/data-quality-rules.md) — full syntax
+- [ASSERT JOB](../reference/statements/session-control/assert-job.md) — run-level metric assertions
 - [EXPECT SCHEMA](../reference/statements/ddl/expect-schema.md) — structural validation
 - [Data Stewardship and Impact Analysis](data-stewardship-impact.md) — the governance surfaces these tags feed

@@ -6,6 +6,7 @@
 | :--- | :--- |
 | [ANALYZE](analyze.md) | Collects statistics about a temp table or result set, including row count, column cardinality, null ratios, and min/max values. |
 | [ASSERT](assert.md) | Validates a condition at runtime and halts execution with an error if it is false. Used for data quality checks and script contracts. |
+| [ASSERT JOB](assert-job.md) | Asserts on the run's own metrics — row count, null rate, quarantine/warn rate — with optional historical baselines and webhook alerting. |
 | [CLEAR SESSION](clear.md) | Cleans up session state: temp files, recovery manifests, encrypted session data, and disk-spill artifacts. |
 | [CONFIG](config.md) | CONFIG is a keyword used exclusively with the SHOW CONNECTION command to inspect the configuration options and parameters of a data source connection. |
 | [EXPLAIN](explain.md) | Shows the execution plan for a SELECT or DML statement without running it. |

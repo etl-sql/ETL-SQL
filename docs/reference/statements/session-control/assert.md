@@ -30,7 +30,10 @@ ASSERT (
 - If the condition evaluates to FALSE or NULL, execution stops and the message (or a default assertion error) is raised.
 - ASSERT is removed at runtime in release mode if the `Engine.DisableAsserts` setting is `true` in `appsettings.json`.
 - Use ASSERT for invariants and data contracts; use `THROW` for business-logic errors.
+- To assert on the run's own metrics (row count, null rate, quarantine rate) rather than on a query
+  result, use [ASSERT JOB](assert-job.md).
 - See: THROW, TRY, LINT
 
 References:
 - [Statements](../README.md)
+- [ASSERT JOB](assert-job.md)

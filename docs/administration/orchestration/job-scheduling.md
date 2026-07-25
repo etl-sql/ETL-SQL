@@ -176,6 +176,20 @@ ORDER BY StartTime DESC;
 
 **Result columns:** `Id`, `JobName`, `StartTime`, `EndTime`, `Status`, `ErrorMessage`, `RowsProcessed`
 
+Each run also records its data-quality outcomes, so quality can be trended alongside volume and
+duration:
+
+| Column | Contents |
+| :--- | :--- |
+| `RowsQuarantined` | Rows removed from output by an `@expect` … `QUARANTINE` action. |
+| `RowsWarned` | Rows that failed a `WARN` rule but still reached the target. |
+| `DataQualityFailures` | Compact per-rule failure counts (`column:rule=count;…`). Counts only — sample values are never persisted here. |
+
+These columns are added by an additive migration on both the SQLite and PostgreSQL providers, so an
+existing history table is upgraded in place and pre-existing rows read back with zeroes. They are
+also what `ASSERT JOB … WITHIN … OF HISTORICAL` reads to build its baseline — see
+[ASSERT JOB](../../reference/statements/session-control/assert-job.md).
+
 **Status values:** `RUNNING` (in-flight), `SUCCESS`, `FAILURE`, `BLOCKED` (script-hash mismatch),
 `QUARANTINED`, and `INTERRUPTED` (a job whose completion was never recorded — the orchestrator
 restarted or the job was killed; reconciled from a stale `RUNNING` row). A failure digest should treat
