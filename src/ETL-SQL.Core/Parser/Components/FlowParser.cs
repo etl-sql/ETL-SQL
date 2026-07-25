@@ -368,11 +368,12 @@ public class FlowParser : ParserComponent
         var metricName = _parser.IsIdentifier(metricToken)
             ? Advance().Value
             : throw new SyntaxException(
-                "Expected a metric name (ROW_COUNT, NULL_PERCENT, QUARANTINE_PERCENT, WARN_PERCENT)",
+                "Expected a metric name (ROW_COUNT, NULL_PERCENT, FRESHNESS, QUARANTINE_PERCENT, WARN_PERCENT)",
                 metricToken.Line, metricToken.Column);
 
         JobMetricKind metric;
         string? columnName = null;
+        string? predicateTarget = null;
         switch (metricName.ToUpperInvariant())
         {
             case "ROW_COUNT":
@@ -387,22 +388,38 @@ public class FlowParser : ParserComponent
             case "NULL_PERCENT":
                 metric = JobMetricKind.NullPercent;
                 Consume(TokenType.LPAREN, "Expected '(' with a column name after NULL_PERCENT");
-                columnName = ConsumeIdentifier("Expected a column name inside NULL_PERCENT(...)").Value;
+                (predicateTarget, columnName) = ParseJobMetricColumnReference("NULL_PERCENT");
                 Consume(TokenType.RPAREN, "Expected ')' after the NULL_PERCENT column");
+                break;
+            case "FRESHNESS":
+                metric = JobMetricKind.Freshness;
+                Consume(TokenType.LPAREN, "Expected '(' with a column name after FRESHNESS");
+                (predicateTarget, columnName) = ParseJobMetricColumnReference("FRESHNESS");
+                Consume(TokenType.RPAREN, "Expected ')' after the FRESHNESS column");
                 break;
             default:
                 throw new SyntaxException(
-                    $"Unknown job metric '{metricName}'. Supported: ROW_COUNT, NULL_PERCENT(<col>), QUARANTINE_PERCENT, WARN_PERCENT",
+                    $"Unknown job metric '{metricName}'. Supported: ROW_COUNT, NULL_PERCENT(<col>), FRESHNESS(<col>), QUARANTINE_PERCENT, WARN_PERCENT",
                     metricToken.Line, metricToken.Column);
         }
 
         if (IsContextualWord(_parser.Current, "WITHIN"))
         {
+            if (metric == JobMetricKind.Freshness)
+                throw new SyntaxException("FRESHNESS does not support OF HISTORICAL; compare it to an interval literal",
+                    metricToken.Line, metricToken.Column);
+
             Advance(); // WITHIN
             var tolerance = ParseSignedNumber("Expected a numeric tolerance after WITHIN");
             if (tolerance < 0)
                 throw new SyntaxException("WITHIN tolerance must not be negative",
                     _parser.Previous.Line, _parser.Previous.Column);
+            bool usesSigma = false;
+            if (IsContextualWord(_parser.Current, "SIGMA"))
+            {
+                usesSigma = true;
+                Advance(); // SIGMA
+            }
             if (!IsContextualWord(_parser.Current, "OF"))
                 throw new SyntaxException("Expected OF after the WITHIN tolerance",
                     _parser.Current.Line, _parser.Current.Column);
@@ -411,7 +428,7 @@ public class FlowParser : ParserComponent
                 throw new SyntaxException("Expected HISTORICAL after 'WITHIN <n> OF'",
                     _parser.Current.Line, _parser.Current.Column);
             Advance(); // HISTORICAL
-            return new JobMetricPredicate(metric, columnName, null, null, tolerance)
+            return new JobMetricPredicate(metric, columnName, null, null, tolerance, predicateTarget, null, usesSigma)
             {
                 Line = metricToken.Line,
                 Column = metricToken.Column
@@ -430,13 +447,38 @@ public class FlowParser : ParserComponent
                 _parser.Current.Line, _parser.Current.Column)
         };
         Advance();
+
+        if (metric == JobMetricKind.Freshness)
+        {
+            var intervalToken = Consume(TokenType.STRING_LITERAL,
+                $"Expected an interval string after the {metricName} comparison");
+            if (!ETL_SQL.Core.Quality.RetentionInterval.TryParse(intervalToken.Value, out var interval))
+                throw new SyntaxException(
+                    $"FRESHNESS interval '{intervalToken.Value}' is not valid — use '<n> MINUTES|HOURS|DAYS|WEEKS'",
+                    intervalToken.Line, intervalToken.Column);
+
+            return new JobMetricPredicate(metric, columnName, op, null, null, predicateTarget, interval)
+            {
+                Line = metricToken.Line,
+                Column = metricToken.Column
+            };
+        }
+
         var bound = ParseSignedNumber($"Expected a numeric bound after the {metricName} comparison");
 
-        return new JobMetricPredicate(metric, columnName, op, bound, null)
+        return new JobMetricPredicate(metric, columnName, op, bound, null, predicateTarget)
         {
             Line = metricToken.Line,
             Column = metricToken.Column
         };
+    }
+
+    private (string? TargetName, string ColumnName) ParseJobMetricColumnReference(string metricName)
+    {
+        var first = ConsumeIdentifier($"Expected a column name inside {metricName}(...)").Value;
+        if (!Match(TokenType.DOT)) return (null, first);
+        var second = ConsumeIdentifier($"Expected a column name after '.' inside {metricName}(...)").Value;
+        return (first, second);
     }
 
     private decimal ParseSignedNumber(string message)

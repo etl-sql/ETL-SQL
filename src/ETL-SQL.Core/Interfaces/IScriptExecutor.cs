@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Core;
 
@@ -31,4 +32,6 @@ public record ScriptExecutionResult(
     /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
     long RowsWarned = 0,
     /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>); counts only, never sample values.</summary>
-    string? DataQualityFailures = null);
+    string? DataQualityFailures = null,
+    /// <summary>Column-level run metrics collected for ASSERT JOB predicates.</summary>
+    IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null);

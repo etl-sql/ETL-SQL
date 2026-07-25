@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Quality;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -291,9 +292,10 @@ namespace ETL_SQL.Orchestrator.Execution
                         ? w.GetInt64() : 0;
                     string? dqFailures = root.TryGetProperty("dataQualityFailures", out var dq) && dq.ValueKind == JsonValueKind.String
                         ? dq.GetString() : null;
+                    var columnMetrics = ParseColumnMetrics(root);
 
                     return new ScriptExecutionResult(
-                        success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures);
+                        success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures, columnMetrics);
                 }
                 catch (JsonException)
                 {
@@ -314,6 +316,53 @@ namespace ETL_SQL.Orchestrator.Execution
                 message.Append(" Stderr: ").Append(stderrText);
 
             return new ScriptExecutionResult(false, 0, message.ToString(), peakMemory, cpuSeconds);
+        }
+
+        private static IReadOnlyList<DataQualityColumnMetric> ParseColumnMetrics(JsonElement root)
+        {
+            if (!root.TryGetProperty("dataQualityColumnMetrics", out var metrics) ||
+                metrics.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<DataQualityColumnMetric>();
+            }
+
+            var result = new List<DataQualityColumnMetric>();
+            foreach (var item in metrics.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var columnName = ReadString(item, "columnName", "ColumnName");
+                if (string.IsNullOrWhiteSpace(columnName))
+                    continue;
+
+                result.Add(new DataQualityColumnMetric(
+                    ReadString(item, "targetTable", "TargetTable"),
+                    columnName,
+                    ReadInt64(item, "totalRows", "TotalRows"),
+                    ReadInt64(item, "nullRows", "NullRows"),
+                    null));
+            }
+
+            return result;
+        }
+
+        private static string? ReadString(JsonElement item, string camelName, string pascalName)
+        {
+            if (item.TryGetProperty(camelName, out var camel) && camel.ValueKind == JsonValueKind.String)
+                return camel.GetString();
+            if (item.TryGetProperty(pascalName, out var pascal) && pascal.ValueKind == JsonValueKind.String)
+                return pascal.GetString();
+            return null;
+        }
+
+        private static long ReadInt64(JsonElement item, string camelName, string pascalName)
+        {
+            if (item.TryGetProperty(camelName, out var camel) && camel.ValueKind == JsonValueKind.Number)
+                return camel.GetInt64();
+            if (item.TryGetProperty(pascalName, out var pascal) && pascal.ValueKind == JsonValueKind.Number)
+                return pascal.GetInt64();
+            return 0;
         }
 
         private string ResolveExecutablePath()
@@ -606,7 +655,11 @@ namespace ETL_SQL.Orchestrator.Execution
                     response.ErrorMessage,
                     response.PeakMemoryBytes,
                     response.CpuTimeSeconds,
-                    response.SessionId);
+                    response.SessionId,
+                    response.RowsQuarantined,
+                    response.RowsWarned,
+                    response.DataQualityFailures,
+                    response.DataQualityColumnMetrics);
             }
         }
 
@@ -648,5 +701,9 @@ namespace ETL_SQL.Orchestrator.Execution
         string? ErrorMessage,
         long PeakMemoryBytes,
         double CpuTimeSeconds,
-        string? SessionId);
+        string? SessionId,
+        long RowsQuarantined = 0,
+        long RowsWarned = 0,
+        string? DataQualityFailures = null,
+        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null);
 }

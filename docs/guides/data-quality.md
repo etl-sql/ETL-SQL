@@ -183,7 +183,8 @@ judges the *load*, using those same in-stream metrics:
 ```sql
 ASSERT JOB import_csv (
     ROW_COUNT WITHIN 0.2 OF HISTORICAL,
-    NULL_PERCENT(Email) < 0.02,
+    NULL_PERCENT(clean_users.Email) < 0.02,
+    FRESHNESS(clean_users.UpdatedAt) < '2 HOURS',
     QUARANTINE_PERCENT < 0.01
 )
 ON FAILURE ALERT alerts_webhook
@@ -197,7 +198,10 @@ common failure — a feed that "succeeds" while delivering a fraction of its usu
 
 Historical baselines use the mean of recent completed runs and deliberately **skip** themselves
 until the job has enough history (default 3 runs), so a newly deployed job does not alert-storm on
-its first execution.
+its first execution. `NULL_PERCENT(target.column)` can also use `WITHIN ... OF HISTORICAL` or
+`WITHIN n SIGMA OF HISTORICAL`; those baselines come from per-column run metrics saved with job
+history. `FRESHNESS` is current-run only and checks the age of the newest timestamp observed in the
+named column.
 
 ## Related
 

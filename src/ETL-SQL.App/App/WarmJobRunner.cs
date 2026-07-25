@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -58,7 +60,11 @@ namespace ETL_SQL.App
                         SecretRedactor.Redact(ex.Message),
                         Process.GetCurrentProcess().PeakWorkingSet64,
                         0,
-                        request?.SessionId);
+                        request?.SessionId,
+                        0,
+                        0,
+                        null,
+                        null);
                     await Console.Out.WriteLineAsync(JsonSerializer.Serialize(response, JsonOptions));
                     await Console.Out.FlushAsync();
                 }
@@ -108,7 +114,11 @@ namespace ETL_SQL.App
                 string.IsNullOrWhiteSpace(error) ? null : SecretRedactor.Redact(error),
                 process.PeakWorkingSet64,
                 cpuSeconds,
-                ctx.SessionId);
+                ctx.SessionId,
+                execution.RowsQuarantined,
+                execution.RowsWarned,
+                execution.DataQualityFailures,
+                execution.DataQualityColumnMetrics);
         }
     }
 
@@ -128,5 +138,9 @@ namespace ETL_SQL.App
         string? ErrorMessage,
         long PeakMemoryBytes,
         double CpuTimeSeconds,
-        string? SessionId);
+        string? SessionId,
+        long RowsQuarantined,
+        long RowsWarned,
+        string? DataQualityFailures,
+        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics);
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 
@@ -25,11 +26,13 @@ public sealed class DataQualityReport
     private long _rowsWarned;
     private long _rowsValidated;
 
-    // Per-column null tallies, collected ONLY for columns an ASSERT JOB predicate names. A script
-    // with no NULL_PERCENT predicate registers nothing, so the per-cell check never runs.
-    private readonly ConcurrentDictionary<string, ColumnNullAccumulator> _nullCounts =
-        new(StringComparer.OrdinalIgnoreCase);
-    private volatile bool _tracksNullCounts;
+    // Per-column run metrics, collected ONLY for columns an ASSERT JOB predicate names. A script
+    // with no NULL_PERCENT/FRESHNESS predicate registers nothing, so the per-cell check never runs.
+    private readonly ConcurrentDictionary<(string Target, string Column), ColumnMetricAccumulator> _columnMetrics =
+        new(ColumnMetricKeyComparer.Instance);
+    private readonly ConcurrentDictionary<(string? Target, string Column), ColumnMetricRegistration> _columnRegistrations =
+        new(ColumnMetricRegistrationComparer.Instance);
+    private volatile bool _tracksColumnMetrics;
 
     /// <summary>Maximum sample values retained per (rule, column) pair.</summary>
     public int MaxSamplesPerRule { get; init; } = 10;
@@ -39,7 +42,7 @@ public sealed class DataQualityReport
     public long RowsValidated => Interlocked.Read(ref _rowsValidated);
 
     /// <summary>True when no rule has failed and no row was validated — lets callers skip all reporting work.</summary>
-    public bool IsEmpty => _failures.IsEmpty && RowsValidated == 0;
+    public bool IsEmpty => _failures.IsEmpty && RowsValidated == 0 && _columnMetrics.IsEmpty;
 
     public void RecordRowValidated() => Interlocked.Increment(ref _rowsValidated);
     public void RecordRowQuarantined() => Interlocked.Increment(ref _rowsQuarantined);
@@ -49,7 +52,9 @@ public sealed class DataQualityReport
     /// True when at least one column is registered for null tracking — the guard callers check
     /// before doing any per-cell work.
     /// </summary>
-    public bool TracksNullCounts => _tracksNullCounts;
+    public bool TracksNullCounts => _tracksColumnMetrics && _columnRegistrations.Values.Any(r => r.TrackNullPercent);
+
+    public bool TracksColumnMetrics => _tracksColumnMetrics;
 
     /// <summary>
     /// Registers a column whose null fraction an <c>ASSERT JOB NULL_PERCENT(col)</c> predicate
@@ -57,19 +62,47 @@ public sealed class DataQualityReport
     /// inspected, so a script without such a predicate pays nothing per cell.
     /// </summary>
     public void RegisterNullTrackedColumn(string columnName)
+        => RegisterColumnMetric(null, columnName, trackNullPercent: true, trackFreshness: false);
+
+    public void RegisterColumnMetric(
+        string? targetTable,
+        string columnName,
+        bool trackNullPercent,
+        bool trackFreshness)
     {
-        _nullCounts.TryAdd(columnName, new ColumnNullAccumulator());
-        _tracksNullCounts = true;
+        var key = (NormalizeTarget(targetTable), columnName);
+        _columnRegistrations.AddOrUpdate(
+            key,
+            _ => new ColumnMetricRegistration(key.Item1, columnName, trackNullPercent, trackFreshness),
+            (_, existing) => existing with
+            {
+                TrackNullPercent = existing.TrackNullPercent || trackNullPercent,
+                TrackFreshness = existing.TrackFreshness || trackFreshness
+            });
+        _tracksColumnMetrics = true;
     }
 
     /// <summary>
     /// Records one observed value for a tracked column. Ignores columns that were not registered.
     /// </summary>
     public void RecordColumnValue(string columnName, bool isNull)
+        => RecordColumnValue(null, columnName, isNull, null);
+
+    public void RecordColumnValue(string? targetTable, string columnName, bool isNull, object? value)
     {
-        if (!_tracksNullCounts) return;
-        if (!_nullCounts.TryGetValue(columnName, out var accumulator)) return;
-        accumulator.Add(isNull);
+        if (!_tracksColumnMetrics) return;
+        var normalizedTarget = NormalizeTarget(targetTable);
+        var registrations = MatchingRegistrations(normalizedTarget, columnName).ToList();
+        if (registrations.Count == 0) return;
+
+        var trackNullPercent = registrations.Any(r => r.TrackNullPercent);
+        var trackFreshness = registrations.Any(r => r.TrackFreshness);
+        var accumulator = _columnMetrics.GetOrAdd(
+            (normalizedTarget ?? "", columnName),
+            _ => new ColumnMetricAccumulator(normalizedTarget, columnName));
+        accumulator.Add(
+            trackNullPercent ? isNull : null,
+            trackFreshness ? TryCoerceDateTimeOffset(value) : null);
     }
 
     /// <summary>
@@ -77,28 +110,74 @@ public sealed class DataQualityReport
     /// registered or no rows were observed for it.
     /// </summary>
     public decimal? GetNullPercent(string columnName)
+        => GetNullPercent(null, columnName);
+
+    public decimal? GetNullPercent(string? targetTable, string columnName)
     {
-        if (!_nullCounts.TryGetValue(columnName, out var accumulator)) return null;
+        var accumulator = ResolveColumnMetricAccumulator(targetTable, columnName);
+        if (accumulator == null) return null;
         var (total, nulls) = accumulator.Snapshot();
         return total == 0 ? null : (decimal)nulls / total;
     }
 
+    public DateTimeOffset? GetMaxTimestamp(string? targetTable, string columnName) =>
+        ResolveColumnMetricAccumulator(targetTable, columnName)?.MaxTimestamp;
+
     /// <summary>Column names registered for null tracking, whether or not any row was seen.</summary>
-    public IReadOnlyCollection<string> NullTrackedColumns => _nullCounts.Keys.ToList();
+    public IReadOnlyCollection<string> NullTrackedColumns =>
+        _columnRegistrations.Values
+            .Where(r => r.TrackNullPercent)
+            .Select(r => r.ColumnName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    public IReadOnlyCollection<ColumnMetricRegistration> ColumnMetricRegistrations =>
+        _columnRegistrations.Values
+            .OrderBy(r => r.TargetTable ?? "", StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.ColumnName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    public bool ShouldTrackColumnMetric(string? targetTable, string columnName) =>
+        MatchingRegistrations(NormalizeTarget(targetTable), columnName).Any();
+
+    public IReadOnlyList<DataQualityColumnMetric> ColumnMetrics =>
+        _columnMetrics.Values
+            .Select(a =>
+            {
+                var (total, nulls) = a.Snapshot();
+                return new DataQualityColumnMetric(a.TargetTable, a.ColumnName, total, nulls, a.MaxTimestamp);
+            })
+            .Where(m => m.TotalRows > 0 || m.MaxTimestampUtc != null)
+            .OrderBy(m => m.TargetTable ?? "", StringComparer.OrdinalIgnoreCase)
+            .ThenBy(m => m.ColumnName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>
-    /// True when the named column was written by more than one sink statement in this run. v1
-    /// resolves <c>NULL_PERCENT(col)</c> across the run's sink writes; an ambiguous name is a clean
-    /// error rather than a silently-wrong metric (qualified <c>NULL_PERCENT(target.col)</c> is a
-    /// noted future extension).
+    /// True when an unqualified column name was written by more than one sink statement in this
+    /// run. Qualified <c>NULL_PERCENT(target.col)</c> resolves directly to the target-specific
+    /// accumulator.
     /// </summary>
     public bool IsNullTrackedColumnAmbiguous(string columnName) =>
-        _nullCounts.TryGetValue(columnName, out var accumulator) && accumulator.SinkCount > 1;
+        IsNullTrackedColumnAmbiguous(null, columnName);
+
+    public bool IsNullTrackedColumnAmbiguous(string? targetTable, string columnName) =>
+        targetTable == null
+            && _columnMetrics.Values.Count(a =>
+                a.TrackSinkSeen && a.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase)) > 1;
 
     /// <summary>Records that a distinct sink statement contributed values for a tracked column.</summary>
     public void RecordNullTrackedSink(string columnName)
+        => RecordNullTrackedSink(null, columnName);
+
+    public void RecordNullTrackedSink(string? targetTable, string columnName)
     {
-        if (_nullCounts.TryGetValue(columnName, out var accumulator)) accumulator.AddSink();
+        if (!_tracksColumnMetrics) return;
+        var normalizedTarget = NormalizeTarget(targetTable);
+        if (!MatchingRegistrations(normalizedTarget, columnName).Any(r => r.TrackNullPercent || r.TrackFreshness)) return;
+        var accumulator = _columnMetrics.GetOrAdd(
+            (normalizedTarget ?? "", columnName),
+            _ => new ColumnMetricAccumulator(normalizedTarget, columnName));
+        accumulator.MarkSinkSeen();
     }
 
     /// <summary>
@@ -134,8 +213,9 @@ public sealed class DataQualityReport
     public void Clear()
     {
         _failures.Clear();
-        _nullCounts.Clear();
-        _tracksNullCounts = false;
+        _columnMetrics.Clear();
+        _columnRegistrations.Clear();
+        _tracksColumnMetrics = false;
         Interlocked.Exchange(ref _rowsQuarantined, 0);
         Interlocked.Exchange(ref _rowsWarned, 0);
         Interlocked.Exchange(ref _rowsValidated, 0);
@@ -149,21 +229,90 @@ public sealed class DataQualityReport
         _ => value.ToString() ?? "NULL"
     };
 
-    private sealed class ColumnNullAccumulator
+    private IEnumerable<ColumnMetricRegistration> MatchingRegistrations(string? targetTable, string columnName) =>
+        _columnRegistrations.Values.Where(r =>
+            r.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase)
+            && (r.TargetTable == null || TargetMatches(r.TargetTable, targetTable)));
+
+    private ColumnMetricAccumulator? ResolveColumnMetricAccumulator(string? targetTable, string columnName)
+    {
+        var normalizedTarget = NormalizeTarget(targetTable);
+        if (normalizedTarget != null)
+        {
+            return _columnMetrics.TryGetValue((normalizedTarget, columnName), out var exact) ? exact : null;
+        }
+
+        var matches = _columnMetrics.Values
+            .Where(a => a.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private static string? NormalizeTarget(string? targetTable)
+    {
+        if (string.IsNullOrWhiteSpace(targetTable)) return null;
+        return targetTable.Trim().TrimStart('#');
+    }
+
+    private static bool TargetMatches(string registeredTarget, string? observedTarget)
+    {
+        var observed = NormalizeTarget(observedTarget);
+        return observed != null && registeredTarget.Equals(observed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static DateTimeOffset? TryCoerceDateTimeOffset(object? value)
+    {
+        if (value is null or DBNull) return null;
+        if (value is DateTimeOffset dto) return dto.ToUniversalTime();
+        if (value is DateTime dt)
+        {
+            if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            return new DateTimeOffset(dt.ToUniversalTime());
+        }
+        if (DateTimeOffset.TryParse(value.ToString(), CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            return parsed.ToUniversalTime();
+        return null;
+    }
+
+    private sealed class ColumnMetricAccumulator(string? targetTable, string columnName)
     {
         private long _total;
         private long _nulls;
-        private int _sinkCount;
+        private int _sinkSeen;
+        private DateTimeOffset? _maxTimestamp;
+        private readonly object _timestampGate = new();
 
-        public int SinkCount => Volatile.Read(ref _sinkCount);
-
-        public void Add(bool isNull)
+        public string? TargetTable { get; } = targetTable;
+        public string ColumnName { get; } = columnName;
+        public bool TrackSinkSeen => Volatile.Read(ref _sinkSeen) == 1;
+        public DateTimeOffset? MaxTimestamp
         {
-            Interlocked.Increment(ref _total);
-            if (isNull) Interlocked.Increment(ref _nulls);
+            get
+            {
+                lock (_timestampGate) return _maxTimestamp;
+            }
         }
 
-        public void AddSink() => Interlocked.Increment(ref _sinkCount);
+        public void Add(bool? isNull, DateTimeOffset? timestamp)
+        {
+            if (isNull.HasValue)
+            {
+                Interlocked.Increment(ref _total);
+                if (isNull.Value) Interlocked.Increment(ref _nulls);
+            }
+
+            if (timestamp.HasValue)
+            {
+                lock (_timestampGate)
+                {
+                    if (_maxTimestamp == null || timestamp.Value > _maxTimestamp.Value)
+                        _maxTimestamp = timestamp.Value;
+                }
+            }
+        }
+
+        public void MarkSinkSeen() => Volatile.Write(ref _sinkSeen, 1);
 
         public (long Total, long Nulls) Snapshot() => (Interlocked.Read(ref _total), Interlocked.Read(ref _nulls));
     }
@@ -192,7 +341,44 @@ public sealed class DataQualityReport
             }
         }
     }
+
+    private sealed class ColumnMetricKeyComparer : IEqualityComparer<(string Target, string Column)>
+    {
+        public static ColumnMetricKeyComparer Instance { get; } = new();
+        public bool Equals((string Target, string Column) x, (string Target, string Column) y) =>
+            string.Equals(x.Target, y.Target, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Column, y.Column, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((string Target, string Column) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Target),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Column));
+    }
+
+    private sealed class ColumnMetricRegistrationComparer : IEqualityComparer<(string? Target, string Column)>
+    {
+        public static ColumnMetricRegistrationComparer Instance { get; } = new();
+        public bool Equals((string? Target, string Column) x, (string? Target, string Column) y) =>
+            string.Equals(x.Target, y.Target, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Column, y.Column, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((string? Target, string Column) obj) =>
+            HashCode.Combine(
+                obj.Target == null ? 0 : StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Target),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Column));
+    }
 }
+
+public sealed record ColumnMetricRegistration(
+    string? TargetTable,
+    string ColumnName,
+    bool TrackNullPercent,
+    bool TrackFreshness);
+
+public sealed record DataQualityColumnMetric(
+    string? TargetTable,
+    string ColumnName,
+    long TotalRows,
+    long NullRows,
+    DateTimeOffset? MaxTimestampUtc);
 
 /// <summary>Aggregated outcome for one (column, rule) pair.</summary>
 public sealed record RuleFailureSummary(

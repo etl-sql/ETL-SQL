@@ -208,7 +208,7 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
 ### 6. In-stream job metrics collector + persisted DQ outcomes — Engine + Orchestrator
 
 - `src/ETL-SQL.Engine/Services/JobMetricsCollector.cs`: a lightweight accumulator wrapping the sink-side stream of materializing statements. Always cheap: row count and quarantine/warn tallies fall out of the `ColumnQualityValidator` pass. **Per-column null counts are collected only for columns named in the script's `ASSERT JOB` predicates** — the Evaluator holds the full `Script` AST, so a pre-walk registers required columns with the collector before execution (zero predicates ⇒ zero per-cell overhead).
-- Column resolution for `NULL_PERCENT(col)`: v1 resolves the column across the run's sink writes; if multiple sink statements write a column of that name, the assert fails with a clean ambiguity error (qualified `NULL_PERCENT(target.col)` is a noted v2 extension). Because metrics come from the stream, **write-only sinks (Kafka, webhook, SMTP) are fully supported** — no post-run query against the target ever occurs.
+- Column resolution for `NULL_PERCENT(col)`: unqualified predicates resolve the column across the run's sink writes; if multiple sink statements write a column of that name, the assert fails with a clean ambiguity error. The v2 metric-depth slice added qualified `NULL_PERCENT(target.col)` and target-aware historical baselines. Because metrics come from the stream, **write-only sinks (Kafka, webhook, SMTP) are fully supported** — no post-run query against the target ever occurs.
 - **Persistence**: extend the job-history record with `RowsQuarantined`, `RowsWarned`, and a compact per-rule failure-count payload; surface the same values on `ExecutionResult`. Store changes are **additive** (SQLite + PostgreSQL providers; rolling-expand safe). This is what gives stewards trend visibility and feeds the Governance read side later.
 
 ### 7. `ASSERT JOB` + HISTORICAL — Core parser, Engine handler, Orchestrator seam
@@ -469,9 +469,9 @@ failures get resolved*. Sequenced last because it consumes the other slices' out
 
 Recommended order, with the reasoning rather than just the list:
 
-1. **Metric depth** (NULL_PERCENT historical, qualified NULL_PERCENT, FRESHNESS, SIGMA). Smallest
-   slice, closes gaps the shipped documentation currently has to describe as limitations, and makes
-   alerting worth improving. One piece of new storage unblocks all four.
+1. **Metric depth** (NULL_PERCENT historical, qualified NULL_PERCENT, FRESHNESS, SIGMA). Shipped;
+   closes the original documentation gaps and makes alerting worth improving. One piece of new
+   storage unblocks all four.
 2. **Alert quality** (transition alerting, recovery notifications). Cheap, and it protects the
    credibility of the alerting channel before slice 3 makes alerts more numerous.
 3. **Quarantine remediation** (designed above). The headline v2 promise and by far the largest

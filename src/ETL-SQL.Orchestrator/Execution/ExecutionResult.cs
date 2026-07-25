@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -27,6 +28,8 @@ namespace ETL_SQL.Orchestrator.Execution
         public long RowsWarned { get; set; }
         /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>); null when no rule failed.</summary>
         public string? DataQualityFailures { get; set; }
+        /// <summary>Column-level run metrics collected for ASSERT JOB predicates.</summary>
+        public List<DataQualityColumnMetric> DataQualityColumnMetrics { get; set; } = new();
         public bool Success { get; set; }
         /// <summary>Captured log messages for display in the TUI.</summary>
         public List<LogEntry> Messages { get; set; } = new();

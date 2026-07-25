@@ -656,7 +656,8 @@ namespace ETL_SQL.App
                             rowsWarned = evaluator.DataQuality.RowsWarned,
                             dataQualityFailures = evaluator.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
-                                : null
+                                : null,
+                            dataQualityColumnMetrics = evaluator.DataQuality.ColumnMetrics
                         }));
                     }
 
@@ -679,6 +680,7 @@ namespace ETL_SQL.App
                                 evaluator.DataQuality.TotalFailures > 0
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
+                            await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                         }
                         catch (Exception ex)
                         {
@@ -724,7 +726,8 @@ namespace ETL_SQL.App
                             rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
-                                : null
+                                : null,
+                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics
                         }));
                     }
                     else
@@ -752,6 +755,8 @@ namespace ETL_SQL.App
                                 evaluator?.DataQuality.TotalFailures > 0
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
+                            if (evaluator != null)
+                                await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                         }
                         catch { }
                     }
@@ -773,7 +778,8 @@ namespace ETL_SQL.App
                             rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
-                                : null
+                                : null,
+                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics
                         }));
                     }
                     else
@@ -800,6 +806,8 @@ namespace ETL_SQL.App
                                 evaluator?.DataQuality.TotalFailures > 0
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
+                            if (evaluator != null)
+                                await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                         }
                         catch { }
                     }

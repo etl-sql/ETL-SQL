@@ -16,13 +16,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Added `ASSERT JOB <name> (<predicates>) [ON FAILURE ALERT <connection>] [ON CRITICAL_FAILURE THROW]`,
   asserting on the run's own metrics rather than a query result: `ROW_COUNT`, `NULL_PERCENT(<col>)`,
-  `QUARANTINE_PERCENT`, and `WARN_PERCENT`, each comparable against a literal or against a
-  historical baseline with `WITHIN <fraction> OF HISTORICAL`. Metrics are collected in-stream during
-  the run (never a post-run re-scan), so write-only sinks are supported. Historical baselines use
-  the mean of recent completed runs and skip themselves below a configurable minimum
-  (`Engine:DataQuality:MinHistoryRuns`, default 3) so new jobs do not alert-storm. Failures can post
-  a counts-only summary through a webhook connection — sample data is never included — and
-  optionally fail the run.
+  qualified `NULL_PERCENT(<target>.<col>)`, `FRESHNESS(<col>)`, `QUARANTINE_PERCENT`, and
+  `WARN_PERCENT`, each comparable against a literal/interval or against a historical baseline with
+  `WITHIN <fraction> OF HISTORICAL`; supported historical metrics also accept
+  `WITHIN <n> SIGMA OF HISTORICAL`. Metrics are collected in-stream during the run (never a post-run
+  re-scan), so write-only sinks are supported. Historical baselines use the mean of recent completed
+  runs and skip themselves below a configurable minimum (`Engine:DataQuality:MinHistoryRuns`,
+  default 3; sigma default 10) so new jobs do not alert-storm. Per-column null metrics are persisted
+  to job history for target-aware `NULL_PERCENT ... OF HISTORICAL`. Failures can post a counts-only
+  summary through a webhook connection — sample data is never included — and optionally fail the run.
 
 - Added column-level data-quality rules: `@expect` / `@fail` tags declared inline on SELECT columns,
   routed by a trailing `ON FAILURE <ACTION> [TO <table>] [WITH (RETENTION = '…')]` clause. Rules

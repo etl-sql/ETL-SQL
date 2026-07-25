@@ -128,6 +128,37 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task QualifiedNullPercent_DisambiguatesMultipleSinks()
+        {
+            var passing = NewEvaluator();
+            await Run(passing, @"
+                CREATE TABLE #a (Email VARCHAR(50));
+                CREATE TABLE #b (Email VARCHAR(50));
+                INSERT INTO #a (Email) VALUES ('x@y.z'), ('a@b.c');
+                INSERT INTO #b (Email) VALUES (NULL), (NULL);");
+
+            await Run(passing, @"
+                SELECT Email INTO #out_a FROM #a;
+                SELECT Email INTO #out_b FROM #b;
+                ASSERT JOB import (NULL_PERCENT(out_a.Email) < 0.5) ON CRITICAL_FAILURE THROW;");
+
+            var failing = NewEvaluator();
+            await Run(failing, @"
+                CREATE TABLE #a (Email VARCHAR(50));
+                CREATE TABLE #b (Email VARCHAR(50));
+                INSERT INTO #a (Email) VALUES ('x@y.z'), ('a@b.c');
+                INSERT INTO #b (Email) VALUES (NULL), (NULL);");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(failing, @"
+                SELECT Email INTO #out_a FROM #a;
+                SELECT Email INTO #out_b FROM #b;
+                ASSERT JOB import (NULL_PERCENT(out_b.Email) < 0.5) ON CRITICAL_FAILURE THROW;"));
+
+            Assert.Contains("NULL_PERCENT(out_b.Email)", ex.Message);
+            Assert.Contains("actual 1", ex.Message);
+        }
+
+        [Fact]
         public async Task NullPercent_IsCollectedWhenColumnarSelectIntoWouldOtherwiseApply()
         {
             var eval = NewEvaluator();
@@ -143,21 +174,67 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task NullPercentHistorical_FailsClearlyBecauseNoBaselineIsPersisted()
+        public async Task NullPercentHistorical_UsesColumnMetricHistory()
         {
             var eval = NewEvaluatorWithHistory(new FakeMetricsProvider(
-                new JobRunMetrics(100, 0, 0),
-                new JobRunMetrics(100, 0, 0),
-                new JobRunMetrics(100, 0, 0)));
+                [],
+                [
+                    new ColumnRunMetrics("clean", "Email", 100, 10),
+                    new ColumnRunMetrics("clean", "Email", 100, 12),
+                    new ColumnRunMetrics("clean", "Email", 100, 8)
+                ]));
             await Run(eval, @"
                 CREATE TABLE #src (Email VARCHAR(50));
-                INSERT INTO #src (Email) VALUES ('a@b.c'), (NULL);");
+                INSERT INTO #src (Email) VALUES ('a@b.c'), ('b@c.d'), (NULL), (NULL);");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
                 SELECT Email INTO #clean FROM #src;
-                ASSERT JOB import (NULL_PERCENT(Email) WITHIN 0.05 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 0.05 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
 
-            Assert.Contains("NULL_PERCENT(Email) does not support OF HISTORICAL", ex.Message);
+            Assert.Contains("NULL_PERCENT(clean.Email)", ex.Message);
+            Assert.Contains("baseline 0.1", ex.Message);
+        }
+
+        [Fact]
+        public async Task NullPercentHistorical_WithinSigmaFailsOutsideBand()
+        {
+            var eval = NewEvaluatorWithHistory(new FakeMetricsProvider(
+                [],
+                Enumerable.Range(0, 10)
+                    .Select(i => new ColumnRunMetrics("clean", "Email", 100, i % 2 == 0 ? 9 : 11))
+                    .ToArray()));
+            await Run(eval, @"
+                CREATE TABLE #src (Email VARCHAR(50));
+                INSERT INTO #src (Email) VALUES (NULL), (NULL), (NULL), (NULL);");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                SELECT Email INTO #clean FROM #src;
+                ASSERT JOB import (NULL_PERCENT(clean.Email) WITHIN 2 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+
+            Assert.Contains("sigma", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("NULL_PERCENT(clean.Email)", ex.Message);
+        }
+
+        [Fact]
+        public async Task Freshness_ComparesAgeOfNewestObservedTimestamp()
+        {
+            var eval = NewEvaluator();
+            var recent = DateTimeOffset.UtcNow.AddMinutes(-5).ToString("O");
+            var stale = DateTimeOffset.UtcNow.AddDays(-2).ToString("O");
+
+            await Run(eval, $@"
+                CREATE TABLE #src (Id INT, EventTime VARCHAR(40));
+                INSERT INTO #src (Id, EventTime) VALUES (1, '{stale}'), (2, '{recent}');
+                SELECT Id, EventTime INTO #clean FROM #src;
+                ASSERT JOB import (FRESHNESS(clean.EventTime) < '1 HOURS') ON CRITICAL_FAILURE THROW;");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                CREATE TABLE #old_src (Id INT, EventTime VARCHAR(40));
+                INSERT INTO #old_src (Id, EventTime) VALUES (1, '2020-01-01T00:00:00Z');
+                SELECT Id, EventTime INTO #old_clean FROM #old_src;
+                ASSERT JOB import (FRESHNESS(old_clean.EventTime) < '1 HOURS') ON CRITICAL_FAILURE THROW;"));
+
+            Assert.Contains("FRESHNESS(old_clean.EventTime)", ex.Message);
         }
 
         [Fact]
@@ -374,11 +451,40 @@ namespace ETL_SQL.Tests.Engine
                 ON FAILURE QUARANTINE TO #q;");
         }
 
-        private sealed class FakeMetricsProvider(params JobRunMetrics[] runs) : IJobMetricsProvider
+        private sealed class FakeMetricsProvider : IJobMetricsProvider
         {
+            private readonly IReadOnlyList<JobRunMetrics> _runs;
+            private readonly IReadOnlyList<ColumnRunMetrics> _columnRuns;
+
+            public FakeMetricsProvider(params JobRunMetrics[] runs)
+            {
+                _runs = runs;
+                _columnRuns = [];
+            }
+
+            public FakeMetricsProvider(
+                IReadOnlyList<JobRunMetrics> runs,
+                IReadOnlyList<ColumnRunMetrics> columnRuns)
+            {
+                _runs = runs;
+                _columnRuns = columnRuns;
+            }
+
             public Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
                 string jobName, int limit, CancellationToken cancellationToken = default) =>
-                Task.FromResult<IReadOnlyList<JobRunMetrics>>(runs.Take(limit).ToList());
+                Task.FromResult<IReadOnlyList<JobRunMetrics>>(_runs.Take(limit).ToList());
+
+            public Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+                string jobName,
+                string? targetTable,
+                string columnName,
+                int limit,
+                CancellationToken cancellationToken = default) =>
+                Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(_columnRuns
+                    .Where(m => m.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase)
+                        && (targetTable == null || string.Equals(m.TargetTable?.TrimStart('#'), targetTable.TrimStart('#'), StringComparison.OrdinalIgnoreCase)))
+                    .Take(limit)
+                    .ToList());
         }
 
         private sealed class CapturingSink : IDataSource

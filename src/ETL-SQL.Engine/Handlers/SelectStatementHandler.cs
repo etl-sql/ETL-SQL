@@ -105,24 +105,31 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 // Sink-side metrics: row count always, per-column null counts only for columns an
                 // ASSERT JOB NULL_PERCENT predicate registered (zero predicates ⇒ zero per-cell work).
-                var nullTracked = context.DataQuality.TracksNullCounts
-                    ? context.DataQuality.NullTrackedColumns
+                var metricRegistrations = context.DataQuality.TracksColumnMetrics
+                    ? context.DataQuality.ColumnMetricRegistrations
                     : null;
-                bool sinkRecorded = false;
+                var sinkRecorded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 await foreach (var batch in source)
                 {
                     totalRows += batch.Rows.Count;
-                    if (nullTracked != null)
+                    if (metricRegistrations != null)
                     {
-                        foreach (var column in nullTracked)
+                        foreach (var column in metricRegistrations
+                            .Select(r => r.ColumnName)
+                            .Distinct(StringComparer.OrdinalIgnoreCase))
                         {
+                            if (!context.DataQuality.ShouldTrackColumnMetric(intoTable.TableName, column)) continue;
                             if (batch.Schema?.GetIndex(column) is not >= 0) continue;
-                            if (!sinkRecorded) context.DataQuality.RecordNullTrackedSink(column);
+                            if (sinkRecorded.Add(column))
+                                context.DataQuality.RecordNullTrackedSink(intoTable.TableName, column);
                             foreach (var row in batch.Rows)
-                                context.DataQuality.RecordColumnValue(column, row[column] is null or DBNull);
+                                context.DataQuality.RecordColumnValue(
+                                    intoTable.TableName,
+                                    column,
+                                    row[column] is null or DBNull,
+                                    row[column]);
                         }
-                        sinkRecorded = true;
                     }
                     yield return batch;
                 }

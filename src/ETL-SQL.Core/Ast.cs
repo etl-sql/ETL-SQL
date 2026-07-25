@@ -1350,6 +1350,8 @@ public enum JobMetricKind
     RowCount,
     /// <summary>Fraction of NULLs in a named column (0..1), collected in-stream.</summary>
     NullPercent,
+    /// <summary>Age of the newest observed value in a named timestamp column.</summary>
+    Freshness,
     /// <summary>Fraction of validated rows removed by QUARANTINE actions (0..1).</summary>
     QuarantinePercent,
     /// <summary>Fraction of validated rows that failed a WARN rule (0..1).</summary>
@@ -1367,7 +1369,10 @@ public sealed record JobMetricPredicate(
     string? ColumnName,
     CompareOp? Op,
     decimal? Bound,
-    decimal? Tolerance) : AstNode
+    decimal? Tolerance,
+    string? TargetName = null,
+    RetentionInterval? IntervalBound = null,
+    bool UsesSigma = false) : AstNode
 {
     /// <summary>True for the <c>WITHIN &lt;frac&gt; OF HISTORICAL</c> form.</summary>
     public bool IsHistorical => Tolerance.HasValue;
@@ -1378,11 +1383,14 @@ public sealed record JobMetricPredicate(
         var metric = Metric switch
         {
             JobMetricKind.RowCount => "ROW_COUNT",
-            JobMetricKind.NullPercent => $"NULL_PERCENT({ColumnName})",
+            JobMetricKind.NullPercent => $"NULL_PERCENT({FormatQualifiedColumn()})",
+            JobMetricKind.Freshness => $"FRESHNESS({FormatQualifiedColumn()})",
             JobMetricKind.QuarantinePercent => "QUARANTINE_PERCENT",
             _ => "WARN_PERCENT"
         };
-        if (IsHistorical) return $"{metric} WITHIN {Tolerance} OF HISTORICAL";
+        if (IsHistorical) return UsesSigma
+            ? $"{metric} WITHIN {Tolerance} SIGMA OF HISTORICAL"
+            : $"{metric} WITHIN {Tolerance} OF HISTORICAL";
         var op = Op switch
         {
             CompareOp.GreaterOrEqual => ">=",
@@ -1391,8 +1399,13 @@ public sealed record JobMetricPredicate(
             CompareOp.Less => "<",
             _ => "="
         };
-        return $"{metric} {op} {Bound}";
+        return IntervalBound != null
+            ? $"{metric} {op} '{IntervalBound}'"
+            : $"{metric} {op} {Bound}";
     }
+
+    private string FormatQualifiedColumn() =>
+        TargetName == null ? ColumnName ?? "" : $"{TargetName}.{ColumnName}";
 }
 
 /// <summary>

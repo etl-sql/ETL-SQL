@@ -22,6 +22,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 {
     private const int DefaultHistoryRuns = 5;
     private const int DefaultMinHistoryRuns = 3;
+    private const int DefaultMinSigmaHistoryRuns = 10;
 
     public Type SupportedStatementType => typeof(AssertJobStatement);
 
@@ -32,6 +33,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
         int historyRuns = ReadOption("Engine:DataQuality:HistoryRuns", DefaultHistoryRuns);
         int minHistoryRuns = ReadOption("Engine:DataQuality:MinHistoryRuns", DefaultMinHistoryRuns);
+        int minSigmaHistoryRuns = ReadOption("Engine:DataQuality:MinSigmaHistoryRuns", DefaultMinSigmaHistoryRuns);
 
         IReadOnlyList<Core.Data.JobRunMetrics>? history = null;
         bool historyLoaded = false;
@@ -51,14 +53,42 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
             if (!predicate.IsHistorical)
             {
-                if (!Compare(current.Value, predicate.Op!.Value, predicate.Bound!.Value))
+                var bound = predicate.IntervalBound != null
+                    ? (decimal)predicate.IntervalBound.ToTimeSpan().TotalSeconds
+                    : predicate.Bound!.Value;
+                if (!Compare(current.Value, predicate.Op!.Value, bound))
                     failures.Add($"{predicate.Describe()} (actual {Format(current.Value)})");
+                continue;
+            }
+
+            if (predicate.Metric == JobMetricKind.NullPercent)
+            {
+                var columnHistoryLimit = predicate.UsesSigma
+                    ? Math.Max(historyRuns, minSigmaHistoryRuns)
+                    : historyRuns;
+                var columnHistory = await LoadColumnHistoryAsync(context, stmt.JobName, predicate, columnHistoryLimit);
+                if (columnHistory is null)
+                {
+                    throw new ExecutionException(
+                        $"ASSERT JOB {stmt.JobName}: '{predicate.Describe()}' requires orchestrator column run history, " +
+                        "which is not available in this execution context.",
+                        null, stmt.Line, stmt.Column);
+                }
+
+                var ratios = columnHistory
+                    .Where(h => h.TotalRows > 0)
+                    .Select(h => (decimal)h.NullRows / h.TotalRows)
+                    .ToList();
+                EvaluateHistoricalSeries(stmt, predicate, current.Value, ratios, minHistoryRuns, minSigmaHistoryRuns, failures, context);
                 continue;
             }
 
             if (!historyLoaded)
             {
-                history = await LoadHistoryAsync(context, stmt.JobName, historyRuns);
+                var historyLimit = stmt.Predicates.Any(p => p.IsHistorical && p.UsesSigma)
+                    ? Math.Max(historyRuns, minSigmaHistoryRuns)
+                    : historyRuns;
+                history = await LoadHistoryAsync(context, stmt.JobName, historyLimit);
                 historyLoaded = true;
             }
 
@@ -71,28 +101,15 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
                     null, stmt.Line, stmt.Column);
             }
 
-            // Cold start is defined, not accidental: a job's first deployments must not alert-storm.
-            if (history.Count < minHistoryRuns)
-            {
-                Warn(context, $"ASSERT JOB {stmt.JobName}: skipping {predicate.Describe()} — " +
-                    $"insufficient history: {history.Count} of {minHistoryRuns} runs.");
-                continue;
-            }
-
-            var baseline = Baseline(predicate, history);
-            if (baseline is null || baseline.Value == 0m)
-            {
-                Warn(context, $"ASSERT JOB {stmt.JobName}: skipping {predicate.Describe()} — " +
-                    "the historical baseline is zero or unavailable, so a relative tolerance is undefined.");
-                continue;
-            }
-
-            var drift = Math.Abs(current.Value - baseline.Value) / Math.Abs(baseline.Value);
-            if (drift > predicate.Tolerance!.Value)
-            {
-                failures.Add($"{predicate.Describe()} (actual {Format(current.Value)}, " +
-                    $"baseline {Format(baseline.Value)}, drift {Format(drift)})");
-            }
+            EvaluateHistoricalSeries(
+                stmt,
+                predicate,
+                current.Value,
+                HistoricalSeries(predicate, history),
+                minHistoryRuns,
+                minSigmaHistoryRuns,
+                failures,
+                context);
         }
 
         if (failures.Count == 0)
@@ -131,59 +148,94 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
                 return report.RowsValidated == 0 ? null : (decimal)report.RowsWarned / report.RowsValidated;
 
             case JobMetricKind.NullPercent:
-                if (predicate.IsHistorical)
-                {
-                    throw new ExecutionException(
-                        $"ASSERT JOB {jobName}: NULL_PERCENT({predicate.ColumnName}) does not support OF HISTORICAL " +
-                        "because per-column null fractions are not persisted per run. Compare it against a literal instead.");
-                }
-
-                // v1 resolves the column across the run's sink writes; an ambiguous name is a clean
-                // error rather than a silently-wrong metric.
-                if (report.IsNullTrackedColumnAmbiguous(predicate.ColumnName!))
+                // Unqualified NULL_PERCENT resolves across this run's sink writes; an ambiguous
+                // name is a clean error rather than a silently-wrong metric.
+                if (report.IsNullTrackedColumnAmbiguous(predicate.TargetName, predicate.ColumnName!))
                 {
                     throw new ExecutionException(
                         $"ASSERT JOB {jobName}: NULL_PERCENT({predicate.ColumnName}) is ambiguous — more than one " +
-                        "sink statement in this run writes a column with that name. Qualified NULL_PERCENT is not " +
-                        "supported yet; rename one of the columns or split the assertion into separate jobs.");
+                        "sink statement in this run writes a column with that name. Use qualified " +
+                        "NULL_PERCENT(target.column), rename one of the columns, or split the assertion into separate jobs.");
                 }
-                return report.GetNullPercent(predicate.ColumnName!);
+                return report.GetNullPercent(predicate.TargetName, predicate.ColumnName!);
+
+            case JobMetricKind.Freshness:
+                var maxTimestamp = report.GetMaxTimestamp(predicate.TargetName, predicate.ColumnName!);
+                return maxTimestamp == null
+                    ? null
+                    : (decimal)Math.Max(0, (DateTimeOffset.UtcNow - maxTimestamp.Value).TotalSeconds);
 
             default:
                 return null;
         }
     }
 
-    /// <summary>
-    /// The historical baseline: the mean of the metric across the last N completed runs.
-    /// </summary>
-    private static decimal? Baseline(JobMetricPredicate predicate, IReadOnlyList<Core.Data.JobRunMetrics> history)
-    {
-        if (history.Count == 0) return null;
-        switch (predicate.Metric)
+    private static List<decimal> HistoricalSeries(JobMetricPredicate predicate, IReadOnlyList<Core.Data.JobRunMetrics> history) =>
+        predicate.Metric switch
         {
-            case JobMetricKind.RowCount:
-                return history.Average(h => (decimal)h.RowsProcessed);
+            JobMetricKind.RowCount => history.Select(h => (decimal)h.RowsProcessed).ToList(),
+            JobMetricKind.QuarantinePercent => history.Where(h => h.RowsProcessed > 0)
+                .Select(h => (decimal)h.RowsQuarantined / h.RowsProcessed).ToList(),
+            JobMetricKind.WarnPercent => history.Where(h => h.RowsProcessed > 0)
+                .Select(h => (decimal)h.RowsWarned / h.RowsProcessed).ToList(),
+            _ => []
+        };
 
-            case JobMetricKind.QuarantinePercent:
-                return AverageRatio(history, h => h.RowsQuarantined);
-
-            case JobMetricKind.WarnPercent:
-                return AverageRatio(history, h => h.RowsWarned);
-
-            default:
-                // Per-column null fractions are not persisted per run, so NULL_PERCENT has no
-                // historical baseline in v1 — the caller reports this as a skip.
-                return null;
-        }
-    }
-
-    private static decimal? AverageRatio(
-        IReadOnlyList<Core.Data.JobRunMetrics> history, Func<Core.Data.JobRunMetrics, long> numerator)
+    private void EvaluateHistoricalSeries(
+        AssertJobStatement stmt,
+        JobMetricPredicate predicate,
+        decimal current,
+        IReadOnlyList<decimal> series,
+        int minHistoryRuns,
+        int minSigmaHistoryRuns,
+        List<string> failures,
+        IExecutionContext context)
     {
-        var usable = history.Where(h => h.RowsProcessed > 0).ToList();
-        if (usable.Count == 0) return null;
-        return usable.Average(h => (decimal)numerator(h) / h.RowsProcessed);
+        var required = predicate.UsesSigma ? minSigmaHistoryRuns : minHistoryRuns;
+        if (series.Count < required)
+        {
+            Warn(context, $"ASSERT JOB {stmt.JobName}: skipping {predicate.Describe()} — " +
+                $"insufficient history: {series.Count} of {required} runs.");
+            return;
+        }
+
+        var baseline = series.Average();
+        if (predicate.UsesSigma)
+        {
+            var variance = series.Select(v => Math.Pow((double)(v - baseline), 2)).Average();
+            var sigma = (decimal)Math.Sqrt(variance);
+            if (sigma == 0m)
+            {
+                Warn(context, $"ASSERT JOB {stmt.JobName}: {predicate.Describe()} has zero historical sigma; " +
+                    "using equality against the historical mean.");
+                if (current != baseline)
+                    failures.Add($"{predicate.Describe()} (actual {Format(current)}, baseline {Format(baseline)}, sigma 0)");
+                return;
+            }
+
+            var distance = Math.Abs(current - baseline);
+            var band = predicate.Tolerance!.Value * sigma;
+            if (distance > band)
+            {
+                failures.Add($"{predicate.Describe()} (actual {Format(current)}, baseline {Format(baseline)}, " +
+                    $"sigma {Format(sigma)}, distance {Format(distance)})");
+            }
+            return;
+        }
+
+        if (baseline == 0m)
+        {
+            Warn(context, $"ASSERT JOB {stmt.JobName}: skipping {predicate.Describe()} — " +
+                "the historical baseline is zero or unavailable, so a relative tolerance is undefined.");
+            return;
+        }
+
+        var drift = Math.Abs(current - baseline) / Math.Abs(baseline);
+        if (drift > predicate.Tolerance!.Value)
+        {
+            failures.Add($"{predicate.Describe()} (actual {Format(current)}, " +
+                $"baseline {Format(baseline)}, drift {Format(drift)})");
+        }
     }
 
     private static async Task<IReadOnlyList<Core.Data.JobRunMetrics>?> LoadHistoryAsync(
@@ -192,6 +244,15 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
         var provider = context.JobMetrics;
         if (provider is null) return null;
         return await provider.GetRecentRunMetricsAsync(jobName, limit, context.CancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<Core.Data.ColumnRunMetrics>?> LoadColumnHistoryAsync(
+        IExecutionContext context, string jobName, JobMetricPredicate predicate, int limit)
+    {
+        var provider = context.JobMetrics;
+        if (provider is null) return null;
+        return await provider.GetRecentColumnMetricsAsync(
+            jobName, predicate.TargetName, predicate.ColumnName!, limit, context.CancellationToken);
     }
 
     /// <summary>

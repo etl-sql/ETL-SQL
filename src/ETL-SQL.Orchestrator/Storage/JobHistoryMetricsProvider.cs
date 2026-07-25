@@ -31,6 +31,17 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetr
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+        string jobName,
+        string? targetTable,
+        string columnName,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await store.GetRecentColumnMetricsAsync(jobName, targetTable, columnName, limit);
+    }
+
     private static bool IsCompletedSuccessfully(JobHistoryEntry entry) =>
         entry.EndTime.HasValue
         && (entry.Status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)

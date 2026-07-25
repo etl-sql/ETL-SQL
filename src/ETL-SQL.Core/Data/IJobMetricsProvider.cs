@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +12,13 @@ public sealed record JobRunMetrics(
     long RowsProcessed,
     long RowsQuarantined,
     long RowsWarned);
+
+/// <summary>One completed run's column-level metric for a specific sink column.</summary>
+public sealed record ColumnRunMetrics(
+    string? TargetTable,
+    string ColumnName,
+    long TotalRows,
+    long NullRows);
 
 /// <summary>
 /// Narrow Engine→Orchestrator seam giving <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> access to
@@ -31,4 +39,17 @@ public interface IJobMetricsProvider
     /// </summary>
     Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
         string jobName, int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns recent successfully completed per-column metrics for <paramref name="columnName"/>,
+    /// optionally narrowed to one sink target. Missing storage in an older orchestrator returns an
+    /// empty list rather than failing a rolling upgrade.
+    /// </summary>
+    Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+        string jobName,
+        string? targetTable,
+        string columnName,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
 }

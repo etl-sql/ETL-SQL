@@ -74,6 +74,52 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Empty(await new JobHistoryMetricsProvider(store).GetRecentRunMetricsAsync("never_ran", 5));
         }
 
+        [Fact]
+        public async Task ColumnMetrics_RoundTripNewestFirst_AndExcludeFailures()
+        {
+            var store = new SQLiteJobHistoryStore(_dbPath);
+            await store.InitializeAsync();
+
+            var first = await store.LogJobStartAsync("nightly");
+            await store.LogJobEndAsync(first, "SUCCESS", rowsProcessed: 100);
+            await store.SaveJobColumnMetricsAsync(first,
+            [
+                new DataQualityColumnMetric("clean", "Email", 100, 10, null),
+                new DataQualityColumnMetric("other", "Email", 100, 50, null)
+            ]);
+            await Task.Delay(5);
+
+            var failed = await store.LogJobStartAsync("nightly");
+            await store.LogJobEndAsync(failed, "FAILURE", rowsProcessed: 100);
+            await store.SaveJobColumnMetricsAsync(failed,
+            [
+                new DataQualityColumnMetric("clean", "Email", 100, 90, null)
+            ]);
+            await Task.Delay(5);
+
+            var second = await store.LogJobStartAsync("nightly");
+            await store.LogJobEndAsync(second, "SUCCESS", rowsProcessed: 100);
+            await store.SaveJobColumnMetricsAsync(second,
+            [
+                new DataQualityColumnMetric("#clean", "email", 100, 12, null)
+            ]);
+
+            var provider = new JobHistoryMetricsProvider(store);
+            var runs = await provider.GetRecentColumnMetricsAsync("nightly", "clean", "EMAIL", limit: 10);
+
+            Assert.Collection(runs,
+                r =>
+                {
+                    Assert.Equal(100, r.TotalRows);
+                    Assert.Equal(12, r.NullRows);
+                },
+                r =>
+                {
+                    Assert.Equal(100, r.TotalRows);
+                    Assert.Equal(10, r.NullRows);
+                });
+        }
+
         // ── Per-column null tallies ────────────────────────────────────────
 
         [Fact]
@@ -112,11 +158,28 @@ namespace ETL_SQL.Tests.Orchestration
             var report = new DataQualityReport();
             report.RegisterNullTrackedColumn("Email");
 
-            report.RecordNullTrackedSink("Email");
+            report.RecordNullTrackedSink("out_a", "Email");
             Assert.False(report.IsNullTrackedColumnAmbiguous("Email"));
 
-            report.RecordNullTrackedSink("Email");
+            report.RecordNullTrackedSink("out_b", "Email");
             Assert.True(report.IsNullTrackedColumnAmbiguous("Email"));
+            Assert.False(report.IsNullTrackedColumnAmbiguous("out_a", "Email"));
+        }
+
+        [Fact]
+        public void QualifiedColumnMetrics_DoNotDoubleCountWhenUnqualifiedIsAlsoRegistered()
+        {
+            var report = new DataQualityReport();
+            report.RegisterNullTrackedColumn("Email");
+            report.RegisterColumnMetric("clean", "Email", trackNullPercent: true, trackFreshness: true);
+
+            report.RecordNullTrackedSink("clean", "Email");
+            report.RecordColumnValue("clean", "Email", isNull: false, "2026-07-25T10:00:00Z");
+
+            Assert.Equal(0m, report.GetNullPercent("clean", "Email"));
+            var metric = Assert.Single(report.ColumnMetrics);
+            Assert.Equal(1, metric.TotalRows);
+            Assert.NotNull(metric.MaxTimestampUtc);
         }
 
         [Fact]

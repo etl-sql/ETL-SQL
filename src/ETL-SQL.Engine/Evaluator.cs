@@ -1245,7 +1245,17 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             foreach (var predicate in assertJob.Predicates)
             {
                 if (predicate.Metric == JobMetricKind.NullPercent && predicate.ColumnName != null)
-                    DataQuality.RegisterNullTrackedColumn(predicate.ColumnName);
+                    DataQuality.RegisterColumnMetric(
+                        predicate.TargetName,
+                        predicate.ColumnName,
+                        trackNullPercent: true,
+                        trackFreshness: false);
+                else if (predicate.Metric == JobMetricKind.Freshness && predicate.ColumnName != null)
+                    DataQuality.RegisterColumnMetric(
+                        predicate.TargetName,
+                        predicate.ColumnName,
+                        trackNullPercent: false,
+                        trackFreshness: true);
             }
         }
     }

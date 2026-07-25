@@ -10,6 +10,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Orchestrator.Storage
 {
@@ -75,6 +76,16 @@ namespace ETL_SQL.Orchestrator.Storage
                     Status TEXT NOT NULL,
                     ErrorMessage TEXT,
                     RowsProcessed INTEGER DEFAULT 0
+                );";
+
+                    var createColumnMetricsTable = @"
+                CREATE TABLE IF NOT EXISTS JobColumnMetrics (
+                    JobHistoryId INTEGER NOT NULL,
+                    TargetTable TEXT,
+                    ColumnName TEXT NOT NULL,
+                    TotalRows INTEGER NOT NULL,
+                    NullRows INTEGER NOT NULL,
+                    PRIMARY KEY (JobHistoryId, TargetTable, ColumnName)
                 );";
 
                     var createBundleTables = @"
@@ -219,7 +230,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Day, NodeId)
                 );";
 
-                    var schema = createJobsTable + createHistoryTable + createBundleTables
+                    var schema = createJobsTable + createHistoryTable + createColumnMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
@@ -229,6 +240,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     schema = schema
                         .Replace("RowsProcessed INTEGER", $"RowsProcessed {_dialect.Int64Type}")
                         .Replace("TotalRows INTEGER", $"TotalRows {_dialect.Int64Type}")
+                        .Replace("NullRows INTEGER", $"NullRows {_dialect.Int64Type}")
                         .Replace("MaxPeakMemoryBytes INTEGER", $"MaxPeakMemoryBytes {_dialect.Int64Type}")
                         .Replace("StateDiskFreeBytes INTEGER", $"StateDiskFreeBytes {_dialect.Int64Type}")
                         .Replace("SpillDiskFreeBytes INTEGER", $"SpillDiskFreeBytes {_dialect.Int64Type}")
@@ -1001,6 +1013,13 @@ namespace ETL_SQL.Orchestrator.Storage
                 command1.AddParam("@name", name);
                 await command1.ExecuteNonQueryAsync();
 
+                var sqlMetrics = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                using var commandMetrics = connection.CreateCommand();
+                commandMetrics.CommandText = sqlMetrics;
+                commandMetrics.Transaction = transaction;
+                commandMetrics.AddParam("@name", name);
+                await commandMetrics.ExecuteNonQueryAsync();
+
                 var sql2 = "DELETE FROM JobHistory WHERE JobName = @name;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
@@ -1034,6 +1053,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 await transaction.RollbackAsync();
                 return false;
             }
+
+            using var deleteMetrics = connection.CreateCommand();
+            deleteMetrics.Transaction = transaction;
+            deleteMetrics.CommandText = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+            deleteMetrics.AddParam("@name", name);
+            await deleteMetrics.ExecuteNonQueryAsync();
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
@@ -1101,6 +1126,73 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task SaveJobColumnMetricsAsync(long entryId, IEnumerable<DataQualityColumnMetric> metrics)
+        {
+            var rows = metrics.Where(m => m.TotalRows > 0).ToList();
+            if (rows.Count == 0) return;
+
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            foreach (var metric in rows)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO JobColumnMetrics (JobHistoryId, TargetTable, ColumnName, TotalRows, NullRows)
+                    VALUES (@historyId, @target, @column, @total, @nulls)
+                    ON CONFLICT (JobHistoryId, TargetTable, ColumnName) DO UPDATE SET
+                        TotalRows = excluded.TotalRows,
+                        NullRows = excluded.NullRows;";
+                command.AddParam("@historyId", entryId);
+                var target = string.IsNullOrWhiteSpace(metric.TargetTable)
+                    ? null
+                    : metric.TargetTable.Trim().TrimStart('#');
+                command.AddParam("@target", (object?)target ?? DBNull.Value);
+                command.AddParam("@column", metric.ColumnName);
+                command.AddParam("@total", metric.TotalRows);
+                command.AddParam("@nulls", metric.NullRows);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+            string jobName, string? targetTable, string columnName, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT m.TargetTable, m.ColumnName, m.TotalRows, m.NullRows
+                FROM JobColumnMetrics m
+                INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
+                WHERE h.JobName = @job
+                  AND h.EndTime IS NOT NULL
+                  AND (UPPER(h.Status) = 'SUCCESS' OR UPPER(h.Status) = 'COMPLETED')
+                  AND m.ColumnName = @column COLLATE NOCASE
+                  AND (@target IS NULL OR m.TargetTable = @target COLLATE NOCASE)
+                ORDER BY h.EndTime DESC, h.StartTime DESC, h.Id DESC
+                LIMIT @limit;";
+            command.AddParam("@job", jobName);
+            command.AddParam("@column", columnName);
+            command.AddParam("@target", string.IsNullOrWhiteSpace(targetTable) ? DBNull.Value : targetTable.Trim().TrimStart('#'));
+            command.AddParam("@limit", limit);
+
+            var results = new List<ColumnRunMetrics>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new ColumnRunMetrics(
+                    reader.IsDBNull(0) ? null : reader.GetString(0),
+                    reader.GetString(1),
+                    Convert.ToInt64(reader.GetValue(2)),
+                    Convert.ToInt64(reader.GetValue(3))));
+            }
+            return results;
+        }
+
         public async Task<int> PruneHistoryAsync(TimeSpan maxAge)
         {
             await EnsureInitializedAsync();
@@ -1109,9 +1201,21 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // StartTime is stored as a round-trip ("O") timestamp; a same-format cutoff compares
             // correctly. RUNNING rows (in-flight jobs) are preserved regardless of age.
+            var cutoff = DateTime.Now.Subtract(maxAge).ToString("O");
+            using (var deleteMetrics = connection.CreateCommand())
+            {
+                deleteMetrics.CommandText = @"
+                    DELETE FROM JobColumnMetrics
+                    WHERE JobHistoryId IN (
+                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    );";
+                deleteMetrics.AddParam("@cutoff", cutoff);
+                await deleteMetrics.ExecuteNonQueryAsync();
+            }
+
             using var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff;";
-            command.AddParam("@cutoff", DateTime.Now.Subtract(maxAge).ToString("O"));
+            command.AddParam("@cutoff", cutoff);
             return await command.ExecuteNonQueryAsync();
         }
 

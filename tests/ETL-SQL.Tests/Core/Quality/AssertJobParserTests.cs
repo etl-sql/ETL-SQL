@@ -84,6 +84,35 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_QualifiedNullPercentAndFreshness()
+        {
+            var stmt = ParseAssertJob(@"
+                ASSERT JOB j (
+                    NULL_PERCENT(#clean.Email) WITHIN 2 SIGMA OF HISTORICAL,
+                    FRESHNESS(clean.EventTime) < '2 HOURS'
+                );");
+
+            Assert.Collection(stmt.Predicates,
+                p =>
+                {
+                    Assert.Equal(JobMetricKind.NullPercent, p.Metric);
+                    Assert.Equal("#clean", p.TargetName);
+                    Assert.Equal("Email", p.ColumnName);
+                    Assert.True(p.IsHistorical);
+                    Assert.True(p.UsesSigma);
+                    Assert.Equal(2m, p.Tolerance);
+                },
+                p =>
+                {
+                    Assert.Equal(JobMetricKind.Freshness, p.Metric);
+                    Assert.Equal("clean", p.TargetName);
+                    Assert.Equal("EventTime", p.ColumnName);
+                    Assert.Equal(CompareOp.Less, p.Op);
+                    Assert.Equal(TimeSpan.FromHours(2), p.IntervalBound?.ToTimeSpan());
+                });
+        }
+
+        [Fact]
         public void Parses_QuotedJobName()
         {
             Assert.Equal("nightly load", ParseAssertJob("ASSERT JOB 'nightly load' (ROW_COUNT > 0);").JobName);
@@ -125,6 +154,9 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("ASSERT JOB j (ROW_COUNT WITHIN 0.2);")]               // WITHIN without OF HISTORICAL
         [InlineData("ASSERT JOB j (ROW_COUNT WITHIN 0.2 OF YESTERDAY);")]  // unknown baseline
         [InlineData("ASSERT JOB j (ROW_COUNT WITHIN -0.2 OF HISTORICAL);")] // negative tolerance
+        [InlineData("ASSERT JOB j (FRESHNESS(EventTime) WITHIN 0.2 OF HISTORICAL);")] // no historical freshness
+        [InlineData("ASSERT JOB j (FRESHNESS(EventTime) < 2);")]           // freshness needs interval string
+        [InlineData("ASSERT JOB j (NULL_PERCENT(a.b.c) < 0.5);")]         // only target.column
         [InlineData("ASSERT JOB j (ROW_COUNT > abc);")]                    // non-numeric bound
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW;")]     // ALERT is required after ON FAILURE
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE ALERT a ON FAILURE ALERT b;")] // duplicate
@@ -139,13 +171,15 @@ namespace ETL_SQL.Tests.Core.Quality
             var stmt = ParseAssertJob(@"
                 ASSERT JOB j (
                     ROW_COUNT WITHIN 0.2 OF HISTORICAL,
-                    NULL_PERCENT(Email) < 0.02,
+                    NULL_PERCENT(#clean.Email) < 0.02,
+                    FRESHNESS(clean.EventTime) < '1 DAYS',
                     QUARANTINE_PERCENT >= 0.01
                 );");
 
             Assert.Equal("ROW_COUNT WITHIN 0.2 OF HISTORICAL", stmt.Predicates[0].Describe());
-            Assert.Equal("NULL_PERCENT(Email) < 0.02", stmt.Predicates[1].Describe());
-            Assert.Equal("QUARANTINE_PERCENT >= 0.01", stmt.Predicates[2].Describe());
+            Assert.Equal("NULL_PERCENT(#clean.Email) < 0.02", stmt.Predicates[1].Describe());
+            Assert.Equal("FRESHNESS(clean.EventTime) < '1 DAYS'", stmt.Predicates[2].Describe());
+            Assert.Equal("QUARANTINE_PERCENT >= 0.01", stmt.Predicates[3].Describe());
         }
 
         private static AssertJobStatement ParseAssertJob(string sql) =>
