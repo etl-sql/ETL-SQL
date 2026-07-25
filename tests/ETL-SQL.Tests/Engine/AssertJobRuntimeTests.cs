@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task RowCount_ComparesAgainstValidatedRows()
+        public async Task RowCount_ComparesAgainstTelemetryRows()
         {
             var eval = NewEvaluator();
             await LoadWithQuarantine(eval, rows: 6, badRows: 0);
@@ -64,6 +64,31 @@ namespace ETL_SQL.Tests.Engine
             await Run(eval, "ASSERT JOB import (ROW_COUNT >= 6);");
             await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
                 "ASSERT JOB import (ROW_COUNT > 100) ON CRITICAL_FAILURE THROW;"));
+        }
+
+        [Fact]
+        public async Task RowCount_WorksForUntaggedLoads()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT);
+                INSERT INTO #src (Id) VALUES (1), (2), (3);
+                SELECT Id INTO #clean FROM #src;
+                ASSERT JOB import (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;");
+        }
+
+        [Fact]
+        public async Task RowCount_FailsForEmptyUntaggedLoad()
+        {
+            var eval = NewEvaluator();
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                CREATE TABLE #src (Id INT);
+                SELECT Id INTO #clean FROM #src;
+                ASSERT JOB import (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;"));
+
+            Assert.Contains("ROW_COUNT > 0", ex.Message);
+            Assert.Contains("actual 0", ex.Message);
         }
 
         [Fact]
@@ -100,6 +125,39 @@ namespace ETL_SQL.Tests.Engine
                 ASSERT JOB import (NULL_PERCENT(Email) < 0.5);"));
 
             Assert.Contains("ambiguous", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task NullPercent_IsCollectedWhenColumnarSelectIntoWouldOtherwiseApply()
+        {
+            var eval = NewEvaluator();
+            eval.UseColumnarTempTables = true;
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT, Email VARCHAR(50));
+                INSERT INTO #src (Id, Email) VALUES (1, 'a@b.c'), (2, NULL), (3, 'd@e.f'), (4, 'g@h.i');
+                SELECT Id, Email INTO #mid FROM #src;");
+
+            await Run(eval, @"
+                SELECT Id, Email INTO #clean FROM #mid;
+                ASSERT JOB import (NULL_PERCENT(Email) < 0.5) ON CRITICAL_FAILURE THROW;");
+        }
+
+        [Fact]
+        public async Task NullPercentHistorical_FailsClearlyBecauseNoBaselineIsPersisted()
+        {
+            var eval = NewEvaluatorWithHistory(new FakeMetricsProvider(
+                new JobRunMetrics(100, 0, 0),
+                new JobRunMetrics(100, 0, 0),
+                new JobRunMetrics(100, 0, 0)));
+            await Run(eval, @"
+                CREATE TABLE #src (Email VARCHAR(50));
+                INSERT INTO #src (Email) VALUES ('a@b.c'), (NULL);");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                SELECT Email INTO #clean FROM #src;
+                ASSERT JOB import (NULL_PERCENT(Email) WITHIN 0.05 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+
+            Assert.Contains("NULL_PERCENT(Email) does not support OF HISTORICAL", ex.Message);
         }
 
         [Fact]
@@ -169,7 +227,8 @@ namespace ETL_SQL.Tests.Engine
                 new JobRunMetrics(100, 0, 0)));
             await LoadWithQuarantine(eval, rows: 9, badRows: 0);
 
-            // Baseline 100, actual 9 → drift 0.91, tolerance 1.0 ⇒ inside the band.
+            // Baseline 100, actual 18 (insert + select rows in this harness) → drift 0.82,
+            // tolerance 1.0 ⇒ inside the band.
             await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 1.0 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
         }
 
@@ -186,17 +245,17 @@ namespace ETL_SQL.Tests.Engine
                 "ASSERT JOB import (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
 
             Assert.Contains("baseline 100", ex.Message);
-            Assert.Contains("drift 0.95", ex.Message);
+            Assert.Contains("drift 0.9", ex.Message);
         }
 
         [Fact]
         public async Task Historical_BaselineIsTheMeanOfRecentRuns()
         {
             var eval = NewEvaluatorWithHistory(new FakeMetricsProvider(
-                new JobRunMetrics(8, 0, 0),
-                new JobRunMetrics(10, 0, 0),
-                new JobRunMetrics(12, 0, 0)));
-            await LoadWithQuarantine(eval, rows: 10, badRows: 0); // mean is 10 → zero drift
+                new JobRunMetrics(18, 0, 0),
+                new JobRunMetrics(20, 0, 0),
+                new JobRunMetrics(22, 0, 0)));
+            await LoadWithQuarantine(eval, rows: 10, badRows: 0); // mean is 20 → zero drift
 
             await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.01 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
         }

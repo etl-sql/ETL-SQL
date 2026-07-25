@@ -39,7 +39,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
         var failures = new List<string>();
         foreach (var predicate in stmt.Predicates)
         {
-            var current = ResolveCurrentValue(predicate, report, stmt.JobName);
+            var current = ResolveCurrentValue(predicate, context, report, stmt.JobName);
             if (current is null)
             {
                 // The metric could not be observed this run (e.g. no rows carried the column).
@@ -113,15 +113,16 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
     }
 
     /// <summary>
-    /// Resolves a predicate's current-run value from the in-stream collector. Returns null when the
-    /// metric was never observed. Percentages are fractions of validated rows.
+    /// Resolves a predicate's current-run value. ROW_COUNT matches the engine telemetry persisted
+    /// to job history; percentages come from the in-stream data-quality collector.
     /// </summary>
-    private static decimal? ResolveCurrentValue(JobMetricPredicate predicate, DataQualityReport report, string jobName)
+    private static decimal? ResolveCurrentValue(
+        JobMetricPredicate predicate, IExecutionContext context, DataQualityReport report, string jobName)
     {
         switch (predicate.Metric)
         {
             case JobMetricKind.RowCount:
-                return report.RowsValidated;
+                return context.Telemetry.RowsProcessed;
 
             case JobMetricKind.QuarantinePercent:
                 return report.RowsValidated == 0 ? null : (decimal)report.RowsQuarantined / report.RowsValidated;
@@ -130,6 +131,13 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
                 return report.RowsValidated == 0 ? null : (decimal)report.RowsWarned / report.RowsValidated;
 
             case JobMetricKind.NullPercent:
+                if (predicate.IsHistorical)
+                {
+                    throw new ExecutionException(
+                        $"ASSERT JOB {jobName}: NULL_PERCENT({predicate.ColumnName}) does not support OF HISTORICAL " +
+                        "because per-column null fractions are not persisted per run. Compare it against a literal instead.");
+                }
+
                 // v1 resolves the column across the run's sink writes; an ambiguous name is a clean
                 // error rather than a silently-wrong metric.
                 if (report.IsNullTrackedColumnAmbiguous(predicate.ColumnName!))

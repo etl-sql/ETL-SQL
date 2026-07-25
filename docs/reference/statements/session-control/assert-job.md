@@ -22,7 +22,7 @@ ASSERT JOB <job_name> (
 
 | Predicate | Meaning |
 | :--- | :--- |
-| `ROW_COUNT <op> <n>` | Rows validated during the run. |
+| `ROW_COUNT <op> <n>` | Rows processed during the run, matching the count persisted to job history. |
 | `NULL_PERCENT(<column>) <op> <n>` | Fraction (0–1) of NULLs observed in that column across the run's sink writes. |
 | `QUARANTINE_PERCENT <op> <n>` | Fraction (0–1) of validated rows removed by a `QUARANTINE` action. |
 | `WARN_PERCENT <op> <n>` | Fraction (0–1) of validated rows that failed a `WARN` rule. |
@@ -51,8 +51,8 @@ runs** of the same job name, and fails when `|current − baseline| / baseline >
   embedded use), a `HISTORICAL` predicate fails with an actionable message, while every
   collector-backed predicate still evaluates normally.
 - `NULL_PERCENT` has no historical baseline in this release — per-column null fractions are not
-  persisted per run, so that combination is skipped with a warning. Compare it against a literal
-  instead.
+  persisted per run, so that combination fails with an actionable error. Compare it against a
+  literal instead.
 
 ## Failure handling
 

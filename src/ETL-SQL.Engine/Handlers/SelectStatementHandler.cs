@@ -73,6 +73,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
 
             if (statement is SelectStatement nativeSelect
+                && !context.DataQuality.TracksNullCounts
                 && await TryNativeSelectInto(nativeSelect, destination, context) is { } nativeRowCount)
             {
                 RecordSelectIntoCompletion(intoTable, context, nativeRowCount);
