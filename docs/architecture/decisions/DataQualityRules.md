@@ -325,6 +325,168 @@ quarantine (v1 behavior) but remediate by hand.
 
 ---
 
+## v2 — metric depth (designed; not built)
+
+The v1 predicate set covers volume, quarantine rate, and warn rate. Three gaps were documented as
+limitations rather than papered over; this section designs them. They share one piece of new
+storage, so they are built together.
+
+### Per-column run metrics — the storage that unblocks the rest
+
+**Problem.** `NULL_PERCENT(col) WITHIN f OF HISTORICAL` parses today and is then skipped with a
+warning, because only *aggregate* per-run counts are persisted — there is no per-column series to
+average. The same missing storage is why `NULL_PERCENT(target.col)` cannot be qualified: with one
+number per run there is nowhere to record which sink it came from.
+
+**Design.** A narrow child table of the run record:
+
+```text
+JobColumnMetrics(
+    JobHistoryId  INTEGER NOT NULL,   -- FK to JobHistory.Id; prunes with its parent
+    TargetTable   TEXT     NULL,      -- the sink the column was written to (NULL = unqualified v1 rows)
+    ColumnName    TEXT NOT NULL,
+    TotalRows     INTEGER NOT NULL,
+    NullRows      INTEGER NOT NULL,
+    PRIMARY KEY (JobHistoryId, TargetTable, ColumnName)
+)
+```
+
+- **Written only for registered columns.** The existing pre-walk registers exactly the columns an
+  `ASSERT JOB` predicate names, so a job with no `NULL_PERCENT` predicate writes no rows and pays
+  nothing — the v1 zero-overhead property is preserved unchanged.
+- **Rows are tiny and bounded**: one row per tracked column per sink per run, typically one to
+  three.
+- **Additive and rolling-expand safe**, created through the same `EnsureInitializedAsync` path as
+  the existing tables, so it lands on both the SQLite and PostgreSQL providers. When the table is
+  absent (a store mid-rollout), the provider returns no history and the predicate behaves exactly
+  as it does today: skipped with a warning. No behavior regression during a rolling upgrade.
+- **Pruning is free** — the rows are keyed by `JobHistoryId`, so existing history pruning removes
+  them with their parent. The daily roll-up deliberately does **not** aggregate them; a mean of
+  means across days is not a number anyone should assert on.
+
+**Provider extension.** `IJobMetricsProvider` gains one method, mirroring the existing one:
+
+```csharp
+Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
+    string jobName, string? targetTable, string columnName, int limit, CancellationToken ct = default);
+```
+
+Baseline is the mean of per-run null *fractions* (`NullRows / TotalRows`) over the last N completed
+runs — the mean of the ratios, not the ratio of the sums, so one enormous run cannot dominate the
+baseline. Runs with `TotalRows = 0` are excluded. The existing `MinHistoryRuns` cold-start rule and
+zero-baseline skip apply unchanged.
+
+**Qualified `NULL_PERCENT(target.col)`** then falls out of the same storage: the parser already
+has to accept a dotted name, `TargetTable` is the discriminator, and the v1 multi-sink ambiguity
+error narrows to "ambiguous *and* unqualified". Unqualified predicates keep working when only one
+sink writes the column, so no existing script changes.
+
+### `FRESHNESS(<column>) < <interval>`
+
+Data-recency checks are table stakes across dbt, Soda, and Monte Carlo, and this is a small
+predicate on infrastructure that already exists. The collector tracks the **maximum value** of a
+registered timestamp column as rows stream past — the same registration path as null counts, so
+again zero cost when unused. The predicate compares `now − max(col)` against a
+`RetentionInterval`-style literal, reusing the interval parser shipped in v1:
+
+```sql
+ASSERT JOB import_events (FRESHNESS(EventTime) < '2 HOURS') ON CRITICAL_FAILURE THROW;
+```
+
+This catches the failure mode volume checks miss entirely: a feed that delivers its usual row count
+every night but has silently stopped advancing.
+
+### `WITHIN <n> SIGMA OF HISTORICAL`
+
+A relative tolerance has to be hand-tuned per job, and a job whose volume legitimately varies gets
+either false positives or a tolerance so wide it never fires. A standard-deviation band self-tunes:
+
+```sql
+ASSERT JOB import_csv (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL);
+```
+
+Mean and population standard deviation over the same last-N window the mean baseline already
+loads — no new storage, no new provider call, only a second aggregate over data already in hand.
+Cold start needs a **higher** minimum than the mean baseline (a stddev over three points is
+meaningless); `MinSigmaHistoryRuns` defaults to 10 and skips with the same warning below it. A
+zero standard deviation (a perfectly stable job) collapses the band to equality, so it falls back
+to the relative-tolerance path with a warning rather than failing every run.
+
+### Seasonality — same-weekday baselines
+
+Mean-of-last-N false-positives on weekly patterns: a Monday run compared against a window
+containing weekend runs drifts for entirely healthy reasons. `JobHistoryDailySummary` and
+`GetJobHistoryDailyAsync` already exist, so a `WITHIN f OF HISTORICAL BY WEEKDAY` variant is a
+filter on the history query rather than new machinery. Deferred behind the three items above
+because it only matters once a job has months of history.
+
+---
+
+## v2 — alert quality (designed; not built)
+
+Once `ASSERT JOB … ALERT` is in real use, the failure mode is **alert fatigue**: a job that fails
+its assertion every night posts to Slack every night, and the channel gets muted — at which point
+the alerting is worse than none, because it is trusted and silent.
+
+**Transition-based alerting.** Alert on pass→fail and fail→pass *transitions* rather than on every
+failing run. The per-run DQ state needed to know the previous outcome is already persisted; this
+needs one more recorded value (the previous assertion outcome per job+assertion) and a comparison.
+
+- **pass → fail**: alert, as today.
+- **fail → fail**: suppress, unless a configurable re-alert interval has elapsed (default: once per
+  24h, so a persistent problem resurfaces without spamming).
+- **fail → pass**: send a **recovery** notification. This is the half that makes an alerting
+  channel trustworthy — an alert with no all-clear trains people to ignore the channel.
+
+Suppression must be visible: a suppressed alert still logs and still lands in the run's
+diagnostics. Silence in Slack must never mean silence in the run record.
+
+---
+
+## v2 — scale and operational hardening (demand-triggered; not scheduled)
+
+These are known ceilings, not defects. Build them when a real workload hits one; each has a
+recorded trigger so the decision is evidence-based rather than speculative.
+
+| Item | Trigger | Approach |
+| :--- | :--- | :--- |
+| Spill-aware UNIQUE key map | A UNIQUE rule on a very high-cardinality key exhausts memory on a constrained host | Build the duplicate-key groups through `ExternalAggregateEngine` (`GROUP BY key HAVING COUNT(*) > 1`, with `MIN`/`MAX(orderKey)` for `UNIQUE_FIRST/LAST`), as §4 originally specified. The row stream already spills once; only the map changes. |
+| Single-pass UNIQUE batching | A statement declares UNIQUE on several columns and the per-column pre-passes dominate runtime | One pre-pass collecting all unique keys simultaneously instead of one pass per column. |
+| Connector-side retention | Operators ask why `WITH (RETENTION = …)` does not prune their durable quarantine table | Issue a bounded delete through the connector for targets that support it, behind an explicit opt-in — the engine currently declines to run DELETEs against a user-owned table, and that caution should be lifted deliberately, not by default. |
+
+---
+
+## v2 — Governance dashboard integration (follow-on)
+
+The persisted per-run DQ metrics were designed as this feature's feed. The dashboard reads the
+lineage/stewardship side already; surfacing DQ findings there means a steward sees *which rules
+protect a column*, *how often they fire*, and — once quarantine remediation ships — *how quickly
+failures get resolved*. Sequenced last because it consumes the other slices' output.
+
+---
+
+## v2 sequencing
+
+Recommended order, with the reasoning rather than just the list:
+
+1. **Metric depth** (NULL_PERCENT historical, qualified NULL_PERCENT, FRESHNESS, SIGMA). Smallest
+   slice, closes gaps the shipped documentation currently has to describe as limitations, and makes
+   alerting worth improving. One piece of new storage unblocks all four.
+2. **Alert quality** (transition alerting, recovery notifications). Cheap, and it protects the
+   credibility of the alerting channel before slice 3 makes alerts more numerous.
+3. **Quarantine remediation** (designed above). The headline v2 promise and by far the largest
+   slice: disposition model, `REPLAY QUARANTINE`, orchestrator manifest, replay lease, Portal
+   steward grid. **Jumps to first if user feedback shows quarantine tables accumulating** — v1
+   ships capture with no workflow, so hand-remediation is the known cost of this ordering, and
+   evidence of that cost outranks this recommendation.
+4. **Scale hardening** — demand-triggered per the table above, not scheduled.
+5. **Governance dashboard integration** — consumes the output of 1–3.
+
+Seasonality sits inside slice 1's design but is deferred within it: it only pays off once jobs have
+months of history, which no deployment will have at v2 time.
+
+---
+
 ## v3 direction — join-statement replay via probe-side provenance (direction only; not designed)
 
 The agreed direction for lifting v2's single-table restriction. Not yet a full design — recorded

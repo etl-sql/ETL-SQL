@@ -12,5 +12,27 @@ promise are defined in
 
 ## Future Candidate Phases
 
-No future candidate phases are currently queued. Add new long-range work here only after it is
-intentionally deferred beyond the active release.
+### Data Quality v2
+
+v1 (column `@expect`/`@fail` rules, quarantine/warn capture, `ASSERT JOB`, the `WEBHOOK` connector)
+shipped in v0.17.0. v2 is designed but not built; the full design, including the as-built deviations
+v1 left behind, lives in
+[`docs/architecture/decisions/DataQualityRules.md`](docs/architecture/decisions/DataQualityRules.md).
+
+Recommended order (rationale in the design doc's "v2 sequencing" section):
+
+1. **Metric depth** — `NULL_PERCENT … OF HISTORICAL` (needs a per-column run-metrics table),
+   qualified `NULL_PERCENT(target.col)`, a `FRESHNESS(col) < interval` predicate, and
+   `WITHIN n SIGMA OF HISTORICAL`. Smallest slice; closes gaps the shipped docs currently describe
+   as limitations.
+2. **Alert quality** — transition-based alerting and recovery notifications, so a nightly-failing
+   job cannot train people to mute the channel.
+3. **Quarantine remediation** — the headline promise: disposition model, `REPLAY QUARANTINE`,
+   orchestrator manifest, replay lease, Portal steward grid. Largest slice. **Promote to first if
+   user feedback shows quarantine tables accumulating** — v1 ships capture with no workflow.
+4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
+   retention. Demand-triggered; each has a recorded trigger in the design doc.
+5. **Governance dashboard integration** — consumes the output of the slices above.
+
+v3 direction (join-statement replay via probe-side provenance) and nested-script replay are recorded
+in the same document as directions only.
