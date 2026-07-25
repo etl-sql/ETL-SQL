@@ -119,7 +119,7 @@ public sealed class ColumnQualityValidator
     /// Pre-pass step: records this row's key (and order-key, for UNIQUE_FIRST/LAST) for every
     /// UNIQUE rule. Called once per row over the spilled stream before validation begins.
     /// </summary>
-    public async Task CollectUniqueKeysAsync(Row projected, CancellationToken cancellationToken = default)
+    public async Task CollectUniqueKeysAsync(Row projected, long rowOrdinal, CancellationToken cancellationToken = default)
     {
         foreach (var (ruleSet, rule) in UniqueRules())
         {
@@ -137,7 +137,7 @@ public sealed class ColumnQualityValidator
             var orderKey = rule.OrderKey != null
                 ? await _context.EvaluateValue(rule.OrderKey, projected)
                 : null;
-            var identity = RowIdentity(projected);
+            var identity = RowIdentity(projected, rowOrdinal);
             group.ConsiderKeeper(rule.Mode, orderKey, identity, _context.CompareConstants);
         }
         cancellationToken.ThrowIfCancellationRequested();
@@ -191,11 +191,12 @@ public sealed class ColumnQualityValidator
     /// deterministic winner is the lexicographically smallest identity, so repeated runs over the
     /// same data always keep the same row.
     /// </summary>
-    private static string RowIdentity(Row projected)
+    private static string RowIdentity(Row projected, long rowOrdinal)
     {
         var builder = new StringBuilder();
         foreach (var (name, value) in projected.Columns.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
             builder.Append(name).Append('=').Append(Stringify(value)).Append('');
+        builder.Append("__dq_ordinal=").Append(rowOrdinal.ToString("D20", CultureInfo.InvariantCulture));
         return builder.ToString();
     }
 
@@ -233,7 +234,7 @@ public sealed class ColumnQualityValidator
     /// True when this row violates the UNIQUE rule: for plain <c>UNIQUE</c>, any key seen more than
     /// once; for <c>UNIQUE_FIRST/LAST</c>, every row in a duplicated group except the keeper.
     /// </summary>
-    private bool ViolatesUnique(UniqueRule rule, ColumnRuleSet ruleSet, Row projected)
+    private bool ViolatesUnique(UniqueRule rule, ColumnRuleSet ruleSet, Row projected, long? rowOrdinal)
     {
         if (!_uniquePrePassComplete) return false;
         var key = BuildUniqueKey(rule, ruleSet, projected);
@@ -241,7 +242,7 @@ public sealed class ColumnQualityValidator
         if (!_uniqueGroups.TryGetValue(rule, out var groups) || !groups.TryGetValue(key, out var group)) return false;
         if (group.Count <= 1) return false;
 
-        return rule.Mode == UniqueMode.All || RowIdentity(projected) != group.KeeperIdentity;
+        return rule.Mode == UniqueMode.All || rowOrdinal == null || RowIdentity(projected, rowOrdinal.Value) != group.KeeperIdentity;
     }
 
     /// <summary>
@@ -250,9 +251,12 @@ public sealed class ColumnQualityValidator
     /// a THROW failure raises <see cref="ExecutionException"/> and aborts the statement.
     /// </summary>
     public async Task<bool> TryAcceptRowAsync(Row input, Row projected, CancellationToken cancellationToken = default)
+        => await TryAcceptRowAsync(input, projected, rowOrdinal: null, cancellationToken);
+
+    public async Task<bool> TryAcceptRowAsync(Row input, Row projected, long? rowOrdinal, CancellationToken cancellationToken = default)
     {
         _context.DataQuality.RecordRowValidated();
-        var failure = await EvaluateRowAsync(input, projected, cancellationToken);
+        var failure = await EvaluateRowAsync(input, projected, rowOrdinal, cancellationToken);
 
         if (failure is { Action: FailAction.Quarantine })
         {
@@ -284,6 +288,9 @@ public sealed class ColumnQualityValidator
         IAsyncEnumerable<(Row Input, Row Projected)> rows,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (RequiresUniquePrePass)
+            throw new InvalidOperationException("ValidateAsync does not support UNIQUE rules; use the select pipeline pre-pass.");
+
         await InitializeAsync(cancellationToken);
         await foreach (var (input, projected) in rows.WithCancellation(cancellationToken))
         {
@@ -298,7 +305,7 @@ public sealed class ColumnQualityValidator
     /// fate — THROW is raised immediately; otherwise QUARANTINE wins over WARN, because a
     /// quarantined row leaves the output and cannot also be warned into it.
     /// </summary>
-    private async Task<RowFailure?> EvaluateRowAsync(Row input, Row projected, CancellationToken cancellationToken)
+    private async Task<RowFailure?> EvaluateRowAsync(Row input, Row projected, long? rowOrdinal, CancellationToken cancellationToken)
     {
         RowFailure? decided = null;
 
@@ -312,7 +319,7 @@ public sealed class ColumnQualityValidator
                     // UNIQUE is decided by the pre-pass over the whole spilled stream; every other
                     // rule is a pure per-row predicate.
                     bool passed = rule is UniqueRule unique
-                        ? !ViolatesUnique(unique, ruleSet, projected)
+                        ? !ViolatesUnique(unique, ruleSet, projected, rowOrdinal)
                         : await RulePassesAsync(rule, value, projected, cancellationToken);
                     if (passed) continue;
 

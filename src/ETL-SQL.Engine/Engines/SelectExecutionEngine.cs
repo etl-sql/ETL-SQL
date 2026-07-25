@@ -762,13 +762,15 @@ public class SelectExecutionEngine
         var spill = await SpillPairsAsync(pairs);
         try
         {
+            long ordinal = 0;
             await foreach (var (_, projectedRow) in spill.ReadAsync())
-                await qualityValidator.CollectUniqueKeysAsync(projectedRow, _context.CancellationToken);
+                await qualityValidator.CollectUniqueKeysAsync(projectedRow, ordinal++, _context.CancellationToken);
             qualityValidator.FinalizeUniquePrePass();
 
+            ordinal = 0;
             await foreach (var (input, projectedRow) in spill.ReadAsync())
             {
-                if (await qualityValidator.TryAcceptRowAsync(input, projectedRow, _context.CancellationToken))
+                if (await qualityValidator.TryAcceptRowAsync(input, projectedRow, ordinal++, _context.CancellationToken))
                     yield return projectedRow;
             }
             await qualityValidator.CompleteAsync(_context.CancellationToken);

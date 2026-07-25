@@ -124,25 +124,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 result.RowsProcessed = evaluator.Telemetry.RowsProcessed;
                 result.Messages = evaluator.Messages.ToList();
 
-                // Data-quality outcomes accumulated by @expect rule enforcement; empty (and free)
-                // when no statement carried rules.
-                var dataQuality = evaluator.DataQuality;
-                result.RowsQuarantined = dataQuality.RowsQuarantined;
-                result.RowsWarned = dataQuality.RowsWarned;
-                if (dataQuality.TotalFailures > 0)
-                {
-                    result.DataQualityFailures = dataQuality.ToHistoryPayload();
-                    foreach (var failure in dataQuality.Failures)
-                    {
-                        result.Diagnostics.Add(new Diagnostic(
-                            failure.ToMessage(), 0, 0,
-                            failure.Action == ETL_SQL.Core.Quality.FailAction.Throw
-                                ? DiagnosticSeverity.Error
-                                : DiagnosticSeverity.Warning,
-                            "DATAQUALITY"));
-                    }
-                }
-
+                CopyDataQualityOutcomes(evaluator, result);
                 result.Success = true;
                 LastEvaluator = evaluator;
             }
@@ -151,6 +133,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 var safeMessage = SecretRedactor.Redact(ex.Message) ?? string.Empty;
                 _logger.Error("Execution failed: {ErrorMessage}", ex, safeMessage);
                 result.Diagnostics.Add(new Diagnostic(safeMessage, 0, 0, DiagnosticSeverity.Error));
+                if (evaluator != null) CopyDataQualityOutcomes(evaluator, result);
                 result.Success = false;
             }
             finally
@@ -165,6 +148,28 @@ namespace ETL_SQL.Orchestrator.Execution
             }
 
             return result;
+        }
+
+        private static void CopyDataQualityOutcomes(Evaluator evaluator, ExecutionResult result)
+        {
+            // Data-quality outcomes accumulated by @expect rule enforcement; empty (and free)
+            // when no statement carried rules. Copy this even for failed runs because THROW rules
+            // record their failure immediately before aborting the statement.
+            var dataQuality = evaluator.DataQuality;
+            result.RowsQuarantined = dataQuality.RowsQuarantined;
+            result.RowsWarned = dataQuality.RowsWarned;
+            if (dataQuality.TotalFailures <= 0) return;
+
+            result.DataQualityFailures = dataQuality.ToHistoryPayload();
+            foreach (var failure in dataQuality.Failures)
+            {
+                result.Diagnostics.Add(new Diagnostic(
+                    failure.ToMessage(), 0, 0,
+                    failure.Action == ETL_SQL.Core.Quality.FailAction.Throw
+                        ? DiagnosticSeverity.Error
+                        : DiagnosticSeverity.Warning,
+                    "DATAQUALITY"));
+            }
         }
 
         /// <summary>

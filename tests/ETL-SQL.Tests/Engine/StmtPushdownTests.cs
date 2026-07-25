@@ -55,6 +55,22 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task SelectSqlPushdown_WithDataQualityRules_IsPinnedToRowEngine()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
+            await ev.Evaluate(Parse("SELECT UserID /* @expect: 'NOT NULL'; @fail: 'WARN'; */, UserName FROM MyDb.Users ON FAILURE WARN;"));
+
+            Assert.Empty(mock.ExecutedSql);
+            Assert.Contains(ev.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "SqlPushdown"
+                     && d.Outcome == PlanDecisionOutcome.Fallback
+                     && d.OperatorId == "select.stream.sql-pushdown");
+        }
+
+        [Fact]
         public async Task SelectSqlPushdownFallback_EmitsPlanDecision()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -224,6 +240,27 @@ namespace ETL_SQL.Tests.Engine
             var north = resultRows.FirstOrDefault(r => r["Region"]?.ToString() == "North");
             Assert.NotNull(north);
             Assert.Equal(5000m, Convert.ToDecimal(north["TotalRevenue"]));
+        }
+
+        [Fact]
+        public async Task SelectIntoSqlPushdown_WithDataQualityRules_IsPinnedToRowEngine()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
+            await ev.Evaluate(Parse(@"
+                CREATE TABLE #Target (UserID INT, UserName STRING);
+                SELECT UserID /* @expect: 'NOT NULL'; @fail: 'WARN'; */, UserName
+                INTO #Target
+                FROM MyDb.Users
+                ON FAILURE WARN;"));
+
+            Assert.Empty(mock.ExecutedSql);
+            Assert.Contains(ev.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "SqlPushdown"
+                     && d.Outcome == PlanDecisionOutcome.Fallback
+                     && d.OperatorId == "select-into.sql-pushdown");
         }
 
         [Fact]

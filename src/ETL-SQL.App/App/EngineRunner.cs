@@ -304,11 +304,12 @@ namespace ETL_SQL.App
                 long auditHistoryId = -1L;
                 string? runTimeHash = null;
                 IJobHistoryStore? historyStore = null;
+                Evaluator? evaluator = null;
 
                 try
                 {
                     logger.WriteLine("Execution phase...");
-                    await using var evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
+                    evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     evaluator.BatchSize = ctx.BatchSize;
                     evaluator.IsVerbose = ctx.IsVerbose;
                     logger.IsVerbose = ctx.IsVerbose;
@@ -713,7 +714,18 @@ namespace ETL_SQL.App
                     if (ctx.IsJsonMode)
                     {
                         Console.Error.WriteLine($"Execution Error at line {ex.Line}, col {ex.Column}: {ex.Message} (Code: {ex.ErrorNumber})");
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            type = "done",
+                            exitCode = 1,
+                            uri = ctx.ScriptFile.FullName,
+                            rowsProcessed = evaluator?.Telemetry.RowsProcessed ?? 0,
+                            rowsQuarantined = evaluator?.DataQuality.RowsQuarantined ?? 0,
+                            rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
+                            dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
+                                ? evaluator.DataQuality.ToHistoryPayload()
+                                : null
+                        }));
                     }
                     else
                     {
@@ -734,7 +746,12 @@ namespace ETL_SQL.App
                                 Process.GetCurrentProcess().PeakWorkingSet64,
                                 0,
                                 runTimeHash,
-                                false);
+                                false,
+                                evaluator?.DataQuality.RowsQuarantined ?? 0,
+                                evaluator?.DataQuality.RowsWarned ?? 0,
+                                evaluator?.DataQuality.TotalFailures > 0
+                                    ? evaluator.DataQuality.ToHistoryPayload()
+                                    : null);
                         }
                         catch { }
                     }
@@ -746,7 +763,18 @@ namespace ETL_SQL.App
                     if (ctx.IsJsonMode)
                     {
                         Console.Error.WriteLine($"Fatal Error: {ex.Message}");
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            type = "done",
+                            exitCode = 1,
+                            uri = ctx.ScriptFile.FullName,
+                            rowsProcessed = evaluator?.Telemetry.RowsProcessed ?? 0,
+                            rowsQuarantined = evaluator?.DataQuality.RowsQuarantined ?? 0,
+                            rowsWarned = evaluator?.DataQuality.RowsWarned ?? 0,
+                            dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
+                                ? evaluator.DataQuality.ToHistoryPayload()
+                                : null
+                        }));
                     }
                     else
                     {
@@ -766,12 +794,21 @@ namespace ETL_SQL.App
                                 Process.GetCurrentProcess().PeakWorkingSet64,
                                 0,
                                 runTimeHash,
-                                false);
+                                false,
+                                evaluator?.DataQuality.RowsQuarantined ?? 0,
+                                evaluator?.DataQuality.RowsWarned ?? 0,
+                                evaluator?.DataQuality.TotalFailures > 0
+                                    ? evaluator.DataQuality.ToHistoryPayload()
+                                    : null);
                         }
                         catch { }
                     }
 
                     return 1;
+                }
+                finally
+                {
+                    if (evaluator != null) await evaluator.DisposeAsync();
                 }
             }
 

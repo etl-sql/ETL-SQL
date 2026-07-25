@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
@@ -436,6 +437,25 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task UniqueFirst_IdenticalDuplicateRows_KeepsOnlyOneRow()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #events (EventId INT, LoadedAt INT, Tag VARCHAR(10));
+                INSERT INTO #events (EventId, LoadedAt, Tag)
+                VALUES (1, 10, 'same'), (1, 10, 'same');");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                INTO #clean FROM #events
+                ON FAILURE QUARANTINE TO #q;");
+
+            Assert.Equal(1, await CountRows(eval, "#clean"));
+            Assert.Equal(1, await CountRows(eval, "#q"));
+        }
+
+        [Fact]
         public async Task UniqueRule_ReadsTheSourceExactlyOnce()
         {
             // Non-rewindable sources (Kafka, paginated REST) cannot be read twice, and even a
@@ -534,6 +554,25 @@ namespace ETL_SQL.Tests.Engine
             // Aggregated warn diagnostics reach the run's diagnostic surface.
             Assert.Contains(result.Diagnostics, d =>
                 d.Code == "DATAQUALITY" && d.Message.Contains("Data quality"));
+        }
+
+        [Fact]
+        public async Task DataQualityThrowFailures_SurfaceOnFailedExecutionResult()
+        {
+            var provider = DependencyInjectionSetup.BuildServiceProvider();
+            var session = Microsoft.Extensions.DependencyInjection.ActivatorUtilities
+                .CreateInstance<ETL_SQL.Orchestrator.Execution.ExecutionSession>(provider);
+
+            var result = await session.ExecuteAsync(@"
+                CREATE TABLE #src (Id INT, Name VARCHAR(50));
+                INSERT INTO #src (Id, Name) VALUES (NULL, 'bad');
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'THROW'; */, Name
+                INTO #clean FROM #src;");
+
+            Assert.False(result.Success);
+            Assert.Equal("Id:NOT NULL=1", result.DataQualityFailures);
+            Assert.Contains(result.Diagnostics, d =>
+                d.Code == "DATAQUALITY" && d.Severity == DiagnosticSeverity.Error);
         }
 
         // ── Harness ────────────────────────────────────────────────────────
