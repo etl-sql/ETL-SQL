@@ -71,6 +71,9 @@
           <a href="#governance/stewardship" class="sidebar-nav-item" id="govNavStewardship">
             <span>📋 Task Workqueue</span>
           </a>
+          <a href="#governance/quarantine" class="sidebar-nav-item" id="govNavQuarantine">
+            <span>✅ Quarantine Queue</span>
+          </a>
           <a href="#governance/audit" class="sidebar-nav-item" id="govNavAudit">
             <span>🛡️ Exceptions Ledger</span>
           </a>
@@ -295,12 +298,13 @@
 
 <script src="/js/echarts.min.js?v=0.16.0"></script>
 <script type="module">
-import { adminApi, auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js?v=0.16.0';
+import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js?v=0.16.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.16.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.16.0';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js?v=0.16.0';
 import { createGovernancePortal } from '/js/governance-portal.js?v=0.16.0';
 import { createLineageCatalog } from '/js/lineage-catalog.js?v=0.16.0';
+import { createDataQualityQueue } from '/js/data-quality-queue.js?v=0.16.0';
 import { renderDag } from '/designer/designer.js?v=0.16.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
@@ -524,6 +528,7 @@ function openReportHashView() {
   } else if (mainView === 'governance' || mainView === 'lineage') {
     let mode = 'overview';
     if (subView === 'stewardship') mode = 'stewardship';
+    else if (subView === 'quarantine') mode = 'quarantine';
     else if (subView === 'audit') mode = 'audit';
     else if (subView === 'badges') mode = 'badges';
     else if (subView === 'glossary') mode = 'glossary';
@@ -539,7 +544,7 @@ function openReportHashView() {
 }
 
 function setSidebarViewActive(view, govMode = 'overview') {
-  const isGov = ['governance', 'lineage', 'overview', 'stewardship', 'audit', 'badges', 'glossary', 'settings'].includes(view) ||
+  const isGov = ['governance', 'lineage', 'overview', 'stewardship', 'quarantine', 'audit', 'badges', 'glossary', 'settings'].includes(view) ||
                 view.startsWith('governance/') || view.startsWith('lineage/');
 
   const sidebar = document.getElementById('sidebar');
@@ -564,6 +569,7 @@ function setSidebarViewActive(view, govMode = 'overview') {
     const activeGovId = {
       overview: 'govNavOverview',
       stewardship: 'govNavStewardship',
+      quarantine: 'govNavQuarantine',
       audit: 'govNavAudit',
       badges: 'govNavBadges',
       glossary: 'govNavGlossary',
@@ -946,9 +952,11 @@ function renderCatalogReportList(title, reports, emptyText) {
 // The catalog-wide "Lineage" sidebar view lives in js/governance-portal.js
 let governancePortal = null;
 let lineageCatalog = null;
+let dataQualityQueue = null;
 function showGovernanceCatalog(mode = 'overview') {
   if (mode === 'lineage') {
     if (governancePortal) { governancePortal.dispose(); governancePortal = null; }
+    if (dataQualityQueue) { dataQualityQueue.dispose(); dataQualityQueue = null; }
     if (!lineageCatalog) {
       lineageCatalog = createLineageCatalog({
         host: document.getElementById('mainContent'),
@@ -961,8 +969,23 @@ function showGovernanceCatalog(mode = 'overview') {
       });
     }
     lineageCatalog.setMode('history');
+  } else if (mode === 'quarantine') {
+    if (lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
+    if (governancePortal) { governancePortal.dispose(); governancePortal = null; }
+    if (!dataQualityQueue) {
+      dataQualityQueue = createDataQualityQueue({
+        host: document.getElementById('mainContent'),
+        dataQualityApi,
+        prepare: () => {
+          setSidebarViewActive('governance', 'quarantine');
+          clearFolderSelection();
+        }
+      });
+    }
+    dataQualityQueue.show();
   } else {
     if (lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
+    if (dataQualityQueue) { dataQualityQueue.dispose(); dataQualityQueue = null; }
     if (!governancePortal) {
       governancePortal = createGovernancePortal({
         host: document.getElementById('mainContent'),

@@ -944,6 +944,52 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_QuarantineQueue_ReturnsReplayManifests()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_import",
+            "dq:quarantine-manifest:q_users",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_import",
+                "loads/users.etlsql",
+                "import_users",
+                "#src",
+                "q_users",
+                true,
+                null,
+                ["Id", "Email"],
+                "schema-a",
+                DateTimeOffset.UtcNow)));
+        await store.SetJobStateAsync(
+            "nightly_import",
+            "dq:quarantine-manifest:q_joined",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_import",
+                "loads/users.etlsql",
+                "import_joined",
+                "#src,#dim",
+                "q_joined",
+                false,
+                "quarantine source spans a join; replay requires a single-table input in this version",
+                ["Id", "Email", "Region"],
+                "schema-b",
+                DateTimeOffset.UtcNow.AddMinutes(-1))));
+
+        var res = await AuthGet(token, "/api/data-quality/quarantine?replayable=true&q=users");
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var items = await res.Content.ReadFromJsonAsync<List<QuarantineQueueItemDto>>(_json);
+        var item = Assert.Single(items!);
+        Assert.Equal("nightly_import", item.JobName);
+        Assert.Equal("q_users", item.QuarantineTarget);
+        Assert.True(item.IsReplayable);
+        Assert.Equal("REPLAY QUARANTINE q_users;", item.ReplayStatement);
+        Assert.Contains("Email", item.InputColumns);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {

@@ -1008,3 +1008,69 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dv-stats-label { font-weight: 600; color: var(--portal-muted); }
 .btn-xs { padding: 2px 6px; font-size: .8em; }
 .chip-filter { background: var(--portal-accent-soft); color: var(--portal-accent); }
+
+/* ── Data Quality — Quarantine Queue ─────────────────────────────────────── */
+.dq-page { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.dq-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) auto;
+  gap: 8px;
+  align-items: center;
+}
+.dq-toolbar input,
+.dq-toolbar select {
+  min-height: 34px;
+  border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-sm);
+  background: var(--portal-surface);
+  color: var(--portal-text);
+  padding: 6px 9px;
+}
+.dq-summary { display: flex; gap: 8px; flex-wrap: wrap; color: var(--portal-muted); font-size: .86em; }
+.dq-summary span {
+  border: 1px solid var(--portal-border-soft);
+  border-radius: var(--portal-radius-sm);
+  padding: 3px 8px;
+  background: var(--portal-surface-subtle);
+}
+.dq-page .error-msg { display: block; margin-bottom: 0; }
+.dq-list { display: flex; flex-direction: column; border: 1px solid var(--portal-border-soft); border-radius: var(--portal-radius); overflow: hidden; }
+.dq-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--portal-border-soft);
+  background: var(--portal-surface);
+}
+.dq-row:last-child { border-bottom: 0; }
+.dq-row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.dq-row-title strong { overflow-wrap: anywhere; }
+.dq-row-detail { color: var(--portal-text-soft); font-size: .88em; line-height: 1.45; overflow-wrap: anywhere; }
+.dq-row-warning { color: var(--portal-danger); font-size: .84em; line-height: 1.35; margin-top: 6px; overflow-wrap: anywhere; }
+.dq-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
+.dq-row-side time { color: var(--portal-muted); font-size: .82em; }
+.dq-row-side code {
+  max-width: 100%;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: .78em;
+  color: var(--portal-text-soft);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.dq-status {
+  border-radius: var(--portal-radius-sm);
+  padding: 2px 7px;
+  font-size: .72em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.dq-status-ready { background: var(--portal-success-soft); color: var(--portal-success); }
+.dq-status-blocked { background: var(--portal-danger-soft); color: var(--portal-danger); }
+
+@media (max-width: 760px) {
+  .dq-toolbar { grid-template-columns: 1fr; }
+  .dq-row { grid-template-columns: 1fr; }
+  .dq-row-side { align-items: flex-start; }
+  .dq-row-side code { text-align: left; }
+}

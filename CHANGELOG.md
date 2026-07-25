@@ -59,6 +59,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   replay is fenced by the orchestrator cluster-lock store so concurrent stewards cannot consume the
   same released row set twice.
 
+- Added the first Portal data-quality quarantine queue surface. `/api/data-quality/quarantine`
+  exposes orchestrator replay manifests with replayability filters, and the Governance sidebar now
+  includes a Quarantine Queue view with target/search filters and copyable `REPLAY QUARANTINE`
+  statements for steward workflows.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

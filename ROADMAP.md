@@ -31,7 +31,9 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. `REPLAY QUARANTINE`
    resolves manifests, substitutes released quarantine rows back into the recorded source table, and
    resumes the recorded section label, then flips consumed rows to `replayed` after success.
-   Replay is fenced through the orchestrator cluster-lock store. Remaining work: Portal steward grid.
+   Replay is fenced through the orchestrator cluster-lock store. The first Portal steward queue now
+   lists replay manifests and replayability state. Remaining work: row editing / release actions and
+   replay-button execution from the Portal.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.

@@ -208,6 +208,19 @@ export const subscriptionsApi = {
     smtpAliases: ()         => apiJson('/api/smtp-aliases')
 };
 
+// ── Data Quality ──────────────────────────────────────────────────────────────
+
+export const dataQualityApi = {
+    quarantineQueue({ jobName = '', q = '', replayable = '', limit = 100 } = {}) {
+        const params = new URLSearchParams();
+        if (jobName) params.set('jobName', jobName);
+        if (q) params.set('q', q);
+        if (replayable !== '' && replayable !== null && replayable !== undefined) params.set('replayable', replayable);
+        params.set('limit', String(limit));
+        return apiJson(`/api/data-quality/quarantine?${params.toString()}`);
+    }
+};
+
 // ── Datasets ───────────────────────────────────────────────────────────────────
 
 export const datasetsApi = {
