@@ -216,6 +216,80 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task QuarantineDisposition_AllowsReleaseFromQuarantined()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            await Run(eval, @"
+                UPDATE #q
+                SET Name = 'fixed', __dq_status = 'released'
+                WHERE __dq_status = 'quarantined';");
+
+            var row = Assert.Single(await ReadRows(eval, "#q"));
+            Assert.Equal("fixed", row["Name"]);
+            Assert.Equal(DataQualityColumns.ReleasedStatus, row[DataQualityColumns.Status]);
+        }
+
+        [Fact]
+        public async Task QuarantineDisposition_RejectsEvidenceColumnEdits()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                UPDATE #q
+                SET __dq_reason = 'changed'
+                WHERE __dq_status = 'quarantined';"));
+            Assert.Contains("immutable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task QuarantineDisposition_RejectsInvalidStatusTransition()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                UPDATE #q
+                SET __dq_status = 'replayed'
+                WHERE __dq_status = 'quarantined';"));
+            Assert.Contains("quarantined -> replayed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task WarnDisposition_RejectsStatusEdits()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(-5, 'warned')");
+            await Run(eval, @"
+                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN TO #warn_log WITH (RETENTION = '30 DAYS');");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                UPDATE #warn_log
+                SET __dq_status = 'released'
+                WHERE __dq_status = 'warned';"));
+            Assert.Contains("Warn rows", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task QuarantineWithoutClause_FailsLoudly()
         {
             var eval = NewEvaluator();

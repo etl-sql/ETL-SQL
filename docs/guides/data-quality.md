@@ -110,6 +110,11 @@ input schema fingerprint that the remediation workflow will use. Labeled single-
 are replayable; join-source quarantines still capture rows but are marked non-replayable until the
 join provenance design ships.
 
+To mark a fixed quarantine row ready for replay, edit the captured source columns and set
+`__dq_status = 'released'`. The engine treats the other `__dq_*` columns as immutable evidence.
+Warn rows are evidence only: their `__dq_status` stays `warned` and cannot enter the quarantine
+release/replay lifecycle.
+
 ## Rules that need to see every row
 
 Most rules judge a row on its own. `UNIQUE` cannot — it has to see the whole result before it knows

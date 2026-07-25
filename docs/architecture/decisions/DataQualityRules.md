@@ -7,8 +7,9 @@
 > [ASSERT JOB](../../reference/statements/session-control/assert-job.md), and the
 > [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
-> v2 design below. The quarantine replay manifest foundation is now built; disposition enforcement,
-> `REPLAY QUARANTINE`, replay leasing, and the Portal steward grid remain pending.
+> v2 design below. The quarantine replay manifest foundation and `UPDATE`-time disposition
+> enforcement are now built; `REPLAY QUARANTINE`, replay leasing, and the Portal steward grid remain
+> pending.
 >
 > **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
 > end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
@@ -36,6 +37,9 @@
 > Rev 6 (2026-07-25): manifest foundation implemented — orchestrator-hosted quarantines persist
 > job/script/section/source/target replay metadata, captured input columns, schema fingerprint, and
 > replayability status; join-source quarantines are recorded as non-replayable for v2.
+> Rev 7 (2026-07-25): disposition enforcement implemented for engine-side `UPDATE` paths touching
+> `__dq_*`: evidence columns are immutable except `__dq_status`, warn status is immutable, and
+> quarantine lifecycle transitions are validated.
 
 ## Goal
 
@@ -246,6 +250,11 @@ WHERE __dq_row_id = 'a41f…';
 The Portal steward UI is a grid over the same table issuing the same UPDATEs plus audit events —
 one mechanism, two front ends, so the paths cannot drift. The engine rejects edits to `__dq_*`
 evidence columns other than `__dq_status`: the failure record is not editable.
+
+**As built so far:** updates that touch `__dq_*` columns are pinned to the engine-side update path
+so the lifecycle is enforced before mutation. `quarantined` rows may move to `released` or
+`discarded`; `released` rows may move to `replayed` or `discarded`; `replayed` and `discarded` are
+terminal except idempotent self-updates. Rows with status `warned` cannot change status.
 
 ### Replay = resume-at-label + source substitution
 

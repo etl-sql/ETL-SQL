@@ -28,8 +28,8 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    nightly-failing job cannot train people to mute the channel.
 3. **Quarantine remediation** — in progress. The orchestrator manifest foundation is implemented:
    quarantining jobs persist the job/script/section/source/target replay metadata and mark joins
-   non-replayable. Remaining work: disposition enforcement, `REPLAY QUARANTINE`, replay lease, and
-   Portal steward grid.
+   non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. Remaining work:
+   `REPLAY QUARANTINE`, replay lease, and Portal steward grid.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.

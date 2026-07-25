@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
@@ -27,7 +29,13 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an UPDATE target.");
         if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
         _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
-        if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName))
+
+        var dataQualityStatusAssignment = GetDataQualityStatusAssignment(stmt);
+        bool touchesDataQualityColumns = dataQualityStatusAssignment != null
+            || stmt.Assignments.Any(a => DataQualityColumns.IsDataQualityColumn(a.ColumnName));
+        ValidateDataQualityAssignments(stmt);
+
+        if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName) && !touchesDataQualityColumns)
         {
             _logger.Debug("Strategy: Remote SQL UPDATE");
             var allParams = new Dictionary<string, object?>();
@@ -76,7 +84,7 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
                 return;
             }
 
-            if (connection is AppendOnlyColumnDataSource columnar && stmt.Output == null)
+            if (connection is AppendOnlyColumnDataSource columnar && stmt.Output == null && !touchesDataQualityColumns)
             {
                 var nativeUpdated = await columnar.UpdateWhereAsync(
                     stmt.WhereClause,
@@ -119,6 +127,11 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
                         if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                         {
                             var before = stmt.Output != null ? row.Clone() : null;
+                            if (dataQualityStatusAssignment != null)
+                            {
+                                var nextStatus = await context.EvaluateValue(dataQualityStatusAssignment.Value, row);
+                                ValidateDataQualityStatusTransition(row[DataQualityColumns.Status], nextStatus);
+                            }
 
                             foreach (var a in stmt.Assignments)
                             {
@@ -158,5 +171,70 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
             if (context.IsVerbose) _logger.WriteLine($"Finished updating {updatedCount} rows in {connName}");
         }
     }
+
+    private static Assignment? GetDataQualityStatusAssignment(UpdateStatement stmt) =>
+        stmt.Assignments.FirstOrDefault(a =>
+            a.ColumnName.Equals(DataQualityColumns.Status, StringComparison.OrdinalIgnoreCase));
+
+    private static void ValidateDataQualityAssignments(UpdateStatement stmt)
+    {
+        foreach (var assignment in stmt.Assignments)
+        {
+            if (!DataQualityColumns.IsDataQualityColumn(assignment.ColumnName)) continue;
+            if (assignment.ColumnName.Equals(DataQualityColumns.Status, StringComparison.OrdinalIgnoreCase)) continue;
+
+            throw new ExecutionException(
+                $"Data-quality evidence column '{assignment.ColumnName}' is immutable; only {DataQualityColumns.Status} may be updated for quarantine disposition.");
+        }
+    }
+
+    private static void ValidateDataQualityStatusTransition(object? currentValue, object? nextValue)
+    {
+        var current = NormalizeStatus(currentValue);
+        var next = NormalizeStatus(nextValue);
+
+        if (!IsKnownDisposition(next))
+            throw new ExecutionException($"Invalid data-quality disposition '{next}'. Expected released, replayed, or discarded.");
+
+        if (current.Equals(DataQualityColumns.WarnedStatus, StringComparison.OrdinalIgnoreCase))
+            throw new ExecutionException("Warn rows are immutable evidence; __dq_status cannot be changed.");
+
+        if (current.Equals(DataQualityColumns.QuarantinedStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            if (next.Equals(DataQualityColumns.QuarantinedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        else if (current.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            if (next.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        else if ((current.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
+                  || current.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase))
+                 && next.Equals(current, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new ExecutionException($"Invalid data-quality disposition transition: {current} -> {next}.");
+    }
+
+    private static bool IsKnownDisposition(string status) =>
+        status.Equals(DataQualityColumns.QuarantinedStatus, StringComparison.OrdinalIgnoreCase)
+        || status.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+        || status.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
+        || status.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeStatus(object? value) =>
+        value switch
+        {
+            null or DBNull => string.Empty,
+            IFormattable f => f.ToString(null, CultureInfo.InvariantCulture)?.Trim() ?? string.Empty,
+            _ => value.ToString()?.Trim() ?? string.Empty
+        };
 }
 

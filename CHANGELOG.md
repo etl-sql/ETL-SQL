@@ -46,6 +46,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   fingerprint. Single-table labeled quarantines are marked replayable; join-source quarantines are
   captured normally but marked non-replayable until the v3 provenance design lands.
 
+- Added data-quality quarantine disposition enforcement for `UPDATE`: `__dq_*` evidence columns are
+  immutable except `__dq_status`, warn rows cannot be released, and quarantine statuses follow the
+  v2 lifecycle (`quarantined` may become `released` or `discarded`; `released` may become
+  `replayed` or `discarded`).
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on
