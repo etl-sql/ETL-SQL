@@ -729,6 +729,12 @@ public class SelectExecutionEngine
         bool hasPreEvaluatedColumns,
         bool canDeferWhere)
     {
+        // Data-quality rules (@expect/@fail): null when no column carries them, so a rule-free
+        // statement pays nothing. Rules validate the projected value; QUARANTINE captures the
+        // pre-projection input row, which is available right here.
+        var qualityValidator = ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);
+        if (qualityValidator != null) await qualityValidator.InitializeAsync(_context.CancellationToken);
+
         var expressionKeys = hasPreEvaluatedColumns
             ? finalColumns.Select(c => c.Expression.ToSql()).ToArray()
             : Array.Empty<string>();
@@ -812,8 +818,17 @@ public class SelectExecutionEngine
                 }
             }
 
+            // Quarantined rows are diverted to their target and never reach the output.
+            if (qualityValidator != null
+                && !await qualityValidator.TryAcceptRowAsync(row, resRow, _context.CancellationToken))
+            {
+                continue;
+            }
+
             yield return resRow;
         }
+
+        if (qualityValidator != null) await qualityValidator.CompleteAsync(_context.CancellationToken);
     }
 
     private async IAsyncEnumerable<Row> ApplyLimitsStream(

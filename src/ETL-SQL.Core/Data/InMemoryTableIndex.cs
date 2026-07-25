@@ -22,6 +22,9 @@ public class InMemoryTableIndex
     public long EstimatedUniqueKeyBytes => _uniqueKeyBytes.Values.Sum();
     public IEnumerable<string> Keys => _indexColumnMap.Keys;
 
+    /// <summary>The column list of every defined index, for callers that must rebuild them all.</summary>
+    public IEnumerable<List<string>> IndexedColumnSets => _indexColumnMap.Values.Select(cols => cols.ToList()).ToList();
+
     public void Clear()
     {
         _indexes.Clear();

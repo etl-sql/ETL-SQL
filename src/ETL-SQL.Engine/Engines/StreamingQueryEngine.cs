@@ -57,6 +57,11 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 compiledColumns[i] = value;
         }
 
+        // Data-quality rules (@expect/@fail): null when no column carries them, so a rule-free
+        // statement pays nothing.
+        var qualityValidator = ETL_SQL.Engine.Services.ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);
+        if (qualityValidator != null) await qualityValidator.InitializeAsync(_context.CancellationToken);
+
         string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         // Qualified-name plan, rebuilt only when the incoming rows' schema instance changes (rows in
         // one stream share a schema): an expanded schema carrying the canonical columns plus real
@@ -144,6 +149,13 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                         : await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
                 }
 
+                // Quarantined rows are diverted to their target and never reach the output.
+                if (qualityValidator != null
+                    && !await qualityValidator.TryAcceptRowAsync(row, resRow, _context.CancellationToken))
+                {
+                    continue;
+                }
+
                 await resultBatch.AddRowAsync(resRow);
                 rowsYielded++;
 
@@ -158,6 +170,7 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
             if (limit.HasValue && rowsYielded >= limit.Value) break;
         }
     done:
+        if (qualityValidator != null) await qualityValidator.CompleteAsync(_context.CancellationToken);
         if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
     }
 

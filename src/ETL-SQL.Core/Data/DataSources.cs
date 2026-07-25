@@ -773,6 +773,40 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         }
     }
 
+    /// <summary>
+    /// Removes resident rows matching <paramref name="predicate"/> and returns how many were
+    /// removed. Used by data-quality retention pruning on engine-managed targets. Returns
+    /// <c>-1</c> when the table has spilled to disk — pruning a partially spilled table would
+    /// silently prune only the resident part, so the caller is told it did not run.
+    /// </summary>
+    public int RemoveRows(Predicate<Row> predicate)
+    {
+        _lock.Wait();
+        try
+        {
+            if (!_spillChunkNames.IsEmpty) return -1;
+
+            int removed = 0;
+            foreach (var batch in _batches)
+            {
+                removed += batch.Rows.RemoveAll(predicate);
+            }
+            if (removed == 0) return 0;
+
+            _batches.RemoveAll(b => b.Rows.Count == 0);
+            _totalRowCount -= removed;
+            _index.ClearData(preserveUniqueKeys: false);
+            foreach (var indexedColumns in _index.IndexedColumnSets)
+                _index.RebuildIndex(indexedColumns, _batches);
+            RecalculateResidentMemoryReservation();
+            return removed;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public void CreateIndex(string columnName, bool isUnique = false)
     {
         CreateIndex(new[] { columnName }, isUnique);

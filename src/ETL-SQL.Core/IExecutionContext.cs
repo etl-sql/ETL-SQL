@@ -256,6 +256,13 @@ public interface IDataContext
 
     /// <summary>Positional parameters provided for the current execution (for ? and ?n placeholders).</summary>
     List<object?>? Parameters { get; set; }
+
+    /// <summary>
+    /// Per-run data-quality outcomes accumulated by <c>@expect</c> rule enforcement: aggregated
+    /// per-(column, rule) failure counts with capped samples, plus quarantine/warn row tallies.
+    /// Always non-null; stays empty (and costs nothing) when no statement carries rules.
+    /// </summary>
+    Quality.DataQualityReport DataQuality { get; }
 }
 
 

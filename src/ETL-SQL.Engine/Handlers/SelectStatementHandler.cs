@@ -856,6 +856,16 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             ("fallbackDestination", "row-engine"));
     }
 
+    /// <summary>
+    /// Statements carrying <c>@expect</c> data-quality rules are pinned to the local row pipeline:
+    /// the columnar/native fast paths bypass local projection entirely, which is where rules are
+    /// enforced and where the pre-projection input row for QUARANTINE capture is available.
+    /// Upstream predicate/semi-join pushdown is unaffected — it moves filters, and rules validate
+    /// output rows. A regression test guards this pin.
+    /// </summary>
+    private static bool HasDataQualityRules(SelectStatement stmt)
+        => stmt.Columns.Any(c => ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(c.Metadata));
+
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0
             && (stmt.Joins == null || stmt.Joins.Count == 0)
@@ -863,7 +873,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
             && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll
-            && !HasLateralColumnAlias(stmt.Columns);
+            && !HasLateralColumnAlias(stmt.Columns)
+            && !HasDataQualityRules(stmt);
 
     private static bool IsGlobalColumnarAggregateCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0
@@ -871,7 +882,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.GroupBy == null && stmt.GroupingSet == null && stmt.HavingClause == null
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
-            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll
+            && !HasDataQualityRules(stmt);
 
     private static bool IsGroupedColumnarAggregateCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0
@@ -879,7 +891,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.GroupBy != null && stmt.GroupingSet == null
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
-            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll
+            && !HasDataQualityRules(stmt);
 
     private static bool HasAggregateProjection(SelectStatement stmt)
         => stmt.Columns.Any(column => column.Expression is FunctionCallExpression function
