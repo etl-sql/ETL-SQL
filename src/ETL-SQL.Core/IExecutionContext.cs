@@ -263,6 +263,13 @@ public interface IDataContext
     /// Always non-null; stays empty (and costs nothing) when no statement carries rules.
     /// </summary>
     Quality.DataQualityReport DataQuality { get; }
+
+    /// <summary>
+    /// Access to previous runs' recorded metrics, for <c>ASSERT JOB … WITHIN … OF HISTORICAL</c>.
+    /// Null outside an orchestrator-hosted run (pure engine, CLI): <c>HISTORICAL</c> predicates
+    /// then fail with a clear message while collector-backed predicates still evaluate.
+    /// </summary>
+    Data.IJobMetricsProvider? JobMetrics => null;
 }
 
 

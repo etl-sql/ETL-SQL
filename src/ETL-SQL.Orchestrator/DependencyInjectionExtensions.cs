@@ -216,6 +216,10 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IWriteEpochStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IClusterLockStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IHostMetricsStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            // Engine→Orchestrator seam for ASSERT JOB ... WITHIN ... OF HISTORICAL. Absent in
+            // pure-engine/CLI hosts, where HISTORICAL predicates fail cleanly instead.
+            services.AddSingleton<IJobMetricsProvider>(sp =>
+                new JobHistoryMetricsProvider(sp.GetRequiredService<IJobHistoryStore>()));
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddSingleton<JobThrottle>();

@@ -25,6 +25,12 @@ public sealed class DataQualityReport
     private long _rowsWarned;
     private long _rowsValidated;
 
+    // Per-column null tallies, collected ONLY for columns an ASSERT JOB predicate names. A script
+    // with no NULL_PERCENT predicate registers nothing, so the per-cell check never runs.
+    private readonly ConcurrentDictionary<string, ColumnNullAccumulator> _nullCounts =
+        new(StringComparer.OrdinalIgnoreCase);
+    private volatile bool _tracksNullCounts;
+
     /// <summary>Maximum sample values retained per (rule, column) pair.</summary>
     public int MaxSamplesPerRule { get; init; } = 10;
 
@@ -38,6 +44,62 @@ public sealed class DataQualityReport
     public void RecordRowValidated() => Interlocked.Increment(ref _rowsValidated);
     public void RecordRowQuarantined() => Interlocked.Increment(ref _rowsQuarantined);
     public void RecordRowWarned() => Interlocked.Increment(ref _rowsWarned);
+
+    /// <summary>
+    /// True when at least one column is registered for null tracking — the guard callers check
+    /// before doing any per-cell work.
+    /// </summary>
+    public bool TracksNullCounts => _tracksNullCounts;
+
+    /// <summary>
+    /// Registers a column whose null fraction an <c>ASSERT JOB NULL_PERCENT(col)</c> predicate
+    /// needs. Called by the pre-execution walk over the script; unregistered columns are never
+    /// inspected, so a script without such a predicate pays nothing per cell.
+    /// </summary>
+    public void RegisterNullTrackedColumn(string columnName)
+    {
+        _nullCounts.TryAdd(columnName, new ColumnNullAccumulator());
+        _tracksNullCounts = true;
+    }
+
+    /// <summary>
+    /// Records one observed value for a tracked column. Ignores columns that were not registered.
+    /// </summary>
+    public void RecordColumnValue(string columnName, bool isNull)
+    {
+        if (!_tracksNullCounts) return;
+        if (!_nullCounts.TryGetValue(columnName, out var accumulator)) return;
+        accumulator.Add(isNull);
+    }
+
+    /// <summary>
+    /// The observed null fraction (0..1) for a tracked column, or null when the column was never
+    /// registered or no rows were observed for it.
+    /// </summary>
+    public decimal? GetNullPercent(string columnName)
+    {
+        if (!_nullCounts.TryGetValue(columnName, out var accumulator)) return null;
+        var (total, nulls) = accumulator.Snapshot();
+        return total == 0 ? null : (decimal)nulls / total;
+    }
+
+    /// <summary>Column names registered for null tracking, whether or not any row was seen.</summary>
+    public IReadOnlyCollection<string> NullTrackedColumns => _nullCounts.Keys.ToList();
+
+    /// <summary>
+    /// True when the named column was written by more than one sink statement in this run. v1
+    /// resolves <c>NULL_PERCENT(col)</c> across the run's sink writes; an ambiguous name is a clean
+    /// error rather than a silently-wrong metric (qualified <c>NULL_PERCENT(target.col)</c> is a
+    /// noted future extension).
+    /// </summary>
+    public bool IsNullTrackedColumnAmbiguous(string columnName) =>
+        _nullCounts.TryGetValue(columnName, out var accumulator) && accumulator.SinkCount > 1;
+
+    /// <summary>Records that a distinct sink statement contributed values for a tracked column.</summary>
+    public void RecordNullTrackedSink(string columnName)
+    {
+        if (_nullCounts.TryGetValue(columnName, out var accumulator)) accumulator.AddSink();
+    }
 
     /// <summary>
     /// Records one rule failure. <paramref name="sample"/> is the projected value that failed;
@@ -72,6 +134,8 @@ public sealed class DataQualityReport
     public void Clear()
     {
         _failures.Clear();
+        _nullCounts.Clear();
+        _tracksNullCounts = false;
         Interlocked.Exchange(ref _rowsQuarantined, 0);
         Interlocked.Exchange(ref _rowsWarned, 0);
         Interlocked.Exchange(ref _rowsValidated, 0);
@@ -84,6 +148,25 @@ public sealed class DataQualityReport
         IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
         _ => value.ToString() ?? "NULL"
     };
+
+    private sealed class ColumnNullAccumulator
+    {
+        private long _total;
+        private long _nulls;
+        private int _sinkCount;
+
+        public int SinkCount => Volatile.Read(ref _sinkCount);
+
+        public void Add(bool isNull)
+        {
+            Interlocked.Increment(ref _total);
+            if (isNull) Interlocked.Increment(ref _nulls);
+        }
+
+        public void AddSink() => Interlocked.Increment(ref _sinkCount);
+
+        public (long Total, long Nulls) Snapshot() => (Interlocked.Read(ref _total), Interlocked.Read(ref _nulls));
+    }
 
     private sealed class RuleFailureAccumulator(int maxSamples)
     {

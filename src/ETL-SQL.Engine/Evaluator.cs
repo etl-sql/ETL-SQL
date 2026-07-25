@@ -203,6 +203,14 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// (and costs nothing) when no statement carries rules.
     /// </summary>
     public ETL_SQL.Core.Quality.DataQualityReport DataQuality { get; } = new();
+
+    /// <summary>
+    /// Previous runs' recorded metrics for <c>ASSERT JOB … OF HISTORICAL</c>. Resolved from DI, so
+    /// it is null in pure-engine and CLI hosts that do not register an orchestrator store.
+    /// </summary>
+    public ETL_SQL.Core.Data.IJobMetricsProvider? JobMetrics =>
+        _serviceProvider?.GetService(typeof(ETL_SQL.Core.Data.IJobMetricsProvider))
+            as ETL_SQL.Core.Data.IJobMetricsProvider;
     public bool UseColumnarTempTables { get => _options.UseColumnarTempTables; set => _options.UseColumnarTempTables = value; }
     public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
     public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
@@ -968,6 +976,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 analyzer.Analyze(script);
             }
 
+            RegisterDataQualityMetricColumns(script);
+
             if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
             {
                 var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
@@ -1203,6 +1213,58 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     }
 
     public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState() => _variableScopeManager.GetGlobalState();
+
+    /// <summary>
+    /// Pre-execution walk registering every column named by an <c>ASSERT JOB NULL_PERCENT(col)</c>
+    /// predicate, so the sink-side collector knows which columns to tally. Scripts without such a
+    /// predicate register nothing and pay no per-cell cost.
+    /// </summary>
+    private void RegisterDataQualityMetricColumns(Script script)
+    {
+        foreach (var statement in EnumerateStatements(script.Statements))
+        {
+            if (statement is not AssertJobStatement assertJob) continue;
+            foreach (var predicate in assertJob.Predicates)
+            {
+                if (predicate.Metric == JobMetricKind.NullPercent && predicate.ColumnName != null)
+                    DataQuality.RegisterNullTrackedColumn(predicate.ColumnName);
+            }
+        }
+    }
+
+    /// <summary>Depth-first walk over a statement list, descending into control-flow containers.</summary>
+    private static IEnumerable<Statement> EnumerateStatements(IEnumerable<Statement?>? statements)
+    {
+        foreach (var statement in statements ?? [])
+        {
+            if (statement is null) continue;
+            yield return statement;
+
+            switch (statement)
+            {
+                case BlockStatement block:
+                    foreach (var s in EnumerateStatements(block.Statements)) yield return s;
+                    break;
+                case IfStatement ifStmt:
+                    foreach (var s in EnumerateStatements(new[] { ifStmt.IfBody, ifStmt.ElseBody })) yield return s;
+                    foreach (var clause in ifStmt.ElseIfClauses ?? [])
+                        foreach (var s in EnumerateStatements(new[] { clause.Body })) yield return s;
+                    break;
+                case WhileStatement w:
+                    foreach (var s in EnumerateStatements(new[] { w.Body })) yield return s;
+                    break;
+                case ForStatement f:
+                    foreach (var s in EnumerateStatements(new[] { f.Body })) yield return s;
+                    break;
+                case ForeachStatement fe:
+                    foreach (var s in EnumerateStatements(new[] { fe.Body })) yield return s;
+                    break;
+                case TryCatchStatement tc:
+                    foreach (var s in EnumerateStatements(new[] { tc.TryBody, tc.CatchBody })) yield return s;
+                    break;
+            }
+        }
+    }
 
     private static List<List<Statement>> SplitIntoBatches(List<Statement> statements)
     {

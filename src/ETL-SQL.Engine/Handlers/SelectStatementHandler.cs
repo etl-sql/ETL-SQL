@@ -41,7 +41,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // skip the early raw-statement pushdown for them.
         if (statement is SelectStatement selPush && selPush.IntoTable == null
             && !selPush.GroupByAll && !selPush.OrderByAll && selPush.Sample == null
-            && !selPush.Columns.Any(c => c.Expression is StarExpression))
+            && !selPush.Columns.Any(c => c.Expression is StarExpression)
+            && !HasDataQualityRules(selPush))
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
             {
@@ -80,6 +81,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
             IAsyncEnumerable<DataTable> batches;
             if (statement is SelectStatement selectQuery &&
+                !HasDataQualityRules(selectQuery) &&
                 _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
             {
                 RecordSqlPushdownAccepted(context, "select-into.sql-pushdown", connName!);
@@ -100,9 +102,27 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             long totalRows = 0;
             async IAsyncEnumerable<DataTable> CountBatches(IAsyncEnumerable<DataTable> source)
             {
+                // Sink-side metrics: row count always, per-column null counts only for columns an
+                // ASSERT JOB NULL_PERCENT predicate registered (zero predicates ⇒ zero per-cell work).
+                var nullTracked = context.DataQuality.TracksNullCounts
+                    ? context.DataQuality.NullTrackedColumns
+                    : null;
+                bool sinkRecorded = false;
+
                 await foreach (var batch in source)
                 {
                     totalRows += batch.Rows.Count;
+                    if (nullTracked != null)
+                    {
+                        foreach (var column in nullTracked)
+                        {
+                            if (batch.Schema?.GetIndex(column) is not >= 0) continue;
+                            if (!sinkRecorded) context.DataQuality.RecordNullTrackedSink(column);
+                            foreach (var row in batch.Rows)
+                                context.DataQuality.RecordColumnValue(column, row[column] is null or DBNull);
+                        }
+                        sinkRecorded = true;
+                    }
                     yield return batch;
                 }
             }
@@ -155,6 +175,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         bool hasStarModifiers = stmt.Columns.Any(c => c.Expression is StarExpression);
         if (stmt.IntoTable == null && !stmt.OrderByAll && !stmt.GroupByAll && !hasStarModifiers && stmt.Sample == null
             && !HasLateralColumnAlias(stmt.Columns)
+            && !HasDataQualityRules(stmt)
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
             RecordSqlPushdownAccepted(context, "select.stream.sql-pushdown", connName!);
