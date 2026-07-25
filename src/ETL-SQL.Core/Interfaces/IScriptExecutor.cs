@@ -19,4 +19,16 @@ public interface IScriptExecutor
     Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, Governance.ExecutionIdentity? executionIdentity = null);
 }
 
-public record ScriptExecutionResult(bool Success, long RowsProcessed, string? ErrorMessage = null, long PeakMemoryBytes = 0, double CpuTimeSeconds = 0, string? SessionId = null);
+public record ScriptExecutionResult(
+    bool Success,
+    long RowsProcessed,
+    string? ErrorMessage = null,
+    long PeakMemoryBytes = 0,
+    double CpuTimeSeconds = 0,
+    string? SessionId = null,
+    /// <summary>Rows removed from output by an <c>@expect</c> QUARANTINE action during this run.</summary>
+    long RowsQuarantined = 0,
+    /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
+    long RowsWarned = 0,
+    /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>); counts only, never sample values.</summary>
+    string? DataQualityFailures = null);

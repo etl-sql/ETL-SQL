@@ -123,6 +123,26 @@ namespace ETL_SQL.Orchestrator.Execution
                 result.ExecutionTree = evaluator.Telemetry.ExecutionTree;
                 result.RowsProcessed = evaluator.Telemetry.RowsProcessed;
                 result.Messages = evaluator.Messages.ToList();
+
+                // Data-quality outcomes accumulated by @expect rule enforcement; empty (and free)
+                // when no statement carried rules.
+                var dataQuality = evaluator.DataQuality;
+                result.RowsQuarantined = dataQuality.RowsQuarantined;
+                result.RowsWarned = dataQuality.RowsWarned;
+                if (dataQuality.TotalFailures > 0)
+                {
+                    result.DataQualityFailures = dataQuality.ToHistoryPayload();
+                    foreach (var failure in dataQuality.Failures)
+                    {
+                        result.Diagnostics.Add(new Diagnostic(
+                            failure.ToMessage(), 0, 0,
+                            failure.Action == ETL_SQL.Core.Quality.FailAction.Throw
+                                ? DiagnosticSeverity.Error
+                                : DiagnosticSeverity.Warning,
+                            "DATAQUALITY"));
+                    }
+                }
+
                 result.Success = true;
                 LastEvaluator = evaluator;
             }

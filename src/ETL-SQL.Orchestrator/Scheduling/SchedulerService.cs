@@ -459,7 +459,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             if (historyId > 0)
                                 await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed,
                                     peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
-                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
+                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched,
+                                    rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
+                                    dataQualityFailures: lastResult.DataQualityFailures);
 
                             break; // Done
                         }
@@ -476,7 +478,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             if (historyId > 0)
                                 await _store.LogJobEndAsync(historyId, "FAILURE", safeError,
                                     peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
-                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
+                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched,
+                                    rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
+                                    dataQualityFailures: lastResult.DataQualityFailures);
                         }
                     }
                     catch (Exception ex)

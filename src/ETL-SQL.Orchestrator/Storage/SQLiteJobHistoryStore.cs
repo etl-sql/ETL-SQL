@@ -408,6 +408,29 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN HashMatched INTEGER;";
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            // Data-quality outcomes per run (rolling-expand safe: additive, defaulted).
+            if (!columns.Contains("RowsQuarantined"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN RowsQuarantined INTEGER DEFAULT 0;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("RowsWarned"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN RowsWarned INTEGER DEFAULT 0;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // Compact "column:rule=count;..." payload — counts only, never sample values.
+            if (!columns.Contains("DataQualityFailures"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN DataQualityFailures TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
@@ -1053,13 +1076,13 @@ namespace ETL_SQL.Orchestrator.Storage
             return Convert.ToInt64((await command.ExecuteScalarAsync())!);
         }
 
-        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null)
+        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null, long rowsQuarantined = 0, long rowsWarned = 0, string? dataQualityFailures = null)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE JobHistory SET EndTime = @end, Status = @status, ErrorMessage = @err, RowsProcessed = @rows, PeakMemoryBytes = @mem, CpuTimeSeconds = @cpu, ScriptHashAtRunTime = @hash, HashMatched = @matched WHERE Id = @id;";
+            var sql = "UPDATE JobHistory SET EndTime = @end, Status = @status, ErrorMessage = @err, RowsProcessed = @rows, PeakMemoryBytes = @mem, CpuTimeSeconds = @cpu, ScriptHashAtRunTime = @hash, HashMatched = @matched, RowsQuarantined = @quarantined, RowsWarned = @warned, DataQualityFailures = @dqfail WHERE Id = @id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.AddParam("@id", entryId);
@@ -1071,6 +1094,9 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@cpu", cpuTimeSeconds);
             command.AddParam("@hash", (object?)scriptHashAtRunTime ?? DBNull.Value);
             command.AddParam("@matched", hashMatched.HasValue ? (object)(hashMatched.Value ? 1 : 0) : DBNull.Value);
+            command.AddParam("@quarantined", rowsQuarantined);
+            command.AddParam("@warned", rowsWarned);
+            command.AddParam("@dqfail", (object?)dataQualityFailures ?? DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -1362,7 +1388,33 @@ namespace ETL_SQL.Orchestrator.Storage
             reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
             reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
             reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0));
+            reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0),
+            // Data-quality columns are additive migrations, so read them by name — a store
+            // upgraded mid-rollout may not have them yet.
+            ReadOptionalInt64(reader, "RowsQuarantined"),
+            ReadOptionalInt64(reader, "RowsWarned"),
+            ReadOptionalString(reader, "DataQualityFailures"));
+
+        private static long ReadOptionalInt64(DbDataReader reader, string columnName)
+        {
+            int ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal < 0 || reader.IsDBNull(ordinal) ? 0 : reader.GetInt64(ordinal);
+        }
+
+        private static string? ReadOptionalString(DbDataReader reader, string columnName)
+        {
+            int ordinal = TryGetOrdinal(reader, columnName);
+            return ordinal < 0 || reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
+        }
+
+        private static int TryGetOrdinal(DbDataReader reader, string columnName)
+        {
+            for (int i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+            return -1;
+        }
 
         public async Task<string?> GetJobStateAsync(string jobName, string key)
         {

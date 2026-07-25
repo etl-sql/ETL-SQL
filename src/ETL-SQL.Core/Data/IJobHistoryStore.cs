@@ -88,7 +88,13 @@ public record JobHistoryEntry(
     long PeakMemoryBytes = 0,
     double CpuTimeSeconds = 0,
     string? ScriptHashAtRunTime = null,
-    bool? HashMatched = null
+    bool? HashMatched = null,
+    /// <summary>Rows removed from output by an <c>@expect</c> QUARANTINE action during this run.</summary>
+    long RowsQuarantined = 0,
+    /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
+    long RowsWarned = 0,
+    /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>). Counts only — never sample values.</summary>
+    string? DataQualityFailures = null
 );
 
 /// <summary>Daily-aggregated job execution for one job, retained far longer than raw history.</summary>
@@ -135,7 +141,7 @@ public interface IJobHistoryStore
 
     // History Management
     Task<long> LogJobStartAsync(string jobName);
-    Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);
+    Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null, long rowsQuarantined = 0, long rowsWarned = 0, string? dataQualityFailures = null);
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
     /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
     Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(

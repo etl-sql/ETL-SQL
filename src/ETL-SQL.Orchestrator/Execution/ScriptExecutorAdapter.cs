@@ -77,7 +77,8 @@ namespace ETL_SQL.Orchestrator.Execution
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
                 var output = new ScriptExecutionResult(result.Success, result.RowsProcessed,
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
-                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
+                    result.RowsQuarantined, result.RowsWarned, result.DataQualityFailures);
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(
                     activity,

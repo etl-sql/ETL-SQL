@@ -643,7 +643,20 @@ namespace ETL_SQL.App
 
                     if (ctx.IsJsonMode)
                     {
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 0, uri = ctx.ScriptFile.FullName }));
+                        // Metrics ride the completion envelope so an out-of-process runner
+                        // (ProcessJobExecutor) can record them against the job's history row.
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            type = "done",
+                            exitCode = 0,
+                            uri = ctx.ScriptFile.FullName,
+                            rowsProcessed = evaluator.Telemetry.RowsProcessed,
+                            rowsQuarantined = evaluator.DataQuality.RowsQuarantined,
+                            rowsWarned = evaluator.DataQuality.RowsWarned,
+                            dataQualityFailures = evaluator.DataQuality.TotalFailures > 0
+                                ? evaluator.DataQuality.ToHistoryPayload()
+                                : null
+                        }));
                     }
 
                     if (auditAdHoc && historyStore != null && auditHistoryId != -1L)
@@ -659,7 +672,12 @@ namespace ETL_SQL.App
                                 Process.GetCurrentProcess().PeakWorkingSet64,
                                 totalCpu,
                                 runTimeHash,
-                                true);
+                                true,
+                                evaluator.DataQuality.RowsQuarantined,
+                                evaluator.DataQuality.RowsWarned,
+                                evaluator.DataQuality.TotalFailures > 0
+                                    ? evaluator.DataQuality.ToHistoryPayload()
+                                    : null);
                         }
                         catch (Exception ex)
                         {

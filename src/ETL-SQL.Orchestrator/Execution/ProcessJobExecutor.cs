@@ -284,7 +284,16 @@ namespace ETL_SQL.Orchestrator.Execution
                     string? error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
                     string? session = root.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
 
-                    return new ScriptExecutionResult(success, rows, error, peakMemory, cpuSeconds, session);
+                    // Data-quality outcomes (absent on older runners → defaults of 0/null).
+                    long quarantined = root.TryGetProperty("rowsQuarantined", out var q) && q.ValueKind == JsonValueKind.Number
+                        ? q.GetInt64() : 0;
+                    long warned = root.TryGetProperty("rowsWarned", out var w) && w.ValueKind == JsonValueKind.Number
+                        ? w.GetInt64() : 0;
+                    string? dqFailures = root.TryGetProperty("dataQualityFailures", out var dq) && dq.ValueKind == JsonValueKind.String
+                        ? dq.GetString() : null;
+
+                    return new ScriptExecutionResult(
+                        success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures);
                 }
                 catch (JsonException)
                 {

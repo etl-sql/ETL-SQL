@@ -506,6 +506,36 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(1, await CountRows(eval, "#q"));
         }
 
+        // ── Metrics surfaced on the run result ─────────────────────────────
+
+        [Fact]
+        public async Task DataQualityOutcomes_SurfaceOnTheExecutionResult()
+        {
+            var provider = DependencyInjectionSetup.BuildServiceProvider();
+            var session = Microsoft.Extensions.DependencyInjection.ActivatorUtilities
+                .CreateInstance<ETL_SQL.Orchestrator.Execution.ExecutionSession>(provider);
+
+            var result = await session.ExecuteAsync(@"
+                CREATE TABLE #src (Id INT, Name VARCHAR(50));
+                INSERT INTO #src (Id, Name) VALUES (1, 'a'), (-5, 'b'), (NULL, 'c');
+                import_rows:
+                SELECT Id /* @expect: '>= 0'; @fail: 'WARN';
+                            @expect_1: 'NOT NULL'; @fail_1: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN
+                ON FAILURE QUARANTINE TO #q;");
+
+            Assert.True(result.Success);
+            Assert.Equal(1, result.RowsQuarantined);
+            Assert.Equal(1, result.RowsWarned);
+            Assert.NotNull(result.DataQualityFailures);
+            Assert.Contains("Id:", result.DataQualityFailures);
+
+            // Aggregated warn diagnostics reach the run's diagnostic surface.
+            Assert.Contains(result.Diagnostics, d =>
+                d.Code == "DATAQUALITY" && d.Message.Contains("Data quality"));
+        }
+
         // ── Harness ────────────────────────────────────────────────────────
 
         private static Evaluator NewEvaluator() =>

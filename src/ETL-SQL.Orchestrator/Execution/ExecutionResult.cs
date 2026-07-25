@@ -21,6 +21,12 @@ namespace ETL_SQL.Orchestrator.Execution
         public List<DataTable> ResultsTables { get; set; } = new();
         public long ExecutionTimeMs { get; set; }
         public long RowsProcessed { get; set; }
+        /// <summary>Rows removed from output by an <c>@expect</c> QUARANTINE action during this run.</summary>
+        public long RowsQuarantined { get; set; }
+        /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
+        public long RowsWarned { get; set; }
+        /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>); null when no rule failed.</summary>
+        public string? DataQualityFailures { get; set; }
         public bool Success { get; set; }
         /// <summary>Captured log messages for display in the TUI.</summary>
         public List<LogEntry> Messages { get; set; } = new();
