@@ -1343,6 +1343,69 @@ public sealed record AssertStatement(Expression Condition, Expression? Message =
 {
 }
 
+/// <summary>The run metric an <c>ASSERT JOB</c> predicate is measured against.</summary>
+public enum JobMetricKind
+{
+    /// <summary>Rows processed by the run.</summary>
+    RowCount,
+    /// <summary>Fraction of NULLs in a named column (0..1), collected in-stream.</summary>
+    NullPercent,
+    /// <summary>Fraction of validated rows removed by QUARANTINE actions (0..1).</summary>
+    QuarantinePercent,
+    /// <summary>Fraction of validated rows that failed a WARN rule (0..1).</summary>
+    WarnPercent
+}
+
+/// <summary>
+/// One <c>ASSERT JOB</c> predicate. Either a direct comparison against a literal
+/// (<c>NULL_PERCENT(Email) &lt; 0.02</c>) or a tolerance band around the historical baseline
+/// (<c>ROW_COUNT WITHIN 0.2 OF HISTORICAL</c>), in which case <see cref="Tolerance"/> is set and
+/// <see cref="Op"/> is unused.
+/// </summary>
+public sealed record JobMetricPredicate(
+    JobMetricKind Metric,
+    string? ColumnName,
+    CompareOp? Op,
+    decimal? Bound,
+    decimal? Tolerance) : AstNode
+{
+    /// <summary>True for the <c>WITHIN &lt;frac&gt; OF HISTORICAL</c> form.</summary>
+    public bool IsHistorical => Tolerance.HasValue;
+
+    /// <summary>Renders the predicate as written, for diagnostics and alert payloads.</summary>
+    public string Describe()
+    {
+        var metric = Metric switch
+        {
+            JobMetricKind.RowCount => "ROW_COUNT",
+            JobMetricKind.NullPercent => $"NULL_PERCENT({ColumnName})",
+            JobMetricKind.QuarantinePercent => "QUARANTINE_PERCENT",
+            _ => "WARN_PERCENT"
+        };
+        if (IsHistorical) return $"{metric} WITHIN {Tolerance} OF HISTORICAL";
+        var op = Op switch
+        {
+            CompareOp.GreaterOrEqual => ">=",
+            CompareOp.LessOrEqual => "<=",
+            CompareOp.Greater => ">",
+            CompareOp.Less => "<",
+            _ => "="
+        };
+        return $"{metric} {op} {Bound}";
+    }
+}
+
+/// <summary>
+/// <c>ASSERT JOB &lt;name&gt; (&lt;predicates&gt;) [ON FAILURE ALERT &lt;connection&gt;]
+/// [ON CRITICAL_FAILURE THROW]</c> — asserts on the run's own metrics, collected in-stream during
+/// execution rather than by a post-run re-scan.
+/// </summary>
+public sealed record AssertJobStatement(
+    string JobName,
+    IReadOnlyList<JobMetricPredicate> Predicates,
+    string? AlertConnection = null,
+    bool ThrowOnCritical = false) : Statement;
+
 public sealed record ExpectedSchemaColumn
 {
     public required string ColumnName { get; init; }
