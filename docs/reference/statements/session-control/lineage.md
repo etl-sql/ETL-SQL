@@ -121,6 +121,13 @@ Tags are attached to columns and tables using inline SQL comments with the `/* @
 | `@sla` | string | e.g. `4h`, `T+1` | Delivery SLA |
 | `@quality` | string | `gold` / `silver` / `bronze` | Confidence in data quality |
 | `@nullable` | boolean | `true` / `false` | Whether this column can contain NULLs |
+| `@expect` | string | e.g. `'NOT NULL'`, `'>= 0'` | Enforced data-quality rule — see [Data Quality Rules](../dml/data-quality-rules.md) |
+| `@fail` | string | `THROW` / `WARN` / `QUARANTINE` | What happens to a row failing the paired `@expect` rule (default `WARN`) |
+
+`@expect` and `@fail` are *enforced* at runtime, unlike the descriptive tags above: failing rows are
+thrown on, warned about, or diverted to a quarantine table, and the per-run counts are recorded on
+the job's history. Numbered variants (`@expect_1` / `@fail_1`, …) declare additional rule/action
+pairs on the same column.
 
 #### Documentation
 

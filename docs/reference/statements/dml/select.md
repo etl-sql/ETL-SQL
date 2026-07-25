@@ -41,5 +41,17 @@ WINDOW regional_amounts AS (PARTITION BY region ORDER BY amount DESC)
 QUALIFY rnk <= 10;
 ```
 
+```sql
+-- Validate column values inline; failing rows are quarantined instead of loaded
+import_users:
+SELECT
+  UserId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
+  Email  /* @expect: 'MATCHES ^[^@]+@[^@]+$'; @fail: 'QUARANTINE'; */
+INTO clean_users
+FROM raw_users
+ON FAILURE QUARANTINE TO quarantine_users WITH (RETENTION = '30 DAYS');
+```
+
 References:
 - [Statements](../README.md)
+- [Data Quality Rules](data-quality-rules.md)

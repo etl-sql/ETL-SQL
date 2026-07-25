@@ -14,6 +14,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added column-level data-quality rules: `@expect` / `@fail` tags declared inline on SELECT columns,
+  routed by a trailing `ON FAILURE <ACTION> [TO <table>] [WITH (RETENTION = '…')]` clause. Rules
+  cover `NOT NULL`, `UNIQUE` (plus `UNIQUE WITH (cols)` and `UNIQUE_FIRST/LAST BY <expr>`),
+  `MATCHES <regex>`, `IN (<list>)`, `EXISTS IN table(col)`, `EXPR <predicate>`, and numeric
+  comparisons; actions are `THROW`, `WARN` (aggregated diagnostics, optional row capture), and
+  `QUARANTINE` (row diverted to a capture table with the `__dq_*` provenance columns). Failing rows
+  are captured pre-projection so stewards see the cause, `@pii` values are masked in diagnostics and
+  logs, and per-run quarantined/warned counts are persisted to job history and surfaced on the
+  execution result. Rules are validated at lint time (malformed rules, non-sink QUARANTINE,
+  orphaned clauses, missing section labels) and appear in editor completions.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

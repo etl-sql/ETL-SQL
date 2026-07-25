@@ -231,8 +231,54 @@ public class LanguageService : ILanguageService
                     .Select(t => new Suggestion("@" + t, SuggestionType.Keyword, Priority: 0,
                         Documentation: GetTagDocumentation(t))));
             }
+
+            results.AddRange(GetTagValueSuggestions(context.ScriptBefore));
         }
         catch { }
+        return results;
+    }
+
+    /// <summary>
+    /// Value completions inside a governance tag: the allowed enum values for catalog enum tags
+    /// (e.g. <c>@fail: 'THROW'</c>), and the rule-grammar starters for <c>@expect</c>. Returns
+    /// nothing unless the cursor sits right after a <c>@tag:</c> inside a comment tag.
+    /// </summary>
+    private static List<Suggestion> GetTagValueSuggestions(string? scriptBefore)
+    {
+        var results = new List<Suggestion>();
+        if (string.IsNullOrEmpty(scriptBefore)) return results;
+
+        var match = System.Text.RegularExpressions.Regex.Match(
+            scriptBefore, @"@(?<tag>\w+)\s*:\s*(?<quote>['""])?(?<partial>[^'"";]*)$");
+        if (!match.Success) return results;
+
+        var tagName = match.Groups["tag"].Value;
+        var quote = match.Groups["quote"].Success ? match.Groups["quote"].Value : "'";
+        var partial = match.Groups["partial"].Value.TrimStart();
+
+        IEnumerable<string> values;
+        if (tagName.Equals("expect", StringComparison.OrdinalIgnoreCase)
+            || System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^expect_\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            values = ["NOT NULL", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ", "UNIQUE_LAST BY ",
+                      "MATCHES ", "IN (", "EXISTS IN ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
+        }
+        else
+        {
+            var definition = ETL_SQL.Common.StewardshipTagCatalog.Resolve(tagName);
+            if (definition is not { ValueKind: ETL_SQL.Common.StewardshipTagValueKind.Enum }) return results;
+            values = definition.AllowedValues;
+        }
+
+        foreach (var value in values.Where(v =>
+                     partial.Length == 0 || v.StartsWith(partial, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Offer the quoted form when the author has not opened a quote yet — tag values keep
+            // their quotes through the comment layer, and rule values must be quoted.
+            var insert = match.Groups["quote"].Success ? value : $"{quote}{value}{quote}";
+            results.Add(new Suggestion(insert, SuggestionType.Keyword, Priority: 0,
+                Documentation: GetTagDocumentation(ETL_SQL.Common.StewardshipTagCatalog.Canonicalize(tagName))));
+        }
         return results;
     }
 
@@ -260,6 +306,15 @@ public class LanguageService : ILanguageService
         "source_table" => "**@source_table** `dbo.Orders` — Originating table.",
         "source_column" => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
         "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
+        "expect" => "**@expect** `'<rule>[, <rule>...]'` — Enforced data-quality rule on this column. "
+            + "Rules: `NOT NULL`, `UNIQUE`, `UNIQUE WITH (cols)`, `UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, "
+            + "`MATCHES <regex>`, `IN (<list>)`, `EXISTS IN table(col)`, `EXPR <predicate>`, and `>= <= > < =` compares. "
+            + "Quote the value; NULL skips every rule except `NOT NULL`. Pair with `@fail` (default `WARN`). "
+            + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",
+        "fail" => "**@fail** `THROW|WARN|QUARANTINE` — What happens to a row failing the paired `@expect` rule. "
+            + "`THROW` aborts the statement; `WARN` lets the row through and aggregates a warning; "
+            + "`QUARANTINE` diverts the row to the `ON FAILURE QUARANTINE TO <table>` target. "
+            + "Defaults to `WARN` when omitted. `QUARANTINE` and `WARN TO` require a matching trailing `ON FAILURE` clause.",
         _ => null
     };
 
