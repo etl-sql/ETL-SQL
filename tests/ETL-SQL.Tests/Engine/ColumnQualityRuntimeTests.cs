@@ -237,7 +237,7 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task ReplayQuarantine_PreflightsReleasedRowsFromManifest()
+        public async Task ReplayQuarantine_ReplaysReleasedRowsFromManifest()
         {
             var provider = new CapturingMetricsProvider();
             var eval = NewEvaluator();
@@ -249,7 +249,7 @@ namespace ETL_SQL.Tests.Engine
                 SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
-            await Run(eval, "UPDATE #q SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+            await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE __dq_status = 'quarantined';");
 
             await Run(eval, "REPLAY QUARANTINE #q;");
 
@@ -258,7 +258,12 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal("import_rows", row["SectionLabel"]);
             Assert.Equal("#src", row["SourceTable"]);
             Assert.Equal(1L, row["ReleasedRows"]);
-            Assert.Equal("ready", row["Status"]);
+            Assert.Equal("replayed", row["Status"]);
+
+            await Run(eval, "SELECT * FROM #clean WHERE Id = 10;");
+            var cleanRow = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(10m, cleanRow["Id"]);
+            Assert.Equal("divert", cleanRow["Name"]);
         }
 
         [Fact]

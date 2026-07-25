@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -19,6 +23,17 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (ReplayQuarantineStatement)statement;
+        if (context is not Evaluator evaluator)
+            throw new ExecutionException(
+                "REPLAY QUARANTINE requires the ETL-SQL engine evaluator replay context.",
+                null, stmt.Line, stmt.Column);
+
+        if (evaluator.QuarantineReplayDepth > 0)
+        {
+            logger.Debug("Skipping nested REPLAY QUARANTINE while a quarantine replay is already active.");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(context.JobName))
             throw new ExecutionException(
                 "REPLAY QUARANTINE requires an orchestrator job name in the execution context.",
@@ -45,38 +60,121 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
                 $"Quarantine target '{target}' is not replayable: {manifest.NonReplayableReason ?? "no reason recorded"}.",
                 null, stmt.Line, stmt.Column);
 
-        var releasedRows = await CountReleasedRowsAsync(context, stmt.QuarantineTable);
-        var result = BuildResult(manifest, releasedRows);
+        if (string.IsNullOrWhiteSpace(manifest.SectionLabel))
+            throw new ExecutionException(
+                $"Quarantine target '{target}' is not replayable: no section label was recorded.",
+                null, stmt.Line, stmt.Column);
+
+        var replayScript = ResolveReplayScript(evaluator, manifest.SectionLabel!, stmt);
+        var (replaySource, releasedRows) = await BuildReplaySourceAsync(context, stmt.QuarantineTable, manifest);
+        if (releasedRows > 0)
+            await ReplayReleasedRowsAsync(evaluator, replayScript, manifest, replaySource);
+
+        var result = BuildResult(manifest, releasedRows, releasedRows > 0 ? "replayed" : "ready");
         context.LastResult = result;
         context.LastResultSets.Add(result);
         context.OnResultSet?.Invoke(result);
 
         logger.Info(
-            "REPLAY QUARANTINE preflight for '{Target}': {ReleasedRows} released row(s) ready for section '{SectionLabel}'.",
+            "REPLAY QUARANTINE for '{Target}': {ReleasedRows} released row(s) processed for section '{SectionLabel}'.",
             target,
             releasedRows,
             manifest.SectionLabel);
     }
 
-    private static async Task<long> CountReleasedRowsAsync(IExecutionContext context, TableReference table)
+    private static Script ResolveReplayScript(Evaluator evaluator, string sectionLabel, ReplayQuarantineStatement stmt)
+    {
+        static bool HasLabel(Script? script, string label) =>
+            script?.Statements.Any(s => s is SectionLabelStatement section
+                && section.LabelName.Equals(label, StringComparison.OrdinalIgnoreCase)) == true;
+
+        if (HasLabel(evaluator.CurrentScript, sectionLabel))
+            return evaluator.CurrentScript!;
+        if (HasLabel(evaluator.LastReplayCandidateScript, sectionLabel))
+            return evaluator.LastReplayCandidateScript!;
+
+        throw new ExecutionException(
+            $"Cannot replay quarantine: checkpoint label '{sectionLabel}' is not defined in the active script.",
+            null, stmt.Line, stmt.Column);
+    }
+
+    private static async Task ReplayReleasedRowsAsync(
+        Evaluator evaluator,
+        Script replayScript,
+        Core.Data.QuarantineReplayManifest manifest,
+        IDataSource replaySource)
+    {
+        var oldIsResuming = evaluator.IsResuming;
+        var oldResumeLabel = evaluator.ResumeLabel;
+        var oldSectionLabel = evaluator.CurrentSectionLabel;
+        var sourceKey = manifest.SourceTable;
+
+        evaluator.ReplaySourceOverrides[sourceKey] = replaySource;
+        evaluator.QuarantineReplayDepth++;
+        evaluator.IsResuming = true;
+        evaluator.ResumeLabel = manifest.SectionLabel;
+
+        try
+        {
+            await evaluator.Evaluate(replayScript, evaluator.CancellationToken);
+        }
+        finally
+        {
+            evaluator.ReplaySourceOverrides.Remove(sourceKey);
+            evaluator.QuarantineReplayDepth--;
+            evaluator.IsResuming = oldIsResuming;
+            evaluator.ResumeLabel = oldResumeLabel;
+            evaluator.CurrentSectionLabel = oldSectionLabel;
+        }
+    }
+
+    private static async Task<(IDataSource Source, long ReleasedRows)> BuildReplaySourceAsync(
+        IExecutionContext context,
+        TableReference table,
+        Core.Data.QuarantineReplayManifest manifest)
     {
         long count = 0;
         var source = await context.ResolveDataSourceAsync(table);
+        var replayBatch = new DataTable();
+        replayBatch.SetColumns(manifest.InputColumns);
+
         await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
         {
             foreach (var row in batch.Rows)
             {
-                if (string.Equals(
-                    row[DataQualityColumns.Status]?.ToString(),
-                    DataQualityColumns.ReleasedStatus,
-                    StringComparison.OrdinalIgnoreCase))
-                    count++;
+                if (!string.Equals(
+                        row[DataQualityColumns.Status]?.ToString(),
+                        DataQualityColumns.ReleasedStatus,
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var replayRow = new Row();
+                foreach (var column in manifest.InputColumns)
+                    replayRow[column] = row[column];
+                await replayBatch.AddRowAsync(replayRow);
+                count++;
             }
         }
-        return count;
+
+        var replaySource = new InMemoryDataSource
+        {
+            Validator = context as IDataValidator,
+            ExecutionContext = context
+        };
+        await replaySource.WriteBatches(SingleBatch(replayBatch, context.CancellationToken), append: false, context.CancellationToken);
+        return (replaySource, count);
     }
 
-    private static DataTable BuildResult(Core.Data.QuarantineReplayManifest manifest, long releasedRows)
+    private static async IAsyncEnumerable<DataTable> SingleBatch(
+        DataTable table,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return table;
+        await Task.CompletedTask;
+    }
+
+    private static DataTable BuildResult(Core.Data.QuarantineReplayManifest manifest, long releasedRows, string status)
     {
         var table = new DataTable();
         table.AddColumn("JobName");
@@ -96,7 +194,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         row["QuarantineTarget"] = manifest.QuarantineTarget;
         row["ReleasedRows"] = releasedRows;
         row["InputSchemaFingerprint"] = manifest.InputSchemaFingerprint;
-        row["Status"] = "ready";
+        row["Status"] = status;
         table.Rows.Add(row);
         return table;
     }

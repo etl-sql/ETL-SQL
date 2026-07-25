@@ -67,10 +67,12 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private readonly ConcurrentDictionary<string, IDataSource> _connections;
     private readonly IBufferManager? _bufferManager;
     private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IDataSource> _replaySourceOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _pendingJobStateUpdates = new();
 
     public IDictionary<string, IDataSource> Connections => _connections;
     public IDictionary<string, IDataSource> LocalSources => _localSources;
+    public IDictionary<string, IDataSource> ReplaySourceOverrides => _replaySourceOverrides;
     public Dictionary<string, string> PendingJobStateUpdates => _pendingJobStateUpdates;
 
     private readonly VariableScopeManager _variableScopeManager;
@@ -192,6 +194,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool IsPersistentSession { get; set; }
     public bool IsResuming { get; set; }
     public string? ResumeLabel { get; set; }
+    public int QuarantineReplayDepth { get; set; }
+    public Script? CurrentScript { get; private set; }
+    public Script? LastReplayCandidateScript { get; private set; }
     public List<object?>? Parameters { get; set; }
     /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
     public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
@@ -949,6 +954,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
     {
+        Script? previousScript = null;
+
         if (CurrentRecursiveDepth == 0)
         {
             var actor = script.Metadata.TryGetValue("author", out var author)
@@ -989,6 +996,13 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
         try
         {
+            previousScript = CurrentScript;
+            CurrentScript = script;
+            if (QuarantineReplayDepth == 0
+                && script.Statements.OfType<SectionLabelStatement>().Any()
+                && !script.Statements.OfType<ReplayQuarantineStatement>().Any())
+                LastReplayCandidateScript = script;
+
             if (LineageEnabled)
             {
                 var analyzer = new LineageAnalyzer(LineageTracker);
@@ -1152,6 +1166,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
         finally
         {
+            CurrentScript = previousScript;
             if (CurrentRecursiveDepth == 0)
             {
                 await StopAdaptiveSamplerAsync();

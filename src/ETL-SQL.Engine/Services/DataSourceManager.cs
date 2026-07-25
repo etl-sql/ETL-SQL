@@ -57,6 +57,13 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
 
         string name = table.ConnectionName ?? table.TableName;
         IDataSource? source = null;
+        var sourceKey = table.GetSourceTables().FirstOrDefault() ?? name;
+
+        if (_evaluator.ReplaySourceOverrides.TryGetValue(sourceKey, out source)
+            || _evaluator.ReplaySourceOverrides.TryGetValue(name, out source))
+        {
+            return source;
+        }
 
         if (_evaluator.LocalSources.TryGetValue(name, out source))
         {

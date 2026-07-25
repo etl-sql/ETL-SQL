@@ -29,8 +29,9 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
 3. **Quarantine remediation** — in progress. The orchestrator manifest foundation is implemented:
    quarantining jobs persist the job/script/section/source/target replay metadata and mark joins
    non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. `REPLAY QUARANTINE`
-   preflight resolves manifests and counts released rows. Remaining work: resume-at-label source
-   substitution, replay lease/status flips, and Portal steward grid.
+   resolves manifests, substitutes released quarantine rows back into the recorded source table, and
+   resumes the recorded section label. Remaining work: replay lease/status flips and Portal steward
+   grid.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.

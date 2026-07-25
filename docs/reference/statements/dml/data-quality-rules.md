@@ -101,15 +101,16 @@ read, including ones absent from the SELECT list — plus these engine columns:
 The pre-projection row is captured rather than the output row because it points stewards at the
 *cause* (the source value) rather than the symptom.
 
-## Remediation Preflight
+## Remediation Replay
 
 `REPLAY QUARANTINE <table>` resolves the orchestrator replay manifest for the current job and
-quarantine target, verifies that the target is replayable, counts rows whose `__dq_status` is
-`released`, and returns a one-row ready summary. Missing manifests and non-replayable shapes, such
-as join-source quarantines, fail before any data changes.
+quarantine target, verifies that the target is replayable, reads rows whose `__dq_status` is
+`released`, strips engine-owned `__dq_*` evidence columns, and resumes the recorded section label
+with those rows substituted for the original source table. Missing manifests and non-replayable
+shapes, such as join-source quarantines, fail before replay starts.
 
-Full resume-at-label replay is a later v2 slice; the preflight exists so operators can validate
-release readiness against the same manifest and row scan that replay will consume.
+Replay leasing and final `released -> replayed` status flips are follow-up v2 work; a failed replay
+therefore leaves released rows eligible for retry.
 
 ## Requirements and limits
 
