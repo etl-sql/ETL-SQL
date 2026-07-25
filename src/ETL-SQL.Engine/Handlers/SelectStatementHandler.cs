@@ -589,7 +589,11 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         bool isComplex = hasAgg || hasWindow && !hasOnlyStreamingRowNumber
             || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null
             || !hasOnlyStreamingRowNumber && (stmt.Offset != null || stmt.LimitCount != null)
-            || stmt.IsDistinct || stmt.QualifyClause != null;
+            || stmt.IsDistinct || stmt.QualifyClause != null
+            // UNIQUE data-quality rules need to see the whole stream before any row's fate is
+            // known, which the single-pass streaming engine cannot do — route to the pipeline,
+            // where the spill-once two-pass scan lives.
+            || HasUniqueDataQualityRule(stmt);
 
         IAsyncEnumerable<DataTable> output;
         if (!isComplex)
@@ -865,6 +869,27 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     /// </summary>
     private static bool HasDataQualityRules(SelectStatement stmt)
         => stmt.Columns.Any(c => ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(c.Metadata));
+
+    /// <summary>
+    /// True when any column carries a UNIQUE-family rule. Those require the whole-stream pre-pass,
+    /// so the statement must run through the multi-pass pipeline rather than the streaming engine.
+    /// Malformed rules are ignored here — the linter and the validator both report them.
+    /// </summary>
+    private static bool HasUniqueDataQualityRule(SelectStatement stmt)
+    {
+        foreach (var column in stmt.Columns)
+        {
+            if (!ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(column.Metadata)) continue;
+            try
+            {
+                if (ETL_SQL.Core.Quality.ColumnRuleParser.ParseBindings(column.Metadata!)
+                    .Any(b => b.Rules.Any(r => r is ETL_SQL.Core.Quality.UniqueRule)))
+                    return true;
+            }
+            catch (ETL_SQL.Core.Quality.ColumnRuleParseException) { /* reported elsewhere */ }
+        }
+        return false;
+    }
 
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0

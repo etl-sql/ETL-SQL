@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -307,6 +308,171 @@ namespace ETL_SQL.Tests.Engine
             Assert.DoesNotContain("secret-value", quarantined[DataQualityColumns.Reason]!.ToString());
         }
 
+        // ── UNIQUE (spill-once pre-pass) ───────────────────────────────────
+
+        [Fact]
+        public async Task UniqueRule_QuarantinesEveryRowInADuplicatedGroup()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (2, 'b'), (1, 'c')");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            // Plain UNIQUE keeps nothing from a duplicated group — both Id=1 rows are diverted.
+            var clean = await ReadRows(eval, "#clean");
+            Assert.Equal(2m, Assert.Single(clean)["Id"]);
+            Assert.Equal(2, await CountRows(eval, "#q"));
+            Assert.Equal(2, eval.DataQuality.RowsQuarantined);
+        }
+
+        [Fact]
+        public async Task UniqueFirstBy_KeepsTheEarliestRowPerKey()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #events (EventId INT, LoadedAt INT, Tag VARCHAR(10));
+                INSERT INTO #events (EventId, LoadedAt, Tag)
+                VALUES (1, 30, 'late'), (1, 10, 'early'), (2, 5, 'only');");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                INTO #clean FROM #events
+                ON FAILURE QUARANTINE TO #q;");
+
+            var clean = await ReadRows(eval, "#clean");
+            Assert.Equal(2, clean.Count);
+            Assert.Contains(clean, r => (string?)r["Tag"] == "early");
+            Assert.Contains(clean, r => (string?)r["Tag"] == "only");
+            Assert.DoesNotContain(clean, r => (string?)r["Tag"] == "late");
+
+            var quarantined = Assert.Single(await ReadRows(eval, "#q"));
+            Assert.Equal("late", quarantined["Tag"]);
+        }
+
+        [Fact]
+        public async Task UniqueLastBy_KeepsTheLatestRowPerKey()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #events (EventId INT, LoadedAt INT, Tag VARCHAR(10));
+                INSERT INTO #events (EventId, LoadedAt, Tag)
+                VALUES (1, 30, 'late'), (1, 10, 'early');");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT EventId /* @expect: 'UNIQUE_LAST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                INTO #clean FROM #events
+                ON FAILURE QUARANTINE TO #q;");
+
+            Assert.Equal("late", Assert.Single(await ReadRows(eval, "#clean"))["Tag"]);
+        }
+
+        [Fact]
+        public async Task UniqueWith_TreatsTheColumnTupleAsTheKey()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #t (TenantId INT, Region VARCHAR(10), Val INT);
+                INSERT INTO #t (TenantId, Region, Val)
+                VALUES (1, 'NA', 10), (1, 'EMEA', 20), (1, 'NA', 30);");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT TenantId /* @expect: 'UNIQUE WITH (TenantId, Region)'; @fail: 'QUARANTINE'; */, Region, Val
+                INTO #clean FROM #t
+                ON FAILURE QUARANTINE TO #q;");
+
+            // (1,'NA') appears twice → both diverted; (1,'EMEA') is unique → kept.
+            Assert.Equal("EMEA", Assert.Single(await ReadRows(eval, "#clean"))["Region"]);
+            Assert.Equal(2, await CountRows(eval, "#q"));
+        }
+
+        [Fact]
+        public async Task UniqueRule_SkipsNullKeys()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'a'), (NULL, 'b'), (1, 'c')");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            // NULL is not a value that can duplicate — UNIQUE skips it like every non-NOT NULL rule.
+            Assert.Equal(3, await CountRows(eval, "#clean"));
+            Assert.Equal(0, await CountRows(eval, "#q"));
+        }
+
+        [Fact]
+        public async Task UniqueFirst_TieOnOrderKey_IsDeterministicAcrossRuns()
+        {
+            // Two rows share both the key and the order key; the tiebreak must pick the same
+            // survivor every run, not whichever the scan happened to reach first.
+            var survivors = new System.Collections.Generic.List<string?>();
+            for (int run = 0; run < 3; run++)
+            {
+                var eval = NewEvaluator();
+                await Run(eval, @"
+                    CREATE TABLE #events (EventId INT, LoadedAt INT, Tag VARCHAR(10));
+                    INSERT INTO #events (EventId, LoadedAt, Tag)
+                    VALUES (1, 10, 'zebra'), (1, 10, 'alpha');");
+
+                await Run(eval, @"
+                    import_rows:
+                    SELECT EventId /* @expect: 'UNIQUE_FIRST BY LoadedAt'; @fail: 'QUARANTINE'; */, LoadedAt, Tag
+                    INTO #clean FROM #events
+                    ON FAILURE QUARANTINE TO #q;");
+
+                survivors.Add(Assert.Single(await ReadRows(eval, "#clean"))["Tag"]?.ToString());
+            }
+
+            Assert.Single(survivors.Distinct());
+        }
+
+        [Fact]
+        public async Task UniqueRule_ReadsTheSourceExactlyOnce()
+        {
+            // Non-rewindable sources (Kafka, paginated REST) cannot be read twice, and even a
+            // rewindable one can observe different data on a second read. The pre-pass and the
+            // validation pass must both come from a single materialization.
+            var eval = NewEvaluator();
+            var counting = new ReadCountingDataSource(
+                ("Id", "Name"),
+                [(1m, "a"), (2m, "b"), (1m, "c")]);
+            eval.Connections["#counted"] = counting;
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #counted
+                ON FAILURE QUARANTINE TO #q;");
+
+            Assert.Equal(1, counting.ReadCount);
+            Assert.Equal(2, await CountRows(eval, "#q"));
+        }
+
+        [Fact]
+        public async Task UniqueRule_WithWarnAction_KeepsEveryRowButCountsFailures()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (1, 'b'), (2, 'c')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'UNIQUE'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+
+            Assert.Equal(3, await CountRows(eval, "#clean")); // WARN never removes rows
+            Assert.Equal(2, eval.DataQuality.RowsWarned);
+            Assert.Equal(2, Assert.Single(eval.DataQuality.Failures).Count);
+        }
+
         // ── Overhead and the local-path pin ────────────────────────────────
 
         [Fact]
@@ -362,6 +528,57 @@ namespace ETL_SQL.Tests.Engine
             await foreach (var batch in source.ReadBatches(1000))
                 rows.AddRange(batch.Rows);
             return rows;
+        }
+
+        /// <summary>
+        /// A read-once source that counts how many times its stream was enumerated, standing in for
+        /// a non-rewindable source (Kafka, paginated REST).
+        /// </summary>
+        private sealed class ReadCountingDataSource : IDataSource
+        {
+            private readonly (string First, string Second) _columns;
+            private readonly (object? Id, object? Name)[] _rows;
+
+            public ReadCountingDataSource((string, string) columns, (object?, object?)[] rows)
+            {
+                _columns = columns;
+                _rows = rows;
+            }
+
+            public int ReadCount { get; private set; }
+
+            public string Path => "counted";
+            public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "COUNTING";
+
+            public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+                ReadBatches(batchSize, System.Threading.CancellationToken.None);
+
+            public async IAsyncEnumerable<DataTable> ReadBatches(
+                int batchSize,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken)
+            {
+                ReadCount++;
+                var table = new DataTable();
+                table.SetColumns(new[] { _columns.First, _columns.Second });
+                foreach (var (id, name) in _rows)
+                {
+                    var row = table.NewRow();
+                    row[_columns.First] = id;
+                    row[_columns.Second] = name;
+                    await table.AddRowAsync(row);
+                }
+                yield return table;
+            }
+
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+                throw new NotSupportedException();
+            public Task<IEnumerable<string>> GetColumnsAsync() =>
+                Task.FromResult<IEnumerable<string>>(new[] { _columns.First, _columns.Second });
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
+            public IDataSource WithTable(string tableName) => this;
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 }

@@ -110,6 +110,140 @@ public sealed class ColumnQualityValidator
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         BuildExistsInKeySetsAsync(cancellationToken);
 
+    // ── UNIQUE pre-pass ────────────────────────────────────────────────────
+
+    private readonly Dictionary<UniqueRule, Dictionary<string, UniqueGroup>> _uniqueGroups = new();
+    private bool _uniquePrePassComplete;
+
+    /// <summary>
+    /// Pre-pass step: records this row's key (and order-key, for UNIQUE_FIRST/LAST) for every
+    /// UNIQUE rule. Called once per row over the spilled stream before validation begins.
+    /// </summary>
+    public async Task CollectUniqueKeysAsync(Row projected, CancellationToken cancellationToken = default)
+    {
+        foreach (var (ruleSet, rule) in UniqueRules())
+        {
+            var key = BuildUniqueKey(rule, ruleSet, projected);
+            if (key == null) continue; // NULL keys skip UNIQUE, like every non-NOT NULL rule
+
+            if (!_uniqueGroups.TryGetValue(rule, out var groups))
+                _uniqueGroups[rule] = groups = new Dictionary<string, UniqueGroup>(KeyComparer(_context.CaseSensitiveComparison));
+            if (!groups.TryGetValue(key, out var group))
+                groups[key] = group = new UniqueGroup();
+
+            group.Count++;
+            if (rule.Mode == UniqueMode.All) continue;
+
+            var orderKey = rule.OrderKey != null
+                ? await _context.EvaluateValue(rule.OrderKey, projected)
+                : null;
+            var identity = RowIdentity(projected);
+            group.ConsiderKeeper(rule.Mode, orderKey, identity, _context.CompareConstants);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    /// <summary>Closes the pre-pass; rows may now be validated against the collected key groups.</summary>
+    public void FinalizeUniquePrePass()
+    {
+        _uniquePrePassComplete = true;
+        foreach (var (rule, groups) in _uniqueGroups)
+        {
+            int duplicates = groups.Values.Count(g => g.Count > 1);
+            if (duplicates > 0)
+                _logger.Debug("[DQ] UNIQUE pre-pass for \"{Rule}\": {Duplicates} duplicated key(s) across {Keys} distinct key(s).",
+                    rule.Text, duplicates, groups.Count);
+        }
+    }
+
+    private IEnumerable<(ColumnRuleSet RuleSet, UniqueRule Rule)> UniqueRules() =>
+        _ruleSets.SelectMany(rs => rs.Bindings
+            .SelectMany(b => b.Rules)
+            .OfType<UniqueRule>()
+            .Select(r => (rs, r)));
+
+    /// <summary>
+    /// The uniqueness key for one row: the column's own projected value, or — for
+    /// <c>UNIQUE WITH (a, b)</c> — the tuple of the named projected columns.
+    /// Returns null when any key part is NULL (UNIQUE skips NULLs like every non-NOT NULL rule).
+    /// </summary>
+    private static string? BuildUniqueKey(UniqueRule rule, ColumnRuleSet ruleSet, Row projected)
+    {
+        if (rule.CompositeColumns is not { Count: > 0 } composite)
+        {
+            var single = projected[ruleSet.OutputIndex];
+            return single is null or DBNull ? null : Stringify(single);
+        }
+
+        var builder = new StringBuilder();
+        foreach (var column in composite)
+        {
+            var value = projected[column];
+            if (value is null or DBNull) return null;
+            builder.Append(Stringify(value)).Append('');
+        }
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Stable per-row identity used to break ties on the UNIQUE_FIRST/LAST order key: the full
+    /// projected row content. When two rows share both the key and the order-key value, the
+    /// deterministic winner is the lexicographically smallest identity, so repeated runs over the
+    /// same data always keep the same row.
+    /// </summary>
+    private static string RowIdentity(Row projected)
+    {
+        var builder = new StringBuilder();
+        foreach (var (name, value) in projected.Columns.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
+            builder.Append(name).Append('=').Append(Stringify(value)).Append('');
+        return builder.ToString();
+    }
+
+    /// <summary>Per-key state gathered by the pre-pass.</summary>
+    private sealed class UniqueGroup
+    {
+        public int Count;
+        public object? KeeperOrderKey;
+        public string? KeeperIdentity;
+
+        public void ConsiderKeeper(UniqueMode mode, object? orderKey, string identity, Func<object?, object?, int> compare)
+        {
+            if (KeeperIdentity == null)
+            {
+                KeeperOrderKey = orderKey;
+                KeeperIdentity = identity;
+                return;
+            }
+
+            int comparison = compare(orderKey, KeeperOrderKey);
+            bool wins = mode == UniqueMode.First ? comparison < 0 : comparison > 0;
+            // Deterministic tiebreak when the order key does not separate the rows.
+            if (comparison == 0)
+                wins = string.CompareOrdinal(identity, KeeperIdentity) < 0;
+
+            if (wins)
+            {
+                KeeperOrderKey = orderKey;
+                KeeperIdentity = identity;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when this row violates the UNIQUE rule: for plain <c>UNIQUE</c>, any key seen more than
+    /// once; for <c>UNIQUE_FIRST/LAST</c>, every row in a duplicated group except the keeper.
+    /// </summary>
+    private bool ViolatesUnique(UniqueRule rule, ColumnRuleSet ruleSet, Row projected)
+    {
+        if (!_uniquePrePassComplete) return false;
+        var key = BuildUniqueKey(rule, ruleSet, projected);
+        if (key == null) return false;
+        if (!_uniqueGroups.TryGetValue(rule, out var groups) || !groups.TryGetValue(key, out var group)) return false;
+        if (group.Count <= 1) return false;
+
+        return rule.Mode == UniqueMode.All || RowIdentity(projected) != group.KeeperIdentity;
+    }
+
     /// <summary>
     /// Validates one row. Returns <c>false</c> when the row was quarantined — the caller must
     /// drop it from the output. Warned rows return <c>true</c> (they still reach the target);
@@ -175,8 +309,12 @@ public sealed class ColumnQualityValidator
             {
                 foreach (var rule in binding.Rules)
                 {
-                    if (rule is UniqueRule) continue; // handled by the UNIQUE pre-pass
-                    if (await RulePassesAsync(rule, value, projected, cancellationToken)) continue;
+                    // UNIQUE is decided by the pre-pass over the whole spilled stream; every other
+                    // rule is a pure per-row predicate.
+                    bool passed = rule is UniqueRule unique
+                        ? !ViolatesUnique(unique, ruleSet, projected)
+                        : await RulePassesAsync(rule, value, projected, cancellationToken);
+                    if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
                         ruleSet.ColumnName, rule.Text, binding.Action, value, ruleSet.IsPii);

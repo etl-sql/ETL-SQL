@@ -731,10 +731,128 @@ public class SelectExecutionEngine
     {
         // Data-quality rules (@expect/@fail): null when no column carries them, so a rule-free
         // statement pays nothing. Rules validate the projected value; QUARANTINE captures the
-        // pre-projection input row, which is available right here.
+        // pre-projection input row, which the pair stream keeps alongside it.
         var qualityValidator = ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);
-        if (qualityValidator != null) await qualityValidator.InitializeAsync(_context.CancellationToken);
+        var pairs = ProjectPairs(rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere);
 
+        if (qualityValidator == null)
+        {
+            await foreach (var pair in pairs) yield return pair.Projected;
+            yield break;
+        }
+
+        await qualityValidator.InitializeAsync(_context.CancellationToken);
+
+        if (!qualityValidator.RequiresUniquePrePass)
+        {
+            await foreach (var (input, projectedRow) in pairs)
+            {
+                if (await qualityValidator.TryAcceptRowAsync(input, projectedRow, _context.CancellationToken))
+                    yield return projectedRow;
+            }
+            await qualityValidator.CompleteAsync(_context.CancellationToken);
+            yield break;
+        }
+
+        // UNIQUE rules need to see the whole stream before any row's fate is known. The stream is
+        // materialized to spill exactly once (design decision 7) — the source is never read twice,
+        // which is impossible or inconsistent for non-rewindable sources (Kafka, paginated REST)
+        // and can observe different data even for rewindable ones. Both the duplicate-key pre-pass
+        // and the main validation pass read from that same spill.
+        var spill = await SpillPairsAsync(pairs);
+        try
+        {
+            await foreach (var (_, projectedRow) in spill.ReadAsync())
+                await qualityValidator.CollectUniqueKeysAsync(projectedRow, _context.CancellationToken);
+            qualityValidator.FinalizeUniquePrePass();
+
+            await foreach (var (input, projectedRow) in spill.ReadAsync())
+            {
+                if (await qualityValidator.TryAcceptRowAsync(input, projectedRow, _context.CancellationToken))
+                    yield return projectedRow;
+            }
+            await qualityValidator.CompleteAsync(_context.CancellationToken);
+        }
+        finally
+        {
+            spill.Delete();
+        }
+    }
+
+    /// <summary>
+    /// Materializes a projected-pair stream to spill storage once and hands back a handle that can
+    /// be re-read as many times as needed. Input and projected rows go to sibling chunks written in
+    /// one pass and read back in lockstep, so the exact projected values are preserved (rather than
+    /// re-evaluated, which would diverge for non-deterministic expressions).
+    /// </summary>
+    private async Task<SpilledPairs> SpillPairsAsync(IAsyncEnumerable<(Row Input, Row Projected)> pairs)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var inputName = $"dq_input_{token}.tmp";
+        var projectedName = $"dq_projected_{token}.tmp";
+        long count = 0;
+        long bytes = 0;
+
+        await using (var inputWriter = await _context.SpillStore.CreateWriterAsync(inputName))
+        await using (var projectedWriter = await _context.SpillStore.CreateWriterAsync(projectedName))
+        {
+            await foreach (var (input, projected) in pairs)
+            {
+                await inputWriter.WriteRowAsync(input);
+                await projectedWriter.WriteRowAsync(projected);
+                bytes += input.EstimateHeapBytes() + projected.EstimateHeapBytes();
+                count++;
+            }
+        }
+
+        _context.Telemetry.TotalSpilledBytes += bytes;
+        _logger.Debug("[DQ] UNIQUE pre-pass spilled {RowCount} row(s) (~{Bytes:N0} bytes) for a single-read two-pass scan.",
+            count, bytes);
+        return new SpilledPairs(_context, inputName, projectedName);
+    }
+
+    /// <summary>A spilled (input, projected) pair stream that can be re-read.</summary>
+    private sealed class SpilledPairs(IExecutionContext context, string inputName, string projectedName)
+    {
+        public async IAsyncEnumerable<(Row Input, Row Projected)> ReadAsync()
+        {
+            await using var inputReader = await context.SpillStore.CreateReaderAsync(inputName);
+            await using var projectedReader = await context.SpillStore.CreateReaderAsync(projectedName);
+            var projectedEnumerator = projectedReader.AsEnumerableAsync().GetAsyncEnumerator();
+            try
+            {
+                await foreach (var input in inputReader.AsEnumerableAsync())
+                {
+                    if (!await projectedEnumerator.MoveNextAsync()) yield break;
+                    yield return (input, projectedEnumerator.Current);
+                }
+            }
+            finally
+            {
+                await projectedEnumerator.DisposeAsync();
+            }
+        }
+
+        public void Delete()
+        {
+            context.SpillStore.DeleteChunk(inputName);
+            context.SpillStore.DeleteChunk(projectedName);
+        }
+    }
+
+    /// <summary>
+    /// The projection step, yielding each output row alongside the pre-projection input row it came
+    /// from. Data-quality QUARANTINE/WARN capture needs the input row; every other caller takes the
+    /// projected one.
+    /// </summary>
+    private async IAsyncEnumerable<(Row Input, Row Projected)> ProjectPairs(
+        IAsyncEnumerable<Row> rows,
+        SelectStatement stmt,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        bool hasPreEvaluatedColumns,
+        bool canDeferWhere)
+    {
         var expressionKeys = hasPreEvaluatedColumns
             ? finalColumns.Select(c => c.Expression.ToSql()).ToArray()
             : Array.Empty<string>();
@@ -818,17 +936,8 @@ public class SelectExecutionEngine
                 }
             }
 
-            // Quarantined rows are diverted to their target and never reach the output.
-            if (qualityValidator != null
-                && !await qualityValidator.TryAcceptRowAsync(row, resRow, _context.CancellationToken))
-            {
-                continue;
-            }
-
-            yield return resRow;
+            yield return (row, resRow);
         }
-
-        if (qualityValidator != null) await qualityValidator.CompleteAsync(_context.CancellationToken);
     }
 
     private async IAsyncEnumerable<Row> ApplyLimitsStream(
