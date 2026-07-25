@@ -21,6 +21,15 @@ public sealed record ColumnRunMetrics(
     long NullRows);
 
 /// <summary>
+/// Last observed outcome for one <c>ASSERT JOB ... ALERT</c> assertion. Hosts persist this by
+/// job/assertion key so alerting can notify on transitions rather than every repeated failure.
+/// </summary>
+public sealed record AssertJobAlertState(
+    bool LastFailed,
+    DateTimeOffset? LastFailureAlertedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <summary>
 /// Narrow Engine→Orchestrator seam giving <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> access to
 /// previous runs' recorded metrics. Statement handlers live in the engine and only see
 /// <see cref="IExecutionContext"/>; the job-history store lives in the orchestrator. This
@@ -52,4 +61,17 @@ public interface IJobMetricsProvider
         int limit,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
+
+    Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+        string jobName,
+        string assertionKey,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<AssertJobAlertState?>(null);
+
+    Task SaveAssertJobAlertStateAsync(
+        string jobName,
+        string assertionKey,
+        AssertJobAlertState state,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

@@ -25,6 +25,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   default 3; sigma default 10) so new jobs do not alert-storm. Per-column null metrics are persisted
   to job history for target-aware `NULL_PERCENT ... OF HISTORICAL`. Failures can post a counts-only
   summary through a webhook connection — sample data is never included — and optionally fail the run.
+  Orchestrator-hosted alerts are transition-based: pass→fail alerts, repeated fail→fail runs are
+  suppressed until `Engine:DataQuality:AlertRealertHours` elapses (default 24), and fail→pass sends
+  a recovery notification.
 
 - Added column-level data-quality rules: `@expect` / `@fail` tags declared inline on SELECT columns,
   routed by a trailing `ON FAILURE <ACTION> [TO <table>] [WITH (RETENTION = '…')]` clause. Rules

@@ -120,6 +120,25 @@ namespace ETL_SQL.Tests.Orchestration
                 });
         }
 
+        [Fact]
+        public async Task AssertJobAlertState_RoundTripsThroughJobState()
+        {
+            var store = new SQLiteJobHistoryStore(_dbPath);
+            await store.InitializeAsync();
+            var provider = new JobHistoryMetricsProvider(store);
+
+            var state = new AssertJobAlertState(
+                LastFailed: true,
+                LastFailureAlertedAtUtc: DateTimeOffset.Parse("2026-07-25T12:00:00Z"),
+                UpdatedAtUtc: DateTimeOffset.Parse("2026-07-25T12:01:00Z"));
+
+            await provider.SaveAssertJobAlertStateAsync("nightly", "abc123", state);
+            var read = await provider.GetAssertJobAlertStateAsync("nightly", "abc123");
+
+            Assert.Equal(state, read);
+            Assert.Null(await provider.GetAssertJobAlertStateAsync("nightly", "missing"));
+        }
+
         // ── Per-column null tallies ────────────────────────────────────────
 
         [Fact]

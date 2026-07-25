@@ -370,6 +370,25 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task AlertTransition_SuppressesRepeatedFailure_AndSendsRecovery()
+        {
+            var provider = new FakeMetricsProvider();
+            var sink = new CapturingSink();
+
+            await RunAssertWithRows(provider, sink, rows: 4, badRows: 3);
+            Assert.Single(sink.Rows);
+            Assert.Equal("FAILURE", sink.Rows[0]["AlertKind"]);
+
+            await RunAssertWithRows(provider, sink, rows: 4, badRows: 3);
+            Assert.Single(sink.Rows);
+
+            await RunAssertWithRows(provider, sink, rows: 4, badRows: 0);
+            Assert.Equal(2, sink.Rows.Count);
+            Assert.Equal("RECOVERY", sink.Rows[1]["AlertKind"]);
+            Assert.Contains("recovered", sink.Rows[1]["Text"]?.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task AlertDeliveryFailure_DoesNotDecideWhetherTheRunFails()
         {
             var eval = NewEvaluator();
@@ -451,10 +470,19 @@ namespace ETL_SQL.Tests.Engine
                 ON FAILURE QUARANTINE TO #q;");
         }
 
+        private static async Task RunAssertWithRows(FakeMetricsProvider provider, CapturingSink sink, int rows, int badRows)
+        {
+            var eval = NewEvaluatorWithHistory(provider);
+            eval.Connections["alerts"] = sink;
+            await LoadWithQuarantine(eval, rows, badRows);
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+        }
+
         private sealed class FakeMetricsProvider : IJobMetricsProvider
         {
             private readonly IReadOnlyList<JobRunMetrics> _runs;
             private readonly IReadOnlyList<ColumnRunMetrics> _columnRuns;
+            private readonly Dictionary<string, AssertJobAlertState> _alertStates = new(StringComparer.OrdinalIgnoreCase);
 
             public FakeMetricsProvider(params JobRunMetrics[] runs)
             {
@@ -485,6 +513,25 @@ namespace ETL_SQL.Tests.Engine
                         && (targetTable == null || string.Equals(m.TargetTable?.TrimStart('#'), targetTable.TrimStart('#'), StringComparison.OrdinalIgnoreCase)))
                     .Take(limit)
                     .ToList());
+
+            public Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+                string jobName,
+                string assertionKey,
+                CancellationToken cancellationToken = default)
+            {
+                _alertStates.TryGetValue($"{jobName}:{assertionKey}", out var state);
+                return Task.FromResult(state);
+            }
+
+            public Task SaveAssertJobAlertStateAsync(
+                string jobName,
+                string assertionKey,
+                AssertJobAlertState state,
+                CancellationToken cancellationToken = default)
+            {
+                _alertStates[$"{jobName}:{assertionKey}"] = state;
+                return Task.CompletedTask;
+            }
         }
 
         private sealed class CapturingSink : IDataSource

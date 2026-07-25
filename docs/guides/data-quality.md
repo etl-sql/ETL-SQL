@@ -203,6 +203,11 @@ its first execution. `NULL_PERCENT(target.column)` can also use `WITHIN ... OF H
 history. `FRESHNESS` is current-run only and checks the age of the newest timestamp observed in the
 named column.
 
+When `ON FAILURE ALERT` runs under the orchestrator, the alert channel is transition-based: the
+first failing run alerts, repeated failing runs are suppressed until the configured re-alert window
+elapses, and the first passing run after a failure sends a recovery notification. Suppressed alerts
+still appear in logs and run diagnostics, so Slack silence does not mean the run record is silent.
+
 ## Related
 
 - [Data Quality Rules reference](../reference/statements/dml/data-quality-rules.md) — full syntax

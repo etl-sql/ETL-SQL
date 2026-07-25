@@ -73,6 +73,16 @@ By default a failing assertion is reported (log + run diagnostics) and the scrip
   a `@pii`-tagged column cannot reach an alerting channel.
 - **`ON CRITICAL_FAILURE THROW`** raises an execution error after alerting, failing the run.
 
+When orchestrator job state is available, alerts are transition-based per job/assertion signature:
+
+- pass → fail sends a failure alert.
+- fail → fail suppresses the repeated alert until `Engine:DataQuality:AlertRealertHours` elapses
+  (default 24). The suppression is still logged and written to run diagnostics.
+- fail → pass sends a recovery notification.
+
+Pure engine hosts that do not expose orchestrator state keep the older behavior: every failing
+`ASSERT JOB ... ALERT` sends an alert, and recovery notifications are unavailable.
+
 Alert delivery has its own policy: if the webhook is unreachable, that is logged and the run
 continues. A broken alerting channel never decides whether the job fails — only
 `ON CRITICAL_FAILURE THROW` does, and it raises the assertion's failure, not the delivery error.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
@@ -14,6 +15,8 @@ namespace ETL_SQL.Orchestrator.Storage;
 /// </summary>
 public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetricsProvider
 {
+    private const string AlertStatePrefix = "dq:assert-alert:";
+
     public async Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
         string jobName, int limit, CancellationToken cancellationToken = default)
     {
@@ -40,6 +43,38 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetr
     {
         cancellationToken.ThrowIfCancellationRequested();
         return await store.GetRecentColumnMetricsAsync(jobName, targetTable, columnName, limit);
+    }
+
+    public async Task<AssertJobAlertState?> GetAssertJobAlertStateAsync(
+        string jobName,
+        string assertionKey,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = await store.GetJobStateAsync(jobName, AlertStatePrefix + assertionKey);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<AssertJobAlertState>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    public async Task SaveAssertJobAlertStateAsync(
+        string jobName,
+        string assertionKey,
+        AssertJobAlertState state,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await store.SetJobStateAsync(
+            jobName,
+            AlertStatePrefix + assertionKey,
+            JsonSerializer.Serialize(state));
     }
 
     private static bool IsCompletedSuccessfully(JobHistoryEntry entry) =>

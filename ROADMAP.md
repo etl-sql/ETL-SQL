@@ -15,8 +15,8 @@ promise are defined in
 ### Data Quality v2
 
 v1 (column `@expect`/`@fail` rules, quarantine/warn capture, `ASSERT JOB`, the `WEBHOOK` connector)
-shipped in v0.17.0. The v2 metric-depth slice is implemented; remaining v2 work is tracked here.
-The full design, including the as-built deviations v1 left behind, lives in
+shipped in v0.17.0. The v2 metric-depth and alert-quality slices are implemented; remaining v2
+work is tracked here. The full design, including the as-built deviations v1 left behind, lives in
 [`docs/architecture/decisions/DataQualityRules.md`](docs/architecture/decisions/DataQualityRules.md).
 
 Recommended order (rationale in the design doc's "v2 sequencing" section):
@@ -24,8 +24,8 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
 1. **Metric depth** — shipped: `NULL_PERCENT ... OF HISTORICAL` (with a per-column run-metrics table),
    qualified `NULL_PERCENT(target.col)`, a `FRESHNESS(col) < interval` predicate, and
    `WITHIN n SIGMA OF HISTORICAL`.
-2. **Alert quality** — transition-based alerting and recovery notifications, so a nightly-failing
-   job cannot train people to mute the channel.
+2. **Alert quality** — shipped: transition-based alerting and recovery notifications, so a
+   nightly-failing job cannot train people to mute the channel.
 3. **Quarantine remediation** — the headline promise: disposition model, `REPLAY QUARANTINE`,
    orchestrator manifest, replay lease, Portal steward grid. Largest slice. **Promote to first if
    user feedback shows quarantine tables accumulating** — v1 ships capture with no workflow.

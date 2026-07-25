@@ -422,15 +422,15 @@ because it only matters once a job has months of history.
 
 ---
 
-## v2 — alert quality (designed; not built)
+## v2 — alert quality (shipped)
 
 Once `ASSERT JOB … ALERT` is in real use, the failure mode is **alert fatigue**: a job that fails
 its assertion every night posts to Slack every night, and the channel gets muted — at which point
 the alerting is worse than none, because it is trusted and silent.
 
 **Transition-based alerting.** Alert on pass→fail and fail→pass *transitions* rather than on every
-failing run. The per-run DQ state needed to know the previous outcome is already persisted; this
-needs one more recorded value (the previous assertion outcome per job+assertion) and a comparison.
+failing run. The shipped implementation stores one JSON alert-state value in `JobState` per
+job+assertion signature through the `IJobMetricsProvider` seam.
 
 - **pass → fail**: alert, as today.
 - **fail → fail**: suppress, unless a configurable re-alert interval has elapsed (default: once per
@@ -438,7 +438,7 @@ needs one more recorded value (the previous assertion outcome per job+assertion)
 - **fail → pass**: send a **recovery** notification. This is the half that makes an alerting
   channel trustworthy — an alert with no all-clear trains people to ignore the channel.
 
-Suppression must be visible: a suppressed alert still logs and still lands in the run's
+Suppression is visible: a suppressed alert still logs and still lands in the run's
 diagnostics. Silence in Slack must never mean silence in the run record.
 
 ---

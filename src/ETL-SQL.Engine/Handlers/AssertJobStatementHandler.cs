@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
@@ -23,6 +26,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
     private const int DefaultHistoryRuns = 5;
     private const int DefaultMinHistoryRuns = 3;
     private const int DefaultMinSigmaHistoryRuns = 10;
+    private const int DefaultAlertRealertHours = 24;
 
     public Type SupportedStatementType => typeof(AssertJobStatement);
 
@@ -34,6 +38,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
         int historyRuns = ReadOption("Engine:DataQuality:HistoryRuns", DefaultHistoryRuns);
         int minHistoryRuns = ReadOption("Engine:DataQuality:MinHistoryRuns", DefaultMinHistoryRuns);
         int minSigmaHistoryRuns = ReadOption("Engine:DataQuality:MinSigmaHistoryRuns", DefaultMinSigmaHistoryRuns);
+        int alertRealertHours = ReadOption("Engine:DataQuality:AlertRealertHours", DefaultAlertRealertHours);
 
         IReadOnlyList<Core.Data.JobRunMetrics>? history = null;
         bool historyLoaded = false;
@@ -114,6 +119,9 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
         if (failures.Count == 0)
         {
+            if (stmt.AlertConnection != null)
+                await HandleAlertTransitionAsync(context, stmt, failed: false, failures, alertRealertHours);
+
             logger.Debug("ASSERT JOB {JobName}: all {Count} predicate(s) passed.", stmt.JobName, stmt.Predicates.Count);
             return;
         }
@@ -123,7 +131,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
         logger.Warning("{AssertJobFailure}", summary);
 
         if (stmt.AlertConnection != null)
-            await SendAlertAsync(context, stmt, failures, summary);
+            await HandleAlertTransitionAsync(context, stmt, failed: true, failures, alertRealertHours, summary);
 
         if (stmt.ThrowOnCritical)
             throw new ExecutionException(summary, null, stmt.Line, stmt.Column);
@@ -261,8 +269,79 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
     /// failure has its own policy (log and continue), independent of ON CRITICAL_FAILURE: a broken
     /// alerting channel must not decide whether the run fails.
     /// </summary>
-    private async Task SendAlertAsync(
-        IExecutionContext context, AssertJobStatement stmt, List<string> failures, string summary)
+    private async Task HandleAlertTransitionAsync(
+        IExecutionContext context,
+        AssertJobStatement stmt,
+        bool failed,
+        List<string> failures,
+        int alertRealertHours,
+        string? failureSummary = null)
+    {
+        var provider = context.JobMetrics;
+        if (provider is null)
+        {
+            if (failed)
+                await SendAlertAsync(context, stmt, "FAILURE", failures, failureSummary!);
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var key = BuildAssertionKey(stmt);
+        var prior = await provider.GetAssertJobAlertStateAsync(stmt.JobName, key, context.CancellationToken);
+
+        bool deliveredFailure = false;
+        if (failed)
+        {
+            var shouldAlert = prior is null
+                || !prior.LastFailed
+                || prior.LastFailureAlertedAtUtc is null
+                || now - prior.LastFailureAlertedAtUtc.Value >= TimeSpan.FromHours(alertRealertHours);
+
+            if (shouldAlert)
+            {
+                deliveredFailure = await SendAlertAsync(context, stmt, "FAILURE", failures, failureSummary!);
+            }
+            else if (prior?.LastFailureAlertedAtUtc is DateTimeOffset lastAlerted)
+            {
+                var message = $"ASSERT JOB {stmt.JobName}: suppressing repeated alert for {stmt.Predicates.Count} predicate(s); " +
+                    $"last failure alert was {lastAlerted:O}.";
+                logger.Info("{AssertJobAlertSuppressed}", message);
+                context.Log(message, ConsoleColor.Yellow);
+            }
+
+            await provider.SaveAssertJobAlertStateAsync(
+                stmt.JobName,
+                key,
+                new AssertJobAlertState(
+                    LastFailed: true,
+                    LastFailureAlertedAtUtc: deliveredFailure ? now : prior?.LastFailureAlertedAtUtc,
+                    UpdatedAtUtc: now),
+                context.CancellationToken);
+            return;
+        }
+
+        if (prior?.LastFailed == true)
+        {
+            var summary = $"ASSERT JOB {stmt.JobName} recovered: all {stmt.Predicates.Count} predicate(s) passed.";
+            await SendAlertAsync(context, stmt, "RECOVERY", [], summary);
+        }
+
+        await provider.SaveAssertJobAlertStateAsync(
+            stmt.JobName,
+            key,
+            new AssertJobAlertState(
+                LastFailed: false,
+                LastFailureAlertedAtUtc: prior?.LastFailureAlertedAtUtc,
+                UpdatedAtUtc: now),
+            context.CancellationToken);
+    }
+
+    private async Task<bool> SendAlertAsync(
+        IExecutionContext context,
+        AssertJobStatement stmt,
+        string alertKind,
+        List<string> failures,
+        string summary)
     {
         try
         {
@@ -270,16 +349,19 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
             {
                 logger.Warning("ASSERT JOB {JobName}: alert connection '{Connection}' is not defined; skipping the alert.",
                     stmt.JobName, stmt.AlertConnection);
-                return;
+                return false;
             }
 
             var report = context.DataQuality;
             var table = new DataTable();
-            table.SetColumns(["Title", "Text", "JobName", "FailedPredicates", "RowsValidated", "RowsQuarantined", "RowsWarned"]);
+            table.SetColumns(["Title", "Text", "JobName", "AlertKind", "FailedPredicates", "RowsValidated", "RowsQuarantined", "RowsWarned"]);
             var row = table.NewRow();
-            row["Title"] = $"Data quality alert: {stmt.JobName}";
+            row["Title"] = alertKind.Equals("RECOVERY", StringComparison.OrdinalIgnoreCase)
+                ? $"Data quality recovery: {stmt.JobName}"
+                : $"Data quality alert: {stmt.JobName}";
             row["Text"] = summary;
             row["JobName"] = stmt.JobName;
+            row["AlertKind"] = alertKind;
             row["FailedPredicates"] = string.Join("; ", failures);
             row["RowsValidated"] = (decimal)report.RowsValidated;
             row["RowsQuarantined"] = (decimal)report.RowsQuarantined;
@@ -288,12 +370,21 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
             await sink.WriteBatches(SingleBatch(table), append: true, context.CancellationToken);
             logger.Info("ASSERT JOB {JobName}: alert delivered through '{Connection}'.", stmt.JobName, stmt.AlertConnection);
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.Warning("ASSERT JOB {JobName}: alert delivery through '{Connection}' failed: {Message}",
                 stmt.JobName, stmt.AlertConnection, ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
+            return false;
         }
+    }
+
+    private static string BuildAssertionKey(AssertJobStatement stmt)
+    {
+        var payload = string.Join("|", stmt.Predicates.Select(p => p.Describe()));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static async IAsyncEnumerable<DataTable> SingleBatch(DataTable table)
