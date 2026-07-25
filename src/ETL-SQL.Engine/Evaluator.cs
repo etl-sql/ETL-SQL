@@ -204,13 +204,31 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// </summary>
     public ETL_SQL.Core.Quality.DataQualityReport DataQuality { get; } = new();
 
+    private ETL_SQL.Core.Data.IJobMetricsProvider? _jobMetrics;
+    private bool _jobMetricsAssigned;
+
     /// <summary>
-    /// Previous runs' recorded metrics for <c>ASSERT JOB … OF HISTORICAL</c>. Resolved from DI, so
-    /// it is null in pure-engine and CLI hosts that do not register an orchestrator store.
+    /// Previous runs' recorded metrics for <c>ASSERT JOB … OF HISTORICAL</c>. Resolved from DI
+    /// unless assigned explicitly — assigning wins, including assigning null to represent a host
+    /// with no orchestrator history (pure engine / embedded). There, HISTORICAL predicates fail
+    /// with a clear message while collector-backed predicates still evaluate.
     /// </summary>
-    public ETL_SQL.Core.Data.IJobMetricsProvider? JobMetrics =>
-        _serviceProvider?.GetService(typeof(ETL_SQL.Core.Data.IJobMetricsProvider))
-            as ETL_SQL.Core.Data.IJobMetricsProvider;
+    public ETL_SQL.Core.Data.IJobMetricsProvider? JobMetrics
+    {
+        get
+        {
+            if (_jobMetricsAssigned) return _jobMetrics;
+            _jobMetrics = _serviceProvider?.GetService(typeof(ETL_SQL.Core.Data.IJobMetricsProvider))
+                as ETL_SQL.Core.Data.IJobMetricsProvider;
+            _jobMetricsAssigned = true;
+            return _jobMetrics;
+        }
+        set
+        {
+            _jobMetrics = value;
+            _jobMetricsAssigned = true;
+        }
+    }
     public bool UseColumnarTempTables { get => _options.UseColumnarTempTables; set => _options.UseColumnarTempTables = value; }
     public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
     public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
