@@ -109,8 +109,9 @@ quarantine target, verifies that the target is replayable, reads rows whose `__d
 with those rows substituted for the original source table. Missing manifests and non-replayable
 shapes, such as join-source quarantines, fail before replay starts.
 
-Replay leasing and final `released -> replayed` status flips are follow-up v2 work; a failed replay
-therefore leaves released rows eligible for retry.
+After the replayed section completes successfully, consumed rows move from `released` to
+`replayed`. A failed replay leaves released rows eligible for retry. Replay lease fencing is still
+follow-up v2 work.
 
 ## Requirements and limits
 

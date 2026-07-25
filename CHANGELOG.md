@@ -55,8 +55,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   resolves the orchestrator replay manifest, rejects missing or non-replayable quarantine targets
   with clear errors, builds a source stream from rows marked `released` with `__dq_*` evidence
   columns stripped, and resumes the recorded section label with that stream substituted for the
-  original source. Replay leasing and final `released -> replayed` status flips remain separate
-  remediation slices.
+  original source. After a successful replay, consumed rows move from `released` to `replayed`;
+  replay leasing remains a separate remediation slice.
 
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and

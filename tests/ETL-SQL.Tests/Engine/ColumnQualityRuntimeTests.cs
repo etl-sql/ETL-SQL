@@ -264,6 +264,10 @@ namespace ETL_SQL.Tests.Engine
             var cleanRow = Assert.Single(eval.LastResult!.Rows);
             Assert.Equal(10m, cleanRow["Id"]);
             Assert.Equal("divert", cleanRow["Name"]);
+
+            await Run(eval, "SELECT __dq_status FROM #q;");
+            var quarantineRow = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(DataQualityColumns.ReplayedStatus, quarantineRow[DataQualityColumns.Status]);
         }
 
         [Fact]

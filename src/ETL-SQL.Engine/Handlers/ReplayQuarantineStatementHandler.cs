@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 
@@ -68,7 +69,10 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         var replayScript = ResolveReplayScript(evaluator, manifest.SectionLabel!, stmt);
         var (replaySource, releasedRows) = await BuildReplaySourceAsync(context, stmt.QuarantineTable, manifest);
         if (releasedRows > 0)
+        {
             await ReplayReleasedRowsAsync(evaluator, replayScript, manifest, replaySource);
+            await MarkReleasedRowsReplayedAsync(evaluator, stmt);
+        }
 
         var result = BuildResult(manifest, releasedRows, releasedRows > 0 ? "replayed" : "ready");
         context.LastResult = result;
@@ -126,6 +130,27 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
             evaluator.ResumeLabel = oldResumeLabel;
             evaluator.CurrentSectionLabel = oldSectionLabel;
         }
+    }
+
+    private static Task MarkReleasedRowsReplayedAsync(Evaluator evaluator, ReplayQuarantineStatement stmt)
+    {
+        var update = new UpdateStatement(
+            stmt.QuarantineTable,
+            [
+                new Assignment(
+                    DataQualityColumns.Status,
+                    new LiteralExpression(DataQualityColumns.ReplayedStatus, TokenType.STRING))
+            ],
+            new BinaryExpression(
+                new IdentifierExpression(DataQualityColumns.Status),
+                TokenType.EQUALS,
+                new LiteralExpression(DataQualityColumns.ReleasedStatus, TokenType.STRING)))
+        {
+            Line = stmt.Line,
+            Column = stmt.Column
+        };
+
+        return evaluator.EvaluateStatement(update, evaluator.CancellationToken);
     }
 
     private static async Task<(IDataSource Source, long ReleasedRows)> BuildReplaySourceAsync(

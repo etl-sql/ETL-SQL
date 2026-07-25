@@ -30,8 +30,8 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    quarantining jobs persist the job/script/section/source/target replay metadata and mark joins
    non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. `REPLAY QUARANTINE`
    resolves manifests, substitutes released quarantine rows back into the recorded source table, and
-   resumes the recorded section label. Remaining work: replay lease/status flips and Portal steward
-   grid.
+   resumes the recorded section label, then flips consumed rows to `replayed` after success.
+   Remaining work: replay lease fencing and Portal steward grid.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.
