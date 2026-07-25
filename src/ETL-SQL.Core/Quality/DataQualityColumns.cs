@@ -33,6 +33,9 @@ public static class DataQualityColumns
 
     public const string QuarantinedStatus = "quarantined";
     public const string WarnedStatus = "warned";
+    public const string ReleasedStatus = "released";
+    public const string ReplayedStatus = "replayed";
+    public const string DiscardedStatus = "discarded";
 
     /// <summary>True when <paramref name="name"/> is one of the engine-owned DQ columns.</summary>
     public static bool IsDataQualityColumn(string name) =>

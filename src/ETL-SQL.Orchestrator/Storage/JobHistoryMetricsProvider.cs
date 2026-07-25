@@ -16,6 +16,7 @@ namespace ETL_SQL.Orchestrator.Storage;
 public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetricsProvider
 {
     private const string AlertStatePrefix = "dq:assert-alert:";
+    private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
 
     public async Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
         string jobName, int limit, CancellationToken cancellationToken = default)
@@ -77,8 +78,41 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store) : IJobMetr
             JsonSerializer.Serialize(state));
     }
 
+    public async Task<QuarantineReplayManifest?> GetQuarantineReplayManifestAsync(
+        string jobName,
+        string quarantineTarget,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = await store.GetJobStateAsync(jobName, QuarantineManifestPrefix + NormalizeStateKeyPart(quarantineTarget));
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<QuarantineReplayManifest>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    public async Task SaveQuarantineReplayManifestAsync(
+        QuarantineReplayManifest manifest,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await store.SetJobStateAsync(
+            manifest.JobName,
+            QuarantineManifestPrefix + NormalizeStateKeyPart(manifest.QuarantineTarget),
+            JsonSerializer.Serialize(manifest));
+    }
+
     private static bool IsCompletedSuccessfully(JobHistoryEntry entry) =>
         entry.EndTime.HasValue
         && (entry.Status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
             || entry.Status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase));
+
+    private static string NormalizeStateKeyPart(string value) =>
+        value.Trim().TrimStart('#').ToLowerInvariant();
 }

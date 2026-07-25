@@ -104,6 +104,12 @@ FROM quarantine_users
 WHERE __dq_column = 'Email' AND __dq_ts >= CURRENT_DATE;
 ```
 
+When the run is orchestrator-hosted, the engine also records a replay manifest for each quarantine
+target. The manifest captures the job, script, section label, source table, quarantine target, and
+input schema fingerprint that the remediation workflow will use. Labeled single-source quarantines
+are replayable; join-source quarantines still capture rows but are marked non-replayable until the
+join provenance design ships.
+
 ## Rules that need to see every row
 
 Most rules judge a row on its own. `UNIQUE` cannot — it has to see the whole result before it knows

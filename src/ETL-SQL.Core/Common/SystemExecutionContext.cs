@@ -175,6 +175,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public string? CurrentScriptPath { get; set; }
+    public string? CurrentSectionLabel { get; set; }
     public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
     public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
     public long MaxSessionSize { get; set; } = LanguageMetadata.DefaultMaxSessionSize;

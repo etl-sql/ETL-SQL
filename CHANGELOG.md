@@ -40,6 +40,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   execution result. Rules are validated at lint time (malformed rules, non-sink QUARANTINE,
   orphaned clauses, missing section labels) and appear in editor completions.
 
+- Added the first quarantine-remediation v2 foundation: orchestrator-hosted jobs now persist a
+  replay manifest when rows are quarantined, recording the job, script path, section label, source
+  table, quarantine target, replayability flag, non-replayable reason, and captured input schema
+  fingerprint. Single-table labeled quarantines are marked replayable; join-source quarantines are
+  captured normally but marked non-replayable until the v3 provenance design lands.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

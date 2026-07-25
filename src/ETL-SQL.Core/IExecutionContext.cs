@@ -237,6 +237,8 @@ public interface IDataContext
     int RegexMatchTimeoutMs { get; set; }
     /// <summary>The absolute path to the script file currently being executed (if any).</summary>
     string? CurrentScriptPath { get; set; }
+    /// <summary>The most recent section label reached during the current execution, if any.</summary>
+    string? CurrentSectionLabel { get; set; }
     /// <summary>Maximum number of file operations allowed in a single script.</summary>
     int MaxFileOperations { get; set; }
     /// <summary>Maximum number of grouping sets allowed in a CUBE/ROLLUP operation.</summary>

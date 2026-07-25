@@ -30,6 +30,23 @@ public sealed record AssertJobAlertState(
     DateTimeOffset UpdatedAtUtc);
 
 /// <summary>
+/// Durable replay metadata for a quarantine target. V2 replay resolves this manifest, reads
+/// released rows from the quarantine table, strips engine-owned <c>__dq_*</c> columns, and resumes
+/// the recorded section label with the quarantine rows substituted for the original source.
+/// </summary>
+public sealed record QuarantineReplayManifest(
+    string JobName,
+    string? ScriptPath,
+    string? SectionLabel,
+    string SourceTable,
+    string QuarantineTarget,
+    bool IsReplayable,
+    string? NonReplayableReason,
+    IReadOnlyList<string> InputColumns,
+    string InputSchemaFingerprint,
+    DateTimeOffset UpdatedAtUtc);
+
+/// <summary>
 /// Narrow Engine→Orchestrator seam giving <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> access to
 /// previous runs' recorded metrics. Statement handlers live in the engine and only see
 /// <see cref="IExecutionContext"/>; the job-history store lives in the orchestrator. This
@@ -72,6 +89,17 @@ public interface IJobMetricsProvider
         string jobName,
         string assertionKey,
         AssertJobAlertState state,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    Task<QuarantineReplayManifest?> GetQuarantineReplayManifestAsync(
+        string jobName,
+        string quarantineTarget,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<QuarantineReplayManifest?>(null);
+
+    Task SaveQuarantineReplayManifestAsync(
+        QuarantineReplayManifest manifest,
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 }

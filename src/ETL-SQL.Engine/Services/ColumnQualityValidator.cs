@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -10,6 +11,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 
@@ -35,6 +37,7 @@ public sealed class ColumnQualityValidator
     private readonly Dictionary<string, HashSet<string>> _existsInKeys = new(StringComparer.OrdinalIgnoreCase);
     private QuarantineWriter? _quarantineWriter;
     private QuarantineWriter? _warnWriter;
+    private bool _quarantineManifestRecorded;
 
     private ColumnQualityValidator(
         IExecutionContext context,
@@ -427,8 +430,59 @@ public sealed class ColumnQualityValidator
     {
         var clause = _routing[FailAction.Quarantine];
         _quarantineWriter ??= new QuarantineWriter(_context, clause.Target!, DataQualityColumns.QuarantinedStatus, includeTargetWritten: false);
+        await RecordQuarantineManifestAsync(clause.Target!, input, cancellationToken);
         await _quarantineWriter.WriteAsync(input, failure, cancellationToken);
         _context.DataQuality.RecordRowQuarantined();
+    }
+
+    private async Task RecordQuarantineManifestAsync(string target, Row input, CancellationToken cancellationToken)
+    {
+        if (_quarantineManifestRecorded) return;
+        _quarantineManifestRecorded = true;
+
+        var provider = _context.JobMetrics;
+        if (provider == null || string.IsNullOrWhiteSpace(_context.JobName)) return;
+
+        var sourceTables = _statement.GetSourceTables()
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var inputColumns = input.Columns.Keys
+            .Where(name => !DataQualityColumns.IsDataQualityColumn(name))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string? nonReplayableReason = null;
+        if (string.IsNullOrWhiteSpace(_context.CurrentSectionLabel))
+            nonReplayableReason = "quarantine replay requires an enclosing section label";
+        else if (sourceTables.Count == 0)
+            nonReplayableReason = "quarantine source table could not be resolved";
+        else if (sourceTables.Count != 1 || _statement.Joins.Count != 0)
+            nonReplayableReason = "quarantine source spans a join; replay requires a single-table input in this version";
+
+        var manifest = new QuarantineReplayManifest(
+            JobName: _context.JobName!,
+            ScriptPath: _context.CurrentScriptPath,
+            SectionLabel: _context.CurrentSectionLabel,
+            SourceTable: sourceTables.Count == 1 ? sourceTables[0] : string.Join(",", sourceTables),
+            QuarantineTarget: target,
+            IsReplayable: nonReplayableReason == null,
+            NonReplayableReason: nonReplayableReason,
+            InputColumns: inputColumns,
+            InputSchemaFingerprint: ComputeInputSchemaFingerprint(inputColumns),
+            UpdatedAtUtc: DateTimeOffset.UtcNow);
+
+        try
+        {
+            await provider.SaveQuarantineReplayManifestAsync(manifest, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warning(
+                "Data-quality quarantine manifest for '{Target}' was not persisted: {Message}",
+                target,
+                ex.Message);
+        }
     }
 
     private async Task WarnAsync(Row input, RowFailure failure, CancellationToken cancellationToken)
@@ -509,6 +563,12 @@ public sealed class ColumnQualityValidator
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? string.Empty
     };
+
+    private static string ComputeInputSchemaFingerprint(IReadOnlyList<string> inputColumns)
+    {
+        var schema = string.Join('\n', inputColumns.Select(c => c.ToLowerInvariant()));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(schema)));
+    }
 
     private static StringComparer KeyComparer(bool caseSensitive) =>
         caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;

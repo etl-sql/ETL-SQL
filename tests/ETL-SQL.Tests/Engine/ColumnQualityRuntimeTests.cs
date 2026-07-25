@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -141,6 +143,57 @@ namespace ETL_SQL.Tests.Engine
             Assert.Null(quarantined[DataQualityColumns.OriginRowId]); // reserved for v2 replay
             Assert.NotNull(quarantined[DataQualityColumns.Timestamp]);
             Assert.NotNull(quarantined[DataQualityColumns.Reason]);
+        }
+
+        [Fact]
+        public async Task QuarantineRule_RecordsReplayManifestForLabeledSingleSource()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.CurrentScriptPath = @"C:\jobs\nightly.etlsql";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(1, 'keep'), (NULL, 'divert')");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, UPPER(Name) AS CleanName
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            var manifest = Assert.Single(provider.Manifests);
+            Assert.Equal("nightly_import", manifest.JobName);
+            Assert.Equal(@"C:\jobs\nightly.etlsql", manifest.ScriptPath);
+            Assert.Equal("import_rows", manifest.SectionLabel);
+            Assert.Equal("#src", manifest.SourceTable);
+            Assert.Equal("#q", manifest.QuarantineTarget);
+            Assert.True(manifest.IsReplayable);
+            Assert.Null(manifest.NonReplayableReason);
+            Assert.Equal(new[] { "Id", "Name" }, manifest.InputColumns);
+            Assert.False(string.IsNullOrWhiteSpace(manifest.InputSchemaFingerprint));
+        }
+
+        [Fact]
+        public async Task QuarantineRule_RecordsNonReplayableManifestForJoinSource()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                CREATE TABLE #dim (Name VARCHAR(100));
+                INSERT INTO #dim (Name) VALUES ('divert');
+                import_joined_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                JOIN #dim ON #src.Name = #dim.Name
+                ON FAILURE QUARANTINE TO #q;");
+
+            var manifest = Assert.Single(provider.Manifests);
+            Assert.False(manifest.IsReplayable);
+            Assert.Contains("single-table", manifest.NonReplayableReason, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -654,6 +707,25 @@ namespace ETL_SQL.Tests.Engine
             await foreach (var batch in source.ReadBatches(1000))
                 rows.AddRange(batch.Rows);
             return rows;
+        }
+
+        private sealed class CapturingMetricsProvider : IJobMetricsProvider
+        {
+            public List<QuarantineReplayManifest> Manifests { get; } = [];
+
+            public Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
+                string jobName,
+                int limit,
+                CancellationToken cancellationToken = default) =>
+                Task.FromResult<IReadOnlyList<JobRunMetrics>>(Array.Empty<JobRunMetrics>());
+
+            public Task SaveQuarantineReplayManifestAsync(
+                QuarantineReplayManifest manifest,
+                CancellationToken cancellationToken = default)
+            {
+                Manifests.Add(manifest);
+                return Task.CompletedTask;
+            }
         }
 
         /// <summary>

@@ -7,7 +7,8 @@
 > [ASSERT JOB](../../reference/statements/session-control/assert-job.md), and the
 > [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
-> v2 design below, which is **not** built.
+> v2 design below. The quarantine replay manifest foundation is now built; disposition enforcement,
+> `REPLAY QUARANTINE`, replay leasing, and the Portal steward grid remain pending.
 >
 > **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
 > end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
@@ -32,6 +33,9 @@
 > Rev 5 (2026-07-24): nested-script quarantines — replay restricted to the job's entry script in
 > v2.0 (manifest records the full `RUN SCRIPT` call chain for diagnostics); nested replay via
 > recorded call stacks + evaluated arguments captured as a future direction.
+> Rev 6 (2026-07-25): manifest foundation implemented — orchestrator-hosted quarantines persist
+> job/script/section/source/target replay metadata, captured input columns, schema fingerprint, and
+> replayability status; join-source quarantines are recorded as non-replayable for v2.
 
 ## Goal
 
@@ -250,6 +254,12 @@ At quarantine time the engine writes a **manifest** to the **orchestrator state 
 input-schema fingerprint)*. The source binding is recorded explicitly at quarantine time — never
 inferred positionally ("first table in the section") at replay time, which would break silently
 when someone adds an earlier table read to the section.
+
+**As built so far:** orchestrator-hosted runs persist that manifest through the
+`IJobMetricsProvider`/job-state seam on first quarantine write. The stored payload includes the
+captured input column list as well as the fingerprint, and records a non-replayable reason for
+unsupported shapes such as joins. The replay statement, replay lease, and status transitions remain
+the next remediation slices.
 
 `REPLAY QUARANTINE <quarantine_table>;` (script statement; the Portal **Replay** button enqueues
 the same as an orchestrator run) resolves the manifest and re-runs the job via the existing

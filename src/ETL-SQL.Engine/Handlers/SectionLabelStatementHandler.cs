@@ -22,6 +22,7 @@ public class SectionLabelStatementHandler : IStatementHandler
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var labelStmt = (SectionLabelStatement)statement;
+        context.CurrentSectionLabel = labelStmt.LabelName;
 
         if (labelStmt.IsTopLevel && context.IsPersistentSession && !string.IsNullOrEmpty(context.SessionId))
         {

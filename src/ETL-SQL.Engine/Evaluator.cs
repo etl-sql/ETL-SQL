@@ -153,6 +153,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); }
     }
     public string? CurrentScriptPath { get; set; }
+    public string? CurrentSectionLabel { get; set; }
     public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
     public int MaxFileOperations
     {

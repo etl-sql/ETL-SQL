@@ -139,6 +139,44 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Null(await provider.GetAssertJobAlertStateAsync("nightly", "missing"));
         }
 
+        [Fact]
+        public async Task QuarantineReplayManifest_RoundTripsThroughJobState()
+        {
+            var store = new SQLiteJobHistoryStore(_dbPath);
+            await store.InitializeAsync();
+            var provider = new JobHistoryMetricsProvider(store);
+
+            var manifest = new QuarantineReplayManifest(
+                JobName: "nightly",
+                ScriptPath: @"C:\jobs\nightly.etlsql",
+                SectionLabel: "import_rows",
+                SourceTable: "#src",
+                QuarantineTarget: "#q",
+                IsReplayable: true,
+                NonReplayableReason: null,
+                InputColumns: new[] { "Id", "Name" },
+                InputSchemaFingerprint: "abc123",
+                UpdatedAtUtc: DateTimeOffset.Parse("2026-07-25T12:02:00Z"));
+
+            await provider.SaveQuarantineReplayManifestAsync(manifest);
+
+            var read = await provider.GetQuarantineReplayManifestAsync("nightly", "#q");
+            Assert.NotNull(read);
+            Assert.Equal(manifest.JobName, read.JobName);
+            Assert.Equal(manifest.ScriptPath, read.ScriptPath);
+            Assert.Equal(manifest.SectionLabel, read.SectionLabel);
+            Assert.Equal(manifest.SourceTable, read.SourceTable);
+            Assert.Equal(manifest.QuarantineTarget, read.QuarantineTarget);
+            Assert.Equal(manifest.IsReplayable, read.IsReplayable);
+            Assert.Equal(manifest.NonReplayableReason, read.NonReplayableReason);
+            Assert.Equal(manifest.InputColumns, read.InputColumns);
+            Assert.Equal(manifest.InputSchemaFingerprint, read.InputSchemaFingerprint);
+            Assert.Equal(manifest.UpdatedAtUtc, read.UpdatedAtUtc);
+
+            Assert.Equal("#q", (await provider.GetQuarantineReplayManifestAsync("nightly", "q"))?.QuarantineTarget);
+            Assert.Null(await provider.GetQuarantineReplayManifestAsync("nightly", "#missing"));
+        }
+
         // ── Per-column null tallies ────────────────────────────────────────
 
         [Fact]
