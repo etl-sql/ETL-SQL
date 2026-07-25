@@ -526,6 +526,63 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(1, await CountRows(eval, "#q"));
         }
 
+        // ── Rule tags do not propagate downstream ──────────────────────────
+
+        [Fact]
+        public async Task RuleTags_AreNotInheritedByDownstreamColumns()
+        {
+            // @expect/@fail are enforcement directives bound to the declaring statement, not
+            // descriptive metadata. If they were inherited through lineage, every later read of a
+            // quality-loaded table would re-validate (and re-quarantine) already-validated rows —
+            // and a plain SELECT would fail for lacking an ON FAILURE clause it never declared.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (NULL, 'b')");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            // A plain read of the loaded table must succeed and enforce nothing.
+            await Run(eval, "SELECT Id, Name FROM #clean;");
+            Assert.Single(eval.LastResult!.Rows);
+
+            // Re-loading from it must not quarantine again either.
+            long quarantinedAfterLoad = eval.DataQuality.RowsQuarantined;
+            await Run(eval, "SELECT Id, Name INTO #copy FROM #clean;");
+            Assert.Equal(quarantinedAfterLoad, eval.DataQuality.RowsQuarantined);
+        }
+
+        [Fact]
+        public async Task RulesStayVisibleWhereDeclared_ButDoNotFlowDownstream()
+        {
+            // Two things must both hold. Rules ARE steward-facing metadata, so they belong on the
+            // lineage entry of the statement that declares them (that visibility is the reason
+            // rules are tags at all). They must NOT be inherited onto columns further down the
+            // graph, where they would re-fire as enforcement.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a')");
+
+            await Run(eval, @"
+                SELECT Id /* @pii: true; @owner: CRM; @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+            await Run(eval, "SELECT Id, Name INTO #downstream FROM #clean;");
+
+            var declared = eval.LineageTracker.GetFullLineage()
+                .First(e => e.TargetTable == "#clean" && e.TargetColumn == "Id").Metadata;
+            Assert.Equal("true", declared["pii"]);
+            Assert.True(declared.ContainsKey("expect"));  // steward visibility where declared
+
+            var downstream = eval.LineageTracker.GetFullLineage()
+                .First(e => e.TargetTable == "#downstream" && e.TargetColumn == "Id").Metadata;
+            Assert.Equal("true", downstream["pii"]);      // descriptive tags still inherit
+            Assert.Equal("CRM", downstream["owner"]);
+            Assert.False(downstream.ContainsKey("expect")); // enforcement does not
+            Assert.False(downstream.ContainsKey("fail"));
+        }
+
         // ── Metrics surfaced on the run result ─────────────────────────────
 
         [Fact]

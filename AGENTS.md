@@ -56,6 +56,7 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Standard Library](docs/reference/functions/README.md)** | Data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with signatures and examples |
 | **[File Operations](docs/reference/file-operations/README.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, SSH key generation, Docker integration, and advanced file ops |
 | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
+| **[Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md)** | `@expect`/`@fail` column rules, the `ON FAILURE` routing clause, quarantine/warn capture schema; see also [ASSERT JOB](docs/reference/statements/session-control/assert-job.md) for run-metric assertions |
 | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
 | **[Report-SQL Guide](docs/guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
 | **[Administration](docs/guides/administration.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
@@ -66,6 +67,7 @@ Key syntax facts:
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
 - **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `WEBHOOK`/`SLACK`/`TEAMS`, `DIRECTORY`, `PORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
+- **Data quality**: `@expect`/`@fail` tags on SELECT columns enforce value rules; a trailing `ON FAILURE` clause routes them. `ASSERT JOB` asserts on the run's own metrics. See [Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md) and [ASSERT JOB](docs/reference/statements/session-control/assert-job.md)
 
 > [!NOTE]
 > `WAITFOR` has four supported forms:

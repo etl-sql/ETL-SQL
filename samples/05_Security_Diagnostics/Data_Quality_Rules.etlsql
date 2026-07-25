@@ -1,0 +1,91 @@
+-- Data Quality Rules: validating column VALUES, not just schema shape.
+--
+-- EXPECT SCHEMA tells you the columns are the right shape. It says nothing about
+-- whether the values are usable: a VARCHAR happily accepts 'not-an-email', and an
+-- INT happily accepts -5 for an age. @expect rules close that gap.
+--
+-- Run:  dotnet run --project src/ETL-SQL.App -- run samples/05_Security_Diagnostics/Data_Quality_Rules.etlsql
+--
+-- Expect a NON-ZERO exit code: the ASSERT JOB at the end fails on purpose to
+-- demonstrate a run being stopped when too much of the feed is bad.
+
+-- ── A messy inbound feed ────────────────────────────────────────────────────
+CREATE TABLE #raw_users (
+    UserId  INT,
+    Email   VARCHAR(200),
+    Age     INT,
+    Region  VARCHAR(10),
+    Source  VARCHAR(50)
+);
+
+INSERT INTO #raw_users (UserId, Email, Age, Region, Source) VALUES
+    (1,    'ana@example.com',   34,  'NA',    'crm-export'),
+    (2,    'bad-address',       28,  'EMEA',  'crm-export'),   -- bad email  -> quarantine
+    (3,    'carl@example.com',  -4,  'APAC',  'web-signup'),   -- bad age    -> warn (still loads)
+    (NULL, 'dana@example.com',  41,  'NA',    'web-signup'),   -- null id    -> quarantine
+    (5,    'eve@example.com',   37,  'ANTARCTICA', 'partner'), -- bad region -> quarantine
+    (1,    'frank@example.com', 52,  'EMEA',  'partner');      -- dup id     -> quarantine
+
+-- ── The load, with rules attached to the columns they protect ───────────────
+-- The section label is required for any quarantining statement: it marks the
+-- re-entry point for reprocessing rows once they are fixed.
+import_users:
+SELECT
+    UserId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE';
+              @expect_1: 'UNIQUE';  @fail_1: 'QUARANTINE'; */,
+    Email  /* @expect: 'MATCHES ^[^@]+@[^@]+\.[a-z]+$'; @fail: 'QUARANTINE'; */,
+    Age    /* @expect: '>= 0, <= 120'; @fail: 'WARN'; */,
+    Region /* @expect: "IN ('NA','EMEA','APAC')"; @fail: 'QUARANTINE'; */,
+    Source
+INTO #clean_users
+FROM #raw_users
+-- Each action needs a routing clause. Real deployments quarantine to a DURABLE
+-- table so the rows survive the run; #temp is used here to keep the sample
+-- self-contained (the linter will point this out, which is the intended lesson).
+ON FAILURE QUARANTINE TO #quarantine_users
+ON FAILURE WARN;
+
+-- ── What made it through ────────────────────────────────────────────────────
+PRINT 'Rows loaded (clean):';
+SELECT UserId, Email, Age, Region FROM #clean_users;
+
+-- Age = -4 warned but still loaded: WARN never removes a row. Note that the
+-- aggregated warning is printed once with a count and capped samples, not once
+-- per failing row.
+
+-- ── Triaging what did not ───────────────────────────────────────────────────
+-- The captured row is the PRE-PROJECTION input row, so columns the SELECT never
+-- projected (Source) are still there to help find the cause upstream.
+PRINT 'Quarantined rows, by cause:';
+SELECT __dq_column, __dq_rule, COUNT(*) AS Failures
+INTO #dq_summary
+FROM #quarantine_users
+GROUP BY __dq_column, __dq_rule;
+SELECT * FROM #dq_summary;
+
+PRINT 'Which upstream source is producing the bad rows?';
+SELECT Source, COUNT(*) AS BadRows
+FROM #quarantine_users
+GROUP BY Source;
+
+PRINT 'Full quarantine detail:';
+SELECT UserId, Email, Region, Source, __dq_column, __dq_reason, __dq_status
+FROM #quarantine_users;
+
+-- ── A ceiling on the run as a whole ─────────────────────────────────────────
+-- Column rules judge rows; ASSERT JOB judges the load. A few quarantined rows
+-- are routine -- half the feed failing means something upstream broke.
+--
+-- This sample deliberately quarantines 5 of 6 rows (83%), so the assertion below
+-- FAILS and the script exits non-zero. That is the point -- comment the assertion
+-- out if you want a clean run.
+--
+-- ON FAILURE ALERT <connection> would post a counts-only summary to Slack/Teams:
+--   CREATE CONNECTION alerts AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = 'slack');
+ASSERT JOB sample_user_import (
+    QUARANTINE_PERCENT < 0.10,
+    ROW_COUNT > 0
+)
+ON CRITICAL_FAILURE THROW;
+
+PRINT 'Not reached: the assertion above fails by design.';

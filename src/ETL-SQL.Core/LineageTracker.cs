@@ -371,7 +371,7 @@ public class LineageTracker : ILineageTracker
                 {
                     lastSeenDescription = kv.Value;
                 }
-                else
+                else if (!Quality.ColumnRuleParser.IsRuleTagKey(kv.Key))
                 {
                     result[kv.Key] = kv.Value;
                 }
@@ -392,7 +392,9 @@ public class LineageTracker : ILineageTracker
                             lastSeenDescription = kv.Value;
                             derivedList.Add($"{sc}: {kv.Value}");
                         }
-                        else
+                        // @expect/@fail are enforcement directives scoped to the declaring
+                        // statement, not descriptive metadata — they must not be inherited.
+                        else if (!Quality.ColumnRuleParser.IsRuleTagKey(kv.Key))
                         {
                             result[kv.Key] = kv.Value;
                         }

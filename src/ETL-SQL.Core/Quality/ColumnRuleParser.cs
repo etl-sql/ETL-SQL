@@ -98,6 +98,15 @@ public static partial class ColumnRuleParser
         metadata != null && metadata.Keys.Any(k => RuleKeyRegex().IsMatch(k));
 
     /// <summary>
+    /// True for <c>expect</c>/<c>fail</c> and their numbered variants. These are <b>enforcement
+    /// directives bound to the statement that declares them</b>, not descriptive metadata about the
+    /// data, so — unlike <c>@pii</c>, <c>@owner</c>, or <c>@d</c> — they must never be inherited by
+    /// downstream columns. A rule that re-fired on every later read of a loaded table would
+    /// re-validate (and re-quarantine) rows that were already validated at load.
+    /// </summary>
+    public static bool IsRuleTagKey(string key) => RuleKeyRegex().IsMatch(key);
+
+    /// <summary>
     /// Strips one pair of matching outer quotes (<c>'…'</c> or <c>"…"</c>) preserved by the tag
     /// layer, unescaping doubled same-kind quotes inside. Unquoted values are returned trimmed.
     /// </summary>

@@ -1,7 +1,19 @@
 # Column & Job Data-Quality Rules — Design Specification
 
-> **Status:** 📋 **PROPOSED** (design only; not yet implemented).
-> Grounded in code explored on the `release/v0.17.0` branch. Target: a future v0.17.x / v0.18.0.
+> **Status:** ✅ **v1 SHIPPED** on `release/v0.17.0` (2026-07-25). All three slices are implemented:
+> **B** the `WEBHOOK` connector, **A** column rules end-to-end, **C** `ASSERT JOB` + `HISTORICAL`.
+> User-facing documentation lives at
+> [Data Quality Rules](../../reference/statements/dml/data-quality-rules.md),
+> [ASSERT JOB](../../reference/statements/session-control/assert-job.md), and the
+> [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
+> behavior. This document remains the design record: the decisions and their rationale, plus the
+> v2 design below, which is **not** built.
+>
+> **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
+> end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
+> than shipped as a second accumulator; `NULL_PERCENT` has no `HISTORICAL` baseline in v1; the
+> UNIQUE duplicate-key map is in-memory rather than built on `ExternalAggregateEngine`; and
+> retention pruning applies only to engine-managed targets.
 > Rev 2 (2026-07-24): design-review revisions — streaming job-metrics collector replaces the
 > post-run scan, DQ metrics are persisted per run, symmetric `ON FAILURE` validation, webhook
 > egress policy, UNIQUE spill-once, WARN aggregation, cold-start/seasonality semantics,
@@ -429,3 +441,42 @@ Built on `release/v0.17.0` (feature branches off the active release branch; no d
 - **Qualified `NULL_PERCENT(target.col)`** for multi-sink runs (v1 errors on ambiguity).
 - **Single-pass batching of multiple UNIQUE columns** (optimization).
 - **Deep Governance-dashboard findings integration** (a follow-on that reuses the lineage/stewardship read side; the persisted per-run DQ metrics from §6 are its designed feed).
+
+---
+
+## As-built deviations (v1, shipped 2026-07-25)
+
+Four places where the implementation intentionally departs from the design above. Each is a
+recorded decision, not an oversight — do not "fix" them without reading the reasoning.
+
+1. **`JobMetricsCollector` was folded into `DataQualityReport`, not shipped separately.**
+   §6 specified a distinct collector class. In practice the column-rule validator already
+   accumulates exactly the tallies the collector needed (`RowsValidated`, `RowsQuarantined`,
+   `RowsWarned`) into `DataQualityReport`, which is on `IExecutionContext` and persists to job
+   history. A second accumulator would have duplicated state and created two places for the same
+   number to be wrong. Per-column null counts were added to the same type, guarded by
+   `TracksNullCounts` so a script with no `NULL_PERCENT` predicate does zero per-cell work — the
+   "zero predicates ⇒ zero overhead" property §6 asked for is preserved.
+
+2. **`NULL_PERCENT` has no `HISTORICAL` baseline.** Per-column null fractions are collected
+   in-stream but only *aggregate* counts are persisted per run, so there is nothing to average
+   across runs. `NULL_PERCENT(col) WITHIN f OF HISTORICAL` parses and is then **skipped with a
+   warning** rather than silently passing. Closing this needs a per-column metrics table — see the
+   v2 plan.
+
+3. **The UNIQUE duplicate-key map is in-memory.** §4 specified building it through
+   `ExternalAggregateEngine` for spill-awareness. The row *stream* is spilled exactly once as
+   designed (the source is never read twice — the correctness requirement), but the key→group map
+   is a dictionary bounded by distinct key count. This is fine for the dimension-scale keys UNIQUE
+   is normally declared on and wrong for very high-cardinality keys on a memory-constrained host.
+   The spill-aware build is a v2 item.
+
+4. **Retention pruning applies only to engine-managed targets.** `WITH (RETENTION = …)` prunes
+   in-memory/`#temp` targets at end of run. For durable targets the engine logs that pruning is the
+   target's own responsibility rather than issuing DELETEs against a user table it does not own.
+   Connector-side retention is a v2 item.
+
+Two smaller notes: `WARN_PERCENT` was added as a fourth `ASSERT JOB` metric (not in the original
+predicate list) because the warn tally was already collected and asserting on it is the natural
+companion to `QUARANTINE_PERCENT`; and the local-path pin covers the SQL pushdown paths as well as
+the columnar ones, since remote pushdown bypasses local projection just as thoroughly.
