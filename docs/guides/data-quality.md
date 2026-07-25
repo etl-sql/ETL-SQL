@@ -115,6 +115,11 @@ To mark a fixed quarantine row ready for replay, edit the captured source column
 Warn rows are evidence only: their `__dq_status` stays `warned` and cannot enter the quarantine
 release/replay lifecycle.
 
+`REPLAY QUARANTINE <table>` currently performs the replay preflight: it resolves the orchestrator
+manifest, rejects non-replayable quarantine targets, scans for rows marked `released`, and returns a
+ready summary. The later replay slice will use the same preflight before leasing the quarantine
+target and resuming the recorded section.
+
 ## Rules that need to see every row
 
 Most rules judge a row on its own. `UNIQUE` cannot — it has to see the whole result before it knows

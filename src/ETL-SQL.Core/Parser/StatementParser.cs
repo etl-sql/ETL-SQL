@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -57,6 +58,7 @@ public class StatementParser
         _dispatchMap[TokenType.FOREACH] = () => FlowParser.ParseForeach();
         _dispatchMap[TokenType.INSERT] = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
         _dispatchMap[TokenType.REPLACE] = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
+        _dispatchMap[TokenType.REPLAY] = () => ParseReplayQuarantine();
         _dispatchMap[TokenType.UPDATE] = () => { var t = _parser.Previous; return DataParser.ParseUpdate(t); };
         _dispatchMap[TokenType.MERGE] = () =>
         {
@@ -637,6 +639,30 @@ public class StatementParser
         }
         if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
         return new GoStatement(count) { Line = t.Line, Column = t.Column };
+    }
+
+    private Statement ParseReplayQuarantine()
+    {
+        var replayToken = _parser.Previous;
+        if (_parser.Current.Type == TokenType.QUARANTINE
+            || _parser.Current.Value.Equals("QUARANTINE", StringComparison.OrdinalIgnoreCase))
+        {
+            _parser.Advance();
+        }
+        else
+        {
+            throw new SyntaxException("Expected QUARANTINE after REPLAY", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        var table = _parser.ParseTableReference(allowAlias: false);
+        if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+        return new ReplayQuarantineStatement(table)
+        {
+            Line = replayToken.Line,
+            Column = replayToken.Column,
+            EndLine = table.EndLine,
+            EndColumn = table.EndColumn
+        };
     }
 
     private Statement ParseGoto()

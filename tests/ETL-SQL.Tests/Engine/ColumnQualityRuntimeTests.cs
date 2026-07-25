@@ -237,6 +237,64 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ReplayQuarantine_PreflightsReleasedRowsFromManifest()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+            await Run(eval, "UPDATE #q SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+
+            await Run(eval, "REPLAY QUARANTINE #q;");
+
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal("nightly_import", row["JobName"]);
+            Assert.Equal("import_rows", row["SectionLabel"]);
+            Assert.Equal("#src", row["SourceTable"]);
+            Assert.Equal(1L, row["ReleasedRows"]);
+            Assert.Equal("ready", row["Status"]);
+        }
+
+        [Fact]
+        public async Task ReplayQuarantine_FailsWhenManifestIsMissing()
+        {
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = new CapturingMetricsProvider();
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #missing;"));
+            Assert.Contains("No quarantine replay manifest", ex.Message);
+        }
+
+        [Fact]
+        public async Task ReplayQuarantine_FailsWhenManifestIsNonReplayable()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                CREATE TABLE #dim (Name VARCHAR(100));
+                INSERT INTO #dim (Name) VALUES ('divert');
+                import_joined_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                JOIN #dim ON #src.Name = #dim.Name
+                ON FAILURE QUARANTINE TO #q;");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #q;"));
+            Assert.Contains("not replayable", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("single-table", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task QuarantineDisposition_RejectsEvidenceColumnEdits()
         {
             var eval = NewEvaluator();
@@ -786,6 +844,8 @@ namespace ETL_SQL.Tests.Engine
         private sealed class CapturingMetricsProvider : IJobMetricsProvider
         {
             public List<QuarantineReplayManifest> Manifests { get; } = [];
+            private readonly Dictionary<string, QuarantineReplayManifest> _manifestsByJobAndTarget =
+                new(StringComparer.OrdinalIgnoreCase);
 
             public Task<IReadOnlyList<JobRunMetrics>> GetRecentRunMetricsAsync(
                 string jobName,
@@ -793,13 +853,26 @@ namespace ETL_SQL.Tests.Engine
                 CancellationToken cancellationToken = default) =>
                 Task.FromResult<IReadOnlyList<JobRunMetrics>>(Array.Empty<JobRunMetrics>());
 
+            public Task<QuarantineReplayManifest?> GetQuarantineReplayManifestAsync(
+                string jobName,
+                string quarantineTarget,
+                CancellationToken cancellationToken = default)
+            {
+                _manifestsByJobAndTarget.TryGetValue($"{jobName}:{NormalizeTarget(quarantineTarget)}", out var manifest);
+                return Task.FromResult(manifest);
+            }
+
             public Task SaveQuarantineReplayManifestAsync(
                 QuarantineReplayManifest manifest,
                 CancellationToken cancellationToken = default)
             {
                 Manifests.Add(manifest);
+                _manifestsByJobAndTarget[$"{manifest.JobName}:{NormalizeTarget(manifest.QuarantineTarget)}"] = manifest;
                 return Task.CompletedTask;
             }
+
+            private static string NormalizeTarget(string target) =>
+                target.Trim().TrimStart('#').ToLowerInvariant();
         }
 
         /// <summary>

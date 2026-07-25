@@ -32,6 +32,7 @@ public static class AstSerializer
         InsertStatement s => FormatInsert(s),
         UpdateStatement s => FormatUpdate(s),
         DeleteStatement s => FormatDelete(s),
+        ReplayQuarantineStatement s => $"REPLAY QUARANTINE {s.QuarantineTable.ToSql()};",
         MergeStatement s => FormatMerge(s),
 
         // ── Execution ──

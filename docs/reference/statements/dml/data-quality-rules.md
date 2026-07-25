@@ -16,6 +16,8 @@ FROM <source>
 ON FAILURE QUARANTINE TO <table> [WITH (RETENTION = '<interval>')]
 ON FAILURE WARN [TO <table>] [WITH (RETENTION = '<interval>')]
 ON FAILURE THROW;
+
+REPLAY QUARANTINE <table>;
 ```
 
 A column can carry several independent rule/action pairs by adding a matching integer suffix:
@@ -98,6 +100,16 @@ read, including ones absent from the SELECT list — plus these engine columns:
 
 The pre-projection row is captured rather than the output row because it points stewards at the
 *cause* (the source value) rather than the symptom.
+
+## Remediation Preflight
+
+`REPLAY QUARANTINE <table>` resolves the orchestrator replay manifest for the current job and
+quarantine target, verifies that the target is replayable, counts rows whose `__dq_status` is
+`released`, and returns a one-row ready summary. Missing manifests and non-replayable shapes, such
+as join-source quarantines, fail before any data changes.
+
+Full resume-at-label replay is a later v2 slice; the preflight exists so operators can validate
+release readiness against the same manifest and row scan that replay will consume.
 
 ## Requirements and limits
 

@@ -7,9 +7,9 @@
 > [ASSERT JOB](../../reference/statements/session-control/assert-job.md), and the
 > [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
-> v2 design below. The quarantine replay manifest foundation and `UPDATE`-time disposition
-> enforcement are now built; `REPLAY QUARANTINE`, replay leasing, and the Portal steward grid remain
-> pending.
+> v2 design below. The quarantine replay manifest foundation, `UPDATE`-time disposition
+> enforcement, and `REPLAY QUARANTINE` preflight are now built; source-substitution replay, replay
+> leasing, and the Portal steward grid remain pending.
 >
 > **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
 > end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
@@ -40,6 +40,9 @@
 > Rev 7 (2026-07-25): disposition enforcement implemented for engine-side `UPDATE` paths touching
 > `__dq_*`: evidence columns are immutable except `__dq_status`, warn status is immutable, and
 > quarantine lifecycle transitions are validated.
+> Rev 8 (2026-07-25): `REPLAY QUARANTINE` preflight implemented — resolves manifests through the
+> existing orchestrator metrics seam, rejects missing/non-replayable manifests, scans released rows,
+> and returns a ready summary without mutating data.
 
 ## Goal
 
@@ -275,6 +278,11 @@ the same as an orchestrator run) resolves the manifest and re-runs the job via t
 resume machinery (`Evaluator.ResumeLabel`, `Evaluator.cs:1009`) with one substitution: the
 recorded source table is fed from `<quarantine_table> WHERE __dq_status = 'released'` with the
 `__dq_*` columns stripped. Because released rows re-enter the **current statement**:
+
+**As built so far:** the statement is parsed and performs preflight only. It resolves the manifest,
+fails clearly when the manifest is missing or marked non-replayable, scans the quarantine target for
+`released` rows, and returns a ready summary table. It does not yet take the replay lease, substitute
+the source stream, resume the section, or flip statuses after execution.
 
 - **current rules re-apply naturally** — no rule snapshot, no drift; if rules changed and a row
   still fails, it lands back in quarantine, which is the correct outcome;

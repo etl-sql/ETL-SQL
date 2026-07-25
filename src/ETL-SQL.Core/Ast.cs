@@ -731,6 +731,8 @@ public sealed record DeleteStatement : Statement
     }
 }
 
+public sealed record ReplayQuarantineStatement(TableReference QuarantineTable) : Statement;
+
 public sealed record KillJobStatement(Expression JobIdExpr) : Statement;
 
 public sealed record DropJobStatement(string Name, bool IfExists) : Statement;

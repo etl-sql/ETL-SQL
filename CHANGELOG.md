@@ -51,6 +51,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   v2 lifecycle (`quarantined` may become `released` or `discarded`; `released` may become
   `replayed` or `discarded`).
 
+- Added `REPLAY QUARANTINE <table>` preflight support. The statement resolves the orchestrator
+  replay manifest, rejects missing or non-replayable quarantine targets with clear errors, scans for
+  rows marked `released`, and returns a ready summary table. Full resume-at-label replay and replay
+  leasing remain separate remediation slices.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on
