@@ -59,3 +59,34 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 - [x] Update docs/help/LSP surfaces for `REPLAY QUARANTINE`, data-quality remediation, and the
       fan-out non-replayable diagnostic.
 
+### Data Quality — Residual Gaps From Code Review
+
+Two gaps left open deliberately after the v2 review fixes (commit `168b70a5`). Both are decisions
+about intended semantics rather than defects, so they are recorded for review rather than patched.
+
+- [ ] **Column-list INSERT guard does not cover set-based copies.**
+      `InsertStatementHandler.GuardDataQualityEvidenceInsert` returns early when `stmt.Columns` is
+      null, so it blocks `INSERT INTO q (__dq_status, …) VALUES (…)` but not
+      `INSERT INTO q SELECT * FROM other_quarantine`. The second form can still land a row carrying
+      `__dq_status = 'released'` in a quarantine target, which `REPLAY QUARANTINE` would then inject
+      into the production target as if it had been validated and remediated.
+      Deciding factor: catching it needs the engine to know the destination *is* a quarantine
+      target (e.g. probing the target schema for `__dq_status`, or consulting the replay manifest)
+      and then to inspect projected column names — which also risks rejecting legitimate
+      table-to-table copies of capture data, such as archiving a quarantine table.
+      Review question: is copying evidence between tables a supported workflow? If yes, guard on
+      the *destination being a live replay target* rather than on the shape of the INSERT.
+
+- [ ] **Retention prunes a shared durable capture target as a whole.**
+      `SqliteDataSource.PruneDataQualityRowsAsync` (and the in-memory path in `QuarantineWriter`)
+      delete every row past the cutoff except `released` ones, with no scoping to the job or run
+      that wrote them. Two jobs quarantining into the same durable table therefore share whichever
+      `WITH (RETENTION = …)` window is shortest, and one job's window silently prunes the other's
+      evidence.
+      `__dq_run_id` is already written on every captured row (`QuarantineWriter.cs:58`), so
+      run-scoped or job-scoped pruning is mechanically straightforward.
+      Review question: should `RETENTION` mean "this statement's captured rows" or "this table"?
+      Scoping it per writer is safer but changes the meaning of the clause and would leave rows
+      from a removed job un-pruned forever, so it needs a deliberate call plus a documentation
+      change either way.
+
