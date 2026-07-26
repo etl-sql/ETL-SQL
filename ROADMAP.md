@@ -15,8 +15,9 @@ promise are defined in
 ### Data Quality v2
 
 v1 (column `@expect`/`@fail` rules, quarantine/warn capture, `ASSERT JOB`, the `WEBHOOK` connector)
-shipped in v0.17.0. The v2 metric-depth and alert-quality slices are implemented; remaining v2
-work is tracked here. The full design, including the as-built deviations v1 left behind, lives in
+shipped in v0.17.0. The v2 metric-depth, alert-quality, and quarantine-remediation slices are
+implemented; demand-triggered hardening work is tracked here. The full design, including the
+as-built deviations v1 left behind, lives in
 [`docs/architecture/decisions/DataQualityRules.md`](docs/architecture/decisions/DataQualityRules.md).
 
 Recommended order (rationale in the design doc's "v2 sequencing" section):
@@ -26,15 +27,15 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    `WITHIN n SIGMA OF HISTORICAL`.
 2. **Alert quality** — shipped: transition-based alerting and recovery notifications, so a
    nightly-failing job cannot train people to mute the channel.
-3. **Quarantine remediation** — in progress. The orchestrator manifest foundation is implemented:
+3. **Quarantine remediation** — shipped. The orchestrator manifest foundation is implemented:
    quarantining jobs persist the job/script/section/source/target replay metadata and mark joins
    non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. `REPLAY QUARANTINE`
    resolves manifests, substitutes released quarantine rows back into the recorded source table, and
    resumes the recorded section label, then flips consumed rows to `replayed` after success.
    Replay is fenced through the orchestrator cluster-lock store. The first Portal steward queue now
    lists replay manifests, replayability state, and can submit replay jobs through the configured
-   Orchestrator job channel. Portal can also submit guarded row-disposition updates for explicit
-   quarantine row ids. Remaining work: a row-browsing/editing grid over quarantine targets.
+   Orchestrator job channel. Portal can preview quarantine rows for Portal-resolvable targets and
+   provides a row editor for source-column fixes, release, and discard actions.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.

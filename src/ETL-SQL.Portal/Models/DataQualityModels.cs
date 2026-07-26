@@ -31,3 +31,10 @@ public sealed record QuarantineDispositionRequest(
 public sealed record QuarantineDispositionResponse(
     string JobId,
     string DispositionStatement);
+
+public sealed record QuarantineRowsResponse(
+    string QuarantineTarget,
+    string Status,
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows,
+    bool Capped);

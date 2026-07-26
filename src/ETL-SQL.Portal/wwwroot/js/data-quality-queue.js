@@ -13,11 +13,20 @@ function renderStatus(item) {
   return '<span class="dq-status dq-status-blocked">Blocked</span>';
 }
 
-function renderRow(item, replayingTarget) {
+function isEvidenceColumn(column) {
+  return String(column || '').toLowerCase().startsWith('__dq_');
+}
+
+function rowId(row) {
+  return row.__dq_row_id || row.__DQ_ROW_ID || '';
+}
+
+function renderManifestRow(item, replayingTarget, selectedTarget) {
   const columns = (item.inputColumns || []).slice(0, 6).map(esc).join(', ');
   const extra = (item.inputColumns || []).length > 6 ? ` +${item.inputColumns.length - 6}` : '';
   const isReplaying = replayingTarget === item.quarantineTarget;
   const replayDisabled = !item.isReplayable || isReplaying;
+  const selected = selectedTarget === item.quarantineTarget;
   return `<article class="dq-row">
     <div class="dq-row-main">
       <div class="dq-row-title">
@@ -35,10 +44,62 @@ function renderRow(item, replayingTarget) {
       <code>${esc(item.replayStatement)}</code>
       <div class="dq-row-actions">
         <button class="btn btn-primary btn-xs" data-replay-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button"${replayDisabled ? ' disabled' : ''}>${isReplaying ? 'Submitting' : 'Replay'}</button>
+        <button class="btn btn-outline btn-xs" data-review-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button">${selected ? 'Rows Open' : 'Review Rows'}</button>
         <button class="btn btn-outline btn-xs" data-copy-replay="${esc(item.replayStatement)}" type="button">Copy</button>
       </div>
     </div>
   </article>`;
+}
+
+function renderRowsPanel(state) {
+  const target = state.selectedItem;
+  if (!target) return '';
+  const response = state.rows;
+  const columns = response?.columns || [];
+  const rows = response?.rows || [];
+  const sourceColumns = columns.filter(column => !isEvidenceColumn(column));
+  const evidenceColumns = columns.filter(column => isEvidenceColumn(column));
+  return `<section class="dq-rows-panel">
+    <div class="dq-rows-header">
+      <div>
+        <h3>${esc(target.quarantineTarget)}</h3>
+        <p>${rows.length} row${rows.length === 1 ? '' : 's'} loaded${response?.capped ? ' · capped' : ''}</p>
+      </div>
+      <div class="dq-row-actions">
+        <select id="dqRowsStatus" aria-label="Row status filter">
+          ${['quarantined', 'released', 'discarded', 'replayed', 'all'].map(status =>
+            `<option value="${status}"${state.rowStatus === status ? ' selected' : ''}>${status}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-xs" id="dqReloadRows" type="button">Reload</button>
+        <button class="btn btn-outline btn-xs" id="dqCloseRows" type="button">Close</button>
+      </div>
+    </div>
+    ${state.rowsError ? `<div class="error-msg">${esc(state.rowsError)}</div>` : ''}
+    ${state.rowsLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading rows...</span></div>' :
+      rows.length ? `<div class="dq-rows-table-wrap"><table class="dq-rows-table">
+        <thead><tr>
+          <th>Actions</th>
+          ${sourceColumns.map(column => `<th>${esc(column)}</th>`).join('')}
+          ${evidenceColumns.map(column => `<th>${esc(column)}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows.map(row => {
+          const id = rowId(row);
+          const edits = state.edits[id] || {};
+          return `<tr>
+            <td class="dq-row-action-cell">
+              <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : 'Save + Release'}</button>
+              <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" type="button"${state.rowAction === id ? ' disabled' : ''}>Discard</button>
+            </td>
+            ${sourceColumns.map(column => `<td><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}"></td>`).join('')}
+            ${evidenceColumns.map(column => `<td><code>${esc(row[column] ?? '')}</code></td>`).join('')}
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>` :
+      `<div class="empty-state empty-state-panel">
+        <h2>No rows</h2>
+        <p>No quarantine rows match the current status filter.</p>
+      </div>`}
+  </section>`;
 }
 
 export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
@@ -50,7 +111,14 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     loading: false,
     error: null,
     replayingTarget: null,
-    message: null
+    message: null,
+    selectedItem: null,
+    rowStatus: 'quarantined',
+    rows: null,
+    rowsLoading: false,
+    rowsError: null,
+    edits: {},
+    rowAction: null
   };
 
   async function load() {
@@ -71,6 +139,29 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     }
   }
 
+  async function loadRows(item = state.selectedItem) {
+    if (!item) return;
+    state.selectedItem = item;
+    state.rowsLoading = true;
+    state.rowsError = null;
+    state.edits = {};
+    render();
+    try {
+      state.rows = await dataQualityApi.quarantineRows({
+        quarantineTarget: item.quarantineTarget,
+        jobName: item.jobName,
+        status: state.rowStatus,
+        limit: 50
+      });
+    } catch (err) {
+      state.rows = null;
+      state.rowsError = err.message || 'Unable to load quarantine rows.';
+    } finally {
+      state.rowsLoading = false;
+      render();
+    }
+  }
+
   async function replay(item) {
     state.replayingTarget = item.quarantineTarget;
     state.error = null;
@@ -83,6 +174,33 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
       state.error = err.message || 'Unable to submit quarantine replay.';
     } finally {
       state.replayingTarget = null;
+      render();
+    }
+  }
+
+  async function updateDisposition(row, disposition) {
+    const id = rowId(row);
+    if (!id) return;
+    const item = state.selectedItem;
+    state.rowAction = id;
+    state.error = null;
+    state.message = null;
+    render();
+    try {
+      const changes = disposition === 'released' ? (state.edits[id] || {}) : null;
+      const result = await dataQualityApi.updateQuarantineDisposition({
+        quarantineTarget: item.quarantineTarget,
+        jobName: item.jobName,
+        rowIds: [id],
+        disposition,
+        changes
+      });
+      state.message = `Disposition job ${result.jobId} submitted for ${id}.`;
+      await loadRows(item);
+    } catch (err) {
+      state.error = err.message || 'Unable to submit quarantine disposition.';
+    } finally {
+      state.rowAction = null;
       render();
     }
   }
@@ -117,12 +235,13 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
       ${state.message ? `<div class="dq-success">${esc(state.message)}</div>` : ''}
       ${state.error ? `<div class="error-msg">${esc(state.error)}</div>` : ''}
       ${state.loading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quarantine queue...</span></div>' :
-        state.items.length ? `<div class="dq-list">${state.items.map(item => renderRow(item, state.replayingTarget)).join('')}</div>` :
+        state.items.length ? `<div class="dq-list">${state.items.map(item => renderManifestRow(item, state.replayingTarget, state.selectedItem?.quarantineTarget)).join('')}</div>` :
         `<div class="empty-state empty-state-panel">
           <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
           <h2>No quarantine manifests</h2>
           <p>No data-quality quarantine replay manifests match the current filters.</p>
         </div>`}
+      ${renderRowsPanel(state)}
     </section>`;
 
     host.querySelector('#dqQueueForm')?.addEventListener('submit', e => {
@@ -138,6 +257,46 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
           value.quarantineTarget === btn.dataset.replayTarget
           && value.jobName === btn.dataset.jobName);
         if (item) replay(item);
+      });
+    });
+    host.querySelectorAll('[data-review-target]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = state.items.find(value =>
+          value.quarantineTarget === btn.dataset.reviewTarget
+          && value.jobName === btn.dataset.jobName);
+        if (item) loadRows(item);
+      });
+    });
+    host.querySelector('#dqRowsStatus')?.addEventListener('change', e => {
+      state.rowStatus = e.target.value;
+      loadRows();
+    });
+    host.querySelector('#dqReloadRows')?.addEventListener('click', () => loadRows());
+    host.querySelector('#dqCloseRows')?.addEventListener('click', () => {
+      state.selectedItem = null;
+      state.rows = null;
+      state.rowsError = null;
+      state.edits = {};
+      render();
+    });
+    host.querySelectorAll('[data-edit-row]').forEach(input => {
+      input.addEventListener('input', () => {
+        const id = input.dataset.editRow;
+        const column = input.dataset.editColumn;
+        state.edits[id] ??= {};
+        state.edits[id][column] = input.value;
+      });
+    });
+    host.querySelectorAll('[data-release-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = (state.rows?.rows || []).find(value => rowId(value) === btn.dataset.releaseRow);
+        if (row) updateDisposition(row, 'released');
+      });
+    });
+    host.querySelectorAll('[data-discard-row]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = (state.rows?.rows || []).find(value => rowId(value) === btn.dataset.discardRow);
+        if (row) updateDisposition(row, 'discarded');
       });
     });
     host.querySelectorAll('[data-copy-replay]').forEach(btn => {

@@ -219,6 +219,11 @@ export const dataQualityApi = {
         params.set('limit', String(limit));
         return apiJson(`/api/data-quality/quarantine?${params.toString()}`);
     },
+    quarantineRows({ quarantineTarget, jobName = '', status = 'quarantined', limit = 50 } = {}) {
+        const params = new URLSearchParams({ quarantineTarget, status, limit: String(limit) });
+        if (jobName) params.set('jobName', jobName);
+        return apiJson(`/api/data-quality/quarantine/rows?${params.toString()}`);
+    },
     replayQuarantine(quarantineTarget, jobName = null) {
         return apiJson('/api/data-quality/quarantine/replay', {
             method: 'POST',

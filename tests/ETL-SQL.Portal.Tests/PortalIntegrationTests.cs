@@ -1119,6 +1119,41 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_QuarantineRows_RejectsUnsupportedStatus()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var res = await AuthGet(token, "/api/data-quality/quarantine/rows?quarantineTarget=q_any&status=deleted");
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task DataQuality_QuarantineRows_RejectsTamperedTarget()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_tampered_rows",
+            "dq:quarantine-manifest:q_tampered",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_tampered_rows",
+                "loads/replay.etlsql",
+                "tampered_section",
+                "#src",
+                "q_tampered; DROP TABLE users",
+                true,
+                null,
+                ["Id"],
+                "schema-tampered",
+                DateTimeOffset.UtcNow)));
+
+        var res = await AuthGet(token, "/api/data-quality/quarantine/rows?quarantineTarget=q_tampered%3B%20DROP%20TABLE%20users&jobName=nightly_tampered_rows");
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {

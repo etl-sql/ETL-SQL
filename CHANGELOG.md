@@ -73,6 +73,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `__dq_*` evidence immutable, and submits it through the Orchestrator job channel for release or
   discard workflows.
 
+- Added the Portal quarantine row editor. `/api/data-quality/quarantine/rows` previews capped
+  quarantine rows for Portal-resolvable targets, the Quarantine Queue can open an inline row grid,
+  and stewards can edit source columns then submit release or discard actions without touching
+  immutable `__dq_*` evidence.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

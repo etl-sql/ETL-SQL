@@ -1,7 +1,10 @@
 using System.Text.Json;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Data;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -16,9 +19,19 @@ namespace ETL_SQL.Portal.Controllers;
 public sealed class DataQualityController(
     IJobHistoryStore jobHistory,
     IJobChannel jobChannel,
+    IServiceProvider services,
+    ETL_SQL.Common.ILogger engineLogger,
     ILogger<DataQualityController> logger) : ControllerBase
 {
     private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
+    private static readonly HashSet<string> AllowedRowStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "all",
+        DataQualityColumns.QuarantinedStatus,
+        DataQualityColumns.ReleasedStatus,
+        DataQualityColumns.DiscardedStatus,
+        DataQualityColumns.ReplayedStatus
+    };
 
     [HttpGet("quarantine")]
     public async Task<IActionResult> GetQuarantineQueue(
@@ -48,6 +61,87 @@ public sealed class DataQualityController(
             .ToList();
 
         return Ok(items);
+    }
+
+    [HttpGet("quarantine/rows")]
+    public async Task<IActionResult> GetQuarantineRows(
+        [FromQuery] string quarantineTarget,
+        [FromQuery] string? jobName = null,
+        [FromQuery] string status = DataQualityColumns.QuarantinedStatus,
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(quarantineTarget))
+            return BadRequest(new { error = "QuarantineTarget is required." });
+
+        status = string.IsNullOrWhiteSpace(status) ? DataQualityColumns.QuarantinedStatus : status.Trim();
+        if (!AllowedRowStatuses.Contains(status))
+            return BadRequest(new { error = "Unsupported quarantine row status filter." });
+
+        limit = Math.Clamp(limit, 1, 200);
+        var manifest = await FindManifestAsync(quarantineTarget, jobName);
+        if (manifest is null)
+            return NotFound(new { error = "Quarantine replay manifest was not found." });
+        if (!IsSafeReplayTarget(manifest.QuarantineTarget))
+            return Conflict(new { error = "Quarantine replay manifest contains an invalid target name." });
+
+        var where = status.Equals("all", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : $" WHERE {DataQualityColumns.Status} = {ToSqlLiteral(status)}";
+        var script = $"SET MAX_LAST_RESULT_ROWS = {limit};\nSELECT * FROM {manifest.QuarantineTarget}{where};";
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+
+            var sessionContext = new CliContext
+            {
+                Command = "run",
+                BatchSize = limit,
+                IsSilentMode = true,
+                SessionId = $"dq-rows-{Guid.NewGuid():N}"
+            };
+            await using var session = new ExecutionSession(services, sessionContext, engineLogger);
+            var result = await session.ExecuteAsync(script, timeout.Token, "portal-data-quality-rows");
+            if (!result.Success)
+            {
+                var message = result.Diagnostics.Count > 0
+                    ? string.Join("; ", result.Diagnostics.Select(d => d.Message))
+                    : "Unable to read quarantine rows.";
+                return StatusCode(502, new { error = ETL_SQL.Core.Common.SecretRedactor.Redact(message) });
+            }
+
+            var table = session.LastEvaluator?.LastResult ?? new DataTable();
+            var columns = table.ColumnNames;
+            var rows = table.Rows
+                .Take(limit)
+                .Select(row => columns.ToDictionary<string, string, object?>(
+                    column => column,
+                    column => row[column],
+                    StringComparer.OrdinalIgnoreCase))
+                .Cast<IReadOnlyDictionary<string, object?>>()
+                .ToList();
+
+            return Ok(new QuarantineRowsResponse(
+                manifest.QuarantineTarget,
+                status,
+                columns,
+                rows,
+                table.IsCapped || table.Rows.Count >= limit || table.TotalRowsMatched > limit));
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(408, new { error = "Quarantine row preview timed out." });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to preview quarantine rows for {Target}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(manifest.QuarantineTarget));
+            return StatusCode(502, new { error = "Unable to read quarantine rows." });
+        }
     }
 
     [HttpPost("quarantine/replay")]
