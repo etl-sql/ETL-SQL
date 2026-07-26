@@ -278,6 +278,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report access approval is now report-scoped by default through `ReportAcl` and audited atomically
   with the grant/denial mutation.
 
+**Report authorship does not survive deprovisioning**
+- Report authorship upgrades an existing grant to `Manage`; it is not standing permission on its own.
+  An author with no remaining folder access and no report ACL loses access to reports they created,
+  so removing a user from their groups or from the directory actually revokes that access.
+- The same rule governs anonymous share and embed links: a link resolves only while its creator still
+  has access, and otherwise reports as `PermissionLost` in the admin anonymous-access inventory
+  instead of continuing to serve report data to unauthenticated visitors.
+
 ## [0.16.0] — 2026-07-19
 
 ### Added

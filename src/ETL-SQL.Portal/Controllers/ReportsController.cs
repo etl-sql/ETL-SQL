@@ -91,12 +91,17 @@ public class ReportsController : ControllerBase
         if (isAdmin)
             return true;
 
+        // Deliberately NOT short-circuiting on `report.CreatedBy == creatorId`. This method gates
+        // anonymous share/embed resolution, where the link's authority is derived from the
+        // grantor's *continuing* access — that is the whole point of the PermissionLost state.
+        // Treating authorship as standing permission would mean removing someone from every group
+        // never revokes the anonymous links they created for their own reports, and the admin
+        // inventory would keep reporting those links as Active. Creator ownership still applies to
+        // interactive access via FolderPermissionService.GetEffectiveReportPermissionAsync.
         var groupIds = await db.UserGroups
             .Where(membership => membership.UserId == creatorId)
             .Select(membership => membership.GroupId)
             .ToListAsync(ct);
-        if (report.CreatedBy == creatorId)
-            return true;
 
         var groupSet = new HashSet<int>(groupIds);
         var folderPermission = await folderPermissions.GetEffectivePermissionAsync(

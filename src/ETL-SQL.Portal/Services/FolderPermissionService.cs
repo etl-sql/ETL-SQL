@@ -50,7 +50,6 @@ public class FolderPermissionService(PortalDbContext db)
         if (IsAdmin(user)) return FolderPermission.Manage;
 
         var userId = GetUserId(user);
-        if (report.CreatedBy == userId) return FolderPermission.Manage;
 
         var folderPerm = await GetEffectivePermissionAsync(report.FolderId, user);
 
@@ -61,6 +60,13 @@ public class FolderPermissionService(PortalDbContext db)
             .ToListAsync();
 
         FolderPermission? directPerm = reportPerms.Count > 0 ? (FolderPermission)reportPerms.Max(p => (int)p) : null;
+
+        // Report authorship upgrades an existing grant to Manage — it never substitutes for one.
+        // Treating authorship as standing permission would mean revoking a user's group membership
+        // (or removing them from the directory) leaves them full access to every report they ever
+        // created, so deprovisioning would not actually deprovision.
+        if (report.CreatedBy == userId && (folderPerm.HasValue || directPerm.HasValue))
+            return FolderPermission.Manage;
 
         if (!folderPerm.HasValue) return directPerm;
         if (!directPerm.HasValue) return folderPerm;
