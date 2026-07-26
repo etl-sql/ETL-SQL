@@ -491,14 +491,18 @@ prerequisite for data quality or stewardship. The progression must remain additi
 
    ```sql
    -- Current session or local Orchestrator store
-   SELECT * FROM eng.stewardship_score
+   SELECT * 
+   INTO #score
+   FROM eng.stewardship_score
    WHERE scope_type = 'JOB' AND scope_name = 'nightly_etl'
-   INTO #score;
+   ;
 
    -- Remote Orchestrator or Portal
-   SELECT * FROM ProdOrch.eng.stewardship_score
+   SELECT * 
+   INTO #score
+   FROM ProdOrch.eng.stewardship_score
    WHERE scope_type = 'TABLE' AND scope_name = '#orders'
-   INTO #score;
+   ;
    ```
 
    Report the numerator, denominator, and percentage for each component—not only a badge or opaque
