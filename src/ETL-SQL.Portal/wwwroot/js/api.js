@@ -230,10 +230,10 @@ export const dataQualityApi = {
             body: { quarantineTarget, jobName }
         });
     },
-    updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null } = {}) {
+    updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null, note = null } = {}) {
         return apiJson('/api/data-quality/quarantine/disposition', {
             method: 'POST',
-            body: { quarantineTarget, jobName, rowIds, disposition, changes }
+            body: { quarantineTarget, jobName, rowIds, disposition, changes, note }
         });
     },
     qualityTrend({ jobName, limit = 30 } = {}) {

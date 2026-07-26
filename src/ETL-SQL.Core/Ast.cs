@@ -1944,6 +1944,17 @@ public sealed record LineageStatement : Statement
     }
 }
 
+/// <summary>
+/// <c>SHOW DATA QUALITY RULES [FOR [TABLE] &lt;table&gt;] [COLUMN &lt;col&gt;] [INTO #t]</c> — lists the
+/// <c>@expect</c>/<c>@fail</c> rules protecting each column, so a steward can answer "is this column
+/// protected, and by what?" without reading the load script. Rules are steward-facing governance
+/// metadata; this is the surface that makes them visible.
+/// </summary>
+public sealed record ShowDataQualityRulesStatement(
+    TableReference? TargetTable = null,
+    string? ColumnName = null,
+    string? IntoTable = null) : Statement;
+
 public sealed record ShowLineageHistoryForTableStatement : Statement
 {
     public string TableName { get; init; } = string.Empty;

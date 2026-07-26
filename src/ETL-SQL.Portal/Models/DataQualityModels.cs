@@ -31,7 +31,13 @@ public sealed record QuarantineDispositionRequest(
     IReadOnlyList<string> RowIds,
     string Disposition,
     string? JobName = null,
-    IReadOnlyDictionary<string, string?>? Changes = null);
+    IReadOnlyDictionary<string, string?>? Changes = null,
+    /// <summary>
+    /// Why the steward made this call. Recorded in the audit trail, not in the quarantine table —
+    /// the capture schema is frozen on first write, and an audit row cannot be edited afterwards
+    /// the way a note column could.
+    /// </summary>
+    string? Note = null);
 
 public sealed record QuarantineDispositionResponse(
     string JobId,

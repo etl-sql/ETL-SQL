@@ -1087,6 +1087,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--portal-surface);
   color: var(--portal-text);
 }
+.dq-note-input { margin-top: 6px; display: block; width: 100%; font-size: .82em; }
 /* Quality trend panel */
 .dq-trend-stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 14px; }
 .dq-trend-stat {

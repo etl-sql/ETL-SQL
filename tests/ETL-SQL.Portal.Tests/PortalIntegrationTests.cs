@@ -1154,6 +1154,42 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_Disposition_IsAuditedWithActorAndReason()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "audited_job",
+            "dq:quarantine-manifest:q_audited",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "audited_job", "loads/x.etlsql", "sec", "#src", "q_audited",
+                true, null, ["Id"], "schema-a", DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_audited",
+            jobName = "audited_job",
+            rowIds = new[] { "row-abc", "row-def" },
+            disposition = "discarded",
+            note = "Duplicate feed replayed by the vendor on 2026-07-25"
+        });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var entry = await db.AuditLogs
+            .Where(a => a.Action == "DATA_QUALITY_DISCARD" && a.ResourceId == "q_audited")
+            .OrderByDescending(a => a.Timestamp)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(entry);
+        Assert.NotNull(entry!.UserId);                              // who
+        Assert.Contains("Duplicate feed replayed", entry.Detail!);  // why
+        Assert.Contains("row-abc", entry.Detail!);                  // which evidence
+        Assert.Contains("rows=2", entry.Detail!);
+    }
+
+    [Fact]
     public async Task DataQuality_Trend_SurfacesPersistedRunMetrics()
     {
         var token = await GetAdminTokenAsync();

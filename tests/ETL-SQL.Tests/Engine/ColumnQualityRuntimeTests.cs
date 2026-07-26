@@ -361,6 +361,67 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ShowDataQualityRules_ListsEachProtectionPerColumn()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'THROW';
+                            @expect_1: 'UNIQUE'; @fail_1: 'QUARANTINE'; */,
+                       Name /* @expect: 'NOT NULL'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q
+                ON FAILURE WARN;");
+
+            await Run(eval, "SHOW DATA QUALITY RULES;");
+            var rows = eval.LastResult!.Rows;
+
+            // One row per individual rule, not per tag: 'NOT NULL, >= 0' reads as two protections.
+            Assert.Equal(4, rows.Count);
+            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
+                && (string?)r["Rule"] == "NOT NULL" && (string?)r["Action"] == "THROW");
+            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
+                && (string?)r["Rule"] == ">= 0" && (string?)r["Action"] == "THROW");
+            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
+                && (string?)r["Rule"] == "UNIQUE" && (string?)r["RuleTag"] == "@expect_1");
+
+            // A rule with no @fail is WARN, and the listing says so rather than leaving it blank.
+            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Name"
+                && (string?)r["Action"] == "WARN (default)");
+        }
+
+        [Fact]
+        public async Task ShowDataQualityRules_FiltersByTableAndColumn_AndWritesIntoTemp()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */,
+                       Name /* @expect: 'NOT NULL'; @fail: 'WARN'; */
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+
+            await Run(eval, "SHOW DATA QUALITY RULES FOR #clean COLUMN Id;");
+            var single = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal("Id", single["TargetColumn"]);
+
+            await Run(eval, "SHOW DATA QUALITY RULES INTO #rules;");
+            var captured = await ReadRows(eval, "#rules");
+            Assert.Equal(2, captured.Count);
+            Assert.All(captured, r => Assert.Equal("#clean", r["TargetTable"]));
+        }
+
+        [Fact]
+        public async Task ShowDataQualityRules_WithNoRulesRecorded_ReturnsEmptyRatherThanFailing()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, "SHOW DATA QUALITY RULES;");
+            Assert.Empty(eval.LastResult!.Rows);
+        }
+
+        [Fact]
         public async Task QuarantineEvidence_CannotBeDeletedWhileDispositionIsInFlight()
         {
             var eval = NewEvaluator();

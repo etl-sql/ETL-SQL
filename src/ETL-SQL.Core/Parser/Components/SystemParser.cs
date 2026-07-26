@@ -572,6 +572,10 @@ public class SystemParser : ParserComponent
         {
             stmt = ParseShowProtectedData(startToken);
         }
+        else if (MatchIdentifier("DATA") && MatchIdentifier("QUALITY"))
+        {
+            stmt = ParseShowDataQualityRules(startToken);
+        }
         else if (Match(TokenType.VERSION)) stmt = new ShowVersionStatement();
         else if (Match(TokenType.SAFE))
         {
@@ -725,7 +729,9 @@ public class SystemParser : ParserComponent
             else
                 throw new ETL_SQL.Core.Common.Exceptions.SyntaxException("Expected SESSIONS after SHOW ACTIVE", _parser.Current.Line, _parser.Current.Column);
         }
-        else if (Match(TokenType.DATASET) || MatchIdentifier("DATASETS"))
+        // DATASETS is a keyword token, so MatchIdentifier alone never matches it — SHOW DATASETS
+        // must accept the keyword form as well as the identifier form.
+        else if (Match(TokenType.DATASET) || Match(TokenType.DATASETS) || MatchIdentifier("DATASETS"))
             stmt = new ShowDatasetsStatement();
 
         if (stmt == null)
@@ -958,6 +964,43 @@ public class SystemParser : ParserComponent
         }
 
         return new LineageStatement(targetTable, columnName, exportPath, exportAsOpenLineage)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
+    }
+
+    /// <summary>
+    /// Parses <c>SHOW DATA QUALITY RULES [FOR [TABLE] &lt;table&gt;] [COLUMN &lt;col&gt;] [INTO #t]</c>.
+    /// </summary>
+    private Statement ParseShowDataQualityRules(Token startToken)
+    {
+        if (!MatchIdentifier("RULES"))
+            throw new SyntaxException("Expected RULES after SHOW DATA QUALITY",
+                _parser.Current.Line, _parser.Current.Column);
+
+        TableReference? targetTable = null;
+        string? columnName = null;
+        string? intoTable = null;
+
+        if (Match(TokenType.FOR))
+        {
+            if (Match(TokenType.TABLE)) { }
+            targetTable = _parser.ParseTableReference(allowAlias: false);
+        }
+
+        if (Match(TokenType.COLUMN))
+            columnName = ConsumeIdentifier("Expected column name after COLUMN").Value;
+
+        if (Match(TokenType.INTO))
+        {
+            intoTable = ConsumeIdentifier("Expected temporary table name after INTO").Value;
+            if (!intoTable.StartsWith("#"))
+                throw new SyntaxException("SHOW DATA QUALITY RULES INTO requires a #temp table name",
+                    _parser.Previous.Line, _parser.Previous.Column);
+        }
+
+        return new ShowDataQualityRulesStatement(targetTable, columnName, intoTable)
         {
             Line = startToken.Line,
             Column = startToken.Column

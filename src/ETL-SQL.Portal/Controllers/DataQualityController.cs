@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -23,8 +24,14 @@ public sealed class DataQualityController(
     ETL_SQL.Common.ILogger engineLogger,
     ETL_SQL.Portal.Data.PortalDbContext db,
     PortalConfig portalConfig,
+    ETL_SQL.Portal.Services.AuditService audit,
     ILogger<DataQualityController> logger) : ControllerBase
 {
+    private int? CurrentUserId =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
+            ? id
+            : null;
+
     private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
     private static readonly HashSet<string> AllowedRowStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -298,6 +305,14 @@ public sealed class DataQualityController(
                 }
             }, cancellationToken);
 
+            // Replay re-runs a production load, so record who triggered it.
+            await audit.LogAsync(
+                CurrentUserId,
+                "DATA_QUALITY_REPLAY",
+                "QuarantineTarget",
+                manifest.QuarantineTarget,
+                $"job={manifest.JobName}; section={manifest.SectionLabel}; submittedJob={jobId}");
+
             return Accepted(new ReplayQuarantineResponse(jobId, replayStatement));
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
@@ -358,6 +373,19 @@ public sealed class DataQualityController(
                     ["Disposition"] = disposition
                 }
             }, cancellationToken);
+
+            // Audit the decision, not just the mechanics: who released or discarded which rows,
+            // and why. "Why did we drop these 400 rows, and who decided?" is the question an audit
+            // actually asks, and the quarantine table itself cannot answer it — its schema is
+            // frozen, and a note column there would be editable by the same person.
+            await audit.LogAsync(
+                CurrentUserId,
+                disposition == DataQualityColumns.DiscardedStatus
+                    ? "DATA_QUALITY_DISCARD"
+                    : "DATA_QUALITY_RELEASE",
+                "QuarantineTarget",
+                manifest.QuarantineTarget,
+                BuildDispositionAuditDetail(manifest, request, disposition, jobId));
 
             return Accepted(new QuarantineDispositionResponse(jobId, statement));
         }
@@ -467,6 +495,44 @@ public sealed class DataQualityController(
         if (string.IsNullOrWhiteSpace(state.StateValue)) return null;
         try { return JsonSerializer.Deserialize<QuarantineReplayManifest>(state.StateValue); }
         catch (JsonException) { return null; }
+    }
+
+    /// <summary>
+    /// Builds the audit detail for a disposition: which rows, which job, the steward's stated
+    /// reason, and which source columns were edited. Edited <em>values</em> are deliberately not
+    /// recorded — quarantine rows carry raw source data, and the audit log is not an access-
+    /// controlled data surface.
+    /// </summary>
+    private static string BuildDispositionAuditDetail(
+        QuarantineReplayManifest manifest,
+        QuarantineDispositionRequest request,
+        string disposition,
+        string jobId)
+    {
+        var parts = new List<string>
+        {
+            $"disposition={disposition}",
+            $"job={manifest.JobName}",
+            $"rows={request.RowIds.Count}",
+            $"submittedJob={jobId}"
+        };
+
+        if (request.Changes is { Count: > 0 })
+            parts.Add($"editedColumns={string.Join(",", request.Changes.Keys)}");
+
+        if (!string.IsNullOrWhiteSpace(request.Note))
+        {
+            var note = request.Note.Trim();
+            if (note.Length > 500) note = note[..500] + "…";
+            parts.Add($"note={note}");
+        }
+
+        // Row ids are the audit's link back to the evidence; cap the list so one bulk action
+        // cannot write an unbounded audit row.
+        parts.Add($"rowIds={string.Join(",", request.RowIds.Take(50))}"
+            + (request.RowIds.Count > 50 ? $" (+{request.RowIds.Count - 50} more)" : ""));
+
+        return string.Join("; ", parts);
     }
 
     private static bool IsSafeReplayTarget(string target)

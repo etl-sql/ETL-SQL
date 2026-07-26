@@ -177,6 +177,7 @@ function renderRowsPanel(state) {
             <td class="dq-row-action-cell">
               <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : 'Save + Release'}</button>
               <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" type="button"${state.rowAction === id ? ' disabled' : ''}>Discard</button>
+              <input class="dq-cell-input dq-note-input" data-note-row="${esc(id)}" placeholder="Reason (audited)" value="${esc(state.notes[id] ?? '')}">
             </td>
             ${sourceColumns.map(column => `<td><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}"></td>`).join('')}
             ${evidenceColumns.map(column => `<td><code>${esc(row[column] ?? '')}</code></td>`).join('')}
@@ -206,6 +207,7 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     rowsLoading: false,
     rowsError: null,
     edits: {},
+    notes: {},
     rowAction: null,
     trendJob: null,
     trend: null,
@@ -301,7 +303,8 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
         jobName: item.jobName,
         rowIds: [id],
         disposition,
-        changes
+        changes,
+        note: state.notes[id] || null
       });
       state.message = `Disposition job ${result.jobId} submitted for ${id}.`;
       await loadRows(item);
@@ -404,6 +407,11 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
         const column = input.dataset.editColumn;
         state.edits[id] ??= {};
         state.edits[id][column] = input.value;
+      });
+    });
+    host.querySelectorAll('[data-note-row]').forEach(input => {
+      input.addEventListener('input', () => {
+        state.notes[input.dataset.noteRow] = input.value;
       });
     });
     host.querySelectorAll('[data-release-row]').forEach(btn => {
