@@ -45,27 +45,41 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
+        // Since v0.17.0 an SFTP connection with no HOST_KEY_FINGERPRINT is rejected rather than
+        // trusted-with-a-warning. The fixture container is created per test run and generates a
+        // fresh host key, so there is no stable fingerprint to pin — this is exactly the transient
+        // lab case ALLOW_UNPINNED_HOST_KEY exists for. These tests cover SFTP file operations; the
+        // host-key policy itself is covered by SftpConnectorTests.EvaluateHostKey cases, plus
+        // UnpinnedHostKey_WithoutOptOut_IsRejected below for the end-to-end wiring.
+        private const bool AllowUnpinnedForEphemeralContainer = true;
+
         /// <summary>Creates a connector that uses the fixture's mapped port and password auth.</summary>
         private SftpConnector PasswordConnector() =>
             new SftpConnector(
                 context: null!,
                 host: _sftp.Host,
+                port: _sftp.Port,
                 username: SftpFixture.TestUser,
                 password: SftpFixture.TestPassword,
                 keyFilePath: null,
                 passphrase: null,
-                clientFactory: (h, u, p, _, _) => new SftpClient(h, _sftp.Port, u, p!));
+                timeoutSeconds: 30,
+                clientFactory: (h, u, p, _, _) => new SftpClient(h, _sftp.Port, u, p!),
+                allowUnpinnedHostKey: AllowUnpinnedForEphemeralContainer);
 
         /// <summary>Creates a connector that uses the fixture's generated RSA private key.</summary>
         private SftpConnector KeyConnector() =>
             new SftpConnector(
                 context: null!,
                 host: _sftp.Host,
+                port: _sftp.Port,
                 username: SftpFixture.TestUser,
                 password: null,
                 keyFilePath: _sftp.PrivateKeyPath,
                 passphrase: null,
-                clientFactory: (h, u, _, k, pp) => new SftpClient(h, _sftp.Port, u, new PrivateKeyFile(k!, pp)));
+                timeoutSeconds: 30,
+                clientFactory: (h, u, _, k, pp) => new SftpClient(h, _sftp.Port, u, new PrivateKeyFile(k!, pp)),
+                allowUnpinnedHostKey: AllowUnpinnedForEphemeralContainer);
 
         private string RemotePath(string filename) =>
             $"/{SftpFixture.RemoteUploadDir}/{filename}";
@@ -110,16 +124,50 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await using var connector = new SftpConnector(
                 context: null!,
                 host: _sftp.Host,
+                port: _sftp.Port,
                 username: SftpFixture.TestUser,
                 password: null,
                 keyFilePath: _sftp.EncryptedPrivateKeyPath,
                 passphrase: SftpFixture.TestPassphrase,
-                clientFactory: (h, u, _, k, pp) => new SftpClient(h, _sftp.Port, u, new PrivateKeyFile(k!, pp)));
+                timeoutSeconds: 30,
+                clientFactory: (h, u, _, k, pp) => new SftpClient(h, _sftp.Port, u, new PrivateKeyFile(k!, pp)),
+                allowUnpinnedHostKey: AllowUnpinnedForEphemeralContainer);
 
             var entries = new System.Collections.Generic.List<FileMetaData>();
             await foreach (var entry in connector.ListFilesAsync($"/{SftpFixture.RemoteUploadDir}"))
                 entries.Add(entry);
             Assert.NotNull(entries);
+        }
+
+        /// <summary>
+        /// End-to-end guard for the v0.17.0 breaking change: with no pin and no explicit opt-out the
+        /// connection must be refused against a real server. The decision table is unit-tested in
+        /// SftpConnectorTests; this covers the wiring from connector options through to the SSH
+        /// host-key callback, which a pure unit test cannot reach.
+        /// </summary>
+        [Fact]
+        public async Task UnpinnedHostKey_WithoutOptOut_IsRejected()
+        {
+            await using var connector = new SftpConnector(
+                context: null!,
+                host: _sftp.Host,
+                port: _sftp.Port,
+                username: SftpFixture.TestUser,
+                password: SftpFixture.TestPassword,
+                keyFilePath: null,
+                passphrase: null,
+                timeoutSeconds: 30,
+                clientFactory: (h, u, p, _, _) => new SftpClient(h, _sftp.Port, u, p!),
+                allowUnpinnedHostKey: false);
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await foreach (var _ in connector.ListFilesAsync($"/{SftpFixture.RemoteUploadDir}"))
+                {
+                }
+            });
+
+            Assert.Contains("Host key", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── 2. Upload / Download round-trip ───────────────────────────────────
