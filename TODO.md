@@ -21,7 +21,7 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
       `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
 - [ ] Run enterprise hardening certification on Windows and Linux:
       `.\scripts\Test-EnterpriseHardeningCertification.ps1`.
-- [ ] Run scale certification for advertised scale claims:
+- [x] Run scale certification for advertised scale claims:
       `.\scripts\Test-ScaleCertification.ps1 -Tier Standard`.
 - [ ] Run the recovery drill and retain the report: `etl-sql admin restore --validate --report recovery-report.json`.
 - [ ] Run HA failure certification and retain the transcripts: `etl-sql admin ha-soak fault-run` then `etl-sql admin ha-soak validate`.
