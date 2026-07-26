@@ -395,6 +395,119 @@ reuse normal SMTP/WEBHOOK connections, multiple named refresh jobs can target th
 unsupported lifecycle parses successfully, and every canonical statement round-trips through the
 formatter and documentation test lane.
 
+### Language — Table Transformation Algorithms (`TRANSFORM`)
+
+**Review basis (2026-07-26).** ETL-SQL's data-preparation helpers (`FILL_DATES`, `GENERATE CALENDAR`,
+`COMPARE DATASETS`) are useful but lack a coherent statement family. `FILL_DATES` in particular
+uses an awkward function-call-as-statement shape that is inconsistent with the rest of the language.
+Users migrating from Power Query (M), dbt macros, or pandas also expect a single-verb operation for
+common table transformations — operations that are too domain-specific for standard SQL but too
+common to warrant writing full window-function or CTE boilerplate each time.
+
+The `TRANSFORM` verb fills this gap. It does not appear in ETL-SQL's current statement surface,
+has no conflict with any SQL standard statement keyword, and is on-brand for a product whose name
+begins with the T in ETL.
+
+**Pattern:**
+
+```sql
+TRANSFORM #result
+FROM #source
+USING <algorithm> (
+    <named parameters>
+);
+```
+
+- **`TRANSFORM`** — the verb; always produces a `#temp` table output
+- **`#result`** — the output temp table name; comes immediately after the verb
+- **`FROM #source`** — the input temp table; omitted only for zero-source generators
+- **`USING <algorithm>`** — the named algorithm applied to the source
+- **`(...)`** — named keyword parameters specific to that algorithm
+
+`GENERATE CALENDAR` and `COMPARE DATASETS` retain their existing verbs: `GENERATE` produces a
+result from no source table, and `COMPARE` takes two sources joined by `WITH`. Neither fits the
+single-source shape `TRANSFORM` owns.
+
+#### P0 — Migrate `FILL_DATES` to `TRANSFORM ... USING FILL_DATES`
+
+Retire the standalone `FILL_DATES(#source, ...) INTO #result` form, which reads as a function call
+being used as a statement. Replace it with the canonical `TRANSFORM` form:
+
+```sql
+-- Retired
+FILL_DATES(
+    #daily_sales,
+    DATE_COL = 'OrderDate',
+    GAPS_FILL = 0,
+    BY_GROUP = 'Region'
+) INTO #daily_sales_filled;
+
+-- Canonical
+TRANSFORM #daily_sales_filled
+FROM #daily_sales
+USING FILL_DATES (
+    DATE_COL = 'OrderDate',
+    GAPS_FILL = 0,
+    BY_GROUP = 'Region'
+);
+```
+
+Update all existing samples, docs, snippets, help files, and formatter output together. Emit a
+deprecation diagnostic for the retired form with an exact replacement.
+
+#### P1 — Add `INTERPOLATE` algorithm
+
+Fills missing numeric values between known data points using a named method. The `BY_GROUP` clause
+partitions independently — identical to the `FILL_DATES` grouping model.
+
+```sql
+TRANSFORM #sensor_filled
+FROM #sensor_readings
+USING INTERPOLATE (
+    DATE_COL  = 'ReadingTime',
+    VALUE_COLS = 'Temperature, Pressure',
+    METHOD    = 'LINEAR',        -- LINEAR | STEP | SPLINE
+    BY_GROUP  = 'SensorId'
+);
+```
+
+#### P1 — Add `DEDUPLICATE` algorithm
+
+Removes duplicate rows with explicit control over which duplicate to retain. Addresses the gap
+between `SELECT DISTINCT` (no ordering) and writing `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY
+...)` boilerplate for every deduplication case.
+
+```sql
+TRANSFORM #customers_deduped
+FROM #customers_raw
+USING DEDUPLICATE (
+    KEY      = 'CustomerId',
+    KEEP     = 'LATEST',         -- LATEST | EARLIEST | MAX(column) | MIN(column)
+    ORDER_BY = 'UpdatedAt'
+);
+```
+
+#### P2 — Add `NORMALIZE` algorithm
+
+Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite
+scoring, or any distance-based calculation where raw magnitude differences would dominate.
+
+```sql
+TRANSFORM #features_normalized
+FROM #features_raw
+USING NORMALIZE (
+    COLUMNS = 'Revenue, Cost, Margin',
+    METHOD  = 'MIN_MAX',         -- MIN_MAX | Z_SCORE | ROBUST
+    RANGE   = '0, 1'             -- applies to MIN_MAX only
+);
+```
+
+**Definition of done.** `FILL_DATES` round-trips through the formatter in its canonical `TRANSFORM`
+form. Every existing sample and doc is updated. Each algorithm ships with a help file, a snippet,
+and at least one self-contained cookbook recipe showing it inside a full Extract → Stage → Transform
+→ Load pipeline. A user familiar with Power Query or dbt can recognize the `TRANSFORM ... USING`
+pattern as the ETL-SQL equivalent of a named table operation without reading the full reference.
+
 ### Workstation-to-Enterprise — Data Quality and Stewardship
 
 **Review basis (2026-07-26).** The underlying small-scale capabilities are stronger than the current
