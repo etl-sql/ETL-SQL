@@ -97,6 +97,7 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
                     {
                         if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                         {
+                            GuardDataQualityEvidenceDelete(row, connName);
                             if (stmt.Output != null)
                             {
                                 rowInfos.Add((row.Clone(), null, "DELETE"));
@@ -131,6 +132,28 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
             context.Telemetry.RowsProcessed += deletedCount;
 
             if (context.IsVerbose) _logger.WriteLine($"Finished deleting {deletedCount} rows in {connName}");
+        }
+    }
+
+    /// <summary>
+    /// Blocks deletion of quarantine rows whose disposition is still in flight. A
+    /// <c>quarantined</c> row is unreviewed evidence and a <c>released</c> row is a steward's
+    /// pending fix awaiting replay; deleting either destroys work or the audit trail. Rows that
+    /// reached a terminal disposition (<c>replayed</c>/<c>discarded</c>) and warn evidence age out
+    /// normally, which is also what retention pruning removes.
+    /// </summary>
+    private static void GuardDataQualityEvidenceDelete(Row row, string connName)
+    {
+        var status = row[ETL_SQL.Core.Quality.DataQualityColumns.Status]?.ToString();
+        if (string.IsNullOrEmpty(status)) return;
+
+        if (status.Equals(ETL_SQL.Core.Quality.DataQualityColumns.QuarantinedStatus, StringComparison.OrdinalIgnoreCase)
+            || status.Equals(ETL_SQL.Core.Quality.DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ExecutionException(
+                $"Cannot delete '{status}' data-quality rows from '{connName}': the disposition is still in flight. "
+                + $"Set {ETL_SQL.Core.Quality.DataQualityColumns.Status} to 'discarded' first, "
+                + "or let retention pruning age the rows out.");
         }
     }
 }

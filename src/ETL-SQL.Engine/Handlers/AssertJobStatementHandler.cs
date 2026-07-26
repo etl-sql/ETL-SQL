@@ -26,6 +26,12 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
     private const int DefaultHistoryRuns = 5;
     private const int DefaultMinHistoryRuns = 3;
     private const int DefaultMinSigmaHistoryRuns = 10;
+
+    /// <summary>
+    /// Per-sigma relative tolerance used when the historical series has zero standard deviation.
+    /// 1% per sigma, so <c>WITHIN 3 SIGMA</c> tolerates a 3% move off a perfectly flat baseline.
+    /// </summary>
+    private const decimal ZeroSigmaFallbackTolerance = 0.01m;
     private const int DefaultAlertRealertHours = 24;
 
     public Type SupportedStatementType => typeof(AssertJobStatement);
@@ -214,10 +220,26 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
             var sigma = (decimal)Math.Sqrt(variance);
             if (sigma == 0m)
             {
+                // A perfectly stable history collapses the band to equality, which would fail the
+                // run on a single extra row — the alert-storm behavior sigma exists to avoid. Fall
+                // back to a relative tolerance around the mean instead, scaled by the requested
+                // sigma count so a wider band stays wider.
+                if (baseline == 0m)
+                {
+                    Warn(context, $"ASSERT JOB {stmt.JobName}: skipping {predicate.Describe()} — " +
+                        "the historical baseline and sigma are both zero, so no band is defined.");
+                    return;
+                }
+
+                var fallbackTolerance = predicate.Tolerance!.Value * ZeroSigmaFallbackTolerance;
+                var fallbackDrift = Math.Abs(current - baseline) / Math.Abs(baseline);
                 Warn(context, $"ASSERT JOB {stmt.JobName}: {predicate.Describe()} has zero historical sigma; " +
-                    "using equality against the historical mean.");
-                if (current != baseline)
-                    failures.Add($"{predicate.Describe()} (actual {Format(current)}, baseline {Format(baseline)}, sigma 0)");
+                    $"falling back to a relative tolerance of {Format(fallbackTolerance)} around the mean.");
+                if (fallbackDrift > fallbackTolerance)
+                {
+                    failures.Add($"{predicate.Describe()} (actual {Format(current)}, baseline {Format(baseline)}, " +
+                        $"sigma 0, drift {Format(fallbackDrift)} > {Format(fallbackTolerance)})");
+                }
                 return;
             }
 

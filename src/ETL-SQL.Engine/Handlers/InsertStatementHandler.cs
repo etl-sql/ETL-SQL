@@ -33,6 +33,8 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         if (context.VarContext.TryGetView(connName, out _))
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an INSERT target.");
 
+        GuardDataQualityEvidenceInsert(stmt, connName);
+
         if (stmt.TargetTable.ConnectionName == null && stmt.TargetTable.TableName.StartsWith("#") && !context.Connections.ContainsKey(connName))
         {
             context.Connections[connName] = new InMemoryDataSource();
@@ -326,6 +328,27 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
             }
 
             if (context.IsVerbose) _logger.WriteLine($"Finished inserting {stmt.Values.Count} rows into {connName}");
+        }
+    }
+
+    /// <summary>
+    /// Rejects an INSERT that explicitly writes engine-owned <c>__dq_*</c> evidence columns.
+    /// Quarantine and warn rows are written by the engine's capture path, not by scripts; a
+    /// hand-authored row carrying <c>__dq_status = 'released'</c> would be picked up by
+    /// <c>REPLAY QUARANTINE</c> and injected into the production target as if it had been
+    /// validated and remediated.
+    /// </summary>
+    private static void GuardDataQualityEvidenceInsert(InsertStatement stmt, string connName)
+    {
+        if (stmt.Columns == null) return;
+
+        foreach (var column in stmt.Columns)
+        {
+            if (!ETL_SQL.Core.Quality.DataQualityColumns.IsDataQualityColumn(column)) continue;
+            throw new ExecutionException(
+                $"Cannot INSERT into data-quality evidence column '{column}' on '{connName}'. "
+                + "These columns are written by the engine's quarantine capture; a hand-authored "
+                + "row would be replayed into the target as if it had been validated.");
         }
     }
 

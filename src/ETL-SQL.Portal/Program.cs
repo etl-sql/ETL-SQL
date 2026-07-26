@@ -283,6 +283,10 @@ builder.Services.AddAuthentication(opt =>
 builder.Services.AddAuthorization(opt =>
 {
     opt.AddPolicy("OrchestratorAccess", p => p.RequireRole("Admin", "OrchestratorManager"));
+    // Quarantine remediation reads raw failing source rows (which carry whatever PII the source
+    // carried), edits them, and enqueues jobs that re-run production loads. That is steward work,
+    // not something every authenticated report reader may do.
+    opt.AddPolicy("DataQualityStewardAccess", p => p.RequireRole("Admin", "DataSteward"));
 });
 builder.Services.AddRateLimiter(options =>
 {

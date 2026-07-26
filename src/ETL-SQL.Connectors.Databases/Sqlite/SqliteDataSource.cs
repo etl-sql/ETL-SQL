@@ -303,12 +303,31 @@ namespace ETL_SQL.Connectors.Sqlite
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             var table = _tableName.Replace("\"", "\"\"");
             var column = timestampColumn.Replace("\"", "\"\"");
+            var statusColumn = ETL_SQL.Core.Quality.DataQualityColumns.Status.Replace("\"", "\"\"");
+            // Never prune a disposition that is still in flight: a 'released' row is a steward's
+            // pending fix awaiting replay, and deleting it discards that work silently. Warn
+            // tables and pre-disposition capture tables have no status column, so the guard is
+            // added only when the column is actually present.
+            var existingColumns = await GetColumnsAsync(effectiveCancellationToken);
+            bool hasStatusColumn = existingColumns.Any(c =>
+                c.Equals(ETL_SQL.Core.Quality.DataQualityColumns.Status, StringComparison.OrdinalIgnoreCase));
+
             var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
-                using var cmd = CreateCommand($"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff", conn);
+                var sql = hasStatusColumn
+                    ? $"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff "
+                      + $"AND COALESCE(\"{statusColumn}\", '') <> $released"
+                    : $"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff";
+
+                using var cmd = CreateCommand(sql, conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
                 cmd.Parameters.Add(new SqliteParameter("$cutoff", cutoffUtc));
+                if (hasStatusColumn)
+                {
+                    cmd.Parameters.Add(new SqliteParameter(
+                        "$released", ETL_SQL.Core.Quality.DataQualityColumns.ReleasedStatus));
+                }
                 return await cmd.ExecuteNonQueryAsync(effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))

@@ -105,30 +105,36 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 // Sink-side metrics: row count always, per-column null counts only for columns an
                 // ASSERT JOB NULL_PERCENT predicate registered (zero predicates ⇒ zero per-cell work).
-                var metricRegistrations = context.DataQuality.TracksColumnMetrics
+                // Resolve each tracked column's recorder once. Everything except the per-cell
+                // Record call is loop-invariant, so it stays out of the row loop — this runs for
+                // every row of every sink write when an ASSERT JOB names a column.
+                var trackedColumns = context.DataQuality.TracksColumnMetrics
                     ? context.DataQuality.ColumnMetricRegistrations
+                        .Select(r => r.ColumnName)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Select(column => (Column: column,
+                            Recorder: context.DataQuality.ResolveRecorder(intoTable.TableName, column)))
+                        .Where(t => t.Recorder != null)
+                        .ToList()
                     : null;
                 var sinkRecorded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 await foreach (var batch in source)
                 {
                     totalRows += batch.Rows.Count;
-                    if (metricRegistrations != null)
+                    if (trackedColumns is { Count: > 0 })
                     {
-                        foreach (var column in metricRegistrations
-                            .Select(r => r.ColumnName)
-                            .Distinct(StringComparer.OrdinalIgnoreCase))
+                        foreach (var (column, recorder) in trackedColumns)
                         {
-                            if (!context.DataQuality.ShouldTrackColumnMetric(intoTable.TableName, column)) continue;
                             if (batch.Schema?.GetIndex(column) is not >= 0) continue;
-                            if (sinkRecorded.Add(column))
-                                context.DataQuality.RecordNullTrackedSink(intoTable.TableName, column);
+                            if (sinkRecorded.Add(column)) recorder!.MarkSinkSeen();
+
+                            bool needsValue = recorder!.NeedsValue;
                             foreach (var row in batch.Rows)
-                                context.DataQuality.RecordColumnValue(
-                                    intoTable.TableName,
-                                    column,
-                                    row[column] is null or DBNull,
-                                    row[column]);
+                            {
+                                var cell = row[column];
+                                recorder.Record(cell is null or DBNull, needsValue ? cell : null);
+                            }
                         }
                     }
                     yield return batch;

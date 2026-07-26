@@ -216,6 +216,32 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ZeroSigma_FallsBackToARelativeBand_NotEquality()
+        {
+            // A perfectly flat history gives sigma 0. Collapsing the band to equality would fail
+            // the run on a single extra row — the alert-storm behavior sigma exists to prevent.
+            // ROW_COUNT reports rows processed by the whole run, and the helper both inserts and
+            // loads, so N seeded rows report as 2N. A flat history of 2000 is the baseline for a
+            // 1000-row load.
+            var flatHistory = Enumerable.Range(0, 10)
+                .Select(_ => new JobRunMetrics(2000, 0, 0))
+                .ToArray();
+
+            // 1004 rows → 2008 processed: 0.4% off a flat baseline, inside the 3% band 3 SIGMA
+            // allows. Under the old equality behavior this failed on any deviation at all.
+            var tolerated = NewEvaluatorWithHistory(new FakeMetricsProvider(flatHistory));
+            await LoadWithQuarantine(tolerated, rows: 1004, badRows: 0);
+            await Run(tolerated, "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
+
+            // A genuine collapse still fails.
+            var breached = NewEvaluatorWithHistory(new FakeMetricsProvider(flatHistory));
+            await LoadWithQuarantine(breached, rows: 400, badRows: 0);
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(breached,
+                "ASSERT JOB import (ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL) ON CRITICAL_FAILURE THROW;"));
+            Assert.Contains("sigma 0", ex.Message);
+        }
+
+        [Fact]
         public async Task Freshness_ComparesAgeOfNewestObservedTimestamp()
         {
             var eval = NewEvaluator();

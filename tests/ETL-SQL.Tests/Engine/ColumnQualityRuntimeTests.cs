@@ -327,6 +327,81 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ReplayQuarantine_OnlyMarksTheRowsItActuallyConsumed()
+        {
+            // A steward can release a row through Portal (a separate job that does not hold the
+            // replay lease) while a replay is in flight. That row must not be flipped to
+            // 'replayed' — it was never fed through the statement, and marking it done would
+            // silently discard the fix.
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'first'), (NULL, 'second')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            // Release only the first row; the second stays quarantined for now.
+            await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE Name = 'first';");
+            await Run(eval, "REPLAY QUARANTINE #q;");
+
+            // Now the second row is released *after* that replay consumed the first.
+            await Run(eval, "UPDATE #q SET Id = 20, __dq_status = 'released' WHERE Name = 'second';");
+
+            await Run(eval, "SELECT Name, __dq_status FROM #q;");
+            var rows = eval.LastResult!.Rows.ToDictionary(
+                r => r["Name"]?.ToString()!, r => r[DataQualityColumns.Status]?.ToString());
+
+            Assert.Equal(DataQualityColumns.ReplayedStatus, rows["first"]);
+            // Still awaiting its own replay — not swept up by the previous one.
+            Assert.Equal(DataQualityColumns.ReleasedStatus, rows["second"]);
+        }
+
+        [Fact]
+        public async Task QuarantineEvidence_CannotBeDeletedWhileDispositionIsInFlight()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            var quarantined = await Assert.ThrowsAsync<ExecutionException>(() =>
+                Run(eval, "DELETE FROM #q;"));
+            Assert.Contains("still in flight", quarantined.Message);
+
+            await Run(eval, "UPDATE #q SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+            var released = await Assert.ThrowsAsync<ExecutionException>(() =>
+                Run(eval, "DELETE FROM #q;"));
+            Assert.Contains("still in flight", released.Message);
+
+            // A terminal disposition is the steward's explicit sign-off, so it can be removed.
+            await Run(eval, "UPDATE #q SET __dq_status = 'discarded' WHERE __dq_status = 'released';");
+            await Run(eval, "DELETE FROM #q;");
+            Assert.Empty(await ReadRows(eval, "#q"));
+        }
+
+        [Fact]
+        public async Task FabricatedEvidenceRows_CannotBeInserted()
+        {
+            // Without this guard a hand-authored 'released' row would be picked up by REPLAY
+            // QUARANTINE and injected into the production target as if it had been validated.
+            var eval = NewEvaluator();
+            await Run(eval, "CREATE TABLE #q2 (Id INT, Name VARCHAR(50), __dq_status VARCHAR(20));");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
+                "INSERT INTO #q2 (Id, Name, __dq_status) VALUES (1, 'injected', 'released');"));
+
+            Assert.Contains("__dq_status", ex.Message);
+            Assert.Contains("evidence column", ex.Message);
+        }
+
+        [Fact]
         public async Task ReplayQuarantine_ReplaysReleasedProbeRowsThroughN1HashJoin()
         {
             var provider = new CapturingMetricsProvider();

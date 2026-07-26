@@ -182,6 +182,12 @@ public interface IDataSource : IAsyncDisposable
 /// </summary>
 public interface IDataQualityRetentionPruner
 {
+    /// <summary>
+    /// Deletes data-quality capture rows older than <paramref name="cutoffUtc"/>.
+    /// Implementations MUST NOT delete rows whose disposition is still in flight — a
+    /// <c>released</c> row is a steward's pending fix waiting to be replayed, and pruning it
+    /// silently discards that work. Only terminal dispositions age out.
+    /// </summary>
     Task<int> PruneDataQualityRowsAsync(
         string timestampColumn,
         DateTime cutoffUtc,

@@ -14,13 +14,15 @@ namespace ETL_SQL.Portal.Controllers;
 
 [ApiController]
 [Route("api/data-quality")]
-[Authorize]
+[Authorize(Policy = "DataQualityStewardAccess")]
 [RequirePortalModule("Reporting")]
 public sealed class DataQualityController(
     IJobHistoryStore jobHistory,
     IJobChannel jobChannel,
     IServiceProvider services,
     ETL_SQL.Common.ILogger engineLogger,
+    ETL_SQL.Portal.Data.PortalDbContext db,
+    PortalConfig portalConfig,
     ILogger<DataQualityController> logger) : ControllerBase
 {
     private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
@@ -103,7 +105,12 @@ public sealed class DataQualityController(
                 SessionId = $"dq-rows-{Guid.NewGuid():N}"
             };
             await using var session = new ExecutionSession(services, sessionContext, engineLogger);
-            var result = await session.ExecuteAsync(script, timeout.Token, "portal-data-quality-rows");
+            // Quarantine rows are copies of raw source data, so the preview must run under the
+            // caller's execution identity — row-level security and PII controls apply here exactly
+            // as they do to any other data view.
+            var identity = await BuildExecutionIdentityAsync(timeout.Token);
+            var result = await session.ExecuteAsync(
+                script, timeout.Token, "portal-data-quality-rows", executionIdentity: identity);
             if (!result.Success)
             {
                 var message = result.Diagnostics.Count > 0
@@ -255,6 +262,49 @@ public sealed class DataQualityController(
                 ETL_SQL.Core.Common.LogSanitizer.Clean(manifest.QuarantineTarget));
             return StatusCode(503, new { error = "Unable to submit quarantine disposition job." });
         }
+    }
+
+    /// <summary>
+    /// Resolves the caller's roles and groups so row-level security applies to the quarantine row
+    /// preview. Mirrors <c>PortalDesignerPreviewService.BuildIdentityAsync</c>.
+    /// </summary>
+    private async Task<ETL_SQL.Core.Governance.ExecutionIdentity?> BuildExecutionIdentityAsync(
+        CancellationToken cancellationToken)
+    {
+        var claimIdentity = ETL_SQL.Portal.Services.PortalDesignerSchemaService.BuildIdentity(User);
+        if (claimIdentity.EffectiveUserId is not int userId)
+            return claimIdentity;
+
+        var portalUser = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+            .FirstOrDefaultAsync(
+                Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AsNoTracking(db.Users),
+                u => u.Id == userId,
+                cancellationToken);
+        if (portalUser is null) return null;
+
+        var roles = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            from ur in db.UserRoles
+            join r in db.Roles on ur.RoleId equals r.Id
+            where ur.UserId == userId && r.Name != null
+            select r.Name!,
+            cancellationToken);
+        var groups = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+            from ug in db.UserGroups
+            join g in db.Groups on ug.GroupId equals g.Id
+            where ug.UserId == userId
+            select g.Name,
+            cancellationToken);
+
+        var name = portalUser.UserName ?? claimIdentity.EffectiveUser ?? userId.ToString();
+        return claimIdentity with
+        {
+            EffectiveUser = name,
+            RealUser = name,
+            IsAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase) || User.IsInRole("Admin"),
+            AdminBypassesRowLevelSecurity = portalConfig.Security.AdminBypassRowLevelSecurity,
+            Roles = roles,
+            Groups = groups
+        };
     }
 
     private async Task<QuarantineReplayManifest?> FindManifestAsync(string quarantineTarget, string? jobName)

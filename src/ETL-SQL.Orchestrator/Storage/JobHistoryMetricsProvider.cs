@@ -117,7 +117,13 @@ public sealed class JobHistoryMetricsProvider(IJobHistoryStore store, IClusterLo
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (locks == null) return true;
+        // Fail closed. This lease is the only thing stopping two concurrent replays from consuming
+        // the same released set and double-inserting into the production target, so a host that
+        // did not supply a lock store must not silently get an unguarded replay.
+        if (locks == null)
+            throw new InvalidOperationException(
+                "Quarantine replay requires a cluster lock store; this host was constructed without one, " +
+                "and running unguarded could double-insert released rows.");
         return await locks.TryAcquireLockAsync(QuarantineReplayLockName(jobName, quarantineTarget), owner, ttl);
     }
 

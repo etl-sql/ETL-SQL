@@ -446,8 +446,11 @@ Mean and population standard deviation over the same last-N window the mean base
 loads — no new storage, no new provider call, only a second aggregate over data already in hand.
 Cold start needs a **higher** minimum than the mean baseline (a stddev over three points is
 meaningless); `MinSigmaHistoryRuns` defaults to 10 and skips with the same warning below it. A
-zero standard deviation (a perfectly stable job) collapses the band to equality, so it falls back
-to the relative-tolerance path with a warning rather than failing every run.
+zero standard deviation (a perfectly stable job) would collapse the band to equality — failing the
+run on a single extra row, exactly the alert-storm behavior sigma exists to prevent — so it falls
+back with a warning to a relative tolerance around the mean of **1% per requested sigma**
+(`WITHIN 3 SIGMA` ⇒ 3%). When the baseline is also zero there is no band to define and the
+predicate is skipped.
 
 ### Seasonality — same-weekday baselines
 

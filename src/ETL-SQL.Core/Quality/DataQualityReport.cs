@@ -90,19 +90,65 @@ public sealed class DataQualityReport
 
     public void RecordColumnValue(string? targetTable, string columnName, bool isNull, object? value)
     {
-        if (!_tracksColumnMetrics) return;
-        var normalizedTarget = NormalizeTarget(targetTable);
-        var registrations = MatchingRegistrations(normalizedTarget, columnName).ToList();
-        if (registrations.Count == 0) return;
+        var recorder = ResolveRecorder(targetTable, columnName);
+        recorder?.Record(isNull, value);
+    }
 
-        var trackNullPercent = registrations.Any(r => r.TrackNullPercent);
-        var trackFreshness = registrations.Any(r => r.TrackFreshness);
+    /// <summary>
+    /// Resolves the per-(target, column) recorder once, so the caller's row loop does a single
+    /// virtual call per row instead of re-normalizing the target name and re-scanning the
+    /// registration set for every cell. Returns null when the column is not tracked.
+    /// </summary>
+    public ColumnMetricRecorder? ResolveRecorder(string? targetTable, string columnName)
+    {
+        if (!_tracksColumnMetrics) return null;
+
+        var normalizedTarget = NormalizeTarget(targetTable);
+        bool trackNullPercent = false;
+        bool trackFreshness = false;
+        bool matched = false;
+        foreach (var registration in _columnRegistrations.Values)
+        {
+            if (!registration.ColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (registration.TargetTable != null && !TargetMatches(registration.TargetTable, normalizedTarget)) continue;
+            matched = true;
+            trackNullPercent |= registration.TrackNullPercent;
+            trackFreshness |= registration.TrackFreshness;
+        }
+        if (!matched) return null;
+
         var accumulator = _columnMetrics.GetOrAdd(
             (normalizedTarget ?? "", columnName),
             _ => new ColumnMetricAccumulator(normalizedTarget, columnName));
-        accumulator.Add(
-            trackNullPercent ? isNull : null,
-            trackFreshness ? TryCoerceDateTimeOffset(value) : null);
+        return new ColumnMetricRecorder(accumulator, trackNullPercent, trackFreshness);
+    }
+
+    /// <summary>
+    /// A pre-resolved handle for recording one tracked column's values. Hoist this out of the row
+    /// loop; <see cref="Record"/> is the only per-row work.
+    /// </summary>
+    public sealed class ColumnMetricRecorder
+    {
+        private readonly ColumnMetricAccumulator _accumulator;
+        private readonly bool _trackNullPercent;
+        private readonly bool _trackFreshness;
+
+        internal ColumnMetricRecorder(ColumnMetricAccumulator accumulator, bool trackNullPercent, bool trackFreshness)
+        {
+            _accumulator = accumulator;
+            _trackNullPercent = trackNullPercent;
+            _trackFreshness = trackFreshness;
+        }
+
+        /// <summary>True when this column needs the cell value (freshness tracking), not just its nullness.</summary>
+        public bool NeedsValue => _trackFreshness;
+
+        public void MarkSinkSeen() => _accumulator.MarkSinkSeen();
+
+        public void Record(bool isNull, object? value) =>
+            _accumulator.Add(
+                _trackNullPercent ? isNull : null,
+                _trackFreshness ? TryCoerceDateTimeOffset(value) : null);
     }
 
     /// <summary>
@@ -275,7 +321,7 @@ public sealed class DataQualityReport
         return null;
     }
 
-    private sealed class ColumnMetricAccumulator(string? targetTable, string columnName)
+    internal sealed class ColumnMetricAccumulator(string? targetTable, string columnName)
     {
         private long _total;
         private long _nulls;

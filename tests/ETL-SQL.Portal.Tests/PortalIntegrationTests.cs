@@ -1154,6 +1154,35 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_Endpoints_AreDeniedToNonStewards()
+    {
+        // Quarantine remediation reads raw failing source rows (whatever PII the source carried),
+        // edits them, and enqueues jobs that re-run production loads. A plain report Viewer must
+        // not be able to do any of that.
+        var viewerToken = await GetFreshViewerTokenAsync();
+
+        var queue = await AuthGet(viewerToken, "/api/data-quality/quarantine");
+        Assert.Equal(HttpStatusCode.Forbidden, queue.StatusCode);
+
+        var rows = await AuthGet(viewerToken, "/api/data-quality/quarantine/rows?quarantineTarget=q_any");
+        Assert.Equal(HttpStatusCode.Forbidden, rows.StatusCode);
+
+        var replay = await AuthPost(viewerToken, "/api/data-quality/quarantine/replay", new
+        {
+            quarantineTarget = "q_any"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, replay.StatusCode);
+
+        var disposition = await AuthPost(viewerToken, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_any",
+            rowIds = new[] { "abc" },
+            disposition = "released"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, disposition.StatusCode);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {

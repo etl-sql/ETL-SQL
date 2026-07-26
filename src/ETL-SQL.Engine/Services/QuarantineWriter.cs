@@ -120,8 +120,15 @@ internal sealed class QuarantineWriter(
                 return;
             }
 
+            // A 'released' row is a steward's pending fix awaiting replay — ageing it out would
+            // discard that work silently, so only terminal dispositions prune.
             int removed = memory.RemoveRows(row =>
-                row[DataQualityColumns.Timestamp] is DateTime ts && ts < cutoff);
+                row[DataQualityColumns.Timestamp] is DateTime ts
+                && ts < cutoff
+                && !string.Equals(
+                    row[DataQualityColumns.Status]?.ToString(),
+                    DataQualityColumns.ReleasedStatus,
+                    StringComparison.OrdinalIgnoreCase));
             if (removed < 0)
                 context.Logger.Debug(
                     "Data-quality retention on '{Target}' did not run: the table has spilled to disk.", target);
