@@ -525,10 +525,11 @@ public sealed class ColumnQualityValidator
         string? nonReplayableReason = null;
         string replayMode = replayProvenance == null ? "single-table" : "probe-join";
         string? probeSourceTable = replayProvenance?.SourceTable;
-        string? joinBuildTable = replayProvenance != null && _statement.Joins.Count == 1
+        string? joinBuildTable = replayProvenance?.JoinBuildTable
+            ?? (replayProvenance != null && _statement.Joins.Count == 1
             ? _statement.Joins[0].Table.GetSourceTables().FirstOrDefault() ?? _statement.Joins[0].Table.ToSql()
-            : null;
-        bool? joinObservedN1 = replayProvenance == null ? null : false;
+            : null);
+        bool? joinObservedN1 = replayProvenance == null ? null : replayProvenance.JoinObservedN1;
         string? joinNonReplayableReason = null;
 
         if (string.IsNullOrWhiteSpace(_context.CurrentSectionLabel))
@@ -537,9 +538,11 @@ public sealed class ColumnQualityValidator
             nonReplayableReason = "quarantine source table could not be resolved";
         else if (replayProvenance != null)
         {
-            joinNonReplayableReason = _statement.Joins.Count == 1
-                ? "join replay requires an observed N:1 join gate"
-                : "join replay supports exactly one build-side join in this version";
+            joinNonReplayableReason = _statement.Joins.Count == 1 && replayProvenance.JoinObservedN1
+                ? null
+                : _statement.Joins.Count == 1
+                    ? replayProvenance.JoinNonReplayableReason ?? "join replay requires an observed N:1 join gate"
+                    : "join replay supports exactly one build-side join in this version";
             nonReplayableReason = joinNonReplayableReason;
         }
         else if (sourceTables.Count != 1)

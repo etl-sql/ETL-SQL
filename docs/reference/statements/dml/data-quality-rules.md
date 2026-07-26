@@ -99,15 +99,27 @@ read, including ones absent from the SELECT list — plus these engine columns:
 | `__dq_target_written` | Warn tables only: always `1`, confirming the row still reached the main target. |
 
 The pre-projection row is captured rather than the output row because it points stewards at the
-*cause* (the source value) rather than the symptom.
+*cause* (the source value) rather than the symptom. For replayable hash-join quarantines, the
+captured row is the probe/source row, not the combined joined row; the join is re-executed during
+replay against the current build-side table.
 
 ## Remediation Replay
 
 `REPLAY QUARANTINE <table>` resolves the orchestrator replay manifest for the current job and
 quarantine target, verifies that the target is replayable, reads rows whose `__dq_status` is
 `released`, strips engine-owned `__dq_*` evidence columns, and resumes the recorded section label
-with those rows substituted for the original source table. Missing manifests and non-replayable
-shapes, such as join-source quarantines, fail before replay starts.
+with those rows substituted for the original source table or probe source table. Missing manifests
+and non-replayable shapes fail before replay starts.
+
+Replayable shapes are:
+
+- **Single-table source** — released rows replace the original source table.
+- **Probe-side hash join** — released rows replace the probe/source table when the run observed at
+  most one build-side row per probe key (`JoinObservedN1 = true` in the manifest). The build table is
+  read again during replay, so steward fixes to dimension/reference data are picked up.
+
+Fan-out joins are non-replayable. The diagnostic reports that join replay requires an observed N:1
+join gate.
 
 After the replayed section completes successfully, consumed rows move from `released` to
 `replayed`. A failed replay leaves released rows eligible for retry. Orchestrator-hosted replay
@@ -125,6 +137,8 @@ takes a cluster lock on the quarantine target before scanning released rows.
 - **`QUARANTINE` is only legal at a sink boundary** — a top-level SELECT, `INSERT … SELECT`, or
   `SELECT … INTO`. On a nested subquery or CTE column it is an error, because it is a filter with a
   side effect that would silently change downstream row counts.
+- **Join replay requires an observed N:1 hash join.** Non-hash joins and fan-out hash joins are
+  captured for steward review but rejected by `REPLAY QUARANTINE` before replay starts.
 - **`UNIQUE_FIRST` / `UNIQUE_LAST` require an explicit `BY` key.** Source, spill, and parallel order
   are not stable, so "first" would otherwise be non-deterministic. When two rows tie on the order
   key, the surviving row is chosen by a deterministic full-row comparison, so repeated runs over the

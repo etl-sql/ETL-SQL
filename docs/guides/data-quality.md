@@ -107,8 +107,10 @@ WHERE __dq_column = 'Email' AND __dq_ts >= CURRENT_DATE;
 When the run is orchestrator-hosted, the engine also records a replay manifest for each quarantine
 target. The manifest captures the job, script, section label, source table, quarantine target, and
 input schema fingerprint that the remediation workflow will use. Labeled single-source quarantines
-are replayable; join-source quarantines still capture rows but are marked non-replayable until the
-join provenance design ships.
+are replayable. Hash joins are also replayable when the observed build-side keys are N:1 for the
+run: the quarantine table captures only the probe/source row, and replay re-runs the join against
+the current build table. Fan-out joins remain non-replayable because one released probe row could
+regenerate sibling output rows that already passed.
 
 To mark a fixed quarantine row ready for replay, edit the captured source columns and set
 `__dq_status = 'released'`. The engine treats the other `__dq_*` columns as immutable evidence.

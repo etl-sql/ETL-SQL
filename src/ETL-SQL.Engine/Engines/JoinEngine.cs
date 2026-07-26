@@ -919,6 +919,8 @@ public class JoinEngine
             if (!hashTable.TryGetValue(key, out var list)) { list = new List<Row>(); hashTable[key] = list; }
             list.Add(r);
         }
+        bool buildSideUnique = hashTable.Values.All(bucket => bucket.Count <= 1);
+        string buildTable = join.Table.GetSourceTables().FirstOrDefault() ?? join.Table.ToSql();
 
         var matchedRight = new HashSet<Row>();
 
@@ -939,6 +941,7 @@ public class JoinEngine
                     if (await _context.EvaluateCondition(join.Condition, combined))
                     {
                         foundMatch = true;
+                        AnnotateJoinReplayObservation(combined, buildTable, buildSideUnique);
                         if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
 
                         yield return combined;
@@ -1100,6 +1103,30 @@ public class JoinEngine
         }
 
         return combined;
+    }
+
+    private static void AnnotateJoinReplayObservation(Row row, string buildTable, bool buildSideUnique)
+    {
+        var provenance = row.DataQualityReplayProvenance;
+        if (provenance == null) return;
+
+        if (!string.IsNullOrWhiteSpace(provenance.JoinBuildTable)
+            && !provenance.JoinBuildTable.Equals(buildTable, StringComparison.OrdinalIgnoreCase))
+        {
+            row.DataQualityReplayProvenance = provenance with
+            {
+                JoinObservedN1 = false,
+                JoinNonReplayableReason = "join replay supports exactly one build-side join in this version"
+            };
+            return;
+        }
+
+        row.DataQualityReplayProvenance = provenance with
+        {
+            JoinBuildTable = buildTable,
+            JoinObservedN1 = buildSideUnique,
+            JoinNonReplayableReason = buildSideUnique ? null : "join replay requires an observed N:1 join gate"
+        };
     }
 
     private static bool IsSemiJoin(string type) => type.Contains("SEMI", StringComparison.OrdinalIgnoreCase);

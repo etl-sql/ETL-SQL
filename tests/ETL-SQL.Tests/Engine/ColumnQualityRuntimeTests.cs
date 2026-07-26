@@ -327,6 +327,45 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ReplayQuarantine_ReplaysReleasedProbeRowsThroughN1HashJoin()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                CREATE TABLE #dim (Name VARCHAR(100), Region VARCHAR(10));
+                INSERT INTO #dim (Name, Region) VALUES ('divert', 'NA');
+                import_joined_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, #src.Name, #dim.Region
+                INTO #clean FROM #src
+                INNER HASH JOIN #dim ON #src.Name = #dim.Name
+                ON FAILURE QUARANTINE TO #q;");
+
+            var manifest = Assert.Single(provider.Manifests);
+            Assert.True(manifest.IsReplayable);
+            Assert.Equal("probe-join", manifest.ReplayMode);
+            Assert.Equal("#src", manifest.SourceTable);
+            Assert.Equal("#src", manifest.ProbeSourceTable);
+            Assert.Equal("#dim", manifest.JoinBuildTable);
+            Assert.True(manifest.JoinObservedN1);
+            Assert.Null(manifest.JoinNonReplayableReason);
+
+            await Run(eval, "UPDATE #q SET Id = 10, __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+            await Run(eval, "REPLAY QUARANTINE #q;");
+
+            Assert.Equal("replayed", Assert.Single(eval.LastResult!.Rows)["Status"]);
+
+            await Run(eval, "SELECT Id, Name, Region FROM #clean WHERE Id = 10;");
+            var cleanRow = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(10m, cleanRow["Id"]);
+            Assert.Equal("divert", cleanRow["Name"]);
+            Assert.Equal("NA", cleanRow["Region"]);
+        }
+
+        [Fact]
         public async Task ReplayQuarantine_FailsWhenManifestIsMissing()
         {
             var eval = NewEvaluator();

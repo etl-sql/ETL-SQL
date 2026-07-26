@@ -52,10 +52,10 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
       and join replay non-replayable reason.
 - [x] Capture probe-side provenance through the streaming hash-join path so quarantined join output
       can persist the original probe row rather than the combined post-join row.
-- [ ] Add the observed N:1 gate by detecting build-side duplicate keys during hash table build and
+- [x] Add the observed N:1 gate by detecting build-side duplicate keys during hash table build and
       recording replayability in the manifest.
-- [ ] Extend `REPLAY QUARANTINE` to substitute released rows at the probe source for replayable
+- [x] Extend `REPLAY QUARANTINE` to substitute released rows at the probe source for replayable
       N:1 joins while keeping existing lease and disposition semantics.
-- [ ] Update docs/help/LSP surfaces for `REPLAY QUARANTINE`, data-quality remediation, and the
+- [x] Update docs/help/LSP surfaces for `REPLAY QUARANTINE`, data-quality remediation, and the
       fan-out non-replayable diagnostic.
 

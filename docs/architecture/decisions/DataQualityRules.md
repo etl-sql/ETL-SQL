@@ -47,6 +47,10 @@
 > stripped of `__dq_*` evidence columns, substituted for the recorded source table, and run through
 > the existing resume-at-label machinery. Successful replay flips consumed rows to `replayed`, and
 > orchestrator-hosted replay is fenced by the cluster-lock store.
+> Rev 10 (2026-07-25): v3 probe-side hash-join replay implemented for observed N:1 build keys.
+> Join quarantines capture probe/source rows, manifests record `probe-join` provenance and the
+> build table, fan-out joins remain non-replayable with a specific N:1 diagnostic, and released
+> probe rows replay through the existing source-substitution path.
 
 ## Goal
 
@@ -572,18 +576,19 @@ replay; fan-out join → non-replayable (steered away by the v2 replayability li
 
 ### V3 implementation slices
 
-1. **Manifest compatibility** — ship the provenance fields above with defaults so existing manifests
+1. **Manifest compatibility** — shipped the provenance fields above with defaults so existing manifests
    deserialize as `single-table`.
-2. **Probe provenance carrier** — preserve the original probe/source row through the streaming
+2. **Probe provenance carrier** — shipped preservation of the original probe/source row through the streaming
    hash-join path separately from the joined output row, so quarantine capture can write source
    columns instead of post-join columns for `probe-join` manifests.
-3. **Observed N:1 gate** — detect build-side duplicate join keys while building the hash table and
+3. **Observed N:1 gate** — shipped detection of build-side duplicate join keys while building the hash table and
    record `JoinObservedN1 = true/false` on the run's manifest. Fan-out remains non-replayable.
-4. **Replay substitution** — extend `REPLAY QUARANTINE` to substitute released rows at
+4. **Replay substitution** — shipped `REPLAY QUARANTINE` substitution of released rows at
    `ProbeSourceTable` when `ReplayMode = 'probe-join'`, then resume at the recorded label using
    the current build-side tables.
-5. **Docs, help, and lint** — update `REPLAY QUARANTINE`, the data-quality guide, Portal queue copy,
-   and diagnostics for `single-table`, `probe-join`, and fan-out join cases.
+5. **Docs and diagnostics** — shipped `REPLAY QUARANTINE` reference/guide updates and the fan-out
+   non-replayable diagnostic. Portal queue copy already surfaces the manifest fields; no embedded
+   help resource exists in this tree for a separate hover update.
 
 ---
 

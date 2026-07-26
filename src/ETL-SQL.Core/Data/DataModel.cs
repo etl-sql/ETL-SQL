@@ -136,7 +136,12 @@ public class TableSchema
 /// Identifies the original probe-side input row for data-quality replay of join-backed rows.
 /// This is internal row metadata, not a logical table column.
 /// </summary>
-public sealed record DataQualityReplayProvenance(string SourceTable, Row SourceRow);
+public sealed record DataQualityReplayProvenance(
+    string SourceTable,
+    Row SourceRow,
+    bool JoinObservedN1 = false,
+    string? JoinBuildTable = null,
+    string? JoinNonReplayableReason = null);
 
 /// <summary>
 /// Represents a single row of tabular data.
