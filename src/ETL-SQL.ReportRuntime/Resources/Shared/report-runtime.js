@@ -800,7 +800,12 @@
                 alert('Error saving default view: ' + e.message);
             }
         });
-        actions.appendChild(defaultViewBtn);
+        // Saving a default view needs the Portal's per-user saved-views API, which the VS Code
+        // preview has no session for — the click would POST to a relative URL that does not exist
+        // and surface a native alert. Keep the preview chrome to its own actions below.
+        if (!vscode) {
+            actions.appendChild(defaultViewBtn);
+        }
 
         if (vscode) {
             const openBtn = document.createElement('button');
