@@ -86,7 +86,14 @@ public class ReportAuthorshipRevocationTests
         Assert.False(await CatalogContainsAsync(client, authorToken, reportName, reportId),
             "A report the author can no longer open must not remain visible in catalog search.");
 
-        // 3. Approval authority — deciding a request grants access to someone else.
+        // 3. The pending-request listing must not keep exposing requester identities and reasons
+        //    to someone who can no longer decide them.
+        var pendingAfter = await AuthGet(client, authorToken, "/api/reports/access-requests/pending");
+        Assert.Equal(HttpStatusCode.OK, pendingAfter.StatusCode);
+        var pendingItems = await pendingAfter.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.DoesNotContain(pendingItems!, item => item?["reportId"]?.GetValue<int>() == reportId);
+
+        // 4. Approval authority — deciding a request grants access to someone else.
         var approve = await AuthPost(client, authorToken,
             $"/api/reports/access-requests/{requestId}/approve", new { permission = Read });
         Assert.Equal(HttpStatusCode.Forbidden, approve.StatusCode);

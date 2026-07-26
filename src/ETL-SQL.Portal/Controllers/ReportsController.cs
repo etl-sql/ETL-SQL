@@ -1475,23 +1475,34 @@ public class ReportsController : ControllerBase
     [HttpGet("reports/access-requests/pending")]
     public async Task<IActionResult> GetPendingAccessRequests()
     {
-        var query = db.ReportAccessRequests
+        var pending = await db.ReportAccessRequests
             .AsNoTracking()
             .Include(r => r.Report)
             .Include(r => r.Requester)
-            .Where(r => r.Status == "Pending");
+            .Where(r => r.Status == "Pending")
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
 
         if (!IsAdmin)
         {
-            var userReportIds = await db.Reports
-                .Where(r => r.CreatedBy == CurrentUserId)
-                .Select(r => r.Id)
-                .ToListAsync();
-            query = query.Where(r => userReportIds.Contains(r.ReportId));
+            // Show exactly the requests the caller can actually decide. Filtering on authorship
+            // instead would let someone who has lost access to a report keep enumerating who is
+            // requesting it and why, long after they stopped being able to approve or deny.
+            var decidable = new List<ReportAccessRequest>(pending.Count);
+            var permissionByReport = new Dictionary<int, bool>();
+            foreach (var request in pending)
+            {
+                if (!permissionByReport.TryGetValue(request.ReportId, out var allowed))
+                {
+                    allowed = await CanDecideAccessRequestAsync(request.Report);
+                    permissionByReport[request.ReportId] = allowed;
+                }
+                if (allowed) decidable.Add(request);
+            }
+            pending = decidable;
         }
 
-        var list = await query
-            .OrderByDescending(r => r.CreatedAt)
+        var list = pending
             .Select(r => new PendingAccessRequestDto(
                 r.Id,
                 r.ReportId,
@@ -1502,7 +1513,7 @@ public class ReportsController : ControllerBase
                 r.Reason,
                 r.Status,
                 r.CreatedAt))
-            .ToListAsync();
+            .ToList();
 
         return Ok(list);
     }

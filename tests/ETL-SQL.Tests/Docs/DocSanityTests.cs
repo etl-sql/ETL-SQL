@@ -131,6 +131,19 @@ namespace ETL_SQL.Tests.Docs
             }
         }
 
+        /// <summary>
+        /// Documents that describe <em>proposed</em> syntax rather than shipped behavior. Their SQL
+        /// blocks deliberately reference options and statement forms that do not exist yet, so
+        /// validating them against the current connector metadata would make planning work fail the
+        /// release gate. Keep this list to genuinely forward-looking documents — anything describing
+        /// behavior a user can actually run belongs in the validated set.
+        /// </summary>
+        private static readonly HashSet<string> ForwardLookingDocs =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                "ROADMAP.md",
+            };
+
         [Fact]
         public void GeneralDocs_CreateConnectionOptions_AreSupportedByConnector()
         {
@@ -142,7 +155,9 @@ namespace ETL_SQL.Tests.Docs
                 .Where(f =>
                 {
                     var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    return !parts.Contains("architecture") && !parts.Contains("templates");
+                    return !parts.Contains("architecture")
+                        && !parts.Contains("templates")
+                        && !ForwardLookingDocs.Contains(Path.GetFileName(f));
                 })
                 .ToArray();
 
