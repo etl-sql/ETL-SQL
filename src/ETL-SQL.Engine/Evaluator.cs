@@ -204,6 +204,12 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
     public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
+
+    /// <summary>
+    /// When true, <c>@expect</c> rules report what they would do without enforcing it. Session
+    /// state rather than an option, so it resets with the session and never persists into a job.
+    /// </summary>
+    public bool DataQualityDryRun { get; set; }
     /// <summary>
     /// Per-run data-quality outcomes accumulated by <c>@expect</c> rule enforcement. Stays empty
     /// (and costs nothing) when no statement carries rules.

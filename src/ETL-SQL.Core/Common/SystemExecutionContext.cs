@@ -130,6 +130,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
     public string ScriptHashPolicy { get; set; } = "Warn";
     public bool CaseSensitiveComparison { get; set; }
+    public bool DataQualityDryRun { get; set; }
     public Quality.DataQualityReport DataQuality { get; } = new();
 
     public Stack<Row> OuterRowStack { get; } = new();

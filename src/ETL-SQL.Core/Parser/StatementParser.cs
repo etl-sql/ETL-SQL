@@ -358,6 +358,7 @@ public class StatementParser
         if (_parser.Match(TokenType.TELEMETRY)) return SystemParser.ParseSetThreshold(ThresholdType.Telemetry);
         if (_parser.Match(TokenType.INTERACTIVE_MODE)) return SystemParser.ParseSetThreshold(ThresholdType.InteractiveMode);
         if (_parser.Match(TokenType.CASE_SENSITIVE)) return SystemParser.ParseSetThreshold(ThresholdType.CaseSensitive);
+        if (_parser.Match(TokenType.DATA_QUALITY_DRY_RUN)) return SystemParser.ParseSetThreshold(ThresholdType.DataQualityDryRun);
         if (_parser.Match(TokenType.LINEAGE)) return SystemParser.ParseSetThreshold(ThresholdType.Lineage);
         if (_parser.Match(TokenType.LINEAGE_NAMESPACE)) return SystemParser.ParseSetThreshold(ThresholdType.LineageNamespace);
         if (_parser.Match(TokenType.LINEAGE_IMPORT_CATALOG)) return SystemParser.ParseSetThreshold(ThresholdType.LineageImportCatalog);

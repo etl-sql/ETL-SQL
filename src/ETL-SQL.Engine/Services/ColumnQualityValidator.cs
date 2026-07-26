@@ -97,8 +97,12 @@ public sealed class ColumnQualityValidator
             .ToDictionary(g => g.Key, g => g.First());
 
         // Symmetric validation (design decision 5) — the linter reports these first, but the
-        // engine must not silently drop enforcement when lint was skipped.
-        foreach (var action in ruleSets.SelectMany(rs => rs.Bindings).Select(b => b.Action).Distinct())
+        // engine must not silently drop enforcement when lint was skipped. A dry run is exempt:
+        // it never routes a row anywhere, so demanding a routing clause would force a steward to
+        // author the very wiring they are still deciding whether to adopt.
+        foreach (var action in context.DataQualityDryRun
+            ? []
+            : ruleSets.SelectMany(rs => rs.Bindings).Select(b => b.Action).Distinct())
         {
             if (action == FailAction.Quarantine && !routing.ContainsKey(FailAction.Quarantine))
                 throw new ExecutionException(
@@ -328,6 +332,15 @@ public sealed class ColumnQualityValidator
         _context.DataQuality.RecordRowValidated();
         var failure = await EvaluateRowAsync(input, projected, rowOrdinal, cancellationToken);
 
+        // Dry run: the failure has already been counted into the report, which is the whole point —
+        // the steward gets the impact numbers. Enforcement is skipped, so no row leaves the output,
+        // no capture table is written, and the load behaves exactly as it would without the rule.
+        if (_context.DataQualityDryRun)
+        {
+            if (failure is not null) _context.DataQuality.RecordRowDryRunAffected();
+            return true;
+        }
+
         if (failure is { Action: FailAction.Quarantine })
         {
             await QuarantineAsync(input, failure, cancellationToken);
@@ -397,7 +410,9 @@ public sealed class ColumnQualityValidator
                         ruleSet.ColumnName, rule.Text, binding.Action, value, ruleSet.IsPii, ruleSet.Owner);
 
                     var reason = DescribeFailure(rule, value, ruleSet);
-                    if (binding.Action == FailAction.Throw)
+                    // A dry run must not abort the load — the point is to learn the impact of a
+                    // rule that is not trusted yet.
+                    if (binding.Action == FailAction.Throw && !_context.DataQualityDryRun)
                     {
                         throw new ExecutionException(
                             $"Data quality rule failed: column '{ruleSet.ColumnName}' {reason}.",

@@ -146,6 +146,9 @@ public class SetThresholdStatementHandler : IStatementHandler
             case ThresholdType.CaseSensitive:
                 context.CaseSensitiveComparison = Convert.ToBoolean(val);
                 break;
+            case ThresholdType.DataQualityDryRun:
+                context.DataQualityDryRun = Convert.ToBoolean(val);
+                break;
             case ThresholdType.Lineage:
                 context.LineageEnabled = Convert.ToBoolean(val);
                 break;

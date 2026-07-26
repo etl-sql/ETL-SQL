@@ -25,6 +25,7 @@ public sealed class DataQualityReport
     private long _rowsQuarantined;
     private long _rowsWarned;
     private long _rowsValidated;
+    private long _rowsDryRunAffected;
 
     // Per-column run metrics, collected ONLY for columns an ASSERT JOB predicate names. A script
     // with no NULL_PERCENT/FRESHNESS predicate registers nothing, so the per-cell check never runs.
@@ -47,6 +48,16 @@ public sealed class DataQualityReport
     public void RecordRowValidated() => Interlocked.Increment(ref _rowsValidated);
     public void RecordRowQuarantined() => Interlocked.Increment(ref _rowsQuarantined);
     public void RecordRowWarned() => Interlocked.Increment(ref _rowsWarned);
+
+    /// <summary>
+    /// Rows that failed at least one rule during a dry run — i.e. rows that <em>would</em> have
+    /// been diverted or warned had the rules been enforced. Counted separately from
+    /// <see cref="RowsQuarantined"/>/<see cref="RowsWarned"/> so a dry run cannot be mistaken for
+    /// real enforcement in job history.
+    /// </summary>
+    public long RowsDryRunAffected => Interlocked.Read(ref _rowsDryRunAffected);
+
+    public void RecordRowDryRunAffected() => Interlocked.Increment(ref _rowsDryRunAffected);
 
     /// <summary>
     /// True when at least one column is registered for null tracking — the guard callers check
@@ -274,6 +285,7 @@ public sealed class DataQualityReport
         Interlocked.Exchange(ref _rowsQuarantined, 0);
         Interlocked.Exchange(ref _rowsWarned, 0);
         Interlocked.Exchange(ref _rowsValidated, 0);
+        Interlocked.Exchange(ref _rowsDryRunAffected, 0);
     }
 
     private static string Format(object? value) => value switch

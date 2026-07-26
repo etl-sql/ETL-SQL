@@ -361,6 +361,67 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task DryRun_ReportsImpactWithoutEnforcing()
+        {
+            // The point of a dry run: learn how many rows a candidate rule would take out, without
+            // it taking any out.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (NULL, 'b'), (NULL, 'c')");
+
+            await Run(eval, @"
+                SET DATA_QUALITY_DRY_RUN = ON;
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src;");
+
+            // Nothing was diverted or thrown: the load behaves exactly as it would without rules.
+            Assert.Equal(3, await CountRows(eval, "#clean"));
+            Assert.Equal(0, eval.DataQuality.RowsQuarantined);
+            Assert.Equal(0, eval.DataQuality.RowsWarned);
+
+            // ...but the steward gets the impact numbers.
+            Assert.Equal(2, eval.DataQuality.RowsDryRunAffected);
+            var failure = Assert.Single(eval.DataQuality.Failures);
+            Assert.Equal("Id", failure.Column);
+            Assert.Equal(2, failure.Count);
+        }
+
+        [Fact]
+        public async Task DryRun_DoesNotRequireRoutingClauses_NorThrow()
+        {
+            // A QUARANTINE rule without ON FAILURE is a hard error normally; during a dry run the
+            // steward has not decided on wiring yet, and a THROW rule must not abort the load.
+            var eval = NewEvaluator();
+            await Seed(eval, "(NULL, 'a')");
+
+            await Run(eval, @"
+                SET DATA_QUALITY_DRY_RUN = ON;
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'THROW'; */, Name
+                INTO #clean FROM #src;");
+
+            Assert.Equal(1, await CountRows(eval, "#clean"));
+            Assert.Equal(1, eval.DataQuality.RowsDryRunAffected);
+        }
+
+        [Fact]
+        public async Task DryRun_TurnedOff_EnforcesNormally()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (NULL, 'b')");
+
+            await Run(eval, @"
+                SET DATA_QUALITY_DRY_RUN = ON;
+                SET DATA_QUALITY_DRY_RUN = OFF;
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            Assert.Equal(1, await CountRows(eval, "#clean"));
+            Assert.Equal(1, eval.DataQuality.RowsQuarantined);
+            Assert.Equal(0, eval.DataQuality.RowsDryRunAffected);
+        }
+
+        [Fact]
         public async Task ShowDataQualityRules_ListsEachProtectionPerColumn()
         {
             var eval = NewEvaluator();

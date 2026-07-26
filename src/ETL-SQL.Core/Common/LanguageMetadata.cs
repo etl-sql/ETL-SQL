@@ -56,7 +56,7 @@ public static class LanguageMetadata
 
     public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "RELDATE", "WEEK_START_DAY", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE",
+        "RELDATE", "WEEK_START_DAY", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE", "DATA_QUALITY_DRY_RUN",
         "SUBSCRIPTION", "ENABLE", "DISABLE",
         "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES", "FILTER", "VISIBLE", "INTERACTIVE_MODE",
         "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
