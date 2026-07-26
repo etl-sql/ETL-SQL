@@ -952,7 +952,12 @@ public class JoinEngine
 
             if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
             else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
-            else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();
+            else if (!foundMatch && IsLeftOuter(join.JoinType))
+            {
+                var unmatched = left.Clone();
+                AnnotateJoinReplayObservation(unmatched, buildTable, buildSideUnique);
+                yield return unmatched;
+            }
         }
 
         if (IsRightOuter(join.JoinType))

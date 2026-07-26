@@ -12,44 +12,17 @@ promise are defined in
 
 ## Future Candidate Phases
 
-### Data Quality v2
+### Portal — Governance Dashboard
 
-v1 (column `@expect`/`@fail` rules, quarantine/warn capture, `ASSERT JOB`, the `WEBHOOK` connector)
-shipped in v0.17.0. The v2 metric-depth, alert-quality, and quarantine-remediation slices are
-implemented; demand-triggered hardening work is tracked here. The full design, including the
-as-built deviations v1 left behind, lives in
-[`docs/architecture/decisions/DataQualityRules.md`](docs/architecture/decisions/DataQualityRules.md).
+Finish the data-steward-first dashboard described in
+[`Governance_Dashboard_Strategy.md`](docs/architecture/roadmaps/Governance_Dashboard_Strategy.md).
+The current production module is a visual prototype: it substitutes demo assets when the
+stewardship API fails and keeps findings, decisions, glossary terms, badges, scans, and scoring
+settings only in browser memory.
 
-Recommended order (rationale in the design doc's "v2 sequencing" section):
-
-1. **Metric depth** — shipped: `NULL_PERCENT ... OF HISTORICAL` (with a per-column run-metrics table),
-   qualified `NULL_PERCENT(target.col)`, a `FRESHNESS(col) < interval` predicate, and
-   `WITHIN n SIGMA OF HISTORICAL`.
-2. **Alert quality** — shipped: transition-based alerting and recovery notifications, so a
-   nightly-failing job cannot train people to mute the channel.
-3. **Quarantine remediation** — shipped. The orchestrator manifest foundation is implemented:
-   quarantining jobs persist the job/script/section/source/target replay metadata and mark joins
-   non-replayable. `UPDATE` now enforces the quarantine disposition lifecycle. `REPLAY QUARANTINE`
-   resolves manifests, substitutes released quarantine rows back into the recorded source table, and
-   resumes the recorded section label, then flips consumed rows to `replayed` after success.
-   Replay is fenced through the orchestrator cluster-lock store. The first Portal steward queue now
-   lists replay manifests, replayability state, and can submit replay jobs through the configured
-   Orchestrator job channel. The row editor for source-column fixes, release, and discard actions is
-   built, but the Portal cannot currently read any real capture target, so the queue marks those
-   targets view-only — see *Portal — Quarantine Row Access* below.
-4. **Scale hardening** — spill-aware UNIQUE key map and single-pass UNIQUE batching shipped.
-   Connector-side retention now has the opt-in data-source capability and SQLite support; additional
-   durable connectors remain demand-triggered. Each has a recorded trigger in the design doc.
-5. **Governance dashboard integration** — mostly delivered. The Portal surfaces a per-job quality
-   trend (`GET /api/data-quality/trend` plus the trend panel on the quarantine queue), dispositions
-   record actor and reason, alerts carry column owners, and `SET DATA_QUALITY_DRY_RUN` previews a
-   rule's impact before enforcing it. Rule visibility shipped as the `SHOW DATA QUALITY RULES`
-   statement only — there is no Portal surface for it, which is carried below.
-
-v3 direction (join-statement replay via probe-side provenance) and nested-script replay are recorded
-in the same document as directions only.
-
----
+Replace those placeholders with authorized, audited, durable Portal APIs. The work is complete only
+when role and API tests cover the mutation boundaries, UI tests cover live and failure states, and
+the production surface never presents demo records as governance evidence.
 
 ### Portal — Quarantine Row Access
 
@@ -63,11 +36,9 @@ steward reads "no rows" as "nothing was quarantined". Pre-projection capture plu
 is the strongest part of the remediation workflow, and it is unavailable exactly where quarantine
 data actually lives.
 
-**Shipped in v0.17.0 (the honest interim).** `QuarantineTargetReadability` classifies each target;
-the queue marks unreadable targets **View only** with the specific reason and offers the review
-statement to run where the connection exists; `GET quarantine/rows` declines with `409` and that
-reason instead of executing and returning a raw engine diagnostic as a `502`. Replay, disposition,
-and trend are unaffected — those run as orchestrator jobs, which do have the connections.
+The current queue marks these targets **View only**, explains why, and provides review SQL to run
+where the connection exists. The remaining product gap is governed, in-Portal access to durable
+catalog-backed targets.
 
 **Chosen direction: catalog-backed preview.** Resolve the target through the shared connection
 catalog rather than widening the Portal's reach generally.
@@ -98,9 +69,9 @@ Slices:
    web tier), and audit each preview read the way dispositions are audited today — reading raw
    quarantined source rows is an access event, not a page view.
 5. **Tests.** A **happy-path** read is the first requirement, not the last: every existing
-   `quarantine/rows` test asserts a rejection, which is precisely why a non-functional row editor
-   shipped as complete. Then: catalog miss, disabled entry, feature switch off, unauthorized
-   identity, and a redaction assertion on the failure path.
+   `quarantine/rows` test asserts a rejection, so the catalog-backed path needs positive coverage
+   before it can be considered functional. Then: catalog miss, disabled entry, feature switch off,
+   unauthorized identity, and a redaction assertion on the failure path.
 6. **Docs + sandbox.** Administration guide: which connections become previewable, what the switch
    does, and what is audited. Flip the sandbox's view-only fixture to a readable catalog-backed
    target so both states stay developable
@@ -127,13 +98,6 @@ day-to-day use.
 3. **No rule visibility in the Portal.** `SHOW DATA QUALITY RULES` is an engine statement only, so a
    steward who lives in the Portal cannot see which rules protect which columns — the thing they
    most need when a quarantine rate jumps. Wants a read-only endpoint plus a panel beside the trend.
-4. **Preview reads are not audited.** Dispositions record actor, rows, and reason; reading the raw
-   quarantined source rows records nothing. Folded into the quarantine-row-access slice above, but
-   it applies to any Portal endpoint that executes engine scripts.
-5. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
+4. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
    new `ExecutionSession`. Acceptable at current volume; worth revisiting before any endpoint like
    this becomes a polled or dashboard-refreshed surface.
-6. **Portal UI work needs sandbox stories first.** The stories under `tools/ui-sandbox/stories/`
-   cover the portal surfaces unevenly and the README index had drifted from the registry. Treat
-   `stories/index.js` as the checklist when picking up Portal UI work, and add the story before the
-   change — the view-only treatment above was designed and verified there without a portal build.

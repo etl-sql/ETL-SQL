@@ -77,7 +77,7 @@ public class ReportsController : ControllerBase
 
     private async Task<bool> CreatorCanResolveAsync(
         int creatorId,
-        int folderId,
+        Report report,
         CancellationToken ct = default)
     {
         var creator = await db.Users.FirstOrDefaultAsync(user => user.Id == creatorId, ct);
@@ -95,9 +95,20 @@ public class ReportsController : ControllerBase
             .Where(membership => membership.UserId == creatorId)
             .Select(membership => membership.GroupId)
             .ToListAsync(ct);
-        var permission = await folderPermissions.GetEffectivePermissionAsync(
-            folderId, new HashSet<int>(groupIds));
-        return permission >= FolderPermission.Read;
+        if (report.CreatedBy == creatorId)
+            return true;
+
+        var groupSet = new HashSet<int>(groupIds);
+        var folderPermission = await folderPermissions.GetEffectivePermissionAsync(
+            report.FolderId, groupSet, creatorId);
+        var reportPermission = await db.ReportAcls
+            .Where(acl => acl.ReportId == report.Id
+                && ((acl.UserId.HasValue && acl.UserId == creatorId)
+                    || (acl.GroupId.HasValue && groupSet.Contains(acl.GroupId.Value))))
+            .Select(acl => (FolderPermission?)acl.Permission)
+            .MaxAsync(ct);
+        return folderPermission >= FolderPermission.Read
+            || reportPermission >= FolderPermission.Read;
     }
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
@@ -546,7 +557,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         return Ok(await reportDependencies.BuildAsync(report, IsAdmin, CurrentUserId));
@@ -562,7 +573,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);
@@ -594,7 +605,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         var snapshots = await db.ReportSnapshots
@@ -646,7 +657,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -727,7 +738,7 @@ public class ReportsController : ControllerBase
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         var exists = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
@@ -766,7 +777,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
         var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
@@ -798,7 +809,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || (perm < FolderPermission.Manage && !IsAdmin)) return Forbid();
 
         var links = await db.ReportShareLinks
@@ -820,7 +831,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == token);
         if (link is null) return NoContent();
 
-        var perm = await GetEffectivePermissionAsync(link.Report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(link.Report);
         if (perm is null || (perm < FolderPermission.Manage && link.CreatedBy != CurrentUserId)) return Forbid();
 
         if (link.RevokedAt is null)
@@ -849,7 +860,7 @@ public class ReportsController : ControllerBase
         if (link.RevokedAt is not null) return NotFound();
         if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
 
-        if (!await CreatorCanResolveAsync(link.CreatedBy, link.Report.FolderId))
+        if (!await CreatorCanResolveAsync(link.CreatedBy, link.Report))
             return NotFound();
 
         await audit.LogAsync(null, "ANONYMOUS_SHARE_LINK_VIEW", "Report",
@@ -869,7 +880,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.Include(r => r.Folder).FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
         var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
         if (expiresAt <= DateTime.UtcNow)
@@ -895,7 +906,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
 
         var tokens = await db.ReportEmbedTokens
@@ -911,7 +922,7 @@ public class ReportsController : ControllerBase
     {
         var embed = await db.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
         if (embed is null) return NoContent();
-        var perm = await GetEffectivePermissionAsync(embed.Report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(embed.Report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
         if (embed.RevokedAt is null)
         {
@@ -931,7 +942,7 @@ public class ReportsController : ControllerBase
         if (embed is null || embed.Report.IsDeleted) return NotFound();
         if (embed.RevokedAt is not null) return NotFound();
         if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
-        if (!await CreatorCanResolveAsync(embed.CreatedBy, embed.Report.FolderId))
+        if (!await CreatorCanResolveAsync(embed.CreatedBy, embed.Report))
             return NotFound();
         await audit.LogAsync(null, "ANONYMOUS_EMBED_TOKEN_VIEW", "Report",
             embed.ReportId.ToString(), $"creator={embed.CreatedBy}");
@@ -969,7 +980,7 @@ public class ReportsController : ControllerBase
         var items = new List<AnonymousReportAccessDto>();
         foreach (var link in shares)
         {
-            var creatorAuthorized = await CreatorCanResolveAsync(link.CreatedBy, link.Report.FolderId);
+            var creatorAuthorized = await CreatorCanResolveAsync(link.CreatedBy, link.Report);
             items.Add(new AnonymousReportAccessDto(
                 "ShareLink", link.Id, link.ReportId, link.Report.Name, link.Report.Folder.Path,
                 null, link.CreatedBy, link.Creator.UserName, link.Creator.IsActive, link.CreatedAt,
@@ -979,7 +990,7 @@ public class ReportsController : ControllerBase
         }
         foreach (var token in embeds)
         {
-            var creatorAuthorized = await CreatorCanResolveAsync(token.CreatedBy, token.Report.FolderId);
+            var creatorAuthorized = await CreatorCanResolveAsync(token.CreatedBy, token.Report);
             items.Add(new AnonymousReportAccessDto(
                 "EmbedToken", token.Id, token.ReportId, token.Report.Name, token.Report.Folder.Path,
                 token.Name, token.CreatedBy, token.Creator.UserName, token.Creator.IsActive, token.CreatedAt,
@@ -1076,7 +1087,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         var alerts = await db.ReportAlerts.Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId)).OrderBy(a => a.Name).ToListAsync();
         return Ok(alerts.Select(ToAlertDto));
@@ -1087,7 +1098,7 @@ public class ReportsController : ControllerBase
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.VisualName))
             return BadRequest(new { error = "Alert name and visualName are required." });
@@ -1157,7 +1168,7 @@ public class ReportsController : ControllerBase
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);
@@ -1251,7 +1262,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -1298,7 +1309,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);
@@ -1341,7 +1352,7 @@ public class ReportsController : ControllerBase
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);

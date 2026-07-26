@@ -191,6 +191,8 @@ public interface IDataQualityRetentionPruner
     Task<int> PruneDataQualityRowsAsync(
         string timestampColumn,
         DateTime cutoffUtc,
+        string scopeColumn,
+        string scopeValue,
         CancellationToken cancellationToken);
 }
 

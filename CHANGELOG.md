@@ -76,7 +76,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added the Portal quarantine row editor. `/api/data-quality/quarantine/rows` previews capped
   quarantine rows for Portal-resolvable targets, the Quarantine Queue can open an inline row grid,
   and stewards can edit source columns then submit release or discard actions without touching
-  immutable `__dq_*` evidence.
+  immutable `__dq_*` evidence. Targets whose producing connection or session-local table is not
+  available inside Portal are labeled view-only with the reason and copyable review SQL instead of
+  opening a row editor that would fail or misleadingly return an empty temp table.
 
 - Hardened the data-quality `UNIQUE` pre-pass for larger inputs: projected key records now spill
   into hash partitions and reduce partition-by-partition instead of keeping the full key map in

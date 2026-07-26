@@ -56,7 +56,7 @@ public sealed class DesignerSnapshotService(
 
         // Same gate the snapshot view path uses: folder permission, then path containment on both the
         // script and the snapshot key, so a stored path cannot point outside the configured roots.
-        var permission = await folderPermissions.GetEffectivePermissionAsync(report.FolderId, user);
+        var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (permission is null) return new Result(SnapshotOutcome.Forbidden, null);
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))

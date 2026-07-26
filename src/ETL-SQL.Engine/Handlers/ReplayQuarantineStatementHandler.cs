@@ -82,12 +82,22 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         try
         {
             var replayScript = ResolveReplayScript(evaluator, manifest.SectionLabel!, stmt);
+            await EnsureNoUnresolvedReplayClaimAsync(context, stmt);
+            await SetReplayStatusAsync(
+                evaluator,
+                stmt,
+                DataQualityColumns.ReleasedStatus,
+                DataQualityColumns.ReplayingStatus);
             var replaySourceResult = await BuildReplaySourceAsync(context, stmt.QuarantineTable, manifest);
             releasedRows = replaySourceResult.ReleasedRows;
             if (releasedRows > 0)
             {
                 await ReplayReleasedRowsAsync(evaluator, replayScript, manifest, replaySourceResult.Source);
-                await MarkReleasedRowsReplayedAsync(evaluator, stmt, replaySourceResult.ConsumedRowIds);
+                await SetReplayStatusAsync(
+                    evaluator,
+                    stmt,
+                    DataQualityColumns.ReplayingStatus,
+                    DataQualityColumns.ReplayedStatus);
             }
         }
         finally
@@ -161,41 +171,47 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
     }
 
     /// <summary>
-    /// Flips only the rows this replay actually consumed to <c>replayed</c>.
-    /// <para>
-    /// Scoping to the captured <c>__dq_row_id</c> set matters: a steward can release a row through
-    /// the Portal (a separate job that does not take the replay lease) while a replay is in flight.
-    /// A blanket <c>WHERE __dq_status = 'released'</c> would mark that row replayed even though it
-    /// was never fed through the statement, silently discarding the steward's fix. Rows released
-    /// mid-replay stay <c>released</c> and are picked up by the next replay.
-    /// </para>
-    /// </summary>
-    private static Task MarkReleasedRowsReplayedAsync(
-        Evaluator evaluator, ReplayQuarantineStatement stmt, IReadOnlyList<string> consumedRowIds)
+    private static async Task EnsureNoUnresolvedReplayClaimAsync(
+        IExecutionContext context,
+        ReplayQuarantineStatement stmt)
     {
-        if (consumedRowIds.Count == 0) return Task.CompletedTask;
+        var source = await context.ResolveDataSourceAsync(stmt.QuarantineTable);
+        await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
+        {
+            if (!batch.Rows.Any(row => string.Equals(
+                    row[DataQualityColumns.Status]?.ToString(),
+                    DataQualityColumns.ReplayingStatus,
+                    StringComparison.OrdinalIgnoreCase)))
+                continue;
 
-        Expression rowIdFilter = new InExpression(
-            new IdentifierExpression(DataQualityColumns.RowId),
-            new ListExpression(consumedRowIds
-                .Select(id => (Expression)new LiteralExpression(id, TokenType.STRING))
-                .ToList()),
-            isNot: false);
+            throw new ExecutionException(
+                $"Cannot replay quarantine: '{stmt.QuarantineTable.ToSql()}' contains rows with "
+                + $"__dq_status = '{DataQualityColumns.ReplayingStatus}' from an incomplete replay. "
+                + $"Review the target side effects, then explicitly return those rows to 'released' "
+                + "or mark them 'replayed' before retrying.",
+                null,
+                stmt.Line,
+                stmt.Column);
+        }
+    }
 
+    private static Task SetReplayStatusAsync(
+        Evaluator evaluator,
+        ReplayQuarantineStatement stmt,
+        string currentStatus,
+        string nextStatus)
+    {
         var update = new UpdateStatement(
             stmt.QuarantineTable,
             [
                 new Assignment(
                     DataQualityColumns.Status,
-                    new LiteralExpression(DataQualityColumns.ReplayedStatus, TokenType.STRING))
+                    new LiteralExpression(nextStatus, TokenType.STRING))
             ],
             new BinaryExpression(
-                new BinaryExpression(
-                    new IdentifierExpression(DataQualityColumns.Status),
-                    TokenType.EQUALS,
-                    new LiteralExpression(DataQualityColumns.ReleasedStatus, TokenType.STRING)),
-                TokenType.AND,
-                rowIdFilter))
+                new IdentifierExpression(DataQualityColumns.Status),
+                TokenType.EQUALS,
+                new LiteralExpression(currentStatus, TokenType.STRING)))
         {
             Line = stmt.Line,
             Column = stmt.Column
@@ -205,10 +221,8 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
     }
 
     /// <summary>
-    /// Streams the released rows into a replay source, recording the <c>__dq_row_id</c> of every
-    /// row consumed so the disposition flip can be scoped to exactly that set. Rows are written in
-    /// bounded batches rather than accumulated — a bulk release is precisely the case where the
-    /// released set is largest.
+    /// Streams the claimed rows into a replay source. Rows are written in bounded batches rather
+    /// than accumulated — a bulk release is precisely the case where the released set is largest.
     /// </summary>
     private static async Task<ReplaySourceResult> BuildReplaySourceAsync(
         IExecutionContext context,
@@ -216,7 +230,6 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
         Core.Data.QuarantineReplayManifest manifest)
     {
         long count = 0;
-        var consumedRowIds = new List<string>();
         var source = await context.ResolveDataSourceAsync(table);
         var replaySource = new InMemoryDataSource
         {
@@ -234,7 +247,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
             {
                 if (!string.Equals(
                         row[DataQualityColumns.Status]?.ToString(),
-                        DataQualityColumns.ReleasedStatus,
+                        DataQualityColumns.ReplayingStatus,
                         StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -243,9 +256,6 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
                     replayRow[column] = row[column];
                 await pending.AddRowAsync(replayRow);
                 count++;
-
-                if (row[DataQualityColumns.RowId]?.ToString() is { Length: > 0 } rowId)
-                    consumedRowIds.Add(rowId);
 
                 if (pending.Rows.Count >= batchSize)
                 {
@@ -263,7 +273,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
                 SingleBatch(pending, context.CancellationToken), append: appended, context.CancellationToken);
         }
 
-        return new ReplaySourceResult(replaySource, count, consumedRowIds);
+        return new ReplaySourceResult(replaySource, count);
     }
 
     private static DataTable NewReplayBatch(Core.Data.QuarantineReplayManifest manifest)
@@ -275,8 +285,7 @@ public class ReplayQuarantineStatementHandler(ILogger logger) : IStatementHandle
 
     private sealed record ReplaySourceResult(
         IDataSource Source,
-        long ReleasedRows,
-        IReadOnlyList<string> ConsumedRowIds);
+        long ReleasedRows);
 
     private static async IAsyncEnumerable<DataTable> SingleBatch(
         DataTable table,

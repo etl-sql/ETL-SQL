@@ -293,6 +293,8 @@ namespace ETL_SQL.Connectors.Sqlite
         public async Task<int> PruneDataQualityRowsAsync(
             string timestampColumn,
             DateTime cutoffUtc,
+            string scopeColumn,
+            string scopeValue,
             CancellationToken cancellationToken)
         {
             if (_context != null && _context.IsWhatIf) return 0;
@@ -304,30 +306,31 @@ namespace ETL_SQL.Connectors.Sqlite
             var table = _tableName.Replace("\"", "\"\"");
             var column = timestampColumn.Replace("\"", "\"\"");
             var statusColumn = ETL_SQL.Core.Quality.DataQualityColumns.Status.Replace("\"", "\"\"");
-            // Never prune a disposition that is still in flight: a 'released' row is a steward's
-            // pending fix awaiting replay, and deleting it discards that work silently. Warn
-            // tables and pre-disposition capture tables have no status column, so the guard is
-            // added only when the column is actually present.
+            var escapedScopeColumn = scopeColumn.Replace("\"", "\"\"");
             var existingColumns = await GetColumnsAsync(effectiveCancellationToken);
             bool hasStatusColumn = existingColumns.Any(c =>
                 c.Equals(ETL_SQL.Core.Quality.DataQualityColumns.Status, StringComparison.OrdinalIgnoreCase));
+            bool hasScopeColumn = existingColumns.Any(c =>
+                c.Equals(scopeColumn, StringComparison.OrdinalIgnoreCase));
+            if (!hasStatusColumn || !hasScopeColumn) return 0;
 
             var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
-                var sql = hasStatusColumn
-                    ? $"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff "
-                      + $"AND COALESCE(\"{statusColumn}\", '') <> $released"
-                    : $"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff";
+                var sql = $"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff "
+                    + $"AND \"{escapedScopeColumn}\" = $scope "
+                    + $"AND \"{statusColumn}\" IN ($warned, $replayed, $discarded)";
 
                 using var cmd = CreateCommand(sql, conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
                 cmd.Parameters.Add(new SqliteParameter("$cutoff", cutoffUtc));
-                if (hasStatusColumn)
-                {
-                    cmd.Parameters.Add(new SqliteParameter(
-                        "$released", ETL_SQL.Core.Quality.DataQualityColumns.ReleasedStatus));
-                }
+                cmd.Parameters.Add(new SqliteParameter("$scope", scopeValue));
+                cmd.Parameters.Add(new SqliteParameter(
+                    "$warned", ETL_SQL.Core.Quality.DataQualityColumns.WarnedStatus));
+                cmd.Parameters.Add(new SqliteParameter(
+                    "$replayed", ETL_SQL.Core.Quality.DataQualityColumns.ReplayedStatus));
+                cmd.Parameters.Add(new SqliteParameter(
+                    "$discarded", ETL_SQL.Core.Quality.DataQualityColumns.DiscardedStatus));
                 return await cmd.ExecuteNonQueryAsync(effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))

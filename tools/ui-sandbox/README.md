@@ -24,17 +24,22 @@ The sandbox currently hosts the following stories under `stories/`:
 
 | Story | ID | Component / UI Surface |
 |---|---|---|
-| **DAG / Lineage** | `dag` | Dependency graphs using Apache ECharts (`renderDag()`) |
+| **Portal Governance Module** | `portal-governance` | Governance overview, work queue, exceptions, badges, glossary, and settings |
+| **Data Quality** | `data-quality-queue` | Quarantine queue, row editor, and quality trend panel |
 | **Script Editor** | `script-editor` | Monaco/CodeMirror based query editor |
+| **Unified Script Editor** | `script-editor-unified` | Stateful editor host with ETL and Report-SQL fixtures |
 | **Report Designer** | `designer` | Portal-based layout designer canvas (`createDesigner()`) |
 | **Snapshot Designer** | `snapshot-designer` | Snapshot-backed layout designing using `.etlsnap` package data |
-| **VS Code Webviews** | `vscode-webviews` | VS Code extension frames (Results panel, Report preview, Report designer) |
-| **Admin Catalog** | `admin-catalog` | Administration view catalog panels |
-| **Datasets Admin** | `datasets-admin` | Staged dataset status and storage manager |
-| **Lineage Catalog** | `lineage-catalog` | Asset inventory and search view with lineage chips |
 | **Lineage UI** | `lineage-ui` | Interactive visual pipelines and flow models |
+| **Lineage Catalog** | `lineage-catalog` | Asset inventory and search view with lineage chips |
+| **Datasets Admin** | `datasets-admin` | Staged dataset status and storage manager |
 | **Subscription History** | `subscription-history` | Email/Slack report subscription logs and audits |
-| **Data Quality** | `data-quality-queue` | Quarantine queue, row editor, and quality trend panel |
+| **Admin Catalog** | `admin-catalog` | Administration view catalog panels |
+| **VS Code Webviews** | `vscode-webviews` | VS Code extension frames (Results panel, Report preview, Report designer) |
+| **Secrets Admin** | `secrets-admin` | Secret inventory and administration workflows |
+| **Connections Admin** | `connections-admin` | Shared connection catalog administration |
+| **Policy Authority Admin** | `policy-authority-admin` | Organization-policy authority and enrollment controls |
+| **Lineage DAG** | `lineage-dag` | Dependency graphs using Apache ECharts (`renderDag()`) |
 
 The **Data Quality** story's fixtures cover the states a steward actually lands in:
 
@@ -42,7 +47,7 @@ The **Data Quality** story's fixtures cover the states a steward actually lands 
 |---|---|
 | `Quarantine queue` | Manifest list: replayable vs blocked, join fan-out reason, copy/replay actions |
 | `Row editor (resolvable target)` | Cell edits, the audited reason field, release/discard, status filter |
-| `Row editor (target Portal cannot read)` | The durable-target gap — a queued, replayable manifest whose rows the Portal's own execution session cannot `SELECT` (see the open item in `TODO.md`) |
+| `Row editor (target Portal cannot read)` | The durable-target gap — a queued, replayable manifest whose rows the Portal's own execution session cannot `SELECT` (see the open item in `ROADMAP.md`) |
 | `Quality trend (degrading)` | Rate sparkline, delta vs. earlier runs, rules firing most, recent runs |
 | `Quality trend (no runs)` | Empty state for a job with no recorded metrics |
 

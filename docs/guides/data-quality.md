@@ -118,10 +118,19 @@ Warn rows are evidence only: their `__dq_status` stays `warned` and cannot enter
 release/replay lifecycle.
 
 `REPLAY QUARANTINE <table>` resolves the orchestrator manifest, rejects non-replayable quarantine
-targets, builds a replacement source stream from rows marked `released`, strips engine-owned
-`__dq_*` evidence columns, and resumes the recorded section. After the replayed section completes
-successfully, consumed rows move to `__dq_status = 'replayed'`. Orchestrator-hosted replay takes a
-cluster lock on the quarantine target so concurrent replays cannot consume the same released set.
+targets, claims rows by moving them from `released` to `replaying`, builds a replacement source
+stream, strips engine-owned `__dq_*` evidence columns, and resumes the recorded section. After the
+section completes successfully, claimed rows move to `__dq_status = 'replayed'`.
+Orchestrator-hosted replay takes a cluster lock on the quarantine target so concurrent replays
+cannot consume the same released set.
+
+If execution fails after rows are claimed, they remain `replaying` and are not automatically
+retried. Review the target for partial side effects, then explicitly return them to `released` for
+retry or mark them `replayed`. The Portal queue exposes both recovery choices.
+
+Retention is scoped by `__dq_capture_scope`, a stable job or script identity. On a shared capture
+target, one writer's retention window cannot prune another writer's rows. Only terminal
+dispositions (`warned`, `replayed`, or `discarded`) age out.
 
 ## Rules that need to see every row
 

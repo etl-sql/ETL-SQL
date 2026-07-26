@@ -281,6 +281,45 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task ReportAcl_AllowsFavoritingWithoutFolderAccess()
+    {
+        await using var db = await CreateDbAsync();
+        var report = await SeedReportAsync(db);
+        db.ReportAcls.Add(new ReportAcl
+        {
+            ReportId = report.Id,
+            UserId = 2,
+            Permission = FolderPermission.Read
+        });
+        await db.SaveChangesAsync();
+
+        var controller = CreateReportsController(db, userId: 2);
+        Assert.IsType<NoContentResult>(await controller.AddFavorite(report.Id));
+        Assert.True(await db.ReportFavorites.AnyAsync(
+            favorite => favorite.ReportId == report.Id && favorite.UserId == 2));
+    }
+
+    [Fact]
+    public async Task ReportAcl_KeepsCreatorShareLinkResolvableWithoutFolderAccess()
+    {
+        await using var db = await CreateDbAsync();
+        var report = await SeedReportAsync(db);
+        db.ReportAcls.Add(new ReportAcl
+        {
+            ReportId = report.Id,
+            UserId = 2,
+            Permission = FolderPermission.Execute
+        });
+        await db.SaveChangesAsync();
+
+        var controller = CreateReportsController(db, userId: 2);
+        Assert.IsType<CreatedAtActionResult>(await controller.CreateShareLink(report.Id, null));
+
+        var link = await db.ReportShareLinks.SingleAsync(value => value.ReportId == report.Id);
+        Assert.IsType<OkObjectResult>(await controller.ResolveShareLink(link.Token));
+    }
+
+    [Fact]
     public async Task SaveDefaultView_PersistsDefaultView_PerUserAndReport()
     {
         await EnsureAuthenticatedAsync();

@@ -31,6 +31,7 @@ internal sealed class QuarantineWriter(
 
     private readonly List<Row> _pending = [];
     private readonly string _runId = context.SessionId ?? Guid.NewGuid().ToString("N");
+    private readonly string _captureScope = BuildCaptureScope(context);
     private List<string>? _columns;
 
     /// <summary>Total rows handed to the target so far.</summary>
@@ -56,6 +57,7 @@ internal sealed class QuarantineWriter(
         row[DataQualityColumns.Reason] = failure.Reason;
         row[DataQualityColumns.Timestamp] = DateTime.UtcNow;
         row[DataQualityColumns.RunId] = _runId;
+        row[DataQualityColumns.CaptureScope] = _captureScope;
         row[DataQualityColumns.Status] = status;
         row[DataQualityColumns.RowId] = ComputeRowId(input);
         row[DataQualityColumns.OriginRowId] = null; // reserved for v2 replay linkage
@@ -104,6 +106,8 @@ internal sealed class QuarantineWriter(
                     int pruned = await pruner.PruneDataQualityRowsAsync(
                         DataQualityColumns.Timestamp,
                         cutoff,
+                        DataQualityColumns.CaptureScope,
+                        _captureScope,
                         cancellationToken);
                     if (pruned > 0)
                         context.Logger.Info(
@@ -125,10 +129,11 @@ internal sealed class QuarantineWriter(
             int removed = memory.RemoveRows(row =>
                 row[DataQualityColumns.Timestamp] is DateTime ts
                 && ts < cutoff
-                && !string.Equals(
-                    row[DataQualityColumns.Status]?.ToString(),
-                    DataQualityColumns.ReleasedStatus,
-                    StringComparison.OrdinalIgnoreCase));
+                && string.Equals(
+                    row[DataQualityColumns.CaptureScope]?.ToString(),
+                    _captureScope,
+                    StringComparison.OrdinalIgnoreCase)
+                && IsTerminalDisposition(row[DataQualityColumns.Status]?.ToString()));
             if (removed < 0)
                 context.Logger.Debug(
                     "Data-quality retention on '{Target}' did not run: the table has spilled to disk.", target);
@@ -165,12 +170,27 @@ internal sealed class QuarantineWriter(
         columns.Add(DataQualityColumns.Reason);
         columns.Add(DataQualityColumns.Timestamp);
         columns.Add(DataQualityColumns.RunId);
+        columns.Add(DataQualityColumns.CaptureScope);
         columns.Add(DataQualityColumns.Status);
         columns.Add(DataQualityColumns.RowId);
         columns.Add(DataQualityColumns.OriginRowId);
         if (includeTargetWritten) columns.Add(DataQualityColumns.TargetWritten);
         return columns;
     }
+
+    private static string BuildCaptureScope(IExecutionContext executionContext)
+    {
+        if (!string.IsNullOrWhiteSpace(executionContext.JobName))
+            return $"job:{executionContext.JobName.Trim()}";
+        if (!string.IsNullOrWhiteSpace(executionContext.CurrentScriptPath))
+            return $"script:{executionContext.CurrentScriptPath.Trim()}";
+        return $"session:{executionContext.SessionId ?? "interactive"}";
+    }
+
+    private static bool IsTerminalDisposition(string? status) =>
+        string.Equals(status, DataQualityColumns.WarnedStatus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Deterministic hash of the captured row's content plus the run id — the stable identity

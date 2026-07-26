@@ -45,7 +45,7 @@ public sealed class ReportScriptSaveService(
         if (report is null)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.NotFound);
 
-        var perm = await folderPermissions.GetEffectivePermissionAsync(report.FolderId, user);
+        var perm = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (perm is null || perm < FolderPermission.Manage)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.Forbidden);
 

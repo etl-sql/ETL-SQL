@@ -292,6 +292,43 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public async Task CreateDataset_FreshCache_UsesSourceTagsForGovernance()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_tags_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            const string createSql = @"
+                CREATE DATASET &governed TTL = '1h' ACCESS PUBLIC AS (
+                    SELECT v /* @owner: DataOps; @steward: steward@example.com;
+                                  @contact: data@example.com; @classification: internal;
+                                  @quality: gold */
+                    FROM #seed
+                );";
+
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                await producer.Evaluate(Parse(@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    " + createSql));
+
+                var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                consumer.DatasetRegistry = registry;
+                consumer.DatasetCallerContext = "UserId=99";
+                await consumer.Evaluate(Parse(createSql + " SELECT COUNT(*) AS n FROM &governed;"));
+
+                Assert.Equal(1m, Assert.Single(consumer.LastResult!.Rows)["n"]);
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
         public async Task UseDataset_NeverMaterialized_Errors()
         {
             // USE of a registered dataset whose parquet file is absent errors (it does not re-run the
@@ -491,7 +528,9 @@ namespace ETL_SQL.Tests.Reporting
                 portalB.DatasetCallerContext = "IsAdmin=true";
                 portalB.DatasetAtRestKey = "cG9ydGFsLUItYXQtcmVzdC1rZXktOTk5";
                 await portalB.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{exportPath}' AS &imported INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
+                    "/* @owner: DataOps; @steward: steward@example.com; @contact: data@example.com; "
+                    + "@classification: internal; @quality: gold */ "
+                    + $"PUBLISH DATASET FROM '{exportPath}' AS &imported INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
                     "USE DATASET &imported; SELECT COUNT(*) AS n, SUM(v) AS s FROM &imported;"));
 
                 var row = portalB.LastResult!.Rows[0];

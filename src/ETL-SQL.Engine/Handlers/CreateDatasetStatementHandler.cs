@@ -72,10 +72,15 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
             var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
             if (IsFreshEnough(existing, stmt.Ttl))
             {
+                await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
+                new LineageManager(context.LineageTracker).RecordSelectIntoLineage(
+                    stmt.SourceQuery,
+                    new TableReference(stmt.TempTableName),
+                    context);
                 TagGovernanceRuntimePolicy.EnforceDatasetPublish(
                     stmt.TempTableName,
                     stmt.AccessLevel,
-                    TagGovernanceRuntimePolicy.CollectGlobalTags(context),
+                    TagGovernanceRuntimePolicy.CollectDatasetTags(stmt, context),
                     stmt.Line,
                     stmt.Column);
 
@@ -89,7 +94,6 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
                     context,
                     existing.AtRestDecryptionKey);
                 RegisterReportContext(stmt, context);
-                await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
                 new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
                 return;
             }

@@ -98,7 +98,7 @@ steward picture; either half alone is not.
 8. **DQ outcomes are persisted per run.** Rows quarantined, rows warned, and per-rule failure counts are recorded on the run's job-history record and exposed on `ExecutionResult`. Without this there is no trend visibility and `ASSERT JOB` could never assert on quarantine rate — the most natural job-level DQ metric.
 9. **The webhook connector inherits REST egress enforcement wholesale.** Arbitrary outbound POST with `SECRET:` access is otherwise an exfiltration primitive. Host validation, per-redirect-hop re-validation, and the proxy-disabled handler are mandatory, and the connector must satisfy `docs/architecture/standards/Connectors_Standards.md` (10 inviolable rules + checklist).
 10. **Documentation and LSP support are part of each slice's definition of done**, not a trailing phase. `docs/reference/` is the embedded runtime help (filenames are lookup keywords) — new surface that ships without reference docs is invisible to users at the point of use.
-11. **v1 quarantine is replay-ready by construction.** Quarantine captures the **pre-projection input row**, requires an **enclosing section label**, and carries `__dq_status`/`__dq_row_id`/`__dq_run_id` plus a **reserved, always-NULL `__dq_origin_row_id`** from day one — so the v2 remediation workflow (label replay with source substitution, designed below) needs no breaking change to quarantine tables written by v1. Because the target schema is fixed on first write (§ Determinism), the v2 re-quarantine linkage column must exist in v1's schema even though only v2 ever populates it; adding it later would break v1-created tables.
+11. **v1 quarantine is replay-ready by construction.** Quarantine captures the **pre-projection input row**, requires an **enclosing section label**, and carries `__dq_status`/`__dq_row_id`/`__dq_run_id`/`__dq_capture_scope` plus a **reserved, always-NULL `__dq_origin_row_id`** from day one — so the v2 remediation workflow (label replay with source substitution, designed below) needs no breaking change to quarantine tables written by v1. Because the target schema is fixed on first write (§ Determinism), the replay-linkage and retention-scope columns must exist before release; adding them later would break v1-created tables.
 12. **Quarantine table schema drift is verified, not ignored.** If the target schema of a durable quarantine table does not match the incoming pre-projection schema, the engine will attempt an additive migration (adding columns that are missing) or fail validation safely if data types are incompatible, alerting the steward.
 13. **Quarantine and warn targets support configurable data retention.** Both `ON FAILURE QUARANTINE TO` and `ON FAILURE WARN TO` clauses accept a retention configuration (e.g. `WITH (RETENTION = '30 DAYS')`) to allow the engine to prune older records automatically. Retention is especially critical for warn tables, which have no lifecycle state machine to provide natural pruning.
 
@@ -136,7 +136,7 @@ ON FAILURE THROW;   -- Up to 3 distinct routing targets are allowed
 - **Actions** (`@fail`): `THROW` (error, `ExecutionException`), `WARN` (row passes through; aggregated diagnostic always emitted; row optionally captured to a warn table), `QUARANTINE` (row removed from output, written to the `TO` target). Default when `@expect` is present but `@fail` is omitted: **`WARN`** (fail-safe, not silent).
 - **Numbered Suffixes**: Multiple rule-action pairs are supported on a single column by adding a matching integer suffix (e.g. `@expect_1` pairs with `@fail_1`). The un-suffixed `@expect` pairs with the un-suffixed `@fail`. If an action is omitted for a numbered expectation, it defaults to `WARN`.
 - **`ON FAILURE <ACTION> [TO <table>] [WITH (<options>)]`** trailing blocks route each action. Up to three blocks are supported concurrently (`QUARANTINE`, `WARN`, `THROW`). `TO` is **required** for `QUARANTINE` (the row has nowhere else to go) and **optional** for `WARN` (omitting `TO` produces diagnostic-only mode — the aggregated warning fires but no row is written to a table). `THROW` never takes a `TO` target. Symmetric validation (design decision 5) applies: a `QUARANTINE` or `WARN` tag without a matching `ON FAILURE` clause, and a clause without any matching tag, are both hard errors.
-- **Retention Options**: Both `ON FAILURE QUARANTINE TO` and `ON FAILURE WARN TO` targets accept `WITH (RETENTION = '<interval>')` (e.g. `'30 DAYS'`). The engine prunes rows older than the interval on each run. Warn tables have no lifecycle pruning beyond retention, so the linter emits a `Diagnostic(Info)` when a `WARN TO` target is declared without a `RETENTION` option, recommending one be set.
+- **Retention Options**: Both `ON FAILURE QUARANTINE TO` and `ON FAILURE WARN TO` targets accept `WITH (RETENTION = '<interval>')` (e.g. `'30 DAYS'`). The engine prunes terminal rows older than the interval within the current job/script `__dq_capture_scope`; active evidence and rows owned by another writer are preserved. Warn tables have no lifecycle pruning beyond retention, so the linter emits a `Diagnostic(Info)` when a `WARN TO` target is declared without a `RETENTION` option, recommending one be set.
 - **Quarantine targets should be durable.** `TO` accepts a `#temp` table or a durable table on a named connection. `#temp` evaporates when the run ends — legal for in-script triage, but the linter emits an **Info** diagnostic recommending a durable target, and all documentation examples quarantine to durable tables. "Remediation is the builder's job" only works if the rows survive the run.
 
 ### WARN table schema
@@ -152,8 +152,9 @@ When `ON FAILURE WARN TO <table>` is declared, each failing-but-passing row is c
 | `__dq_reason` | ✓ | ✓ |
 | `__dq_ts` | ✓ | ✓ |
 | `__dq_run_id` | ✓ | ✓ |
+| `__dq_capture_scope` | stable job/script retention owner | stable job/script retention owner |
 | `__dq_row_id` | Hash of input row + run_id | ✓ — same hash, same deduplication semantics |
-| `__dq_status` | `'quarantined'` (lifecycle: released/replayed/discarded) | **`'warned'` (fixed — no lifecycle transitions; row is already in the target)** |
+| `__dq_status` | `'quarantined'` (lifecycle: released/replaying/replayed/discarded) | **`'warned'` (fixed — no lifecycle transitions; row is already in the target)** |
 | `__dq_origin_row_id` | NULL in v1; v2 replay linkage | **Always NULL — replay concept does not apply to warns** |
 | **`__dq_target_written`** | *(absent)* | **`1` (BIT, always) — confirms the row reached the main target despite the rule failure** |
 
@@ -212,7 +213,7 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
   - **PII masking in samples and alerts.** Sample values from a `@pii`-tagged column are **masked** in warn diagnostics, logs, and every alert payload (`ASSERT JOB … ALERT` webhook summaries) — counts stay, values don't. A governance feature must not exfiltrate PII to Slack. The full value is preserved only inside the quarantine table itself, which carries propagated stewardship tags and access controls (see Determinism & edge cases).
   - **UNIQUE rules run over a single spill materialization** (design decision 7). The validating iterator spills the upstream stream once (respecting `JoinSpillThreshold`-class thresholds and the `MemoryGovernor`); the duplicate-key set is built from the spill via `ExternalAggregateEngine.ApplyAggregationExternal(groupBy=[col], HAVING COUNT(*)>1)` (composite `UNIQUE WITH` groups by the column tuple — same engine, multi-column key) — for `UNIQUE_FIRST/LAST BY key` also aggregating `MIN/MAX(orderKey)` per group so only the keeper survives — then the main pass streams from the same spill. Cost is one extra disk write/read of the stream, documented. One pre-pass per unique column in v1 (single-pass batching is a noted optimization).
   - **Rules pin execution to the local path.** Upstream predicate/semi-join pushdown is unaffected (it moves filters, and rules validate output rows), but any plan shape that would bypass local projection entirely is disabled for statements carrying `@expect` rules, with a regression test guarding the pin.
-- **QUARANTINE routing**: resolve the `TO` target via `context.ResolveDataSourceAsync` (auto-create for `#temp`), write with `WriteBatches(append:true)`. **The captured row is the pre-projection input row** — every input column the statement saw, available directly in the `ProjectRows` wrapper — not the projected output row. This is what makes v2 replay possible (re-feed the row through the statement) and it is also better for stewards: they fix the *cause* (the source value), not the symptom. Rows are **augmented** with `__dq_rule`, `__dq_column`, `__dq_value` (the projected value that failed), `__dq_reason`, `__dq_ts`, `__dq_run_id`, `__dq_status` (always `'quarantined'` when written — the v2 disposition column, shipped in v1 so remediation never breaks the schema), `__dq_row_id` — a deterministic hash of the captured row content + run id, the stable identity replay-once semantics key on — and a **reserved `__dq_origin_row_id`** written as NULL in v1. The latter is the forward-compat hook for decision 11: v2 replay populates it when an edited-but-still-failing row re-quarantines (linking the new row back to the original `__dq_row_id`), and because the quarantine schema is frozen on first write (§ Determinism), the column must be present in v1-created tables or v2 could not write to them. The engine routes and annotates; the **remediation workflow ships as v2** (designed below) — v1 users remediate by hand against the same schema.
+- **QUARANTINE routing**: resolve the `TO` target via `context.ResolveDataSourceAsync` (auto-create for `#temp`), write with `WriteBatches(append:true)`. **The captured row is the pre-projection input row** — every input column the statement saw, available directly in the `ProjectRows` wrapper — not the projected output row. This is what makes v2 replay possible (re-feed the row through the statement) and it is also better for stewards: they fix the *cause* (the source value), not the symptom. Rows are **augmented** with `__dq_rule`, `__dq_column`, `__dq_value` (the projected value that failed), `__dq_reason`, `__dq_ts`, `__dq_run_id`, `__dq_capture_scope`, `__dq_status` (always `'quarantined'` when written — the v2 disposition column, shipped in v1 so remediation never breaks the schema), `__dq_row_id` — a deterministic hash of the captured row content + run id, the stable identity replay-once semantics key on — and a **reserved `__dq_origin_row_id`** written as NULL in v1. The latter is the forward-compat hook for decision 11: v2 replay populates it when an edited-but-still-failing row re-quarantines (linking the new row back to the original `__dq_row_id`), and because the quarantine schema is frozen on first write (§ Determinism), the column must be present in v1-created tables or v2 could not write to them. The engine routes and annotates; the **remediation workflow ships as v2** (designed below) — v1 users remediate by hand against the same schema.
 - **WARN routing**: two modes depending on whether `TO` is present:
   - **Diagnostic-only** (`ON FAILURE WARN` with no `TO`): the aggregated end-of-stream `Diagnostic(Warning)` fires (count + N capped samples); no row is written anywhere. This is the lightest mode — no storage overhead, message visible in the run log and LSP output.
   - **Row-capture** (`ON FAILURE WARN TO <table>`): in addition to the aggregated diagnostic, each individually failing row is written to the warn table in the same `WriteBatches(append:true)` pattern as quarantine. The captured row is the **pre-projection input row** augmented with the same `__dq_*` columns as quarantine, except `__dq_status` is always `'warned'` (immutable), `__dq_origin_row_id` is always NULL (no replay), and `__dq_target_written` is always `1` (confirms the row reached the main target). Retention pruning fires at the end of the run when a `RETENTION` interval is configured. No replay manifest is written for warn records.
@@ -249,7 +250,8 @@ decision 11); v2 ships the workflow.
 
 ### Disposition model
 
-`__dq_status` flows `quarantined → released → replayed | discarded`. Stewards **edit rows with
+`__dq_status` flows `quarantined → released → replaying → replayed`, with `discarded` available
+before replay. Stewards **edit rows with
 plain SQL** — no new edit syntax:
 
 ```sql
@@ -264,8 +266,10 @@ evidence columns other than `__dq_status`: the failure record is not editable.
 
 **As built so far:** updates that touch `__dq_*` columns are pinned to the engine-side update path
 so the lifecycle is enforced before mutation. `quarantined` rows may move to `released` or
-`discarded`; `released` rows may move to `replayed` or `discarded`; `replayed` and `discarded` are
-terminal except idempotent self-updates. Rows with status `warned` cannot change status.
+`discarded`; replay claims `released` rows as `replaying`; `replaying` rows may return to
+`released` after a verified-safe retry decision or move to `replayed` after target-side
+verification. `replayed` and `discarded` are terminal except idempotent self-updates. Rows with
+status `warned` cannot change status.
 
 ### Replay = resume-at-label + source substitution
 
@@ -284,15 +288,16 @@ cluster lock through the orchestrator metrics seam before scanning released rows
 `REPLAY QUARANTINE <quarantine_table>;` (script statement; the Portal **Replay** button enqueues
 the same as an orchestrator run) resolves the manifest and re-runs the job via the existing
 resume machinery (`Evaluator.ResumeLabel`, `Evaluator.cs:1009`) with one substitution: the
-recorded source table is fed from `<quarantine_table> WHERE __dq_status = 'released'` with the
+recorded source table is fed from rows claimed as `__dq_status = 'replaying'` with the
 `__dq_*` columns stripped. Because released rows re-enter the **current statement**:
 
 **As built so far:** the statement resolves the manifest, fails clearly when the manifest is missing
 or marked non-replayable, builds an in-memory source stream from released rows with `__dq_*`
 evidence columns stripped, and resumes the recorded section label through the existing evaluator
-resume path. After a successful replay, it flips consumed rows from `released` to `replayed`.
-It takes the replay lease before scanning released rows and releases it when replay finishes or
-fails.
+resume path. Before target-side work it claims the released set as `replaying`; after a
+successful replay it flips that set to `replayed`. A failed run leaves the claim unresolved so a
+later replay cannot duplicate target writes without an explicit steward recovery decision. It
+takes the replay lease before claiming rows and releases it when replay finishes or fails.
 
 - **current rules re-apply naturally** — no rule snapshot, no drift; if rules changed and a row
   still fails, it lands back in quarantine, which is the correct outcome;

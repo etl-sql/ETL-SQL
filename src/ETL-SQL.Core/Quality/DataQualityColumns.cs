@@ -19,6 +19,8 @@ public static class DataQualityColumns
     public const string Timestamp = "__dq_ts";
     /// <summary>Identifier of the run that captured the row.</summary>
     public const string RunId = "__dq_run_id";
+    /// <summary>Stable job or script identity used to scope retention on shared capture targets.</summary>
+    public const string CaptureScope = "__dq_capture_scope";
     /// <summary>Disposition: 'quarantined' (v2 lifecycle) or 'warned' (immutable).</summary>
     public const string Status = "__dq_status";
     /// <summary>Deterministic hash of the captured row content + run id — the replay identity key.</summary>
@@ -34,6 +36,7 @@ public static class DataQualityColumns
     public const string QuarantinedStatus = "quarantined";
     public const string WarnedStatus = "warned";
     public const string ReleasedStatus = "released";
+    public const string ReplayingStatus = "replaying";
     public const string ReplayedStatus = "replayed";
     public const string DiscardedStatus = "discarded";
 

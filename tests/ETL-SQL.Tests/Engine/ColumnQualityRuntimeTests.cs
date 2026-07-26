@@ -132,6 +132,8 @@ namespace ETL_SQL.Tests.Engine
             Assert.Single(target.WrittenRows);
             Assert.Equal(1, target.PruneCalls);
             Assert.Equal(DataQualityColumns.Timestamp, target.TimestampColumn);
+            Assert.Equal(DataQualityColumns.CaptureScope, target.ScopeColumn);
+            Assert.Equal(target.WrittenRows[0][DataQualityColumns.CaptureScope], target.ScopeValue);
             Assert.True(target.CutoffUtc < DateTime.UtcNow);
         }
 
@@ -524,6 +526,47 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task FabricatedEvidenceRows_CannotBeInsertedWithoutColumnList()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, "CREATE TABLE #q2 (Id INT, Name VARCHAR(50), __dq_status VARCHAR(20));");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
+                "INSERT INTO #q2 VALUES (1, 'injected', 'released');"));
+
+            Assert.Contains("__dq_status", ex.Message);
+            Assert.Empty(await ReadRows(eval, "#q2"));
+        }
+
+        [Fact]
+        public async Task ReplayQuarantine_RejectsAnUnresolvedReplayClaim()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+            await Run(eval,
+                "UPDATE #q SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+            await Run(eval,
+                "UPDATE #q SET __dq_status = 'replaying' WHERE __dq_status = 'released';");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+                Run(eval, "REPLAY QUARANTINE #q;"));
+
+            Assert.Contains("incomplete replay", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(await ReadRows(eval, "#clean"));
+            Assert.Equal(
+                DataQualityColumns.ReplayingStatus,
+                Assert.Single(await ReadRows(eval, "#q"))[DataQualityColumns.Status]);
+        }
+
+        [Fact]
         public async Task ReplayQuarantine_ReplaysReleasedProbeRowsThroughN1HashJoin()
         {
             var provider = new CapturingMetricsProvider();
@@ -559,6 +602,42 @@ namespace ETL_SQL.Tests.Engine
             var cleanRow = Assert.Single(eval.LastResult!.Rows);
             Assert.Equal(10m, cleanRow["Id"]);
             Assert.Equal("divert", cleanRow["Name"]);
+            Assert.Equal("NA", cleanRow["Region"]);
+        }
+
+        [Fact]
+        public async Task ReplayQuarantine_ReplaysUnmatchedProbeAfterDimensionIsAdded()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(1, 'missing')");
+
+            await Run(eval, @"
+                CREATE TABLE #dim (Name VARCHAR(100), Region VARCHAR(10));
+                import_joined_rows:
+                SELECT #src.Id, #src.Name,
+                       #dim.Region /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                LEFT HASH JOIN #dim ON #src.Name = #dim.Name
+                ON FAILURE QUARANTINE TO #q;");
+
+            var manifest = Assert.Single(provider.Manifests);
+            Assert.True(manifest.IsReplayable);
+            Assert.Equal("probe-join", manifest.ReplayMode);
+            Assert.Equal("#dim", manifest.JoinBuildTable);
+            Assert.True(manifest.JoinObservedN1);
+
+            await Run(eval, "INSERT INTO #dim (Name, Region) VALUES ('missing', 'NA');");
+            await Run(eval,
+                "UPDATE #q SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+            await Run(eval, "REPLAY QUARANTINE #q;");
+
+            await Run(eval, "SELECT Id, Name, Region FROM #clean;");
+            var cleanRow = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(1m, cleanRow["Id"]);
+            Assert.Equal("missing", cleanRow["Name"]);
             Assert.Equal("NA", cleanRow["Region"]);
         }
 
@@ -1255,6 +1334,8 @@ namespace ETL_SQL.Tests.Engine
             public int PruneCalls { get; private set; }
             public string? TimestampColumn { get; private set; }
             public DateTime CutoffUtc { get; private set; }
+            public string? ScopeColumn { get; private set; }
+            public string? ScopeValue { get; private set; }
 
             public string Path => "retention-pruning";
             public Dictionary<string, string>? Options => null;
@@ -1263,12 +1344,16 @@ namespace ETL_SQL.Tests.Engine
             public async Task<int> PruneDataQualityRowsAsync(
                 string timestampColumn,
                 DateTime cutoffUtc,
+                string scopeColumn,
+                string scopeValue,
                 CancellationToken cancellationToken)
             {
                 await Task.Yield();
                 PruneCalls++;
                 TimestampColumn = timestampColumn;
                 CutoffUtc = cutoffUtc;
+                ScopeColumn = scopeColumn;
+                ScopeValue = scopeValue;
                 return 0;
             }
 

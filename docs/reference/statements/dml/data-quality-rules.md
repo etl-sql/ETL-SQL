@@ -93,6 +93,7 @@ read, including ones absent from the SELECT list — plus these engine columns:
 | `__dq_reason` | Human-readable failure reason. |
 | `__dq_ts` | UTC capture timestamp. |
 | `__dq_run_id` | Identifier of the run that captured the row. |
+| `__dq_capture_scope` | Stable job or script identity used to isolate retention on shared targets. |
 | `__dq_status` | `'quarantined'` or `'warned'`. |
 | `__dq_row_id` | Deterministic hash of the row content plus the run id — a stable row identity. |
 | `__dq_origin_row_id` | Reserved; always NULL. |
@@ -106,10 +107,10 @@ replay against the current build-side table.
 ## Remediation Replay
 
 `REPLAY QUARANTINE <table>` resolves the orchestrator replay manifest for the current job and
-quarantine target, verifies that the target is replayable, reads rows whose `__dq_status` is
-`released`, strips engine-owned `__dq_*` evidence columns, and resumes the recorded section label
-with those rows substituted for the original source table or probe source table. Missing manifests
-and non-replayable shapes fail before replay starts.
+quarantine target, verifies that the target is replayable, claims rows by moving `__dq_status` from
+`released` to `replaying`, strips engine-owned `__dq_*` evidence columns, and resumes the recorded
+section label with those rows substituted for the original source table or probe source table.
+Missing manifests and non-replayable shapes fail before replay starts.
 
 Replayable shapes are:
 
@@ -121,9 +122,13 @@ Replayable shapes are:
 Fan-out joins are non-replayable. The diagnostic reports that join replay requires an observed N:1
 join gate.
 
-After the replayed section completes successfully, consumed rows move from `released` to
-`replayed`. A failed replay leaves released rows eligible for retry. Orchestrator-hosted replay
-takes a cluster lock on the quarantine target before scanning released rows.
+After the replayed section completes successfully, claimed rows move from `replaying` to
+`replayed`. A failed replay leaves rows `replaying` to prevent an automatic duplicate load.
+After checking the target for partial side effects, explicitly return those rows to `released` for
+retry or mark them `replayed`. Orchestrator-hosted replay takes a cluster lock before claiming rows.
+
+Retention applies only to terminal `warned`, `replayed`, or `discarded` rows in the current
+`__dq_capture_scope`. Active `quarantined`, `released`, and `replaying` evidence is retained.
 
 ## Requirements and limits
 

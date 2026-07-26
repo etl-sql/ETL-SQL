@@ -146,6 +146,38 @@ public sealed class DesignerSnapshotServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForDesigner_HonorsDirectReportAcl()
+    {
+        await using var db = await NewDbAsync();
+        var services = NewServices(db);
+        var report = await CreateReportSnapshotAsync(
+            db,
+            services,
+            "direct-acl.etlsnap",
+            new DateTime(2026, 7, 22, 12, 30, 0, DateTimeKind.Utc),
+            CreateManifest("DirectAcl", 1));
+        db.Users.Add(new PortalUser
+        {
+            Id = 99,
+            UserName = "direct-reader",
+            NormalizedUserName = "DIRECT-READER",
+            Email = "direct-reader@example.invalid"
+        });
+        db.ReportAcls.Add(new ReportAcl
+        {
+            ReportId = report.Id,
+            UserId = 99,
+            Permission = FolderPermission.Read
+        });
+        await db.SaveChangesAsync();
+
+        var result = await services.Service.LoadForDesignerAsync(report.Id, User(id: 99));
+
+        Assert.Equal(DesignerSnapshotService.SnapshotOutcome.Ok, result.Outcome);
+        Assert.NotNull(result.Package);
+    }
+
+    [Fact]
     public async Task LoadForDesigner_ReturnsArrowBackedRows_WithHonestSamplingMetadata()
     {
         await using var db = await NewDbAsync();

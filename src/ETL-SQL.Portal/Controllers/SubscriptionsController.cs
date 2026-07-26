@@ -108,7 +108,8 @@ public class SubscriptionsController(
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted);
         if (report is null) return NotFound(new { error = "Report not found" });
         // COMPAT_BREAK: 0.10
-        if (!await folderPermissions.HasPermissionAsync(report.FolderId, FolderPermission.Read, User))
+        var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
+        if (permission is null || permission < FolderPermission.Read)
             return Forbid();
 
         if (!Enum.TryParse<SubscriptionFormat>(req.Format, true, out var format))

@@ -310,19 +310,44 @@ namespace ETL_SQL.Tests.Connectors
             try
             {
                 await foreach (var _ in dataSource.ExecuteRawSql(
-                    $"CREATE TABLE dq (id INTEGER, \"{DataQualityColumns.Timestamp}\" TEXT)")) { }
+                    $"CREATE TABLE dq (id INTEGER, \"{DataQualityColumns.Timestamp}\" TEXT, "
+                    + $"\"{DataQualityColumns.CaptureScope}\" TEXT, \"{DataQualityColumns.Status}\" TEXT)")) { }
 
                 var table = new DataTable();
-                table.SetColumns(new[] { "id", DataQualityColumns.Timestamp });
+                table.SetColumns(new[]
+                {
+                    "id",
+                    DataQualityColumns.Timestamp,
+                    DataQualityColumns.CaptureScope,
+                    DataQualityColumns.Status
+                });
                 await table.AddRowAsync(new Row
                 {
                     ["id"] = 1L,
-                    [DataQualityColumns.Timestamp] = DateTime.UtcNow.AddDays(-45)
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow.AddDays(-45),
+                    [DataQualityColumns.CaptureScope] = "job:a",
+                    [DataQualityColumns.Status] = DataQualityColumns.ReplayedStatus
                 });
                 await table.AddRowAsync(new Row
                 {
                     ["id"] = 2L,
-                    [DataQualityColumns.Timestamp] = DateTime.UtcNow
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow,
+                    [DataQualityColumns.CaptureScope] = "job:a",
+                    [DataQualityColumns.Status] = DataQualityColumns.ReplayedStatus
+                });
+                await table.AddRowAsync(new Row
+                {
+                    ["id"] = 3L,
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow.AddDays(-45),
+                    [DataQualityColumns.CaptureScope] = "job:b",
+                    [DataQualityColumns.Status] = DataQualityColumns.ReplayedStatus
+                });
+                await table.AddRowAsync(new Row
+                {
+                    ["id"] = 4L,
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow.AddDays(-45),
+                    [DataQualityColumns.CaptureScope] = "job:a",
+                    [DataQualityColumns.Status] = DataQualityColumns.QuarantinedStatus
                 });
 
                 async IAsyncEnumerable<DataTable> GetBatches()
@@ -337,6 +362,8 @@ namespace ETL_SQL.Tests.Connectors
                 var pruned = await writeSource.PruneDataQualityRowsAsync(
                     DataQualityColumns.Timestamp,
                     DateTime.UtcNow.AddDays(-30),
+                    DataQualityColumns.CaptureScope,
+                    "job:a",
                     CancellationToken.None);
 
                 readSource = (SqliteDataSource)dataSource.WithTable("dq");
@@ -345,7 +372,7 @@ namespace ETL_SQL.Tests.Connectors
                     ids.AddRange(batch.Rows.Select(r => Convert.ToInt64(r["id"])));
 
                 Assert.Equal(1, pruned);
-                Assert.Equal(new[] { 2L }, ids);
+                Assert.Equal(new[] { 2L, 3L, 4L }, ids);
             }
             finally
             {

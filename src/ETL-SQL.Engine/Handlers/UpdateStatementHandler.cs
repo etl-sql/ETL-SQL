@@ -194,7 +194,8 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
         var next = NormalizeStatus(nextValue);
 
         if (!IsKnownDisposition(next))
-            throw new ExecutionException($"Invalid data-quality disposition '{next}'. Expected released, replayed, or discarded.");
+            throw new ExecutionException(
+                $"Invalid data-quality disposition '{next}'. Expected quarantined, released, replaying, replayed, or discarded.");
 
         if (current.Equals(DataQualityColumns.WarnedStatus, StringComparison.OrdinalIgnoreCase))
             throw new ExecutionException("Warn rows are immutable evidence; __dq_status cannot be changed.");
@@ -209,8 +210,16 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
         else if (current.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase))
         {
             if (next.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.ReplayingStatus, StringComparison.OrdinalIgnoreCase)
                 || next.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
                 || next.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        else if (current.Equals(DataQualityColumns.ReplayingStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            if (next.Equals(DataQualityColumns.ReplayingStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+                || next.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase))
                 return;
         }
         else if ((current.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
@@ -226,6 +235,7 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
     private static bool IsKnownDisposition(string status) =>
         status.Equals(DataQualityColumns.QuarantinedStatus, StringComparison.OrdinalIgnoreCase)
         || status.Equals(DataQualityColumns.ReleasedStatus, StringComparison.OrdinalIgnoreCase)
+        || status.Equals(DataQualityColumns.ReplayingStatus, StringComparison.OrdinalIgnoreCase)
         || status.Equals(DataQualityColumns.ReplayedStatus, StringComparison.OrdinalIgnoreCase)
         || status.Equals(DataQualityColumns.DiscardedStatus, StringComparison.OrdinalIgnoreCase);
 
