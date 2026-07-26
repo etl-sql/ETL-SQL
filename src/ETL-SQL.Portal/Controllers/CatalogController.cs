@@ -516,8 +516,13 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             return db.Reports.Where(r => !r.IsDeleted);
 
         var userId = CurrentUserId;
+        // Mirrors FolderPermissionService.GetEffectiveReportPermissionAsync: authorship is not a
+        // visibility grant on its own, otherwise a user removed from every group would keep seeing
+        // the reports they authored in search, favourites, and recents while being unable to open
+        // them. A creator who still holds folder ownership or any ACL is covered by the clauses
+        // below.
         return db.Reports.Where(r => !r.IsDeleted && (
-            r.CreatedBy == userId
+            db.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)
             || db.FolderAcls.Any(a =>
                 a.FolderId == r.FolderId
                 && a.Permission >= FolderPermission.Read

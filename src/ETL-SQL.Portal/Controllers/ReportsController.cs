@@ -75,6 +75,19 @@ public class ReportsController : ControllerBase
     /// </summary>
     private string? ToScriptKey(string? scriptPath) => PortalPathGuard.ToScriptKey(portalConfig, scriptPath);
 
+    /// <summary>
+    /// Whether the caller may approve or deny an access request for <paramref name="report"/>.
+    /// Deciding a request grants another user access, so it requires standing <c>Manage</c>
+    /// authority — admin, folder ownership, or an ACL. Authorship alone is deliberately not
+    /// sufficient, so losing access also loses the ability to grant it to others.
+    /// </summary>
+    private async Task<bool> CanDecideAccessRequestAsync(Report report)
+    {
+        if (IsAdmin) return true;
+        var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
+        return permission >= FolderPermission.Manage;
+    }
+
     private async Task<bool> CreatorCanResolveAsync(
         int creatorId,
         Report report,
@@ -1503,7 +1516,10 @@ public class ReportsController : ControllerBase
 
         if (request is null) return NotFound();
 
-        if (!IsAdmin && request.Report.CreatedBy != CurrentUserId)
+        // Deciding an access request grants another user access, so it requires standing Manage
+        // authority on the report — not merely having authored it. An author who has since lost
+        // access must not keep handing out access to a report they can no longer open themselves.
+        if (!await CanDecideAccessRequestAsync(request.Report))
         {
             return Forbid();
         }
@@ -1555,7 +1571,8 @@ public class ReportsController : ControllerBase
 
         if (request is null) return NotFound();
 
-        if (!IsAdmin && request.Report.CreatedBy != CurrentUserId)
+        // Same standing-authority rule as approval — see ApproveAccessRequest.
+        if (!await CanDecideAccessRequestAsync(request.Report))
         {
             return Forbid();
         }
