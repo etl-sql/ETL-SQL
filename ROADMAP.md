@@ -107,8 +107,8 @@ live users, remove contradictory forms now rather than carrying permanent compat
    ```sql
    ALTER CONNECTION portal_mail WITH (...) AT portal_admin;
    TEST CONNECTION portal_mail AT portal_admin INTO #test_result;
-   SHOW CONNECTION portal_mail CONFIG AT portal_admin INTO #config;
-   SHOW CONNECTIONS AT portal_admin INTO #connections;
+   SELECT * FROM portal_admin.eng.connection_config WHERE connection_name = 'portal_mail' INTO #config;
+   SELECT * FROM portal_admin.eng.connections INTO #connections;
    DROP CONNECTION IF EXISTS portal_mail AT portal_admin;
    ```
 
@@ -150,8 +150,8 @@ ALTER REFRESH JOB FinanceNightly
 SET SCHEDULE = '0 3 * * *'
 AT orch_admin;
 
-SHOW REFRESH JOBS FOR REPORT 'Finance Dashboard'
-AT orch_admin
+SELECT * FROM orch_admin.eng.refresh_jobs
+WHERE report_name = 'Finance Dashboard'
 INTO #refresh_jobs;
 
 DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
@@ -255,19 +255,95 @@ DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
 5. Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` for genuine
    resources with clear identity and lifecycle. Do not encode an implementation type before
    `CONNECTION`.
+6. **Retire `SHOW` as a data-retrieval verb. Replace all row-returning `SHOW` commands with
+   `SELECT` against the `eng.*` virtual schema.** Engine metadata, session state, lineage,
+   governance, jobs, orchestration, and portal catalog are all queryable as virtual tables under
+   the `eng.` schema prefix — a dedicated namespace that no remote database engine claims. The
+   three-part `connection.eng.table` form targets a remote connection's `eng.*` catalog using
+   the existing identifier routing rules, eliminating the need for an `INTO` escape hatch or a
+   separate `SHOW ... INTO #table` pattern:
+
+   ```sql
+   -- Engine-local (schema.table, no connection prefix)
+   SELECT * FROM eng.variables;
+   SELECT * FROM eng.lineage WHERE target_table = '#orders';
+   SELECT * FROM eng.tags WHERE tag_name = 'pii';
+   SELECT * FROM eng.connections;
+
+   -- Remote connection (connection.schema.table — same routing rules as all data queries)
+   SELECT * FROM ProdOrch.eng.jobs;
+   SELECT * FROM ProdOrch.eng.job_history WHERE job_name = 'nightly_etl';
+   SELECT * FROM my_portal.eng.reports WHERE folder = 'Finance';
+   SELECT * FROM my_portal.eng.permissions WHERE target_type = 'USER' AND target_name = 'jsmith';
+   ```
+
+   Full `SELECT` power — `WHERE`, `JOIN`, `GROUP BY`, `ORDER BY`, `INTO`, subqueries — applies
+   immediately. Autocomplete discovers the `eng.*` catalog via the `eng.` prefix. The
+   `EXECUTE portal BEGIN ... SHOW ... INTO #t; END` two-step collapses to a single `SELECT`.
+   The `eng` namespace is a reserved connection name; the engine must reject `CREATE CONNECTION
+   eng AS ...` at parse time.
+
+   Parameterized catalog queries that cannot be expressed as a WHERE filter on a static virtual
+   table use a table-valued function under the same schema:
+
+   ```sql
+   -- Full-text catalog search with fuzzy matching and relevance scoring
+   SELECT name, path, owner, relevance_score
+   FROM my_portal.eng.catalog_search('Q3 Sales')
+   ORDER BY relevance_score DESC;
+   ```
+
+   The `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` form is a file-write operation, not
+   data retrieval. Rename it to `EXPORT LINEAGE AS OPENLINEAGE TO '...'` alongside this change.
+   REPL shortcuts such as `SHOW TABLES` may remain as display-only aliases that expand to the
+   underlying `SELECT` at parse time and are never emitted by the formatter or autocomplete.
+
+   **Complete `eng.*` virtual table catalog:**
+   ```
+   -- Session / engine state
+   eng.connections          eng.connection_config    eng.variables
+   eng.profile              eng.tables               eng.columns
+   eng.views                eng.version              eng.locks
+
+   -- Lineage and governance
+   eng.lineage              eng.lineage_history      eng.tags
+   eng.stewardship_gaps     eng.protected_data       eng.protected_data_suggestions
+
+   -- Data quality
+   eng.data_quality_rules   eng.data_quality_status  eng.data_quality_failures
+   eng.stewardship_score
+
+   -- Jobs and orchestration
+   eng.jobs                 eng.job_history          eng.job_state
+   eng.refresh_jobs         eng.host_metrics         eng.subscriptions
+
+   -- Portal catalog
+   eng.users                eng.reports              eng.favorites
+   eng.recent_reports       eng.sessions             eng.permissions
+   eng.usage_metrics        eng.operational_metrics  eng.audit
+   eng.report_history       eng.report_dependencies  eng.share_links
+   eng.embed_tokens         eng.saved_views          eng.alerts
+
+   -- Table-valued functions (parameterized)
+   eng.catalog_search()     -- fuzzy full-text portal catalog search
+   ```
+
+   Update the engine, parser, formatter, linter, LSP autocomplete, help, snippets, samples, and
+   all documentation together with this change. Every `SHOW <data>` form must become a `SELECT
+   FROM eng.*` form; every `SHOW ... INTO #table` pattern in the ROADMAP, guides, cookbook, and
+   sample files must be rewritten accordingly.
 
 #### P1 — Normalize inspection and target clauses
 
-1. Use `AT <connection>` consistently for host/connection targeting. Align parser, formatter, help,
-   snippets, and docs on `SHOW TABLES AT <connection>`; remove the parser-only
-   `SHOW TABLES ON <connection>` form.
-2. Decide and implement one truthful tag inventory surface. If global enumeration is supported,
-   implement documented `SHOW TAGS [INTO #table]`; otherwise remove it from the docs and require
-   `SHOW TAGS FOR SCRIPT` or `SHOW TAGS FOR TABLE <name>`.
-3. Apply one inspection ordering rule: `SHOW <object-or-collection> [qualifier] [target]
-   [filter] [AT <management-connection>] [INTO #table]`. Reconcile special cases such as connection
-   config, report history/dependencies, bundle versions/files, refresh jobs, and effective
-   permissions against that rule.
+1. Remove the `SHOW TABLES ON <connection>` parser-only alias. The canonical form is
+   `SELECT * FROM <connection>.eng.tables`; there is no `ON` variant.
+2. Implement `eng.tags` as a globally enumerable virtual table over the current session's tag
+   catalog. Remove `SHOW TAGS FOR SCRIPT` and `SHOW TAGS FOR TABLE <name>` as special forms;
+   filter with `WHERE` instead: `SELECT * FROM eng.tags WHERE table_name = '#orders'`.
+3. Remove the `SHOW <object> [qualifier] [target] [filter] [AT conn] [INTO #table]` ordering
+   rule — it is superseded by `SELECT ... FROM [connection.]eng.<table> [WHERE ...] [AT conn]`.
+   Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
+   and effective permissions as `eng.*` virtual tables with `WHERE` filters.
 4. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
    agree on one expiration clause; prefer structural `EXPIRES <timestamp>` over a second
    `WITH(EXPIRES_AT=...)` spelling.
@@ -285,7 +361,7 @@ forms before the first supported release:
 | `CREATE DIRECTORY`, `DELETE DIRECTORY`, etc. | `CREATE_DIRECTORY(...)`, `DELETE_DIRECTORY(...)`, and sibling underscore forms |
 | `FOREACH` | `FOR EACH` |
 | `WAIT UNTIL <condition>` | `WAITFOR (<condition>)`; retain `WAITFOR DELAY` and `WAITFOR TIME` for their distinct time forms |
-| One schema-inspection command | Redundant aliases among `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE` |
+| `SELECT * FROM eng.columns WHERE table_name = ...` | `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, `DESCRIBE` — all retired; `eng.columns` is the single surface |
 
 Generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs, and error
 messages must emit only the canonical forms. If a short migration window is retained, every alias
@@ -306,7 +382,7 @@ do not describe both forms as equally canonical.
    sigils, `AT` targeting, named refresh jobs, SMTP/WEBHOOK catalog registration, and all
    Report-SQL object families.
 4. Parse every copy-pasteable documentation and sample block in its correct execution context.
-   Specifically reconcile `SHOW TABLES`, `SHOW TAGS`, Theme deletion, Portal share/embed expiry,
+   Specifically reconcile `eng.tables`, `eng.tags`, Theme deletion, Portal share/embed expiry,
    Report-SQL lifecycle claims, managed connections, and refresh-job examples.
 5. Update `docs/syntax-index.md`, statement references, connector references, administration
    guides, architecture contracts, help resources, snippets, migration guide, samples,
@@ -331,10 +407,12 @@ product story suggests:
   alerts become available when the script runs through Orchestrator.
 - The single-node Orchestrator already uses local SQLite by default and persists job history,
   warning/quarantine totals, compact per-rule failure counts, and structured per-column metrics.
-- `SHOW DATA QUALITY RULES` exposes the rules recorded by the current execution.
-- `SHOW LINEAGE HISTORY FOR MISSING TAGS` audits required `@owner`, `@steward`, `@contact`,
-  `@classification`, and `@quality` metadata locally or `AT` an Orchestrator/Portal connection.
-  `SHOW PROTECTED DATA [SUGGESTIONS]` provides the corresponding protected-data inventory.
+- `SELECT * FROM eng.data_quality_rules` exposes the rules recorded by the current execution.
+- `SELECT * FROM eng.stewardship_gaps` audits required `@owner`, `@steward`, `@contact`,
+  `@classification`, and `@quality` metadata locally; `SELECT * FROM ProdOrch.eng.stewardship_gaps`
+  targets a remote Orchestrator or Portal connection.
+  `SELECT * FROM eng.protected_data` and `SELECT * FROM eng.protected_data_suggestions` provide
+  the corresponding protected-data inventory.
 
 The gap is not a second data-quality engine. It is a coherent operator-facing read model between a
 single script's result and the full Portal governance workflow. A one-person shop should be able to
@@ -354,34 +432,42 @@ prerequisite for data quality or stewardship. The progression must remain additi
 
 #### P0 — Ship a no-Portal quality status surface
 
-1. Add a structured status command:
+1. Add `eng.data_quality_status` as a virtual table over the current run or the local Orchestrator
+   store:
 
    ```sql
-   SHOW DATA QUALITY STATUS
-     [FOR JOB <job_name>]
-     [SINCE <duration>]
-     [AT <orchestrator_connection>]
-     [INTO #table];
+   -- Current run or local Orchestrator store
+   SELECT * FROM eng.data_quality_status
+   WHERE job_name = 'nightly_etl' AND run_since > DATEADD(DAY, -7, GETDATE())
+   INTO #dq_status;
+
+   -- Remote Orchestrator
+   SELECT * FROM ProdOrch.eng.data_quality_status
+   WHERE job_name = 'nightly_etl'
+   INTO #dq_status;
    ```
 
-   With no `AT`, it reports the current run or the injected local Orchestrator store when one is
-   available. The result must include job/run identity, time, status, rows processed, warned and
+   The virtual table must include job/run identity, time, status, rows processed, warned and
    quarantined counts and percentages, failed-rule count, freshness state, and error summary. It
    must consume structured history fields rather than parse display prose.
-2. Add the drill-down paired with that summary:
+2. Add `eng.data_quality_failures` as the drill-down paired with that summary:
 
    ```sql
-   SHOW DATA QUALITY FAILURES
-     [FOR JOB <job_name>]
-     [SINCE <duration>]
-     [AT <orchestrator_connection>]
-     [INTO #table];
+   -- Current run or local Orchestrator store
+   SELECT * FROM eng.data_quality_failures
+   WHERE job_name = 'nightly_etl'
+   INTO #dq_failures;
+
+   -- Remote Orchestrator
+   SELECT * FROM ProdOrch.eng.data_quality_failures
+   WHERE job_name = 'nightly_etl' AND run_since > DATEADD(DAY, -7, GETDATE())
+   INTO #dq_failures;
    ```
 
    Return one row per run, target, column, rule, and action with the failure count. Persist a
    normalized rule-failure record where necessary; keep the compact history string only as a
    compatibility/display field. Do not persist or return sample values.
-3. Expand `SHOW JOB HISTORY` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
+3. Expand `eng.job_history` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
    data-quality summary fields, or make the status command the documented quality projection over
    that history. Both commands must agree on run identity and status.
 4. Preserve `ASSERT JOB` as the executable gate. Document the zero-service pattern for Task
@@ -401,13 +487,18 @@ prerequisite for data quality or stewardship. The progression must remain additi
 
 #### P1 — Add transparent stewardship scoring
 
-1. Add a score command over the existing lineage/tag catalog:
+1. Add `eng.stewardship_score` as a virtual table over the existing lineage/tag catalog:
 
    ```sql
-   SHOW STEWARDSHIP SCORE
-     [FOR JOB <job_name> | TABLE <table_name> | SCRIPT <script_path>]
-     [AT <orchestrator_connection>]
-     [INTO #table];
+   -- Current session or local Orchestrator store
+   SELECT * FROM eng.stewardship_score
+   WHERE scope_type = 'JOB' AND scope_name = 'nightly_etl'
+   INTO #score;
+
+   -- Remote Orchestrator or Portal
+   SELECT * FROM ProdOrch.eng.stewardship_score
+   WHERE scope_type = 'TABLE' AND scope_name = '#orders'
+   INTO #score;
    ```
 
    Report the numerator, denominator, and percentage for each component—not only a badge or opaque
@@ -419,9 +510,9 @@ prerequisite for data quality or stewardship. The progression must remain additi
    able to declare required tags, scope, exclusions, and any weights in normal policy
    configuration. If no weighted policy exists, show component percentages without inventing a
    composite score.
-3. Use `SHOW LINEAGE HISTORY FOR MISSING TAGS ... INTO #gaps` as the detail query behind tag
-   completeness rather than introducing a synonymous "gaps" command. Score totals and missing-tag
-   rows must reconcile exactly.
+3. Use `SELECT * FROM eng.stewardship_gaps` (or `ProdOrch.eng.stewardship_gaps` for remote) as
+   the detail query behind tag completeness rather than introducing a synonymous "gaps" command.
+   Score totals and missing-tag rows must reconcile exactly.
 4. Treat tag source locations as the remediation path. Results should retain script path and line
    when known so a solo operator fixes the source-controlled `INSERT TAG` / `INSERT LINEAGE`
    statement instead of editing an isolated governance database.
@@ -436,7 +527,7 @@ prerequisite for data quality or stewardship. The progression must remain additi
      and jobs with no recent successful run.
    - **Stewardship Scorecard:** component scores, missing required tags, protected assets without
      ownership/classification, and rule-coverage gaps.
-2. Build the templates from `SHOW ... INTO #table` statements so they run locally in the Report
+2. Build the templates from `SELECT ... FROM eng.*` statements so they run locally in the Report
    Player or on a schedule through Orchestrator. Portal publishing is optional and must not change
    the report's queries or meaning.
 3. Add a copy-pasteable "one-person quality loop" guide and sample:
@@ -476,7 +567,7 @@ Treat **Solo / Workstation**, **Team / SME**, **Enterprise / Corporate**, and
    canonical declarative job/report definitions must not require business-logic rewrites as a
    deployment grows. Add profile review to new-feature design and release checklists.
 3. Define the smallest safe form of each enterprise-oriented capability. Portal must not become a
-   prerequisite where CLI, local SQLite, Orchestrator, `SHOW ... INTO`, or Report Player can provide
+   prerequisite where CLI, local SQLite, Orchestrator, `SELECT FROM eng.*`, or Report Player can provide
    a secure useful experience.
 4. Keep regulated, air-gapped, high-volume, HA, disaster-recovery, and data-residency requirements
    as overlays that add evidence to a profile rather than creating inconsistent fifth and sixth
@@ -865,9 +956,11 @@ each affects day-to-day use.
    exists for humans reading run history; it already needed careful handling because rule text
    contains both `:` and `=` (a `MATCHES` regex). v2 records per-column run metrics — the trend
    should read those instead of parsing prose.
-3. **No rule visibility in the Portal.** `SHOW DATA QUALITY RULES` is an engine statement only, so a
-   steward who lives in the Portal cannot see which rules protect which columns — the thing they
-   most need when a quarantine rate jumps. Wants a read-only endpoint plus a panel beside the trend.
+3. **No rule visibility in the Portal.** `eng.data_quality_rules` is currently engine-session-only,
+   so a steward who lives in the Portal cannot see which rules protect which columns — the thing
+   they most need when a quarantine rate jumps. Wants a read-only endpoint plus a panel beside the
+   trend. Making `eng.data_quality_rules` queryable via `my_portal.eng.data_quality_rules` is the
+   fix once the `eng.*` virtual table layer is wired through the Portal API.
 4. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
    new `ExecutionSession`. Acceptable at current volume; worth revisiting before any endpoint like
    this becomes a polled or dashboard-refreshed surface.
