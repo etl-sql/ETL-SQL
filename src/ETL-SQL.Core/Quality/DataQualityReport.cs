@@ -231,16 +231,25 @@ public sealed class DataQualityReport
     /// pass <paramref name="isPii"/> so the value is masked before it is ever retained.
     /// </summary>
     public void RecordFailure(string column, string rule, FailAction action, object? sample, bool isPii)
+        => RecordFailure(column, rule, action, sample, isPii, owner: null);
+
+    /// <summary>
+    /// Records one rule failure. <paramref name="owner"/> is the column's accountable steward
+    /// (from its <c>@steward</c>/<c>@owner</c>/<c>@contact</c> tag), carried so an alert can name
+    /// who should act rather than only what broke.
+    /// </summary>
+    public void RecordFailure(
+        string column, string rule, FailAction action, object? sample, bool isPii, string? owner)
     {
         var accumulator = _failures.GetOrAdd((column, rule), _ => new RuleFailureAccumulator(MaxSamplesPerRule));
-        accumulator.Add(action, isPii ? PiiMask : Format(sample));
+        accumulator.Add(action, isPii ? PiiMask : Format(sample), owner);
     }
 
     /// <summary>Per-(column, rule) failure counts and capped samples, ordered for stable output.</summary>
     public IReadOnlyList<RuleFailureSummary> Failures =>
         _failures
             .Select(kv => new RuleFailureSummary(
-                kv.Key.Column, kv.Key.Rule, kv.Value.Action, kv.Value.Count, kv.Value.Samples))
+                kv.Key.Column, kv.Key.Rule, kv.Value.Action, kv.Value.Count, kv.Value.Samples, kv.Value.Owner))
             .OrderBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
             .ThenBy(f => f.Rule, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -371,18 +380,20 @@ public sealed class DataQualityReport
 
         public long Count => Interlocked.Read(ref _count);
         public FailAction Action { get; private set; }
+        public string? Owner { get; private set; }
 
         public IReadOnlyList<string> Samples
         {
             get { lock (_gate) return _samples.ToArray(); }
         }
 
-        public void Add(FailAction action, string sample)
+        public void Add(FailAction action, string sample, string? owner)
         {
             Interlocked.Increment(ref _count);
             lock (_gate)
             {
                 Action = action;
+                Owner ??= owner;
                 if (_samples.Count < maxSamples) _samples.Add(sample);
             }
         }
@@ -432,7 +443,9 @@ public sealed record RuleFailureSummary(
     string Rule,
     FailAction Action,
     long Count,
-    IReadOnlyList<string> Samples)
+    IReadOnlyList<string> Samples,
+    /// <summary>The column's accountable steward, from its @steward/@owner/@contact tag.</summary>
+    string? Owner = null)
 {
     /// <summary>The end-of-stream diagnostic text: count plus capped samples.</summary>
     public string ToMessage() =>

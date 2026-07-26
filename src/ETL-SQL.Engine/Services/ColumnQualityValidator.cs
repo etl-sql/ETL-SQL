@@ -87,7 +87,7 @@ public sealed class ColumnQualityValidator
 
             var name = i < outputColumnNames.Count ? outputColumnNames[i] : column.Alias ?? $"Column{i + 1}";
             bool isPii = IsPiiTagged(column.Metadata!);
-            ruleSets.Add(new ColumnRuleSet(i, name, bindings, isPii));
+            ruleSets.Add(new ColumnRuleSet(i, name, bindings, isPii, ResolveOwner(column.Metadata!)));
         }
 
         if (ruleSets.Count == 0) return null;
@@ -394,7 +394,7 @@ public sealed class ColumnQualityValidator
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
-                        ruleSet.ColumnName, rule.Text, binding.Action, value, ruleSet.IsPii);
+                        ruleSet.ColumnName, rule.Text, binding.Action, value, ruleSet.IsPii, ruleSet.Owner);
 
                     var reason = DescribeFailure(rule, value, ruleSet);
                     if (binding.Action == FailAction.Throw)
@@ -682,7 +682,26 @@ public sealed class ColumnQualityValidator
         int OutputIndex,
         string ColumnName,
         IReadOnlyList<ColumnRuleBinding> Bindings,
-        bool IsPii);
+        bool IsPii,
+        string? Owner = null);
+
+    /// <summary>
+    /// The column's accountable person, preferring the most specific tag available. These already
+    /// exist and already propagate through lineage; alerting just needs to use them so a failure
+    /// reaches whoever can fix it rather than only a shared channel.
+    /// </summary>
+    private static string? ResolveOwner(IReadOnlyDictionary<string, string> metadata)
+    {
+        foreach (var tag in new[] { "steward", "owner", "contact" })
+        {
+            if (metadata.TryGetValue(tag, out var raw))
+            {
+                var value = ColumnRuleParser.Unquote(raw).Trim();
+                if (value.Length > 0) return value;
+            }
+        }
+        return null;
+    }
 
     internal sealed record RowFailure(
         FailAction Action,

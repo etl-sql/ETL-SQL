@@ -216,6 +216,43 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task Alert_NamesTheFailingColumnsAndTheirOwners()
+        {
+            // @steward/@owner/@contact already exist and already propagate; the alert should use
+            // them so a failure reaches whoever can fix it, not just a shared channel.
+            var eval = NewEvaluator();
+            var sink = new CapturingSink();
+            eval.Connections["alerts"] = sink;
+
+            await Run(eval, @"
+                CREATE TABLE #src (Id INT, Email VARCHAR(50), Ssn VARCHAR(20));
+                INSERT INTO #src (Id, Email, Ssn) VALUES (1, 'bad', '123-45-6789');");
+            await Run(eval, @"
+                import_rows:
+                SELECT Id,
+                       Email /* @steward: alice@example.com; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */,
+                       Ssn   /* @pii: true; @owner: bob@example.com; @expect: 'MATCHES ^ok$'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q;");
+
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+
+            var alert = Assert.Single(sink.Rows);
+            var owners = alert["Owners"]?.ToString();
+            Assert.Contains("alice@example.com", owners);   // @steward
+            Assert.Contains("bob@example.com", owners);     // @owner fallback
+            Assert.Contains("alice@example.com", alert["Text"]?.ToString());
+
+            var failingColumns = alert["FailingColumns"]?.ToString();
+            Assert.Contains("Email", failingColumns);
+            Assert.Contains("Ssn", failingColumns);
+
+            // Column names and stewards only — a PII column's values must not ride along.
+            var payload = string.Join("|", alert.Columns.Select(kv => $"{kv.Key}={kv.Value}"));
+            Assert.DoesNotContain("123-45-6789", payload);
+        }
+
+        [Fact]
         public async Task ZeroSigma_FallsBackToARelativeBand_NotEquality()
         {
             // A perfectly flat history gives sigma 0. Collapsing the band to equality would fail

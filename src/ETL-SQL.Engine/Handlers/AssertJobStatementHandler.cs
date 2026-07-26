@@ -376,7 +376,8 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
             var report = context.DataQuality;
             var table = new DataTable();
-            table.SetColumns(["Title", "Text", "JobName", "AlertKind", "FailedPredicates", "RowsValidated", "RowsQuarantined", "RowsWarned"]);
+            table.SetColumns(["Title", "Text", "JobName", "AlertKind", "FailedPredicates",
+                "RowsValidated", "RowsQuarantined", "RowsWarned", "Owners", "FailingColumns"]);
             var row = table.NewRow();
             row["Title"] = alertKind.Equals("RECOVERY", StringComparison.OrdinalIgnoreCase)
                 ? $"Data quality recovery: {stmt.JobName}"
@@ -388,6 +389,27 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
             row["RowsValidated"] = (decimal)report.RowsValidated;
             row["RowsQuarantined"] = (decimal)report.RowsQuarantined;
             row["RowsWarned"] = (decimal)report.RowsWarned;
+
+            // Name the columns that actually failed and who owns them, so the alert reaches
+            // someone who can act rather than only stating that a threshold moved. Column names
+            // and stewards only — never sample values, which may be PII.
+            var failingColumns = report.Failures
+                .Select(f => f.Column)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var owners = report.Failures
+                .Where(f => !string.IsNullOrWhiteSpace(f.Owner))
+                .Select(f => f.Owner!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(o => o, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            row["FailingColumns"] = string.Join(", ", failingColumns);
+            row["Owners"] = string.Join(", ", owners);
+            if (owners.Count > 0)
+                row["Text"] = $"{summary} Owner(s): {string.Join(", ", owners)}.";
+
             await table.AddRowAsync(row);
 
             await sink.WriteBatches(SingleBatch(table), append: true, context.CancellationToken);
