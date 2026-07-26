@@ -722,6 +722,47 @@ authorized authors can work entirely in Studio while outside script ingress is r
 departmental topology, a cross-environment identity cannot discover or access another environment's
 reports, datasets, connections, secrets, artifacts, or authoring state.
 
+### Portal — Authorship Is Not Permission (permission-model consistency)
+
+**Origin (2026-07-26).** During the v0.17.0 release gate, two pre-existing security tests caught
+report authorship being treated as *standing permission*: a user removed from every group kept full
+access to reports they had authored, kept seeing them in the catalog, kept the ability to approve
+other people's access requests, and the anonymous share/embed links they had issued kept resolving.
+Four sites were fixed in v0.17.0 (`GetEffectiveReportPermissionAsync`, `CreatorCanResolveAsync`,
+`CatalogController.VisibleReportsQuery`, and the access-request approve/deny endpoints), and the rule
+is now pinned by `ReportAuthorshipRevocationTests`.
+
+The **same pattern remains in shipped code for datasets**, where it was not introduced by v0.17.0 and
+so was deliberately left alone rather than changed mid-release without test coverage:
+
+- `DatasetPermissionService.GetEffectivePermissionAsync` and its `Evaluate` helper both return
+  `DatasetPermission.Owner` whenever `dataset.CreatedBy == userId` or
+  `dataset.OwningReport?.CreatedBy == userId`, before consulting any ACL or folder permission.
+- `ReportDependencyService` (~line 94) short-circuits on `dataset.OwningReport?.CreatedBy`.
+
+The work:
+
+1. **Decide the intended rule explicitly and write it down.** The report model now says authorship
+   *upgrades* an existing grant but never substitutes for one. Datasets should either adopt that rule
+   or document why they differ — the current inconsistency is undocumented and looks accidental.
+2. **Write the dataset revocation tests first.** Dataset authorship is load-bearing for publishing and
+   registry flows that currently have no coverage for the revocation case, which is exactly why this
+   was not changed during the release. Mirror `ReportAuthorshipRevocationTests`: a creator removed
+   from every group loses dataset access, and one retaining a lesser grant keeps the upgrade.
+3. **Apply the rule** to both `DatasetPermissionService` paths and `ReportDependencyService`.
+4. **Add an architecture test that fails on new unconditional authorship short-circuits** — a rule
+   over the permission services and controllers flagging `CreatedBy ==` / `OwnerId ==` comparisons
+   that return a permission or `true` without also consulting an ACL. This is the class-level guard;
+   all four v0.17.0 sites would have tripped it at the commit that introduced them, instead of being
+   found by two unrelated tests during a release gate.
+5. **Audit the remaining ownership surfaces** for the same shape — connection ACLs, subscriptions,
+   alerts (`ReportAlerts` filters on `OwnerId == CurrentUserId`), and saved views.
+
+**Definition of done.** Removing a user from every group, or from the directory, demonstrably revokes
+every report, dataset, connection, subscription, alert, saved view, and anonymous link they created,
+with a test per surface; and a newly-introduced authorship short-circuit fails the build rather than
+a release gate.
+
 ### Portal — Governance Dashboard
 
 Finish the data-steward-first dashboard described in
