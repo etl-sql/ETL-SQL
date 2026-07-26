@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Report Designer — ETL-SQL Portal</title>
-  <link rel="stylesheet" href="/css/portal.css?v=0.16.0">
-  <link rel="stylesheet" href="/designer/designer.css?v=0.16.0">
+  <link rel="stylesheet" href="/css/portal.css?v=0.17.0">
+  <link rel="stylesheet" href="/designer/designer.css?v=0.17.0">
   <style>
     body, html { margin: 0; padding: 0; overflow: hidden; }
     .app-shell  { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -17,11 +17,11 @@
   <div id="designerHost"></div>
 </div>
 
-<script src="/js/echarts.min.js?v=0.16.0"></script>
+<script src="/js/echarts.min.js?v=0.17.0"></script>
 <script type="module">
-import { auth, authApi, foldersApi, reportsApi } from '/js/api.js?v=0.16.0';
-import { applyPortalBranding } from '/js/branding.js?v=0.16.0';
-import { createDesigner } from '/designer/designer.js?v=0.16.0';
+import { auth, authApi, foldersApi, reportsApi } from '/js/api.js?v=0.17.0';
+import { applyPortalBranding } from '/js/branding.js?v=0.17.0';
+import { createDesigner } from '/designer/designer.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();

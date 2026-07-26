@@ -43,7 +43,14 @@ namespace ETL_SQL.Tests.UI
             var help = ETL_SQL.TUI.Program.ServiceProvider.GetService(typeof(ILanguageHelpRegistry)) as ILanguageHelpRegistry;
             Assert.NotNull(help);
 
-            string? topic = help!.GetTopics().FirstOrDefault(t => help.GetHelp(t) != null && !t.Contains(' '));
+            // The topic must be a single word by InfoAtCursor's own definition, not merely
+            // space-free: help topics are derived from doc filenames, so hyphenated pages such as
+            // 'data-prep' or 'asof-join' are legitimate topics that WordAt correctly splits at the
+            // hyphen ('data'), leaving nothing for Build to resolve. Selecting on WordAt keeps this
+            // test asserting the registry lookup rather than tripping over topic naming.
+            string? topic = help!.GetTopics().FirstOrDefault(t =>
+                help.GetHelp(t) != null
+                && InfoAtCursor.WordAt(t, 0) == t);
             Assert.NotNull(topic); // the embedded help resources should provide at least one keyword
 
             var result = InfoAtCursor.Build(topic!, 0, 0, null, help, null, out var title);
