@@ -1051,6 +1051,74 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_UpdateDisposition_SubmitsGuardedReleaseUpdate()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_disposition",
+            "dq:quarantine-manifest:q_disposition",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_disposition",
+                "loads/replay.etlsql",
+                "disposition_section",
+                "#src",
+                "q_disposition",
+                true,
+                null,
+                ["Id", "Email"],
+                "schema-disposition",
+                DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_disposition",
+            jobName = "nightly_disposition",
+            rowIds = new[] { "row-1" },
+            disposition = "released",
+            changes = new Dictionary<string, string?> { ["Email"] = "fixed@example.test" }
+        });
+
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<QuarantineDispositionResponse>(_json);
+        Assert.False(string.IsNullOrWhiteSpace(body!.JobId));
+        Assert.Equal(
+            "UPDATE q_disposition SET Email = 'fixed@example.test', __dq_status = 'released' WHERE __dq_row_id IN ('row-1') AND __dq_status = 'quarantined';",
+            body.DispositionStatement);
+    }
+
+    [Fact]
+    public async Task DataQuality_UpdateDisposition_RejectsReleaseForNonReplayableManifest()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_non_replayable",
+            "dq:quarantine-manifest:q_non_replayable",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_non_replayable",
+                "loads/replay.etlsql",
+                "blocked_section",
+                "#src,#dim",
+                "q_non_replayable",
+                false,
+                "quarantine source spans a join; replay requires a single-table input in this version",
+                ["Id"],
+                "schema-non-replayable",
+                DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_non_replayable",
+            jobName = "nightly_non_replayable",
+            rowIds = new[] { "row-1" },
+            disposition = "released"
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {

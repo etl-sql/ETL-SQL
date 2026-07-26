@@ -68,6 +68,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   through the configured Orchestrator job channel, rejects blocked or tampered manifest targets, and
   reports the submitted replay job id back to the steward.
 
+- Added Portal quarantine disposition submission. `/api/data-quality/quarantine/disposition`
+  accepts explicit row ids plus optional source-column edits, builds a guarded `UPDATE` that leaves
+  `__dq_*` evidence immutable, and submits it through the Orchestrator job channel for release or
+  discard workflows.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

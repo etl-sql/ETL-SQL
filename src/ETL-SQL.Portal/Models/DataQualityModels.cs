@@ -20,3 +20,14 @@ public sealed record ReplayQuarantineRequest(
 public sealed record ReplayQuarantineResponse(
     string JobId,
     string ReplayStatement);
+
+public sealed record QuarantineDispositionRequest(
+    string QuarantineTarget,
+    IReadOnlyList<string> RowIds,
+    string Disposition,
+    string? JobName = null,
+    IReadOnlyDictionary<string, string?>? Changes = null);
+
+public sealed record QuarantineDispositionResponse(
+    string JobId,
+    string DispositionStatement);

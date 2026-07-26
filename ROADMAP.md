@@ -33,7 +33,8 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    resumes the recorded section label, then flips consumed rows to `replayed` after success.
    Replay is fenced through the orchestrator cluster-lock store. The first Portal steward queue now
    lists replay manifests, replayability state, and can submit replay jobs through the configured
-   Orchestrator job channel. Remaining work: row editing / release actions from the Portal.
+   Orchestrator job channel. Portal can also submit guarded row-disposition updates for explicit
+   quarantine row ids. Remaining work: a row-browsing/editing grid over quarantine targets.
 4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
    retention. Demand-triggered; each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.

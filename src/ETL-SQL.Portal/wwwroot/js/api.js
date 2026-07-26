@@ -224,6 +224,12 @@ export const dataQualityApi = {
             method: 'POST',
             body: { quarantineTarget, jobName }
         });
+    },
+    updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null } = {}) {
+        return apiJson('/api/data-quality/quarantine/disposition', {
+            method: 'POST',
+            body: { quarantineTarget, jobName, rowIds, disposition, changes }
+        });
     }
 };
 
