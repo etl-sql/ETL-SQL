@@ -98,6 +98,8 @@ live users, remove contradictory forms now rather than carrying permanent compat
    session-local connection. Never copy resolved secret values across the boundary: catalog entries
    store `SECRET:name` references or host-owned protected values under the existing zero-trust
    rules.
+   
+   **Do we use this syntax to create shared connections?**
 
 3. **Use one managed-connection lifecycle.** Extend the same object-first grammar to remote
    administration:
@@ -212,27 +214,44 @@ DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
    `CREATE <object> <name> AS <type>(...)`; definition/property-bag report objects should use one
    shared form, including `CREATE STYLE <name> AS (...)`.
 4. Treat tags and lineage as inserted metadata records, not unnamed DDL objects. Canonicalize the
-   existing shapes on `INSERT`:
+   existing shapes on `INSERT`, and extend to a full DML surface where the semantics warrant it:
+
+   **Tags** are mutable metadata facts and support full `INSERT`, `UPDATE`, and `DELETE`:
 
    ```sql
-   INSERT TAG FOR TABLE #orders (
-       owner = 'Finance',
-       classification = 'Confidential'
-   );
+   -- Attach metadata
+   INSERT TAG FOR TABLE #orders (owner = 'Finance', classification = 'Confidential');
+   INSERT TAG FOR TABLE #orders COLUMN customer_id (pii = TRUE);
 
-   INSERT TAG FOR TABLE #orders COLUMN customer_id (
-       pii = TRUE
-   );
+   -- Correct or transfer metadata
+   UPDATE TAG FOR TABLE #orders COLUMN customer_id (owner = 'DataPrivacy');
 
-   INSERT LINEAGE FOR TABLE #orders
-   FROM 'openlineage/orders.json';
+   -- Remove one key or all tags on a target
+   DELETE TAG FOR TABLE #orders COLUMN customer_id (pii);
+   DELETE TAGS FOR TABLE #orders COLUMN customer_id;
+   ```
+
+   **Lineage** is a provenance record and has asymmetric mutability. Auto-captured lineage
+   (produced by `SELECT INTO`, `MERGE`, etc.) is immutable — it is an audit record of what
+   actually ran. Only manually imported lineage may be deleted, to allow correction of a bad
+   import; deleting auto-captured lineage must be blocked by the engine or require an explicit
+   `SET ALLOW_LINEAGE_DELETE = ON` governance override. `UPDATE LINEAGE` is not supported in
+   any form because editing a provenance record rewrites history.
+
+   ```sql
+   -- Import curated or cross-system lineage
+   INSERT LINEAGE FOR TABLE #orders FROM 'openlineage/orders.json';
+
+   -- Correct a bad import (imported lineage only; auto-captured is blocked)
+   DELETE LINEAGE FOR TABLE #orders;
    ```
 
    Retire `CREATE TAG`, `CREATE LINEAGE`, and the duplicate bare `TAG ... WITH (...)` statement.
-   Route the new forms through `INSERT` dispatch without confusing them with row DML, preserve the
-   existing typed tag-catalog validation and zero-trust lineage source handling, and update lineage
-   capture, formatter, linting, completion, help, snippets, samples, and documentation together.
-   Tags and lineage do not participate in the `CREATE`/`ALTER`/`DROP` object lifecycle matrix.
+   Route the new forms through `INSERT`/`UPDATE`/`DELETE` dispatch without confusing them with
+   row DML, preserve the existing typed tag-catalog validation and zero-trust lineage source
+   handling, and update lineage capture, formatter, linting, completion, help, snippets, samples,
+   and documentation together. Tags and lineage do not participate in the
+   `CREATE`/`ALTER`/`DROP` object lifecycle matrix.
 5. Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` for genuine
    resources with clear identity and lifecycle. Do not encode an implementation type before
    `CONNECTION`.
