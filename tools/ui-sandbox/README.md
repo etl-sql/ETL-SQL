@@ -34,6 +34,17 @@ The sandbox currently hosts the following stories under `stories/`:
 | **Lineage Catalog** | `lineage-catalog` | Asset inventory and search view with lineage chips |
 | **Lineage UI** | `lineage-ui` | Interactive visual pipelines and flow models |
 | **Subscription History** | `subscription-history` | Email/Slack report subscription logs and audits |
+| **Data Quality** | `data-quality-queue` | Quarantine queue, row editor, and quality trend panel |
+
+The **Data Quality** story's fixtures cover the states a steward actually lands in:
+
+| Fixture | Exercises |
+|---|---|
+| `Quarantine queue` | Manifest list: replayable vs blocked, join fan-out reason, copy/replay actions |
+| `Row editor (resolvable target)` | Cell edits, the audited reason field, release/discard, status filter |
+| `Row editor (target Portal cannot read)` | The durable-target gap — a queued, replayable manifest whose rows the Portal's own execution session cannot `SELECT` (see the open item in `TODO.md`) |
+| `Quality trend (degrading)` | Rate sparkline, delta vs. earlier runs, rules firing most, recent runs |
+| `Quality trend (no runs)` | Empty state for a job with no recorded metrics |
 
 ## Portal parity — what's faithful vs mocked
 

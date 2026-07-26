@@ -184,6 +184,9 @@ function renderRowsPanel(state) {
           </tr>`;
         }).join('')}</tbody>
       </table></div>` :
+      // Only an actual empty result is "no rows". When the read failed we have no idea whether
+      // rows exist, and telling a steward nothing matched would read as an all-clear.
+      state.rowsError ? '' :
       `<div class="empty-state empty-state-panel">
         <h2>No rows</h2>
         <p>No quarantine rows match the current status filter.</p>
