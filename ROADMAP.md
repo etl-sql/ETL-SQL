@@ -55,6 +55,11 @@ another set of isolated capabilities.
    underneath interactive. Collapse the global nav, use a modal drawer with overlay/focus
    containment, and provide responsive table, form, tab, and action patterns for Reports, Admin,
    Governance, Docs, and Orchestrator.
+6. **Split authoring authority before promoting Studio.** The current editor is gated by the
+   Designer module and `Admin,Publisher`; source read/save/commit additionally require report
+   `Manage`. This lets the same broad authority edit active source, commit it, and—when
+   `PushOnSave` is configured—push it. Introduce explicit authoring capabilities and enforce them in
+   every API before exposing Studio in global navigation. Hiding buttons is not authorization.
 
 #### P1 — Connect the product into coherent workspaces
 
@@ -108,6 +113,54 @@ another set of isolated capabilities.
    icon-only toolbar, improve dataset/on-page empty states, and make the canvas/inspector useful at
    laptop and tablet widths.
 
+#### Studio authorization model
+
+Studio permissions should overlay resource ACLs; they should not turn `Publisher` or folder
+`Manage` into an all-purpose development credential.
+
+| Action | Required authority |
+| :--- | :--- |
+| Discover/open Studio | Designer module + deployment authoring policy + `StudioAccess` |
+| Read report source | `ScriptRead` + report/folder `Author` or `Manage` |
+| Analyze, complete, and render a preview | `ScriptPreview` + source-read authority |
+| Run an interactive selection | `ScriptRun` + source-read authority + existing shared-connection ACLs; retain the read-only/`#temp` execution policy |
+| Save a draft | `ScriptSave` + report/folder `Author` or `Manage`; saving must not publish, commit, or push implicitly |
+| Publish or replace the active report version | `ReportPublish` + target-folder authority |
+| Upload/import outside source | `ScriptIngress`; disabled in the catalog-only SaaS profile |
+| Commit to repository | `SourceCommit` + source-save authority; record actor, revision, diff summary, and correlation id |
+| Push or promote a branch | `SourcePush` or a deployment service identity; separate from commit and disabled by default |
+
+Add an `Author` resource grant so report editing does not require permission to change ACLs, move or
+delete reports, or administer the entire folder. Capabilities should be assignable to groups and
+service accounts, included in effective-permission diagnostics, auditable, deny-by-default for new
+tenants/environments, and tested as a matrix across Viewer, Author, Publisher, Approver, and Admin.
+For controlled production, support a draft → review/approval → publish/commit/push workflow with
+optimistic concurrency, protected branches, and separation of duties.
+
+#### Enterprise administration coverage audit
+
+The enterprise guides are strong on command-line and configuration runbooks, but several shipped
+Portal APIs and health contracts have no corresponding browser workflow. Portal coverage should be
+added where the operation is safe while the Portal is online; host-bootstrap, recovery, and
+containment operations must remain out-of-process.
+
+| Enterprise area | Current Portal coverage | Portal update and boundary |
+| :--- | :--- | :--- |
+| OIDC and LDAP identity | Federated login, provisioning, and group sync are implemented; OIDC diagnostics is an API, while provider configuration is file/environment based. | Add identity-provider status, callback/issuer reachability, claim and group-mapping test results, sync health, and break-glass readiness. Never return client secrets; stage high-risk configuration changes and show restart impact. |
+| Service accounts | CRUD, secret rotation, revoke, scoped-token issuance, and middleware enforcement exist as APIs; no Admin page exists. | Add a Service Accounts page with scope, expiry, last use, owner, rotate/revoke, one-time secret display, and audit history. |
+| Policy authority and machine registry | The Admin Policy Authority page covers validation, publication, activation, canaries, rollback, and machine registration/revocation. | Preserve this as the model enterprise surface; add fleet impact, approval/separation-of-duty state, collector consequences, and links from affected machines to policy history. |
+| Host enrollment | `etl-sql enterprise enroll/status/unenroll` is an elevated host command; the Portal registers the corresponding machine identity. | Show enrollment and registration consistency, expiry, certificate posture, and remediation instructions. Keep enrollment/unenrollment on the host because it owns an OS-protected bootstrap and is intentionally outside lower-authority Portal configuration. |
+| Secrets and shared connections | Strong Admin pages already support write-only secrets, masked connections, verify, enable/disable, impact, ACLs, and metadata promotion. | Retain and integrate them with Studio capability checks, policy findings, rotation due dates, and cross-environment promotion plans. |
+| Audit outbox and security-event delivery | Audit rows are visible; outbox and security-event diagnostics are emitted through health, Prometheus, and fleet status, but have no operator workspace. | Add collector status, pending/failed counts and bytes, oldest age, last attempt/success, fail-closed threshold state, and a redacted test-delivery workflow. Security-event collector configuration remains signed organization policy. |
+| Native failure, backup, and capacity services | `api/admin/services` and per-service history exist; configuration is file based and the UI has no page. | Show enablement, schedule, recipients/SMTP alias, last/next run, outcomes, and history. Use staged configuration with validation and an explicit apply/restart contract where live reload is unsupported. |
+| Backups and restore drills | Split-custody backup/restore and validation are CLI operations; the native backup service records age/failure evidence. | Show last successful backup, freshness policy, archive/manifest identifiers, validation and restore-drill evidence, and alerts. Keep backup custody, restore, and destructive recovery outside the running Portal. |
+| Doctor and support bundles | `etl-sql doctor` and redacted support-bundle generation are CLI-only. | Add an Admin Diagnostics page for the online-safe checks and an audited, redacted support bundle with an explicit review-before-download step. Keep the CLI path as the recovery option when Portal is unavailable. |
+| HA, fleet, migrations, and upgrades | Readiness, node heartbeats, fleet status/aggregation, compatibility metadata, migration ownership, and upgrade reports exist in backend contracts; no unified Portal view exists. | Add the read-only Fleet/Operations workspace, upgrade preflight/postflight evidence, node divergence, drain guidance, and migration owner/status. Package deployment, database migration, HA soak, and traffic control remain external operator actions. |
+| Dataset at-rest keys | Rotation and recovery behavior are documented and an Admin rotation endpoint exists; no Admin workflow exists. | Add key-version inventory, preflight, impact count, guarded rotation, progress/failures, post-rotation verification, and rollback instructions without ever displaying key material. |
+| Configuration export and promotion | A secret-free configuration export API and script-first replay path exist; no guided Portal workflow exists. | Add export, target-plan validation, diff, unsupported-resource summary, approval, and audit. Do not turn it into database backup or move secrets/datasets between isolated environments. |
+| RLS and effective access | Report/folder effective permissions are queryable and row filtering is enforced at execution; the Portal does not provide one complete access explanation. | Add an identity access simulator that explains role, group, folder/report ACL, connection grant, Studio capability, and RLS outcome without returning protected rows. |
+| Departmental isolation | Deployment templates and verification enforce separate environments; the Portal exposes only read-only fleet status. | Implement the isolation-safe Environments workflow described above, while keeping cross-environment provisioning in a separately authorized deployment plane. |
+
 #### P1 — Accessibility and visual-system completion
 
 - Consolidate the duplicated page headers, identity display, module gating, theme control, spacing,
@@ -143,13 +196,14 @@ another set of isolated capabilities.
    contract, and first end-to-end login/admin smoke.
 2. **Report consumer flow:** consumer home/search, report-card cleanup, parameter preflight,
    execution status, prerequisites, and accessible report runtime controls.
-3. **Studio authoring:** top-level role/module-gated Studio, catalog-only SaaS policy, Code/Design
-   modes, authoring home, and end-to-end create/edit/validate/run/publish coverage.
+3. **Studio authoring:** granular authoring capabilities and `Author` resource grants first, then the
+   top-level Studio, catalog-only SaaS policy, Code/Design modes, authoring home, review/promotion
+   flow, and end-to-end create/edit/validate/run/save/publish/commit coverage.
 4. **Responsive and accessible foundations:** mobile shell, responsive Admin patterns, semantic
    dialogs/drawers, keyboard/focus work, and shared feedback components.
-5. **Governance, operations, and environments:** remove demo evidence, finish steward/audit routes,
-   connect job status, expose the missing role-gated operations surfaces, and add the isolation-safe
-   departmental environment workflow.
+5. **Governance, enterprise operations, and environments:** remove demo evidence, finish
+   steward/audit routes, connect job status, implement the enterprise coverage matrix above, and add
+   the isolation-safe departmental environment workflow.
 6. **Docs and designer polish:** shared Markdown renderer, designer hierarchy/discoverability, and
    final visual consistency pass.
 7. **Architecture and administration documentation:** after the implementation and contracts have
@@ -159,7 +213,7 @@ another set of isolated capabilities.
    verification runbook with the shipped behavior. Architecture diagrams and interface contracts
    must be checked against the final C# source rather than copied from this roadmap.
 8. **Release gate:** browser, accessibility, responsive, local/Docker parity, departmental
-   isolation, and role/module/authoring-policy acceptance runs.
+   isolation, and role/module/authoring-capability/policy acceptance runs.
 
 **Definition of done.** A first-time Viewer can find and run a parameterized report without
 instruction; a Publisher can validate, publish, design, and diagnose it; a Steward sees only real,
