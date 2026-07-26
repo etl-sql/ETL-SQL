@@ -444,6 +444,6 @@ Where possible, include a minimal reproduction, the affected version, and an imp
 
 ---
 
-**Policy Version**: 0.16.0
+**Policy Version**: 0.17.0
 **Last Review Date**: 2026-07-18
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

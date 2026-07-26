@@ -6,6 +6,7 @@
 | :--- | :--- |
 | [ABS](abs.md) | Returns the absolute (non-negative) value of a number. |
 | [ACOS](acos.md) | Returns the arccosine (inverse cosine) of a number, in radians. |
+| [AGE_BUCKET](age_bucket.md) | Groups a number of days into a standard ageing band (`0-30`, `31-60`, `61-90`, `91-120`, `120+`). Negative ages return `Current`. |
 | [ASIN](asin.md) | Returns the arcsine (inverse sine) of a number, in radians. |
 | [ATAN](atan.md) | Returns the arctangent (inverse tangent) of a number, in radians. |
 | [ATAN2](atan2.md) | Returns the angle, in radians, between the positive x-axis and the point represented by `(x, y)`. |
@@ -26,8 +27,10 @@
 | [RADIANS](radians.md) | Converts an angle value in degrees to radians. |
 | [RAND](rand.md) | Returns a pseudo-random FLOAT in the range [0.0, 1.0). |
 | [ROUND](round.md) | Rounds a number to the specified number of decimal places. |
+| [SAFE_DIVIDE](safe_divide.md) | Divides two numbers, returning a fallback value instead of failing when the divisor is zero or `NULL`. |
 | [SIGN](sign.md) | Returns the sign of a number: 1 (positive), -1 (negative), or 0 (zero). |
 | [SIN](sin.md) | Returns the trigonometric sine of an angle in radians. |
 | [SQRT](sqrt.md) | Returns the square root of a non-negative number. |
 | [TAN](tan.md) | Returns the trigonometric tangent of an angle in radians. |
 | [TRUNCATE](truncate.md) | Truncates a number to a specified number of decimal places without rounding. |
+| [VALUE_BUCKET](value_bucket.md) | Categorizes a numeric value into caller-defined bands using comma-separated thresholds and labels. |

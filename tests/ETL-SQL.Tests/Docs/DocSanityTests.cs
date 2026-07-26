@@ -669,5 +669,80 @@ namespace ETL_SQL.Tests.Docs
                 $"The following directories contain >5 markdown files but lack a README.md index ({missing.Count}):\n" +
                 string.Join("\n", missing));
         }
+
+        // ── Every registered standard function has a reference page ──────────────
+
+        /// <summary>
+        /// Functions that are registered but deliberately have no page of their own under
+        /// <c>docs/reference/functions/</c>. This list is a ratchet: it may shrink, never grow.
+        /// A new function must ship with its reference page, because <c>docs/reference</c> is the
+        /// embedded runtime help surfaced by <c>HELP</c>.
+        /// </summary>
+        private static readonly HashSet<string> FunctionsWithoutOwnReferencePage =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                // Documented together as a statement form in
+                // docs/reference/statements/dml/unnest.md rather than as function pages.
+                "FLATTEN",
+                "UNNEST",
+
+                // Row-level-security predicates, documented as a group in
+                // docs/administration/platform/row-level-security.md. They are only meaningful in
+                // an RLS policy context, so a standalone function page would be misleading on its
+                // own. Tracked for per-function HELP coverage as follow-up work.
+                "HAS_GROUP",
+                "HAS_ROLE",
+                "USER_GROUPS",
+                "USER_ROLES",
+            };
+
+        [Fact]
+        public void EveryRegisteredFunction_HasAReferencePage()
+        {
+            var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
+            ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
+
+            var functionsDir = RepoFile("docs/reference/functions");
+            Assert.True(Directory.Exists(functionsDir), $"Missing functions doc dir: {functionsDir}");
+
+            var documented = Directory
+                .GetFiles(functionsDir, "*.md", SearchOption.AllDirectories)
+                .Select(Path.GetFileNameWithoutExtension)
+                .Where(n => !string.IsNullOrEmpty(n) &&
+                            !n!.Equals("README", StringComparison.OrdinalIgnoreCase))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var undocumented = registry.GetRegisteredNames()
+                .Where(n => !documented.Contains(n))
+                .Where(n => !FunctionsWithoutOwnReferencePage.Contains(n))
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Assert.True(undocumented.Count == 0,
+                $"Registered functions with no page under docs/reference/functions/ ({undocumented.Count}):\n" +
+                string.Join("\n", undocumented) +
+                "\n\ndocs/reference is the embedded runtime help. Add <name>.md in the matching " +
+                "category folder and a row in that folder's README.md index.");
+        }
+
+        [Fact]
+        public void FunctionsWithoutOwnReferencePage_AreAllStillRegistered()
+        {
+            // Keeps the exemption list honest: an entry for a function that no longer exists
+            // (renamed or removed) would silently mask a genuinely undocumented function later.
+            var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
+            ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
+            var registered = registry.GetRegisteredNames().ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var stale = FunctionsWithoutOwnReferencePage
+                .Where(n => !registered.Contains(n))
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Assert.True(stale.Count == 0,
+                $"Exempted from function-doc coverage but no longer registered ({stale.Count}):\n" +
+                string.Join("\n", stale) +
+                "\n\nRemove these from FunctionsWithoutOwnReferencePage.");
+        }
     }
 }

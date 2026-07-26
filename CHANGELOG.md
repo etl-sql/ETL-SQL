@@ -10,7 +10,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.17.0] — 2026-07-26
 
 ### Added
 
@@ -97,10 +97,6 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   and error messages. Every request and redirect hop passes egress-policy validation; only 307/308
   redirects are followed so a delivery is never silently downgraded to a body-less GET.
 
-## [0.17.0] — 2026-07-23
-
-### Added
-
 - Added a design-time script DAG/Flow preview for `.etlsql` and `.rptsql` authoring surfaces, derived
   from parsed script text and wired into existing shared DAG rendering paths.
 - Added report-designer ergonomics for keyboard deletion, save shortcuts, escape-to-clear,
@@ -129,6 +125,127 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added `samples/08_Reporting/protected_data_audit.rptsql` as a starter protected-data stewardship dashboard.
 - Added Portal Lineage Audit mode for a steward-focused workflow that combines protected inventory, classifier suggestions, metadata queues, stale protected assets, inferred impact, steward-impact audit rows, and audit outbox health.
 - Added tag-driven governance policy lint and Portal runtime gates for public dataset stewardship metadata, restricted/confidential public datasets, protected dataset exports, and `@quality=gold` promotion metadata.
+
+**Stewardship catalog impact analysis**
+- Added `/api/catalog/impact` for upstream, downstream, and bidirectional impact analysis by table,
+  column, job, script, dataset, report, subscription, owner, and steward.
+- Added Portal Lineage Impact mode and pre-publish report validation impact summaries so publishers
+  can review affected reports, datasets, subscriptions, jobs, owners, and stewards before changes.
+- Added auditable `STEWARD_LINEAGE_IMPACT` hooks for report execution and persisted ad hoc
+  interaction lineage changes that affect steward-owned assets.
+- Added [Data Stewardship and Impact Analysis](docs/guides/data-stewardship-impact.md) as the
+  operator and publisher usage guide.
+
+**Data prep helpers**
+- Added `GENERATE CALENDAR FROM <start> TO <end> INTO #temp`, materializing a full date dimension
+  (`DateKey`, ISO week, fiscal year/quarter, month/day names, and boundary flags such as
+  `IsMonthEnd` / `IsQuarterStart`).
+- Added `FILL_DATES(#source, DATE_COL = …, GAPS_FILL = …, BY_GROUP = …) INTO #temp` to fill missing
+  daily rows per group, copying existing rows unchanged.
+- Added `COMPARE DATASETS #source WITH #baseline KEY (…) [EXCLUDE (…)] INTO #diff`, writing only
+  inserted/updated/deleted rows with `_change_type`, `_changed_columns`, and `<column>_old` /
+  `<column>_new` pairs.
+- Added 14 productivity functions: `SAME_PERIOD_LAST_YEAR`, `START_OF_MONTH`, `END_OF_MONTH`,
+  `START_OF_QUARTER`, `END_OF_QUARTER`, `START_OF_WEEK`, `END_OF_WEEK`, `SAFE_DIVIDE`, `AGE_BUCKET`,
+  `VALUE_BUCKET`, `CLEAN_STRING`, `MASK_EMAIL`, `MASK_PHONE`, and `MASK_SSN`. The `MASK_*` functions
+  are presentation masking for reports and diagnostics, not a security control.
+
+**Authoring & CLI**
+- Added string variable interpolation inside string literals — `${@var}` and `${var}` — resolved
+  across statement options, file paths, dynamic connection settings, and expressions. An undeclared
+  name is left intact as literal text so shell and regex strings are not corrupted.
+- Added `etl-sql edit`, which opens the browser-based script editor, and a unified script editor
+  workbench shared by the Workstation and Portal hosts.
+- Added `SHOW SCHEMA` as a statement, plus `--mock` mode and `--json` output options for
+  scripting and agent use.
+- Added `SET DATA_QUALITY_DRY_RUN` so a rule set's impact can be previewed without quarantining,
+  warning, or failing a run.
+
+**Workstation editor**
+- Added a Git status surface with a header branch badge, a formatter settings panel persisted to
+  `.etlsql-formatter.json`, and local run history.
+- Added a memory ceiling and a destructive-statement guard for local runs, plus cancellable runs
+  with visible elapsed time and a graceful exit path.
+- Added column lineage and report preview, and compact colour-coded hover help.
+
+**MOCKDB**
+- Added built-in `Numbers`, `Dates`, `Times`, `Geography`, `Currencies`, and `Flags` dimension
+  tables, with `Numbers` expanded to 1M rows and `Dates` covering a 200-year range (1900–2100), so
+  demos and tests no longer need an external database.
+
+**Portal & designer**
+- Promoted Lineage to a top-level Governance workspace with its own sidebar, and added a docs
+  endpoint so in-Portal documentation matches the Portal layout.
+- Added governed multi-statement runs and workbench sidebar parity.
+- Extended the visual designer with report-level theme persistence, custom colour-palette pickers, an
+  interactive `@variable` parameter binder, Tidy Layout compacting, governance badges, live
+  split-screen mode, snapping grid guides, hover drop-zone highlights, container box styling and
+  group dragging, and `LAYOUT(COLSPAN, ROWSPAN, WIDTH, HEIGHT)` emission on `CREATE VISUAL`.
+- Expanded ECharts option mapping so every visual type renders in snapshot mode.
+
+**Engine & type safety**
+- Added integer digit-precision and sign constraints on temp tables, and `INT(N,+)` / `INT(N,-)`
+  sign enforcement for flat-file columns.
+
+**Tooling**
+- Added a VS Code Visual Flow (DAG) webview backed by the shared script DAG builder.
+- Added Portal subject-module sub-choices to the Windows installer and Linux package configuration.
+
+### Changed
+
+**Connector assemblies**
+- Split the monolithic `ETL-SQL.Connectors` assembly into per-domain projects — `.Cloud` (S3, Azure
+  Blob, SharePoint), `.Messaging` (Kafka, SMTP), `.Remote` (FTP, SFTP, Directory, Active Directory)
+  and `.Databases` (the ten database connectors, plus `DatabaseConnectionStringBuilder` and
+  `ConnectorRetryPolicy`) — alongside the existing `.Common` and `.Files`. Hosts now reference only
+  the connector groups they register, so a host no longer drags in every provider SDK transitively.
+  Provider namespaces are unchanged, so scripts and connection syntax are unaffected.
+
+**Report Designer lays out against the last compiled snapshot**
+- The designer canvas now renders visuals using data from the report's most recent `.etlsnap`
+  package instead of empty wireframe placeholders, so layout decisions are made against real shapes
+  without touching a production database. Rows are capped at 500 per visual and the canvas badges a
+  sampled snapshot.
+- A report that has never run, or one whose output depends on the viewer's identity, has no shared
+  snapshot and continues to show placeholders — identity-sensitive reports deliberately never
+  persist one.
+
+**Release gate**
+- `Test-PreRelease.ps1` now fails when `THIRD-PARTY-INVENTORY.md` no longer matches the package
+  graph, so the licence review and NOTICES cannot silently drift.
+- Ten build and publish scripts were renamed from `under_scores` to `hyphens`
+  (`publish-release.ps1`, `build-msi.ps1`, `build-linux-packages.sh` and so on). Anything invoking
+  them by path needs updating; `scripts/README.md` lists all 90 scripts.
+
+### Fixed
+
+**Real column types for MOCKDB and SQLite**
+- The schema and session explorers previously showed `ANY` for every MOCKDB and SQLite column. Both
+  now report real declared types, including nullability and primary keys.
+- **Note:** the schema cache is consulted before the connector, so an existing workstation keeps
+  showing `ANY` until its cached entry ages out (14-day maximum) or `%LOCALAPPDATA%/ETL-SQL/SchemaCache`
+  is cleared.
+
+**Editor CLI rejects unknown options**
+- `etl-sql-editor` previously ignored an unrecognised flag and then treated its value as the
+  workspace path, so `--profile dev` silently opened a folder named `dev`. Unknown options now fail
+  with usage. `--profile` was removed from the documented command shape; local connection profiles
+  were deliberately not built.
+
+**Result grid no longer renders unbounded result sets**
+- The grid built one row of DOM for every row returned. Runs started from the Workstation editor and
+  the Portal are capped, but the VS Code REPL streams whatever the CLI evaluated, so a large
+  `SELECT` could hang the results panel. The grid now draws at most 5,000 rows and labels a
+  truncated view "showing first N of M". Export is unaffected and still writes every row.
+
+**`WAITFOR FILE UNLOCKED` no longer reports a false syntax error**
+- The linter grammar modelled only `WAITFOR DELAY | TIME | (condition)`, so a valid
+  `WAITFOR FILE UNLOCKED` statement was flagged as a syntax error in the editor and completion
+  stopped offering next tokens. The parser always accepted it.
+
+**`SHOW DATASETS` no longer reports a false parse failure**
+- Fixed alongside the data-quality work; `QUARANTINE` was also unreserved as a keyword so existing
+  scripts using it as an identifier keep parsing.
 
 ### Performance
 
@@ -160,68 +277,6 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   host returns `403`.
 - Report access approval is now report-scoped by default through `ReportAcl` and audited atomically
   with the grant/denial mutation.
-
-### Added
-
-**Stewardship catalog impact analysis**
-- Added `/api/catalog/impact` for upstream, downstream, and bidirectional impact analysis by table,
-  column, job, script, dataset, report, subscription, owner, and steward.
-- Added Portal Lineage Impact mode and pre-publish report validation impact summaries so publishers
-  can review affected reports, datasets, subscriptions, jobs, owners, and stewards before changes.
-- Added auditable `STEWARD_LINEAGE_IMPACT` hooks for report execution and persisted ad hoc
-  interaction lineage changes that affect steward-owned assets.
-- Added [Data Stewardship and Impact Analysis](docs/guides/data-stewardship-impact.md) as the
-  operator and publisher usage guide.
-
-**Real column types for MOCKDB and SQLite**
-- The schema and session explorers previously showed `ANY` for every MOCKDB and SQLite column. Both
-  now report real declared types, including nullability and primary keys.
-- **Note:** the schema cache is consulted before the connector, so an existing workstation keeps
-  showing `ANY` until its cached entry ages out (14-day maximum) or `%LOCALAPPDATA%/ETL-SQL/SchemaCache`
-  is cleared.
-
-**Editor CLI rejects unknown options**
-- `etl-sql-editor` previously ignored an unrecognised flag and then treated its value as the
-  workspace path, so `--profile dev` silently opened a folder named `dev`. Unknown options now fail
-  with usage. `--profile` was removed from the documented command shape; local connection profiles
-  were deliberately not built.
-
-**Report Designer lays out against the last compiled snapshot**
-- The designer canvas now renders visuals using data from the report's most recent `.etlsnap`
-  package instead of empty wireframe placeholders, so layout decisions are made against real shapes
-  without touching a production database. Rows are capped at 500 per visual and the canvas badges a
-  sampled snapshot.
-- A report that has never run, or one whose output depends on the viewer's identity, has no shared
-  snapshot and continues to show placeholders — identity-sensitive reports deliberately never
-  persist one.
-
-**Result grid no longer renders unbounded result sets**
-- The grid built one row of DOM for every row returned. Runs started from the Workstation editor and
-  the Portal are capped, but the VS Code REPL streams whatever the CLI evaluated, so a large
-  `SELECT` could hang the results panel. The grid now draws at most 5,000 rows and labels a
-  truncated view "showing first N of M". Export is unaffected and still writes every row.
-
-**`WAITFOR FILE UNLOCKED` no longer reports a false syntax error**
-- The linter grammar modelled only `WAITFOR DELAY | TIME | (condition)`, so a valid
-  `WAITFOR FILE UNLOCKED` statement was flagged as a syntax error in the editor and completion
-  stopped offering next tokens. The parser always accepted it.
-
-### Changed
-
-**Connector assemblies**
-- Split the monolithic `ETL-SQL.Connectors` assembly into per-domain projects — `.Cloud` (S3, Azure
-  Blob, SharePoint), `.Messaging` (Kafka, SMTP), `.Remote` (FTP, SFTP, Directory, Active Directory)
-  and `.Databases` (the ten database connectors, plus `DatabaseConnectionStringBuilder` and
-  `ConnectorRetryPolicy`) — alongside the existing `.Common` and `.Files`. Hosts now reference only
-  the connector groups they register, so a host no longer drags in every provider SDK transitively.
-  Provider namespaces are unchanged, so scripts and connection syntax are unaffected.
-
-**Release gate**
-- `Test-PreRelease.ps1` now fails when `THIRD-PARTY-INVENTORY.md` no longer matches the package
-  graph, so the licence review and NOTICES cannot silently drift.
-- Ten build and publish scripts were renamed from `under_scores` to `hyphens`
-  (`publish-release.ps1`, `build-msi.ps1`, `build-linux-packages.sh` and so on). Anything invoking
-  them by path needs updating; `scripts/README.md` lists all 90 scripts.
 
 ## [0.16.0] — 2026-07-19
 
