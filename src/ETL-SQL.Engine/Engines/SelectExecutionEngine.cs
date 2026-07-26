@@ -743,7 +743,9 @@ public class SelectExecutionEngine
         // statement pays nothing. Rules validate the projected value; QUARANTINE captures the
         // pre-projection input row, which the pair stream keeps alongside it.
         var qualityValidator = ColumnQualityValidator.TryCreate(_context, _logger, stmt, colNames);
-        var pairs = ProjectPairs(rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere);
+        var pairs = ProjectPairs(
+            rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere,
+            keepInput: qualityValidator != null);
 
         if (qualityValidator == null)
         {
@@ -857,13 +859,21 @@ public class SelectExecutionEngine
     /// from. Data-quality QUARANTINE/WARN capture needs the input row; every other caller takes the
     /// projected one.
     /// </summary>
+    /// <param name="keepInput">
+    /// Whether the caller needs the pre-projection input row. Only QUARANTINE capture does. When
+    /// false the input is dropped at the yield, so a rule-free statement does not hold every source
+    /// row alive alongside its projection for the life of the stream — that retention promotes rows
+    /// into higher GC generations and showed up as a uniform GC-pause increase across every
+    /// certification scenario.
+    /// </param>
     private async IAsyncEnumerable<(Row Input, Row Projected)> ProjectPairs(
         IAsyncEnumerable<Row> rows,
         SelectStatement stmt,
         List<SelectColumn> finalColumns,
         List<string> colNames,
         bool hasPreEvaluatedColumns,
-        bool canDeferWhere)
+        bool canDeferWhere,
+        bool keepInput)
     {
         var expressionKeys = hasPreEvaluatedColumns
             ? finalColumns.Select(c => c.Expression.ToSql()).ToArray()
@@ -949,7 +959,7 @@ public class SelectExecutionEngine
             }
 
             resRow.DataQualityReplayProvenance = row.DataQualityReplayProvenance;
-            yield return (row, resRow);
+            yield return (keepInput ? row : null!, resRow);
         }
     }
 
