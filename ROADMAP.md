@@ -440,6 +440,74 @@ reports, and optionally receive SMTP/WEBHOOK notifications without installing Po
 Portal or HA reuses the same scripts, records, formulas, and reports while adding collaboration and
 enterprise controls.
 
+### Platform — Deployment Profiles and Upgrade Certification
+
+Build the profile, portability, and certification program defined in
+[`Deployment_Profile_Strategy.md`](docs/architecture/roadmaps/Deployment_Profile_Strategy.md).
+Treat **Solo / Workstation**, **Team / SME**, **Enterprise / Corporate**, and
+**SaaS / Multi-Organization** as cumulative support profiles rather than editions.
+
+#### P0 — Establish the profile contract and coverage matrix
+
+1. Inventory every product capability against all four profiles: authoring, execution, scheduling,
+   connections/secrets, reports, quality/stewardship, identity, policy, audit, backup/recovery,
+   observability, HA, and tenant isolation. Mark each cell Green, Yellow, Red, or justified N/A and
+   attach current evidence.
+2. Make portability an architectural invariant: `.etlsql`, `.rptsql`, rules, tags, assertions, and
+   canonical declarative job/report definitions must not require business-logic rewrites as a
+   deployment grows. Add profile review to new-feature design and release checklists.
+3. Define the smallest safe form of each enterprise-oriented capability. Portal must not become a
+   prerequisite where CLI, local SQLite, Orchestrator, `SHOW ... INTO`, or Report Player can provide
+   a secure useful experience.
+4. Keep regulated, air-gapped, high-volume, HA, disaster-recovery, and data-residency requirements
+   as overlays that add evidence to a profile rather than creating inconsistent fifth and sixth
+   product tiers.
+
+#### P1 — Build supported promotion and upgrade tooling
+
+1. Add versioned inventory and preflight that classifies portable artifacts, exportable catalog
+   state, target-environment bindings, protected material, operational evidence, and ephemeral
+   state before any mutation.
+2. Add validated export/import and mapping for connections, `SECRET:name` references, jobs,
+   refresh schedules, reports, folders, ownership, policy references, lineage, tags, quality
+   history, and other eligible state. Never export resolved secrets as ordinary configuration.
+3. Implement and document the supported transitions:
+   - Solo / Workstation → Team / SME
+   - Team / SME → Enterprise / Corporate
+   - Enterprise / Corporate → SaaS / Multi-Organization
+   - Direct Solo / Workstation → SaaS / Multi-Organization onboarding
+   - N → N+1 within every profile
+4. Each transition must include backup/export, target binding, collision reporting, idempotent
+   import or safe failure, validation, scheduler fencing/cutover, post-cutover proof, and a defined
+   rollback or restore point.
+5. Treat SaaS onboarding as an explicit tenant-scoped import, not merely a server-count change.
+   Preserve portable customer artifacts while proving isolation across identity, databases,
+   artifacts, secrets/keys, caches, jobs/queues, reports, lineage/quality, audit, telemetry, support
+   access, and resource limits.
+
+#### P2 — Add deployment-profile certification
+
+1. Add `scripts/Test-DeploymentProfileCertification.ps1` with selectable Solo, Team, Enterprise,
+   SaaS, and transition lanes. Compose existing connector, scale, hardening, HA, and pre-release
+   evidence rather than duplicating their tests.
+2. Implement journey-based fixtures for portable pipeline execution, connection/secret rebinding,
+   scheduling/notifications, quality/stewardship, report publication, identity/ownership mapping,
+   backup/restore, environment promotion, topology growth, N → N+1 upgrade, SaaS import/export, and
+   tenant isolation/failure containment.
+3. Retain commit-bound JSON and Markdown evidence under `certification-results/` with topology,
+   artifact hashes, mapping decisions, continuity counts, negative isolation results, and
+   rollback/restore outcomes.
+4. Add the profile/transition matrix to release claims. A capability is not certified for every
+   deployment merely because its Solo or Enterprise test passes; each applicable profile and
+   transition needs its own current evidence.
+
+**Definition of done.** A user can start with source-controlled artifacts on one workstation,
+promote them to a shared team service, add corporate identity/policy/audit/HA, or onboard them
+directly or progressively into an isolated SaaS tenant without rewriting pipeline or report logic.
+Every supported profile passes N → N+1, every promotion path preserves and reconciles its declared
+portable state, and SaaS evidence proves tenant isolation rather than inferring it from
+configuration.
+
 ### Portal — Comprehensive Product and UX Update
 
 **Review basis (2026-07-26).** Walked the production Portal in both a local development host and

@@ -8,6 +8,7 @@
 | [ETL-SQL Connector Upgrade Notes](Connector_Upgrade_Strategy.md) | > [!NOTE] |
 | [Data Lake Connectors Strategy](DataLake_Connectors_Strategy.md) | > [!IMPORTANT] |
 | [Data Stewardship & Lineage Governance Strategy](Data_Stewardship_Strategy.md) | **Status:** v0.17.0 core shipped; later review, quality, and external-catalog lifecycle phases remain candidate work |
+| [Deployment Profile and Portability Strategy](Deployment_Profile_Strategy.md) | **Status:** Active product strategy; certification implementation is candidate work |
 | [ETL-SQL Engine Architecture Separation Plan](Engine_Upgrade_Strategy.md) | > [!IMPORTANT] |
 | [ETL-SQL Enterprise Platform Strategy](Enterprise_Platform_Strategy.md) | **Status:** Active product strategy |
 | [Fuzzy Matching Strategy](FuzzyMatching_Strategy.md) | **Status:** Phases 1–4 shipped; Phase 5 deferred |
