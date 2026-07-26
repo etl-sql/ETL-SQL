@@ -115,6 +115,26 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal("-5", warned[DataQualityColumns.Value]?.ToString());
         }
 
+        [Fact]
+        public async Task WarnRetention_UsesConnectorSidePrunerWhenAvailable()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (-5, 'b')");
+            var target = new RetentionPruningDataSource();
+            eval.Connections["#warn_log"] = target;
+
+            await Run(eval, @"
+                SELECT Id /* @expect: '>= 0'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN TO #warn_log WITH (RETENTION = '30 DAYS');");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));
+            Assert.Single(target.WrittenRows);
+            Assert.Equal(1, target.PruneCalls);
+            Assert.Equal(DataQualityColumns.Timestamp, target.TimestampColumn);
+            Assert.True(target.CutoffUtc < DateTime.UtcNow);
+        }
+
         // ── QUARANTINE ─────────────────────────────────────────────────────
 
         [Fact]
@@ -959,6 +979,53 @@ namespace ETL_SQL.Tests.Engine
         /// A read-once source that counts how many times its stream was enumerated, standing in for
         /// a non-rewindable source (Kafka, paginated REST).
         /// </summary>
+        private sealed class RetentionPruningDataSource : IDataSource, IDataQualityRetentionPruner
+        {
+            public List<Row> WrittenRows { get; } = [];
+            public int PruneCalls { get; private set; }
+            public string? TimestampColumn { get; private set; }
+            public DateTime CutoffUtc { get; private set; }
+
+            public string Path => "retention-pruning";
+            public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "RETENTION_TEST";
+
+            public async Task<int> PruneDataQualityRowsAsync(
+                string timestampColumn,
+                DateTime cutoffUtc,
+                CancellationToken cancellationToken)
+            {
+                await Task.Yield();
+                PruneCalls++;
+                TimestampColumn = timestampColumn;
+                CutoffUtc = cutoffUtc;
+                return 0;
+            }
+
+            public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+            {
+                var table = new DataTable();
+                table.SetColumns(WrittenRows.FirstOrDefault()?.Columns.Keys ?? Enumerable.Empty<string>());
+                foreach (var row in WrittenRows)
+                    await table.AddRowAsync(row);
+                yield return table;
+            }
+
+            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+            {
+                if (!append) WrittenRows.Clear();
+                await foreach (var batch in batches)
+                    WrittenRows.AddRange(batch.Rows);
+            }
+
+            public Task<IEnumerable<string>> GetColumnsAsync() =>
+                Task.FromResult<IEnumerable<string>>(WrittenRows.FirstOrDefault()?.Columns.Keys ?? Enumerable.Empty<string>());
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
+            public IDataSource WithTable(string tableName) => this;
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+
         private sealed class ReadCountingDataSource : IDataSource
         {
             private readonly (string First, string Second) _columns;

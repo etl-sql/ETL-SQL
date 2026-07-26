@@ -8,14 +8,14 @@
 > [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
 > v2 design below. The quarantine replay manifest foundation, `UPDATE`-time disposition
-> enforcement, and `REPLAY QUARANTINE` source-substitution replay with cluster-lock fencing are now
-> built; the Portal steward grid remains pending.
+> enforcement, `REPLAY QUARANTINE` source-substitution replay with cluster-lock fencing, the Portal
+> steward queue/editor, and the first scale-hardening pass are now built.
 >
 > **Where the implementation deliberately differs from this spec** (see "As-built deviations" at the
 > end for the reasoning): the §6 `JobMetricsCollector` was folded into `DataQualityReport` rather
 > than shipped as a second accumulator; `NULL_PERCENT` has no `HISTORICAL` baseline in v1; the
-> UNIQUE duplicate-key map is in-memory rather than built on `ExternalAggregateEngine`; and
-> retention pruning applies only to engine-managed targets.
+> UNIQUE duplicate-key map uses hash-partitioned spill rather than `ExternalAggregateEngine`; and
+> connector-side retention is opt-in per data source, with SQLite support shipped first.
 > Rev 2 (2026-07-24): design-review revisions — streaming job-metrics collector replaces the
 > post-run scan, DQ metrics are persisted per run, symmetric `ON FAILURE` validation, webhook
 > egress policy, UNIQUE spill-once, WARN aggregation, cold-start/seasonality semantics,
@@ -483,9 +483,9 @@ recorded trigger so the decision is evidence-based rather than speculative.
 
 | Item | Trigger | Approach |
 | :--- | :--- | :--- |
-| Spill-aware UNIQUE key map | A UNIQUE rule on a very high-cardinality key exhausts memory on a constrained host | Build the duplicate-key groups through `ExternalAggregateEngine` (`GROUP BY key HAVING COUNT(*) > 1`, with `MIN`/`MAX(orderKey)` for `UNIQUE_FIRST/LAST`), as §4 originally specified. The row stream already spills once; only the map changes. |
-| Single-pass UNIQUE batching | A statement declares UNIQUE on several columns and the per-column pre-passes dominate runtime | One pre-pass collecting all unique keys simultaneously instead of one pass per column. |
-| Connector-side retention | Operators ask why `WITH (RETENTION = …)` does not prune their durable quarantine table | Issue a bounded delete through the connector for targets that support it, behind an explicit opt-in — the engine currently declines to run DELETEs against a user-owned table, and that caution should be lifted deliberately, not by default. |
+| Spill-aware UNIQUE key map | Shipped in v0.17.0 scale hardening | Projected key records spill into hash partitions and reduce partition-by-partition; only duplicated groups remain in the validation lookup. |
+| Single-pass UNIQUE batching | Shipped in v0.17.0 scale hardening | One pre-pass collects all unique keys for all UNIQUE rule occurrences simultaneously instead of one pass per column. |
+| Connector-side retention | Operators ask why `WITH (RETENTION = …)` does not prune a durable quarantine table outside SQLite | Targets can opt in through `IDataQualityRetentionPruner`; SQLite issues a bounded connector-side delete on `__dq_ts`. Additional durable connectors remain demand-triggered. |
 
 ---
 
@@ -634,7 +634,7 @@ Built on `release/v0.17.0` (feature branches off the active release branch; no d
 - **`WITHIN <n> SIGMA OF HISTORICAL`** (v2) — stddev-based tolerance that self-tunes per job, matching Deequ/Elementary practice; nearly free since run history is already stored.
 - **Alert-state dedup + recovery notifications** (v2) — alert on pass→fail and fail→pass *transitions* with an optional re-alert interval, using the persisted per-run DQ state; prevents a nightly-failing job from posting to Slack forever.
 - **Qualified `NULL_PERCENT(target.col)`** for multi-sink runs (v1 errors on ambiguity).
-- **Single-pass batching of multiple UNIQUE columns** (optimization).
+- **Connector-side retention for durable connectors beyond SQLite** (demand-triggered).
 - **Deep Governance-dashboard findings integration** (a follow-on that reuses the lineage/stewardship read side; the persisted per-run DQ metrics from §6 are its designed feed).
 
 ---
@@ -659,17 +659,16 @@ recorded decision, not an oversight — do not "fix" them without reading the re
    warning** rather than silently passing. Closing this needs a per-column metrics table — see the
    v2 plan.
 
-3. **The UNIQUE duplicate-key map is in-memory.** §4 specified building it through
-   `ExternalAggregateEngine` for spill-awareness. The row *stream* is spilled exactly once as
-   designed (the source is never read twice — the correctness requirement), but the key→group map
-   is a dictionary bounded by distinct key count. This is fine for the dimension-scale keys UNIQUE
-   is normally declared on and wrong for very high-cardinality keys on a memory-constrained host.
-   The spill-aware build is a v2 item.
+3. **The UNIQUE duplicate-key map uses hash-partitioned spill rather than `ExternalAggregateEngine`.**
+   §4 specified `ExternalAggregateEngine`; the shipped scale-hardening path writes projected UNIQUE
+   key records into spill partitions and reduces one partition at a time. This keeps the source
+   single-read guarantee, batches all UNIQUE rule occurrences in one pre-pass, and bounds memory by
+   the hottest hash partition while avoiding a wider aggregate-engine contract change.
 
-4. **Retention pruning applies only to engine-managed targets.** `WITH (RETENTION = …)` prunes
-   in-memory/`#temp` targets at end of run. For durable targets the engine logs that pruning is the
-   target's own responsibility rather than issuing DELETEs against a user table it does not own.
-   Connector-side retention is a v2 item.
+4. **Connector-side retention is opt-in per data source.** `WITH (RETENTION = …)` prunes
+   in-memory/`#temp` targets at end of run. Durable targets prune only when the connector implements
+   `IDataQualityRetentionPruner`; SQLite does, and other durable connectors deliberately remain
+   demand-triggered rather than inheriting deletes by default.
 
 Two smaller notes: `WARN_PERCENT` was added as a fourth `ASSERT JOB` metric (not in the original
 predicate list) because the warn tally was already collected and asserting on it is the natural

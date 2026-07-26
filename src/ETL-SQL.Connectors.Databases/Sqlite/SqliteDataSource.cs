@@ -12,7 +12,7 @@ using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Connectors.Sqlite
 {
-    public class SqliteDataSource : IDatabaseSource, ITransactionalDataSource
+    public class SqliteDataSource : IDatabaseSource, ITransactionalDataSource, IDataQualityRetentionPruner
     {
         private readonly string _connectionString;
         private readonly string? _tableName;
@@ -279,6 +279,37 @@ namespace ETL_SQL.Connectors.Sqlite
                 using var cmd = CreateCommand($"DELETE FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
                 await cmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
+            finally
+            {
+                if (!isShared) await conn.DisposeAsync();
+            }
+        }
+
+        public async Task<int> PruneDataQualityRowsAsync(
+            string timestampColumn,
+            DateTime cutoffUtc,
+            CancellationToken cancellationToken)
+        {
+            if (_context != null && _context.IsWhatIf) return 0;
+
+            if (string.IsNullOrEmpty(_tableName))
+                throw new ExecutionException("No table specified for SQLite data-quality retention pruning.");
+
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            var table = _tableName.Replace("\"", "\"\"");
+            var column = timestampColumn.Replace("\"", "\"\"");
+            var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
+            try
+            {
+                using var cmd = CreateCommand($"DELETE FROM \"{table}\" WHERE \"{column}\" < $cutoff", conn);
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                cmd.Parameters.Add(new SqliteParameter("$cutoff", cutoffUtc));
+                return await cmd.ExecuteNonQueryAsync(effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {

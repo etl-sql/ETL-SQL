@@ -176,6 +176,18 @@ public interface IDataSource : IAsyncDisposable
     }
 }
 
+/// <summary>
+/// Optional capability for data sources that can prune engine-owned data-quality capture rows
+/// with a bounded connector-side delete.
+/// </summary>
+public interface IDataQualityRetentionPruner
+{
+    Task<int> PruneDataQualityRowsAsync(
+        string timestampColumn,
+        DateTime cutoffUtc,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Optional row-count estimate used to choose bounded operators before consuming a source.</summary>
 public interface IEstimatedCardinalityDataSource
 {

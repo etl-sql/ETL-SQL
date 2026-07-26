@@ -12,6 +12,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Connectors.S3;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
 using Moq;
@@ -279,6 +280,72 @@ namespace ETL_SQL.Tests.Connectors
                 Assert.Equal(2, batches[0].Rows.Count);
                 Assert.Equal("Alice", batches[0].Rows[0]["name"]);
                 Assert.Equal("Bob", batches[0].Rows[1]["name"]);
+            }
+            finally
+            {
+                if (writeSource != null) await writeSource.DisposeAsync();
+                if (readSource != null) await readSource.DisposeAsync();
+                await dataSource.DisposeAsync();
+
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                if (File.Exists(tempDb))
+                {
+                    File.Delete(tempDb);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task SqliteDataSource_DataQualityRetentionPrunesOldRows()
+        {
+            var mockContext = CreateMockContext();
+            var tempDb = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.db");
+            mockContext.Setup(c => c.ResolvePath(tempDb)).Returns(tempDb);
+
+            var connectionString = $"Data Source={tempDb}";
+            var dataSource = new SqliteDataSource(mockContext.Object, connectionString);
+            SqliteDataSource? writeSource = null;
+            SqliteDataSource? readSource = null;
+
+            try
+            {
+                await foreach (var _ in dataSource.ExecuteRawSql(
+                    $"CREATE TABLE dq (id INTEGER, \"{DataQualityColumns.Timestamp}\" TEXT)")) { }
+
+                var table = new DataTable();
+                table.SetColumns(new[] { "id", DataQualityColumns.Timestamp });
+                await table.AddRowAsync(new Row
+                {
+                    ["id"] = 1L,
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow.AddDays(-45)
+                });
+                await table.AddRowAsync(new Row
+                {
+                    ["id"] = 2L,
+                    [DataQualityColumns.Timestamp] = DateTime.UtcNow
+                });
+
+                async IAsyncEnumerable<DataTable> GetBatches()
+                {
+                    yield return table;
+                    await Task.CompletedTask;
+                }
+
+                writeSource = (SqliteDataSource)dataSource.WithTable("dq");
+                await writeSource.WriteBatches(GetBatches(), append: true);
+
+                var pruned = await writeSource.PruneDataQualityRowsAsync(
+                    DataQualityColumns.Timestamp,
+                    DateTime.UtcNow.AddDays(-30),
+                    CancellationToken.None);
+
+                readSource = (SqliteDataSource)dataSource.WithTable("dq");
+                var ids = new List<long>();
+                await foreach (var batch in readSource.ReadBatches())
+                    ids.AddRange(batch.Rows.Select(r => Convert.ToInt64(r["id"])));
+
+                Assert.Equal(1, pruned);
+                Assert.Equal(new[] { 2L }, ids);
             }
             finally
             {

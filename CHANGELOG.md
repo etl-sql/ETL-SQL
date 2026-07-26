@@ -83,6 +83,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   memory. Duplicate lookup is keyed by rule occurrence, so identical `UNIQUE` rule text on different
   columns no longer collides.
 
+- Added an opt-in data-source capability for connector-side data-quality retention pruning.
+  `WITH (RETENTION = '...')` capture targets now use the connector capability when available, with
+  SQLite-backed quarantine/warn tables deleting rows older than `__dq_ts` through a bounded
+  connector-side `DELETE`.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on
