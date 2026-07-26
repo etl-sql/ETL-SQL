@@ -12,6 +12,434 @@ promise are defined in
 
 ## Future Candidate Phases
 
+### Language — Canonical Syntax and Lifecycle Consistency
+
+**Audit basis (2026-07-26).** Review the complete top-level statement surface after the recent
+language expansion: parser dispatch, AST models, formatter output, Report-SQL, Portal and
+Orchestrator administration, file operations, reference documentation, samples, snippets, grammar
+completion, and parser/runtime tests. The core language already has the right foundation:
+
+```sql
+CREATE <object-kind> <name> [AS <implementation-or-definition>];
+ALTER <object-kind> <name> ...;
+DROP <object-kind> IF EXISTS <name>;
+```
+
+Keep object identity before implementation type. Treat `UNIQUE` in `CREATE UNIQUE INDEX` and similar
+orthogonal SQL modifiers as valid modifiers, not implementation types. Because the product has no
+live users, remove contradictory forms now rather than carrying permanent compatibility grammar.
+
+#### P0 — Unify managed connections across Engine, Portal, and Orchestrator
+
+1. **Delete the separate Portal SMTP language and resource model.** Remove `CREATE SMTP CONNECTION`,
+   `SHOW SMTP CONNECTIONS`, and `DROP SMTP CONNECTION`. SMTP is already a normal connector:
+
+   ```sql
+   CREATE CONNECTION local_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       PORT = 587,
+       USERNAME = 'etl-notify',
+       PASSWORD = 'SECRET:smtp_password',
+       DEFAULT_FROM = 'etl@example.com'
+   );
+   ```
+
+   Do not preserve the provider-before-object form as an alias. Reuse connector metadata,
+   validation, secret handling, testing, redaction, audit, and connection-catalog behavior instead
+   of maintaining Portal-only SMTP options, DTOs, storage, export syntax, and handlers.
+
+2. **Add an optional management target to `CREATE CONNECTION`.** A connection without `AT` remains
+   session-local. `AT <connection>` registers or updates the named definition in the governed
+   connection catalog owned by a `PORTAL` or `ORCHESTRATOR` connection:
+
+   ```sql
+   CREATE CONNECTION portal_admin AS PORTAL(
+       HOST = 'https://portal.corp.example',
+       API_KEY = 'SECRET:portal_admin_key'
+   );
+
+   CREATE CONNECTION portal_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       PORT = 587,
+       USERNAME = 'portal-notify',
+       PASSWORD = 'SECRET:portal_smtp_password',
+       DEFAULT_FROM = 'reports@example.com'
+   ) AT portal_admin;
+
+   CREATE CONNECTION portal_alerts AS WEBHOOK(
+       URL = 'SECRET:portal_alert_webhook',
+       FORMAT = 'slack'
+   ) AT portal_admin;
+   ```
+
+   The same syntax must work for Orchestrator-owned failure and operations notifications:
+
+   ```sql
+   CREATE CONNECTION orch_admin AS ORCHESTRATOR(
+       HOST = 'https://orchestrator.corp.example',
+       API_KEY = 'SECRET:orchestrator_admin_key'
+   );
+
+   CREATE CONNECTION orch_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       USERNAME = 'orchestrator-notify',
+       PASSWORD = 'SECRET:orchestrator_smtp_password'
+   ) AT orch_admin;
+
+   CREATE CONNECTION orch_failures AS WEBHOOK(
+       URL = 'SECRET:orchestrator_failure_webhook',
+       FORMAT = 'teams'
+   ) AT orch_admin;
+   ```
+
+   `AT` must reject targets that are not management-capable `PORTAL` or `ORCHESTRATOR`
+   connections. Define whether the statement also opens a local connection; the preferred contract
+   is that `AT` performs an audited remote catalog mutation while the unqualified form creates a
+   session-local connection. Never copy resolved secret values across the boundary: catalog entries
+   store `SECRET:name` references or host-owned protected values under the existing zero-trust
+   rules.
+
+3. **Use one managed-connection lifecycle.** Extend the same object-first grammar to remote
+   administration:
+
+   ```sql
+   ALTER CONNECTION portal_mail WITH (...) AT portal_admin;
+   TEST CONNECTION portal_mail AT portal_admin INTO #test_result;
+   SHOW CONNECTION portal_mail CONFIG AT portal_admin INTO #config;
+   SHOW CONNECTIONS AT portal_admin INTO #connections;
+   DROP CONNECTION IF EXISTS portal_mail AT portal_admin;
+   ```
+
+   Portal and Orchestrator must share the catalog contract, connector metadata, authorization
+   checks, secret-reference validation, redaction, impact analysis, enable/disable behavior, and
+   audit vocabulary. Host-specific policy may restrict which connector types can be registered,
+   but it must not create a second syntax family. Include SMTP and WEBHOOK in end-to-end tests for
+   both hosts, including notification delivery, disabled entries, missing secrets, unauthorized
+   callers, `WHAT_IF`, configuration export/import, and fail-closed audit behavior.
+
+4. **Migrate every existing Portal SMTP consumer.** Update subscriptions, alerts, native failure
+   notifications, backup/capacity services, configuration export, Portal administration APIs and
+   UI, samples, tests, help, snippets, and documentation to resolve a normal cataloged SMTP
+   connection. Remove the Portal-specific SMTP entity/API only after all consumers use the unified
+   catalog and a data migration converts any development records without exposing credentials.
+
+#### P0 — Correct named report refresh jobs
+
+`CREATE REFRESH JOB FOR REPORT` is incorrect because a report may have multiple independent refresh
+jobs. The job name is required identity, not an optional label. Replace the current singleton form
+and its generated `portal-refresh:<orchestrator>:<report-id>` key with:
+
+```sql
+CREATE REFRESH JOB FinanceNightly
+FOR REPORT 'Finance Dashboard'
+SCHEDULE '0 2 * * *'
+AT orch_admin;
+
+CREATE REFRESH JOB FinanceBusinessHours
+FOR REPORT 'Finance Dashboard'
+SCHEDULE '*/15 8-18 * * 1-5'
+AT orch_admin;
+```
+
+Provide a complete name-based lifecycle:
+
+```sql
+ALTER REFRESH JOB FinanceNightly
+SET SCHEDULE = '0 3 * * *'
+AT orch_admin;
+
+SHOW REFRESH JOBS FOR REPORT 'Finance Dashboard'
+AT orch_admin
+INTO #refresh_jobs;
+
+DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
+```
+
+- Require a name in the parser, AST, Portal/Orchestrator requests, persistence model, catalog
+  uniqueness constraint, audit events, configuration export/import, dependency views, UI, and
+  documentation.
+- Scope uniqueness to the owning Portal/Orchestrator catalog as appropriate; do not key uniqueness
+  by report. Store the report relationship separately so many jobs can target one report.
+- Creating a second job for the same report must add a schedule, never replace an existing job.
+  Duplicate job names must fail unless an explicit supported lifecycle modifier is used.
+- Update, enable/disable, history, last/next run, dependency, and deletion operations must identify
+  the job by name. Report deletion must define and test cascade/restrict behavior for all attached
+  refresh jobs.
+- Migrate existing generated singleton jobs to deterministic visible names, report collisions
+  before mutation, and update the API/UI assumption that only one refresh job can exist per report.
+
+#### P1 — Make lifecycle modifiers explicit and uniform
+
+1. Publish one capability matrix for every creatable object covering `CREATE`, `CREATE IF NOT
+   EXISTS`, `CREATE OR ALTER`, `CREATE OR REPLACE`, standalone `ALTER`, `DROP`, and `DROP IF EXISTS`.
+   The parser must reject unsupported combinations immediately; it must never silently discard a
+   requested mode or let handlers interpret an unknown mode differently.
+2. Canonicalize existence modifiers before the object name:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS #stage (...);
+   DROP VIEW IF EXISTS ActiveOrders;
+   DROP THEME IF EXISTS corporate;
+   ```
+
+   Remove post-name forms such as `DROP CONNECTION name IF EXISTS`.
+3. Finish or remove advertised Report-SQL lifecycle forms. `ALTER STYLE`, `ALTER NAVIGATION`, and
+   `ALTER DATASET` must not parse and then fail as “not yet implemented.” Add the missing
+   `ALTER BUTTON`, `DROP BUTTON`, and any deliberately supported Theme lifecycle. Each `ALTER`
+   grammar must patch fields meaningful to that object rather than route every report object
+   through a visual-shaped property parser.
+4. Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
+   formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
+   Add negative tests for every unsupported object/mode pair.
+
+#### P1 — Normalize identity, type, and clause ordering
+
+1. Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
+   `EXPORT`, and `PUBLISH`. Continue using quoted catalog identity where Portal dataset commands
+   require it, but do not let an arbitrary unsigiled identifier accidentally select the local
+   lifecycle.
+2. Make publish commands identify the published object before the source:
+
+   ```sql
+   PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly.rptsql' ...;
+   PUBLISH BUNDLE 'finance-etl' FROM 'bundles/finance' ...;
+   PUBLISH DATASET &sales_imported FROM 'transfer/sales.parquet' ...;
+   ```
+
+   Remove the source-first `PUBLISH DATASET FROM ... AS &name` exception and update export/import
+   round-trip tooling.
+3. Use `AS` consistently for a type or definition. Typed objects remain
+   `CREATE <object> <name> AS <type>(...)`; definition/property-bag report objects should use one
+   shared form, including `CREATE STYLE <name> AS (...)`.
+4. Treat tags and lineage as inserted metadata records, not unnamed DDL objects. Canonicalize the
+   existing shapes on `INSERT`:
+
+   ```sql
+   INSERT TAG FOR TABLE #orders (
+       owner = 'Finance',
+       classification = 'Confidential'
+   );
+
+   INSERT TAG FOR TABLE #orders COLUMN customer_id (
+       pii = TRUE
+   );
+
+   INSERT LINEAGE FOR TABLE #orders
+   FROM 'openlineage/orders.json';
+   ```
+
+   Retire `CREATE TAG`, `CREATE LINEAGE`, and the duplicate bare `TAG ... WITH (...)` statement.
+   Route the new forms through `INSERT` dispatch without confusing them with row DML, preserve the
+   existing typed tag-catalog validation and zero-trust lineage source handling, and update lineage
+   capture, formatter, linting, completion, help, snippets, samples, and documentation together.
+   Tags and lineage do not participate in the `CREATE`/`ALTER`/`DROP` object lifecycle matrix.
+5. Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` for genuine
+   resources with clear identity and lifecycle. Do not encode an implementation type before
+   `CONNECTION`.
+
+#### P1 — Normalize inspection and target clauses
+
+1. Use `AT <connection>` consistently for host/connection targeting. Align parser, formatter, help,
+   snippets, and docs on `SHOW TABLES AT <connection>`; remove the parser-only
+   `SHOW TABLES ON <connection>` form.
+2. Decide and implement one truthful tag inventory surface. If global enumeration is supported,
+   implement documented `SHOW TAGS [INTO #table]`; otherwise remove it from the docs and require
+   `SHOW TAGS FOR SCRIPT` or `SHOW TAGS FOR TABLE <name>`.
+3. Apply one inspection ordering rule: `SHOW <object-or-collection> [qualifier] [target]
+   [filter] [AT <management-connection>] [INTO #table]`. Reconcile special cases such as connection
+   config, report history/dependencies, bundle versions/files, refresh jobs, and effective
+   permissions against that rule.
+4. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
+   agree on one expiration clause; prefer structural `EXPIRES <timestamp>` over a second
+   `WITH(EXPIRES_AT=...)` spelling.
+
+#### P2 — Retire duplicate surface syntax
+
+Choose and document one canonical spelling for each operation, then remove unused compatibility
+forms before the first supported release:
+
+| Keep canonical | Retire duplicate forms |
+| :--- | :--- |
+| `SEND EMAIL ...` | `SEND_EMAIL(...)` |
+| `SEND FILE ...` / `RECEIVE FILE ...` | `SEND_FILE(...)`, `RECEIVE_FILE(...)`, `FILE_SEND`, `FILE_RECEIVE` |
+| `COPY FILE`, `MOVE FILE`, `DELETE FILE`, etc. | `COPY_FILE(...)`, `MOVE_FILE(...)`, `DELETE_FILE(...)`, and sibling underscore forms |
+| `CREATE DIRECTORY`, `DELETE DIRECTORY`, etc. | `CREATE_DIRECTORY(...)`, `DELETE_DIRECTORY(...)`, and sibling underscore forms |
+| `FOREACH` | `FOR EACH` |
+| `WAIT UNTIL <condition>` | `WAITFOR (<condition>)`; retain `WAITFOR DELAY` and `WAITFOR TIME` for their distinct time forms |
+| One schema-inspection command | Redundant aliases among `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE` |
+
+Generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs, and error
+messages must emit only the canonical forms. If a short migration window is retained, every alias
+must produce a deprecation diagnostic with an exact replacement and a declared removal release;
+do not describe both forms as equally canonical.
+
+#### P2 — Restore parser/formatter/documentation round-trip guarantees
+
+1. Give every executable statement a real `ToSql()` serialization. Report-SQL and Portal
+   statements must never fall through to `UNKNOWN STATEMENT`; formatter output must parse back to
+   an equivalent AST and preserve lifecycle mode, identity sigils, target host, and security
+   clauses.
+2. Add a generated statement-surface inventory from parser/AST metadata and fail CI when a
+   creatable object lacks its declared lifecycle, formatter coverage, grammar completion, help,
+   snippet where applicable, or reference page.
+3. Add table-driven parser → formatter → parser tests for every canonical form and explicit
+   rejection tests for every retired form. Include `IF EXISTS` position, creation modes, dataset
+   sigils, `AT` targeting, named refresh jobs, SMTP/WEBHOOK catalog registration, and all
+   Report-SQL object families.
+4. Parse every copy-pasteable documentation and sample block in its correct execution context.
+   Specifically reconcile `SHOW TABLES`, `SHOW TAGS`, Theme deletion, Portal share/embed expiry,
+   Report-SQL lifecycle claims, managed connections, and refresh-job examples.
+5. Update `docs/syntax-index.md`, statement references, connector references, administration
+   guides, architecture contracts, help resources, snippets, migration guide, samples,
+   configuration export, LSP grammar, and release notes as one atomic language change.
+
+**Definition of done.** A user can predict a statement from the object model: the verb names the
+operation, the object kind precedes its identity, implementation type follows `AS`, remote ownership
+follows `AT`, and lifecycle modifiers occupy one position with one meaning. Portal and Orchestrator
+reuse normal SMTP/WEBHOOK connections, multiple named refresh jobs can target the same report, no
+unsupported lifecycle parses successfully, and every canonical statement round-trips through the
+formatter and documentation test lane.
+
+### Workstation-to-Enterprise — Data Quality and Stewardship
+
+**Review basis (2026-07-26).** The underlying small-scale capabilities are stronger than the current
+product story suggests:
+
+- `@expect` / `@fail` rules and `ON FAILURE WARN | QUARANTINE | THROW` execute in the engine and do
+  not require either host.
+- `ASSERT JOB` evaluates current-run row count, null percentage, freshness, quarantine percentage,
+  and warning percentage. It can fail a CLI/CI run directly; historical baselines and transition
+  alerts become available when the script runs through Orchestrator.
+- The single-node Orchestrator already uses local SQLite by default and persists job history,
+  warning/quarantine totals, compact per-rule failure counts, and structured per-column metrics.
+- `SHOW DATA QUALITY RULES` exposes the rules recorded by the current execution.
+- `SHOW LINEAGE HISTORY FOR MISSING TAGS` audits required `@owner`, `@steward`, `@contact`,
+  `@classification`, and `@quality` metadata locally or `AT` an Orchestrator/Portal connection.
+  `SHOW PROTECTED DATA [SUGGESTIONS]` provides the corresponding protected-data inventory.
+
+The gap is not a second data-quality engine. It is a coherent operator-facing read model between a
+single script's result and the full Portal governance workflow. A one-person shop should be able to
+answer "Is my data healthy?", "What failed?", and "What metadata is missing?" from the CLI,
+Orchestrator, or a generated report, using the same durable evidence the Portal later presents.
+
+**Product invariant.** Portal is a presentation, collaboration, and remediation layer—not a
+prerequisite for data quality or stewardship. The progression must remain additive:
+
+1. **Workstation:** source-controlled rules and tags, current-run assertions, terminal results, and
+   a non-zero process exit when a critical gate fails.
+2. **Local Orchestrator:** optional SQLite-backed scheduling, history, baselines, tag/lineage
+   catalog, reports, and SMTP/WEBHOOK notifications with no Portal deployment.
+3. **Enterprise:** the same records and calculations gain Portal queues, assignments, approvals,
+   access control, remote audit, PostgreSQL/HA, and organization policy. Moving up a tier must not
+   require rewriting rules, tags, assertions, or score definitions.
+
+#### P0 — Ship a no-Portal quality status surface
+
+1. Add a structured status command:
+
+   ```sql
+   SHOW DATA QUALITY STATUS
+     [FOR JOB <job_name>]
+     [SINCE <duration>]
+     [AT <orchestrator_connection>]
+     [INTO #table];
+   ```
+
+   With no `AT`, it reports the current run or the injected local Orchestrator store when one is
+   available. The result must include job/run identity, time, status, rows processed, warned and
+   quarantined counts and percentages, failed-rule count, freshness state, and error summary. It
+   must consume structured history fields rather than parse display prose.
+2. Add the drill-down paired with that summary:
+
+   ```sql
+   SHOW DATA QUALITY FAILURES
+     [FOR JOB <job_name>]
+     [SINCE <duration>]
+     [AT <orchestrator_connection>]
+     [INTO #table];
+   ```
+
+   Return one row per run, target, column, rule, and action with the failure count. Persist a
+   normalized rule-failure record where necessary; keep the compact history string only as a
+   compatibility/display field. Do not persist or return sample values.
+3. Expand `SHOW JOB HISTORY` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
+   data-quality summary fields, or make the status command the documented quality projection over
+   that history. Both commands must agree on run identity and status.
+4. Preserve `ASSERT JOB` as the executable gate. Document the zero-service pattern for Task
+   Scheduler/cron/CI and the local-Orchestrator pattern for history, baselines, recovery
+   notifications, and scheduled execution.
+5. Route optional alerts through the canonical managed connections from the language-consistency
+   phase:
+
+   ```sql
+   CREATE CONNECTION local_orch AS ORCHESTRATOR(...);
+   CREATE CONNECTION quality_mail AS SMTP(...) AT local_orch;
+   CREATE CONNECTION quality_hook AS WEBHOOK(...) AT local_orch;
+   ```
+
+   A workstation user may omit notifications entirely; notifications must not be required to
+   obtain a failing exit code or query the result.
+
+#### P1 — Add transparent stewardship scoring
+
+1. Add a score command over the existing lineage/tag catalog:
+
+   ```sql
+   SHOW STEWARDSHIP SCORE
+     [FOR JOB <job_name> | TABLE <table_name> | SCRIPT <script_path>]
+     [AT <orchestrator_connection>]
+     [INTO #table];
+   ```
+
+   Report the numerator, denominator, and percentage for each component—not only a badge or opaque
+   composite. Initial components should include required-tag completeness, protected-data
+   ownership/classification coverage, and data-quality-rule coverage. Include asset/column counts
+   and the evaluation time so the score is reproducible and auditable.
+2. Make scoring policy explicit and source-control friendly. Default required tags may remain
+   `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`, but an organization must be
+   able to declare required tags, scope, exclusions, and any weights in normal policy
+   configuration. If no weighted policy exists, show component percentages without inventing a
+   composite score.
+3. Use `SHOW LINEAGE HISTORY FOR MISSING TAGS ... INTO #gaps` as the detail query behind tag
+   completeness rather than introducing a synonymous "gaps" command. Score totals and missing-tag
+   rows must reconcile exactly.
+4. Treat tag source locations as the remediation path. Results should retain script path and line
+   when known so a solo operator fixes the source-controlled `INSERT TAG` / `INSERT LINEAGE`
+   statement instead of editing an isolated governance database.
+5. Make local and remote calculations identical. The CLI, local Orchestrator, Portal API, and
+   Portal dashboard must share one scoring service and versioned score definition; the Portal must
+   never calculate a more favorable score from browser state or demo records.
+
+#### P2 — Provide runnable operator reports and a small-shop starter path
+
+1. Ship source-controlled `.rptsql` templates for:
+   - **Data Quality Health:** latest status, recent failures, warning/quarantine trends, freshness,
+     and jobs with no recent successful run.
+   - **Stewardship Scorecard:** component scores, missing required tags, protected assets without
+     ownership/classification, and rule-coverage gaps.
+2. Build the templates from `SHOW ... INTO #table` statements so they run locally in the Report
+   Player or on a schedule through Orchestrator. Portal publishing is optional and must not change
+   the report's queries or meaning.
+3. Add a copy-pasteable "one-person quality loop" guide and sample:
+   define tags and column rules in the pipeline, run `ASSERT JOB`, schedule it in the local
+   Orchestrator, inspect the two reports, and optionally send failure/recovery notifications through
+   saved SMTP/WEBHOOK connections.
+4. Add fixtures and acceptance tests for all three deployment rungs. Given the same run history,
+   lineage catalog, and policy, workstation/local-Orchestrator queries and Portal APIs must return
+   the same counts and scores. Cover empty history, first run, clean run, warning, quarantine,
+   critical failure, stale data, missing tags, protected unowned data, and recovery.
+5. Apply zero-trust output rules throughout: redact connection/secret material, never include
+   failed sample values in history or alerts, enforce identity/policy when querying a remote
+   Orchestrator, and preserve counts-only behavior unless a separately authorized quarantine target
+   is opened.
+
+**Definition of done.** A user with only the CLI can enforce rules and fail automation; a user with
+the default single-node SQLite Orchestrator can schedule those scripts, query durable quality
+history, audit tag completeness, obtain transparent stewardship scores, run health/scorecard
+reports, and optionally receive SMTP/WEBHOOK notifications without installing Portal. Deploying
+Portal or HA reuses the same scripts, records, formulas, and reports while adding collaboration and
+enterprise controls.
+
 ### Portal — Comprehensive Product and UX Update
 
 **Review basis (2026-07-26).** Walked the production Portal in both a local development host and
