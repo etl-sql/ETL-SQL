@@ -64,6 +64,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   includes a Quarantine Queue view with target/search filters and copyable `REPLAY QUARANTINE`
   statements for steward workflows.
 
+- Added Portal quarantine replay submission. The quarantine queue can now submit replayable manifests
+  through the configured Orchestrator job channel, rejects blocked or tampered manifest targets, and
+  reports the submitted replay job id back to the steward.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

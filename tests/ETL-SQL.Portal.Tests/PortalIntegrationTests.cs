@@ -990,6 +990,67 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_ReplayQuarantine_SubmitsReplayJob()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_replay",
+            "dq:quarantine-manifest:q_replayable",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_replay",
+                "loads/replay.etlsql",
+                "replayable_section",
+                "#src",
+                "q_replayable",
+                true,
+                null,
+                ["Id"],
+                "schema-replay",
+                DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/replay", new
+        {
+            quarantineTarget = "q_replayable",
+            jobName = "nightly_replay"
+        });
+
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<ReplayQuarantineResponse>(_json);
+        Assert.False(string.IsNullOrWhiteSpace(body!.JobId));
+        Assert.Equal("REPLAY QUARANTINE q_replayable;", body.ReplayStatement);
+    }
+
+    [Fact]
+    public async Task DataQuality_ReplayQuarantine_RejectsBlockedManifest()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_blocked",
+            "dq:quarantine-manifest:q_blocked",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_blocked",
+                "loads/replay.etlsql",
+                "blocked_section",
+                "#src,#dim",
+                "q_blocked",
+                false,
+                "quarantine source spans a join; replay requires a single-table input in this version",
+                ["Id"],
+                "schema-blocked",
+                DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/replay", new
+        {
+            quarantineTarget = "q_blocked",
+            jobName = "nightly_blocked"
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {

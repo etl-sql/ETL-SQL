@@ -218,6 +218,12 @@ export const dataQualityApi = {
         if (replayable !== '' && replayable !== null && replayable !== undefined) params.set('replayable', replayable);
         params.set('limit', String(limit));
         return apiJson(`/api/data-quality/quarantine?${params.toString()}`);
+    },
+    replayQuarantine(quarantineTarget, jobName = null) {
+        return apiJson('/api/data-quality/quarantine/replay', {
+            method: 'POST',
+            body: { quarantineTarget, jobName }
+        });
     }
 };
 

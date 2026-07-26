@@ -13,3 +13,10 @@ public sealed record QuarantineQueueItemDto(
     DateTimeOffset UpdatedAtUtc,
     string ReplayStatement);
 
+public sealed record ReplayQuarantineRequest(
+    string QuarantineTarget,
+    string? JobName = null);
+
+public sealed record ReplayQuarantineResponse(
+    string JobId,
+    string ReplayStatement);

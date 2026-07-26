@@ -1034,6 +1034,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   background: var(--portal-surface-subtle);
 }
 .dq-page .error-msg { display: block; margin-bottom: 0; }
+.dq-success {
+  display: block;
+  border: 1px solid var(--portal-success-soft);
+  border-radius: var(--portal-radius-sm);
+  background: var(--portal-success-soft);
+  color: var(--portal-success);
+  padding: 8px 10px;
+  font-size: .88em;
+}
 .dq-list { display: flex; flex-direction: column; border: 1px solid var(--portal-border-soft); border-radius: var(--portal-radius); overflow: hidden; }
 .dq-row {
   display: grid;
@@ -1058,6 +1067,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   overflow-wrap: anywhere;
   text-align: right;
 }
+.dq-row-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .dq-status {
   border-radius: var(--portal-radius-sm);
   padding: 2px 7px;
@@ -1073,4 +1083,5 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .dq-row { grid-template-columns: 1fr; }
   .dq-row-side { align-items: flex-start; }
   .dq-row-side code { text-align: left; }
+  .dq-row-actions { justify-content: flex-start; }
 }
