@@ -38,6 +38,7 @@ public sealed class DataQualityController(
         "all",
         DataQualityColumns.QuarantinedStatus,
         DataQualityColumns.ReleasedStatus,
+        DataQualityColumns.ReplayingStatus,
         DataQualityColumns.DiscardedStatus,
         DataQualityColumns.ReplayedStatus
     };
@@ -201,6 +202,22 @@ public sealed class DataQualityController(
         if (!IsSafeReplayTarget(manifest.QuarantineTarget))
             return Conflict(new { error = "Quarantine replay manifest contains an invalid target name." });
 
+        // Refuse a read we already know this process cannot perform, and say why. Running it
+        // anyway produces either an engine resolution error dressed up as a 502, or — for a
+        // #temp target, which auto-creates empty — an empty result that reads as "nothing was
+        // quarantined". Both are worse than declining with a reason.
+        var readability = ETL_SQL.Portal.Services.QuarantineTargetReadability
+            .Describe(manifest.QuarantineTarget);
+        if (!readability.Readable)
+        {
+            return Conflict(new
+            {
+                error = readability.Reason,
+                reviewStatement = ETL_SQL.Portal.Services.QuarantineTargetReadability
+                    .BuildReviewStatement(manifest.QuarantineTarget)
+            });
+        }
+
         var where = status.Equals("all", StringComparison.OrdinalIgnoreCase)
             ? string.Empty
             : $" WHERE {DataQualityColumns.Status} = {ToSqlLiteral(status)}";
@@ -338,8 +355,11 @@ public sealed class DataQualityController(
             return BadRequest(new { error = "A disposition update is limited to 500 row ids." });
 
         var disposition = request.Disposition?.Trim().ToLowerInvariant();
-        if (disposition is not (DataQualityColumns.ReleasedStatus or DataQualityColumns.DiscardedStatus))
-            return BadRequest(new { error = "Disposition must be 'released' or 'discarded'." });
+        if (disposition is not (
+                DataQualityColumns.ReleasedStatus
+                or DataQualityColumns.ReplayedStatus
+                or DataQualityColumns.DiscardedStatus))
+            return BadRequest(new { error = "Disposition must be 'released', 'replayed', or 'discarded'." });
 
         var manifest = await FindManifestAsync(request.QuarantineTarget, request.JobName);
         if (manifest is null)
@@ -466,6 +486,8 @@ public sealed class DataQualityController(
         {
             var manifest = ReadManifest(state);
             if (manifest == null) return null;
+            var readability = ETL_SQL.Portal.Services.QuarantineTargetReadability
+                .Describe(manifest.QuarantineTarget);
             return new QuarantineQueueItemDto(
                 manifest.JobName,
                 manifest.ScriptPath,
@@ -482,7 +504,11 @@ public sealed class DataQualityController(
                 manifest.JoinBuildTable,
                 manifest.JoinObservedN1,
                 manifest.JoinNonReplayableReason,
-                $"REPLAY QUARANTINE {manifest.QuarantineTarget};");
+                $"REPLAY QUARANTINE {manifest.QuarantineTarget};",
+                readability.Readable,
+                readability.Reason,
+                ETL_SQL.Portal.Services.QuarantineTargetReadability
+                    .BuildReviewStatement(manifest.QuarantineTarget));
         }
         catch (JsonException)
         {

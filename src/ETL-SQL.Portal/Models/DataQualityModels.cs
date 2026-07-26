@@ -16,7 +16,16 @@ public sealed record QuarantineQueueItemDto(
     string? JoinBuildTable,
     bool? JoinObservedN1,
     string? JoinNonReplayableReason,
-    string ReplayStatement);
+    string ReplayStatement,
+    /// <summary>
+    /// Whether Portal can read this target's rows. False means the queue shows the target as
+    /// view-only rather than offering a row editor that cannot work — see
+    /// <see cref="ETL_SQL.Portal.Services.QuarantineTargetReadability"/>.
+    /// </summary>
+    bool RowsReadable,
+    string? RowsUnavailableReason,
+    /// <summary>The statement a steward can run themselves against a view-only target.</summary>
+    string ReviewStatement);
 
 public sealed record ReplayQuarantineRequest(
     string QuarantineTarget,

@@ -989,6 +989,60 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Contains("Email", item.InputColumns);
     }
 
+    [Theory]
+    // A durable table on a named connection, and a #temp target — the two shapes real capture
+    // targets take. Neither is readable from the Portal process, and the #temp case is the
+    // dangerous one: the preview session auto-creates the table empty, so a steward who is
+    // offered a row editor sees "no rows" and reads it as "nothing was quarantined".
+    [InlineData("warehouse.dbo.q_unreadable", "warehouse")]
+    [InlineData("#q_scratch", "temp table")]
+    public async Task DataQuality_Queue_MarksTargetsPortalCannotReadAsViewOnly(string target, string expectedInReason)
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        var job = $"view_only_{Guid.NewGuid():N}";
+        await store.SetJobStateAsync(
+            job,
+            $"dq:quarantine-manifest:{target}",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                job, "loads/x.etlsql", "sec", "#src", target,
+                true, null, ["Id"], "schema-v", DateTimeOffset.UtcNow)));
+
+        var res = await AuthGet(token, $"/api/data-quality/quarantine?jobName={job}");
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var item = Assert.Single((await res.Content.ReadFromJsonAsync<List<QuarantineQueueItemDto>>(_json))!);
+        Assert.False(item.RowsReadable);
+        Assert.Contains(expectedInReason, item.RowsUnavailableReason);
+        // Replay is unaffected — it runs in the orchestrator, which does have the connection.
+        Assert.True(item.IsReplayable);
+        Assert.Equal($"SELECT * FROM {target} WHERE __dq_status = 'quarantined';", item.ReviewStatement);
+    }
+
+    [Fact]
+    public async Task DataQuality_QuarantineRows_DeclinesTargetPortalCannotRead()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "unreadable_job",
+            "dq:quarantine-manifest:warehouse.dbo.q_rows",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "unreadable_job", "loads/x.etlsql", "sec", "#src", "warehouse.dbo.q_rows",
+                true, null, ["Id"], "schema-v", DateTimeOffset.UtcNow)));
+
+        var res = await AuthGet(
+            token,
+            "/api/data-quality/quarantine/rows?quarantineTarget=warehouse.dbo.q_rows&jobName=unreadable_job");
+
+        // Declined up front with a reason, rather than executed and surfaced as a 502 carrying a
+        // raw engine diagnostic.
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.Contains("warehouse", body);
+        Assert.Contains("SELECT * FROM warehouse.dbo.q_rows", body);
+    }
+
     [Fact]
     public async Task DataQuality_ReplayQuarantine_SubmitsReplayJob()
     {

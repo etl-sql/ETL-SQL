@@ -1,10 +1,14 @@
 import { createDataQualityQueue } from '../../../src/ETL-SQL.Portal/wwwroot/js/data-quality-queue.js';
 
 // Three shapes of quarantine target, because they behave differently in the row editor:
-//   1. a session-local table the Portal's own execution session can resolve  → editable
-//   2. a durable table on a named production connection                      → listed, not readable
-//   3. a #temp table that stopped existing when the producing run ended      → listed, not readable
-// Only the first is reachable today; see the "Row editor" fixtures below.
+//   1. a table the Portal's own execution session can resolve  → editable
+//   2. a durable table on a named production connection        → listed, view-only
+//   3. a #temp table that died with the producing run          → listed, view-only
+//
+// `rowsReadable` mirrors what `QuarantineTargetReadability` reports. The shipped classifier
+// returns false for every shape today — the Portal's preview session restores no connections —
+// so the readable manifests below are the design target for the catalog-backed preview on the
+// roadmap, kept here so the row editor stays developable in the meantime.
 const manifests = [
   {
     jobName: 'nightly_import',
@@ -23,6 +27,9 @@ const manifests = [
     joinObservedN1: null,
     joinNonReplayableReason: null,
     replayStatement: 'REPLAY QUARANTINE quarantine_users;',
+    rowsReadable: true,
+    rowsUnavailableReason: null,
+    reviewStatement: "SELECT * FROM quarantine_users WHERE __dq_status = 'quarantined';",
   },
   {
     jobName: 'nightly_import',
@@ -41,6 +48,9 @@ const manifests = [
     joinObservedN1: false,
     joinNonReplayableReason: 'build side had duplicate keys',
     replayStatement: 'REPLAY QUARANTINE quarantine_orders;',
+    rowsReadable: true,
+    rowsUnavailableReason: null,
+    reviewStatement: "SELECT * FROM quarantine_orders WHERE __dq_status = 'quarantined';",
   },
   {
     // The shape the docs tell stewards to use for anything they intend to review later: a durable
@@ -61,6 +71,9 @@ const manifests = [
     joinObservedN1: null,
     joinNonReplayableReason: null,
     replayStatement: 'REPLAY QUARANTINE warehouse.dbo.quarantine_users;',
+    rowsReadable: false,
+    rowsUnavailableReason: "Portal cannot open connection 'warehouse'. The row editor runs inside the Portal process, which has no access to the connections the job used.",
+    reviewStatement: "SELECT * FROM warehouse.dbo.quarantine_users WHERE __dq_status = 'quarantined';",
   },
   {
     // A #temp capture target: the manifest outlives the run, the table does not.
@@ -80,6 +93,9 @@ const manifests = [
     joinObservedN1: null,
     joinNonReplayableReason: null,
     replayStatement: 'REPLAY QUARANTINE #quarantine_sessions;',
+    rowsReadable: false,
+    rowsUnavailableReason: "'#quarantine_sessions' is a session-local temp table. It stopped existing when the producing run ended, so Portal has no rows to show — quarantine into a durable table if you need to review rows after the run.",
+    reviewStatement: "SELECT * FROM #quarantine_sessions WHERE __dq_status = 'quarantined';",
   },
 ];
 
@@ -134,6 +150,9 @@ const rowsByStatus = {
   released: [
     { UserId: 4, Email: 'kim@example.com', Source: 'web-signup', __dq_row_id: 'd4', __dq_column: 'Email', __dq_reason: "value 'kim@example' failed rule \"MATCHES ^[^@]+@[^@]+$\"", __dq_status: 'released' },
   ],
+  replaying: [
+    { UserId: 6, Email: 'pat@example.com', Source: 'crm-export', __dq_row_id: 'f6', __dq_column: 'Email', __dq_reason: 'replay claim requires target-side review', __dq_status: 'replaying' },
+  ],
   discarded: [
     { UserId: 5, Email: 'test@test', Source: 'load-test', __dq_row_id: 'e5', __dq_column: 'Email', __dq_reason: "value 'test@test' failed rule \"MATCHES ^[^@]+@[^@]+$\"", __dq_status: 'discarded' },
   ],
@@ -142,29 +161,22 @@ const rowsByStatus = {
 
 const rowColumns = ['UserId', 'Email', 'Source', '__dq_row_id', '__dq_column', '__dq_reason', '__dq_status'];
 
-/**
- * The error the Portal actually returns when its own execution session cannot resolve the
- * quarantine target. `DataQualityController.GetQuarantineRows` runs
- * `SELECT * FROM {target}` in a fresh in-process `ExecutionSession`, and surfaces the engine
- * diagnostic verbatim as a 502 — so this is the whole message a steward sees.
- */
-function unresolvableTargetError(target) {
-  const name = target.includes('.') ? target.split('.')[0] : target;
-  const message = target.includes('.')
-    ? `Table or connection not found: ${name}`
-    : `Table not found: ${name}`;
-  return Object.assign(new Error(message), { status: 502 });
+// `GetQuarantineRows` declines a target it knows this process cannot resolve, rather than running
+// the SELECT and returning an engine error (or, for a #temp target, an empty result that reads as
+// "nothing was quarantined"). The queue hides the row editor for these, so this only fires if a
+// stale manifest slips through.
+function viewOnlyTargetError(target) {
+  const item = manifests.find(m => m.quarantineTarget === target);
+  return Object.assign(new Error(item?.rowsUnavailableReason || 'Portal cannot read this target.'),
+    { status: 409 });
 }
-
-// Only session-local tables the Portal can resolve are readable. Everything else fails at the
-// SELECT, which is the gap the "unreachable" fixtures below make visible.
-const PORTAL_RESOLVABLE = new Set(['quarantine_users', 'quarantine_orders']);
 
 function mockApi(trendKey) {
   return {
     quarantineQueue: async () => manifests,
     quarantineRows: async ({ quarantineTarget, status }) => {
-      if (!PORTAL_RESOLVABLE.has(quarantineTarget)) throw unresolvableTargetError(quarantineTarget);
+      const item = manifests.find(m => m.quarantineTarget === quarantineTarget);
+      if (item && item.rowsReadable === false) throw viewOnlyTargetError(quarantineTarget);
       const rows = status === 'all'
         ? Object.values(rowsByStatus).flat()
         : (rowsByStatus[status] || []);
@@ -186,7 +198,8 @@ export default {
   fixtures: [
     { id: 'queue', label: 'Quarantine queue' },
     { id: 'rows', label: 'Row editor (resolvable target)' },
-    { id: 'rows-unreachable', label: 'Row editor (target Portal cannot read)' },
+    { id: 'rows-replaying', label: 'Row editor (incomplete replay)' },
+    { id: 'view-only', label: 'Queue (targets Portal cannot read)' },
     { id: 'trend', label: 'Quality trend (degrading)' },
     { id: 'trend-empty', label: 'Quality trend (no runs)' },
   ],
@@ -204,13 +217,23 @@ export default {
       // Open the trend panel for the first manifest so the fixture lands on it directly.
       host.querySelector('[data-trend-job]')?.click();
       ctx.stat(trendKey === 'empty' ? 'trend panel — empty state' : 'trend panel — degrading quality');
-    } else if (fixtureId === 'rows' || fixtureId === 'rows-unreachable') {
-      const target = fixtureId === 'rows' ? 'quarantine_users' : 'warehouse.dbo.quarantine_users';
-      host.querySelector(`[data-review-target="${target}"]`)?.click();
+    } else if (fixtureId === 'rows' || fixtureId === 'rows-replaying') {
+      host.querySelector('[data-review-target="quarantine_users"]')?.click();
       await settle();
+      if (fixtureId === 'rows-replaying') {
+        const status = host.querySelector('#dqRowsStatus');
+        status.value = 'replaying';
+        status.dispatchEvent(new Event('change'));
+        await settle();
+      }
       ctx.stat(fixtureId === 'rows'
         ? 'row editor — edit cells, add an audited reason, release or discard'
-        : 'row editor — durable target on a named connection is not readable from Portal');
+        : 'row editor — return an incomplete claim to released or mark it replayed');
+    } else if (fixtureId === 'view-only') {
+      // No row editor is offered for these: the queue states why and hands over the statement to
+      // run where the connection exists. Replay and trend still work.
+      const viewOnly = manifests.filter(m => m.rowsReadable === false).length;
+      ctx.stat(`${viewOnly} of ${manifests.length} targets are view-only — reason shown inline`);
     } else {
       ctx.stat(`${manifests.length} manifests`);
     }

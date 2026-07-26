@@ -13,6 +13,12 @@ function renderStatus(item) {
   return '<span class="dq-status dq-status-blocked">Blocked</span>';
 }
 
+// A target whose rows this Portal cannot read. Older manifests predate the flag, so an absent
+// value means "readable" — the endpoint is still the authority and will decline if it is not.
+function rowsReadable(item) {
+  return item.rowsReadable !== false;
+}
+
 function isEvidenceColumn(column) {
   return String(column || '').toLowerCase().startsWith('__dq_');
 }
@@ -27,6 +33,7 @@ function renderManifestRow(item, replayingTarget, selectedTarget) {
   const isReplaying = replayingTarget === item.quarantineTarget;
   const replayDisabled = !item.isReplayable || isReplaying;
   const selected = selectedTarget === item.quarantineTarget;
+  const readable = rowsReadable(item);
   return `<article class="dq-row">
     <div class="dq-row-main">
       <div class="dq-row-title">
@@ -38,13 +45,19 @@ function renderManifestRow(item, replayingTarget, selectedTarget) {
       </div>
       <div class="dq-row-detail">${columns ? `Columns ${columns}${extra}` : 'No captured columns recorded'}</div>
       ${item.nonReplayableReason ? `<div class="dq-row-warning">${esc(item.nonReplayableReason)}</div>` : ''}
+      ${readable ? '' : `<div class="dq-row-warning">${esc(item.rowsUnavailableReason
+        || 'Portal cannot read this target’s rows.')} Replay and trend still work; copy the
+        review statement to read the rows where the connection exists.</div>`}
     </div>
     <div class="dq-row-side">
       <time>${esc(formatDate(item.updatedAtUtc))}</time>
       <code>${esc(item.replayStatement)}</code>
       <div class="dq-row-actions">
         <button class="btn btn-primary btn-xs" data-replay-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button"${replayDisabled ? ' disabled' : ''}>${isReplaying ? 'Submitting' : 'Replay'}</button>
-        <button class="btn btn-outline btn-xs" data-review-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button">${selected ? 'Rows Open' : 'Review Rows'}</button>
+        ${readable
+          ? `<button class="btn btn-outline btn-xs" data-review-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button">${selected ? 'Rows Open' : 'Review Rows'}</button>`
+          : `<span class="dq-status dq-status-blocked" title="${esc(item.rowsUnavailableReason || '')}">View only</span>
+             <button class="btn btn-outline btn-xs" data-copy-review="${esc(item.reviewStatement || '')}" type="button">Copy Review SQL</button>`}
         <button class="btn btn-outline btn-xs" data-trend-job="${esc(item.jobName)}" type="button">Trend</button>
         <button class="btn btn-outline btn-xs" data-copy-replay="${esc(item.replayStatement)}" type="button">Copy</button>
       </div>
@@ -155,7 +168,7 @@ function renderRowsPanel(state) {
       </div>
       <div class="dq-row-actions">
         <select id="dqRowsStatus" aria-label="Row status filter">
-          ${['quarantined', 'released', 'discarded', 'replayed', 'all'].map(status =>
+          ${['quarantined', 'released', 'replaying', 'discarded', 'replayed', 'all'].map(status =>
             `<option value="${status}"${state.rowStatus === status ? ' selected' : ''}>${status}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-xs" id="dqReloadRows" type="button">Reload</button>
@@ -173,10 +186,11 @@ function renderRowsPanel(state) {
         <tbody>${rows.map(row => {
           const id = rowId(row);
           const edits = state.edits[id] || {};
+          const isReplayClaim = row.__dq_status === 'replaying';
           return `<tr>
             <td class="dq-row-action-cell">
-              <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : 'Save + Release'}</button>
-              <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" type="button"${state.rowAction === id ? ' disabled' : ''}>Discard</button>
+              <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : isReplayClaim ? 'Return to released' : 'Save + Release'}</button>
+              <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" data-disposition="${isReplayClaim ? 'replayed' : 'discarded'}" type="button"${state.rowAction === id ? ' disabled' : ''}>${isReplayClaim ? 'Mark replayed' : 'Discard'}</button>
               <input class="dq-cell-input dq-note-input" data-note-row="${esc(id)}" placeholder="Reason (audited)" value="${esc(state.notes[id] ?? '')}">
             </td>
             ${sourceColumns.map(column => `<td><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}"></td>`).join('')}
@@ -426,14 +440,15 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     host.querySelectorAll('[data-discard-row]').forEach(btn => {
       btn.addEventListener('click', () => {
         const row = (state.rows?.rows || []).find(value => rowId(value) === btn.dataset.discardRow);
-        if (row) updateDisposition(row, 'discarded');
+        if (row) updateDisposition(row, btn.dataset.disposition || 'discarded');
       });
     });
-    host.querySelectorAll('[data-copy-replay]').forEach(btn => {
+    host.querySelectorAll('[data-copy-replay], [data-copy-review]').forEach(btn => {
+      const label = btn.textContent;
       btn.addEventListener('click', async () => {
-        await navigator.clipboard?.writeText(btn.dataset.copyReplay || '');
+        await navigator.clipboard?.writeText(btn.dataset.copyReplay ?? btn.dataset.copyReview ?? '');
         btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+        setTimeout(() => { btn.textContent = label; }, 1200);
       });
     });
   }
