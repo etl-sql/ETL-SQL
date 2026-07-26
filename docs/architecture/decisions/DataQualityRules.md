@@ -520,10 +520,27 @@ months of history, which no deployment will have at v2 time.
 
 ---
 
-## v3 direction — join-statement replay via probe-side provenance (direction only; not designed)
+## v3 — join-statement replay via probe-side provenance
 
-The agreed direction for lifting v2's single-table restriction. Not yet a full design — recorded
-so the v2 hooks stay compatible with it.
+The v3 objective is to lift v2's single-table replay restriction for the common star-schema
+enrichment case: a streamed fact/probe row joins to at most one dimension/build row, then a
+data-quality rule quarantines the joined output. The replay contract remains the same as v2:
+released rows re-enter the real statement under current rules, protected by the same replay lease
+and disposition lifecycle.
+
+### V3 manifest contract
+
+`QuarantineReplayManifest` keeps the v2 fields and adds backward-compatible provenance fields:
+
+- **ReplayMode** — `single-table` for v2 behavior, `probe-join` for v3 join replay.
+- **ProbeSourceTable** — the source table whose row will be substituted during replay.
+- **JoinBuildTable** — the build-side table used to establish the replayability gate.
+- **JoinObservedN1** — true only when the run observed at most one build row per probe key.
+- **JoinNonReplayableReason** — precise join-specific reason when probe replay is blocked.
+
+These fields are surfaced through the Portal quarantine queue so stewards can distinguish
+single-table replay, probe-side join replay, and fan-out/non-replayable quarantines without reading
+raw job state.
 
 **Mechanism.** The engine's hash joins have a **build side** (loaded into the hash table —
 typically dimensions) and a streamed **probe side** (typically the fact/driving table). Every
@@ -552,6 +569,21 @@ dominant pattern — passes the gate; fan-out joins remain non-replayable.
 
 **Resulting decision tree:** single-table → v2 replay; N:1 join (observed) → v3 probe-side
 replay; fan-out join → non-replayable (steered away by the v2 replayability lint).
+
+### V3 implementation slices
+
+1. **Manifest compatibility** — ship the provenance fields above with defaults so existing manifests
+   deserialize as `single-table`.
+2. **Probe provenance carrier** — preserve the original probe/source row through the streaming
+   hash-join path separately from the joined output row, so quarantine capture can write source
+   columns instead of post-join columns for `probe-join` manifests.
+3. **Observed N:1 gate** — detect build-side duplicate join keys while building the hash table and
+   record `JoinObservedN1 = true/false` on the run's manifest. Fan-out remains non-replayable.
+4. **Replay substitution** — extend `REPLAY QUARANTINE` to substitute released rows at
+   `ProbeSourceTable` when `ReplayMode = 'probe-join'`, then resume at the recorded label using
+   the current build-side tables.
+5. **Docs, help, and lint** — update `REPLAY QUARANTINE`, the data-quality guide, Portal queue copy,
+   and diagnostics for `single-table`, `probe-join`, and fan-out join cases.
 
 ---
 

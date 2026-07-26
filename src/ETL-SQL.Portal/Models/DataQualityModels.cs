@@ -11,6 +11,11 @@ public sealed record QuarantineQueueItemDto(
     IReadOnlyList<string> InputColumns,
     string InputSchemaFingerprint,
     DateTimeOffset UpdatedAtUtc,
+    string ReplayMode,
+    string? ProbeSourceTable,
+    string? JoinBuildTable,
+    bool? JoinObservedN1,
+    string? JoinNonReplayableReason,
     string ReplayStatement);
 
 public sealed record ReplayQuarantineRequest(

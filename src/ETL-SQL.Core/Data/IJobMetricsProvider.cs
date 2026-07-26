@@ -44,7 +44,12 @@ public sealed record QuarantineReplayManifest(
     string? NonReplayableReason,
     IReadOnlyList<string> InputColumns,
     string InputSchemaFingerprint,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string ReplayMode = "single-table",
+    string? ProbeSourceTable = null,
+    string? JoinBuildTable = null,
+    bool? JoinObservedN1 = null,
+    string? JoinNonReplayableReason = null);
 
 /// <summary>
 /// Narrow Engine→Orchestrator seam giving <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> access to

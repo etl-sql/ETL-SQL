@@ -156,7 +156,12 @@ namespace ETL_SQL.Tests.Orchestration
                 NonReplayableReason: null,
                 InputColumns: new[] { "Id", "Name" },
                 InputSchemaFingerprint: "abc123",
-                UpdatedAtUtc: DateTimeOffset.Parse("2026-07-25T12:02:00Z"));
+                UpdatedAtUtc: DateTimeOffset.Parse("2026-07-25T12:02:00Z"),
+                ReplayMode: "probe-join",
+                ProbeSourceTable: "#facts",
+                JoinBuildTable: "#dim",
+                JoinObservedN1: true,
+                JoinNonReplayableReason: null);
 
             await provider.SaveQuarantineReplayManifestAsync(manifest);
 
@@ -172,9 +177,42 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(manifest.InputColumns, read.InputColumns);
             Assert.Equal(manifest.InputSchemaFingerprint, read.InputSchemaFingerprint);
             Assert.Equal(manifest.UpdatedAtUtc, read.UpdatedAtUtc);
+            Assert.Equal(manifest.ReplayMode, read.ReplayMode);
+            Assert.Equal(manifest.ProbeSourceTable, read.ProbeSourceTable);
+            Assert.Equal(manifest.JoinBuildTable, read.JoinBuildTable);
+            Assert.Equal(manifest.JoinObservedN1, read.JoinObservedN1);
+            Assert.Equal(manifest.JoinNonReplayableReason, read.JoinNonReplayableReason);
 
             Assert.Equal("#q", (await provider.GetQuarantineReplayManifestAsync("nightly", "q"))?.QuarantineTarget);
             Assert.Null(await provider.GetQuarantineReplayManifestAsync("nightly", "#missing"));
+        }
+
+        [Fact]
+        public void QuarantineReplayManifest_OldJsonDefaultsToSingleTableReplay()
+        {
+            var json = """
+                {
+                  "JobName": "nightly",
+                  "ScriptPath": "C:\\jobs\\nightly.etlsql",
+                  "SectionLabel": "import_rows",
+                  "SourceTable": "#src",
+                  "QuarantineTarget": "#q",
+                  "IsReplayable": true,
+                  "NonReplayableReason": null,
+                  "InputColumns": [ "Id", "Name" ],
+                  "InputSchemaFingerprint": "abc123",
+                  "UpdatedAtUtc": "2026-07-25T12:02:00+00:00"
+                }
+                """;
+
+            var manifest = System.Text.Json.JsonSerializer.Deserialize<QuarantineReplayManifest>(json);
+
+            Assert.NotNull(manifest);
+            Assert.Equal("single-table", manifest.ReplayMode);
+            Assert.Null(manifest.ProbeSourceTable);
+            Assert.Null(manifest.JoinBuildTable);
+            Assert.Null(manifest.JoinObservedN1);
+            Assert.Null(manifest.JoinNonReplayableReason);
         }
 
         // ── Per-column null tallies ────────────────────────────────────────

@@ -42,3 +42,20 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
       escaping (it collides with `MATCHES` regexes); a same-kind literal quote is doubled (SQL `''`). See the tag
       value grammar note in [DataQualityRules.md](docs/architecture/decisions/DataQualityRules.md).
 
+### Data Quality V3 — Join Replay
+
+- [ ] Promote the v3 join replay direction in `docs/architecture/decisions/DataQualityRules.md`
+      into a full design section with implementation slices, manifest fields, replay decision tree,
+      and documentation requirements.
+- [ ] Extend `QuarantineReplayManifest` with backward-compatible replay-mode/provenance fields:
+      single-table vs probe-side join replay, probe source table, join table, observed N:1 status,
+      and join replay non-replayable reason.
+- [ ] Capture probe-side provenance through the streaming hash-join path so quarantined join output
+      can persist the original probe row rather than the combined post-join row.
+- [ ] Add the observed N:1 gate by detecting build-side duplicate keys during hash table build and
+      recording replayability in the manifest.
+- [ ] Extend `REPLAY QUARANTINE` to substitute released rows at the probe source for replayable
+      N:1 joins while keeping existing lease and disposition semantics.
+- [ ] Update docs/help/LSP surfaces for `REPLAY QUARANTINE`, data-quality remediation, and the
+      fan-out non-replayable diagnostic.
+

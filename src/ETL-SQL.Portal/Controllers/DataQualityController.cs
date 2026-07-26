@@ -292,6 +292,11 @@ public sealed class DataQualityController(
                 manifest.InputColumns,
                 manifest.InputSchemaFingerprint,
                 manifest.UpdatedAtUtc,
+                manifest.ReplayMode,
+                manifest.ProbeSourceTable,
+                manifest.JoinBuildTable,
+                manifest.JoinObservedN1,
+                manifest.JoinNonReplayableReason,
                 $"REPLAY QUARANTINE {manifest.QuarantineTarget};");
         }
         catch (JsonException)
