@@ -644,8 +644,7 @@ public class StatementParser
     private Statement ParseReplayQuarantine()
     {
         var replayToken = _parser.Previous;
-        if (_parser.Current.Type == TokenType.QUARANTINE
-            || _parser.Current.Value.Equals("QUARANTINE", StringComparison.OrdinalIgnoreCase))
+        if (_parser.Current.Value.Equals("QUARANTINE", StringComparison.OrdinalIgnoreCase))
         {
             _parser.Advance();
         }

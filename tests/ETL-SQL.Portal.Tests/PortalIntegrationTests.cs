@@ -1154,6 +1154,58 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DataQuality_Trend_SurfacesPersistedRunMetrics()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        const string job = "trend_import";
+
+        // Three completed runs, quality degrading: 1%, 2%, then 20%.
+        foreach (var (rows, quarantined, failures) in new[]
+        {
+            (1000L, 10L, "Email:MATCHES ^[^@]+@[^@]+$=10"),
+            (1000L, 20L, "Email:MATCHES ^[^@]+@[^@]+$=20"),
+            (1000L, 200L, "Email:MATCHES ^[^@]+@[^@]+$=180;Age:>= 0=20")
+        })
+        {
+            var id = await store.LogJobStartAsync(job);
+            await store.LogJobEndAsync(id, "SUCCESS", rowsProcessed: rows,
+                rowsQuarantined: quarantined, rowsWarned: 0, dataQualityFailures: failures);
+            await Task.Delay(5);
+        }
+
+        var res = await AuthGet(token, $"/api/data-quality/trend?jobName={job}");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var trend = await res.Content.ReadFromJsonAsync<DataQualityTrendDto>(_json);
+
+        Assert.Equal(3, trend!.RunCount);
+        Assert.Equal(230, trend.TotalRowsQuarantined);
+        Assert.Equal(0.2m, trend.LatestQuarantineRate);
+        // Latest 20% against a 1.5% mean of the two earlier runs — a clear degradation signal.
+        Assert.NotNull(trend.QuarantineRateDelta);
+        Assert.True(trend.QuarantineRateDelta > 0.18m, "expected the latest run to read as degrading");
+
+        // Rule text contains ':' and '=' (a MATCHES regex), so the payload parser must not split on them.
+        var top = trend.TopRuleFailures[0];
+        Assert.Equal("Email", top.Column);
+        Assert.Equal("MATCHES ^[^@]+@[^@]+$", top.Rule);
+        Assert.Equal(210, top.Count);
+    }
+
+    [Fact]
+    public async Task DataQuality_Trend_UnknownJob_ReturnsEmptyRatherThanError()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var res = await AuthGet(token, "/api/data-quality/trend?jobName=never_ran_at_all");
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var trend = await res.Content.ReadFromJsonAsync<DataQualityTrendDto>(_json);
+        Assert.Equal(0, trend!.RunCount);
+        Assert.Empty(trend.Runs);
+    }
+
+    [Fact]
     public async Task DataQuality_Endpoints_AreDeniedToNonStewards()
     {
         // Quarantine remediation reads raw failing source rows (whatever PII the source carried),
@@ -1180,6 +1232,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             disposition = "released"
         });
         Assert.Equal(HttpStatusCode.Forbidden, disposition.StatusCode);
+
+        var trend = await AuthGet(viewerToken, "/api/data-quality/trend?jobName=any");
+        Assert.Equal(HttpStatusCode.Forbidden, trend.StatusCode);
     }
 
     [Fact]

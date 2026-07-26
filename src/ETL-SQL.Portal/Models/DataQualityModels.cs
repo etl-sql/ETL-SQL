@@ -37,6 +37,42 @@ public sealed record QuarantineDispositionResponse(
     string JobId,
     string DispositionStatement);
 
+/// <summary>One completed run's data-quality outcome, for the steward trend view.</summary>
+public sealed record DataQualityRunDto(
+    long HistoryId,
+    string JobName,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string Status,
+    long RowsProcessed,
+    long RowsQuarantined,
+    long RowsWarned,
+    /// <summary>Quarantined rows as a fraction of rows processed (0..1); null when nothing was processed.</summary>
+    decimal? QuarantineRate,
+    /// <summary>Warned rows as a fraction of rows processed (0..1); null when nothing was processed.</summary>
+    decimal? WarnRate,
+    IReadOnlyList<DataQualityRuleFailureDto> RuleFailures);
+
+/// <summary>A per-rule failure count parsed from the run's compact history payload.</summary>
+public sealed record DataQualityRuleFailureDto(string Column, string Rule, long Count);
+
+/// <summary>
+/// Quality trend for one job: the most recent runs plus the aggregate a steward triages on —
+/// which rules fire most, and whether the rate is moving.
+/// </summary>
+public sealed record DataQualityTrendDto(
+    string JobName,
+    int RunCount,
+    long TotalRowsProcessed,
+    long TotalRowsQuarantined,
+    long TotalRowsWarned,
+    decimal? AverageQuarantineRate,
+    decimal? LatestQuarantineRate,
+    /// <summary>Latest rate minus the mean of the preceding runs; positive means quality is degrading.</summary>
+    decimal? QuarantineRateDelta,
+    IReadOnlyList<DataQualityRuleFailureDto> TopRuleFailures,
+    IReadOnlyList<DataQualityRunDto> Runs);
+
 public sealed record QuarantineRowsResponse(
     string QuarantineTarget,
     string Status,

@@ -59,6 +59,41 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 - [x] Update docs/help/LSP surfaces for `REPLAY QUARANTINE`, data-quality remediation, and the
       fan-out non-replayable diagnostic.
 
+### Data Quality — Steward Gaps
+
+Gaps found by walking the shipped system as a data steward would use it. The first is done; the
+rest are ordered by how much they affect day-to-day stewardship.
+
+- [x] **No read surface for the persisted per-run metrics.** The engine had been recording
+      `RowsQuarantined` / `RowsWarned` / `DataQualityFailures` per run since v1, and nothing in the
+      Portal read any of it — the stated purpose of persisting them (trend visibility) was never
+      delivered. Added `GET /api/data-quality/trend` plus a trend panel on the quarantine queue:
+      per-run rates, a sparkline, the rules firing most, and the latest run compared against the
+      mean of the preceding ones.
+- [ ] **Rules are invisible without reading the script.** The stated rationale for rules-as-tags was
+      steward visibility — "see what rules protect a column without reading engine internals" — but
+      there is no surface listing them. Nothing answers "is `Email` protected, and by what?" short
+      of opening the load script. Needs a `SHOW DATA QUALITY RULES`-style read path and/or a column
+      panel fed from the tag catalog and lineage.
+- [ ] **Disposition records neither actor nor reason.** Release and discard write only
+      `__dq_status`. "Why did we drop these 400 rows, and who decided?" is unanswerable, which is
+      exactly the audit question that gets asked. The design said these actions would be audited
+      through the governance outbox; that did not land. Wants an acting identity plus an optional
+      note column, and the Portal disposition call should pass the caller through.
+- [ ] **Alerts do not reach the column's owner.** `@owner` / `@steward` / `@contact` are already
+      tagged and already propagate, but the `ASSERT JOB … ALERT` payload ignores them and posts to a
+      single channel. Including the owning steward for the failing columns would route failures to
+      whoever can actually fix them.
+- [ ] **No way to preview a rule's impact before enforcing it.** To learn how many rows a new
+      `@expect` would quarantine, you must add it and run it in production. `SET WHAT_IF` already
+      exists as a concept; a rule dry-run that reports counts without routing rows would let a
+      steward calibrate a threshold safely.
+- [ ] **The row editor only works for Portal-resolvable targets.** Pre-projection capture plus
+      in-Portal editing is the strongest part of the workflow, but it is unavailable for durable
+      quarantine tables on named production connections — which is where real quarantine data
+      lives. Decide whether Portal should be able to reach those targets, or whether the queue
+      should state plainly that a target is view-only and why.
+
 ### Data Quality — Residual Gaps From Code Review
 
 Two gaps left open deliberately after the v2 review fixes (commit `168b70a5`). Both are decisions

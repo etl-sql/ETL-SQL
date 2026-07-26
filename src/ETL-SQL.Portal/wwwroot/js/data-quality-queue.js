@@ -45,10 +45,98 @@ function renderManifestRow(item, replayingTarget, selectedTarget) {
       <div class="dq-row-actions">
         <button class="btn btn-primary btn-xs" data-replay-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button"${replayDisabled ? ' disabled' : ''}>${isReplaying ? 'Submitting' : 'Replay'}</button>
         <button class="btn btn-outline btn-xs" data-review-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button">${selected ? 'Rows Open' : 'Review Rows'}</button>
+        <button class="btn btn-outline btn-xs" data-trend-job="${esc(item.jobName)}" type="button">Trend</button>
         <button class="btn btn-outline btn-xs" data-copy-replay="${esc(item.replayStatement)}" type="button">Copy</button>
       </div>
     </div>
   </article>`;
+}
+
+function formatRate(rate) {
+  if (rate === null || rate === undefined) return '—';
+  return `${(Number(rate) * 100).toFixed(2)}%`;
+}
+
+function renderTrendDelta(delta) {
+  if (delta === null || delta === undefined) return '';
+  const pct = Number(delta) * 100;
+  // A rising quarantine rate means quality is degrading, so "up" is the bad direction here.
+  if (Math.abs(pct) < 0.005) return '<span class="dq-trend-flat">no change vs. earlier runs</span>';
+  const cls = pct > 0 ? 'dq-trend-worse' : 'dq-trend-better';
+  const arrow = pct > 0 ? '▲' : '▼';
+  const word = pct > 0 ? 'worse' : 'better';
+  return `<span class="${cls}">${arrow} ${Math.abs(pct).toFixed(2)} pts ${word} than earlier runs</span>`;
+}
+
+function renderSparkline(runs) {
+  // Oldest → newest, so the line reads left to right like every other trend chart.
+  const ordered = runs.slice().reverse().filter(r => r.quarantineRate !== null && r.quarantineRate !== undefined);
+  if (ordered.length < 2) return '';
+  const values = ordered.map(r => Number(r.quarantineRate));
+  const max = Math.max(...values, 0.0001);
+  const bars = ordered.map(run => {
+    const height = Math.max(2, Math.round((Number(run.quarantineRate) / max) * 100));
+    const title = `${formatDate(run.endTime || run.startTime)} — ${formatRate(run.quarantineRate)} quarantined (${run.rowsQuarantined} of ${run.rowsProcessed})`;
+    return `<span class="dq-spark-bar" style="height:${height}%" title="${esc(title)}"></span>`;
+  }).join('');
+  return `<div class="dq-spark" role="img" aria-label="Quarantine rate over the last ${ordered.length} runs">${bars}</div>`;
+}
+
+function renderTrendPanel(state) {
+  if (!state.trendJob) return '';
+  const trend = state.trend;
+  return `<section class="dq-rows-panel" id="dqTrendPanel">
+    <header class="dq-rows-header">
+      <div>
+        <h3>Quality trend — ${esc(state.trendJob)}</h3>
+        <p class="library-subtitle">Quarantine and warn outcomes recorded on each completed run.</p>
+      </div>
+      <button class="btn btn-outline btn-xs" id="dqTrendClose" type="button">Close</button>
+    </header>
+    ${state.trendError ? `<div class="error-msg">${esc(state.trendError)}</div>` : ''}
+    ${state.trendLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quality trend...</span></div>' :
+      !trend || trend.runCount === 0 ? `<div class="empty-state empty-state-panel">
+        <h2>No recorded runs</h2>
+        <p>This job has no completed runs with data-quality metrics yet.</p>
+      </div>` : `
+      <div class="dq-trend-stats">
+        <div class="dq-trend-stat">
+          <span class="dq-trend-label">Latest quarantine rate</span>
+          <strong>${formatRate(trend.latestQuarantineRate)}</strong>
+          ${renderTrendDelta(trend.quarantineRateDelta)}
+        </div>
+        <div class="dq-trend-stat">
+          <span class="dq-trend-label">Average over ${trend.runCount} run(s)</span>
+          <strong>${formatRate(trend.averageQuarantineRate)}</strong>
+        </div>
+        <div class="dq-trend-stat">
+          <span class="dq-trend-label">Rows quarantined / warned</span>
+          <strong>${trend.totalRowsQuarantined.toLocaleString()} / ${trend.totalRowsWarned.toLocaleString()}</strong>
+          <span class="dq-trend-flat">of ${trend.totalRowsProcessed.toLocaleString()} processed</span>
+        </div>
+      </div>
+      ${renderSparkline(trend.runs || [])}
+      ${(trend.topRuleFailures || []).length ? `
+        <h4 class="dq-trend-subhead">Rules firing most</h4>
+        <table class="dq-rows-table">
+          <thead><tr><th>Column</th><th>Rule</th><th>Failures</th></tr></thead>
+          <tbody>${trend.topRuleFailures.map(f => `<tr>
+            <td>${esc(f.column)}</td><td><code>${esc(f.rule)}</code></td><td>${f.count.toLocaleString()}</td>
+          </tr>`).join('')}</tbody>
+        </table>` : '<p class="library-subtitle">No per-rule failure counts recorded for these runs.</p>'}
+      <h4 class="dq-trend-subhead">Recent runs</h4>
+      <table class="dq-rows-table">
+        <thead><tr><th>Completed</th><th>Status</th><th>Processed</th><th>Quarantined</th><th>Warned</th><th>Rate</th></tr></thead>
+        <tbody>${(trend.runs || []).map(run => `<tr>
+          <td>${esc(formatDate(run.endTime || run.startTime))}</td>
+          <td>${esc(run.status)}</td>
+          <td>${run.rowsProcessed.toLocaleString()}</td>
+          <td>${run.rowsQuarantined.toLocaleString()}</td>
+          <td>${run.rowsWarned.toLocaleString()}</td>
+          <td>${formatRate(run.quarantineRate)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`}
+  </section>`;
 }
 
 function renderRowsPanel(state) {
@@ -118,8 +206,28 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     rowsLoading: false,
     rowsError: null,
     edits: {},
-    rowAction: null
+    rowAction: null,
+    trendJob: null,
+    trend: null,
+    trendLoading: false,
+    trendError: null
   };
+
+  async function loadTrend(jobName) {
+    state.trendJob = jobName;
+    state.trend = null;
+    state.trendError = null;
+    state.trendLoading = true;
+    render();
+    try {
+      state.trend = await dataQualityApi.qualityTrend({ jobName });
+    } catch (err) {
+      state.trendError = err.message || 'Unable to load quality trend.';
+    } finally {
+      state.trendLoading = false;
+      render();
+    }
+  }
 
   async function load() {
     state.loading = true;
@@ -241,8 +349,19 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
           <h2>No quarantine manifests</h2>
           <p>No data-quality quarantine replay manifests match the current filters.</p>
         </div>`}
+      ${renderTrendPanel(state)}
       ${renderRowsPanel(state)}
     </section>`;
+
+    host.querySelectorAll('[data-trend-job]').forEach(btn => {
+      btn.addEventListener('click', () => loadTrend(btn.dataset.trendJob));
+    });
+    host.querySelector('#dqTrendClose')?.addEventListener('click', () => {
+      state.trendJob = null;
+      state.trend = null;
+      state.trendError = null;
+      render();
+    });
 
     host.querySelector('#dqQueueForm')?.addEventListener('submit', e => {
       e.preventDefault();

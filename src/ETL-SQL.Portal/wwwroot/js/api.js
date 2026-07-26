@@ -235,6 +235,10 @@ export const dataQualityApi = {
             method: 'POST',
             body: { quarantineTarget, jobName, rowIds, disposition, changes }
         });
+    },
+    qualityTrend({ jobName, limit = 30 } = {}) {
+        const params = new URLSearchParams({ jobName, limit: String(limit) });
+        return apiJson(`/api/data-quality/trend?${params.toString()}`);
     }
 };
 

@@ -39,7 +39,11 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
 4. **Scale hardening** — spill-aware UNIQUE key map and single-pass UNIQUE batching shipped.
    Connector-side retention now has the opt-in data-source capability and SQLite support; additional
    durable connectors remain demand-triggered. Each has a recorded trigger in the design doc.
-5. **Governance dashboard integration** — consumes the output of the slices above.
+5. **Governance dashboard integration** — partially delivered. The Portal now surfaces a per-job
+   quality trend (`GET /api/data-quality/trend` plus the trend panel on the quarantine queue), so
+   the per-run metrics the engine persists are finally readable. Still outstanding: rule visibility
+   (which rules protect which columns), disposition audit (actor and reason), owner-routed alerts,
+   and rule impact preview — tracked in `TODO.md` under *Data Quality — Steward Gaps*.
 
 v3 direction (join-statement replay via probe-side provenance) and nested-script replay are recorded
 in the same document as directions only.

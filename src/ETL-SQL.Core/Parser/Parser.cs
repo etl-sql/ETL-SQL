@@ -707,7 +707,7 @@ public class Parser : IParser
             {
                 action = ETL_SQL.Core.Quality.FailAction.Throw;
             }
-            else if (Current.Type == TokenType.QUARANTINE || IsContextualKeyword(Current, "QUARANTINE"))
+            else if (IsContextualKeyword(Current, "QUARANTINE"))
             {
                 Advance();
                 action = ETL_SQL.Core.Quality.FailAction.Quarantine;

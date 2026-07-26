@@ -135,6 +135,25 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void QuarantineIsNotAReservedWord()
+        {
+            // "quarantine" is the most natural name in this domain for a table or connection, so it
+            // must stay usable as an identifier. It is matched contextually in the two positions the
+            // grammar needs it (ON FAILURE QUARANTINE, REPLAY QUARANTINE).
+            var script = Parse(@"
+                CREATE CONNECTION quarantine AS MOCKDB('mock:dq');
+                SELECT quarantine AS quarantine INTO #t FROM src;");
+
+            Assert.Equal(2, script.Statements.Count);
+
+            // ...and still parses in the positions that do mean the keyword.
+            Assert.Equal(FailAction.Quarantine,
+                ParseSelect("SELECT A INTO t FROM src ON FAILURE QUARANTINE TO q;")
+                    .OnFailureActions!.Single().Action);
+            Assert.IsType<ReplayQuarantineStatement>(Parse("REPLAY QUARANTINE #q;").Statements[0]);
+        }
+
+        [Fact]
         public void SelectWithoutClause_HasNullOnFailureActions()
         {
             Assert.Null(ParseSelect("SELECT A FROM src;").OnFailureActions);

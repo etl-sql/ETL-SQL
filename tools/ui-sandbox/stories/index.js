@@ -14,9 +14,11 @@ import policyAuthorityAdmin from './policy-authority-admin.story.js';
 import snapshotDesigner from './snapshot-designer.story.js';
 import lineageDag from './lineage-dag.story.js';
 import portalGovernance from './governance.story.js';
+import dataQualityQueue from './data-quality-queue.story.js';
 
 export const stories = [
   portalGovernance,
+  dataQualityQueue,
   scriptEditor,
   scriptEditorUnified,
   designer,

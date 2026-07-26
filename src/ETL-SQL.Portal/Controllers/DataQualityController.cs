@@ -65,6 +65,113 @@ public sealed class DataQualityController(
         return Ok(items);
     }
 
+    /// <summary>
+    /// Quality trend for a job: per-run quarantine/warn outcomes plus the rules that fire most.
+    /// This is the read surface for the metrics the engine has been persisting per run — without
+    /// it a steward can see the current quarantine queue but not whether quality is degrading.
+    /// </summary>
+    [HttpGet("trend")]
+    public async Task<IActionResult> GetQualityTrend(
+        [FromQuery] string jobName,
+        [FromQuery] int limit = 30)
+    {
+        if (string.IsNullOrWhiteSpace(jobName))
+            return BadRequest(new { error = "JobName is required." });
+
+        limit = Math.Clamp(limit, 1, 200);
+        var history = await jobHistory.GetHistoryAsync(jobName.Trim(), limit);
+
+        var runs = history
+            .Where(h => h.EndTime.HasValue)
+            .OrderByDescending(h => h.EndTime ?? h.StartTime)
+            .Take(limit)
+            .Select(ToRunDto)
+            .ToList();
+
+        if (runs.Count == 0)
+            return Ok(new DataQualityTrendDto(jobName.Trim(), 0, 0, 0, 0, null, null, null, [], []));
+
+        var rated = runs.Where(r => r.QuarantineRate.HasValue).ToList();
+        decimal? averageRate = rated.Count > 0 ? rated.Average(r => r.QuarantineRate!.Value) : null;
+        decimal? latestRate = runs[0].QuarantineRate;
+
+        // Compare the latest run against the mean of the ones before it, so a single bad run reads
+        // as a spike rather than quietly averaging away.
+        var priorRated = rated.Skip(1).ToList();
+        decimal? delta = latestRate.HasValue && priorRated.Count > 0
+            ? latestRate.Value - priorRated.Average(r => r.QuarantineRate!.Value)
+            : null;
+
+        var topFailures = runs
+            .SelectMany(r => r.RuleFailures)
+            .GroupBy(f => (f.Column, f.Rule))
+            .Select(g => new DataQualityRuleFailureDto(g.Key.Column, g.Key.Rule, g.Sum(f => f.Count)))
+            .OrderByDescending(f => f.Count)
+            .ThenBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToList();
+
+        return Ok(new DataQualityTrendDto(
+            jobName.Trim(),
+            runs.Count,
+            runs.Sum(r => r.RowsProcessed),
+            runs.Sum(r => r.RowsQuarantined),
+            runs.Sum(r => r.RowsWarned),
+            averageRate,
+            latestRate,
+            delta,
+            topFailures,
+            runs));
+    }
+
+    private static DataQualityRunDto ToRunDto(JobHistoryEntry entry)
+    {
+        decimal? quarantineRate = entry.RowsProcessed > 0
+            ? (decimal)entry.RowsQuarantined / entry.RowsProcessed
+            : null;
+        decimal? warnRate = entry.RowsProcessed > 0
+            ? (decimal)entry.RowsWarned / entry.RowsProcessed
+            : null;
+
+        return new DataQualityRunDto(
+            entry.Id,
+            entry.JobName,
+            entry.StartTime,
+            entry.EndTime,
+            entry.Status,
+            entry.RowsProcessed,
+            entry.RowsQuarantined,
+            entry.RowsWarned,
+            quarantineRate,
+            warnRate,
+            ParseRuleFailures(entry.DataQualityFailures));
+    }
+
+    /// <summary>
+    /// Parses the compact <c>column:rule=count;…</c> history payload. Rule text can itself contain
+    /// ':' and '=' (a MATCHES regex, for instance), so the column is taken up to the first ':' and
+    /// the count from the last '='.
+    /// </summary>
+    private static IReadOnlyList<DataQualityRuleFailureDto> ParseRuleFailures(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload)) return [];
+
+        var failures = new List<DataQualityRuleFailureDto>();
+        foreach (var entry in payload.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int colon = entry.IndexOf(':');
+            int equals = entry.LastIndexOf('=');
+            if (colon <= 0 || equals <= colon) continue;
+            if (!long.TryParse(entry[(equals + 1)..], out var count)) continue;
+
+            failures.Add(new DataQualityRuleFailureDto(
+                entry[..colon],
+                entry[(colon + 1)..equals],
+                count));
+        }
+        return failures;
+    }
+
     [HttpGet("quarantine/rows")]
     public async Task<IActionResult> GetQuarantineRows(
         [FromQuery] string quarantineTarget,

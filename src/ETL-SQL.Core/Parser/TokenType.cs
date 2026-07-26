@@ -6,7 +6,10 @@ public enum TokenType
     CREATE, CONNECTION, ON, FILE, DATABASE, EXCEL, JSON, XML,
     MSSQL, ORACLE, POSTGRES, SNOWFLAKE, BIGQUERY, MOCKDB, ODBC, FLATFILE, GENERATE, COMPARE, DATASETS, CALENDAR, FILL_DATES,
     SELECT, FROM, WHERE, GROUP, BY, HAVING, QUALIFY, WINDOW, FILTER,
-    INSERT, INTO, VALUES, REPLACE, REPLAY, QUARANTINE,
+    // QUARANTINE is deliberately NOT a token type. It appears only in positions the parser matches
+    // contextually (ON FAILURE QUARANTINE, REPLAY QUARANTINE), and "quarantine" is the most natural
+    // name in this domain for a table or connection — reserving it broke real scripts.
+    INSERT, INTO, VALUES, REPLACE, REPLAY,
     UPDATE, SET,
     DELETE, TRUNCATE, PIVOT, UNPIVOT, MERGE, USING, MATCHED, SOURCE,
     COPY, MOVE, COMPRESS, DECOMPRESS, SEND, RECEIVE, EMAIL, ADD, COLUMN, EXPORT,
