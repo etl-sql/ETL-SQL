@@ -71,4 +71,4 @@ The request is queued in `AuditOutboxMessages` for email notification to the rep
 ## References
 - [Portal Permissions](permissions.md)
 - [Monitoring & Audit](monitoring-and-audit.md)
-- [Administration Guide](../../guides/administration.md)
+- [Administration Guide](../README.md)
