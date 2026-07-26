@@ -78,6 +78,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   and stewards can edit source columns then submit release or discard actions without touching
   immutable `__dq_*` evidence.
 
+- Hardened the data-quality `UNIQUE` pre-pass for larger inputs: projected key records now spill
+  into hash partitions and reduce partition-by-partition instead of keeping the full key map in
+  memory. Duplicate lookup is keyed by rule occurrence, so identical `UNIQUE` rule text on different
+  columns no longer collides.
+
 - Added a write-only `WEBHOOK` connector (aliases `SLACK`, `TEAMS`) that POSTs each inserted row as a
   JSON payload — Slack/Teams message shaping via `FORMAT`, custom bodies via `BODY_TEMPLATE`, and
   opt-in retry policy. The endpoint URL is treated as a credential: `SECRET:` references resolve on

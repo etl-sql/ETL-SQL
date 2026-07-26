@@ -36,8 +36,8 @@ Recommended order (rationale in the design doc's "v2 sequencing" section):
    lists replay manifests, replayability state, and can submit replay jobs through the configured
    Orchestrator job channel. Portal can preview quarantine rows for Portal-resolvable targets and
    provides a row editor for source-column fixes, release, and discard actions.
-4. **Scale hardening** — spill-aware UNIQUE key map, single-pass UNIQUE batching, connector-side
-   retention. Demand-triggered; each has a recorded trigger in the design doc.
+4. **Scale hardening** — spill-aware UNIQUE key map shipped; single-pass UNIQUE batching and
+   connector-side retention remain demand-triggered. Each has a recorded trigger in the design doc.
 5. **Governance dashboard integration** — consumes the output of the slices above.
 
 v3 direction (join-statement replay via probe-side provenance) and nested-script replay are recorded

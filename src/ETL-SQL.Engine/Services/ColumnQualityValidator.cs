@@ -13,6 +13,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services;
@@ -115,7 +116,9 @@ public sealed class ColumnQualityValidator
 
     // ── UNIQUE pre-pass ────────────────────────────────────────────────────
 
-    private readonly Dictionary<UniqueRule, Dictionary<string, UniqueGroup>> _uniqueGroups = new();
+    private readonly Dictionary<int, Dictionary<string, UniqueGroup>> _uniqueGroups = new();
+    private List<UniqueRuleEntry>? _uniqueRuleEntries;
+    private UniqueKeySpill? _uniqueKeySpill;
     private bool _uniquePrePassComplete;
 
     /// <summary>
@@ -124,24 +127,17 @@ public sealed class ColumnQualityValidator
     /// </summary>
     public async Task CollectUniqueKeysAsync(Row projected, long rowOrdinal, CancellationToken cancellationToken = default)
     {
-        foreach (var (ruleSet, rule) in UniqueRules())
+        foreach (var entry in UniqueRules())
         {
-            var key = BuildUniqueKey(rule, ruleSet, projected);
+            var key = BuildUniqueKey(entry.Rule, entry.RuleSet, projected);
             if (key == null) continue; // NULL keys skip UNIQUE, like every non-NOT NULL rule
 
-            if (!_uniqueGroups.TryGetValue(rule, out var groups))
-                _uniqueGroups[rule] = groups = new Dictionary<string, UniqueGroup>(KeyComparer(_context.CaseSensitiveComparison));
-            if (!groups.TryGetValue(key, out var group))
-                groups[key] = group = new UniqueGroup();
-
-            group.Count++;
-            if (rule.Mode == UniqueMode.All) continue;
-
-            var orderKey = rule.OrderKey != null
-                ? await _context.EvaluateValue(rule.OrderKey, projected)
+            var orderKey = entry.Rule.OrderKey != null
+                ? await _context.EvaluateValue(entry.Rule.OrderKey, projected)
                 : null;
             var identity = RowIdentity(projected, rowOrdinal);
-            group.ConsiderKeeper(rule.Mode, orderKey, identity, _context.CompareConstants);
+            _uniqueKeySpill ??= await UniqueKeySpill.CreateAsync(_context, _context.ExternalHashPartitions);
+            await _uniqueKeySpill.WriteAsync(entry.Id, key, identity, orderKey, _context.CaseSensitiveComparison);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -149,21 +145,92 @@ public sealed class ColumnQualityValidator
     /// <summary>Closes the pre-pass; rows may now be validated against the collected key groups.</summary>
     public void FinalizeUniquePrePass()
     {
-        _uniquePrePassComplete = true;
-        foreach (var (rule, groups) in _uniqueGroups)
+        FinalizeUniquePrePassAsync().GetAwaiter().GetResult();
+    }
+
+    public async Task FinalizeUniquePrePassAsync()
+    {
+        if (_uniquePrePassComplete) return;
+
+        if (_uniqueKeySpill != null)
         {
-            int duplicates = groups.Values.Count(g => g.Count > 1);
+            await _uniqueKeySpill.CloseWritersAsync();
+            try
+            {
+                await foreach (var partition in _uniqueKeySpill.ReadPartitionsAsync())
+                    ReduceUniquePartition(partition);
+            }
+            finally
+            {
+                _uniqueKeySpill.Delete();
+                _uniqueKeySpill = null;
+            }
+        }
+
+        _uniquePrePassComplete = true;
+        foreach (var entry in UniqueRules())
+        {
+            if (!_uniqueGroups.TryGetValue(entry.Id, out var groups)) continue;
+            int duplicates = groups.Count;
             if (duplicates > 0)
                 _logger.Debug("[DQ] UNIQUE pre-pass for \"{Rule}\": {Duplicates} duplicated key(s) across {Keys} distinct key(s).",
-                    rule.Text, duplicates, groups.Count);
+                    entry.Rule.Text, duplicates, groups.Count);
         }
     }
 
-    private IEnumerable<(ColumnRuleSet RuleSet, UniqueRule Rule)> UniqueRules() =>
-        _ruleSets.SelectMany(rs => rs.Bindings
-            .SelectMany(b => b.Rules)
-            .OfType<UniqueRule>()
-            .Select(r => (rs, r)));
+    private IReadOnlyList<UniqueRuleEntry> UniqueRules()
+    {
+        if (_uniqueRuleEntries != null) return _uniqueRuleEntries;
+
+        var entries = new List<UniqueRuleEntry>();
+        foreach (var ruleSet in _ruleSets)
+        {
+            foreach (var rule in ruleSet.Bindings.SelectMany(b => b.Rules).OfType<UniqueRule>())
+                entries.Add(new UniqueRuleEntry(entries.Count, ruleSet, rule));
+        }
+        _uniqueRuleEntries = entries;
+        return entries;
+    }
+
+    private UniqueRuleEntry FindUniqueEntry(ColumnRuleSet ruleSet, UniqueRule rule) =>
+        UniqueRules().First(entry =>
+            ReferenceEquals(entry.RuleSet, ruleSet)
+            && (ReferenceEquals(entry.Rule, rule) || entry.Rule.Equals(rule)));
+
+    private void ReduceUniquePartition(IReadOnlyList<Row> records)
+    {
+        var local = new Dictionary<int, Dictionary<string, UniqueGroup>>();
+        foreach (var record in records)
+        {
+            var ruleId = Convert.ToInt32(record["RuleId"], CultureInfo.InvariantCulture);
+            var entry = UniqueRules()[ruleId];
+            var key = Stringify(record["Key"]);
+            if (!local.TryGetValue(ruleId, out var groups))
+                local[ruleId] = groups = new Dictionary<string, UniqueGroup>(KeyComparer(_context.CaseSensitiveComparison));
+            if (!groups.TryGetValue(key, out var group))
+                groups[key] = group = new UniqueGroup();
+
+            group.Count++;
+            if (entry.Rule.Mode == UniqueMode.All) continue;
+
+            group.ConsiderKeeper(
+                entry.Rule.Mode,
+                record["OrderKey"],
+                Stringify(record["Identity"]),
+                _context.CompareConstants);
+        }
+
+        foreach (var (ruleId, groups) in local)
+        {
+            foreach (var (key, group) in groups)
+            {
+                if (group.Count <= 1) continue;
+                if (!_uniqueGroups.TryGetValue(ruleId, out var duplicateGroups))
+                    _uniqueGroups[ruleId] = duplicateGroups = new Dictionary<string, UniqueGroup>(KeyComparer(_context.CaseSensitiveComparison));
+                duplicateGroups[key] = group;
+            }
+        }
+    }
 
     /// <summary>
     /// The uniqueness key for one row: the column's own projected value, or — for
@@ -242,8 +309,8 @@ public sealed class ColumnQualityValidator
         if (!_uniquePrePassComplete) return false;
         var key = BuildUniqueKey(rule, ruleSet, projected);
         if (key == null) return false;
-        if (!_uniqueGroups.TryGetValue(rule, out var groups) || !groups.TryGetValue(key, out var group)) return false;
-        if (group.Count <= 1) return false;
+        var entry = FindUniqueEntry(ruleSet, rule);
+        if (!_uniqueGroups.TryGetValue(entry.Id, out var groups) || !groups.TryGetValue(key, out var group)) return false;
 
         return rule.Mode == UniqueMode.All || rowOrdinal == null || RowIdentity(projected, rowOrdinal.Value) != group.KeeperIdentity;
     }
@@ -600,5 +667,80 @@ public sealed class ColumnQualityValidator
     {
         public string ColumnName => ColumnRules.ColumnName;
         public bool IsPii => ColumnRules.IsPii;
+    }
+
+    private sealed record UniqueRuleEntry(int Id, ColumnRuleSet RuleSet, UniqueRule Rule);
+
+    private sealed class UniqueKeySpill
+    {
+        private readonly IExecutionContext _context;
+        private readonly string[] _names;
+        private readonly ISpillWriter[] _writers;
+        private bool _closed;
+
+        private UniqueKeySpill(IExecutionContext context, string[] names, ISpillWriter[] writers)
+        {
+            _context = context;
+            _names = names;
+            _writers = writers;
+        }
+
+        public static async Task<UniqueKeySpill> CreateAsync(IExecutionContext context, int requestedPartitions)
+        {
+            var partitionCount = Math.Max(1, requestedPartitions);
+            var operationId = Guid.NewGuid().ToString("N");
+            var names = new string[partitionCount];
+            var writers = new ISpillWriter[partitionCount];
+            for (var i = 0; i < partitionCount; i++)
+            {
+                names[i] = $"dq_unique_{operationId}_{i}.tmp";
+                writers[i] = await context.SpillStore.CreateWriterAsync(names[i]);
+            }
+            return new UniqueKeySpill(context, names, writers);
+        }
+
+        public async Task WriteAsync(int ruleId, string key, string identity, object? orderKey, bool caseSensitive)
+        {
+            var routeKey = caseSensitive ? key : key.ToUpperInvariant();
+            var partition = (HashCode.Combine(ruleId, routeKey) & 0x7fffffff) % _writers.Length;
+            var record = new Row
+            {
+                ["RuleId"] = ruleId,
+                ["Key"] = key,
+                ["Identity"] = identity,
+                ["OrderKey"] = orderKey
+            };
+            await _writers[partition].WriteRowAsync(record);
+        }
+
+        public async Task CloseWritersAsync()
+        {
+            if (_closed) return;
+            _closed = true;
+            foreach (var writer in _writers)
+                await writer.DisposeAsync();
+        }
+
+        public async IAsyncEnumerable<IReadOnlyList<Row>> ReadPartitionsAsync()
+        {
+            await CloseWritersAsync();
+            foreach (var name in _names)
+            {
+                var rows = new List<Row>();
+                await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+                await foreach (var row in reader.AsEnumerableAsync())
+                    rows.Add(row);
+                yield return rows;
+            }
+        }
+
+        public void Delete()
+        {
+            foreach (var name in _names)
+            {
+                try { _context.SpillStore.DeleteChunk(name); }
+                catch { /* best-effort cleanup */ }
+            }
+        }
     }
 }

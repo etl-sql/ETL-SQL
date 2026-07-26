@@ -765,7 +765,7 @@ public class SelectExecutionEngine
             long ordinal = 0;
             await foreach (var (_, projectedRow) in spill.ReadAsync())
                 await qualityValidator.CollectUniqueKeysAsync(projectedRow, ordinal++, _context.CancellationToken);
-            qualityValidator.FinalizeUniquePrePass();
+            await qualityValidator.FinalizeUniquePrePassAsync();
 
             ordinal = 0;
             await foreach (var (input, projectedRow) in spill.ReadAsync())

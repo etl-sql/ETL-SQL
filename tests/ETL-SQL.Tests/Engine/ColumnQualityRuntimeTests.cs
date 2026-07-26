@@ -628,6 +628,30 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task UniqueRule_SameTextOnDifferentColumns_IsTrackedIndependently()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #t (A INT, B INT, Tag VARCHAR(10));
+                INSERT INTO #t (A, B, Tag)
+                VALUES (1, 10, 'a'), (1, 20, 'b'), (2, 20, 'c'), (3, 30, 'd');");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT
+                    A /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */,
+                    B /* @expect: 'UNIQUE'; @fail: 'QUARANTINE'; */,
+                    Tag
+                INTO #clean FROM #t
+                ON FAILURE QUARANTINE TO #q;");
+
+            var clean = await ReadRows(eval, "#clean");
+            Assert.Equal("d", Assert.Single(clean)["Tag"]);
+            Assert.Equal(3, await CountRows(eval, "#q"));
+            Assert.Equal(3, eval.DataQuality.RowsQuarantined);
+        }
+
+        [Fact]
         public async Task UniqueFirst_TieOnOrderKey_IsDeterministicAcrossRuns()
         {
             // Two rows share both the key and the order key; the tiebreak must pick the same
