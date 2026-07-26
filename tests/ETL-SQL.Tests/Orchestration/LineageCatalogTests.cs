@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
 using ETL_SQL.Orchestrator.Storage;
 using Xunit;
 

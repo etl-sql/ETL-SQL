@@ -183,7 +183,8 @@ public sealed class DesignerAnalysisService
                         v.GridCol, v.GridRow, v.GridColSpan, v.GridRowSpan,
                         containerGrid, slot);
 
-                    containerChildren.Add(childEl with {
+                    containerChildren.Add(childEl with
+                    {
                         GridCol = cCol,
                         GridRow = cRow,
                         GridColSpan = cColSpan,

@@ -155,23 +155,23 @@ public class QuarantineBoundaryRule : ILintRule
             case null:
                 return;
             case SelectStatement select:
-            {
-                foreach (var column in select.Columns)
                 {
-                    foreach (var binding in SafeBindings(column))
+                    foreach (var column in select.Columns)
                     {
-                        if (binding.Action != FailAction.Quarantine) continue;
-                        Report(results, LintSeverity.Error, column,
-                            "@fail: 'QUARANTINE' is only legal at a sink/materialization boundary (top-level SELECT, INSERT ... SELECT, SELECT ... INTO) — it is a filter with a side effect that would silently change downstream row counts here.");
+                        foreach (var binding in SafeBindings(column))
+                        {
+                            if (binding.Action != FailAction.Quarantine) continue;
+                            Report(results, LintSeverity.Error, column,
+                                "@fail: 'QUARANTINE' is only legal at a sink/materialization boundary (top-level SELECT, INSERT ... SELECT, SELECT ... INTO) — it is a filter with a side effect that would silently change downstream row counts here.");
+                        }
                     }
+                    if (select.FromTable?.Subquery != null) CheckNonSinkQuery(select.FromTable.Subquery, results);
+                    foreach (var join in select.Joins)
+                        if (join.Table?.Subquery != null) CheckNonSinkQuery(join.Table.Subquery, results);
+                    foreach (var cte in select.Ctes ?? [])
+                        CheckNonSinkQuery(cte.Query, results);
+                    break;
                 }
-                if (select.FromTable?.Subquery != null) CheckNonSinkQuery(select.FromTable.Subquery, results);
-                foreach (var join in select.Joins)
-                    if (join.Table?.Subquery != null) CheckNonSinkQuery(join.Table.Subquery, results);
-                foreach (var cte in select.Ctes ?? [])
-                    CheckNonSinkQuery(cte.Query, results);
-                break;
-            }
             case SetOperationStatement setOp:
                 CheckNonSinkQuery(setOp.Left, results);
                 CheckNonSinkQuery(setOp.Right, results);

@@ -1,5 +1,5 @@
-using System.Net;
 using System.Linq;
+using System.Net;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
 using ETL_SQL.Common;
@@ -204,7 +204,8 @@ public static class WorkstationEditorApp
                 foreach (var table in tables)
                 {
                     var columns = await metadata.GetColumnDetailsAsync(connection, table, documentUri);
-                    tableList.Add(new {
+                    tableList.Add(new
+                    {
                         name = table,
                         columns = columns.Select(c => new { name = c.Name, type = c.DataType }).ToList()
                     });

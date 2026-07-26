@@ -443,17 +443,17 @@ public sealed class ColumnQualityValidator
                 return GetRegex(matches).IsMatch(Stringify(value));
 
             case ComparisonRule comparison:
-            {
-                if (!TryToDecimal(value, out var numeric)) return false;
-                return comparison.Op switch
                 {
-                    CompareOp.GreaterOrEqual => numeric >= comparison.Value,
-                    CompareOp.LessOrEqual => numeric <= comparison.Value,
-                    CompareOp.Greater => numeric > comparison.Value,
-                    CompareOp.Less => numeric < comparison.Value,
-                    _ => numeric == comparison.Value
-                };
-            }
+                    if (!TryToDecimal(value, out var numeric)) return false;
+                    return comparison.Op switch
+                    {
+                        CompareOp.GreaterOrEqual => numeric >= comparison.Value,
+                        CompareOp.LessOrEqual => numeric <= comparison.Value,
+                        CompareOp.Greater => numeric > comparison.Value,
+                        CompareOp.Less => numeric < comparison.Value,
+                        _ => numeric == comparison.Value
+                    };
+                }
 
             case InListRule inList:
                 return inList.Values.Any(candidate => ValuesEqual(candidate, value));

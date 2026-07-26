@@ -47,39 +47,39 @@ public sealed class ScriptMetadataDiscovery(IMetadataManager metadata)
         switch (statement)
         {
             case CreateConnectionStatement connection when RegisterConnections:
-            {
-                var connectionString = connection.TargetExpression?.ToSql() ?? string.Empty;
-                connectionString = connectionString.Trim('\'', '\"', '(', ')', ' ');
-                metadata.RegisterDocumentConnection(
-                    documentUri,
-                    connection.ConnectionName,
-                    connection.ConnectionType ?? "UNKNOWN",
-                    connectionString);
-                activeConnections.Add(connection.ConnectionName);
-                break;
-            }
+                {
+                    var connectionString = connection.TargetExpression?.ToSql() ?? string.Empty;
+                    connectionString = connectionString.Trim('\'', '\"', '(', ')', ' ');
+                    metadata.RegisterDocumentConnection(
+                        documentUri,
+                        connection.ConnectionName,
+                        connection.ConnectionType ?? "UNKNOWN",
+                        connectionString);
+                    activeConnections.Add(connection.ConnectionName);
+                    break;
+                }
 
             case CreateTableStatement createTable when IsTempTable(createTable.TargetTable.TableName):
-            {
-                var tableName = createTable.TargetTable.TableName;
-                metadata.RegisterTempTable(
-                    documentUri,
-                    tableName,
-                    createTable.Columns.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList());
-                activeTempTables.Add(tableName);
-                break;
-            }
+                {
+                    var tableName = createTable.TargetTable.TableName;
+                    metadata.RegisterTempTable(
+                        documentUri,
+                        tableName,
+                        createTable.Columns.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList());
+                    activeTempTables.Add(tableName);
+                    break;
+                }
 
             case SelectStatement select when select.IntoTable != null && IsTempTable(select.IntoTable.TableName):
-            {
-                var tableName = select.IntoTable.TableName;
-                metadata.RegisterTempTable(
-                    documentUri,
-                    tableName,
-                    await ResolveProjectedColumnsAsync(select, documentUri));
-                activeTempTables.Add(tableName);
-                break;
-            }
+                {
+                    var tableName = select.IntoTable.TableName;
+                    metadata.RegisterTempTable(
+                        documentUri,
+                        tableName,
+                        await ResolveProjectedColumnsAsync(select, documentUri));
+                    activeTempTables.Add(tableName);
+                    break;
+                }
 
             case DockerStatement docker when RegisterConnections && !string.IsNullOrEmpty(docker.Alias):
                 metadata.RegisterDocumentConnection(documentUri, docker.Alias, "DOCKER", docker.ImageName.ToSql());

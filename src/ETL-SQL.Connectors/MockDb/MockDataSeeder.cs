@@ -518,7 +518,18 @@ namespace ETL_SQL.Connectors.MockDb
 
             await geo.AddRowAsync(new Row
             {
-                ["GeoKey"] = -1, ["StateCode"] = "XX", ["StateName"] = "Unknown", ["CountryCode"] = "XX", ["CountryCode3"] = "UNK", ["CountryName"] = "Unknown", ["Continent"] = "Unknown", ["Region"] = "Unknown", ["SubRegion"] = "Unknown", ["TimeZone"] = "UTC", ["UtcOffsetHours"] = 0, ["IsDomestic"] = 0
+                ["GeoKey"] = -1,
+                ["StateCode"] = "XX",
+                ["StateName"] = "Unknown",
+                ["CountryCode"] = "XX",
+                ["CountryCode3"] = "UNK",
+                ["CountryName"] = "Unknown",
+                ["Continent"] = "Unknown",
+                ["Region"] = "Unknown",
+                ["SubRegion"] = "Unknown",
+                ["TimeZone"] = "UTC",
+                ["UtcOffsetHours"] = 0,
+                ["IsDomestic"] = 0
             });
 
             var sampleStates = new (int Key, string Code, string Name, string C2, string C3, string CName, string Cont, string Reg, string SubReg, string TZ, int Offset, int Domestic)[]
@@ -562,7 +573,15 @@ namespace ETL_SQL.Connectors.MockDb
 
             await currencies.AddRowAsync(new Row
             {
-                ["CurrencyKey"] = -1, ["CurrencyCode"] = "XXX", ["NumericCode"] = 999, ["CurrencyName"] = "Unknown Currency", ["Symbol"] = "?", ["MinorUnitDigits"] = 2, ["CountryName"] = "Unknown", ["IsBaseCurrency"] = 0, ["StandardFormatPattern"] = "#,##0.00"
+                ["CurrencyKey"] = -1,
+                ["CurrencyCode"] = "XXX",
+                ["NumericCode"] = 999,
+                ["CurrencyName"] = "Unknown Currency",
+                ["Symbol"] = "?",
+                ["MinorUnitDigits"] = 2,
+                ["CountryName"] = "Unknown",
+                ["IsBaseCurrency"] = 0,
+                ["StandardFormatPattern"] = "#,##0.00"
             });
 
             var sampleCurrencies = new (int Key, string Code, int NumCode, string Name, string Sym, int Digits, string Country, int BaseCurr, string Format)[]
@@ -602,17 +621,47 @@ namespace ETL_SQL.Connectors.MockDb
 
             await flags.AddRowAsync(new Row
             {
-                ["FlagKey"] = -1, ["FlagValue"] = -1, ["FlagName"] = "Unknown", ["YesNo"] = "Unknown", ["YesNoChar"] = "U", ["ActiveInactive"] = "Unknown", ["EnabledDisabled"] = "Unknown", ["PassFail"] = "Unknown", ["SuccessFailure"] = "Unknown", ["IncludeExclude"] = "Unknown", ["OnOff"] = "Unknown"
+                ["FlagKey"] = -1,
+                ["FlagValue"] = -1,
+                ["FlagName"] = "Unknown",
+                ["YesNo"] = "Unknown",
+                ["YesNoChar"] = "U",
+                ["ActiveInactive"] = "Unknown",
+                ["EnabledDisabled"] = "Unknown",
+                ["PassFail"] = "Unknown",
+                ["SuccessFailure"] = "Unknown",
+                ["IncludeExclude"] = "Unknown",
+                ["OnOff"] = "Unknown"
             });
 
             await flags.AddRowAsync(new Row
             {
-                ["FlagKey"] = 0, ["FlagValue"] = 0, ["FlagName"] = "False", ["YesNo"] = "No", ["YesNoChar"] = "N", ["ActiveInactive"] = "Inactive", ["EnabledDisabled"] = "Disabled", ["PassFail"] = "Fail", ["SuccessFailure"] = "Failure", ["IncludeExclude"] = "Exclude", ["OnOff"] = "Off"
+                ["FlagKey"] = 0,
+                ["FlagValue"] = 0,
+                ["FlagName"] = "False",
+                ["YesNo"] = "No",
+                ["YesNoChar"] = "N",
+                ["ActiveInactive"] = "Inactive",
+                ["EnabledDisabled"] = "Disabled",
+                ["PassFail"] = "Fail",
+                ["SuccessFailure"] = "Failure",
+                ["IncludeExclude"] = "Exclude",
+                ["OnOff"] = "Off"
             });
 
             await flags.AddRowAsync(new Row
             {
-                ["FlagKey"] = 1, ["FlagValue"] = 1, ["FlagName"] = "True", ["YesNo"] = "Yes", ["YesNoChar"] = "Y", ["ActiveInactive"] = "Active", ["EnabledDisabled"] = "Enabled", ["PassFail"] = "Pass", ["SuccessFailure"] = "Success", ["IncludeExclude"] = "Include", ["OnOff"] = "On"
+                ["FlagKey"] = 1,
+                ["FlagValue"] = 1,
+                ["FlagName"] = "True",
+                ["YesNo"] = "Yes",
+                ["YesNoChar"] = "Y",
+                ["ActiveInactive"] = "Active",
+                ["EnabledDisabled"] = "Enabled",
+                ["PassFail"] = "Pass",
+                ["SuccessFailure"] = "Success",
+                ["IncludeExclude"] = "Include",
+                ["OnOff"] = "On"
             });
 
             tables["Flags"] = flags;
