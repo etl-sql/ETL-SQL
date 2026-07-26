@@ -133,6 +133,12 @@ public class TableSchema
 }
 
 /// <summary>
+/// Identifies the original probe-side input row for data-quality replay of join-backed rows.
+/// This is internal row metadata, not a logical table column.
+/// </summary>
+public sealed record DataQualityReplayProvenance(string SourceTable, Row SourceRow);
+
+/// <summary>
 /// Represents a single row of tabular data.
 /// Optimized for performance by using array-based storage when a <see cref="TableSchema"/> is provided.
 /// </summary>
@@ -142,6 +148,7 @@ public class Row
     private object?[]? _values;
     private Dictionary<string, object?>? _dynamicColumns;
     public TableSchema? Schema => _schema;
+    public DataQualityReplayProvenance? DataQualityReplayProvenance { get; set; }
 
     /// <summary>
     /// A shared empty row with no schema or values. Use when an expression evaluator
@@ -522,7 +529,14 @@ public class Row
         return copy;
     }
 
-    public Row Clone()
+    public Row CloneWithoutReplayProvenance()
+    {
+        return CloneCore(includeReplayProvenance: false);
+    }
+
+    public Row Clone() => CloneCore(includeReplayProvenance: true);
+
+    private Row CloneCore(bool includeReplayProvenance)
     {
         Row row;
         if (_schema != null)
@@ -539,6 +553,9 @@ public class Row
         {
             foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
         }
+        row.DataQualityReplayProvenance = includeReplayProvenance && DataQualityReplayProvenance is not null
+            ? DataQualityReplayProvenance with { SourceRow = DataQualityReplayProvenance.SourceRow.CloneWithoutReplayProvenance() }
+            : null;
         return row;
     }
 

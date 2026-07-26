@@ -70,6 +70,10 @@ public class SelectExecutionEngine
         stmt = logicalPlan.Statement;
 
         string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
+        bool seedReplayProvenance = stmt.Joins.Count > 0;
+        string? replaySourceTable = seedReplayProvenance
+            ? stmt.FromTable.GetSourceTables().FirstOrDefault() ?? stmt.FromTable.ToSql()
+            : null;
         bool hasAggInColumns = stmt.Columns.Any(c => _aggregateEngine.IsAggregate(c.Expression));
         bool hasWindowInColumns = stmt.Columns.Any(c => _windowEngine.IsWindowFunction(c.Expression));
         bool hasGroupBy = stmt.GroupBy != null || stmt.GroupingSet != null;
@@ -81,6 +85,12 @@ public class SelectExecutionEngine
         var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r =>
         {
             var cloned = r.Clone();
+            if (seedReplayProvenance)
+            {
+                cloned.DataQualityReplayProvenance ??= new DataQualityReplayProvenance(
+                    replaySourceTable!,
+                    r.CloneWithoutReplayProvenance());
+            }
             foreach (var colName in r.GetColumnNames())
             {
                 // Only qualify if not already qualified
@@ -938,6 +948,7 @@ public class SelectExecutionEngine
                 }
             }
 
+            resRow.DataQualityReplayProvenance = row.DataQualityReplayProvenance;
             yield return (row, resRow);
         }
     }

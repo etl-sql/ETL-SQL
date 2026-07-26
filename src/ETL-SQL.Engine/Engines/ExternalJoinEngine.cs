@@ -571,6 +571,7 @@ public class ExternalJoinEngine
     private Row CombineRows(Row? left, Row right)
     {
         var combined = new Row();
+        combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;
         left?.ForEachColumn((name, value) => combined[name] = value);
         right.ForEachColumn((name, value) => combined[name] = value);
         return combined;

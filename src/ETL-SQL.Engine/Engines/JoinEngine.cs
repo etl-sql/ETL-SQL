@@ -1074,6 +1074,7 @@ public class JoinEngine
     private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
     {
         var combined = schema != null ? new Row(schema) : new Row();
+        combined.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         left.ForEachColumn((k, v) => combined[k] = v);
 
         if (schema != null && right.Schema != null)

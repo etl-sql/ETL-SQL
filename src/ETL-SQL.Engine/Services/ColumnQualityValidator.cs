@@ -496,9 +496,10 @@ public sealed class ColumnQualityValidator
     private async Task QuarantineAsync(Row input, RowFailure failure, CancellationToken cancellationToken)
     {
         var clause = _routing[FailAction.Quarantine];
+        var captureInput = input.DataQualityReplayProvenance?.SourceRow ?? input;
         _quarantineWriter ??= new QuarantineWriter(_context, clause.Target!, DataQualityColumns.QuarantinedStatus, includeTargetWritten: false);
         await RecordQuarantineManifestAsync(clause.Target!, input, cancellationToken);
-        await _quarantineWriter.WriteAsync(input, failure, cancellationToken);
+        await _quarantineWriter.WriteAsync(captureInput, failure, cancellationToken);
         _context.DataQuality.RecordRowQuarantined();
     }
 
@@ -514,30 +515,52 @@ public sealed class ColumnQualityValidator
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var inputColumns = input.Columns.Keys
+        var replayProvenance = input.DataQualityReplayProvenance;
+        var manifestInput = replayProvenance?.SourceRow ?? input;
+        var inputColumns = manifestInput.Columns.Keys
             .Where(name => !DataQualityColumns.IsDataQualityColumn(name))
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         string? nonReplayableReason = null;
+        string replayMode = replayProvenance == null ? "single-table" : "probe-join";
+        string? probeSourceTable = replayProvenance?.SourceTable;
+        string? joinBuildTable = replayProvenance != null && _statement.Joins.Count == 1
+            ? _statement.Joins[0].Table.GetSourceTables().FirstOrDefault() ?? _statement.Joins[0].Table.ToSql()
+            : null;
+        bool? joinObservedN1 = replayProvenance == null ? null : false;
+        string? joinNonReplayableReason = null;
+
         if (string.IsNullOrWhiteSpace(_context.CurrentSectionLabel))
             nonReplayableReason = "quarantine replay requires an enclosing section label";
-        else if (sourceTables.Count == 0)
+        else if (replayProvenance == null && sourceTables.Count == 0)
             nonReplayableReason = "quarantine source table could not be resolved";
-        else if (sourceTables.Count != 1 || _statement.Joins.Count != 0)
+        else if (replayProvenance != null)
+        {
+            joinNonReplayableReason = _statement.Joins.Count == 1
+                ? "join replay requires an observed N:1 join gate"
+                : "join replay supports exactly one build-side join in this version";
+            nonReplayableReason = joinNonReplayableReason;
+        }
+        else if (sourceTables.Count != 1)
             nonReplayableReason = "quarantine source spans a join; replay requires a single-table input in this version";
 
         var manifest = new QuarantineReplayManifest(
             JobName: _context.JobName!,
             ScriptPath: _context.CurrentScriptPath,
             SectionLabel: _context.CurrentSectionLabel,
-            SourceTable: sourceTables.Count == 1 ? sourceTables[0] : string.Join(",", sourceTables),
+            SourceTable: probeSourceTable ?? (sourceTables.Count == 1 ? sourceTables[0] : string.Join(",", sourceTables)),
             QuarantineTarget: target,
             IsReplayable: nonReplayableReason == null,
             NonReplayableReason: nonReplayableReason,
             InputColumns: inputColumns,
             InputSchemaFingerprint: ComputeInputSchemaFingerprint(inputColumns),
-            UpdatedAtUtc: DateTimeOffset.UtcNow);
+            UpdatedAtUtc: DateTimeOffset.UtcNow,
+            ReplayMode: replayMode,
+            ProbeSourceTable: probeSourceTable,
+            JoinBuildTable: joinBuildTable,
+            JoinObservedN1: joinObservedN1,
+            JoinNonReplayableReason: joinNonReplayableReason);
 
         try
         {

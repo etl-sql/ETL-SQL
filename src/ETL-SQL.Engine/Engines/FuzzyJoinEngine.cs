@@ -146,6 +146,7 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
     private static Row CombineRows(Row left, Row right)
     {
         var r = left.Clone();
+        r.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         right.ForEachColumn((k, v) => r[k] = v);
         // Expand schema aliases (e.g. "b.name") so qualified column references in the ON
         // condition resolve correctly. ForEachColumn only visits canonical names.

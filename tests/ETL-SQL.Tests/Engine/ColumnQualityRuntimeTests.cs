@@ -213,7 +213,41 @@ namespace ETL_SQL.Tests.Engine
 
             var manifest = Assert.Single(provider.Manifests);
             Assert.False(manifest.IsReplayable);
-            Assert.Contains("single-table", manifest.NonReplayableReason, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("probe-join", manifest.ReplayMode);
+            Assert.Equal("#src", manifest.SourceTable);
+            Assert.Equal("#src", manifest.ProbeSourceTable);
+            Assert.Equal("#dim", manifest.JoinBuildTable);
+            Assert.False(manifest.JoinObservedN1);
+            Assert.Contains("N:1", manifest.NonReplayableReason, StringComparison.OrdinalIgnoreCase);
+
+            var quarantined = Assert.Single(await ReadRows(eval, "#q"));
+            Assert.Equal("divert", quarantined["Name"]);
+            Assert.DoesNotContain("Region", quarantined.GetColumnNames(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task JoinOutput_CarriesProbeReplayProvenanceWithoutVisibleColumns()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'match')");
+
+            await Run(eval, @"
+                CREATE TABLE #dim (Name VARCHAR(100), Region VARCHAR(10));
+                INSERT INTO #dim (Name, Region) VALUES ('match', 'NA');
+                SELECT #src.Id, #src.Name, #dim.Region
+                INTO #joined FROM #src
+                JOIN #dim ON #src.Name = #dim.Name;");
+
+            var row = Assert.Single(await ReadRows(eval, "#joined"));
+            Assert.NotNull(row.DataQualityReplayProvenance);
+            var provenance = row.DataQualityReplayProvenance!;
+            Assert.Equal("#src", provenance.SourceTable);
+            Assert.Equal(1m, provenance.SourceRow["Id"]);
+            Assert.Equal("match", provenance.SourceRow["Name"]);
+            Assert.DoesNotContain(
+                row.GetColumnNames(),
+                name => name.Contains("ReplayProvenance", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("DataQuality", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]
@@ -322,7 +356,7 @@ namespace ETL_SQL.Tests.Engine
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #q;"));
             Assert.Contains("not replayable", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("single-table", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("N:1", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
