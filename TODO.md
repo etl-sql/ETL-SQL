@@ -260,104 +260,33 @@ live users, remove contradictory forms now rather than carrying permanent compat
    connection. Remove the Portal-specific SMTP entity/API only after all consumers use the unified
    catalog and a data migration converts any development records without exposing credentials.
 
-#### P0 — Correct named report refresh jobs
+#### P0 — Correct named report refresh jobs (Unified Job, Schedule, & Notification Refactor)
 
-**Design decisions taken 2026-07-27.**
+**Design specification established 2026-07-27:** See [job_schedule_notification.md](docs/architecture/decisions/job_schedule_notification.md) for full design, grammar, and database schema mappings.
 
-- **Names are unique per orchestrator connection.** `Nightly` may exist once on `orch_a` and once
-  on `orch_b`, never twice on the same orchestrator. The orchestrator owns the schedule, so that
-  is where the identity naturally lives; it also keeps names short without making `DROP` ambiguous.
-- **The name is a bare identifier**, matching `CREATE <object> <name>` elsewhere:
-  `CREATE REFRESH JOB FinanceNightly FOR REPORT 'Finance Dashboard' SCHEDULE '0 2 * * *' AT orch;`
-  Report paths stay string literals — they are paths, not identifiers.
-- **Lifecycle in this pass: `CREATE`, `DROP [IF EXISTS]`, and `ALTER ... SET SCHEDULE`.** A
-  duplicate `CREATE` **fails** rather than overwriting — that silent overwrite is the defect.
-  `CREATE OR ALTER` is not in this pass.
-- **Run history carries the job name.** Job history, last/next run and the Orchestrator trigger
-  record must identify which of a report's schedules fired; otherwise two schedules on one report
-  remain indistinguishable in operations. This reaches the Orchestrator store, not just the Portal.
+Since this is a greenfield deployment with no legacy data migration risk, migrate straight to the new normalized schema and unified syntax.
 
-**Audit 2026-07-27 — the defect is confirmed and located. Not started; nothing is committed.**
+**Implementation Steps:**
 
-The overwrite is real and mechanical: `SubscriptionsController` builds the key as
-`portal-refresh:{alias}:{report.Id}` and `DatasetRegistryService.RegisterRefreshJobAsync` looks the
-job up **by that key**, so a second `CREATE REFRESH JOB` for the same report and orchestrator
-updates the existing schedule instead of adding a job. Nothing warns.
-
-Current surface:
-- `CreatePortalRefreshJobStatement(ReportName, Schedule, OrchestratorAlias)` — no name.
-- `DropPortalRefreshJobStatement(ReportName)` — cannot express *which* job.
-- `DatasetJob` has `Id, ReportId, OrchestratorJobName, RefreshInterval, LastRefreshedAt` — **no
-  `Name` column**, so naming is migration-bearing on both providers.
-
-**Trap found while attempting slice 1 — read before touching `IDatasetRegistry`.**
-`IDatasetRegistry.RegisterRefreshJobAsync` is a **default interface method**
-(`=> Task.CompletedTask`). Removing or renaming the Portal's override therefore **compiles
-cleanly**, and `SubscriptionsController`'s call silently binds to the interface's no-op default —
-creating a refresh job would quietly do nothing, with no compile error and no runtime error. That
-is worse than the bug being fixed. Either remove the default body so every implementer must be
-explicit, or change the interface and its callers in the same step; do not rely on the compiler to
-find the call sites, because it will not.
-
-Suggested slices, in dependency order — the parser change alone does not compile, because four
-connector call sites in `PortalDataSource` and `OrchestratorDataSource` pass `stmt.ReportName` to
-report-scoped endpoints. Making them merely compile would send a job name to a report-keyed API,
-which is worse than the current behaviour, so the API and persistence must lead:
-1. **Persistence** — add `DatasetJob.Name`, unique per catalog (not per report); key the job as
-   `portal-refresh:{alias}:{name}`. Migration on both providers. Existing generated jobs need
-   deterministic visible names, and collisions must be reported before mutation.
-2. **Portal API** — name in the create request; name-based lookup for update/enable/disable/drop;
-   `CREATE_REFRESH_JOB` audit detail carries the name. Report deletion must define and test
-   cascade vs restrict for attached jobs.
-3. **Parser/AST** — `CREATE REFRESH JOB <name> FOR REPORT '...' SCHEDULE '...' AT <conn>` and
-   `DROP REFRESH JOB [IF EXISTS] <name>`; reject the retired report-scoped forms with a diagnostic
-   that explains *why* a name is now required, since the old form parsed fine and silently
-   overwrote.
-4. **Consumers** — the four connector call sites, UI, configuration export/import, dependency
-   views, docs, tests.
-
-`CREATE REFRESH JOB FOR REPORT` is incorrect because a report may have multiple independent refresh
-jobs. The job name is required identity, not an optional label. Replace the current singleton form
-and its generated `portal-refresh:<orchestrator>:<report-id>` key with:
-
-```sql
-CREATE REFRESH JOB FinanceNightly
-FOR REPORT 'Finance Dashboard'
-SCHEDULE '0 2 * * *'
-AT orch_admin;
-
-CREATE REFRESH JOB FinanceBusinessHours
-FOR REPORT 'Finance Dashboard'
-SCHEDULE '*/15 8-18 * * 1-5'
-AT orch_admin;
-```
-
-Provide a complete name-based lifecycle:
-
-```sql
-ALTER REFRESH JOB FinanceNightly
-SET SCHEDULE = '0 3 * * *'
-AT orch_admin;
-
-SELECT * FROM orch_admin.eng.refresh_jobs
-WHERE report_name = 'Finance Dashboard'
-INTO #refresh_jobs;
-
-DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
-```
-
-- Require a name in the parser, AST, Portal/Orchestrator requests, persistence model, catalog
-  uniqueness constraint, audit events, configuration export/import, dependency views, UI, and
-  documentation.
-- Scope uniqueness to the owning Portal/Orchestrator catalog as appropriate; do not key uniqueness
-  by report. Store the report relationship separately so many jobs can target one report.
-- Creating a second job for the same report must add a schedule, never replace an existing job.
-  Duplicate job names must fail unless an explicit supported lifecycle modifier is used.
-- Update, enable/disable, history, last/next run, dependency, and deletion operations must identify
-  the job by name. Report deletion must define and test cascade/restrict behavior for all attached
-  refresh jobs.
-- Migrate existing generated singleton jobs to deterministic visible names, report collisions
-  before mutation, and update the API/UI assumption that only one refresh job can exist per report.
+1. **Database Schema & Migrations:**
+   - Drop the old `DatasetJobs` table.
+   - Implement `RefreshJobs`, `Schedules`, `Notifications` tables along with join tables `RefreshJobSchedules` and `RefreshJobNotifications` (which maps connections to trigger conditions like `ON FAILURE` or `ON SUCCESS` per-job).
+   - Generate database migrations for both SQLite (`ETL-SQL.Portal.Data`) and PostgreSQL (`ETL-SQL.Portal.Migrations.Postgres`).
+2. **Interface & Dispatch Refactoring:**
+   - Update `IDatasetRegistry` (remove default interface methods to avoid silent compiling bugs) and implement name-based mapping services in `DatasetRegistryService.cs`.
+3. **Parser, AST, and Linter Updates:**
+   - Refactor `CreateJobStatement` in `Ast.cs` to hold `FOR REPORT` and `FOR SCRIPT` targets.
+   - Implement grammar parser rules for `CREATE/ALTER/DROP/ENABLE/DISABLE` on `JOB`, `SCHEDULE`, and `NOTIFICATION` in `PortalParser.cs` and `DataParser.cs`.
+   - Enforce explicit timezone parsing (`AT TIME ZONE`). Add a compiler diagnostic to reject and explain the deprecated report-scoped refresh syntax.
+4. **Resilient Sync Service & Outbox Logging:**
+   - Implement the `JobReconciliationService` background worker to sync Portal DB state to Orchestrator endpoints periodically and on startup.
+   - Update `ConfigurationExportService.cs` to emit the new SQL statements.
+   - Hook into the transaction outbox to log `CREATE_JOB`, `DROP_SCHEDULE`, etc.
+5. **UI & Consumer Updates:**
+   - Update `OrchestratorPollerService.cs` to match Orchestrator completions via the join table prefix.
+   - Update Portal sub-systems (Subscriptions, Dataset Refreshes) to generate standard `JOB` + `SCHEDULE` links under the hood.
+   - Re-align `ReportDependencyService.cs` to display the new named schedules.
+   - Update help snippets and hover documents.
 
 #### P1 — Make lifecycle modifiers explicit and uniform
 

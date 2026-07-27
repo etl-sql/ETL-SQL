@@ -19,6 +19,7 @@
 | [Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design](ExecutionTransparencyAndFallbacks.md) | **Status:** Phase 5 implementation complete for the current v0.15 native/pushdown/external surfaces; |
 | [HA Topology and Failure Certification](HA_Topology_Failure_Certification.md) | This guide defines the supported Portal and Orchestrator deployment topologies, the readiness |
 | [Host Utilization Time Series & Capacity Reporting — Implementation Plan](HostUtilizationAndCapacityPlanning.md) | > **Status:** ✅ **COMPLETE** (drafted 2026-07-02, finished 2026-07-03). All six sequencing steps have |
+| [Job, Schedule, and Alerting Refactor — Design Specification](job_schedule_notification.md) | Design specification for unifying report and script scheduling under a first-class peer JOB, SCHEDULE, and NOTIFICATION many-to-many model. |
 | [Performance Regression Quality (v0.15.0 Phase 3) — Design](PerformanceRegressionQuality.md) | **Status:** Implemented for v0.15.0 Phase 3. |
 | [Design Strategy: First-Class Web Script Editing in the Portal](PortalEditorStrategy.md) | As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant |
 | [Row-Level Security via Injected Identity — Reference Specification](RowLevelSecurity.md) | > **Status:** ✅ **COMPLETE** (shipped in v0.14.0). |
