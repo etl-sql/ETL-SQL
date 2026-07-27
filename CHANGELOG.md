@@ -32,6 +32,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   post-name spelling (`DROP CONNECTION c IF EXISTS`), previously accepted for six kinds, is
   rejected with the canonical form.
 
+**Report-object `ALTER` accepts only what it can actually change**
+
+- `ALTER STYLE`, `ALTER NAVIGATION`, `ALTER THEME`, and report-scoped `ALTER DATASET` are refused by
+  the parser. They previously parsed, linted, and completed successfully, then threw "ALTER not yet
+  implemented" at execution — after a report script may already have done half its work. The
+  diagnostic names the `CREATE OR REPLACE` form for that kind, spelled the way that kind accepts it.
+- Each alterable kind now accepts only the clauses it can patch. `ALTER PAGE p (SOURCE = ...)`,
+  `ALTER TEMPLATE t (TITLE = ...)`, and similar previously parsed and were then discarded in the
+  handler: the statement reported success having changed nothing. They are now parse errors listing
+  the clauses that kind does accept.
+- `ALTER PAGE REFRESH` requires a whole number of seconds. `CREATE PAGE` silently treats an
+  unparseable interval as "off"; on a patch the same silence would report success while leaving the
+  previous interval running.
+
 ### Security
 
 - Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
@@ -46,6 +60,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   credential that an engine error echoes back; pattern-based redaction does not match a bare
   password in free text. Net exposure is lower than before, but this specific mitigation is absent.
   Tracked for a fix at the point where `SECRET:` references are resolved.
+
+### Added
+
+- `DROP BUTTON [IF EXISTS] <name>` and `ALTER BUTTON <name> (...)`. `BUTTON` previously had `CREATE`
+  only, even though the engine already removed buttons on `DROP` and `CREATE BUTTON`'s
+  duplicate-name error told the author to "use CREATE OR ALTER or DROP BUTTON first" — advice the
+  parser then rejected. `ALTER BUTTON` patches `TITLE`, `TOOLTIP`, `OPTIONS`, `ACTIONS`, and `STYLE`,
+  and enforces the same `ON_CLICK`-only rule as `CREATE BUTTON`.
+- `ALTER PAGE` can patch `VISIBLE` and `REFRESH`; `ALTER CONTAINER` can patch `VISIBLE` and `ICON`.
+  These are fields the objects have always had, reachable until now only by redefining the object
+  and restating its whole layout.
 
 ### Fixed
 

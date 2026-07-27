@@ -69,5 +69,17 @@ CREATE VISUAL SalesBar AS BAR (
 );
 ```
 
+## Lifecycle
+
+```sql
+CREATE OR REPLACE VISUAL RevenueChart AS BAR (...);   -- redefine, including the visual type
+ALTER VISUAL RevenueChart (TITLE = 'Revenue', OPTIONS (STACKED = ON));
+DROP VISUAL IF EXISTS RevenueChart;
+```
+
+`ALTER VISUAL` patches `SOURCE`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STYLE`, `TITLE`, `SUBTITLE`, and
+`TOOLTIP`. An omitted clause keeps its current value. The visual type itself is part of the
+definition, not a patchable field — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
+
 References:
 - [Report SQL Guide](../../../guides/report-sql.md)

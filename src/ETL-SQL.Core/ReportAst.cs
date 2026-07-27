@@ -486,6 +486,12 @@ public record AlterReportObjectStatement : Statement
     public Expression? Subtitle { get; init; }
     public bool SubtitleIsMarkdown { get; init; }
     public TooltipDefinition? Tooltip { get; init; }
+    /// <summary>PAGE and CONTAINER only. Null means the clause was absent, so the value is kept.</summary>
+    public string? Visibility { get; init; }
+    /// <summary>PAGE only. Null means absent; 0 disables the auto-refresh.</summary>
+    public int? RefreshIntervalSeconds { get; init; }
+    /// <summary>CONTAINER only.</summary>
+    public string? Icon { get; init; }
 }
 
 /// <summary>

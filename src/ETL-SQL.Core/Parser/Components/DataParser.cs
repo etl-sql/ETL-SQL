@@ -310,8 +310,14 @@ public class DataParser : ParserComponent
         if (Match(TokenType.VISUAL)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Visual);
         if (Match(TokenType.PAGE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Page);
         if (Match(TokenType.CONTAINER)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Container);
+        if (Match(TokenType.BUTTON)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Button);
         if (Match(TokenType.STYLE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Style);
         if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Navigation);
+        // THEME has no ALTER — it is refused inside ParseAlterReportObject, which names the
+        // CREATE OR REPLACE replacement. Routing it here rather than letting it fall through to the
+        // generic "expected object kind" error is the difference between being told what to write
+        // and being told the parser did not recognise the word.
+        if (Match(TokenType.THEME)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Theme);
         if (Match(TokenType.DATASET))
         {
             if (_parser.Current.Type == TokenType.STRING_LITERAL)
@@ -519,6 +525,14 @@ public class DataParser : ParserComponent
             RejectTrailingIfExists("STYLE", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Style, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+        }
+        else if (Match(TokenType.BUTTON))
+        {
+            if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            var name = ConsumeIdentifier("Expected button name").Value;
+            RejectTrailingIfExists("BUTTON", name);
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new DropReportObjectStatement { ObjectType = ReportObjectType.Button, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
         else if (Match(TokenType.NAVIGATION))
         {

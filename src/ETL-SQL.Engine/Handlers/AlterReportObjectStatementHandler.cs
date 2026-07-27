@@ -34,6 +34,9 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
             case ReportObjectType.Container:
                 UpdateContainer(stmt, context);
                 break;
+            case ReportObjectType.Button:
+                UpdateButton(stmt, context);
+                break;
             case ReportObjectType.Template:
                 UpdateTemplate(stmt, context);
                 break;
@@ -42,7 +45,7 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
                 // ReportParser.AlterableReportObjects). Kept as a guard for AST built in code:
                 // it states the contract rather than reporting the feature as merely unfinished.
                 throw new ExecutionException(
-                    $"ALTER is not supported for {stmt.ObjectType}; only VISUAL, PAGE, CONTAINER and TEMPLATE can be altered.",
+                    $"ALTER is not supported for {stmt.ObjectType}; only VISUAL, PAGE, CONTAINER, BUTTON and TEMPLATE can be altered.",
                     null, stmt.Line, stmt.Column);
         }
 
@@ -90,7 +93,9 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
             Subtitle = stmt.Subtitle ?? page.Subtitle,
             Tooltip = stmt.Tooltip ?? page.Tooltip,
             Styles = stmt.Styles ?? page.Styles,
-            StyleName = stmt.StyleName ?? page.StyleName
+            StyleName = stmt.StyleName ?? page.StyleName,
+            Visibility = stmt.Visibility ?? page.Visibility,
+            RefreshIntervalSeconds = stmt.RefreshIntervalSeconds ?? page.RefreshIntervalSeconds
         };
 
         context.ReportContext.PageDefinitions[stmt.Name] = updated;
@@ -109,10 +114,32 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
             StyleName = stmt.StyleName ?? container.StyleName,
             Title = stmt.Title ?? container.Title,
             Subtitle = stmt.Subtitle ?? container.Subtitle,
-            Tooltip = stmt.Tooltip ?? container.Tooltip
+            Tooltip = stmt.Tooltip ?? container.Tooltip,
+            Visibility = stmt.Visibility ?? container.Visibility,
+            Icon = stmt.Icon ?? container.Icon
         };
 
         context.ReportContext.ContainerDefinitions[stmt.Name] = updated;
+    }
+
+    private void UpdateButton(AlterReportObjectStatement stmt, IExecutionContext context)
+    {
+        if (!context.ReportContext.ButtonDefinitions.TryGetValue(stmt.Name, out var button))
+        {
+            throw new ExecutionException($"Button '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
+        }
+
+        var updated = button with
+        {
+            Title = stmt.Title ?? button.Title,
+            Tooltip = stmt.Tooltip ?? button.Tooltip,
+            Options = stmt.Options ?? button.Options,
+            Actions = stmt.Actions ?? button.Actions,
+            Styles = stmt.Styles ?? button.Styles,
+            StyleName = stmt.StyleName ?? button.StyleName
+        };
+
+        context.ReportContext.ButtonDefinitions[stmt.Name] = updated;
     }
 
     private void UpdateTemplate(AlterReportObjectStatement stmt, IExecutionContext context)

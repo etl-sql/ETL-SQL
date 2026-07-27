@@ -65,5 +65,17 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
 );
 ```
 
+## Lifecycle
+
+```sql
+CREATE OR REPLACE CONTAINER FilterDrawer AS DRAWER (...);   -- redefine, including the layout
+ALTER CONTAINER FilterDrawer (TITLE = 'Filters', VISIBLE = OFF, ICON = 'filter');
+DROP CONTAINER IF EXISTS FilterDrawer;
+```
+
+`ALTER CONTAINER` patches `TITLE`, `SUBTITLE`, `TOOLTIP`, `STYLE`, `VISIBLE`, and `ICON`. An omitted
+clause keeps its current value. Changing `LAYOUT` is a re-layout rather than a patch — use
+`CREATE OR REPLACE CONTAINER`.
+
 References:
 - [Report SQL Guide](../../../guides/report-sql.md)

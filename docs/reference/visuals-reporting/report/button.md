@@ -41,5 +41,18 @@ CREATE BUTTON RefreshMetrics AS (
 );
 ```
 
+## Lifecycle
+
+```sql
+CREATE OR REPLACE BUTTON GoBack AS (...);   -- redefine from scratch
+ALTER BUTTON GoBack (TITLE = 'Return');     -- patch named clauses only
+DROP BUTTON IF EXISTS GoBack;
+```
+
+`ALTER BUTTON` patches `TITLE`, `TOOLTIP`, `OPTIONS`, `ACTIONS`, and `STYLE`. A clause you omit keeps
+its current value; a clause a button does not have — `SOURCE`, `MAPPINGS`, `SUBTITLE` — is refused at
+parse time rather than accepted and ignored. Actions still accept `ON_CLICK` only, exactly as in
+`CREATE BUTTON`.
+
 References:
 - [Report SQL Guide](../../../guides/report-sql.md)

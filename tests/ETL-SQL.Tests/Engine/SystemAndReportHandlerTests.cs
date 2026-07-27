@@ -262,11 +262,27 @@ namespace ETL_SQL.Tests.Engine
         // ── ALTER TEMPLATE ────────────────────────────────────────────────────
 
         [Fact]
-        public async Task AlterTemplate_AfterCreate_UpdatesTitle()
+        public async Task AlterTemplate_AfterCreate_PatchesOptions()
         {
             await Run(
                 "CREATE TEMPLATE mytempl AS (TYPE = 'table');" +
-                "ALTER TEMPLATE mytempl (TITLE = 'Updated Title');");
+                "ALTER TEMPLATE mytempl (OPTIONS (TYPE = 'card'));");
+        }
+
+        /// <summary>
+        /// This test used to be named "UpdatesTitle" and passed a TITLE clause, but a template is an
+        /// option bag with no title: the handler patches <c>Options</c> and nothing else, so the
+        /// clause was parsed and silently discarded. It asserted only that no exception was thrown,
+        /// which is exactly what a statement that does nothing achieves. The parser now refuses it.
+        /// </summary>
+        [Fact]
+        public async Task AlterTemplate_Title_IsRefused_NotSilentlyDiscarded()
+        {
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(
+                "CREATE TEMPLATE mytempl2 AS (TYPE = 'table');" +
+                "ALTER TEMPLATE mytempl2 (TITLE = 'Updated Title');"));
+
+            Assert.Contains("ALTER TEMPLATE does not support TITLE", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]

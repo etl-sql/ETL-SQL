@@ -901,6 +901,12 @@ Specific to `.rptsql` files and the reporting engine.
 | `ACTIONS` block | Interactive event bindings | [ACTIONS.md](reference/visuals-reporting/report/actions.md) |
 | `INTERACTIONS` block | Cross-visual filtering rules | [INTERACTIONS.md](reference/visuals-reporting/report/interactions.md) |
 
+Lifecycle: every report object above supports `CREATE OR REPLACE <kind> <name>` and
+`DROP <kind> [IF EXISTS] <name>`. `ALTER <kind> <name> (...)` patches named clauses and is supported
+for `VISUAL`, `PAGE`, `CONTAINER`, `BUTTON`, and `TEMPLATE` only; `STYLE`, `NAVIGATION`, `THEME`, and
+`DATASET` are redefined with `CREATE OR REPLACE` instead. Each kind accepts only the clauses it can
+patch — see its reference page — and anything else is refused at parse time.
+
 ### 8.2 Visual Types
 | Type | Category | Help File |
 | :--- | :--- | :--- |

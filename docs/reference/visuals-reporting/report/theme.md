@@ -45,6 +45,22 @@ DROP THEME IF EXISTS corporate;
 
 Removes the theme from memory and deletes the `.json` file from disk.
 
+### Theme lifecycle
+
+`CREATE`, `CREATE OR REPLACE`, and `DROP` — there is deliberately no `ALTER THEME`. A theme is a
+small property bag written out as one JSON file, so redefining it is both shorter than a patch and
+leaves the file on disk unambiguous:
+
+```sql
+CREATE OR REPLACE THEME corporate AS (
+  BACKGROUND = '#101018',
+  TEXT_COLOR = '#eeeeee'
+);
+```
+
+`ALTER THEME` is rejected by the parser, before any statement in the script runs, with a message
+naming this form.
+
 ## References
 
 - [Report-SQL Reference](../README.md)

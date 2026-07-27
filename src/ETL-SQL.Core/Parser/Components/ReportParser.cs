@@ -1061,36 +1061,75 @@ public class ReportParser : ParserComponent
     // ── ALTER (Report Objects) ────────────────────────────────────────────
 
     /// <summary>
+    /// A clause that may appear in an <c>ALTER &lt;report object&gt;</c> body. The enum name is the
+    /// keyword, so diagnostics can list what a kind accepts without a second spelling table.
+    /// </summary>
+    private enum AlterClause
+    {
+        Source, Mappings, Options, Actions, Style, Title, Subtitle, Tooltip, Visible, Refresh, Icon
+    }
+
+    /// <summary>
     /// Report object kinds whose <c>ALTER</c> is implemented by
-    /// <c>AlterReportObjectStatementHandler</c>. Every other kind is refused here.
+    /// <c>AlterReportObjectStatementHandler</c>, and the clauses each one accepts. Every other kind
+    /// is refused here, and so is every clause a kind has no field for.
     /// </summary>
     /// <remarks>
-    /// The handler's <c>default</c> arm throws "ALTER not yet implemented", which meant these
-    /// forms parsed, linted and completed successfully, then failed at execution — the worst place
+    /// The handler's <c>default</c> arm threw "ALTER not yet implemented", which meant unsupported
+    /// kinds parsed, linted and completed successfully, then failed at execution — the worst place
     /// to learn a statement is unsupported, since a report script may already have run half its
     /// work. The parser is the only stage that can say so before anything happens.
     /// <para>
-    /// This list mirrors the handler's switch; adding a kind there means adding it here, and the
-    /// rejection tests pin both directions.
+    /// The per-kind clause lists exist for the same reason one level down. A single visual-shaped
+    /// body was previously parsed for every kind, so <c>ALTER PAGE p (SOURCE = ...)</c> parsed and
+    /// the handler then silently discarded the clause: the statement reported success having
+    /// changed nothing. A clause is listed only where the handler actually patches it.
+    /// </para>
+    /// <para>
+    /// This table mirrors the handler's switch; adding a kind or a patched field there means adding
+    /// it here, and the tests pin both directions.
     /// </para>
     /// </remarks>
-    private static readonly ReportObjectType[] AlterableReportObjects =
+    private static readonly (ReportObjectType Type, AlterClause[] Clauses)[] AlterableReportObjects =
     [
-        ReportObjectType.Visual,
-        ReportObjectType.Page,
-        ReportObjectType.Container,
-        ReportObjectType.Template,
+        (ReportObjectType.Visual,
+            [AlterClause.Source, AlterClause.Mappings, AlterClause.Options, AlterClause.Actions,
+             AlterClause.Style, AlterClause.Title, AlterClause.Subtitle, AlterClause.Tooltip]),
+        (ReportObjectType.Page,
+            [AlterClause.Style, AlterClause.Title, AlterClause.Subtitle, AlterClause.Tooltip,
+             AlterClause.Visible, AlterClause.Refresh]),
+        (ReportObjectType.Container,
+            [AlterClause.Style, AlterClause.Title, AlterClause.Subtitle, AlterClause.Tooltip,
+             AlterClause.Visible, AlterClause.Icon]),
+        (ReportObjectType.Button,
+            [AlterClause.Options, AlterClause.Actions, AlterClause.Style, AlterClause.Title,
+             AlterClause.Tooltip]),
+        (ReportObjectType.Template, [AlterClause.Options]),
     ];
+
+    /// <summary>
+    /// The canonical recreate form per kind, used in the refusal diagnostic. The kinds differ —
+    /// <c>STYLE</c> takes no <c>AS</c>, <c>NAVIGATION</c> names its type after <c>AS</c> — and a
+    /// message that suggests a form the parser rejects is worse than no suggestion at all.
+    /// </summary>
+    private static string RecreateForm(ReportObjectType type) => type switch
+    {
+        ReportObjectType.Style => "CREATE OR REPLACE STYLE <name> (...)",
+        ReportObjectType.Navigation => "CREATE OR REPLACE NAVIGATION <name> AS TAB|BUTTON|LINK (...)",
+        ReportObjectType.Dataset => "CREATE OR REPLACE DATASET &<name> AS (SELECT ...)",
+        _ => $"CREATE OR REPLACE {type.ToString().ToUpperInvariant()} <name> AS (...)"
+    };
 
     public Statement ParseAlterReportObject(ReportObjectType type)
     {
         var startToken = _parser.Previous;
 
-        if (Array.IndexOf(AlterableReportObjects, type) < 0)
+        var supported = Array.Find(AlterableReportObjects, e => e.Type == type).Clauses;
+        if (supported is null)
             throw new SyntaxException(
                 $"ALTER is not supported for {type.ToString().ToUpperInvariant()}. " +
-                $"Supported: {string.Join(", ", AlterableReportObjects.Select(t => t.ToString().ToUpperInvariant()))}. " +
-                $"Recreate the object instead — CREATE OR REPLACE {type.ToString().ToUpperInvariant()} <name> AS (...).",
+                $"Supported: {string.Join(", ", AlterableReportObjects.Select(e => e.Type.ToString().ToUpperInvariant()))}. " +
+                $"Recreate the object instead — {RecreateForm(type)}.",
                 startToken.Line, startToken.Column);
 
         var name = ConsumeIdentifier($"Expected {type} name after ALTER {type}").Value;
@@ -1106,49 +1145,100 @@ public class ReportParser : ParserComponent
         Expression? title = null, subtitle = null;
         bool titleMd = false, subtitleMd = false;
         TooltipDefinition? tooltip = null;
+        string? visibility = null;
+        int? refreshSecs = null;
+        string? icon = null;
+
+        // The clause keyword has already been consumed when this runs, so the position reported is
+        // the offending keyword itself.
+        void RequireClause(AlterClause clause)
+        {
+            if (Array.IndexOf(supported, clause) >= 0) return;
+
+            throw new SyntaxException(
+                $"ALTER {type.ToString().ToUpperInvariant()} does not support " +
+                $"{clause.ToString().ToUpperInvariant()}. Supported clauses: " +
+                $"{string.Join(", ", supported.Select(c => c.ToString().ToUpperInvariant()))}. " +
+                $"To change anything else, recreate the object — {RecreateForm(type)}.",
+                _parser.Previous.Line, _parser.Previous.Column);
+        }
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
             if (Match(TokenType.SOURCE))
             {
+                RequireClause(AlterClause.Source);
                 Match(TokenType.EQUALS);
                 source = ParseVisualSource();
             }
             else if (Match(TokenType.TITLE))
             {
+                RequireClause(AlterClause.Title);
                 Match(TokenType.EQUALS);
                 title = ParseExpression();
             }
             else if (Match(TokenType.SUBTITLE))
             {
+                RequireClause(AlterClause.Subtitle);
                 Match(TokenType.EQUALS);
                 subtitle = ParseExpression();
             }
             else if (Match(TokenType.TOOLTIP))
             {
+                RequireClause(AlterClause.Tooltip);
                 tooltip = ParseTooltipDefinition();
             }
             else if (Match(TokenType.MAPPINGS))
             {
+                RequireClause(AlterClause.Mappings);
                 Consume(TokenType.LPAREN, "Expected '(' after MAPPINGS");
                 mappings.AddRange(ParseMappings());
                 Consume(TokenType.RPAREN, "Expected ')' to close MAPPINGS");
             }
             else if (Match(TokenType.OPTIONS))
             {
+                RequireClause(AlterClause.Options);
                 Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
                 ParseOptions(options, axisOptions);
                 Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
             }
             else if (Match(TokenType.ACTIONS))
             {
+                RequireClause(AlterClause.Actions);
                 Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
                 actions.AddRange(ParseActions());
                 Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
             }
             else if (Match(TokenType.STYLE))
             {
+                RequireClause(AlterClause.Style);
                 ParseStyleClause(styles, ref styleName);
+            }
+            else if (Match(TokenType.VISIBLE))
+            {
+                RequireClause(AlterClause.Visible);
+                Match(TokenType.EQUALS);
+                visibility = ParseOnOffValue();
+            }
+            else if (Match(TokenType.REFRESH))
+            {
+                RequireClause(AlterClause.Refresh);
+                Match(TokenType.EQUALS);
+                var raw = ConsumeReportOptionValue();
+                // CREATE PAGE swallows an unparseable interval and silently means "off". ALTER is a
+                // patch, so the same silence would report success and leave the old interval in
+                // place — the one outcome the author cannot see.
+                if (!int.TryParse(raw, out var parsedRefresh) || parsedRefresh < 0)
+                    throw new SyntaxException(
+                        $"ALTER PAGE REFRESH expects a whole number of seconds (0 disables it), not '{raw}'.",
+                        _parser.Previous.Line, _parser.Previous.Column);
+                refreshSecs = parsedRefresh;
+            }
+            else if (Match(TokenType.ICON))
+            {
+                RequireClause(AlterClause.Icon);
+                Consume(TokenType.EQUALS, "Expected '=' after ICON");
+                icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
             }
             else
             {
@@ -1159,6 +1249,9 @@ public class ReportParser : ParserComponent
 
         Consume(TokenType.RPAREN, $"Expected ')' to close ALTER {type}");
         Match(TokenType.SEMICOLON);
+
+        if (type == ReportObjectType.Button)
+            ValidateButtonActionTriggers(actions, startToken);
 
         return new AlterReportObjectStatement
         {
@@ -1176,6 +1269,9 @@ public class ReportParser : ParserComponent
             Subtitle = subtitle,
             SubtitleIsMarkdown = subtitleMd,
             Tooltip = tooltip,
+            Visibility = visibility,
+            RefreshIntervalSeconds = refreshSecs,
+            Icon = icon,
             Line = startToken.Line,
             Column = startToken.Column
         };

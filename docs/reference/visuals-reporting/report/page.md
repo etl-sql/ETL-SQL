@@ -62,5 +62,18 @@ CREATE PAGE Detail AS PAGINATED (
 );
 ```
 
+## Lifecycle
+
+```sql
+CREATE OR REPLACE PAGE Overview AS DASHBOARD (...);   -- redefine, including the layout
+ALTER PAGE Overview (TITLE = 'Q3 Overview', VISIBLE = OFF, REFRESH = 300);
+DROP PAGE IF EXISTS Overview;
+```
+
+`ALTER PAGE` patches `TITLE`, `SUBTITLE`, `TOOLTIP`, `STYLE`, `VISIBLE`, and `REFRESH`. An omitted
+clause keeps its current value, and `REFRESH` takes a whole number of seconds (`0` disables it).
+Changing `STRUCTURE` or `MAP` is a re-layout rather than a patch — use `CREATE OR REPLACE PAGE`.
+Clauses a page does not have, such as `SOURCE` or `MAPPINGS`, are refused at parse time.
+
 References:
 - [Report SQL Guide](../../../guides/report-sql.md)

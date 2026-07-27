@@ -307,11 +307,30 @@ Since this is a greenfield deployment with no legacy data migration risk, migrat
    rejected with a diagnostic naming the exact replacement. The rejection is applied to all sixteen
    `DROP` kinds so the diagnostic is uniform rather than an accident of which kinds happened to
    accept it. `CREATE TABLE IF NOT EXISTS` was already canonical — verified, not assumed.
-3. Finish or remove advertised Report-SQL lifecycle forms. `ALTER STYLE`, `ALTER NAVIGATION`, and
-   `ALTER DATASET` must not parse and then fail as “not yet implemented.” Add the missing
-   `ALTER BUTTON`, `DROP BUTTON`, and any deliberately supported Theme lifecycle. Each `ALTER`
-   grammar must patch fields meaningful to that object rather than route every report object
-   through a visual-shaped property parser.
+3. **[DONE]** Finish or remove advertised Report-SQL lifecycle forms. `ALTER STYLE`,
+   `ALTER NAVIGATION`, `ALTER THEME`, and report-scoped `ALTER DATASET` are refused by the parser
+   instead of failing at execution as “not yet implemented”; the diagnostic names the
+   `CREATE OR REPLACE` form **as that kind spells it** (`STYLE` takes no `AS`, `NAVIGATION` names its
+   type after `AS`), because a suggestion the parser rejects sends the reader to a second error.
+   `ALTER BUTTON` and `DROP BUTTON` are added — `BUTTON` had `CREATE` only, while
+   `DropReportObjectStatementHandler` already removed buttons and `CREATE BUTTON`'s duplicate-name
+   error advised "use CREATE OR ALTER or DROP BUTTON first", advice the parser then rejected.
+
+   Each `ALTER` kind now declares the clauses it can patch (`ReportParser.AlterableReportObjects`),
+   so the shared visual-shaped body no longer accepts clauses the object has no field for. That was
+   not merely untidy: `ALTER PAGE p (SOURCE = ...)` parsed and the handler discarded it, so the
+   statement reported success having changed nothing. `ALTER PAGE` gained `VISIBLE`/`REFRESH` and
+   `ALTER CONTAINER` gained `VISIBLE`/`ICON` — fields those objects always had, previously reachable
+   only by redefining the object and restating its whole layout.
+
+   Two things were deliberately left out. `STRUCTURE`/`MAP` are a re-layout rather than a patch, so
+   they stay with `CREATE OR REPLACE`. And `ALTER TEMPLATE` still takes `OPTIONS (...)` while
+   `CREATE TEMPLATE` takes a bare `(key = value)` bag; unifying the two property-bag body shapes
+   belongs to the “Use `AS` consistently for a type or definition” item below, not here.
+
+   A pre-existing test named `AlterTemplate_AfterCreate_UpdatesTitle` asserted the discard: it
+   passed a `TITLE` clause a template has no field for and asserted only that nothing threw — which
+   is exactly what a statement that does nothing achieves. It now asserts the refusal.
 4. Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
    formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
    Add negative tests for every unsupported object/mode pair.
