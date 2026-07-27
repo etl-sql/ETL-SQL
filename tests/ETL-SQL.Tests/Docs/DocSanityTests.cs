@@ -142,6 +142,10 @@ namespace ETL_SQL.Tests.Docs
             new(StringComparer.OrdinalIgnoreCase)
             {
                 "ROADMAP.md",
+                // Planning work moves ROADMAP -> TODO when a track starts, carrying its proposed
+                // syntax with it. The exemption follows the document's purpose, not its filename:
+                // neither file describes behavior a user can run today.
+                "TODO.md",
             };
 
         [Fact]

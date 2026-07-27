@@ -37,7 +37,396 @@ First release on the monthly cadence (v0.7.0–v0.17.0 were weekly). Rationale i
 [Release_Workflows.md](docs/architecture/roadmaps/Release_Workflows.md#release-cadence).
 The date is a target, not a commitment — ship when the gate is green and the evidence is collected.
 
-### Release-process RCI — issues found cutting v0.17.0
+**Sequencing.** The language work below comes first; the release-process RCI items are scheduled
+**last**, deliberately. The RCI changes touch the validation gate and CI itself, so landing them
+mid-release would mean debugging the measuring instrument and the product at the same time. Doing
+them at the end also means they are exercised for the first time on the *next* release rather than
+destabilising this one.
+
+### Language — Canonical Syntax and Lifecycle Consistency
+
+**Audit basis (2026-07-26).** Review the complete top-level statement surface after the recent
+language expansion: parser dispatch, AST models, formatter output, Report-SQL, Portal and
+Orchestrator administration, file operations, reference documentation, samples, snippets, grammar
+completion, and parser/runtime tests. The core language already has the right foundation:
+
+```sql
+CREATE <object-kind> <name> [AS <implementation-or-definition>];
+ALTER <object-kind> <name> ...;
+DROP <object-kind> IF EXISTS <name>;
+```
+
+Keep object identity before implementation type. Treat `UNIQUE` in `CREATE UNIQUE INDEX` and similar
+orthogonal SQL modifiers as valid modifiers, not implementation types. Because the product has no
+live users, remove contradictory forms now rather than carrying permanent compatibility grammar.
+
+#### P0 — Unify managed connections across Engine, Portal, and Orchestrator
+
+1. **Delete the separate Portal SMTP language and resource model.** Remove `CREATE SMTP CONNECTION`,
+   `SHOW SMTP CONNECTIONS`, and `DROP SMTP CONNECTION`. SMTP is already a normal connector:
+
+   ```sql
+   CREATE CONNECTION local_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       PORT = 587,
+       USERNAME = 'etl-notify',
+       PASSWORD = 'SECRET:smtp_password',
+       DEFAULT_FROM = 'etl@example.com'
+   );
+   ```
+
+   Do not preserve the provider-before-object form as an alias. Reuse connector metadata,
+   validation, secret handling, testing, redaction, audit, and connection-catalog behavior instead
+   of maintaining Portal-only SMTP options, DTOs, storage, export syntax, and handlers.
+
+2. **Add an optional management target to `CREATE CONNECTION`.** A connection without `AT` remains
+   session-local. `AT <connection>` registers or updates the named definition in the governed
+   connection catalog owned by a `PORTAL` or `ORCHESTRATOR` connection:
+
+   ```sql
+   CREATE CONNECTION portal_admin AS PORTAL(
+       HOST = 'https://portal.corp.example',
+       API_KEY = 'SECRET:portal_admin_key'
+   );
+
+   CREATE CONNECTION portal_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       PORT = 587,
+       USERNAME = 'portal-notify',
+       PASSWORD = 'SECRET:portal_smtp_password',
+       DEFAULT_FROM = 'reports@example.com'
+   ) AT portal_admin;
+
+   CREATE CONNECTION portal_alerts AS WEBHOOK(
+       URL = 'SECRET:portal_alert_webhook',
+       FORMAT = 'slack'
+   ) AT portal_admin;
+   ```
+
+   The same syntax must work for Orchestrator-owned failure and operations notifications:
+
+   ```sql
+   CREATE CONNECTION orch_admin AS ORCHESTRATOR(
+       HOST = 'https://orchestrator.corp.example',
+       API_KEY = 'SECRET:orchestrator_admin_key'
+   );
+
+   CREATE CONNECTION orch_mail AS SMTP(
+       HOST = 'smtp.corp.example',
+       USERNAME = 'orchestrator-notify',
+       PASSWORD = 'SECRET:orchestrator_smtp_password'
+   ) AT orch_admin;
+
+   CREATE CONNECTION orch_failures AS WEBHOOK(
+       URL = 'SECRET:orchestrator_failure_webhook',
+       FORMAT = 'teams'
+   ) AT orch_admin;
+   ```
+
+   `AT` must reject targets that are not management-capable `PORTAL` or `ORCHESTRATOR`
+   connections. Define whether the statement also opens a local connection; the preferred contract
+   is that `AT` performs an audited remote catalog mutation while the unqualified form creates a
+   session-local connection. Never copy resolved secret values across the boundary: catalog entries
+   store `SECRET:name` references or host-owned protected values under the existing zero-trust
+   rules.
+   
+   **Do we use this syntax to create shared connections?**
+
+3. **Use one managed-connection lifecycle.** Extend the same object-first grammar to remote
+   administration:
+
+   ```sql
+   ALTER CONNECTION portal_mail WITH (...) AT portal_admin;
+   TEST CONNECTION portal_mail AT portal_admin INTO #test_result;
+   SELECT * FROM portal_admin.eng.connection_config WHERE connection_name = 'portal_mail' INTO #config;
+   SELECT * FROM portal_admin.eng.connections INTO #connections;
+   DROP CONNECTION IF EXISTS portal_mail AT portal_admin;
+   ```
+
+   Portal and Orchestrator must share the catalog contract, connector metadata, authorization
+   checks, secret-reference validation, redaction, impact analysis, enable/disable behavior, and
+   audit vocabulary. Host-specific policy may restrict which connector types can be registered,
+   but it must not create a second syntax family. Include SMTP and WEBHOOK in end-to-end tests for
+   both hosts, including notification delivery, disabled entries, missing secrets, unauthorized
+   callers, `WHAT_IF`, configuration export/import, and fail-closed audit behavior.
+
+4. **Migrate every existing Portal SMTP consumer.** Update subscriptions, alerts, native failure
+   notifications, backup/capacity services, configuration export, Portal administration APIs and
+   UI, samples, tests, help, snippets, and documentation to resolve a normal cataloged SMTP
+   connection. Remove the Portal-specific SMTP entity/API only after all consumers use the unified
+   catalog and a data migration converts any development records without exposing credentials.
+
+#### P0 — Correct named report refresh jobs
+
+`CREATE REFRESH JOB FOR REPORT` is incorrect because a report may have multiple independent refresh
+jobs. The job name is required identity, not an optional label. Replace the current singleton form
+and its generated `portal-refresh:<orchestrator>:<report-id>` key with:
+
+```sql
+CREATE REFRESH JOB FinanceNightly
+FOR REPORT 'Finance Dashboard'
+SCHEDULE '0 2 * * *'
+AT orch_admin;
+
+CREATE REFRESH JOB FinanceBusinessHours
+FOR REPORT 'Finance Dashboard'
+SCHEDULE '*/15 8-18 * * 1-5'
+AT orch_admin;
+```
+
+Provide a complete name-based lifecycle:
+
+```sql
+ALTER REFRESH JOB FinanceNightly
+SET SCHEDULE = '0 3 * * *'
+AT orch_admin;
+
+SELECT * FROM orch_admin.eng.refresh_jobs
+WHERE report_name = 'Finance Dashboard'
+INTO #refresh_jobs;
+
+DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
+```
+
+- Require a name in the parser, AST, Portal/Orchestrator requests, persistence model, catalog
+  uniqueness constraint, audit events, configuration export/import, dependency views, UI, and
+  documentation.
+- Scope uniqueness to the owning Portal/Orchestrator catalog as appropriate; do not key uniqueness
+  by report. Store the report relationship separately so many jobs can target one report.
+- Creating a second job for the same report must add a schedule, never replace an existing job.
+  Duplicate job names must fail unless an explicit supported lifecycle modifier is used.
+- Update, enable/disable, history, last/next run, dependency, and deletion operations must identify
+  the job by name. Report deletion must define and test cascade/restrict behavior for all attached
+  refresh jobs.
+- Migrate existing generated singleton jobs to deterministic visible names, report collisions
+  before mutation, and update the API/UI assumption that only one refresh job can exist per report.
+
+#### P1 — Make lifecycle modifiers explicit and uniform
+
+1. Publish one capability matrix for every creatable object covering `CREATE`, `CREATE IF NOT
+   EXISTS`, `CREATE OR ALTER`, `CREATE OR REPLACE`, standalone `ALTER`, `DROP`, and `DROP IF EXISTS`.
+   The parser must reject unsupported combinations immediately; it must never silently discard a
+   requested mode or let handlers interpret an unknown mode differently.
+2. Canonicalize existence modifiers before the object name:
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS #stage (...);
+   DROP VIEW IF EXISTS ActiveOrders;
+   DROP THEME IF EXISTS corporate;
+   ```
+
+   Remove post-name forms such as `DROP CONNECTION name IF EXISTS`.
+3. Finish or remove advertised Report-SQL lifecycle forms. `ALTER STYLE`, `ALTER NAVIGATION`, and
+   `ALTER DATASET` must not parse and then fail as “not yet implemented.” Add the missing
+   `ALTER BUTTON`, `DROP BUTTON`, and any deliberately supported Theme lifecycle. Each `ALTER`
+   grammar must patch fields meaningful to that object rather than route every report object
+   through a visual-shaped property parser.
+4. Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
+   formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
+   Add negative tests for every unsupported object/mode pair.
+
+#### P1 — Normalize identity, type, and clause ordering
+
+1. Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
+   `EXPORT`, and `PUBLISH`. Continue using quoted catalog identity where Portal dataset commands
+   require it, but do not let an arbitrary unsigiled identifier accidentally select the local
+   lifecycle.
+2. Make publish commands identify the published object before the source:
+
+   ```sql
+   PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly.rptsql' ...;
+   PUBLISH BUNDLE 'finance-etl' FROM 'bundles/finance' ...;
+   PUBLISH DATASET &sales_imported FROM 'transfer/sales.parquet' ...;
+   ```
+
+   Remove the source-first `PUBLISH DATASET FROM ... AS &name` exception and update export/import
+   round-trip tooling.
+3. Use `AS` consistently for a type or definition. Typed objects remain
+   `CREATE <object> <name> AS <type>(...)`; definition/property-bag report objects should use one
+   shared form, including `CREATE STYLE <name> AS (...)`.
+4. Treat tags and lineage as inserted metadata records, not unnamed DDL objects. Canonicalize the
+   existing shapes on `INSERT`, and extend to a full DML surface where the semantics warrant it:
+
+   **Tags** are mutable metadata facts and support full `INSERT`, `UPDATE`, and `DELETE`:
+
+   ```sql
+   -- Attach metadata
+   INSERT TAG FOR TABLE #orders (owner = 'Finance', classification = 'Confidential');
+   INSERT TAG FOR TABLE #orders COLUMN customer_id (pii = TRUE);
+
+   -- Correct or transfer metadata
+   UPDATE TAG FOR TABLE #orders COLUMN customer_id (owner = 'DataPrivacy');
+
+   -- Remove one key or all tags on a target
+   DELETE TAG FOR TABLE #orders COLUMN customer_id (pii);
+   DELETE TAGS FOR TABLE #orders COLUMN customer_id;
+   ```
+
+   **Lineage** is a provenance record and has asymmetric mutability. Auto-captured lineage
+   (produced by `SELECT INTO`, `MERGE`, etc.) is immutable — it is an audit record of what
+   actually ran. Only manually imported lineage may be deleted, to allow correction of a bad
+   import; deleting auto-captured lineage must be blocked by the engine or require an explicit
+   `SET ALLOW_LINEAGE_DELETE = ON` governance override. `UPDATE LINEAGE` is not supported in
+   any form because editing a provenance record rewrites history.
+
+   ```sql
+   -- Import curated or cross-system lineage
+   INSERT LINEAGE FOR TABLE #orders FROM 'openlineage/orders.json';
+
+   -- Correct a bad import (imported lineage only; auto-captured is blocked)
+   DELETE LINEAGE FOR TABLE #orders;
+   ```
+
+   Retire `CREATE TAG`, `CREATE LINEAGE`, and the duplicate bare `TAG ... WITH (...)` statement.
+   Route the new forms through `INSERT`/`UPDATE`/`DELETE` dispatch without confusing them with
+   row DML, preserve the existing typed tag-catalog validation and zero-trust lineage source
+   handling, and update lineage capture, formatter, linting, completion, help, snippets, samples,
+   and documentation together. Tags and lineage do not participate in the
+   `CREATE`/`ALTER`/`DROP` object lifecycle matrix.
+5. Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` for genuine
+   resources with clear identity and lifecycle. Do not encode an implementation type before
+   `CONNECTION`.
+6. **Retire `SHOW` as a data-retrieval verb. Replace all row-returning `SHOW` commands with
+   `SELECT` against the `eng.*` virtual schema.** Engine metadata, session state, lineage,
+   governance, jobs, orchestration, and portal catalog are all queryable as virtual tables under
+   the `eng.` schema prefix — a dedicated namespace that no remote database engine claims. The
+   three-part `connection.eng.table` form targets a remote connection's `eng.*` catalog using
+   the existing identifier routing rules, eliminating the need for an `INTO` escape hatch or a
+   separate `SHOW ... INTO #table` pattern:
+
+   ```sql
+   -- Engine-local (schema.table, no connection prefix)
+   SELECT * FROM eng.variables;
+   SELECT * FROM eng.lineage WHERE target_table = '#orders';
+   SELECT * FROM eng.tags WHERE tag_name = 'pii';
+   SELECT * FROM eng.connections;
+
+   -- Remote connection (connection.schema.table — same routing rules as all data queries)
+   SELECT * FROM ProdOrch.eng.jobs;
+   SELECT * FROM ProdOrch.eng.job_history WHERE job_name = 'nightly_etl';
+   SELECT * FROM my_portal.eng.reports WHERE folder = 'Finance';
+   SELECT * FROM my_portal.eng.permissions WHERE target_type = 'USER' AND target_name = 'jsmith';
+   ```
+
+   Full `SELECT` power — `WHERE`, `JOIN`, `GROUP BY`, `ORDER BY`, `INTO`, subqueries — applies
+   immediately. Autocomplete discovers the `eng.*` catalog via the `eng.` prefix. The
+   `EXECUTE portal BEGIN ... SHOW ... INTO #t; END` two-step collapses to a single `SELECT`.
+   The `eng` namespace is a reserved connection name; the engine must reject `CREATE CONNECTION
+   eng AS ...` at parse time.
+
+   Parameterized catalog queries that cannot be expressed as a WHERE filter on a static virtual
+   table use a table-valued function under the same schema:
+
+   ```sql
+   -- Full-text catalog search with fuzzy matching and relevance scoring
+   SELECT name, path, owner, relevance_score
+   FROM my_portal.eng.catalog_search('Q3 Sales')
+   ORDER BY relevance_score DESC;
+   ```
+
+   The `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` form is a file-write operation, not
+   data retrieval. Rename it to `EXPORT LINEAGE AS OPENLINEAGE TO '...'` alongside this change.
+   REPL shortcuts such as `SHOW TABLES` may remain as display-only aliases that expand to the
+   underlying `SELECT` at parse time and are never emitted by the formatter or autocomplete.
+
+   **Complete `eng.*` virtual table catalog:**
+   ```
+   -- Session / engine state
+   eng.connections          eng.connection_config    eng.variables
+   eng.profile              eng.tables               eng.columns
+   eng.views                eng.version              eng.locks
+
+   -- Lineage and governance
+   eng.lineage              eng.lineage_history      eng.tags
+   eng.stewardship_gaps     eng.protected_data       eng.protected_data_suggestions
+
+   -- Data quality
+   eng.data_quality_rules   eng.data_quality_status  eng.data_quality_failures
+   eng.stewardship_score
+
+   -- Jobs and orchestration
+   eng.jobs                 eng.job_history          eng.job_state
+   eng.refresh_jobs         eng.host_metrics         eng.subscriptions
+
+   -- Portal catalog
+   eng.users                eng.reports              eng.favorites
+   eng.recent_reports       eng.sessions             eng.permissions
+   eng.usage_metrics        eng.operational_metrics  eng.audit
+   eng.report_history       eng.report_dependencies  eng.share_links
+   eng.embed_tokens         eng.saved_views          eng.alerts
+
+   -- Table-valued functions (parameterized)
+   eng.catalog_search()     -- fuzzy full-text portal catalog search
+   ```
+
+   Update the engine, parser, formatter, linter, LSP autocomplete, help, snippets, samples, and
+   all documentation together with this change. Every `SHOW <data>` form must become a `SELECT
+   FROM eng.*` form; every `SHOW ... INTO #table` pattern in the ROADMAP, guides, cookbook, and
+   sample files must be rewritten accordingly.
+
+#### P1 — Normalize inspection and target clauses
+
+1. Remove the `SHOW TABLES ON <connection>` parser-only alias. The canonical form is
+   `SELECT * FROM <connection>.eng.tables`; there is no `ON` variant.
+2. Implement `eng.tags` as a globally enumerable virtual table over the current session's tag
+   catalog. Remove `SHOW TAGS FOR SCRIPT` and `SHOW TAGS FOR TABLE <name>` as special forms;
+   filter with `WHERE` instead: `SELECT * FROM eng.tags WHERE table_name = '#orders'`.
+3. Remove the `SHOW <object> [qualifier] [target] [filter] [AT conn] [INTO #table]` ordering
+   rule — it is superseded by `SELECT ... FROM [connection.]eng.<table> [WHERE ...] [AT conn]`.
+   Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
+   and effective permissions as `eng.*` virtual tables with `WHERE` filters.
+4. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
+   agree on one expiration clause; prefer structural `EXPIRES <timestamp>` over a second
+   `WITH(EXPIRES_AT=...)` spelling.
+
+#### P2 — Retire duplicate surface syntax
+
+Choose and document one canonical spelling for each operation, then remove unused compatibility
+forms before the first supported release:
+
+| Keep canonical | Retire duplicate forms |
+| :--- | :--- |
+| `SEND EMAIL ...` | `SEND_EMAIL(...)` |
+| `SEND FILE ...` / `RECEIVE FILE ...` | `SEND_FILE(...)`, `RECEIVE_FILE(...)`, `FILE_SEND`, `FILE_RECEIVE` |
+| `COPY FILE`, `MOVE FILE`, `DELETE FILE`, etc. | `COPY_FILE(...)`, `MOVE_FILE(...)`, `DELETE_FILE(...)`, and sibling underscore forms |
+| `CREATE DIRECTORY`, `DELETE DIRECTORY`, etc. | `CREATE_DIRECTORY(...)`, `DELETE_DIRECTORY(...)`, and sibling underscore forms |
+| `FOREACH` | `FOR EACH` |
+| `WAIT UNTIL <condition>` | `WAITFOR (<condition>)`; retain `WAITFOR DELAY` and `WAITFOR TIME` for their distinct time forms |
+| `SELECT * FROM eng.columns WHERE table_name = ...` | `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, `DESCRIBE` — all retired; `eng.columns` is the single surface |
+
+Generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs, and error
+messages must emit only the canonical forms. If a short migration window is retained, every alias
+must produce a deprecation diagnostic with an exact replacement and a declared removal release;
+do not describe both forms as equally canonical.
+
+#### P2 — Restore parser/formatter/documentation round-trip guarantees
+
+1. Give every executable statement a real `ToSql()` serialization. Report-SQL and Portal
+   statements must never fall through to `UNKNOWN STATEMENT`; formatter output must parse back to
+   an equivalent AST and preserve lifecycle mode, identity sigils, target host, and security
+   clauses.
+2. Add a generated statement-surface inventory from parser/AST metadata and fail CI when a
+   creatable object lacks its declared lifecycle, formatter coverage, grammar completion, help,
+   snippet where applicable, or reference page.
+3. Add table-driven parser → formatter → parser tests for every canonical form and explicit
+   rejection tests for every retired form. Include `IF EXISTS` position, creation modes, dataset
+   sigils, `AT` targeting, named refresh jobs, SMTP/WEBHOOK catalog registration, and all
+   Report-SQL object families.
+4. Parse every copy-pasteable documentation and sample block in its correct execution context.
+   Specifically reconcile `eng.tables`, `eng.tags`, Theme deletion, Portal share/embed expiry,
+   Report-SQL lifecycle claims, managed connections, and refresh-job examples.
+5. Update `docs/syntax-index.md`, statement references, connector references, administration
+   guides, architecture contracts, help resources, snippets, migration guide, samples,
+   configuration export, LSP grammar, and release notes as one atomic language change.
+
+**Definition of done.** A user can predict a statement from the object model: the verb names the
+operation, the object kind precedes its identity, implementation type follows `AS`, remote ownership
+follows `AT`, and lifecycle modifiers occupy one position with one meaning. Portal and Orchestrator
+reuse normal SMTP/WEBHOOK connections, multiple named refresh jobs can target the same report, no
+unsupported lifecycle parses successfully, and every canonical statement round-trips through the
+formatter and documentation test lane.
+
+### Release-process RCI — issues found cutting v0.17.0 (scheduled last)
 
 Thirteen process problems surfaced during this release. Four are already fixed (noted below); the
 rest are listed in rough value order. The theme: **the gate's failures were mostly not product
