@@ -262,6 +262,36 @@ live users, remove contradictory forms now rather than carrying permanent compat
 
 #### P0 — Correct named report refresh jobs
 
+**Audit 2026-07-27 — the defect is confirmed and located. Not started; nothing is committed.**
+
+The overwrite is real and mechanical: `SubscriptionsController` builds the key as
+`portal-refresh:{alias}:{report.Id}` and `DatasetRegistryService.RegisterRefreshJobAsync` looks the
+job up **by that key**, so a second `CREATE REFRESH JOB` for the same report and orchestrator
+updates the existing schedule instead of adding a job. Nothing warns.
+
+Current surface:
+- `CreatePortalRefreshJobStatement(ReportName, Schedule, OrchestratorAlias)` — no name.
+- `DropPortalRefreshJobStatement(ReportName)` — cannot express *which* job.
+- `DatasetJob` has `Id, ReportId, OrchestratorJobName, RefreshInterval, LastRefreshedAt` — **no
+  `Name` column**, so naming is migration-bearing on both providers.
+
+Suggested slices, in dependency order — the parser change alone does not compile, because four
+connector call sites in `PortalDataSource` and `OrchestratorDataSource` pass `stmt.ReportName` to
+report-scoped endpoints. Making them merely compile would send a job name to a report-keyed API,
+which is worse than the current behaviour, so the API and persistence must lead:
+1. **Persistence** — add `DatasetJob.Name`, unique per catalog (not per report); key the job as
+   `portal-refresh:{alias}:{name}`. Migration on both providers. Existing generated jobs need
+   deterministic visible names, and collisions must be reported before mutation.
+2. **Portal API** — name in the create request; name-based lookup for update/enable/disable/drop;
+   `CREATE_REFRESH_JOB` audit detail carries the name. Report deletion must define and test
+   cascade vs restrict for attached jobs.
+3. **Parser/AST** — `CREATE REFRESH JOB <name> FOR REPORT '...' SCHEDULE '...' AT <conn>` and
+   `DROP REFRESH JOB [IF EXISTS] <name>`; reject the retired report-scoped forms with a diagnostic
+   that explains *why* a name is now required, since the old form parsed fine and silently
+   overwrote.
+4. **Consumers** — the four connector call sites, UI, configuration export/import, dependency
+   views, docs, tests.
+
 `CREATE REFRESH JOB FOR REPORT` is incorrect because a report may have multiple independent refresh
 jobs. The job name is required identity, not an optional label. Replace the current singleton form
 and its generated `portal-refresh:<orchestrator>:<report-id>` key with:
