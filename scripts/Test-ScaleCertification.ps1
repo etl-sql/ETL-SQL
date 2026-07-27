@@ -50,7 +50,11 @@ param(
     [ValidateRange(0, 20)]
     [int]$Samples = 0,
 
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+
+    # Skips the discarded warm-up run. Only for throwaway smoke checks where the numbers are not
+    # being compared against a baseline — a cold first run is not a measurement.
+    [switch]$NoWarmUp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -256,7 +260,10 @@ if ($RowCountScale -le 0) {
 }
 
 if ($Samples -le 0) {
-    $Samples = if ($Tier -eq 'Standard' -and -not $Scenario) { 3 } else { 1 }
+    # A full-tier run feeds Compare-CertBaseline, so it needs replicates: a single sample read
+    # 717 ms where five read 888 ms on identical code, which is enough to cross a failure band on
+    # its own. Single-scenario runs are for interactive investigation and stay at 1 by default.
+    $Samples = if (-not $Scenario) { 3 } else { 1 }
 }
 
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -367,6 +374,25 @@ $dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
 $allSampleMetrics = @()
 $sampleReports = @()
 $testExitCode = 0
+
+# ── Warm-up run, discarded ────────────────────────────────────────────────────────────────────
+# The first run after a build measures JIT compilation and antivirus scanning of fresh binaries,
+# not the code. Because the release gate runs certification after ~70 minutes of test lanes, those
+# readings were the least trustworthy in the whole gate: the same commit measured 5013 ms warmed and
+# 8977 ms cold — a 56% spread, wider than any band being compared against. That produced repeated
+# false regressions across v0.15.0, v0.16.0 and v0.17.0, and one false "the engine regressed 49%"
+# alarm that cost most of a release day. See
+# docs/architecture/decisions/v0.17.0-performance-results.md.
+if (-not $NoWarmUp) {
+    Write-Host "Warm-up run (discarded — first run after a build measures JIT, not the code)..." -ForegroundColor Yellow
+    $warmLog = Join-Path $OutDir 'raw-output-warmup.txt'
+    Remove-Item $warmLog -ErrorAction SilentlyContinue
+    $env:CERT_PROGRESS_FILE = [System.IO.Path]::GetFullPath((Join-Path $OutDir 'progress-warmup.txt'))
+    $warm = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
+        -RedirectStandardOutput $warmLog -RedirectStandardError "$warmLog.err" -NoNewWindow -PassThru
+    $warm.WaitForExit()
+    Write-Host ("  warm-up complete (exit {0}) — measuring now" -f $warm.ExitCode) -ForegroundColor Gray
+}
 
 for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
     $sampleRawLog = if ($Samples -eq 1) { $rawLog } else { Join-Path $OutDir ("raw-output-sample{0}.txt" -f $sampleIndex) }

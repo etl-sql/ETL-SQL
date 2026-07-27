@@ -43,10 +43,13 @@ release day plus a false regression alarm.
 
 The fix is to make the apparatus trustworthy, not to chase the numbers:
 
-- [ ] **Discard a warm-up run after every build** inside `Test-ScaleCertification.ps1`. This single
-      change removes the entire effect.
-- [ ] **Refuse single-sample reports for regression decisions** in `Compare-CertBaseline.ps1`. One
-      sample read 717 ms where five read 888 ms on identical code.
+- [x] **Discard a warm-up run after every build** inside `Test-ScaleCertification.ps1` — done in
+      v0.17.0. Removes most of the effect on its own.
+- [x] **Default a full-tier run to 3 samples** (previously 1 for Smoke) — done in v0.17.0. Warm-up
+      alone was not sufficient: Smoke still failed on a single sample, and passed at 3.
+- [ ] **Refuse single-sample reports for regression decisions** in `Compare-CertBaseline.ps1`. The
+      producer now defaults to 3, but the consumer should reject `samples == 1` outright rather than
+      trusting its input — one sample read 717 ms where five read 888 ms on identical code.
 - [ ] **Report the within-arm spread alongside every delta**, and treat a delta smaller than the
       spread as no result. Noise floor is ~2% with warm-up and ~56% without.
 - [ ] **Run scale certification before the long test lanes**, or quiesce the machine first. Running
