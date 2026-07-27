@@ -290,6 +290,15 @@ Current surface:
 - `DatasetJob` has `Id, ReportId, OrchestratorJobName, RefreshInterval, LastRefreshedAt` — **no
   `Name` column**, so naming is migration-bearing on both providers.
 
+**Trap found while attempting slice 1 — read before touching `IDatasetRegistry`.**
+`IDatasetRegistry.RegisterRefreshJobAsync` is a **default interface method**
+(`=> Task.CompletedTask`). Removing or renaming the Portal's override therefore **compiles
+cleanly**, and `SubscriptionsController`'s call silently binds to the interface's no-op default —
+creating a refresh job would quietly do nothing, with no compile error and no runtime error. That
+is worse than the bug being fixed. Either remove the default body so every implementer must be
+explicit, or change the interface and its callers in the same step; do not rely on the compiler to
+find the call sites, because it will not.
+
 Suggested slices, in dependency order — the parser change alone does not compile, because four
 connector call sites in `PortalDataSource` and `OrchestratorDataSource` pass `stmt.ReportName` to
 report-scoped endpoints. Making them merely compile would send a job name to a report-keyed API,
