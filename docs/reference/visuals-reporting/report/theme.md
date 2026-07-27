@@ -40,7 +40,7 @@ CREATE VISUAL RevenueChart AS BAR (
 
 ```sql
 DROP THEME corporate;
-DROP THEME corporate IF EXISTS;
+DROP THEME IF EXISTS corporate;
 ```
 
 Removes the theme from memory and deletes the `.json` file from disk.

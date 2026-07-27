@@ -6,36 +6,28 @@ release notes, or the relevant implementation/design document.
 
 ---
 
-## v0.17.0 Release — SHIPPED 2026-07-26
-
-Released and tagged (`v0.17.0` -> `8fee49a5`). Release notes in
-`docs/releases/v0.17.0.md`; evidence in `artifacts/release-evidence/0.17.0/`.
-
-### Release Verification — complete
-
-- [x] Full pre-release lane — **Passed**, 33/33 phases, run `20260726-203705`.
-- [x] Enterprise hardening certification — **Passed** on Windows (local + CI) and Linux (CI matrix).
-- [x] Recovery drill — **Pass**; RPO 13s, data-loss window 13s, no missing dependencies.
-- [x] HA failure certification — fault injection **10/10 scenarios**, `FaultInjection` gate validated.
-      The `Sustained`/`All` gates were not run: they need a live PostgreSQL HA topology under load,
-      and v0.17.0 publishes no HA capacity claims.
-- [x] Evidence collected — `artifacts/release-evidence/0.17.0/README.md` indexes it and records
-      what was **not** covered.
-- [x] `CHANGELOG.md`, release notes, and docs reflect v0.17.0 behaviour.
-
-### Known gap shipped with this release
-
-- [ ] **MSI in-place upgrade was never verified.** Needs elevation, which the release session did
-      not have. Static evidence only: identical `UpgradeCode`, ascending `ProductVersion`,
-      unchanged `MajorUpgrade`. Automation queued below.
-
----
-
-## v0.18.0 — target 2026-08-24
+## v0.18.0 Release — target 2026-08-24
 
 First release on the monthly cadence (v0.7.0–v0.17.0 were weekly). Rationale in
 [Release_Workflows.md](docs/architecture/roadmaps/Release_Workflows.md#release-cadence).
 The date is a target, not a commitment — ship when the gate is green and the evidence is collected.
+
+### Release evidence gates — none run yet
+
+Carried forward from
+[Enterprise_Release_Evidence_Checklist.md](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
+None of these can be inherited from v0.17.0 — evidence is per-release, against the candidate commit.
+
+- [ ] Full pre-release lane — `scripts/Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration`
+- [ ] Cross-platform test lane — `scripts/test-lane.ps1`
+- [ ] Enterprise hardening certification — `scripts/Test-EnterpriseHardeningCertification.ps1`,
+      Windows **and** Linux
+- [ ] Recovery drill — `etl-sql admin restore --validate --report`
+- [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
+      and `evidence` before `validate` — see the RCI item below)
+- [ ] Security-boundary docs — `SecurityBoundaryDocTests` green
+- [ ] Evidence indexed under `artifacts/release-evidence/0.18.0/`, recording what was **not**
+      covered as well as what was
 
 **Sequencing.** The language work below comes first; the release-process RCI items are scheduled
 **last**, deliberately. The RCI changes touch the validation gate and CI itself, so landing them
@@ -62,6 +54,26 @@ live users, remove contradictory forms now rather than carrying permanent compat
 
 #### P0 — Unify managed connections across Engine, Portal, and Orchestrator
 
+**Design decisions taken 2026-07-27 — these supersede the `AT` proposal in item 2 below.**
+
+- **Targeting uses the existing `EXECUTE <portal_conn> BEGIN … END` block, not a new `AT` clause.**
+  `AT` was only ever shorthand for something the language can already express, and
+  `ExecuteRemoteBlockStatementHandler` already forwards every inner statement to the Portal
+  dispatcher. Item 2's `AT` syntax is therefore **withdrawn**; item 3's `... AT portal_admin`
+  examples become `EXECUTE portal_admin BEGIN ... END`.
+- **Scope is every connector type, not just SMTP.** Inside a Portal admin block,
+  `CREATE CONNECTION <name> AS <connector>(…)` registers a governed entry in the catalog. WEBHOOK
+  needs exactly this (it substitutes for SMTP), so restricting the first pass to SMTP would only
+  buy a second migration.
+- **The store is the existing `PortalSharedConnection` catalog; the bespoke `SmtpConnection` table
+  is deleted.** This is the substance of the change, not the spelling. `SmtpConnection` holds an
+  `EncryptedPassword` — a credential **value** — while `PortalSharedConnection` enforces
+  `SECRET:` **references** on write, encrypts target/options at rest, and carries ACLs, ownership,
+  a usage ledger and versioning. Portal SMTP is currently the one path that stores a secret value,
+  bypassing the zero-trust rule the shared catalog exists to enforce.
+- **Migration drops existing passwords and forces re-entry.** There is no honest automatic
+  conversion from an encrypted value to a `SECRET:` reference, and nobody is using this yet.
+
 1. **Delete the separate Portal SMTP language and resource model.** Remove `CREATE SMTP CONNECTION`,
    `SHOW SMTP CONNECTIONS`, and `DROP SMTP CONNECTION`. SMTP is already a normal connector:
 
@@ -79,9 +91,11 @@ live users, remove contradictory forms now rather than carrying permanent compat
    validation, secret handling, testing, redaction, audit, and connection-catalog behavior instead
    of maintaining Portal-only SMTP options, DTOs, storage, export syntax, and handlers.
 
-2. **Add an optional management target to `CREATE CONNECTION`.** A connection without `AT` remains
-   session-local. `AT <connection>` registers or updates the named definition in the governed
-   connection catalog owned by a `PORTAL` or `ORCHESTRATOR` connection:
+2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
+   superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.
+   The examples below are retained only to show the intended *option shapes* (`SECRET:` references,
+   never resolved values); read `... AT portal_admin` as `EXECUTE portal_admin BEGIN ... END`.
+   A connection created outside such a block remains session-local.
 
    ```sql
    CREATE CONNECTION portal_admin AS PORTAL(
@@ -207,7 +221,7 @@ DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
    EXISTS`, `CREATE OR ALTER`, `CREATE OR REPLACE`, standalone `ALTER`, `DROP`, and `DROP IF EXISTS`.
    The parser must reject unsupported combinations immediately; it must never silently discard a
    requested mode or let handlers interpret an unknown mode differently.
-2. Canonicalize existence modifiers before the object name:
+2. **[DONE]** Canonicalize existence modifiers before the object name:
 
    ```sql
    CREATE TABLE IF NOT EXISTS #stage (...);
@@ -215,7 +229,11 @@ DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
    DROP THEME IF EXISTS corporate;
    ```
 
-   Remove post-name forms such as `DROP CONNECTION name IF EXISTS`.
+   Remove post-name forms such as `DROP CONNECTION name IF EXISTS`. The post-name spelling was
+   accepted for six kinds (`CONNECTION`, `PROCEDURE`, `FUNCTION`, `VIEW`, `INDEX`, `JOB`) and is now
+   rejected with a diagnostic naming the exact replacement. The rejection is applied to all sixteen
+   `DROP` kinds so the diagnostic is uniform rather than an accident of which kinds happened to
+   accept it. `CREATE TABLE IF NOT EXISTS` was already canonical — verified, not assumed.
 3. Finish or remove advertised Report-SQL lifecycle forms. `ALTER STYLE`, `ALTER NAVIGATION`, and
    `ALTER DATASET` must not parse and then fail as “not yet implemented.” Add the missing
    `ALTER BUTTON`, `DROP BUTTON`, and any deliberately supported Theme lifecycle. Each `ALTER`
@@ -415,6 +433,18 @@ do not describe both forms as equally canonical.
 4. Parse every copy-pasteable documentation and sample block in its correct execution context.
    Specifically reconcile `eng.tables`, `eng.tags`, Theme deletion, Portal share/embed expiry,
    Report-SQL lifecycle claims, managed connections, and refresh-job examples.
+
+   **Root cause found (2026-07-27) — the doc lane cannot currently catch these.**
+   `DocumentationSyntaxTests.ValidateDocumentationSnippets` validates snippets against the
+   *linter's* `DefaultGrammar` state tree with `requireComplete: false`, not against the production
+   parser. `DefaultGrammar`'s `DROP` rule is a single wildcard transition that consumes any token
+   up to the semicolon, so **no `DROP` snippet can ever fail that test**. This is how
+   `docs/reference/visuals-reporting/report/theme.md` shipped `DROP THEME corporate IF EXISTS;` —
+   a form the parser has never accepted for `THEME` — inside the embedded runtime `HELP`.
+   Two independent defects:
+   - the doc test asserts against a second, more permissive grammar than the one that runs;
+   - `Parser.Parse()` records a `SyntaxException` as a diagnostic and recovers, so any doc check
+     built on "did it throw" is vacuous. It must assert `script.Diagnostics` is empty.
 5. Update `docs/syntax-index.md`, statement references, connector references, administration
    guides, architecture contracts, help resources, snippets, migration guide, samples,
    configuration export, LSP grammar, and release notes as one atomic language change.

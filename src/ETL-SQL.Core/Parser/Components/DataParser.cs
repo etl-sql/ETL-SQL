@@ -395,6 +395,30 @@ public class DataParser : ParserComponent
         return new AlterJobStatement(jobName, schedule, script) { Line = startToken.Line, Column = startToken.Column };
     }
 
+    /// <summary>
+    /// Rejects the retired post-name existence modifier (<c>DROP VIEW v IF EXISTS</c>) and points at
+    /// the canonical spelling. Existence modifiers occupy one position — before the object name — for
+    /// every object kind.
+    /// </summary>
+    /// <remarks>
+    /// Reporting here rather than letting the tokens fall through matters: <c>ParseDrop</c> would
+    /// return a complete statement and the trailing <c>IF EXISTS</c> would fail as the *next*
+    /// statement, pointing at the wrong line with an unrelated message.
+    /// <para>
+    /// The <c>EXISTS</c> lookahead is required, not defensive. The statement terminator is optional,
+    /// so a bare <c>DROP VIEW v</c> may legally be followed by an <c>IF</c> statement; only
+    /// <c>IF EXISTS</c> is unambiguously the retired form.
+    /// </para>
+    /// </remarks>
+    private void RejectTrailingIfExists(string objectKind, string name)
+    {
+        if (_parser.Current.Type != TokenType.IF || _parser.Peek.Type != TokenType.EXISTS) return;
+
+        throw new SyntaxException(
+            $"IF EXISTS must come before the object name. Use 'DROP {objectKind} IF EXISTS {name}'.",
+            _parser.Current.Line, _parser.Current.Column);
+    }
+
     public Statement ParseDrop(Token startToken)
     {
         bool ifExists = false;
@@ -402,6 +426,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var target = ParseTableReference(false);
+            RejectTrailingIfExists("TABLE", target.TableName);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropTableStatement(target, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -409,7 +434,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected connection name").Value;
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("CONNECTION", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropConnectionStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -417,7 +442,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected procedure name").Value;
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("PROCEDURE", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropProcedureStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -425,7 +450,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected function name").Value;
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("FUNCTION", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropFunctionStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -433,7 +458,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected view name").Value;
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("VIEW", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropViewStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -450,7 +475,7 @@ public class DataParser : ParserComponent
                 idxName = indexPart;
             }
             else if (Match(TokenType.ON)) target = ParseTableReference();
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("INDEX", idxName);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropIndexStatement(idxName, target, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -459,6 +484,7 @@ public class DataParser : ParserComponent
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             Consume(TokenType.BANG, "Expected '!' before set name in DROP SETS");
             var name = ConsumeIdentifier("Expected set name after '!'").Value;
+            RejectTrailingIfExists("SETS", "!" + name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -466,6 +492,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected visual name").Value;
+            RejectTrailingIfExists("VISUAL", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Visual, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -473,6 +500,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected page name").Value;
+            RejectTrailingIfExists("PAGE", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Page, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -480,6 +508,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected container name").Value;
+            RejectTrailingIfExists("CONTAINER", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Container, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -487,6 +516,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected style name").Value;
+            RejectTrailingIfExists("STYLE", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Style, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -494,6 +524,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected navigation name").Value;
+            RejectTrailingIfExists("NAVIGATION", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Navigation, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -503,6 +534,7 @@ public class DataParser : ParserComponent
                 return _parent.PortalParser.ParseDropDataset(startToken);
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected dataset name").Value;
+            RejectTrailingIfExists("DATASET", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -510,6 +542,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected template name").Value;
+            RejectTrailingIfExists("TEMPLATE", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Template, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -517,6 +550,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected theme name").Value;
+            RejectTrailingIfExists("THEME", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Theme, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
         }
@@ -524,7 +558,7 @@ public class DataParser : ParserComponent
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected job name to drop").Value;
-            if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            RejectTrailingIfExists("JOB", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropJobStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
