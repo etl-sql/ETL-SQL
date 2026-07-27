@@ -6,24 +6,28 @@ release notes, or the relevant implementation/design document.
 
 ---
 
-## v0.17.0 Release
+## v0.17.0 Release — SHIPPED 2026-07-26
 
-Feature implementation for this sprint has moved to `CHANGELOG.md` and
-`docs/releases/v0.17.0.md`. Only release verification remains here.
+Released and tagged (`v0.17.0` -> `8fee49a5`). Release notes in
+`docs/releases/v0.17.0.md`; evidence in `artifacts/release-evidence/0.17.0/`.
 
-### Release Verification
+### Release Verification — complete
 
-- [ ] Run the full pre-release lane:
-      `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
-- [ ] Run enterprise hardening certification on Windows and Linux:
-      `.\scripts\Test-EnterpriseHardeningCertification.ps1`.
-- [ ] Run the recovery drill and retain the report: `etl-sql admin restore --validate --report recovery-report.json`.
-- [ ] Run HA failure certification and retain the transcripts: `etl-sql admin ha-soak fault-run` then `etl-sql admin ha-soak validate`.
-- [ ] Collect the evidence required by [Enterprise_Release_Evidence_Checklist.md](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md)
-      — that document is the authoritative list, including the remaining engine and Portal
-      `.\scripts\test-lane.ps1` runs, `SecurityBoundaryDocTests`, and retained transcripts; the
-      entries above are the commands, not a substitute for it.
-- [ ] Confirm `CHANGELOG.md`, release notes, sample inventory, and docs reflect v0.17.0 behavior.
+- [x] Full pre-release lane — **Passed**, 33/33 phases, run `20260726-203705`.
+- [x] Enterprise hardening certification — **Passed** on Windows (local + CI) and Linux (CI matrix).
+- [x] Recovery drill — **Pass**; RPO 13s, data-loss window 13s, no missing dependencies.
+- [x] HA failure certification — fault injection **10/10 scenarios**, `FaultInjection` gate validated.
+      The `Sustained`/`All` gates were not run: they need a live PostgreSQL HA topology under load,
+      and v0.17.0 publishes no HA capacity claims.
+- [x] Evidence collected — `artifacts/release-evidence/0.17.0/README.md` indexes it and records
+      what was **not** covered.
+- [x] `CHANGELOG.md`, release notes, and docs reflect v0.17.0 behaviour.
+
+### Known gap shipped with this release
+
+- [ ] **MSI in-place upgrade was never verified.** Needs elevation, which the release session did
+      not have. Static evidence only: identical `UpgradeCode`, ascending `ProductVersion`,
+      unchanged `MajorUpgrade`. Automation queued below.
 
 ---
 
@@ -32,6 +36,91 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 First release on the monthly cadence (v0.7.0–v0.17.0 were weekly). Rationale in
 [Release_Workflows.md](docs/architecture/roadmaps/Release_Workflows.md#release-cadence).
 The date is a target, not a commitment — ship when the gate is green and the evidence is collected.
+
+### Release-process RCI — issues found cutting v0.17.0
+
+Thirteen process problems surfaced during this release. Four are already fixed (noted below); the
+rest are listed in rough value order. The theme: **the gate's failures were mostly not product
+defects**, they were the gate measuring the wrong thing, hiding things, or being impossible to run.
+
+#### Highest value — a test lane that is red for weeks
+
+- [ ] **Run the Docker integration lane in CI.** All 11 SFTP integration tests were red from the
+      moment v0.17.0's host-key breaking change landed, and nothing noticed, because that lane is
+      local-only and the only thing that runs it is a full release gate reaching phase 30. A
+      security-relevant breaking change reached release day with its own tests broken. The lane
+      needs only Linux containers, which GitHub runners provide. If a full lane per PR is too slow,
+      run it nightly on the release branch.
+
+#### Make the gate report the truth
+
+- [ ] **Continue through independent phases instead of failing fast**, reporting all failures at the
+      end (keep fail-fast only where output feeds the next phase, e.g. build -> test lanes). One
+      npm-audit failure hid six VS Code phases and the entire Docker lane, so three unrelated
+      problems surfaced one restart at a time — roughly 70 minutes each.
+- [ ] **Fix the format phase's catch-22.** It says "commit the reformatted files, then re-run with
+      `-Resume`", but committing is exactly what invalidates the resume fingerprint, so `-Resume`
+      then refuses. Either emit the correct remedy ("rerun *without* `-Resume`") or, better, record
+      the post-format fingerprint as the baseline — formatting is provably behaviour-preserving, so
+      that turns a full restart into a resume.
+- [ ] **Add a pre-commit `dotnet format` check on staged files.** Format drift has now cost a gate
+      restart two releases running. Catch it at the commit that introduces it.
+
+#### Make the gate runnable and reproducible
+
+- [ ] **Document running the gate detached.** The agent harness caps managed background commands at
+      10 minutes; the gate needs 60–90, so it is always killed inside whichever long silent phase
+      spans the ten-minute mark — with no error, which reads like a hang. Two full cycles were lost
+      before diagnosing it. `Start-Process pwsh -WindowStyle Hidden` teeing to a log works; add it
+      to the release checklist.
+- [ ] **Run the gate from a detached checkout of the exact release commit.** A concurrent session's
+      roadmap commit broke an in-flight gate run (a `CREATE CONNECTION` example using an option that
+      does not exist). It also makes the evidence honest: the checklist claims evidence comes from
+      "the exact candidate commit", which a live working tree with another session committing to it
+      cannot support.
+
+#### Stop notes and docs drifting from the code
+
+- [ ] **Enforce changelog coverage per feature.** The `[0.17.0]` section was written mid-sprint and
+      never caught up: auditing 191 commits found ~12 shipped features missing, including
+      *in-pipeline data quality* — the largest feature of the release — absent from the summary and
+      highlights entirely. Prefer a `changelog.d/<branch>.md` fragment per feature branch that the
+      gate concatenates, so notes cannot lag code.
+- [ ] **Correct `CLAUDE.md`'s claim that CI runs only on `main` pushes.** It runs on pushes and PRs
+      to `main` **and** `release/**`. Believing otherwise implies you must merge to `main` to get CI,
+      inverting the intended order and re-creating the v0.16.0 failure mode.
+
+#### Smaller items
+
+- [ ] **Warn when `gpg.ssh.allowedSignersFile` is unset while `gpg.format=ssh`.** Commits verified as
+      `N` (unsigned) purely because git could not check its own signatures; `main` requires signed
+      commits, so a reviewer gets a false negative.
+- [ ] **Consider installing the .NET SDK in WSL** so a Linux lane can run locally. Accepted for now
+      — the CI `Enterprise Certification (linux)` matrix covers it.
+- [ ] **Pause Dependabot during a release window.** Pushing `main` rebased both open PRs and
+      re-triggered four CI/CodeQL runs that competed with the release-critical jobs for Windows
+      runners.
+- [ ] **Document the `ha-soak` command ordering.** `fault-run` requires `fault-plan` first and
+      `validate` requires `evidence` first; the checklist lists only "`fault-run` then `validate`",
+      so both fail on a first attempt.
+
+#### Already fixed during v0.17.0
+
+- [x] Scale-certification warm-up and replicate sampling — see the dedicated item below.
+- [x] `DocSanityTests.EveryRegisteredFunction_HasAReferencePage` — 14 functions shipped with no
+      reference pages at all, invisible to the embedded `HELP`. Now impossible to ship silently.
+- [x] `DocSanityTests.SourceAndTooling_DoNotEmbedDeveloperSpecificPaths` — caught leftover debug
+      code writing to a hardcoded developer path from the SLT runner.
+- [x] Never use `git add -A` in this repo — a concurrent session's file was swept into a commit.
+      Stage explicit paths.
+
+#### Process observation worth keeping
+
+The **authorship-permission regression** (five sites, including unauthenticated share links
+surviving revocation) was found by two pre-existing tests during the gate. It had been reviewed by
+hand in Phase 2 and cleared. Meanwhile the one finding raised purely from reading the diff turned
+out to be wrong on both premises, and its proposed fix measured as a no-op. For permission and
+revocation logic, a red test is far stronger evidence than a careful read.
 
 ### Close CodeQL alert 323 — unescaped telemetry in the lineage tree
 
