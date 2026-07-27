@@ -29,6 +29,31 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 
 ## v0.18.0
 
+### Close CodeQL alert 323 — unescaped telemetry in the lineage tree
+
+Open High `js/xss` accepted for v0.17.0 and left **open** rather than dismissed, because it is a real
+latent gap. Full triage in
+[v0.17.0-code-review.md](docs/architecture/decisions/v0.17.0-code-review.md).
+
+`report-runtime.js` escapes every string field in the lineage-tree template but interpolates two
+values raw, because the author treated them as numbers:
+
+```js
+if (node.durationMs    != null) timeStr = `[${node.durationMs}ms]`;
+if (node.rowsProcessed != null) rowsStr = `(${node.rowsProcessed} rows)`;
+```
+
+Not exploitable today (both come from `evaluator.Telemetry`, which is numeric) and not introduced by
+v0.17.0 — the same lines exist at `v0.16.0`. It surfaced only because `sync-assets` began copying the
+runtime into `src/ETL-SQL.WorkstationEditor/wwwroot/`, a path CodeQL scans.
+
+- [ ] Escape or coerce both values in the **canonical**
+      `src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js`, then run
+      `node .\scripts\sync-assets.js` so the four host copies match.
+- [ ] Audit the rest of that template family for the same "strings escaped, numbers trusted"
+      split — the inconsistency is the actual defect, not these two lines.
+- [ ] Confirm alert 323 closes on the next `main` scan.
+
 ### Merge the deferred Dependabot action bumps
 
 Two open Dependabot PRs were deliberately left out of v0.17.0. Both are one major behind and appear
