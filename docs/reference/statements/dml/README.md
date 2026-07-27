@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [Data Quality Rules](data-quality-rules.md) | Column-value validation declared inline on SELECT columns with `@expect` / `@fail` tags, routed by a trailing `ON FAILURE` clause to THROW, WARN, or QUARANTINE. |
+| [Data Quality Rules (@expect / @fail / ON FAILURE)](data-quality-rules.md) | Column-value validation declared inline on SELECT columns as governance tags, with pluggable |
 | [DELETE](delete.md) | DELETE removes rows from a target table. Without WHERE, all rows are removed; prefer TRUNCATE in that case, as it is faster. |
 | [insert](insert.md) | INSERT adds new rows to a target table from a SELECT result or a literal VALUES list. |
 | [MERGE](merge.md) | MERGE performs an upsert. Matching rows are updated; unmatched rows are inserted. Optionally, rows present in the target but absent from the source... |

@@ -6,7 +6,7 @@
 | :--- | :--- |
 | [ABS](abs.md) | Returns the absolute (non-negative) value of a number. |
 | [ACOS](acos.md) | Returns the arccosine (inverse cosine) of a number, in radians. |
-| [AGE_BUCKET](age_bucket.md) | Groups a number of days into a standard ageing band (`0-30`, `31-60`, `61-90`, `91-120`, `120+`). Negative ages return `Current`. |
+| [AGE_BUCKET](age_bucket.md) | Groups a number of days into a standard ageing band, for aged receivables, open-item, and staleness reporting. |
 | [ASIN](asin.md) | Returns the arcsine (inverse sine) of a number, in radians. |
 | [ATAN](atan.md) | Returns the arctangent (inverse tangent) of a number, in radians. |
 | [ATAN2](atan2.md) | Returns the angle, in radians, between the positive x-axis and the point represented by `(x, y)`. |

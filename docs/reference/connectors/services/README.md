@@ -17,4 +17,4 @@
 | [SFTP](sftp.md) | Secure File Transfer Protocol over SSH. Supports password and key-pair authentication (mutually |
 | [SHAREPOINT](sharepoint.md) | Manages files in SharePoint Document Libraries (remote file-system operations) and reads/writes |
 | [SMTP](smtp.md) | Outbound-only email connector used with the `SEND EMAIL` statement and report subscription delivery. |
-| [WEBHOOK](webhook.md) | Write-only sink that POSTs each inserted row as a JSON payload to an HTTP(S) webhook endpoint — Slack, |
+| [WEBHOOK](webhook.md) | Write-only sink that POSTs each inserted row as a JSON payload to an HTTP(S) webhook endpoint — Slack and Teams incoming webhooks, or any generic J... |

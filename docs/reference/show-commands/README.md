@@ -6,7 +6,7 @@
 | :--- | :--- |
 | [SHOW ACTIVE SESSIONS](show-active-sessions.md) | Displays unrevoked, unexpired portal refresh sessions. |
 | [SHOW ALERTS FOR REPORT](show-alerts.md) | Displays portal report alerts configured for a named report. |
-| [SHOW CATALOG SEARCH](show-catalog-search.md) | Searches the portal catalog for reports matching a text query. |
+| [SHOW CATALOG SEARCH](show-catalog-search.md) | Searches the portal catalog for reports matching a text query using fuzzy token matching and relevance scoring. |
 | [SHOW CONNECTION CONFIG](show-connection-config.md) | Displays configuration options for a specific connection with sensitive values redacted. |
 | [SHOW CONNECTIONS](show-connections.md) | Displays all registered data sources and their current status. |
 | [SHOW EFFECTIVE PERMISSIONS](show-effective-permissions.md) | Displays resolved portal permissions for a user, report, or folder. |
@@ -24,7 +24,7 @@
 | [SHOW REPORT HISTORY](show-report-history.md) | Displays portal report refresh and execution history rows for a named report. |
 | [SHOW REPORT](show-report.md) | Displays portal report metadata for a named report. |
 | [SHOW SAVED VIEWS FOR REPORT](show-saved-views.md) | Displays saved parameter views for a named portal report. |
-| [SHOW SCHEMA](show-schema.md) | Displays column names, data types, nullability, and tags for a table or dataset. |
+| [SHOW SCHEMA](show-schema.md) | Inspects column definitions, data types, nullability constraints, and governance tags for a specified table or dataset. |
 | [SHOW SHARE LINKS FOR REPORT](show-share-links.md) | Displays active portal share links for a named report. |
 | [SHOW SUBSCRIPTIONS](show-subscriptions.md) | Displays defined report subscriptions. |
 | [SHOW TABLES](show-tables.md) | Displays tables available on a connection or in the engine session. |

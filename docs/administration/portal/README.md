@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Self-Service Access Request Workflow](access-requests.md) | The Portal provides an interactive self-service access request workflow when users encounter restricted reports or folders. Instead of displaying a... |
 | [SMTP Connections and Subscriptions](connections-and-subscriptions.md) | ## 7. SMTP Connections |
 | [Deployment and First-Run Setup](deployment.md) | ## 1. Deployment |
 | [Health Monitoring and Audit Log](monitoring-and-audit.md) | ## 10. Health Monitoring |
@@ -15,5 +16,4 @@
 | [Quick Start](quick-start.md) | ## 12. Quick Start: Required Steps |
 | [Extended Admin Scripting](scripting.md) | ## 9. Extended Admin Scripting |
 | [Security Model](security.md) | ## 11. Security Model |
-| [Self-Service Access Requests](access-requests.md) | Self-service access request workflow and audit notifications |
 | [User Management](users.md) | ## 4. User Management |

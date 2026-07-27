@@ -6,9 +6,9 @@
 | :--- | :--- |
 | [ASCII](ascii.md) | Returns the ASCII / Unicode code point of the first character of a string. |
 | [CHAR](char.md) | Returns the character corresponding to an ASCII or Unicode code point. |
-| [CHARINDEX](charindex.md) | Returns the 1-based position of the first occurrence of a substring within a string. |
 | [CHAR_LENGTH](char_length.md) | Returns the number of characters in a string. `CHAR_LENGTH` is the SQL-standard alias for `LEN`. |
-| [CLEAN_STRING](clean_string.md) | Replaces control characters with spaces, collapses whitespace runs, and trims the result. |
+| [CHARINDEX](charindex.md) | Returns the 1-based position of the first occurrence of a substring within a string. |
+| [CLEAN_STRING](clean_string.md) | Normalizes whitespace in a string: replaces control characters with spaces, collapses runs of |
 | [CONCAT](concat.md) | Concatenates two or more strings into a single string. |
 | [CONCAT_WS](concat_ws.md) | Concatenates strings with a separator, automatically skipping NULL values. |
 | [DATALENGTH](datalength.md) | Returns the number of bytes used to represent an expression. |
@@ -22,8 +22,8 @@
 | [LPAD](lpad.md) | Left-pads a string with another string until it reaches the specified target length. |
 | [LTRIM](ltrim.md) | Removes leading (left-side) whitespace from a string. |
 | [MASK_EMAIL](mask_email.md) | Masks the local part of an email address for governance and reporting output. |
-| [MASK_PHONE](mask_phone.md) | Masks a phone number, keeping only the last four digits. |
-| [MASK_SSN](mask_ssn.md) | Masks a Social Security Number, keeping only the last four digits. |
+| [MASK_PHONE](mask_phone.md) | Masks a phone number for governance and reporting output, keeping only the last four digits. |
+| [MASK_SSN](mask_ssn.md) | Masks a Social Security Number for governance and reporting output, keeping only the last four digits. |
 | [OVERLAY](overlay.md) | Replaces part of a string with another string using SQL-standard `OVERLAY` syntax. |
 | [PATINDEX](patindex.md) | Returns the 1-based starting position of the first occurrence of a wildcard pattern in a string. |
 | [POSITION](position.md) | Returns the 1-based position of the first occurrence of a substring. SQL-standard form. |

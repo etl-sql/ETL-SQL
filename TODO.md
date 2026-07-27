@@ -27,7 +27,11 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 
 ---
 
-## v0.18.0
+## v0.18.0 — target 2026-08-24
+
+First release on the monthly cadence (v0.7.0–v0.17.0 were weekly). Rationale in
+[Release_Workflows.md](docs/architecture/roadmaps/Release_Workflows.md#release-cadence).
+The date is a target, not a commitment — ship when the gate is green and the evidence is collected.
 
 ### Close CodeQL alert 323 — unescaped telemetry in the lineage tree
 

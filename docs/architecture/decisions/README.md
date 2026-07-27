@@ -10,7 +10,7 @@
 | [Portal and Orchestrator Capacity Planning](Capacity_Planning.md) | Use this guide to turn an expected user base and job schedule into a starter server plan for |
 | [Portal and Orchestrator Capacity Testing](Capacity_Testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
 | [Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design](ConcurrentPostgresFailureSoak.md) | **Status:** Implementation in progress; Slice A topology harness is implemented. |
-| [Column & Job Data-Quality Rules — Design Specification](DataQualityRules.md) | > **Status:** 📋 **PROPOSED** (design only; not yet implemented). |
+| [Column & Job Data-Quality Rules — Design Specification](DataQualityRules.md) | > **Status:** ✅ **v1 SHIPPED** on `release/v0.17.0` (2026-07-25). All three slices are implemented: |
 | [Departmental Isolation Topology](Departmental_Isolation.md) | This document defines how to run **multiple isolated ETL-SQL environments** — for example |
 | [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md) | This guide defines supported RPO/RTO targets, recovery-set contents, restore-drill expectations, and |
 | [Enterprise Release Evidence Checklist](Enterprise_Release_Evidence_Checklist.md) | Status: Prepared checklist, not release evidence. |
@@ -29,4 +29,6 @@
 | [v0.13.0 Performance Results](v0.13.0-performance-results.md) | Generated 2026-06-27 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX. |
 | [Flaky Tests — noted during v0.15.0 release, fix in v0.16.0](v0.15.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.15.0 release. Policy: **don't fight a flaky test |
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |
+| [v0.17.0 Code Review & Security Pass](v0.17.0-code-review.md) | **Reviewed:** 2026-07-26 · **Range:** `v0.16.0..HEAD` (191 commits, 268 files, +52k/-2.9k in `src`) |
 | [Flaky Tests — noted during v0.17.0 release, fix in v0.18.0](v0.17.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.17.0 release. Policy is unchanged from |
+| [v0.17.0 Performance Results — Scale Certification](v0.17.0-performance-results.md) | **Status:** Decision record. **There is no v0.17.0 performance regression.** Both certification |

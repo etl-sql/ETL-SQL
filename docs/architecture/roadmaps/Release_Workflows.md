@@ -9,6 +9,30 @@ ETL-SQL releases are local-first while the product remains owner-controlled. The
 5. Push only after local validation passes.
 6. Tag and publish release artifacts.
 
+## Release Cadence
+
+**Through v0.17.0 the cadence was weekly.** v0.7.0 through v0.17.0 shipped on consecutive Sundays,
+which suited a phase of rapid feature delivery: small diffs, short feedback loops, and little time
+for a release to drift from `main`.
+
+**From v0.18.0 the cadence moves to monthly.** The next release targets **2026-08-24**.
+
+The change reflects what the release actually costs now. A weekly release amortises the fixed
+overhead — full local gate, enterprise certification on two platforms, recovery drill, HA fault
+injection, packaging, CodeQL — across seven days of work. As the surface has grown, that fixed cost
+stopped fitting a weekly window: the v0.17.0 gate alone runs 60–90 minutes per attempt, and each
+push to `main` or a release branch triggers roughly 40 minutes of CI across Windows and Linux
+runners.
+
+Monthly also gives the verification steps room to be real rather than skipped. Several checks are
+long or manual by nature — the MSI in-place upgrade test, operator-run HA soak against a live
+PostgreSQL topology, scale certification on a quiesced machine. Under weekly pressure those are the
+first things to get deferred, and deferral compounds: the scale-certification re-validation was
+pushed out of v0.15.0, then v0.16.0, and only resolved during v0.17.0.
+
+Cadence is a target, not a commitment. Ship when the gate is green and the evidence is collected;
+a release that is not ready waits.
+
 ## Release Artifact Verification (Checksums & SBOM)
 
 During the release publishing process (`scripts/publish-release.ps1`), the packaging runner automatically:
