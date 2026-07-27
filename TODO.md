@@ -281,20 +281,44 @@ normalized schema and unified syntax.
   connection work.
 - **`ReportId` stays a real FK.** `TargetPath` is a mutable job property changed by
   `ALTER JOB … SET TARGET`.
+- **Surrogate keys; names are renameable.** `JobId`/`ScheduleId`/`NotificationId` are the primary
+  keys and `Name` is a unique mutable attribute, following SQL Agent. This is migration-bearing well
+  beyond the `Jobs` table: `JobHistory.JobName`, `JobState (JobName, StateKey)` and
+  `HostMetricsDaily (Day, JobName)` all key on the name string today, so a rename would otherwise
+  orphan a job's entire history, state, and daily metrics. `JobHistory` also keeps a denormalised
+  `JobNameAtRunTime` so a rename cannot rewrite what the audit trail says about the past.
+- **`ALERT` is kept as a fourth entity** — it is a *condition* plus destinations, where a
+  `NOTIFICATION` is only a destination. `CREATE ALERT n FOR REPORT '…' WHEN VISUAL v < 100` then
+  `ALTER ALERT n ADD NOTIFICATION …` (no `ON <condition>` — the alert is the condition).
+  `ASSERT JOB … ON FAILURE ALERT <connection>` becomes `… ON FAILURE NOTIFY <notification>`.
+- **`CREATE DATASET … REFRESH EVERY` is removed**, not migrated. It is a 1:1 dataset↔schedule
+  coupling and the only engine-side consumer of the retired inline `AS <statement>` job body — it
+  synthesises a `PRINT`-bodied job purely to give the poller a completion to see. `TTL` stays; it is
+  cache expiry, not a schedule.
+- **Timezones reuse `RelDateResolver.FindTimeZone`** — the same function `AT TIME ZONE` and
+  `RELDATE` already call, which accepts IANA, Windows, and abbreviation aliases per
+  `docs/reference/dates-times/dates-times.md`. Validate at `CREATE`/`ALTER` time and store the
+  resolved default, so editing `appsettings.json` cannot silently move existing schedules.
+- **Generated names for sugar** derive from `NEWID()` (UUID v7 — time-ordered, so they sort by
+  creation), under a reserved prefix `CREATE JOB` refuses.
 
-**Blocked on answers to §11 of the spec** — Q1 (is `ALERT` a notification, and does `ASSERT JOB …
-ON FAILURE ALERT` fold in), Q2 (naming for subscription-generated objects), Q3 (`Jobs.Name` flat PK),
-Q4 (which process dispatches a notification, given `SECRET:` resolution lives in the Portal). Q1, Q3
-and Q4 change the schema, so settle them before step 1.
+**Open — see §12 of the spec.** Q3 is the load-bearing one: an alert's condition is `WHEN VISUAL`,
+a Report-SQL concept the Orchestrator knows nothing about, so either the Orchestrator triggers and
+the Portal evaluates, or `ALERT` is the one entity the Portal owns. Settle that before the alert
+slice. Q1 (script-target conditions, alert evaluation cadence) and Q2 (whether the Portal provisions
+connection aliases onto an orchestrator, rather than an operator doing it by hand) can follow.
 
 **Implementation Steps:**
 
 1. **Orchestrator store (system of record):**
-   - Add `Schedules`, `Notifications`, `JobSchedules`, `JobNotifications`; add `JobType`/`TargetPath`
-     to `Jobs` and retire `Interval`/`Unit`/`AtTime`.
+   - Add `Schedules`, `Notifications`, `Alerts` and the link tables; add `JobId`/`JobType`/
+     `TargetPath` to `Jobs`, demote `Name` to a unique index, and retire `Interval`/`Unit`/`AtTime`.
+   - Re-key `JobHistory`, `JobState` and `HostMetricsDaily` onto `JobId`.
    - This is **raw DDL with idempotent `ALTER TABLE … ADD COLUMN` upgrades** across
      `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect` — *not* EF migrations. Additive
-     changes are easy; the retired columns are `NOT NULL` and need a rebuild path.
+     changes are easy; this is the first change here that is not additive, because SQLite cannot
+     alter a primary key in place. Plan a per-table rebuild (`CREATE new → INSERT SELECT → DROP old
+     → RENAME`) in one transaction each.
    - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
      reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
      run; no `DateTime.Now` anywhere in the path.
@@ -308,7 +332,11 @@ and Q4 change the schema, so settle them before step 1.
      an override still compiles and silently binds to a no-op.
 3. **Parser, AST, formatter, linter:**
    - `CreateJobStatement` holds `FOR REPORT`/`FOR SCRIPT` (mutually exclusive) plus retry options;
-     new `SCHEDULE` and `NOTIFICATION` statements; `ALTER JOB … ADD|REMOVE`.
+     new `SCHEDULE`, `NOTIFICATION` and reshaped `ALERT` statements; `ALTER <kind> … ADD|REMOVE`
+     and `ALTER <kind> … RENAME TO`.
+   - Remove `REFRESH EVERY` from `CREATE DATASET`; delete
+     `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
+     `DatasetRefreshIntervalRule`.
    - `IF EXISTS` before the name; reject `CREATE OR ALTER`/`CREATE OR REPLACE` for these kinds by
      name rather than discarding the mode.
    - Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
