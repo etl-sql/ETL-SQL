@@ -47,7 +47,6 @@ public sealed class SubscriptionDeliveryLedgerTests
     {
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
-        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var owner = new PortalUser

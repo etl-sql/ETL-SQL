@@ -188,8 +188,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DROP SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
 | `CREATE ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
 | `DROP ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
-| `CREATE SMTP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
-| `DROP SMTP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
+| `CREATE CONNECTION ... AS SMTP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
+| `DROP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
 | `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
 | `DROP SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
 | `REFRESH DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
@@ -998,9 +998,9 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Not supported — no portal endpoint exists; use REBUILD SNAPSHOT |
-| `CREATE SMTP CONNECTION` | Portal | Registers a portal-managed SMTP credential (password stored encrypted) |
-| `SHOW SMTP CONNECTIONS` | Portal | Lists portal SMTP connections (never includes passwords) |
-| `DROP SMTP CONNECTION` | Portal | Deletes a portal SMTP connection by alias |
+| `CREATE CONNECTION <alias> AS SMTP(...)` | Portal | Registers a mail relay in the governed catalog; the password is a `SECRET:` reference, never a value |
+| `SHOW SMTP CONNECTIONS` | Portal | Lists the portal connection catalog (credential references are masked) |
+| `DROP CONNECTION [IF EXISTS] <alias>` | Portal | Removes a cataloged connection by alias |
 | `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
 | `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |
 | `DROP SUBSCRIPTION` | Portal | Deletes a subscription |

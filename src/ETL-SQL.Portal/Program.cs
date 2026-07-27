@@ -458,7 +458,6 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.OidcUserProvisioningService>(
 builder.Services.AddHttpClient<ETL_SQL.Portal.Services.FleetHealthAggregator>(client =>
     client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
-builder.Services.AddSingleton<ETL_SQL.Portal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.OrchestratorApiKeyProtector>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.OrchestratorDbLocator>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalBrandingSettingsService>();

@@ -483,7 +483,6 @@ public sealed class OperationalObservabilityTests : IDisposable
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
-        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
         var suffix = Guid.NewGuid().ToString("N")[..8];
         const string smtpPassword = "Sup3r-Secret-SMTP-Pw!";
 

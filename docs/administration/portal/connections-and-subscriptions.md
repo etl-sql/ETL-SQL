@@ -18,28 +18,40 @@ SMTP connections are named credentials used by subscriptions to send email. Open
 
 ### 7.2 Security Note
 
-SMTP passwords are encrypted at rest using the .NET Data Protection API with the machine key. Moving the portal to a new host requires re-entering SMTP passwords because the encrypted values cannot be decrypted on a different machine without transferring the Data Protection key ring.
+SMTP credentials are **not** stored on the connection. The connection holds a `SECRET:name`
+reference into the portal secret store, so configuring an authenticated relay is two steps: store
+the password as a secret, then reference it by name. Moving the portal to a new host means
+re-provisioning the *secret store*; the connection definitions themselves carry no credential and
+promote between environments unchanged.
 
 ### 7.3 Scripted Management
 
-SMTP connections can also be managed from an ETL-SQL script inside an `EXECUTE portal` block (Admin role required), which keeps mail configuration reproducible alongside the rest of a portal bootstrap script:
+SMTP connections can also be managed from an ETL-SQL script inside an `EXECUTE portal` block (Admin role required), which keeps mail configuration reproducible alongside the rest of a portal bootstrap script. SMTP is an ordinary connector and uses the ordinary connector grammar:
 
 ```sql
+-- 1. Store the credential once (Admin -> Secrets, or PUT /api/admin/secrets/{name})
+
+-- 2. Reference it from the connection
 EXECUTE portal BEGIN
-    CREATE SMTP CONNECTION 'corporate' WITH (
+    CREATE CONNECTION corporate AS SMTP(
         HOST         = 'smtp.corp.example',
         PORT         = 587,
         USERNAME     = 'mailer',
-        PASSWORD     = ENC:...,            -- expression position: ENC:/variables accepted
-        FROM_ADDRESS = 'reports@corp.example',
+        PASSWORD     = 'SECRET:corporate_smtp_password',
+        DEFAULT_FROM = 'reports@corp.example',
         USE_SSL      = TRUE
     );
-    SHOW SMTP CONNECTIONS;                 -- never returns passwords
-    DROP SMTP CONNECTION 'corporate';
+    SHOW SMTP CONNECTIONS;                 -- credential references are masked
+    DROP CONNECTION IF EXISTS corporate;
 END;
 ```
 
-The password travels once over the authenticated HTTPS channel and is stored encrypted exactly as if entered in **Admin → SMTP**; no SMTP secret is persisted in the script's execution history or portal audit log.
+No SMTP secret is persisted in the script, the script's execution history, or the portal audit log — the script contains only the reference, and the engine resolves it when the connection is opened.
+
+> **Changed:** `CREATE SMTP CONNECTION 'alias' WITH (...)` is removed, along with the Portal-only
+> SMTP store. Note `DEFAULT_FROM` replaces `FROM_ADDRESS`, the alias is an identifier rather than a
+> string literal, and the password must be a `SECRET:` reference — a literal value is refused.
+> Existing passwords are not migrated; store each in the secret store and re-reference it.
 
 ---
 

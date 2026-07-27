@@ -24,7 +24,6 @@ public class SubscriptionDeliverySecurityTests
 
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
-        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
         var suffix = Guid.NewGuid().ToString("N");
         const string smtpPassword = "delivery-password-marker";
 
@@ -146,7 +145,6 @@ public class SubscriptionDeliverySecurityTests
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
-        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
         var suffix = Guid.NewGuid().ToString("N");
 
         var owner = new PortalUser { UserName = $"owner-{suffix}", Email = $"owner-{suffix}@test.local", IsActive = true };

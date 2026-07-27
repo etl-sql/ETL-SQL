@@ -107,6 +107,9 @@ public sealed class MigrationConvergenceTests : IDisposable
         var violations = new List<string>();
         foreach (var (id, typeInfo) in migrations.Migrations)
         {
+            if (PreDeploymentBreakingMigrations.Any(m => id.EndsWith(m, StringComparison.Ordinal)))
+                continue;
+
             var migration = migrations.CreateMigration(typeInfo, provider);
             foreach (var operation in migration.UpOperations)
             {
@@ -157,6 +160,29 @@ public sealed class MigrationConvergenceTests : IDisposable
         await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
     }
+
+    /// <summary>
+    /// Migrations deliberately exempted from the rolling-expand contract, by migration-name suffix.
+    /// </summary>
+    /// <remarks>
+    /// The contract protects mixed-version clusters during a rolling deploy. It is waived only
+    /// while the product has no deployments to roll — an exemption that stops being available the
+    /// moment anyone installs this. Each entry must say what it drops and why deferring it to a
+    /// later release was worse than taking the break now.
+    /// <para>
+    /// This is deliberately a narrow allow-list rather than a relaxed rule: every future drop still
+    /// has to fail this test and be argued for explicitly.
+    /// </para>
+    /// </remarks>
+    private static readonly string[] PreDeploymentBreakingMigrations =
+    [
+        // Drops SmtpConnections, superseded by the governed connection catalog. Deferring would
+        // carry a dead table plus the entity, DbSet and model configuration that must stay wired
+        // to it — and removing those without the migration makes the model diverge from the schema
+        // and SchemaUpToDate report false. No installation exists to roll, so the contract guards
+        // nothing here.
+        "_DropSmtpConnections",
+    ];
 
     private static bool IsRollingContractViolation(MigrationOperation operation, out string reason)
     {

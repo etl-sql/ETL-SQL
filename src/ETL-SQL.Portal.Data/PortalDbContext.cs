@@ -19,7 +19,6 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PortalExecutionJob> PortalExecutionJobs => Set<PortalExecutionJob>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SubscriptionDelivery> SubscriptionDeliveries => Set<SubscriptionDelivery>();
-    public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditOutboxMessage> AuditOutboxMessages => Set<AuditOutboxMessage>();
     public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
@@ -191,12 +190,6 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Recipient).HasConversion(piiNullableConverter);
         });
 
-        builder.Entity<SmtpConnection>(e =>
-        {
-            e.Property(x => x.Version).IsConcurrencyToken();
-            e.HasIndex(x => x.Alias).IsUnique();
-        });
-
         builder.Entity<PortalSecret>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
@@ -326,3 +319,4 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         });
     }
 }
+

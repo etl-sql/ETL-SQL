@@ -319,18 +319,9 @@ public class Subscription : IVersionedEntity
 
 // ── SMTP Connections ──────────────────────────────────────────────────────────
 
-public class SmtpConnection : IVersionedEntity
-{
-    public int Id { get; set; }
-    public string Alias { get; set; } = "";
-    public string Host { get; set; } = "";
-    public int Port { get; set; } = 587;
-    public string? Username { get; set; }
-    public string? EncryptedPassword { get; set; }
-    public string? FromAddress { get; set; }
-    public bool UseSsl { get; set; } = true;
-    public long Version { get; set; } = 1;
-}
+// SmtpConnection was removed: SMTP is a normal connector stored in PortalSharedConnection, which
+// holds SECRET: references rather than an encrypted credential value and carries ACLs, audit and a
+// usage ledger. The table is dropped by the DropSmtpConnections migration.
 
 // ── Subscription delivery ledger ────────────────────────────────────────────────
 

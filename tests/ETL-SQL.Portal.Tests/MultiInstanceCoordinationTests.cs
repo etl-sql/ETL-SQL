@@ -33,7 +33,7 @@ public sealed class MultiInstanceCoordinationTests
     }
 
     private sealed record Fixture(
-        PortalConfig Config, SmtpPasswordProtector Protector, PortalPiiProtector PiiProtector,
+        PortalConfig Config, PortalPiiProtector PiiProtector,
         string DbPath, int SubscriptionId);
 
     /// <summary>Seeds a deliverable subscription, then yields the pieces needed to build independent
@@ -43,7 +43,6 @@ public sealed class MultiInstanceCoordinationTests
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
-        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
         var piiProtector = scope.ServiceProvider.GetRequiredService<PortalPiiProtector>();
 
         var owner = new PortalUser
@@ -84,7 +83,7 @@ public sealed class MultiInstanceCoordinationTests
         db.Subscriptions.Add(subscription);
         await db.SaveChangesAsync();
 
-        return new Fixture(config, protector, piiProtector, config.DatabasePath, subscription.Id);
+        return new Fixture(config, piiProtector, config.DatabasePath, subscription.Id);
     }
 
     /// <summary>Builds an independent delivery executor over a fresh connection (its own DbContext,

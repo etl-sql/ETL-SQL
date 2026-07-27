@@ -49,11 +49,11 @@ EXECUTE portal BEGIN
     -- Refresh jobs (routed to Orchestrator)
     CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;
 
-    -- SMTP connections (portal-managed mail credentials)
-    CREATE SMTP CONNECTION 'corporate' WITH (
+    -- Governed connections (SMTP is an ordinary connector; credentials are SECRET: references)
+    CREATE CONNECTION corporate AS SMTP(
         HOST = 'smtp.corp.example', USERNAME = 'mailer',
-        PASSWORD = ENC:U2FsdGVkX1+..., FROM_ADDRESS = 'reports@corp.example');
-    SHOW SMTP CONNECTIONS;   -- never returns passwords
+        PASSWORD = 'SECRET:corporate_smtp_password', DEFAULT_FROM = 'reports@corp.example');
+    SHOW SMTP CONNECTIONS;   -- credential references are masked
 
     -- Discovery
     SHOW USERS;
