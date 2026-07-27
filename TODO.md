@@ -262,6 +262,21 @@ live users, remove contradictory forms now rather than carrying permanent compat
 
 #### P0 — Correct named report refresh jobs
 
+**Design decisions taken 2026-07-27.**
+
+- **Names are unique per orchestrator connection.** `Nightly` may exist once on `orch_a` and once
+  on `orch_b`, never twice on the same orchestrator. The orchestrator owns the schedule, so that
+  is where the identity naturally lives; it also keeps names short without making `DROP` ambiguous.
+- **The name is a bare identifier**, matching `CREATE <object> <name>` elsewhere:
+  `CREATE REFRESH JOB FinanceNightly FOR REPORT 'Finance Dashboard' SCHEDULE '0 2 * * *' AT orch;`
+  Report paths stay string literals — they are paths, not identifiers.
+- **Lifecycle in this pass: `CREATE`, `DROP [IF EXISTS]`, and `ALTER ... SET SCHEDULE`.** A
+  duplicate `CREATE` **fails** rather than overwriting — that silent overwrite is the defect.
+  `CREATE OR ALTER` is not in this pass.
+- **Run history carries the job name.** Job history, last/next run and the Orchestrator trigger
+  record must identify which of a report's schedules fired; otherwise two schedules on one report
+  remain indistinguishable in operations. This reaches the Orchestrator store, not just the Portal.
+
 **Audit 2026-07-27 — the defect is confirmed and located. Not started; nothing is committed.**
 
 The overwrite is real and mechanical: `SubscriptionsController` builds the key as
