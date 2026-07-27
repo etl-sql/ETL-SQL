@@ -29,6 +29,39 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 
 ## v0.18.0
 
+### Automate the MSI in-place upgrade check
+
+Today this is a manual, elevated step in the release checklist, and it is the kind of step that
+quietly stops happening. It is the only thing that catches a WiX major-upgrade regression — a
+failure mode that is otherwise **silent**, producing a side-by-side second install rather than an
+error. The gate's N→N+1 drill covers the data/engine layer, not the installer.
+
+It is manual because a `perMachine` MSI needs elevation and nobody wants to mutate their own
+workstation. **Both reasons vanish on a GitHub-hosted `windows-latest` runner**: it executes as an
+administrator, so `msiexec /qn` needs no UAC, and it is ephemeral, so installs leave nothing behind.
+
+- [ ] Add `scripts/Test-MsiUpgrade.ps1 -PreviousMsi <path> -CurrentMsi <path>` asserting the full
+      sequence, not just the registry:
+      1. install previous → exactly **1** uninstall entry at the previous version
+      2. write a sentinel file into `InstallLocation`
+      3. install current **over** it
+      4. **exactly 1 entry, at the new version** — two entries is the side-by-side regression
+      5. sentinel survived → config/data preserved
+      6. installed `ETL-SQL.exe --version` reports the new version
+      7. uninstall → 0 entries
+- [ ] Steps 5–6 matter: a registry-only assertion passes while files are clobbered or
+      `RemoveExistingProducts` is mis-scheduled, which is precisely what "preserves config/data" in
+      the checklist is asking about.
+- [ ] Add a CI job gated to `release/**` pushes and tags (not every PR — the previous release MSI is
+      ~900 MB). Resolve the previous tag with `gh release list`, download with
+      `gh release download <tag> --pattern '*-x64-Setup.msi'`, and cache it keyed on the tag.
+- [ ] Once green, make it a required status check and delete the manual step from
+      [release-checklist.md](docs/releases/release-checklist.md) Phase 4.
+
+Static checks are a useful cheap complement but are **not** a substitute: identical `UpgradeCode`,
+ascending `ProductVersion`, and an unchanged `MajorUpgrade` element rule out the most common cause
+and nothing else. Consider adding them as a fast unit test over the built MSI regardless.
+
 ### Scale certification — make the harness incapable of false failures
 
 **Resolves a question open since v0.15.0.** There was no engine regression in v0.15.0, v0.16.0, or
