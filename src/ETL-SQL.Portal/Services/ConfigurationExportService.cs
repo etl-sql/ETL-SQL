@@ -183,9 +183,9 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 secrets.Add(placeholder);
                 options.Add($"PASSWORD = '${{{placeholder}}}'");
             }
-            if (!string.IsNullOrWhiteSpace(s.FromAddress)) options.Add($"FROM_ADDRESS = {Q(s.FromAddress)}");
+            if (!string.IsNullOrWhiteSpace(s.FromAddress)) options.Add($"DEFAULT_FROM = {Q(s.FromAddress)}");
             options.Add($"USE_SSL = {(s.UseSsl ? "TRUE" : "FALSE")}");
-            body.AppendLine($"    CREATE SMTP CONNECTION {Q(s.Alias)} WITH ({string.Join(", ", options)});");
+            body.AppendLine($"    CREATE CONNECTION {s.Alias} AS SMTP({string.Join(", ", options)});");
         }
         emitted.Add($"{smtpCount} SMTP connection(s)");
 

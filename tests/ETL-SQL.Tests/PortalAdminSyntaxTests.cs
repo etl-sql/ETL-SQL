@@ -114,46 +114,48 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void CreateSmtpConnection_ParsesAllOptions()
+        public void SmtpConnection_UsesTheOrdinaryConnectorGrammar()
         {
+            // SMTP is a normal connector; the Portal is addressed by the enclosing
+            // EXECUTE <portal> BEGIN ... END block, not by a second statement family.
             var script = TestHelpers.Parse(
-                "CREATE SMTP CONNECTION 'corporate' WITH (HOST = 'smtp.corp.local', PORT = 2525, " +
-                "USERNAME = 'mailer', PASSWORD = 'secret', FROM_ADDRESS = 'reports@corp.local', USE_SSL = FALSE);");
-            var stmt = Assert.IsType<CreatePortalSmtpConnectionStatement>(Assert.Single(script.Statements));
+                "CREATE CONNECTION corporate AS SMTP(HOST = 'smtp.corp.local', PORT = 2525, " +
+                "USERNAME = 'mailer', PASSWORD = 'SECRET:smtp_password', " +
+                "DEFAULT_FROM = 'reports@corp.local', USE_SSL = FALSE);");
+            var stmt = Assert.IsType<CreateConnectionStatement>(Assert.Single(script.Statements));
 
-            Assert.Equal("corporate", stmt.Alias);
-            Assert.Equal("smtp.corp.local", stmt.Host);
-            Assert.Equal(2525, stmt.Port);
-            Assert.Equal("mailer", stmt.Username);
-            Assert.NotNull(stmt.Password);
-            Assert.Equal("reports@corp.local", stmt.FromAddress);
-            Assert.False(stmt.UseSsl);
+            Assert.Equal("corporate", stmt.ConnectionName);
+            Assert.Equal("SMTP", stmt.ConnectionType, ignoreCase: true);
+            Assert.NotNull(stmt.Options);
+            Assert.True(stmt.Options!.ContainsKey("DEFAULT_FROM"));
+            Assert.True(stmt.Options.ContainsKey("PASSWORD"));
+        }
+
+        /// <summary>
+        /// The retired form must name its replacement. It differed in three ways at once — string
+        /// alias vs identifier, WITH vs AS, FROM_ADDRESS vs DEFAULT_FROM — so "unexpected token"
+        /// would leave the reader guessing at all three.
+        /// </summary>
+        [Theory]
+        [InlineData(
+            "CREATE SMTP CONNECTION 'corporate' WITH (HOST = 'smtp.corp.local');",
+            "CREATE CONNECTION <alias> AS SMTP")]
+        [InlineData(
+            "DROP SMTP CONNECTION 'corporate';",
+            "DROP CONNECTION [IF EXISTS] <alias>")]
+        public void RetiredPortalSmtpLanguage_IsRejectedWithItsReplacement(string sql, string expectedFix)
+        {
+            var script = TestHelpers.Parse(sql);
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains(expectedFix, diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
 
         [Fact]
-        public void CreateSmtpConnection_AppliesDefaultsAndRequiresHost()
+        public void ShowSmtpConnections_StillParses()
         {
-            var script = TestHelpers.Parse("CREATE SMTP CONNECTION 'minimal' WITH (HOST = 'smtp.local');");
-            var stmt = Assert.IsType<CreatePortalSmtpConnectionStatement>(Assert.Single(script.Statements));
-
-            Assert.Equal(587, stmt.Port);
-            Assert.True(stmt.UseSsl);
-            Assert.Null(stmt.Username);
-            Assert.Null(stmt.Password);
-
-            var missingHost = TestHelpers.Parse("CREATE SMTP CONNECTION 'broken' WITH (PORT = 25);");
-            Assert.Contains(missingHost.Diagnostics, d =>
-                d.Severity == DiagnosticSeverity.Error &&
-                d.Message.Contains("HOST", StringComparison.OrdinalIgnoreCase));
-        }
-
-        [Fact]
-        public void DropAndShowSmtpConnections_Parse()
-        {
-            var drop = TestHelpers.Parse("DROP SMTP CONNECTION 'corporate';");
-            var dropStmt = Assert.IsType<DropPortalSmtpConnectionStatement>(Assert.Single(drop.Statements));
-            Assert.Equal("corporate", dropStmt.Alias);
-
             var show = TestHelpers.Parse("SHOW SMTP CONNECTIONS;");
             var showStmt = Assert.IsType<ShowPortalSmtpConnectionsStatement>(Assert.Single(show.Statements));
             Assert.Null(showStmt.IntoTable);

@@ -159,76 +159,29 @@ public class PortalParser : ParserComponent
         { Line = start.Line, Column = start.Column };
     }
 
-    // ── SMTP connections ──────────────────────────────────────────────────
+    // ── SMTP connections (retired) ────────────────────────────────────────
 
-    // CREATE SMTP CONNECTION 'alias' WITH (HOST=..., [PORT=...,] [USERNAME=...,]
-    //     [PASSWORD=...,] [FROM_ADDRESS=...,] [USE_SSL=TRUE|FALSE])
-    public Statement ParseCreateSmtpConnection(Token start)
-    {
-        Consume(TokenType.CONNECTION, "Expected CONNECTION after CREATE SMTP");
-        string alias = ConsumeStringLiteral("Expected SMTP alias string literal");
-        Consume(TokenType.WITH, "Expected WITH after SMTP alias");
-        Consume(TokenType.LPAREN, "Expected '('");
+    /// <summary>
+    /// Rejects the retired Portal-only SMTP language. SMTP is an ordinary connector, so it uses the
+    /// ordinary connector grammar; the Portal is addressed by the enclosing
+    /// <c>EXECUTE &lt;portal&gt; BEGIN ... END</c> block, not by a second statement family.
+    /// </summary>
+    /// <remarks>
+    /// The alias was a string literal here and is an identifier in the canonical form, and the
+    /// option was spelled <c>FROM_ADDRESS</c> where the SMTP connector declares
+    /// <c>DEFAULT_FROM</c> — so the replacement is quoted in full rather than described.
+    /// </remarks>
+    public Statement ParseCreateSmtpConnection(Token start) => throw new SyntaxException(
+        "CREATE SMTP CONNECTION has been removed. SMTP is a normal connector: use "
+        + "CREATE CONNECTION <alias> AS SMTP(HOST = '...', PORT = 587, USERNAME = '...', "
+        + "PASSWORD = 'SECRET:name', DEFAULT_FROM = '...') inside EXECUTE <portal> BEGIN ... END. "
+        + "Note DEFAULT_FROM replaces FROM_ADDRESS, and the password must be a SECRET: reference.",
+        start.Line, start.Column);
 
-        string? host = null, username = null, fromAddress = null;
-        int port = 587;
-        bool useSsl = true;
-        Expression? password = null;
-
-        ParseOptionList(() =>
-        {
-            string key = Advance().Value;
-            Consume(TokenType.EQUALS, "Expected '='");
-            switch (key.ToUpperInvariant())
-            {
-                case "HOST":
-                    host = ConsumeStringLiteral("Expected host string literal");
-                    break;
-                case "PORT":
-                    var portToken = Advance();
-                    if (!int.TryParse(portToken.Value, out port))
-                        throw new SyntaxException("Expected numeric PORT value", portToken.Line, portToken.Column);
-                    break;
-                case "USERNAME":
-                    username = ConsumeStringLiteral("Expected username string literal");
-                    break;
-                case "PASSWORD":
-                    password = ParseExpression();
-                    break;
-                case "FROM_ADDRESS":
-                    fromAddress = ConsumeStringLiteral("Expected from-address string literal");
-                    break;
-                case "USE_SSL":
-                    var sslToken = Advance();
-                    useSsl = sslToken.Value.ToUpperInvariant() switch
-                    {
-                        "TRUE" or "ON" or "1" => true,
-                        "FALSE" or "OFF" or "0" => false,
-                        _ => throw new SyntaxException(
-                            "Expected TRUE or FALSE for USE_SSL", sslToken.Line, sslToken.Column)
-                    };
-                    break;
-                default:
-                    ParseExpression(); // skip unknown
-                    break;
-            }
-        });
-
-        if (host is null)
-            throw new SyntaxException("CREATE SMTP CONNECTION requires HOST", start.Line, start.Column);
-
-        return new CreatePortalSmtpConnectionStatement(alias, host, port, username, password, fromAddress, useSsl)
-        { Line = start.Line, Column = start.Column };
-    }
-
-    // DROP SMTP CONNECTION 'alias'
-    public Statement ParseDropSmtpConnection(Token start)
-    {
-        Consume(TokenType.CONNECTION, "Expected CONNECTION after DROP SMTP");
-        string alias = ConsumeStringLiteral("Expected SMTP alias string literal");
-        return new DropPortalSmtpConnectionStatement(alias)
-        { Line = start.Line, Column = start.Column };
-    }
+    public Statement ParseDropSmtpConnection(Token start) => throw new SyntaxException(
+        "DROP SMTP CONNECTION has been removed. Use DROP CONNECTION [IF EXISTS] <alias> "
+        + "inside EXECUTE <portal> BEGIN ... END.",
+        start.Line, start.Column);
 
     // ── Folders ───────────────────────────────────────────────────────────
 

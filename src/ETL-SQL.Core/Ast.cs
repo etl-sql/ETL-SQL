@@ -2638,20 +2638,12 @@ public sealed record DropPortalGroupStatement(string Name, bool Cascade) : State
 
 public sealed record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
 
-/// <summary>Registers a portal-managed SMTP connection (named credential used by subscription
-/// and alert delivery). Password is an expression so ENC: values and variables work; it is sent
-/// to the portal once and stored encrypted — never echoed by SHOW.</summary>
-public sealed record CreatePortalSmtpConnectionStatement(
-    string Alias,
-    string Host,
-    int Port,
-    string? Username,
-    Expression? Password,
-    string? FromAddress,
-    bool UseSsl) : Statement;
+// CreatePortalSmtpConnectionStatement and DropPortalSmtpConnectionStatement were removed: SMTP is
+// an ordinary connector, so it uses CreateConnectionStatement/DropConnectionStatement like every
+// other type. An EXECUTE <portal> BEGIN ... END block routes those to the governed catalog.
 
-public sealed record DropPortalSmtpConnectionStatement(string Alias) : Statement;
-
+/// <summary>Lists the Portal's governed connection catalog. Retiring this in favour of a
+/// <c>SELECT ... FROM eng.connections</c> form belongs with the wider SHOW retirement.</summary>
 public sealed record ShowPortalSmtpConnectionsStatement(string? IntoTable = null) : Statement;
 
 public sealed record CreatePortalFolderStatement(string Path) : Statement;

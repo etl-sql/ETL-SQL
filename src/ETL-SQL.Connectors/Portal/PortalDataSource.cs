@@ -142,8 +142,10 @@ namespace ETL_SQL.Connectors.Portal
                 case DropPortalGroupStatement s: await DropGroupAsync(s, context); break;
                 case AddUserToPortalGroupStatement s: await AddUserToGroupAsync(s, context); break;
 
-                case CreatePortalSmtpConnectionStatement s: await CreateSmtpConnectionAsync(s, context); break;
-                case DropPortalSmtpConnectionStatement s: await DropSmtpConnectionAsync(s, context); break;
+                // Governed connection catalog — every connector type, not just SMTP.
+                case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
+                case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
+
                 case ShowPortalSmtpConnectionsStatement s: await ShowSmtpConnectionsAsync(s, context); break;
 
                 case CreatePortalFolderStatement s: await CreateFolderAsync(s, context); break;
@@ -372,60 +374,72 @@ namespace ETL_SQL.Connectors.Portal
         private static string? TryGetString(JsonElement element, string property) =>
             element.TryGetProperty(property, out var v) ? v.GetString() : null;
 
-        // ── SMTP connections ──────────────────────────────────────────────────────
+        // ── Governed connection catalog ───────────────────────────────────────────
 
-        private async Task CreateSmtpConnectionAsync(CreatePortalSmtpConnectionStatement stmt, IExecutionContext context)
+        /// <summary>
+        /// Registers <c>CREATE CONNECTION &lt;name&gt; AS &lt;connector&gt;(...)</c> issued inside an
+        /// <c>EXECUTE &lt;portal&gt; BEGIN ... END</c> block as a governed entry in the Portal's
+        /// shared-connection catalog. The same statement outside such a block still opens an ordinary
+        /// session-local connection — the block is what makes it a remote catalog mutation.
+        /// </summary>
+        /// <remarks>
+        /// Option values are forwarded <b>verbatim and unresolved</b>. A <c>SECRET:name</c> must
+        /// reach the catalog as a reference: the catalog stores references and rejects raw values,
+        /// so resolving it here would both defeat that rule and copy a credential across the trust
+        /// boundary. A literal password is therefore refused by the Portal, not silently stored —
+        /// which is the intended behaviour, and why no secret resolution happens on this path.
+        /// </remarks>
+        private async Task CreateSharedConnectionAsync(CreateConnectionStatement stmt, IExecutionContext context)
         {
-            // The password expression is evaluated once and sent over the authenticated channel;
-            // the portal stores it encrypted (SmtpPasswordProtector) and never returns it.
-            var password = stmt.Password is not null
-                ? await ResolveRequiredSecretAsync(stmt.Password, context, $"SMTP connection '{stmt.Alias}'")
-                : null;
+            if (string.IsNullOrWhiteSpace(stmt.ConnectionType))
+                throw new ExecutionException(
+                    $"CREATE CONNECTION {stmt.ConnectionName} on a Portal requires an implementation type: " +
+                    $"CREATE CONNECTION {stmt.ConnectionName} AS <connector>(...).");
 
-            if (await TryLookupSmtpConnectionIdAsync(stmt.Alias) is not null)
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var option in stmt.Options ?? [])
             {
-                _logger.WriteLine($"SMTP connection '{stmt.Alias}' already exists — skipped.", ConsoleColor.DarkGray);
-                return;
+                var value = (await context.EvaluateValue(option.Value, new Row()))?.ToString();
+                if (value is not null) options[option.Key] = value;
             }
 
-            var req = new
+            var target = stmt.TargetExpression is null
+                ? null
+                : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
+
+            await CallAsync(
+                HttpMethod.Put,
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
+                new { ConnectorType = stmt.ConnectionType, Target = target, Options = options },
+                $"Shared connection '{stmt.ConnectionName}' registered ({stmt.ConnectionType}).");
+        }
+
+        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
+        {
+            var url = $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}";
+
+            if (stmt.IfExists)
             {
-                Alias = stmt.Alias,
-                Host = stmt.Host,
-                Port = stmt.Port,
-                Username = stmt.Username,
-                Password = password,
-                FromAddress = stmt.FromAddress,
-                UseSsl = stmt.UseSsl
-            };
-            await CallAsync(HttpMethod.Post, "api/admin/smtp", req,
-                $"SMTP connection '{stmt.Alias}' created.");
+                using var probe = await _http.GetAsync(url);
+                if (probe.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.WriteLine(
+                        $"Shared connection '{stmt.ConnectionName}' does not exist — skipped.",
+                        ConsoleColor.DarkGray);
+                    return;
+                }
+            }
+
+            await CallAsync(HttpMethod.Delete, url, null,
+                $"Shared connection '{stmt.ConnectionName}' deleted.");
         }
 
-        private async Task DropSmtpConnectionAsync(DropPortalSmtpConnectionStatement stmt, IExecutionContext context)
-        {
-            var smtpId = await LookupSmtpConnectionIdAsync(stmt.Alias);
-            await CallAsync(HttpMethod.Delete, $"api/admin/smtp/{smtpId}", null,
-                $"SMTP connection '{stmt.Alias}' deleted.");
-        }
+        // ── Portal connection listing ─────────────────────────────────────────────
 
+        // SHOW SMTP CONNECTIONS now lists the governed catalog: the bespoke SMTP store is gone.
+        // Retiring the statement itself belongs with the wider SHOW -> eng.* work.
         private async Task ShowSmtpConnectionsAsync(ShowPortalSmtpConnectionsStatement stmt, IExecutionContext context) =>
-            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/smtp", null), stmt.IntoTable, context);
-
-        private async Task<int> LookupSmtpConnectionIdAsync(string alias) =>
-            await TryLookupSmtpConnectionIdAsync(alias)
-            ?? throw new ExecutionException($"Portal SMTP connection '{alias}' not found.");
-
-        private async Task<int?> TryLookupSmtpConnectionIdAsync(string alias)
-        {
-            var resp = await _http.GetAsync("api/admin/smtp");
-            resp.EnsureSuccessStatusCode();
-            var connections = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
-            var match = connections.FirstOrDefault(c =>
-                c.TryGetProperty("alias", out var v) &&
-                v.GetString()?.Equals(alias, StringComparison.OrdinalIgnoreCase) == true);
-            return match.ValueKind == JsonValueKind.Undefined ? null : match.GetProperty("id").GetInt32();
-        }
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/connections", null), stmt.IntoTable, context);
 
         // ── Folders ───────────────────────────────────────────────────────────────
 
@@ -1072,12 +1086,28 @@ namespace ETL_SQL.Connectors.Portal
                             $"Cannot grant on folder '{s.FolderPath}': group '{s.GroupName}' does not exist.");
                     return $"WHAT IF: would grant {s.Permission} on folder '{s.FolderPath}' to group '{s.GroupName}'.";
 
-                case CreatePortalSmtpConnectionStatement s:
-                    if (s.Password is not null)
-                        await ResolveRequiredSecretAsync(s.Password, context, $"SMTP connection '{s.Alias}'");
-                    return await TryLookupSmtpConnectionIdAsync(s.Alias) is not null
-                        ? $"WHAT IF: SMTP connection '{s.Alias}' already exists — would skip."
-                        : $"WHAT IF: would create SMTP connection '{s.Alias}'.";
+                case CreateConnectionStatement s:
+                    {
+                        // No secret resolution here either: the catalog stores SECRET: references,
+                        // so a dry run must not reach into the secret store to prove a value exists.
+                        using var probe = await _http.GetAsync(
+                            $"api/admin/connections/{Uri.EscapeDataString(s.ConnectionName)}");
+                        return probe.StatusCode == System.Net.HttpStatusCode.NotFound
+                            ? $"WHAT IF: would register shared connection '{s.ConnectionName}' ({s.ConnectionType})."
+                            : $"WHAT IF: shared connection '{s.ConnectionName}' exists — would update it ({s.ConnectionType}).";
+                    }
+
+                case DropConnectionStatement s:
+                    {
+                        using var probe = await _http.GetAsync(
+                            $"api/admin/connections/{Uri.EscapeDataString(s.ConnectionName)}");
+                        if (probe.StatusCode != System.Net.HttpStatusCode.NotFound)
+                            return $"WHAT IF: would delete shared connection '{s.ConnectionName}'.";
+                        return s.IfExists
+                            ? $"WHAT IF: shared connection '{s.ConnectionName}' does not exist — would skip."
+                            : throw new ExecutionException(
+                                $"Cannot drop shared connection '{s.ConnectionName}': it does not exist.");
+                    }
 
                 case PublishPortalReportStatement s:
                     {

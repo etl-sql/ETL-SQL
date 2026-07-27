@@ -91,6 +91,43 @@ live users, remove contradictory forms now rather than carrying permanent compat
    validation, secret handling, testing, redaction, audit, and connection-catalog behavior instead
    of maintaining Portal-only SMTP options, DTOs, storage, export syntax, and handlers.
 
+   **Progress 2026-07-27 — language done, storage NOT yet migrated.**
+
+   Done:
+   - `CREATE SMTP CONNECTION` / `DROP SMTP CONNECTION` retired; both reject with a diagnostic
+     naming the canonical replacement (they differed in three ways at once — string alias vs
+     identifier, `WITH` vs `AS`, `FROM_ADDRESS` vs `DEFAULT_FROM` — so a generic parse error
+     would have left all three to guess at).
+   - `CreatePortalSmtpConnectionStatement` / `DropPortalSmtpConnectionStatement` deleted.
+   - `PortalDataSource` routes `CreateConnectionStatement` / `DropConnectionStatement` inside an
+     `EXECUTE <portal>` block to `PUT|DELETE api/admin/connections/{alias}`, for **any** connector
+     type. Option values are forwarded **unresolved** so a `SECRET:name` arrives as a reference;
+     a literal credential is refused by the catalog rather than stored. `WHAT_IF` covers both.
+   - `ConfigurationExportService` emits the canonical form with `DEFAULT_FROM`.
+   - No Portal-side API work was needed: `PortalConnectionCatalogService` and
+     `api/admin/connections` were already connector-agnostic and already enforce `SECRET:`-only
+     credentials. The bespoke SMTP stack was redundant, not merely inconsistent.
+
+   **Still to do — the system is inconsistent until this lands.** `CREATE CONNECTION ... AS SMTP`
+   now writes to `PortalSharedConnection`, but every consumer still reads the old
+   `SmtpConnections` table, so a connection created with the new syntax is invisible to
+   subscriptions and alerts:
+   - [ ] `SmtpAdminNotificationSender` — resolves `db.SmtpConnections` and unprotects
+         `EncryptedPassword` via `SmtpPasswordProtector`. It must resolve the catalog entry and
+         obtain the password from the secret store through the `SECRET:` reference instead. This
+         is the substantive change, not a lookup swap: the credential path changes.
+   - [ ] `SubscriptionsController` — `api/admin/smtp` CRUD, `api/smtp-aliases`, and the
+         subscription create/update alias validation.
+   - [ ] `SubscriptionDeliveryService`, `OperationalMetricsService`,
+         `PortalPrometheusMetricsExporter`, `OperationalMetricsDigest` (`SmtpConnections` count).
+   - [ ] `ConfigurationExportService` — still enumerates `db.SmtpConnections`; switch to the
+         catalog so export and import agree.
+   - [ ] `connections-admin.js` SMTP option in the admin UI.
+   - [ ] EF migration on **both** providers dropping `SmtpConnections`; passwords are
+         deliberately dropped, forcing re-entry as `SECRET:` references.
+   - [ ] `SHOW SMTP CONNECTIONS` now lists the whole governed catalog rather than SMTP only. Its
+         retirement belongs with the wider `SHOW` → `eng.*` item; until then the name is stale.
+
 2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
    superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.
    The examples below are retained only to show the intended *option shapes* (`SECRET:` references,
