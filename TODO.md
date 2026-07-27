@@ -29,6 +29,28 @@ Feature implementation for this sprint has moved to `CHANGELOG.md` and
 
 ## v0.18.0
 
+### Merge the deferred Dependabot action bumps
+
+Two open Dependabot PRs were deliberately left out of v0.17.0. Both are one major behind and appear
+**only in `ci.yml`**, in the Enterprise Certification job's evidence-upload step — neither occurs
+anywhere in `release.yml`, so neither can affect a tag-triggered build or publish. Taking them
+during the release would have changed the tag candidate and forced another full CI cycle for no
+release benefit.
+
+- [ ] Merge **#21** — `actions/setup-dotnet` 5 → 6 (`ci.yml:163`)
+- [ ] Merge **#22** — `actions/upload-artifact` 6 → 7 (`ci.yml:176`)
+- [ ] Re-check the pin inventory afterwards: `grep -rhoE "uses: actions/[a-z-]+@v[0-9]+"
+      .github/workflows/*.yml | sort | uniq -c`
+
+Contrast with `actions/attest-build-provenance`, which **was** merged into v0.17.0 (v2 → v4): it
+runs in `release.yml` at tag time, gates un-drafting the release, and was two majors stale — a
+failure there would have stranded the release as a draft mid-publish. The distinction to keep is
+**does the action run at tag time**, not how old it is.
+
+Watch item: if `upload-artifact@v6` is retired, the Enterprise Certification job still passes but its
+evidence artifact silently stops attaching — the evidence checklist depends on that upload for the
+Linux certification record.
+
 ### Automate the MSI in-place upgrade check
 
 Today this is a manual, elevated step in the release checklist, and it is the kind of step that
