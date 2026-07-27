@@ -173,7 +173,7 @@ jobs:
 
       - name: Retain enterprise certification evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: enterprise-certification-${{ matrix.platform }}
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
