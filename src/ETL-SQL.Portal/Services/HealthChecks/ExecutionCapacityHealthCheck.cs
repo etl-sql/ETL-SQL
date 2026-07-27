@@ -17,7 +17,8 @@ public class ExecutionCapacityHealthCheck(
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-        int smtpCount = await db.SmtpConnections.CountAsync(ct);
+        int smtpCount = await db.PortalSharedConnections
+            .CountAsync(c => c.ConnectorType.ToUpper() == "SMTP", ct);
         int activeSubs = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
         int activeExecutions = await db.PortalExecutionJobs.CountAsync(
             job => job.Status == "Pending" || job.Status == "Running", ct);

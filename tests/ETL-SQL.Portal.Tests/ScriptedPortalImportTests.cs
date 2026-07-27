@@ -185,14 +185,7 @@ public sealed class ScriptedPortalImportTests
                 ScriptPath = Path.Combine(config.ScriptRootPath, $"import_{suffix}.rptsql"),
                 CreatedBy = adminId
             });
-            db.SmtpConnections.Add(new SmtpConnection
-            {
-                Alias = $"smtp_{suffix}",
-                Host = "smtp.test.local",
-                Port = 2525,
-                FromAddress = "reports@test.local",
-                UseSsl = false
-            });
+            SmtpCatalogSeed.Add(db, $"smtp_{suffix}", defaultFrom: "reports@test.local");
             await db.SaveChangesAsync();
         }
 

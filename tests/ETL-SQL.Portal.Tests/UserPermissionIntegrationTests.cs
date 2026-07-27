@@ -289,17 +289,9 @@ namespace ETL_SQL.Portal.Tests
                     );
                     await db.SaveChangesAsync();
 
-                    // 7. Seed SMTP Connection
-                    db.SmtpConnections.Add(new SmtpConnection
-                    {
-                        Alias = "default-smtp",
-                        Host = "localhost",
-                        Port = 25,
-                        Username = "smtp-user",
-                        EncryptedPassword = "encrypted-pwd-dummy",
-                        FromAddress = "portal@test.local",
-                        UseSsl = false
-                    });
+                    // 7. Seed SMTP Connection in the governed catalog
+                    SmtpCatalogSeed.Add(db, "default-smtp", host: "localhost", port: 25,
+                        username: "smtp-user");
 
                     // 8. Seed Saved View
                     db.SavedReportViews.Add(new SavedReportView

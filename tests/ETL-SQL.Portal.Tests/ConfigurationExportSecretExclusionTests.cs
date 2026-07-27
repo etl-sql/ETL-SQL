@@ -39,17 +39,11 @@ public sealed class ConfigurationExportSecretExclusionTests
         };
         db.Users.Add(user);
 
-        // An SMTP connection whose stored credential is (marker) ciphertext.
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = $"secret_smtp_{suffix}",
-            Host = "smtp.test.local",
-            Port = 587,
-            Username = "mailer",
-            EncryptedPassword = SmtpCiphertextMarker,
-            FromAddress = "reports@test.local",
-            UseSsl = true
-        });
+        // An SMTP connection in the governed catalog. It holds a SECRET: reference rather than a
+        // credential, so there is no ciphertext for the export to leak — the exposure this case
+        // used to guard has been designed out rather than merely tested for.
+        SmtpCatalogSeed.Add(db, $"secret_smtp_{suffix}", port: 587, username: "mailer",
+            defaultFrom: "reports@test.local", useSsl: true);
 
         var folder = new Folder { Name = $"sf_{suffix}", Path = $"/sf_{suffix}", OwnerId = user.Id };
         db.Folders.Add(folder);
@@ -97,14 +91,18 @@ public sealed class ConfigurationExportSecretExclusionTests
         // Not one byte of secret or capability material may appear in the export.
         foreach (var marker in new[]
                  {
-                     SmtpCiphertextMarker, PasswordHashMarker,
+                     PasswordHashMarker,
                      RefreshTokenMarker, ShareTokenMarker, EmbedTokenMarker
                  })
             Assert.DoesNotContain(marker, script);
 
-        // The SMTP credential is still represented — as a substitution placeholder, not a value.
-        Assert.Contains($"SMTP_SECRET_SMTP_{suffix.ToUpperInvariant()}_PASSWORD", script);
-        Assert.Contains(export.RequiredSecrets, s => s.Contains(suffix.ToUpperInvariant()));
+        // SmtpCiphertextMarker is no longer among them: the catalog stores no credential to leak.
+        // The positive form of that guarantee — a reference is exported, never a value.
+        Assert.Contains("PASSWORD = 'SECRET:", script);
+
+        // Connections need no substitution placeholder: the catalog holds a SECRET: reference, so
+        // the exported statement is already value-free and replayable as-is. Placeholders remain
+        // for the things that really do hold values, such as user passwords below.
 
         // The user is emitted with a password placeholder, never the hash.
         Assert.Contains($"CREATE USER 'secret_user_{suffix}'", script);

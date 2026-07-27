@@ -202,16 +202,8 @@ public sealed class ConfigurationRoundTripTests
             new FolderAcl { FolderId = root.Id, GroupId = ops.Id, Permission = FolderPermission.Read },
             new FolderAcl { FolderId = child.Id, GroupId = finance.Id, Permission = FolderPermission.Execute });
 
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = $"corp_{suffix}",
-            Host = "smtp.corp.test",
-            Port = 587,
-            Username = "mailer",
-            EncryptedPassword = $"CIPHER-{suffix}",
-            FromAddress = "reports@corp.test",
-            UseSsl = true
-        });
+        SmtpCatalogSeed.Add(db, $"corp_{suffix}", host: "smtp.corp.test", port: 587,
+            username: "mailer", defaultFrom: "reports@corp.test", useSsl: true);
 
         var reportScriptPath = Path.Combine(
             scope.ServiceProvider.GetRequiredService<PortalConfig>().ScriptRootPath,
@@ -387,8 +379,10 @@ public sealed class ConfigurationRoundTripTests
                            where g.Name.EndsWith($"_{suffix}")
                            select f.Path + "|" + g.Name + "|" + a.Permission).ToListAsync()).ToHashSet();
 
-        var smtp = (await db.SmtpConnections.Where(s => s.Alias.EndsWith($"_{suffix}"))
-            .Select(s => s.Alias + "|" + s.Host + "|" + s.Port + "|" + s.UseSsl).ToListAsync()).ToHashSet();
+        // Connection identity for round-trip comparison is alias + type + options, all of which
+        // survive export because the options carry references rather than values.
+        var smtp = (await db.PortalSharedConnections.Where(c => c.Alias.EndsWith($"_{suffix}"))
+            .Select(c => c.Alias + "|" + c.ConnectorType + "|" + c.OptionsJson).ToListAsync()).ToHashSet();
 
         var reports = (await db.Reports
             .Include(r => r.Folder)

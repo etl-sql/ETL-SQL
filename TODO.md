@@ -134,14 +134,35 @@ live users, remove contradictory forms now rather than carrying permanent compat
          `OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit`,
          whose premise — that a plaintext credential could leak into logs — no longer holds and
          should assert the reference is what appears.
-   - [ ] `OperationalMetricsService`, `PortalPrometheusMetricsExporter`, `OperationalMetricsDigest`
-         still count `SmtpConnections`; they report 0 until repointed at the catalog.
-   - [ ] `connections-admin.js` SMTP option in the admin UI.
+   - [x] `OperationalMetricsService` and `ExecutionCapacityHealthCheck` count SMTP entries from the
+         catalog. The public metric name (`etlsql_portal_smtp_connections`) and the record field
+         are unchanged — renaming a scraped gauge would break dashboards for no gain.
+   - [x] `connections-admin.js` — no change needed; the shared-connections form already offers
+         SMTP as a connector type.
+   - [ ] **~20 Portal integration tests still red.** `SubscriptionIntegrationTests`,
+         `PortalIntegrationTests` and `UserPermissionIntegrationTests` drive the deleted
+         `api/admin/smtp` endpoints over HTTP. They need to POST to
+         `PUT api/admin/connections/{alias}` with a `SECRET:` reference instead. Counted against a
+         build predating the last fixture pass, so the true figure is lower — re-run before
+         working through them.
    - [ ] EF migration on **both** providers dropping `SmtpConnections`; passwords are
          deliberately dropped, forcing re-entry as `SECRET:` references. Do this **last**, once
          nothing reads the table.
    - [ ] `SmtpPasswordProtector` becomes dead once the table goes — delete it and its DI
          registration.
+   - [ ] **Redact resolved credentials in engine output — a capability lost in this change.**
+         `SubscriptionDeliveryService.Sanitize` used to take the plaintext password and scrub it
+         from downstream error text by literal replacement. The Portal no longer holds the
+         plaintext, so it cannot scrub what it cannot know, and pattern-based `SecretRedactor`
+         matches `SECRET:`/`SHARED:`/Bearer/URL/JSON shapes — not a bare password in free text.
+         An engine error quoting the resolved password verbatim would therefore reach the delivery
+         ledger and audit detail.
+         The fix belongs where the secret is resolved: whichever component turns `SECRET:name`
+         into a value must redact that value from its own error output before returning it. Net
+         exposure is still lower than before (the credential is no longer written into script text
+         at all), but this specific mitigation is currently absent and should not be assumed.
+         `OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit`
+         documents the narrowed boundary.
 
 2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
    superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.

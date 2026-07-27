@@ -104,11 +104,14 @@ public sealed class ConfigurationPromotionTests
         Assert.Equal($"/root_{suffix}", report.Folder.Path);
         Assert.True(await db.Subscriptions.AnyAsync(s => s.Name == $"sub_{suffix}" && s.Schedule == "Daily"));
 
-        // Secret rebinding: the prod SMTP password is the prod value, and no dev secret was carried.
-        var smtp = await db.SmtpConnections.SingleAsync(s => s.Alias == $"corp_{suffix}");
-        var protector = verify.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
-        Assert.Equal(ProdSecret, protector.Unprotect(smtp.EncryptedPassword));
-        Assert.DoesNotContain(DevSmtpCipherPrefix, smtp.EncryptedPassword ?? "");
+        // Secret rebinding: the promoted connection carries the environment-neutral SECRET:
+        // reference, and no dev credential material travelled with it. Rebinding is now structural
+        // rather than a re-encryption step — prod resolves the same reference from its own store.
+        var smtp = await db.PortalSharedConnections.SingleAsync(c => c.Alias == $"corp_{suffix}");
+        Assert.Equal("SMTP", smtp.ConnectorType, ignoreCase: true);
+        Assert.Contains("SECRET:corp_smtp_password", smtp.OptionsJson);
+        Assert.DoesNotContain(DevSmtpCipherPrefix, smtp.OptionsJson);
+        Assert.DoesNotContain(ProdSecret, smtp.OptionsJson);
         var alice = await db.Users.SingleAsync(u => u.UserName == $"alice_{suffix}");
         Assert.NotEqual($"{DevUserHashPrefix}{suffix}", alice.PasswordHash);
         Assert.False(string.IsNullOrEmpty(alice.PasswordHash));
@@ -127,7 +130,7 @@ public sealed class ConfigurationPromotionTests
         // Idempotent: the second promotion pass created no duplicates.
         Assert.Equal(1, await db.Reports.CountAsync(r => r.Name == $"report_{suffix}"));
         Assert.Equal(1, await db.Users.CountAsync(u => u.UserName == $"alice_{suffix}"));
-        Assert.Equal(1, await db.SmtpConnections.CountAsync(s => s.Alias == $"corp_{suffix}"));
+        Assert.Equal(1, await db.PortalSharedConnections.CountAsync(c => c.Alias == $"corp_{suffix}"));
         Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.Name == $"sub_{suffix}"));
         Assert.Equal(1, await db.DatasetJobs.CountAsync(j => j.Report.Name == $"report_{suffix}"));
     }
@@ -159,16 +162,13 @@ public sealed class ConfigurationPromotionTests
         await db.SaveChangesAsync();
         db.FolderAcls.Add(new FolderAcl { FolderId = root.Id, GroupId = finance.Id, Permission = FolderPermission.Manage });
 
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = $"corp_{suffix}",
-            Host = "smtp.dev.test",
-            Port = 587,
-            Username = "mailer",
-            EncryptedPassword = $"{DevSmtpCipherPrefix}{suffix}", // dev-only secret; must never reach prod
-            FromAddress = "reports@dev.test",
-            UseSsl = true
-        });
+        // The reference name is environment-neutral by design — that is what makes promotion work:
+        // the same SECRET:name resolves to a different value from each environment's secret store.
+        // The dev *value* (DevSmtpCipherPrefix) therefore never enters the catalog at all, which is
+        // a stronger guarantee than the export merely omitting it.
+        SmtpCatalogSeed.Add(db, $"corp_{suffix}", host: "smtp.dev.test", port: 587,
+            username: "mailer", defaultFrom: "reports@dev.test", useSsl: true,
+            passwordSecretRef: "SECRET:corp_smtp_password");
 
         var scriptPath = Path.Combine(config.ScriptRootPath, $"promote_{suffix}.rptsql");
         await File.WriteAllTextAsync(scriptPath, "SELECT 1 AS Value INTO #data;");

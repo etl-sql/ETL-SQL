@@ -147,7 +147,10 @@ public sealed class OperationalMetricsService(
             .CountAsync(d => d.CompletedAt >= since && (d.Outcome == "Failed" || d.Outcome == "Denied"), ct);
 
         var activeSubscriptions = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
-        var smtpConnections = await db.SmtpConnections.CountAsync(ct);
+        // Counted from the governed catalog since the bespoke SmtpConnections table was retired.
+        // ToUpper() rather than a case-insensitive comparison so it translates on both providers.
+        var smtpConnections = await db.PortalSharedConnections
+            .CountAsync(c => c.ConnectorType.ToUpper() == "SMTP", ct);
         var staleSnapshots = await CountStaleSnapshotsAsync(now, ct);
         var staleDatasets = await CountStaleDatasetsAsync(now, ct);
         var policyExpiry = await CountPolicyExpiryAsync(now, ct);

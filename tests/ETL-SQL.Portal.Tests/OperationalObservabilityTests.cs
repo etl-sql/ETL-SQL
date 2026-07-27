@@ -139,7 +139,7 @@ public sealed class OperationalObservabilityTests : IDisposable
             new Subscription { ReportId = report.Id, UserId = owner.Id, SmtpAlias = "a", Recipients = "r", IsActive = true },
             new Subscription { ReportId = report.Id, UserId = owner.Id, SmtpAlias = "a", Recipients = "r", IsActive = true },
             new Subscription { ReportId = report.Id, UserId = owner.Id, SmtpAlias = "a", Recipients = "r", IsActive = false });
-        db.SmtpConnections.Add(new SmtpConnection { Alias = "a", Host = "h", Port = 25 });
+        SmtpCatalogSeed.Add(db, "a", host: "h", port: 25);
         db.AuditOutboxMessages.AddRange(
             new AuditOutboxMessage
             {
@@ -459,10 +459,22 @@ public sealed class OperationalObservabilityTests : IDisposable
     }
 
     /// <summary>
-    /// Portal-wide log hygiene: even when a downstream error echoes the SMTP credential, the
-    /// delivery executor sanitizes it before it reaches the log, the persisted failure detail, or
-    /// the audit record.
+    /// Portal-wide log hygiene: a credential echoed by a downstream error must not reach the log,
+    /// the persisted failure detail, or the audit record.
     /// </summary>
+    /// <remarks>
+    /// <b>Boundary changed when SMTP moved to the governed catalog.</b> This previously passed the
+    /// plaintext password to <c>Sanitize</c> for a literal find-and-replace. The Portal no longer
+    /// holds the plaintext, so it can no longer scrub a value it cannot know: pattern-based
+    /// <c>SecretRedactor</c> catches <c>SECRET:</c>/<c>SHARED:</c>/Bearer/URL/JSON shapes, not a
+    /// bare password sitting in free text.
+    /// <para>
+    /// So this now asserts what the Portal can still guarantee. Redacting a resolved credential
+    /// from engine output is the responsibility of the component that resolved it — tracked in
+    /// TODO.md. Until that lands, an engine error quoting the literal password verbatim would
+    /// reach the ledger.
+    /// </para>
+    /// </remarks>
     [Fact]
     public async Task DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit()
     {
@@ -500,8 +512,9 @@ public sealed class OperationalObservabilityTests : IDisposable
         await db.SaveChangesAsync();
 
         var capturing = new CapturingLogger<SubscriptionDeliveryService>();
-        // A runner whose error text echoes the SMTP password — the worst case for a credential leak.
-        var runner = new EchoingFailureRunner($"SMTP AUTH rejected for password {smtpPassword}");
+        // A runner whose error echoes the credential as a SECRET: reference — which is the only
+        // form the Portal can now see. See the XML doc above for the boundary change.
+        var runner = new EchoingFailureRunner($"SMTP AUTH rejected for SECRET:{smtpPassword}");
         var service = new SubscriptionDeliveryService(
             db, config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
             new AuditService(db, new HttpContextAccessor()), runner, capturing);
