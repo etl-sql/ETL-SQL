@@ -1060,9 +1060,39 @@ public class ReportParser : ParserComponent
 
     // ── ALTER (Report Objects) ────────────────────────────────────────────
 
+    /// <summary>
+    /// Report object kinds whose <c>ALTER</c> is implemented by
+    /// <c>AlterReportObjectStatementHandler</c>. Every other kind is refused here.
+    /// </summary>
+    /// <remarks>
+    /// The handler's <c>default</c> arm throws "ALTER not yet implemented", which meant these
+    /// forms parsed, linted and completed successfully, then failed at execution — the worst place
+    /// to learn a statement is unsupported, since a report script may already have run half its
+    /// work. The parser is the only stage that can say so before anything happens.
+    /// <para>
+    /// This list mirrors the handler's switch; adding a kind there means adding it here, and the
+    /// rejection tests pin both directions.
+    /// </para>
+    /// </remarks>
+    private static readonly ReportObjectType[] AlterableReportObjects =
+    [
+        ReportObjectType.Visual,
+        ReportObjectType.Page,
+        ReportObjectType.Container,
+        ReportObjectType.Template,
+    ];
+
     public Statement ParseAlterReportObject(ReportObjectType type)
     {
         var startToken = _parser.Previous;
+
+        if (Array.IndexOf(AlterableReportObjects, type) < 0)
+            throw new SyntaxException(
+                $"ALTER is not supported for {type.ToString().ToUpperInvariant()}. " +
+                $"Supported: {string.Join(", ", AlterableReportObjects.Select(t => t.ToString().ToUpperInvariant()))}. " +
+                $"Recreate the object instead — CREATE OR REPLACE {type.ToString().ToUpperInvariant()} <name> AS (...).",
+                startToken.Line, startToken.Column);
+
         var name = ConsumeIdentifier($"Expected {type} name after ALTER {type}").Value;
         Consume(TokenType.LPAREN, $"Expected '(' after {type} name");
 

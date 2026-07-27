@@ -38,7 +38,12 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
                 UpdateTemplate(stmt, context);
                 break;
             default:
-                throw new ExecutionException($"ALTER not yet implemented for {stmt.ObjectType}", null, stmt.Line, stmt.Column);
+                // Unreachable via the parser, which refuses unsupported kinds up front (see
+                // ReportParser.AlterableReportObjects). Kept as a guard for AST built in code:
+                // it states the contract rather than reporting the feature as merely unfinished.
+                throw new ExecutionException(
+                    $"ALTER is not supported for {stmt.ObjectType}; only VISUAL, PAGE, CONTAINER and TEMPLATE can be altered.",
+                    null, stmt.Line, stmt.Column);
         }
 
         _logger.Debug("{ObjectType} '{ObjectName}' altered.", stmt.ObjectType, stmt.Name);
