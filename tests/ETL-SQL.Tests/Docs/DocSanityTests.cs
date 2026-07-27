@@ -652,6 +652,90 @@ namespace ETL_SQL.Tests.Docs
                 string.Join("\n", brokenLinks));
         }
 
+        /// <summary>Files git tracks, repo-relative with forward slashes.</summary>
+        private static HashSet<string> TrackedFiles()
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git", "ls-files")
+            {
+                WorkingDirectory = RepoRoot,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit();
+            return output
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim().Replace('\\', '/'))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Source and tooling must not embed one developer's checkout location. v0.16.0 was blocked
+        /// mid-release by 101 doc links that resolved only against the author's own filesystem, and
+        /// the same pattern reappeared in the UI sandbox's fixture data. CI runners have neither
+        /// path, so anything that depends on one is broken everywhere except the machine it was
+        /// written on.
+        /// </summary>
+        [Fact]
+        public void SourceAndTooling_DoNotEmbedDeveloperSpecificPaths()
+        {
+            // Documentation deliberately shows absolute paths, because the security sandbox requires
+            // them — those are illustrative examples, not dependencies on a real location.
+            var searchRoots = new[] { "src", "scripts", "tools", "tests" };
+            var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".cs", ".ps1", ".psm1", ".sh", ".js", ".mjs", ".ts", ".json", ".yml", ".yaml"
+            };
+
+            // A drive-qualified or POSIX home path pointing at a named user's directory.
+            var pattern = new Regex(
+                @"([A-Za-z]:[\\/]Users[\\/][A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/)",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+            // Paths that look developer-specific but are not a dependency on anyone's machine:
+            // well-known OS locations, and deliberately synthetic identities in test fixtures.
+            var allowed = new Regex(
+                @"[\\/]Users[\\/](Public|Default|All Users)\b|[\\/](alice|bob|carol|dave|testuser|user)\b",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+            // Only committed files matter: downloaded caches such as .vscode-test contain vendored
+            // third-party binaries full of other people's home directories, and they are gitignored
+            // precisely because they are not ours. Asking git avoids maintaining a blacklist that
+            // silently rots as new tool caches appear.
+            var tracked = TrackedFiles();
+
+            var offenders = new List<string>();
+            foreach (var root in searchRoots)
+            {
+                var dir = RepoFile(root);
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    if (!extensions.Contains(Path.GetExtension(file))) continue;
+                    var relative = Path.GetRelativePath(RepoRoot, file).Replace('\\', '/');
+                    if (!tracked.Contains(relative)) continue;
+
+                    var lines = File.ReadAllLines(file);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        var match = pattern.Match(lines[i]);
+                        if (!match.Success) continue;
+                        if (allowed.IsMatch(match.Value)) continue;
+                        offenders.Add($"{Path.GetRelativePath(RepoRoot, file)}:{i + 1}: {match.Value}");
+                    }
+                }
+            }
+
+            Assert.True(offenders.Count == 0,
+                $"Developer-specific absolute paths found in source/tooling ({offenders.Count}):\n" +
+                string.Join("\n", offenders) +
+                "\n\nUse a relative path, a runtime-resolved path, or a generic placeholder. CI runners " +
+                "do not have these directories.");
+        }
+
         [Fact]
         public void EveryDirectoryWithMoreThanFiveMarkdownFiles_HasAReadme()
         {

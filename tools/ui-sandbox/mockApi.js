@@ -53,7 +53,9 @@ export function makeMockApi(seedState) {
       data = { id: 1, ok: true, version: 1, sourceRevision: 'sandbox-rev-1' };
     } else if (path.endsWith('/api/workspace')) {
       data = {
-        root: 'C:/Users/chuck/scratch/ETL-SQL',
+        // Placeholder only — this is mock response data, never a real path. Keep it generic so the
+        // sandbox does not bake one developer's checkout location into the repository.
+        root: 'C:/workspace/ETL-SQL',
         files: seedState?.files || [
           { path: 'etl/weekly_load.etlsql', size: 1024 },
           { path: 'etl/staging_clean.etlsql', size: 450 }

@@ -311,19 +311,6 @@ SET TELEMETRY = OFF;";
                 .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                 .ToList();
 
-            if (record.LineNumber == 5510 || record.LineNumber == 38929 || record.LineNumber == 24654)
-            {
-                try
-                {
-                    var sb = new System.Text.StringBuilder();
-                    sb.AppendLine($"--- DEBUG VerifyResults for Line {record.LineNumber} ---");
-                    sb.AppendLine($"flat: {string.Join(", ", flat)}");
-                    sb.AppendLine($"expectedValues: {string.Join(", ", expectedValues)}");
-                    System.IO.File.AppendAllText(@"C:\Users\chuck\scratch\ETL-SQL\debug_select.txt", sb.ToString());
-                }
-                catch { }
-            }
-
             if (flat.Count != expectedValues.Count)
                 throw new Exception($"Line {record.LineNumber}: Row count mismatch. Expected {expectedValues.Count} values, got {flat.Count}.");
 

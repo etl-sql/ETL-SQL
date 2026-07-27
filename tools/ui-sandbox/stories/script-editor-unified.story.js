@@ -125,7 +125,8 @@ export default {
       authFetch: api,
 
       // Configuration for stateful sidebars
-      workspaceRoot: 'C:/Users/chuck/scratch/ETL-SQL',
+      // Placeholder only — fixture data, never a real path. See mockApi.js.
+      workspaceRoot: 'C:/workspace/ETL-SQL',
       sidebar,
       gitStatus: {
         branch: 'main',
