@@ -139,12 +139,20 @@ live users, remove contradictory forms now rather than carrying permanent compat
          are unchanged — renaming a scraped gauge would break dashboards for no gain.
    - [x] `connections-admin.js` — no change needed; the shared-connections form already offers
          SMTP as a connector type.
-   - [ ] **~20 Portal integration tests still red.** `SubscriptionIntegrationTests`,
-         `PortalIntegrationTests` and `UserPermissionIntegrationTests` drive the deleted
-         `api/admin/smtp` endpoints over HTTP. They need to POST to
-         `PUT api/admin/connections/{alias}` with a `SECRET:` reference instead. Counted against a
-         build predating the last fixture pass, so the true figure is lower — re-run before
-         working through them.
+   - [x] Portal integration tests moved to the catalog. **`ETL-SQL.Portal.Tests` is 551/551
+         green.** Registering SMTP is now genuinely two steps — `PUT api/admin/secrets/{name}`
+         then `PUT api/admin/connections/{alias}` referencing `SECRET:name` — because the catalog
+         rejects literal credentials. **That is the operator flow, not a test detail: the
+         administration docs must describe it before this ships.**
+
+   **Two test-authoring traps found here, both worth generalising:**
+   - A projection composed *inside* a LINQ query over an encrypted column is translated to
+     SQL-side concatenation and bypasses the PII value converter — so the test compares
+     ciphertext, which is non-deterministic and differs on every write. Materialise before
+     projecting. Any test touching `OptionsJson`, `Target`, or other converter-backed columns is
+     exposed to this.
+   - Comparing `OptionsJson` as raw JSON asserts on key order, which the export normalises
+     alphabetically. Compare a sorted `key=value` projection instead.
    - [ ] EF migration on **both** providers dropping `SmtpConnections`; passwords are
          deliberately dropped, forcing re-entry as `SECRET:` references. Do this **last**, once
          nothing reads the table.
