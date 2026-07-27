@@ -264,29 +264,76 @@ live users, remove contradictory forms now rather than carrying permanent compat
 
 **Design specification established 2026-07-27:** See [job_schedule_notification.md](docs/architecture/decisions/job_schedule_notification.md) for full design, grammar, and database schema mappings.
 
-Since this is a greenfield deployment with no legacy data migration risk, migrate straight to the new normalized schema and unified syntax.
+Since this is a greenfield deployment with no legacy data migration risk, migrate straight to the new
+normalized schema and unified syntax.
+
+**Decisions taken 2026-07-27** (details and rationale in the design spec):
+- **One grammar.** The engine's `CREATE JOB … ON SCHEDULE EVERY n UNIT … AS <statement>` is
+  *replaced*, not supplemented. `WITH (MAX_RETRIES, RETRY_DELAY)` carries over; the inline
+  `AS <statement>` body does not — a job names a script path.
+- **Cron is the one schedule representation.** The Orchestrator's `Interval`/`Unit`/`AtTime` model
+  predates that decision and is corrected, not bridged: it cannot express `*/15 8-18 * * 1-5` and
+  `SchedulerService.CalculateNextRun` has no timezone concept at all.
+- **The Orchestrator is the system of record** for `JOB`, `SCHEDULE`, `NOTIFICATION`. Names are
+  unique per orchestrator. The Portal keeps only a report→job link; it does not mirror the catalog,
+  so there is no Portal→Orchestrator reconciler.
+- **Targeting is `EXECUTE <server> BEGIN … END`**, never `AT <server>` — same call as the managed
+  connection work.
+- **`ReportId` stays a real FK.** `TargetPath` is a mutable job property changed by
+  `ALTER JOB … SET TARGET`.
+
+**Blocked on answers to §11 of the spec** — Q1 (is `ALERT` a notification, and does `ASSERT JOB …
+ON FAILURE ALERT` fold in), Q2 (naming for subscription-generated objects), Q3 (`Jobs.Name` flat PK),
+Q4 (which process dispatches a notification, given `SECRET:` resolution lives in the Portal). Q1, Q3
+and Q4 change the schema, so settle them before step 1.
 
 **Implementation Steps:**
 
-1. **Database Schema & Migrations:**
-   - Drop the old `DatasetJobs` table.
-   - Implement `RefreshJobs`, `Schedules`, `Notifications` tables along with join tables `RefreshJobSchedules` and `RefreshJobNotifications` (which maps connections to trigger conditions like `ON FAILURE` or `ON SUCCESS` per-job).
-   - Generate database migrations for both SQLite (`ETL-SQL.Portal.Data`) and PostgreSQL (`ETL-SQL.Portal.Migrations.Postgres`).
-2. **Interface & Dispatch Refactoring:**
-   - Update `IDatasetRegistry` (remove default interface methods to avoid silent compiling bugs) and implement name-based mapping services in `DatasetRegistryService.cs`.
-3. **Parser, AST, and Linter Updates:**
-   - Refactor `CreateJobStatement` in `Ast.cs` to hold `FOR REPORT` and `FOR SCRIPT` targets.
-   - Implement grammar parser rules for `CREATE/ALTER/DROP/ENABLE/DISABLE` on `JOB`, `SCHEDULE`, and `NOTIFICATION` in `PortalParser.cs` and `DataParser.cs`.
-   - Enforce explicit timezone parsing (`AT TIME ZONE`). Add a compiler diagnostic to reject and explain the deprecated report-scoped refresh syntax.
-4. **Resilient Sync Service & Outbox Logging:**
-   - Implement the `JobReconciliationService` background worker to sync Portal DB state to Orchestrator endpoints periodically and on startup.
-   - Update `ConfigurationExportService.cs` to emit the new SQL statements.
-   - Hook into the transaction outbox to log `CREATE_JOB`, `DROP_SCHEDULE`, etc.
-5. **UI & Consumer Updates:**
-   - Update `OrchestratorPollerService.cs` to match Orchestrator completions via the join table prefix.
-   - Update Portal sub-systems (Subscriptions, Dataset Refreshes) to generate standard `JOB` + `SCHEDULE` links under the hood.
-   - Re-align `ReportDependencyService.cs` to display the new named schedules.
-   - Update help snippets and hover documents.
+1. **Orchestrator store (system of record):**
+   - Add `Schedules`, `Notifications`, `JobSchedules`, `JobNotifications`; add `JobType`/`TargetPath`
+     to `Jobs` and retire `Interval`/`Unit`/`AtTime`.
+   - This is **raw DDL with idempotent `ALTER TABLE … ADD COLUMN` upgrades** across
+     `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect` — *not* EF migrations. Additive
+     changes are easy; the retired columns are `NOT NULL` and need a rebuild path.
+   - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
+     reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
+     run; no `DateTime.Now` anywhere in the path.
+2. **Portal persistence:**
+   - Replace `DatasetJobs` with `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`), EF
+     migrations on both providers.
+   - The `DropTable` violates `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRolling
+     ExpandContract`; add the migration to that test's `PreDeploymentBreakingMigrations` allow-list
+     with a written justification (precedent: `_DropSmtpConnections`).
+   - Remove the default interface method bodies on `IDatasetRegistry` — a default body means deleting
+     an override still compiles and silently binds to a no-op.
+3. **Parser, AST, formatter, linter:**
+   - `CreateJobStatement` holds `FOR REPORT`/`FOR SCRIPT` (mutually exclusive) plus retry options;
+     new `SCHEDULE` and `NOTIFICATION` statements; `ALTER JOB … ADD|REMOVE`.
+   - `IF EXISTS` before the name; reject `CREATE OR ALTER`/`CREATE OR REPLACE` for these kinds by
+     name rather than discarding the mode.
+   - Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
+     from `AT <connection>` with the two-token lookahead `ExpressionParser` already uses.
+   - Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
+     today, so a generic syntax error would leave the reader guessing.
+4. **Notification dispatch and audit:**
+   - Implement dispatch per the answer to Q4, resolving connections through the governed catalog so
+     no credential is stored on the `Notification`.
+   - Outbox audit for `CREATE_JOB`, `DROP_SCHEDULE`, `ATTACH_SCHEDULE`, `ATTACH_NOTIFICATION`, …
+   - Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION` while linked,
+     cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are attached.
+5. **Consumers, UI, docs:**
+   - `OrchestratorPollerService` matches `ReportJobLinks` by job name; `SCRIPT` completions ignored.
+   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION` (naming per Q2).
+   - `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
+     the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
+     `SubscriptionScriptMaintenance`.
+   - Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
+     `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
+     (a shared Orchestrator legitimately carries another Portal's jobs).
+   - `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.job_schedules` — reconcile with the
+     `SHOW`-retirement inventory above, which currently lists `eng.refresh_jobs`.
+   - Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using the retired
+     inline-`AS` job form.
 
 #### P1 — Make lifecycle modifiers explicit and uniform
 
