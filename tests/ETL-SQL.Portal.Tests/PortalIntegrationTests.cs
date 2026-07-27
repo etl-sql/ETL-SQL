@@ -3005,19 +3005,7 @@ CREATE VISUAL EdgeRows AS TABLE (
         var reportId = report!["id"]!.GetValue<int>();
 
         // Create SMTP connection (required for non-Link format)
-        var smtpRes = await AuthPost(token, "/api/admin/smtp", new
-        {
-            alias = $"test-smtp-{Guid.NewGuid():N}"[..16],
-            host = "smtp.test.local",
-            port = 587,
-            username = "user@test.local",
-            password = "smtppassword",
-            fromAddress = "noreply@test.local",
-            useSsl = true
-        });
-        Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
-        var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
+        var smtpAlias = await CreateSmtpConnectionAsync(token, "test-smtp");
 
         // Create subscription (Link format — no attachment export needed)
         var subRes = await AuthPost(token, "/api/subscriptions", new
@@ -3453,19 +3441,7 @@ CREATE VISUAL Summary AS TABLE (
         Assert.Equal(HttpStatusCode.OK, csvRes.StatusCode);
 
         // Trigger CREATE_SUBSCRIPTION and DELETE_SUBSCRIPTION
-        var smtpRes = await AuthPost(token, "/api/admin/smtp", new
-        {
-            alias = $"audit-smtp-{Guid.NewGuid():N}"[..16],
-            host = "smtp.test.local",
-            port = 587,
-            username = "user@test.local",
-            password = "smtppassword",
-            fromAddress = "noreply@test.local",
-            useSsl = true
-        });
-        Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
-        var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
+        var smtpAlias = await CreateSmtpConnectionAsync(token, "audit-smtp");
 
         var subRes = await AuthPost(token, "/api/subscriptions", new
         {
@@ -3521,19 +3497,7 @@ CREATE VISUAL Summary AS TABLE (
         var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
-        var smtpRes = await AuthPost(token, "/api/admin/smtp", new
-        {
-            alias = $"param-smtp-{Guid.NewGuid():N}"[..16],
-            host = "smtp.test.local",
-            port = 587,
-            username = "user@test.local",
-            password = "smtppassword",
-            fromAddress = "noreply@test.local",
-            useSsl = true
-        });
-        Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
-        var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
+        var smtpAlias = await CreateSmtpConnectionAsync(token, "param-smtp");
 
         var subRes = await AuthPost(token, "/api/subscriptions", new
         {
@@ -3678,6 +3642,37 @@ CREATE VISUAL Summary AS TABLE (
         req.Content = JsonContent.Create(body);
         await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
         return await _client.SendAsync(req);
+    }
+
+    /// <summary>
+    /// Registers an SMTP connection in the governed catalog and returns its alias. Two steps rather
+    /// than one: the catalog stores <c>SECRET:</c> references and rejects literal credentials, so
+    /// the value goes to the Portal secret store first and the connection references it by name.
+    /// </summary>
+    private async Task<string> CreateSmtpConnectionAsync(string token, string prefix)
+    {
+        var alias = $"{prefix}-{Guid.NewGuid():N}"[..16];
+        var secretName = alias.Replace('-', '_') + "_password";
+
+        Assert.True((await AuthPut(token, $"/api/admin/secrets/{secretName}",
+            new { value = "smtppassword" })).IsSuccessStatusCode);
+
+        var res = await AuthPut(token, $"/api/admin/connections/{alias}", new
+        {
+            connectorType = "SMTP",
+            options = new Dictionary<string, string>
+            {
+                ["HOST"] = "smtp.test.local",
+                ["PORT"] = "587",
+                ["USERNAME"] = "user@test.local",
+                ["PASSWORD"] = $"SECRET:{secretName}",
+                ["DEFAULT_FROM"] = "noreply@test.local",
+                ["USE_SSL"] = "true"
+            },
+            sensitiveFields = new[] { "PASSWORD" }
+        });
+        Assert.True(res.IsSuccessStatusCode, $"connection register failed: {res.StatusCode}");
+        return alias;
     }
 
     private async Task<HttpResponseMessage> AuthPut(string token, string url, object body)
@@ -3850,3 +3845,4 @@ CREATE VISUAL {visualName} AS CARD (
         }
     }
 }
+

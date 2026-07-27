@@ -968,8 +968,8 @@ namespace ETL_SQL.Portal.Tests
             var resGroups = await AuthGet(tFinPub, "/api/admin/groups");
             Assert.Equal(HttpStatusCode.Forbidden, resGroups.StatusCode);
 
-            // 3. SMTP Administration -> 403 Forbidden
-            var resSmtp = await AuthGet(tFinPub, "/api/admin/smtp");
+            // 3. Connection catalog administration (which now covers SMTP) -> 403 Forbidden
+            var resSmtp = await AuthGet(tFinPub, "/api/admin/connections");
             Assert.Equal(HttpStatusCode.Forbidden, resSmtp.StatusCode);
 
             // 4. Usage Metrics -> 403 Forbidden

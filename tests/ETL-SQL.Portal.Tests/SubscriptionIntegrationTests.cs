@@ -202,34 +202,48 @@ namespace ETL_SQL.Portal.Tests
             var report = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             var reportId = report!["id"]!.GetValue<int>();
 
-            var smtpAlias = $"smtp-{Guid.NewGuid():N}"[..16];
-            var smtpRes = await AuthPost(client, token, "/api/admin/smtp", new
-            {
-                alias = smtpAlias,
-                host = _smtp.SmtpHost,
-                port = _smtp.SmtpPort,
-                fromAddress = "portal@example.com",
-                useSsl = false
-            });
-            Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
+            var smtpAlias = await CreateSmtpAliasAsync(client, token);
 
             return (folderId, reportId, smtpAlias, reportName);
         }
 
+        /// <summary>
+        /// Registers an SMTP connection in the governed catalog. Two steps rather than one, because
+        /// the catalog stores <c>SECRET:</c> references and rejects literal credentials: the value
+        /// goes to the Portal secret store first, and the connection references it by name.
+        /// </summary>
         private async Task<string> CreateSmtpAliasAsync(HttpClient client, string token, string? alias = null, int? port = null, string? fromAddress = null, string? password = null)
         {
             var smtpAlias = alias ?? $"smtp-{Guid.NewGuid():N}"[..16];
-            var smtpRes = await AuthPost(client, token, "/api/admin/smtp", new
+
+            var options = new Dictionary<string, string>
             {
-                alias = smtpAlias,
-                host = _smtp.SmtpHost,
-                port = port ?? _smtp.SmtpPort,
-                username = password == null ? null : "smtp-user",
-                password,
-                fromAddress = fromAddress ?? "portal@example.com",
-                useSsl = false
+                ["HOST"] = _smtp.SmtpHost,
+                ["PORT"] = (port ?? _smtp.SmtpPort).ToString(),
+                ["DEFAULT_FROM"] = fromAddress ?? "portal@example.com",
+                ["USE_SSL"] = "false"
+            };
+
+            if (password is not null)
+            {
+                var secretName = $"{smtpAlias}_password".Replace('-', '_');
+                var secretRes = await AuthPut(client, token, $"/api/admin/secrets/{secretName}",
+                    new { value = password });
+                Assert.True(secretRes.IsSuccessStatusCode,
+                    $"seeding secret '{secretName}' failed: {secretRes.StatusCode}");
+
+                options["USERNAME"] = "smtp-user";
+                options["PASSWORD"] = $"SECRET:{secretName}";
+            }
+
+            var smtpRes = await AuthPut(client, token, $"/api/admin/connections/{smtpAlias}", new
+            {
+                connectorType = "SMTP",
+                options,
+                sensitiveFields = new[] { "PASSWORD" }
             });
-            Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
+            Assert.True(smtpRes.IsSuccessStatusCode,
+                $"registering connection '{smtpAlias}' failed: {smtpRes.StatusCode}");
             return smtpAlias;
         }
 

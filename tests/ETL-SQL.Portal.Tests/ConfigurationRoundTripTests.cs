@@ -381,8 +381,22 @@ public sealed class ConfigurationRoundTripTests
 
         // Connection identity for round-trip comparison is alias + type + options, all of which
         // survive export because the options carry references rather than values.
-        var smtp = (await db.PortalSharedConnections.Where(c => c.Alias.EndsWith($"_{suffix}"))
-            .Select(c => c.Alias + "|" + c.ConnectorType + "|" + c.OptionsJson).ToListAsync()).ToHashSet();
+        //
+        // The rows are materialised before projecting: OptionsJson is encrypted at rest by the PII
+        // value converter, and a projection composed inside the query is translated to SQL-side
+        // concatenation that bypasses the converter entirely — comparing ciphertext, which differs
+        // on every write because the encryption is non-deterministic.
+        // Options are normalised to a sorted key=value list rather than compared as raw JSON: the
+        // export writes options in alphabetical order, so identical content round-trips with a
+        // different key order and a string comparison would fail on formatting, not on state.
+        var smtp = (await db.PortalSharedConnections
+                .Where(c => c.Alias.EndsWith($"_{suffix}"))
+                .ToListAsync())
+            .Select(c => c.Alias + "|" + c.ConnectorType + "|" + string.Join(",",
+                (System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(c.OptionsJson) ?? [])
+                    .OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(o => $"{o.Key}={o.Value}")))
+            .ToHashSet();
 
         var reports = (await db.Reports
             .Include(r => r.Folder)

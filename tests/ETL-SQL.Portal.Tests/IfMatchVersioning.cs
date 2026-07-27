@@ -33,8 +33,8 @@ internal static partial class IfMatchVersioning
     [GeneratedRegex(@"^(?<r>/api/subscriptions/\d+)$")]
     private static partial Regex SubscriptionRoute();
 
-    [GeneratedRegex(@"^(?<r>/api/admin/smtp/\d+)$")]
-    private static partial Regex SmtpRoute();
+    // No SMTP route: api/admin/smtp is retired. Connections are keyed by alias under
+    // api/admin/connections and are not id-versioned mutations.
 
     /// <summary>
     /// Resolves the targeted resource's current version and adds <c>If-Match</c> to
@@ -61,7 +61,7 @@ internal static partial class IfMatchVersioning
     {
         foreach (var route in (ReadOnlySpan<Regex>)
             [UserRoute(), GroupRoute(), DatasetRoute(), FolderRoute(),
-             ReportRoute(), SubscriptionRoute(), SmtpRoute()])
+             ReportRoute(), SubscriptionRoute()])
         {
             var match = route.Match(path);
             if (match.Success)
