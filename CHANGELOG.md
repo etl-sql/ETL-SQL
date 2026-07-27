@@ -12,6 +12,46 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+
+**Portal SMTP is an ordinary connector; `CREATE SMTP CONNECTION` is removed**
+
+- SMTP now uses the connector grammar: `CREATE CONNECTION <alias> AS SMTP(...)` inside an
+  `EXECUTE <portal> BEGIN ... END` block. The retired form is rejected with a diagnostic naming the
+  exact replacement — it differed in five ways at once (statement shape, string-literal vs
+  identifier alias, `WITH` vs `AS`, `FROM_ADDRESS` vs `DEFAULT_FROM`, and credential handling), so a
+  generic syntax error would have left all of them to guess at.
+- `DROP SMTP CONNECTION 'alias'` becomes `DROP CONNECTION [IF EXISTS] <alias>`.
+- **Credentials are `SECRET:name` references, never values.** Configuring SMTP is now two steps:
+  store the password in the portal secret store, then reference it from the connection. A literal
+  password is refused by the catalog rather than stored.
+- The `SmtpConnections` table is **dropped with no data migration**. Existing SMTP passwords are
+  not carried forward; store each one as a secret and re-reference it. The `api/admin/smtp`
+  endpoints are removed — `api/admin/connections` serves every connector type.
+- Existence modifiers are canonical for every object kind: `DROP <kind> IF EXISTS <name>`. The
+  post-name spelling (`DROP CONNECTION c IF EXISTS`), previously accepted for six kinds, is
+  rejected with the canonical form.
+
+### Security
+
+- Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
+  in the governed connection catalog, which enforces reference-only credentials on write, encrypts
+  target and options at rest, and carries per-connection use ACLs, ownership, an audit trail and a
+  usage ledger. The Portal no longer materialises the plaintext: subscription and admin-notification
+  delivery scripts carry the reference and the engine resolves it when the connection opens, so the
+  credential is never written into script text that could reach logs, execution history, or error
+  detail. This is a hardening of an exposure that previously required active scrubbing — no exploit
+  path was identified.
+- **Known gap:** because the Portal no longer holds the plaintext, it can no longer redact a
+  credential that an engine error echoes back; pattern-based redaction does not match a bare
+  password in free text. Net exposure is lower than before, but this specific mitigation is absent.
+  Tracked for a fix at the point where `SECRET:` references are resolved.
+
+### Fixed
+
+- `docs/reference/visuals-reporting/report/theme.md`, which is embedded as runtime `HELP`,
+  documented `DROP THEME corporate IF EXISTS` — a form the parser has never accepted for `THEME`.
+
 ## [0.17.0] — 2026-07-26
 
 ### Added
