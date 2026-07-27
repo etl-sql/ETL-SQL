@@ -281,15 +281,22 @@ normalized schema and unified syntax.
   connection work.
 - **`ReportId` stays a real FK.** `TargetPath` is a mutable job property changed by
   `ALTER JOB … SET TARGET`.
-- **Surrogate keys; names are renameable.** `JobId`/`ScheduleId`/`NotificationId` are the primary
-  keys and `Name` is a unique mutable attribute, following SQL Agent. This is migration-bearing well
-  beyond the `Jobs` table: `JobHistory.JobName`, `JobState (JobName, StateKey)` and
-  `HostMetricsDaily (Day, JobName)` all key on the name string today, so a rename would otherwise
-  orphan a job's entire history, state, and daily metrics. `JobHistory` also keeps a denormalised
-  `JobNameAtRunTime` so a rename cannot rewrite what the audit trail says about the past.
-- **`ALERT` is kept as a fourth entity** — it is a *condition* plus destinations, where a
-  `NOTIFICATION` is only a destination. `CREATE ALERT n FOR REPORT '…' WHEN VISUAL v < 100` then
-  `ALTER ALERT n ADD NOTIFICATION …` (no `ON <condition>` — the alert is the condition).
+- **`Name` stays the primary key and is not renameable.** The surrogate-key/renameable-label model
+  was considered and rejected: configuration here *is* code, `ConfigurationExportService` emits
+  replayable scripts that reference objects by name, and a name that drifts under a script makes a
+  re-import create a duplicate instead of reconciling. It is also the identity model every other
+  object in the language already uses. Presentation moves to `DISPLAY_NAME`, `DESCRIPTION`, and an
+  `OPTIONS` bag — freely editable, never referenced by a script. Anything the scheduler *reads* gets
+  a real column, not an options key.
+  This removes the largest and riskiest piece of the plan: `JobHistory`, `JobState (JobName,
+  StateKey)` and `HostMetricsDaily (Day, JobName)` are no longer re-keyed, so every orchestrator
+  store change stays additive — SQLite cannot alter a primary key in place, and this would otherwise
+  have been the first non-additive change that store has ever taken.
+- **`ALERT` is a fourth entity owned by the Portal.** It is a *condition* plus destinations, where a
+  `NOTIFICATION` is only a destination; and it says "a visualization changed", so evaluating
+  `WHEN VISUAL …` is Report-SQL work the Orchestrator cannot do. `CREATE ALERT n FOR REPORT '…'
+  WHEN VISUAL v < 100` then `ALTER ALERT n ADD NOTIFICATION …` (no `ON <condition>` — the alert is
+  the condition). Evaluated on report-refresh completion, which the Portal already observes.
   `ASSERT JOB … ON FAILURE ALERT <connection>` becomes `… ON FAILURE NOTIFY <notification>`.
 - **`CREATE DATASET … REFRESH EVERY` is removed**, not migrated. It is a 1:1 dataset↔schedule
   coupling and the only engine-side consumer of the retired inline `AS <statement>` job body — it
@@ -300,31 +307,33 @@ normalized schema and unified syntax.
   `docs/reference/dates-times/dates-times.md`. Validate at `CREATE`/`ALTER` time and store the
   resolved default, so editing `appsettings.json` cannot silently move existing schedules.
 - **Generated names for sugar** derive from `NEWID()` (UUID v7 — time-ordered, so they sort by
-  creation), under a reserved prefix `CREATE JOB` refuses.
+  creation), under a reserved prefix `CREATE JOB` refuses. Readability is `DISPLAY_NAME`'s job, so a
+  generated name can stay stable and export-safe without being what an operator reads.
 
-**Open — see §12 of the spec.** Q3 is the load-bearing one: an alert's condition is `WHEN VISUAL`,
-a Report-SQL concept the Orchestrator knows nothing about, so either the Orchestrator triggers and
-the Portal evaluates, or `ALERT` is the one entity the Portal owns. Settle that before the alert
-slice. Q1 (script-target conditions, alert evaluation cadence) and Q2 (whether the Portal provisions
-connection aliases onto an orchestrator, rather than an operator doing it by hand) can follow.
+**Open — see §12 of the spec.** None block the job/schedule slice. Q1: notifications are defined
+where they are used (Orchestrator's for job outcomes, Portal's for alerts, same grammar targeted by
+the `EXECUTE` block) — confirm the two-catalog split. Q2: alerts are `FOR REPORT` only and evaluate
+on refresh completion rather than carrying their own schedule. Q3: whether the Portal should
+provision connection aliases onto an orchestrator instead of an operator doing it by hand.
 
 **Implementation Steps:**
 
-1. **Orchestrator store (system of record):**
-   - Add `Schedules`, `Notifications`, `Alerts` and the link tables; add `JobId`/`JobType`/
-     `TargetPath` to `Jobs`, demote `Name` to a unique index, and retire `Interval`/`Unit`/`AtTime`.
-   - Re-key `JobHistory`, `JobState` and `HostMetricsDaily` onto `JobId`.
-   - This is **raw DDL with idempotent `ALTER TABLE … ADD COLUMN` upgrades** across
-     `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect` — *not* EF migrations. Additive
-     changes are easy; this is the first change here that is not additive, because SQLite cannot
-     alter a primary key in place. Plan a per-table rebuild (`CREATE new → INSERT SELECT → DROP old
-     → RENAME`) in one transaction each.
+1. **Orchestrator store (system of record for `JOB`/`SCHEDULE`/`NOTIFICATION`):**
+   - Add `Schedules`, `Notifications`, `JobSchedules`, `JobNotifications`; add `DisplayName`,
+     `Description`, `Options`, `JobType`, `TargetPath` to `Jobs`.
+   - `Interval`/`Unit`/`AtTime` become unused but are `NOT NULL`; leave them with defaults and stop
+     reading them. Removing them is a later contract step.
+   - **All additive**, matching how this raw-DDL store (`SqliteOrchestratorDialect`,
+     `NpgsqlOrchestratorDialect`, idempotent `ALTER TABLE … ADD COLUMN`) has always been changed.
+     `JobHistory`, `JobState` and `HostMetricsDaily` are untouched.
    - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
      reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
      run; no `DateTime.Now` anywhere in the path.
 2. **Portal persistence:**
    - Replace `DatasetJobs` with `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`), EF
      migrations on both providers.
+   - Add `Alerts` (`ReportId` FK, visual + operator + threshold), `AlertNotifications`, and the
+     Portal's own `Notifications` catalog for alert delivery.
    - The `DropTable` violates `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRolling
      ExpandContract`; add the migration to that test's `PreDeploymentBreakingMigrations` allow-list
      with a written justification (precedent: `_DropSmtpConnections`).
@@ -350,8 +359,9 @@ connection aliases onto an orchestrator, rather than an operator doing it by han
    - Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION` while linked,
      cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are attached.
 5. **Consumers, UI, docs:**
-   - `OrchestratorPollerService` matches `ReportJobLinks` by job name; `SCRIPT` completions ignored.
-   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION` (naming per Q2).
+   - `OrchestratorPollerService` matches `ReportJobLinks` by job name, then evaluates the alerts
+     attached to that report; `SCRIPT` completions ignored.
+   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
    - `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`.
