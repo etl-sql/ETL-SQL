@@ -153,9 +153,18 @@ live users, remove contradictory forms now rather than carrying permanent compat
      exposed to this.
    - Comparing `OptionsJson` as raw JSON asserts on key order, which the export normalises
      alphabetically. Compare a sorted `key=value` projection instead.
-   - [ ] EF migration on **both** providers dropping `SmtpConnections`; passwords are
-         deliberately dropped, forcing re-entry as `SECRET:` references. Do this **last**, once
-         nothing reads the table.
+   - [ ] **DEFERRED TO v0.19.0 — the table must NOT be dropped in v0.18.0.**
+         `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRollingExpandContract`
+         rejects `DropTableOperation` in `Up`, and it is right to: during a rolling HA upgrade a
+         node still running v0.17.x would query a table that no longer exists. This is
+         expand/contract — v0.18.0 is the expand half (nothing reads `SmtpConnections` any more),
+         v0.19.0 is the contract half.
+         Keep the `SmtpConnection` entity, its `DbSet` and its model configuration in place until
+         then: removing them without the migration makes the model diverge from the schema and
+         `SchemaUpToDate` goes false. `SmtpPasswordProtector` can go earlier — it is not
+         schema-bound — but check the test fixtures that still resolve it first.
+         Passwords are deliberately not migrated; re-entry as `SECRET:` references is the
+         documented path.
    - [ ] `SmtpPasswordProtector` becomes dead once the table goes — delete it and its DI
          registration.
    - [ ] **Redact resolved credentials in engine output — a capability lost in this change.**
