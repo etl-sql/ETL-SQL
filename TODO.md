@@ -112,21 +112,36 @@ live users, remove contradictory forms now rather than carrying permanent compat
    now writes to `PortalSharedConnection`, but every consumer still reads the old
    `SmtpConnections` table, so a connection created with the new syntax is invisible to
    subscriptions and alerts:
-   - [ ] `SmtpAdminNotificationSender` — resolves `db.SmtpConnections` and unprotects
-         `EncryptedPassword` via `SmtpPasswordProtector`. It must resolve the catalog entry and
-         obtain the password from the secret store through the `SECRET:` reference instead. This
-         is the substantive change, not a lookup swap: the credential path changes.
-   - [ ] `SubscriptionsController` — `api/admin/smtp` CRUD, `api/smtp-aliases`, and the
-         subscription create/update alias validation.
-   - [ ] `SubscriptionDeliveryService`, `OperationalMetricsService`,
-         `PortalPrometheusMetricsExporter`, `OperationalMetricsDigest` (`SmtpConnections` count).
-   - [ ] `ConfigurationExportService` — still enumerates `db.SmtpConnections`; switch to the
-         catalog so export and import agree.
+   - [x] `SmtpAdminNotificationSender` — now resolves the catalog entry and copies the
+         `SECRET:` reference into the generated script. It no longer takes `SmtpPasswordProtector`:
+         the credential is never materialised in the Portal process, because the engine resolves
+         the reference on connect. This turned out **simpler** than expected, not harder — the
+         feared "decrypt here, re-encrypt there" step does not exist.
+   - [x] `SubscriptionsController` — `api/admin/smtp` CRUD deleted (superseded by
+         `api/admin/connections`); `api/smtp-aliases` and subscription alias validation now read
+         the catalog, treating a disabled entry as absent.
+   - [x] `SubscriptionDeliveryService` — resolves from the catalog; the delivery script carries
+         the `SECRET:` reference. `Sanitize` no longer takes a password to redact because the
+         process never sees one.
+   - [x] `ConfigurationExportService` — enumerates the catalog and exports option values verbatim.
+         The `${SMTP_<ALIAS>_PASSWORD}` placeholder machinery is gone for connections: a `SECRET:`
+         reference is not a secret, so the exported script is directly replayable.
+   - [ ] **5 Portal tests still red — all fixture-shape, no product defect known.** They seed
+         `db.SmtpConnections` and assert the old export shape:
+         `ConfigurationRoundTripTests`, `ConfigurationExportSecretExclusionTests`,
+         `ConfigurationPromotionTests`, `ScriptedPortalImportTests` (use `SmtpCatalogSeed.Add`,
+         added for this purpose), and
+         `OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit`,
+         whose premise — that a plaintext credential could leak into logs — no longer holds and
+         should assert the reference is what appears.
+   - [ ] `OperationalMetricsService`, `PortalPrometheusMetricsExporter`, `OperationalMetricsDigest`
+         still count `SmtpConnections`; they report 0 until repointed at the catalog.
    - [ ] `connections-admin.js` SMTP option in the admin UI.
    - [ ] EF migration on **both** providers dropping `SmtpConnections`; passwords are
-         deliberately dropped, forcing re-entry as `SECRET:` references.
-   - [ ] `SHOW SMTP CONNECTIONS` now lists the whole governed catalog rather than SMTP only. Its
-         retirement belongs with the wider `SHOW` → `eng.*` item; until then the name is stale.
+         deliberately dropped, forcing re-entry as `SECRET:` references. Do this **last**, once
+         nothing reads the table.
+   - [ ] `SmtpPasswordProtector` becomes dead once the table goes — delete it and its DI
+         registration.
 
 2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
    superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.
@@ -433,6 +448,20 @@ DROP REFRESH JOB IF EXISTS FinanceNightly AT orch_admin;
 4. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
    agree on one expiration clause; prefer structural `EXPIRES <timestamp>` over a second
    `WITH(EXPIRES_AT=...)` spelling.
+5. **Retire `SHOW SMTP CONNECTIONS` in favour of `eng.connections`.** Carried over from the P0
+   managed-connection work (2026-07-27): the bespoke SMTP store is gone, so the statement now
+   lists the whole governed catalog and its name is actively misleading. Replace with a filter on
+   the connector type, against a Portal-qualified catalog:
+
+   ```sql
+   SELECT * FROM my_portal.eng.connections WHERE connector_type = 'SMTP';
+   ```
+
+   Delete `ShowPortalSmtpConnectionsStatement`, its `SHOW SMTP CONNECTION[S]` parser branch in
+   `SystemParser`, its `INTO #table` rewrite case, and the `PortalDataSource` handler that now
+   points at `api/admin/connections`. `eng.connections` is already listed in the catalog inventory
+   under the P1 `SHOW` retirement item, so this is a consumer of that work rather than a new
+   surface.
 
 #### P2 — Retire duplicate surface syntax
 

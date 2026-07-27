@@ -79,17 +79,7 @@ public class SubscriptionDeliverySecurityTests
         };
         db.Reports.Add(report);
 
-        var smtp = new SmtpConnection
-        {
-            Alias = $"smtp-{suffix}",
-            Host = "smtp.test.local",
-            Port = 2525,
-            Username = "smtp-user",
-            EncryptedPassword = protector.Protect(smtpPassword),
-            FromAddress = "portal@test.local",
-            UseSsl = false
-        };
-        db.SmtpConnections.Add(smtp);
+        var smtp = SmtpCatalogSeed.Add(db, $"smtp-{suffix}", username: "smtp-user");
         await db.SaveChangesAsync();
 
         var subscription = new Subscription
@@ -108,7 +98,7 @@ public class SubscriptionDeliverySecurityTests
         var service = new SubscriptionDeliveryService(
             db,
             config,
-            protector,
+            new PortalConnectionCatalogService(db),
             new FolderPermissionService(db),
             new AuditService(db, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
             runner,
@@ -121,7 +111,11 @@ public class SubscriptionDeliverySecurityTests
 
         if (runnerShouldExecute)
         {
-            Assert.Contains(smtpPassword, runner.Script, StringComparison.Ordinal);
+            // The delivery script must carry the SECRET: reference, never a resolved credential:
+            // the Portal no longer holds the plaintext, and the engine resolves it on connect.
+            // This assertion was previously the inverse — it required the password to appear.
+            Assert.Contains("PASSWORD = 'SECRET:", runner.Script, StringComparison.Ordinal);
+            Assert.DoesNotContain(smtpPassword, runner.Script, StringComparison.Ordinal);
             Assert.Contains("recipient@test.local", runner.Script, StringComparison.Ordinal);
             Assert.NotNull(subscription.LastSentAt);
             Assert.Equal(0, subscription.FailCount);
@@ -191,17 +185,7 @@ public class SubscriptionDeliverySecurityTests
         var report = new Report { FolderId = folder.Id, Name = $"R {suffix}", ScriptPath = scriptPath, CreatedBy = owner.Id };
         db.Reports.Add(report);
 
-        var smtp = new SmtpConnection
-        {
-            Alias = $"smtp-{suffix}",
-            Host = "smtp.test.local",
-            Port = 2525,
-            Username = "u",
-            EncryptedPassword = protector.Protect("pw"),
-            FromAddress = "portal@test.local",
-            UseSsl = false
-        };
-        db.SmtpConnections.Add(smtp);
+        var smtp = SmtpCatalogSeed.Add(db, $"smtp-{suffix}", username: "u");
         await db.SaveChangesAsync();
 
         var subscription = new Subscription
@@ -217,7 +201,7 @@ public class SubscriptionDeliverySecurityTests
         await db.SaveChangesAsync();
 
         var runner = new RecordingSubscriptionRunner();
-        var service = new SubscriptionDeliveryService(db, config, protector, new FolderPermissionService(db),
+        var service = new SubscriptionDeliveryService(db, config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
             new AuditService(db, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
             runner, NullLogger<SubscriptionDeliveryService>.Instance);
 
@@ -347,3 +331,4 @@ public class SubscriptionDeliverySecurityTests
         }
     }
 }
+

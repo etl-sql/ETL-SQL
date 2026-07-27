@@ -75,15 +75,7 @@ public sealed class SubscriptionDeliveryLedgerTests
         db.Reports.Add(report);
 
         var alias = $"smtp_{suffix}";
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = alias,
-            Host = "smtp.test.local",
-            Port = 2525,
-            EncryptedPassword = protector.Protect("pw-marker"),
-            FromAddress = "portal@test.local",
-            UseSsl = false
-        });
+        SmtpCatalogSeed.Add(db, alias);
         await db.SaveChangesAsync();
 
         var subscription = new Subscription
@@ -99,7 +91,7 @@ public sealed class SubscriptionDeliveryLedgerTests
         await db.SaveChangesAsync();
 
         var service = new SubscriptionDeliveryService(
-            db, config, protector, new FolderPermissionService(db),
+            db, config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
             new AuditService(db, new HttpContextAccessor()), runner,
             NullLogger<SubscriptionDeliveryService>.Instance);
 
@@ -331,3 +323,4 @@ public sealed class SubscriptionDeliveryLedgerTests
             row => row.SubscriptionId == h.SubscriptionId));
     }
 }
+

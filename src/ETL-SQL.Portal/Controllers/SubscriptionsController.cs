@@ -22,7 +22,7 @@ public class SubscriptionsController(
     AuditService audit,
     SubscriptionDeliveryStatusService deliveryStatus,
     FolderPermissionService folderPermissions,
-    SmtpPasswordProtector pwdProtector,
+    PortalConnectionCatalogService connectionCatalog,
     IDatasetRegistry datasetRegistry,
     SubscriptionScriptService subscriptionScripts,
     SubscriptionQueryService subscriptionQueries) : ControllerBase
@@ -127,11 +127,10 @@ public class SubscriptionsController(
         if (string.IsNullOrEmpty(recipientEmail))
             return BadRequest(new { error = "No recipient email. Supply one or add an email to your profile." });
 
-        SmtpConnection? smtp = null;
         if (!string.IsNullOrEmpty(req.SmtpAlias))
         {
-            smtp = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Alias == req.SmtpAlias);
-            if (smtp is null) return BadRequest(new { error = $"SMTP connection '{req.SmtpAlias}' not found." });
+            if (!await SmtpAliasExistsAsync(req.SmtpAlias))
+                return BadRequest(new { error = $"SMTP connection '{req.SmtpAlias}' not found." });
         }
         else if (format != SubscriptionFormat.Link)
         {
@@ -385,122 +384,30 @@ public class SubscriptionsController(
 
     // ── SMTP alias list (any authenticated user) ───────────────────────────────
 
-    /// <summary>Returns SMTP alias names so the subscribe modal can populate a dropdown.</summary>
+    /// <summary>
+    /// Returns SMTP alias names so the subscribe modal can populate a dropdown. Sourced from the
+    /// governed connection catalog: the bespoke SmtpConnection store no longer exists.
+    /// </summary>
     [HttpGet("api/smtp-aliases")]
-    public async Task<IActionResult> ListSmtpAliases()
+    public async Task<IActionResult> ListSmtpAliases(CancellationToken ct)
     {
-        var aliases = await db.SmtpConnections.Select(c => c.Alias).ToListAsync();
+        var aliases = (await connectionCatalog.ListAsync(ct))
+            .Where(c => !c.Disabled && c.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Alias)
+            .ToList();
         return Ok(aliases);
     }
 
-    // ── SMTP connections (Admin only) ──────────────────────────────────────────
+    // SMTP connection CRUD moved to ConnectionsAdminController (api/admin/connections), which
+    // serves every connector type and enforces SECRET:-reference credentials.
 
-    [HttpGet("api/admin/smtp")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> ListSmtp()
-    {
-        var conns = await db.SmtpConnections
-            .Select(c => new SmtpConnectionDto(c.Id, c.Alias, c.Host, c.Port, c.Username, c.FromAddress, c.UseSsl, c.Version))
-            .ToListAsync();
-        return Ok(conns);
-    }
-
-    [HttpPost("api/admin/smtp")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> CreateSmtp([FromBody] CreateSmtpRequest req)
-    {
-        if (await db.SmtpConnections.AnyAsync(c => c.Alias == req.Alias))
-            return Conflict(new { error = "Alias already exists" });
-
-        var conn = new SmtpConnection
-        {
-            Alias = req.Alias,
-            Host = req.Host,
-            Port = req.Port,
-            Username = req.Username,
-            EncryptedPassword = req.Password is not null ? pwdProtector.Protect(req.Password) : null,
-            FromAddress = req.FromAddress,
-            UseSsl = req.UseSsl
-        };
-        db.SmtpConnections.Add(conn);
-        await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_SMTP", "SmtpConnection", conn.Id.ToString(), req.Alias);
-        return Ok(new SmtpConnectionDto(conn.Id, conn.Alias, conn.Host, conn.Port, conn.Username, conn.FromAddress, conn.UseSsl, conn.Version));
-    }
-
-    [HttpPut("api/admin/smtp/{id:int}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateSmtp(int id, [FromBody] UpdateSmtpRequest req)
-    {
-        var conn = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Id == id);
-        if (conn is null) return NotFound();
-        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
-        if (expectedVersion is null)
-            return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, conn, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
-
-        if (req.Host is not null) conn.Host = req.Host;
-        if (req.Port.HasValue) conn.Port = req.Port.Value;
-        if (req.Username is not null) conn.Username = req.Username;
-        if (req.Password is not null) conn.EncryptedPassword = pwdProtector.Protect(req.Password);
-        if (req.FromAddress is not null) conn.FromAddress = req.FromAddress;
-        if (req.UseSsl.HasValue) conn.UseSsl = req.UseSsl.Value;
-
-        // SMTP definitions are credential-bearing: the change and its audit row share one
-        // commit (P1.6). The detail never includes the password.
-        audit.Stage(CurrentUserId, "UPDATE_SMTP", "SmtpConnection", id.ToString(),
-            $"{conn.Alias}{(req.Password is not null ? " (password rotated)" : "")}");
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await db.Entry(conn).ReloadAsync();
-            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
-        }
-        OptimisticConcurrency.SetETag(Response, conn.Version);
-        return Ok(ToSmtpDto(conn));
-    }
-
-    [HttpDelete("api/admin/smtp/{id:int}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeleteSmtp(int id)
-    {
-        var conn = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Id == id);
-        if (conn is null) return NotFound();
-        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
-        if (expectedVersion is null)
-            return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, conn, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
-        db.SmtpConnections.Remove(conn);
-        audit.Stage(CurrentUserId, "DELETE_SMTP", "SmtpConnection", id.ToString());
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            db.ChangeTracker.Clear();
-            var current = await db.SmtpConnections.FindAsync(id);
-            return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToSmtpDto(current));
-        }
-        return NoContent();
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────────────────
-
-    private static SmtpConnectionDto ToSmtpDto(SmtpConnection connection) =>
-        new(
-            connection.Id,
-            connection.Alias,
-            connection.Host,
-            connection.Port,
-            connection.Username,
-            connection.FromAddress,
-            connection.UseSsl,
-            connection.Version);
-
+    /// <summary>
+    /// True when the alias names an enabled SMTP entry in the governed catalog. A disabled entry
+    /// is treated as absent: binding a subscription to it would only fail later, at delivery.
+    /// </summary>
+    private async Task<bool> SmtpAliasExistsAsync(string alias) =>
+        (await connectionCatalog.ListAsync()).Any(c =>
+            !c.Disabled
+            && c.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase)
+            && c.Alias.Equals(alias, StringComparison.OrdinalIgnoreCase));
 }

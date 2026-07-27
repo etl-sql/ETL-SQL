@@ -41,17 +41,24 @@ public sealed class ConfigurationExportTests
         Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, HttpMethod.Post,
             $"/api/folders/{folderId}/acl", adminToken,
             new { groupId, permission = 2 }, version: 1)).StatusCode);
-        var smtp = await PostAsync(client, adminToken, "/api/admin/smtp", new
-        {
-            alias = $"exp_smtp_{suffix}",
-            host = "smtp.test.local",
-            port = 587,
-            username = "mailer",
-            password = "smtp-secret-marker",
-            fromAddress = "reports@test.local",
-            useSsl = true
-        });
-        Assert.NotNull(smtp);
+        // SMTP is registered through the governed catalog, which stores SECRET: references only —
+        // posting a literal password here would (correctly) be rejected.
+        Assert.Equal(HttpStatusCode.NoContent, (await SendAsync(client, HttpMethod.Put,
+            $"/api/admin/connections/exp_smtp_{suffix}", adminToken,
+            new
+            {
+                connectorType = "SMTP",
+                options = new Dictionary<string, string>
+                {
+                    ["HOST"] = "smtp.test.local",
+                    ["PORT"] = "587",
+                    ["USERNAME"] = "mailer",
+                    ["PASSWORD"] = "SECRET:smtp_secret_marker",
+                    ["DEFAULT_FROM"] = "reports@test.local",
+                    ["USE_SSL"] = "true"
+                },
+                sensitiveFields = new[] { "PASSWORD" }
+            }, version: 1)).StatusCode);
         var scriptPath = Path.Combine(factory.TempDir, "scripts", $"exp_{suffix}.rptsql");
         await File.WriteAllTextAsync(scriptPath, "-- export test report\n");
         Assert.NotNull(await PostAsync(client, adminToken, "/api/reports", new
@@ -107,7 +114,8 @@ public sealed class ConfigurationExportTests
         Assert.Contains($"GRANT MANAGE ON FOLDER '/exp_folder_{suffix}' TO GROUP 'exp_grp_{suffix}';", script);
         // SMTP exports as an ordinary connector, not a Portal-only statement family.
         Assert.Contains($"CREATE CONNECTION exp_smtp_{suffix} AS SMTP(", script);
-        Assert.Contains($"PASSWORD = '${{SMTP_EXP_SMTP_{suffix.ToUpperInvariant()}_PASSWORD}}'", script);
+        // A SECRET: reference is not a secret, so it exports verbatim rather than as a placeholder.
+        Assert.Contains("PASSWORD = 'SECRET:smtp_secret_marker'", script);
         Assert.Contains($"PUBLISH REPORT 'Export Report {suffix}'", script);
         Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [alpha@test.local]'", script);
         Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [zeta@test.local]'", script);

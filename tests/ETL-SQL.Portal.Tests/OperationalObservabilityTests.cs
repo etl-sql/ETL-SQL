@@ -485,15 +485,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         await File.WriteAllTextAsync(scriptPath, "SELECT 1 AS V INTO #d;");
         var report = new Report { FolderId = folder.Id, Name = $"R {suffix}", ScriptPath = scriptPath, CreatedBy = owner.Id };
         db.Reports.Add(report);
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = $"smtp_{suffix}",
-            Host = "smtp.test.local",
-            Port = 2525,
-            EncryptedPassword = protector.Protect(smtpPassword),
-            FromAddress = "p@test.local",
-            UseSsl = false
-        });
+        SmtpCatalogSeed.Add(db, $"smtp_{suffix}", defaultFrom: "p@test.local");
         await db.SaveChangesAsync();
         var sub = new Subscription
         {
@@ -511,7 +503,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         // A runner whose error text echoes the SMTP password — the worst case for a credential leak.
         var runner = new EchoingFailureRunner($"SMTP AUTH rejected for password {smtpPassword}");
         var service = new SubscriptionDeliveryService(
-            db, config, protector, new FolderPermissionService(db),
+            db, config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
             new AuditService(db, new HttpContextAccessor()), runner, capturing);
 
         var result = await service.DeliverAsync(sub.Id, "trigger-log");
@@ -581,3 +573,4 @@ public sealed class OperationalObservabilityTests : IDisposable
         return (await relogin.Content.ReadFromJsonAsync<JsonObject>())!["token"]!.GetValue<string>();
     }
 }
+

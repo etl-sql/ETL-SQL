@@ -69,15 +69,7 @@ public sealed class MultiInstanceCoordinationTests
             CreatedBy = owner.Id
         };
         db.Reports.Add(report);
-        db.SmtpConnections.Add(new SmtpConnection
-        {
-            Alias = $"smtp_{suffix}",
-            Host = "smtp.test.local",
-            Port = 2525,
-            EncryptedPassword = protector.Protect("pw"),
-            FromAddress = "portal@test.local",
-            UseSsl = false
-        });
+        SmtpCatalogSeed.Add(db, $"smtp_{suffix}");
         await db.SaveChangesAsync();
 
         var subscription = new Subscription
@@ -107,7 +99,7 @@ public sealed class MultiInstanceCoordinationTests
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=10000;");
         var runner = new CountingRunner();
         var service = new SubscriptionDeliveryService(
-            db, f.Config, f.Protector, new FolderPermissionService(db),
+            db, f.Config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
             new AuditService(db, new HttpContextAccessor()), runner,
             NullLogger<SubscriptionDeliveryService>.Instance);
         return (service, runner, db);
@@ -219,3 +211,4 @@ public sealed class MultiInstanceCoordinationTests
         Assert.Equal(2, await db1.SubscriptionDeliveries.CountAsync(d => d.SubscriptionId == f.SubscriptionId));
     }
 }
+

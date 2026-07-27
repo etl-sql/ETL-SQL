@@ -156,38 +156,30 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         }
         emitted.Add($"{folderAclCount} folder ACL(s)");
 
-        // ── SMTP connections ──────────────────────────────────────────────────
-        var smtpCount = 0;
-        AppendSection(body, "SMTP connections (credentials are never exported)");
-        await foreach (var s in db.SmtpConnections.AsNoTracking()
-            .OrderBy(s => s.Alias)
-            .Select(s => new
-            {
-                s.Alias,
-                s.Host,
-                s.Port,
-                s.Username,
-                s.EncryptedPassword,
-                s.FromAddress,
-                s.UseSsl
-            })
+        // ── Governed connections ──────────────────────────────────────────────
+        // Catalog option values are SECRET: references, not secrets, so they export verbatim —
+        // no ${...} placeholder is needed, and the exported script is directly replayable.
+        // A value that is not a reference cannot occur here: the catalog rejects raw credentials
+        // on write.
+        var connectionCount = 0;
+        AppendSection(body, "Connections (credentials are SECRET: references, never values)");
+        await foreach (var c in db.PortalSharedConnections.AsNoTracking()
+            .OrderBy(c => c.Alias)
+            .Select(c => new { c.Alias, c.ConnectorType, c.OptionsJson })
             .AsAsyncEnumerable()
             .WithCancellation(ct))
         {
-            smtpCount++;
-            var options = new List<string> { $"HOST = {Q(s.Host)}", $"PORT = {s.Port}" };
-            if (!string.IsNullOrWhiteSpace(s.Username)) options.Add($"USERNAME = {Q(s.Username)}");
-            if (!string.IsNullOrEmpty(s.EncryptedPassword))
-            {
-                var placeholder = $"SMTP_{Placeholder(s.Alias)}_PASSWORD";
-                secrets.Add(placeholder);
-                options.Add($"PASSWORD = '${{{placeholder}}}'");
-            }
-            if (!string.IsNullOrWhiteSpace(s.FromAddress)) options.Add($"DEFAULT_FROM = {Q(s.FromAddress)}");
-            options.Add($"USE_SSL = {(s.UseSsl ? "TRUE" : "FALSE")}");
-            body.AppendLine($"    CREATE CONNECTION {s.Alias} AS SMTP({string.Join(", ", options)});");
+            connectionCount++;
+            var parsed = System.Text.Json.JsonSerializer
+                .Deserialize<Dictionary<string, string>>(c.OptionsJson) ?? [];
+            var options = parsed
+                .OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(o => $"{o.Key} = {Q(o.Value)}")
+                .ToList();
+            body.AppendLine(
+                $"    CREATE CONNECTION {c.Alias} AS {c.ConnectorType.ToUpperInvariant()}({string.Join(", ", options)});");
         }
-        emitted.Add($"{smtpCount} SMTP connection(s)");
+        emitted.Add($"{connectionCount} connection(s)");
 
         // ── Reports (publication references — script files travel separately, P1.10) ─
         var reportCount = 0;

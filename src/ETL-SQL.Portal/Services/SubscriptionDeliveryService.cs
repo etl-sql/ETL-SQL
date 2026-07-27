@@ -58,7 +58,7 @@ public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : I
 public class SubscriptionDeliveryService(
     PortalDbContext db,
     PortalConfig config,
-    SmtpPasswordProtector pwdProtector,
+    PortalConnectionCatalogService connectionCatalog,
     FolderPermissionService folderPermissions,
     AuditService audit,
     ISubscriptionScriptRunner runner,
@@ -100,7 +100,7 @@ public class SubscriptionDeliveryService(
             {
                 // Unknown outcome: record it against this recipient and never re-claim the same
                 // trigger. A later, distinct trigger may retry independently.
-                result = SubscriptionDeliveryResult.Failed(Sanitize(ex.Message, null));
+                result = SubscriptionDeliveryResult.Failed(Sanitize(ex.Message));
             }
 
             ledger.Outcome = result.Outcome.ToString();
@@ -220,13 +220,27 @@ public class SubscriptionDeliveryService(
                 "Report script could not be read for row-level-security evaluation.", correlationId, ct);
         }
 
-        SmtpConnection? smtp = null;
+        IReadOnlyDictionary<string, string>? smtp = null;
         if (!string.IsNullOrEmpty(sub.SmtpAlias))
         {
-            smtp = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Alias == sub.SmtpAlias, ct);
-            if (smtp is null)
+            try
+            {
+                var definition = await connectionCatalog.ResolveDefinitionAsync(sub.SmtpAlias, identity: null, ct);
+                if (!definition.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
+                    return await RecordFailureAsync(sub, recipient,
+                        $"Connection '{sub.SmtpAlias}' is a {definition.ConnectorType} connection, not SMTP.",
+                        correlationId, ct);
+                smtp = definition.Options;
+            }
+            catch (KeyNotFoundException)
+            {
                 return await RecordFailureAsync(sub,
                     recipient, $"SMTP connection '{sub.SmtpAlias}' no longer exists.", correlationId, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return await RecordFailureAsync(sub, recipient, ex.Message, correlationId, ct);
+            }
         }
         else if (sub.Format != SubscriptionFormat.Link)
         {
@@ -239,16 +253,11 @@ public class SubscriptionDeliveryService(
                 "Link subscription has no SMTP alias — nothing to deliver.");
         }
 
-        var smtpPassword = pwdProtector.Unprotect(smtp.EncryptedPassword);
-        if (!string.IsNullOrEmpty(smtp.EncryptedPassword) && smtpPassword is null)
-            return await RecordFailureAsync(
-                sub, recipient, "SMTP credential could not be resolved.", correlationId, ct);
-
         string? exportPath = null;
         try
         {
             var script = ComposeDeliveryScript(
-                sub, recipient, reportScriptPath, smtp, smtpPassword, out exportPath);
+                sub, recipient, reportScriptPath, smtp, out exportPath);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, config.Resources.ExecutionTimeoutSeconds)));
@@ -271,7 +280,7 @@ public class SubscriptionDeliveryService(
 
             if (!success)
                 return await RecordFailureAsync(
-                    sub, recipient, Sanitize(error, smtpPassword), correlationId, ct);
+                    sub, recipient, Sanitize(error), correlationId, ct);
 
             // Recipient outcome and its audit record share one commit. The address is represented
             // by a fingerprint in operational records; the delivery ledger retains the address for
@@ -382,11 +391,10 @@ public class SubscriptionDeliveryService(
         Subscription sub,
         string recipient,
         string reportScriptPath,
-        SmtpConnection smtp,
-        string? smtpPassword,
+        IReadOnlyDictionary<string, string> smtp,
         out string? exportPath)
     {
-        var fromAddr = smtp.FromAddress ?? smtp.Username ?? "etlsql@localhost";
+        var fromAddr = SmtpOption(smtp, "DEFAULT_FROM") ?? SmtpOption(smtp, "USERNAME") ?? "etlsql@localhost";
         var sb = new StringBuilder();
 
         var parameters = DeserializeParams(sub.ParametersJson);
@@ -413,7 +421,7 @@ public class SubscriptionDeliveryService(
 
             sb.AppendLine($"EXPORT REPORT '{reportScriptPath.Replace("\\", "/")}' FORMAT {formatName} TO '{exportPath.Replace("\\", "/")}';");
             sb.AppendLine();
-            AppendSmtpConnection(sb, smtp, smtpPassword);
+            AppendSmtpConnection(sb, smtp);
             sb.AppendLine("SEND EMAIL");
             sb.AppendLine($"    TO      '{Esc(recipient)}'");
             sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
@@ -426,7 +434,7 @@ public class SubscriptionDeliveryService(
         {
             exportPath = null;
             var portalUrl = $"{{portal_url}}/index.html#report/{sub.ReportId}";
-            AppendSmtpConnection(sb, smtp, smtpPassword);
+            AppendSmtpConnection(sb, smtp);
             sb.AppendLine("SEND EMAIL");
             sb.AppendLine($"    TO      '{Esc(recipient)}'");
             sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
@@ -438,19 +446,30 @@ public class SubscriptionDeliveryService(
         return sb.ToString();
     }
 
-    private static void AppendSmtpConnection(StringBuilder sb, SmtpConnection smtp, string? password)
+    /// <summary>
+    /// Emits the SMTP connection for the delivery script from cataloged options. Values are copied
+    /// verbatim, so a <c>SECRET:name</c> reference stays a reference and the engine resolves it on
+    /// connect — the credential is never materialised in the Portal process.
+    /// </summary>
+    private static void AppendSmtpConnection(StringBuilder sb, IReadOnlyDictionary<string, string> smtp)
     {
         sb.AppendLine("CREATE CONNECTION __sub_smtp AS SMTP(");
-        sb.AppendLine($"    HOST     = '{Esc(smtp.Host)}',");
-        sb.AppendLine($"    PORT     = {smtp.Port},");
-        if (!string.IsNullOrEmpty(smtp.Username))
-            sb.AppendLine($"    USERNAME = '{Esc(smtp.Username)}',");
-        if (!string.IsNullOrEmpty(password))
-            sb.AppendLine($"    PASSWORD = '{Esc(password)}',");
-        sb.AppendLine($"    USE_SSL  = '{smtp.UseSsl.ToString().ToLower()}'");
+
+        var lines = new List<string>();
+        foreach (var key in new[] { "HOST", "PORT", "USERNAME", "PASSWORD", "USE_SSL" })
+        {
+            if (SmtpOption(smtp, key) is not { } value) continue;
+            // PORT is the connector's only numeric option; the rest are quoted literals.
+            lines.Add(key == "PORT" ? $"    {key} = {value}" : $"    {key} = '{Esc(value)}'");
+        }
+
+        sb.AppendLine(string.Join("," + Environment.NewLine, lines));
         sb.AppendLine(");");
         sb.AppendLine();
     }
+
+    private static string? SmtpOption(IReadOnlyDictionary<string, string> options, string key) =>
+        options.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
     // ── Outcome recording ─────────────────────────────────────────────────────
 
@@ -528,12 +547,16 @@ public class SubscriptionDeliveryService(
         return SubscriptionDeliveryResult.Skipped("No recipient required delivery.");
     }
 
-    /// <summary>The persisted failure detail must never echo the SMTP credential.</summary>
-    private static string Sanitize(string? error, string? smtpPassword)
+    /// <summary>
+    /// The persisted failure detail must never echo the SMTP credential. The password is no longer
+    /// known to this process — the script carries a SECRET: reference the engine resolves — so the
+    /// former literal replacement had nothing to match on. SecretRedactor covers what can still
+    /// appear in engine output.
+    /// </summary>
+    private static string Sanitize(string? error)
     {
         var message = string.IsNullOrWhiteSpace(error) ? "Delivery failed." : error;
-        if (!string.IsNullOrEmpty(smtpPassword))
-            message = message.Replace(smtpPassword, "***");
+        message = ETL_SQL.Core.Common.SecretRedactor.Redact(message) ?? message;
         return message.Length > 1000 ? message[..1000] : message;
     }
 
