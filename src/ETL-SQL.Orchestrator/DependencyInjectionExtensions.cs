@@ -226,6 +226,7 @@ namespace ETL_SQL.Orchestrator
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddSingleton<JobThrottle>();
+            services.AddSingleton<NotificationDispatchService>();
             services.AddSingleton<SchedulerService>();
             services.AddSingleton<IJobManager>(sp => sp.GetRequiredService<SchedulerService>());
 

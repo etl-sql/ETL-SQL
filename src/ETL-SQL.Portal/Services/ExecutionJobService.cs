@@ -81,6 +81,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private readonly IArtifactStorage _artifacts;
     private readonly SnapshotPackageService _snapshotPackages;
     private readonly INodeCapacityMonitor _capacityMonitor;
+    private readonly PortalAlertEvaluationService? _alertEvaluation;
     public ExecutionJobService(
         PortalConfig config,
         IServiceScopeFactory scopeFactory,
@@ -89,7 +90,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         IJobChannel channel,
         IArtifactStorage? artifacts = null,
         INodeCapacityMonitor? capacityMonitor = null,
-        SnapshotPackageService? snapshotPackages = null)
+        SnapshotPackageService? snapshotPackages = null,
+        PortalAlertEvaluationService? alertEvaluation = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
@@ -102,6 +104,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _artifacts,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
         _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
+        _alertEvaluation = alertEvaluation;
         _admission = new WeightedExecutionAdmission(
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.InteractiveExecutionWeight,
@@ -539,6 +542,25 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             {
                 // Retention is best-effort; never fail a completed execution over it.
                 _log.LogWarning(ex, "Snapshot pruning failed for report {ReportId}", job.ReportId);
+            }
+
+            if (job.TrustedDatasetExecution && !identitySensitive && _alertEvaluation is not null)
+            {
+                try
+                {
+                    await _alertEvaluation.EvaluateScheduledRefreshAsync(
+                        job.ReportId,
+                        job.Id,
+                        manifestPath,
+                        DateTime.UtcNow,
+                        cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning(ex,
+                        "Scheduled alert evaluation failed for report {ReportId}.",
+                        job.ReportId);
+                }
             }
 
             // Invalidate sessions so next parameter interaction picks up fresh data

@@ -89,6 +89,28 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to kill job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
+    public async Task<HttpResponseMessage?> DispatchNotificationAsync(
+        string notificationName,
+        OrchestratorNotificationDispatchRequest req,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Post,
+                $"api/notifications/{Uri.EscapeDataString(notificationName)}/dispatch",
+                req,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to dispatch notification {Name}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(notificationName));
+            return null;
+        }
+    }
+
     public async Task<OrchestratorScriptsDto?> GetScriptsAsync()
     {
         try { return await GetJsonAsync<OrchestratorScriptsDto>("api/scripts"); }
@@ -124,7 +146,8 @@ public class OrchestratorProxyService(
         HttpMethod method,
         string path,
         object? body = null,
-        long? version = null)
+        long? version = null,
+        CancellationToken cancellationToken = default)
     {
         var url = settings.BuildUrl(path);
         if (url is null) return null;
@@ -138,7 +161,7 @@ public class OrchestratorProxyService(
         if (body is not null)
             req.Content = JsonContent.Create(body);
 
-        return await http.SendAsync(req);
+        return await http.SendAsync(req, cancellationToken);
     }
 
     // ── Private raw-deserialization types ─────────────────────────────────────
@@ -158,3 +181,17 @@ public class OrchestratorProxyService(
         public string? Content { get; set; }
     }
 }
+
+public sealed record OrchestratorNotificationDispatchRequest(
+    string SourceKind,
+    string Title,
+    string Text,
+    string? Trigger = null,
+    string? Status = null,
+    string? JobName = null,
+    string? AlertName = null,
+    string? ReportId = null,
+    long? HistoryId = null,
+    long? RowsProcessed = null,
+    string? RecipientOverride = null,
+    string? ErrorMessage = null);

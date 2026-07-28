@@ -555,7 +555,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 await leaseHeartbeat;
             }
 
-            await DispatchJobNotificationsAsync(job, finalStatus, lastHistoryId, lastResult);
+            var notificationDispatch = _serviceProvider.GetService<NotificationDispatchService>();
+            if (notificationDispatch is not null)
+            {
+                await notificationDispatch.DispatchJobNotificationsAsync(
+                    job, finalStatus, lastHistoryId, lastResult, _cts?.Token ?? default);
+            }
 
             var nextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
             try
@@ -575,159 +580,6 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             await QuarantineIfRepeatedlyFailingAsync(job);
         }
-
-        private async Task DispatchJobNotificationsAsync(
-            JobDefinition job,
-            string finalStatus,
-            long historyId,
-            ScriptExecutionResult? result)
-        {
-            if (_store is not IJobCatalogStore catalog) return;
-
-            IReadOnlyList<JobNotificationLink> links;
-            try
-            {
-                links = await catalog.GetJobNotificationsAsync(job.Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Job {JobName}: failed to read notification links.", job.Name);
-                return;
-            }
-
-            if (links.Count == 0) return;
-
-            var trigger = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
-                ? NotificationTrigger.Success
-                : NotificationTrigger.Failure;
-            var dueLinks = links
-                .Where(link => link.Trigger == trigger || link.Trigger == NotificationTrigger.Completion)
-                .ToList();
-            if (dueLinks.Count == 0) return;
-
-            using var scope = _serviceProvider.CreateScope();
-            var connectionCatalog = scope.ServiceProvider.GetService<IConnectionCatalogProvider>();
-            if (connectionCatalog is null)
-            {
-                _logger.LogWarning(
-                    "Job {JobName}: {Count} notification link(s) are due, but no connection catalog provider is configured.",
-                    job.Name, dueLinks.Count);
-                return;
-            }
-
-            var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-            foreach (var link in dueLinks)
-            {
-                NotificationDefinition? notification;
-                try
-                {
-                    notification = await catalog.GetNotificationAsync(link.NotificationName);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Job {JobName}: failed to load notification '{Notification}'.",
-                        job.Name, link.NotificationName);
-                    continue;
-                }
-
-                if (notification is null)
-                {
-                    _logger.LogWarning(
-                        "Job {JobName}: notification '{Notification}' is attached but no longer exists; skipping.",
-                        job.Name, link.NotificationName);
-                    continue;
-                }
-
-                if (!notification.IsEnabled)
-                {
-                    _logger.LogInformation(
-                        "Job {JobName}: notification '{Notification}' is disabled; skipping.",
-                        job.Name, notification.Name);
-                    continue;
-                }
-
-                SharedConnectionDefinition connection;
-                try
-                {
-                    connection = await connectionCatalog.ResolveAsync(
-                        notification.ConnectionName, identity: null, cancellationToken: _cts?.Token ?? default);
-                }
-                catch (Exception ex) when (ex is KeyNotFoundException or UnauthorizedAccessException or InvalidOperationException)
-                {
-                    _logger.LogWarning(
-                        "Job {JobName}: notification '{Notification}' references unusable connection '{Connection}': {Message}",
-                        job.Name, notification.Name, notification.ConnectionName, SecretRedactor.Redact(ex.Message));
-                    continue;
-                }
-
-                var script = BuildNotificationScript(job, notification, connection, finalStatus, historyId, result);
-                try
-                {
-                    var delivery = await executor.ExecuteTextAsync(
-                        script,
-                        sessionId: null,
-                        cancellationToken: _cts?.Token ?? default,
-                        jobName: $"{job.Name}:notification:{notification.Name}");
-                    if (delivery.Success)
-                    {
-                        _logger.LogInformation(
-                            "Job {JobName}: notification '{Notification}' delivered for {Status}.",
-                            job.Name, notification.Name, finalStatus);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "Job {JobName}: notification '{Notification}' delivery failed: {Message}",
-                            job.Name, notification.Name, SecretRedactor.Redact(delivery.ErrorMessage));
-                    }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogWarning(ex,
-                        "Job {JobName}: notification '{Notification}' delivery failed.",
-                        job.Name, notification.Name);
-                }
-            }
-        }
-
-        private static string BuildNotificationScript(
-            JobDefinition job,
-            NotificationDefinition notification,
-            SharedConnectionDefinition connection,
-            string finalStatus,
-            long historyId,
-            ScriptExecutionResult? result)
-        {
-            var alias = "__job_notification_sink";
-            var title = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
-                ? $"Job succeeded: {job.Name}"
-                : $"Job failed: {job.Name}";
-            var text = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
-                ? $"Job '{job.Name}' completed successfully."
-                : $"Job '{job.Name}' failed. {SecretRedactor.Redact(result?.ErrorMessage)}".Trim();
-
-            return $"""
-                CREATE CONNECTION {alias} AS {connection.ConnectorType}('SHARED:{SqlString(notification.ConnectionName)}');
-                INSERT INTO {alias} (
-                    Title, Text, JobName, NotificationName, Trigger, Status, HistoryId, RowsProcessed, Recipient, ErrorMessage
-                )
-                VALUES (
-                    '{SqlString(title)}',
-                    '{SqlString(text)}',
-                    '{SqlString(job.Name)}',
-                    '{SqlString(notification.Name)}',
-                    '{SqlString(finalStatus)}',
-                    '{SqlString(finalStatus)}',
-                    {historyId},
-                    {result?.RowsProcessed ?? 0},
-                    '{SqlString(notification.Recipient ?? string.Empty)}',
-                    '{SqlString(SecretRedactor.Redact(result?.ErrorMessage) ?? string.Empty)}'
-                );
-                """;
-        }
-
-        private static string SqlString(string value) => value.Replace("'", "''");
 
         private async Task QuarantineIfRepeatedlyFailingAsync(JobDefinition job)
         {

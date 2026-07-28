@@ -13,6 +13,7 @@ using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
@@ -152,6 +153,9 @@ namespace ETL_SQL.Tests.Orchestration
                 var services = new ServiceCollection();
                 services.AddSingleton(mockExecutor.Object);
                 services.AddSingleton<IConnectionCatalogProvider>(connectionCatalog);
+                services.AddSingleton<IJobCatalogStore>(store);
+                services.AddSingleton<ILogger<NotificationDispatchService>>(NullLogger<NotificationDispatchService>.Instance);
+                services.AddSingleton<NotificationDispatchService>();
                 var serviceProvider = services.BuildServiceProvider();
 
                 var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 1 });

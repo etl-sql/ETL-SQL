@@ -348,6 +348,48 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(history);
             }).WithName("getAllJobHistory");
 
+            app.MapPost("/api/notifications/{name}/dispatch", async (HttpContext ctx, string name,
+                DispatchNotificationApiRequest req, NotificationDispatchService dispatch, IConfiguration cfg,
+                CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+
+                var notificationName = Uri.UnescapeDataString(name);
+                var sourceKind = string.IsNullOrWhiteSpace(req.SourceKind)
+                    ? "ALERT"
+                    : req.SourceKind.Trim().ToUpperInvariant();
+                if (sourceKind != "ALERT" && sourceKind != "JOB")
+                    return Results.BadRequest(new { Error = "SourceKind must be ALERT or JOB." });
+                if (string.IsNullOrWhiteSpace(req.Title))
+                    return Results.BadRequest(new { Error = "Title is required." });
+                if (string.IsNullOrWhiteSpace(req.Text))
+                    return Results.BadRequest(new { Error = "Text is required." });
+
+                var result = await dispatch.DispatchNotificationAsync(
+                    new NotificationDispatchPayload(
+                        NotificationName: notificationName,
+                        SourceKind: sourceKind,
+                        Title: req.Title.Trim(),
+                        Text: req.Text.Trim(),
+                        Trigger: req.Trigger,
+                        Status: req.Status,
+                        JobName: req.JobName,
+                        AlertName: req.AlertName,
+                        ReportId: req.ReportId,
+                        HistoryId: req.HistoryId,
+                        RowsProcessed: req.RowsProcessed ?? 0,
+                        RecipientOverride: req.RecipientOverride,
+                        ErrorMessage: req.ErrorMessage,
+                        Actor: ReadActor(ctx)),
+                    ct);
+
+                return result.Delivered
+                    ? Results.Ok(result)
+                    : Results.Json(result, statusCode: result.Skipped
+                        ? StatusCodes.Status202Accepted
+                        : StatusCodes.Status502BadGateway);
+            }).WithName("dispatchNotification");
+
             app.MapGet("/api/lineage/history/table/{name}", async (HttpContext ctx, string name,
                 ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
             {
@@ -922,6 +964,21 @@ namespace ETL_SQL.Orchestrator.Service
             string? DisplayName = null,
             string? Description = null,
             Dictionary<string, string>? Options = null
+        );
+
+        private sealed record DispatchNotificationApiRequest(
+            string? SourceKind = null,
+            string? Title = null,
+            string? Text = null,
+            string? Trigger = null,
+            string? Status = null,
+            string? JobName = null,
+            string? AlertName = null,
+            string? ReportId = null,
+            long? HistoryId = null,
+            long? RowsProcessed = null,
+            string? RecipientOverride = null,
+            string? ErrorMessage = null
         );
 
         private static long? ReadExpectedVersion(HttpContext context)

@@ -425,6 +425,7 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportDependencyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.LineageImpactService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.LineageStewardNotificationService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.SnapshotPackageService>();
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalAlertEvaluationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<IDatasetRegistry>(sp =>
     ETL_SQL.Core.Observability.DatasetObservability.Instrument(

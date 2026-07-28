@@ -397,6 +397,10 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      notifications are skipped, and delivery runs through an in-process script that opens the
      notification's shared connection catalog alias so `SECRET:` resolution and connector policy stay
      on the normal engine path.
+   - **[PARTIAL]** Portal-evaluated report alerts now use the same Orchestrator delivery path:
+     trusted scheduled refreshes evaluate active alerts from the persisted snapshot, dispatch attached
+     notification names through `/api/notifications/{name}/dispatch` only when the alert enters
+     `TRIGGERED`, and update `LastState`/`LastEvaluatedAt`/`LastTriggeredAt`/`LastNotifiedAt`.
    - The Orchestrator dispatches, for jobs **and** for alerts — one catalog, one path, so an operator
      configures a mail destination once. The Portal evaluates the alert condition and calls the
      Orchestrator to deliver. Resolve connections through normal `SECRET:` resolution on the
@@ -412,8 +416,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION` while linked,
      cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are attached.
 5. **Consumers, UI, docs:**
-   - `OrchestratorPollerService` matches `ReportJobLinks` by job name, then evaluates the alerts
-     attached to that report; `SCRIPT` completions ignored.
+   - `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
+     Portal refresh; the completed trusted refresh evaluates alerts attached to that report.
+     `SCRIPT` completions ignored.
    - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
    - `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
