@@ -338,13 +338,31 @@ public class PortalConnectionCatalogApiTests
             var folder = new Folder { Name = "impact", Path = "/impact", OwnerId = 1 };
             db.Folders.Add(folder);
             await db.SaveChangesAsync();
-            db.Reports.Add(new Report
+            var report = new Report
             {
                 FolderId = folder.Id,
                 Name = "Impact Report",
                 ScriptPath = "impact_report.rptsql",
                 CreatedBy = 1
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+
+            var alert = new ReportAlert
+            {
+                ReportId = report.Id,
+                OwnerId = 1,
+                Name = "Impact Alert",
+                VisualName = "Revenue",
+                Operator = ">",
+                Threshold = 10
+            };
+            alert.Notifications.Add(new AlertNotification
+            {
+                OrchestratorAlias = "impact_dw",
+                NotificationName = "OpsNotify"
             });
+            db.ReportAlerts.Add(alert);
             await db.SaveChangesAsync();
         }
 
@@ -365,6 +383,8 @@ public class PortalConnectionCatalogApiTests
         Assert.Contains("Impact Report", connBody);
         Assert.Contains("impact-job", connBody);
         Assert.Contains("ann", connBody);
+        Assert.Contains("Impact Alert", connBody);
+        Assert.Contains("OpsNotify", connBody);
 
         // the secret's impact includes the report script and the catalog entry that references it
         using (var scope = factory.Services.CreateScope())

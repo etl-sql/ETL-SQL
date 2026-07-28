@@ -42,6 +42,25 @@ public sealed class ReferenceImpactService(
                 new ImpactConsumer("Consumer", u.ConsumerUser, "Recorded at SHARED: resolution", u.LastUsedAtUtc, u.UseCount)));
         }
 
+        var alertLinks = await db.AlertNotifications
+            .AsNoTracking()
+            .Include(n => n.Alert)
+                .ThenInclude(a => a.Report)
+                    .ThenInclude(r => r.Folder)
+            .Where(n => n.OrchestratorAlias == alias && !n.Alert.Report.IsDeleted)
+            .OrderBy(n => n.Alert.Report.Folder.Path)
+            .ThenBy(n => n.Alert.Report.Name)
+            .ThenBy(n => n.Alert.Name)
+            .ThenBy(n => n.NotificationName)
+            .ToListAsync(ct);
+        consumers.AddRange(alertLinks.Select(n =>
+            new ImpactConsumer(
+                "AlertNotification",
+                n.Alert.Name,
+                $"{n.Alert.Report.Folder.Path}/{n.Alert.Report.Name} → {n.NotificationName}",
+                n.Alert.UpdatedAt,
+                null)));
+
         return new ImpactReport(reference, consumers.Count, consumers);
     }
 
