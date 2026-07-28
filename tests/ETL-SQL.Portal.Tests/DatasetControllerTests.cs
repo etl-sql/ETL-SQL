@@ -855,6 +855,54 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DeleteReport_WithAttachedRefreshJob_Conflicts()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderRes = await AuthPost(token, "/api/folders", new
+        {
+            name = $"report_job_guard_{suffix}",
+            parentId = (int?)null
+        });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"report_job_guard_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'guard';");
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"report_job_guard_{suffix}",
+            description = "",
+            scriptPath
+        });
+        reportRes.EnsureSuccessStatusCode();
+        var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.DatasetJobs.Add(new DatasetJob
+            {
+                ReportId = reportId,
+                OrchestratorJobName = $"refresh_{suffix}",
+                RefreshInterval = "0 2 * * *"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var deleteRes = await AuthDelete(token, $"/api/reports/{reportId}?cascade=true");
+
+        Assert.Equal(HttpStatusCode.Conflict, deleteRes.StatusCode);
+        var body = (await deleteRes.Content.ReadFromJsonAsync<JsonObject>(_json))!;
+        Assert.Contains("attached refresh jobs", body["error"]!.GetValue<string>());
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False((await verifyDb.Reports.SingleAsync(r => r.Id == reportId)).IsDeleted);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Security")]
     public async Task Delete_ForbidsEditorAccess()
     {

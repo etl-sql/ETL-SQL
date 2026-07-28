@@ -1447,6 +1447,19 @@ public class ReportsController : ControllerBase
         if (hasActive && !cascade)
             return Conflict(new { error = "Report has active subscriptions. Use ?cascade=true." });
 
+        var attachedRefreshJobs = await db.DatasetJobs
+            .Where(j => j.ReportId == report.Id)
+            .Select(j => j.OrchestratorJobName)
+            .ToListAsync();
+        if (attachedRefreshJobs.Count > 0)
+        {
+            return Conflict(new
+            {
+                error = "Report has attached refresh jobs. Remove the refresh jobs before deleting the report.",
+                refreshJobs = attachedRefreshJobs
+            });
+        }
+
         if (cascade)
             foreach (var sub in report.Subscriptions)
                 sub.IsActive = false;

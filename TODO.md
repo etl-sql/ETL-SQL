@@ -413,8 +413,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      This is attribution, not authorization — see `ROADMAP.md` → *Orchestrator — Per-Object
      Authorization* for the deferral and its trigger.
    - Outbox audit for `CREATE_JOB`, `DROP_SCHEDULE`, `ATTACH_SCHEDULE`, `ATTACH_NOTIFICATION`, …
-   - Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION` while linked,
-     cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are attached.
+   - **[DONE]** Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION`
+     while linked, cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are
+     attached.
 5. **Consumers, UI, docs:**
    - `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
      Portal refresh; the completed trusted refresh evaluates alerts attached to that report.
