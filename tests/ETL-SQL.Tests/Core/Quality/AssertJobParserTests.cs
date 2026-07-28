@@ -11,7 +11,7 @@ namespace ETL_SQL.Tests.Core.Quality
 {
     /// <summary>
     /// ASSERT JOB grammar: metric predicates (direct comparisons and the HISTORICAL tolerance
-    /// band), the trailing ALERT / CRITICAL_FAILURE clauses, and the contextual-keyword handling
+    /// band), the trailing NOTIFY / CRITICAL_FAILURE clauses, and the contextual-keyword handling
     /// that keeps plain boolean ASSERT working.
     /// </summary>
     public class AssertJobParserTests
@@ -25,11 +25,11 @@ namespace ETL_SQL.Tests.Core.Quality
                     NULL_PERCENT(Email) < 0.02,
                     QUARANTINE_PERCENT < 0.01
                 )
-                ON FAILURE ALERT alerts_webhook
+                ON FAILURE NOTIFY dq_failures
                 ON CRITICAL_FAILURE THROW;");
 
             Assert.Equal("import_csv", stmt.JobName);
-            Assert.Equal("alerts_webhook", stmt.AlertConnection);
+            Assert.Equal("dq_failures", stmt.FailureNotification);
             Assert.True(stmt.ThrowOnCritical);
 
             Assert.Collection(stmt.Predicates,
@@ -122,13 +122,23 @@ namespace ETL_SQL.Tests.Core.Quality
         public void ClausesAreOptional_AndOrderIndependent()
         {
             var neither = ParseAssertJob("ASSERT JOB j (ROW_COUNT > 0);");
-            Assert.Null(neither.AlertConnection);
+            Assert.Null(neither.FailureNotification);
             Assert.False(neither.ThrowOnCritical);
 
             var criticalFirst = ParseAssertJob(
-                "ASSERT JOB j (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW ON FAILURE ALERT hook;");
-            Assert.Equal("hook", criticalFirst.AlertConnection);
+                "ASSERT JOB j (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW ON FAILURE NOTIFY hook;");
+            Assert.Equal("hook", criticalFirst.FailureNotification);
             Assert.True(criticalFirst.ThrowOnCritical);
+        }
+
+        [Fact]
+        public void RetiredAlertClause_ReportsNotifyReplacement()
+        {
+            var ex = Assert.Throws<SyntaxException>(() =>
+                ParseAssertJob("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE ALERT hook;"));
+
+            Assert.Contains("ON FAILURE ALERT", ex.Message);
+            Assert.Contains("ON FAILURE NOTIFY", ex.Message);
         }
 
         [Fact]
@@ -158,8 +168,8 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("ASSERT JOB j (FRESHNESS(EventTime) < 2);")]           // freshness needs interval string
         [InlineData("ASSERT JOB j (NULL_PERCENT(a.b.c) < 0.5);")]         // only target.column
         [InlineData("ASSERT JOB j (ROW_COUNT > abc);")]                    // non-numeric bound
-        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW;")]     // ALERT is required after ON FAILURE
-        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE ALERT a ON FAILURE ALERT b;")] // duplicate
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW;")]     // NOTIFY is required after ON FAILURE
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE NOTIFY a ON FAILURE NOTIFY b;")] // duplicate
         public void MalformedForms_AreSyntaxErrors(string sql)
         {
             Assert.Throws<SyntaxException>(() => ParseAssertJob(sql));

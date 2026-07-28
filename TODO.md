@@ -366,16 +366,17 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      them would break `SELECT success FROM …`.
      Timezone validation happens at write time and `CronSchedule` moved to `ETL-SQL.Engine` — the
      handlers are tier 1 and cannot reference the Orchestrator.
-   - **[3b — CREATE JOB + PORTAL ALERT SYNTAX DONE; ASSERT JOB NOTIFY NEXT]** `CreateJobStatement` now holds mutually exclusive
+   - **[DONE — 3b]** `CreateJobStatement` now holds mutually exclusive
      `FOR REPORT`/`FOR SCRIPT` targets plus retry and catalog metadata options. The inline
      `AS <statement>` body and interval schedule grammar are retired with replacement diagnostics;
      local and remote handlers, API payloads, samples, snippets, docs, and tests use the normalized
      model. `CREATE OR ALTER` preserves links and omitted properties; `CREATE OR REPLACE` drops
      links. Portal alert definitions now use identifier names/visuals, metadata options, separate
      `ALTER ALERT ... ADD|REMOVE NOTIFICATION` links, `ENABLE|DISABLE ALERT`, name-based drop, Portal
-     API endpoints, export/import support, and additive alert-notification migrations. The remaining
-     3b follow-up is replacing `ASSERT JOB ... ON FAILURE ALERT <connection>` with
-     `ASSERT JOB ... ON FAILURE NOTIFY <notification>`.
+     API endpoints, export/import support, and additive alert-notification migrations.
+     `ASSERT JOB ... ON FAILURE ALERT <connection>` is retired with a replacement diagnostic;
+     `ASSERT JOB ... ON FAILURE NOTIFY <notification>` resolves a named Orchestrator notification
+     and fails clearly when a notification catalog is unavailable.
    - **[DONE]** Remove `REFRESH EVERY` from `CREATE DATASET`; delete
      `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
      `DatasetRefreshIntervalRule`.

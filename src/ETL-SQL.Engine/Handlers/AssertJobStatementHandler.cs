@@ -18,10 +18,13 @@ namespace ETL_SQL.Engine.Handlers;
 
 /// <summary>
 /// Handles <c>ASSERT JOB</c>: evaluates run-level metric predicates against the values the
-/// in-stream collector gathered during this run (never a post-run re-scan), routes failures to an
-/// optional webhook alert, and throws when <c>ON CRITICAL_FAILURE THROW</c> is declared.
+/// in-stream collector gathered during this run (never a post-run re-scan), routes failures through
+/// an optional catalog notification, and throws when <c>ON CRITICAL_FAILURE THROW</c> is declared.
 /// </summary>
-public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = null) : IStatementHandler
+public class AssertJobStatementHandler(
+    ILogger logger,
+    IConfiguration? config = null,
+    IJobCatalogStore? catalog = null) : IStatementHandler
 {
     private const int DefaultHistoryRuns = 5;
     private const int DefaultMinHistoryRuns = 3;
@@ -125,7 +128,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
         if (failures.Count == 0)
         {
-            if (stmt.AlertConnection != null)
+            if (stmt.FailureNotification != null)
                 await HandleAlertTransitionAsync(context, stmt, failed: false, failures, alertRealertHours);
 
             logger.Debug("ASSERT JOB {JobName}: all {Count} predicate(s) passed.", stmt.JobName, stmt.Predicates.Count);
@@ -136,7 +139,7 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
             + string.Join("; ", failures);
         logger.Warning("{AssertJobFailure}", summary);
 
-        if (stmt.AlertConnection != null)
+        if (stmt.FailureNotification != null)
             await HandleAlertTransitionAsync(context, stmt, failed: true, failures, alertRealertHours, summary);
 
         if (stmt.ThrowOnCritical)
@@ -286,10 +289,10 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
     }
 
     /// <summary>
-    /// Posts a failure summary through the named webhook connection. Metric values and counts only
-    /// — never sample data, so a PII column's values cannot reach an alerting channel. Delivery
-    /// failure has its own policy (log and continue), independent of ON CRITICAL_FAILURE: a broken
-    /// alerting channel must not decide whether the run fails.
+    /// Posts a failure summary through the named catalog notification. Metric values and counts
+    /// only — never sample data, so a PII column's values cannot reach an alerting channel.
+    /// Delivery failure has its own policy (log and continue), independent of ON CRITICAL_FAILURE:
+    /// a broken alerting channel must not decide whether the run fails.
     /// </summary>
     private async Task HandleAlertTransitionAsync(
         IExecutionContext context,
@@ -365,19 +368,23 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
         List<string> failures,
         string summary)
     {
+        var notification = await ResolveFailureNotificationAsync(stmt);
+        if (notification is null) return false;
+
         try
         {
-            if (!context.Connections.TryGetValue(stmt.AlertConnection!, out var sink))
+            if (!context.Connections.TryGetValue(notification.ConnectionName, out var sink))
             {
-                logger.Warning("ASSERT JOB {JobName}: alert connection '{Connection}' is not defined; skipping the alert.",
-                    stmt.JobName, stmt.AlertConnection);
+                logger.Warning(
+                    "ASSERT JOB {JobName}: notification '{Notification}' references connection '{Connection}', which is not defined; skipping the notification.",
+                    stmt.JobName, stmt.FailureNotification, notification.ConnectionName);
                 return false;
             }
 
             var report = context.DataQuality;
             var table = new DataTable();
             table.SetColumns(["Title", "Text", "JobName", "AlertKind", "FailedPredicates",
-                "RowsValidated", "RowsQuarantined", "RowsWarned", "Owners", "FailingColumns"]);
+                "RowsValidated", "RowsQuarantined", "RowsWarned", "Owners", "FailingColumns", "Recipient"]);
             var row = table.NewRow();
             row["Title"] = alertKind.Equals("RECOVERY", StringComparison.OrdinalIgnoreCase)
                 ? $"Data quality recovery: {stmt.JobName}"
@@ -407,21 +414,52 @@ public class AssertJobStatementHandler(ILogger logger, IConfiguration? config = 
 
             row["FailingColumns"] = string.Join(", ", failingColumns);
             row["Owners"] = string.Join(", ", owners);
+            row["Recipient"] = notification.Recipient ?? "";
             if (owners.Count > 0)
                 row["Text"] = $"{summary} Owner(s): {string.Join(", ", owners)}.";
 
             await table.AddRowAsync(row);
 
             await sink.WriteBatches(SingleBatch(table), append: true, context.CancellationToken);
-            logger.Info("ASSERT JOB {JobName}: alert delivered through '{Connection}'.", stmt.JobName, stmt.AlertConnection);
+            logger.Info(
+                "ASSERT JOB {JobName}: notification '{Notification}' delivered through connection '{Connection}'.",
+                stmt.JobName, stmt.FailureNotification, notification.ConnectionName);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.Warning("ASSERT JOB {JobName}: alert delivery through '{Connection}' failed: {Message}",
-                stmt.JobName, stmt.AlertConnection, ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
+            logger.Warning("ASSERT JOB {JobName}: notification delivery through '{Notification}' failed: {Message}",
+                stmt.JobName, stmt.FailureNotification, ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
             return false;
         }
+    }
+
+    private async Task<NotificationDefinition?> ResolveFailureNotificationAsync(AssertJobStatement stmt)
+    {
+        if (catalog is null)
+            throw new ExecutionException(
+                $"ASSERT JOB {stmt.JobName}: ON FAILURE NOTIFY requires an Orchestrator notification catalog. " +
+                "Run the script in an orchestrator context or remove the NOTIFY clause.",
+                null, stmt.Line, stmt.Column);
+
+        var notification = await catalog.GetNotificationAsync(stmt.FailureNotification!);
+        if (notification is null)
+        {
+            logger.Warning(
+                "ASSERT JOB {JobName}: notification '{Notification}' does not exist; skipping the notification.",
+                stmt.JobName, stmt.FailureNotification);
+            return null;
+        }
+
+        if (!notification.IsEnabled)
+        {
+            logger.Info(
+                "ASSERT JOB {JobName}: notification '{Notification}' is disabled; skipping the notification.",
+                stmt.JobName, stmt.FailureNotification);
+            return null;
+        }
+
+        return notification;
     }
 
     private static string BuildAssertionKey(AssertJobStatement stmt)

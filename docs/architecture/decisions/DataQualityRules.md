@@ -172,17 +172,20 @@ ASSERT JOB import_csv (
     NULL_PERCENT(Email) < 0.02,
     QUARANTINE_PERCENT < 0.01
 )
-ON FAILURE ALERT alerts_webhook
+ON FAILURE NOTIFY data_quality_alerts
 ON CRITICAL_FAILURE THROW;
 ```
 
-### Webhook connection
+### Notification destination
 
 ```sql
 CREATE CONNECTION alerts_webhook AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = 'slack');
+CREATE NOTIFICATION data_quality_alerts USING alerts_webhook;
 ```
 
-The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only DQ alerts.
+The webhook remains a general-purpose sink: any script can `INSERT INTO` it. `ASSERT JOB` routes
+through a named Orchestrator notification so jobs, data-quality assertions, and report alerts share
+one destination catalog.
 
 ---
 
@@ -210,7 +213,7 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
   - **Per-row rules** (NotNull/Matches/Comparison/In/Expr) evaluate inline against the projected value; `EXPR` predicates get the full projected row. NULL values **skip** every rule except `NOT NULL` (see Proposed surface). Honor `SET CASE_SENSITIVE` for MATCHES/IN/EXISTS IN. Numeric compares are **decimal** at runtime. THROW → `ExecutionException`; WARN → aggregated (below); QUARANTINE → divert row.
   - **EXISTS IN** builds its key set once per statement from the referenced table (hash set via the existing spill-aware infrastructure; reference tables are typically dimension-sized), then probes per row. The build honors `SET CASE_SENSITIVE`.
   - **WARN is aggregated, never per-row.** Per-row diagnostics on a 10M-row load with a high failure rate is a diagnostics DoS. The validator keeps, per (rule, column): a failure **count** plus the first **N sample values** (default 10, configurable under `appsettings.json → Engine`), and emits **one** `Diagnostic(Warning)` per (rule, column) at end of stream with count + samples. Per-row detail goes to Debug-level logging only.
-  - **PII masking in samples and alerts.** Sample values from a `@pii`-tagged column are **masked** in warn diagnostics, logs, and every alert payload (`ASSERT JOB … ALERT` webhook summaries) — counts stay, values don't. A governance feature must not exfiltrate PII to Slack. The full value is preserved only inside the quarantine table itself, which carries propagated stewardship tags and access controls (see Determinism & edge cases).
+  - **PII masking in samples and notifications.** Sample values from a `@pii`-tagged column are **masked** in warn diagnostics, logs, and every notification payload (`ASSERT JOB … NOTIFY` summaries) — counts stay, values don't. A governance feature must not exfiltrate PII to Slack. The full value is preserved only inside the quarantine table itself, which carries propagated stewardship tags and access controls (see Determinism & edge cases).
   - **UNIQUE rules run over a single spill materialization** (design decision 7). The validating iterator spills the upstream stream once (respecting `JoinSpillThreshold`-class thresholds and the `MemoryGovernor`); the duplicate-key set is built from the spill via `ExternalAggregateEngine.ApplyAggregationExternal(groupBy=[col], HAVING COUNT(*)>1)` (composite `UNIQUE WITH` groups by the column tuple — same engine, multi-column key) — for `UNIQUE_FIRST/LAST BY key` also aggregating `MIN/MAX(orderKey)` per group so only the keeper survives — then the main pass streams from the same spill. Cost is one extra disk write/read of the stream, documented. One pre-pass per unique column in v1 (single-pass batching is a noted optimization).
   - **Rules pin execution to the local path.** Upstream predicate/semi-join pushdown is unaffected (it moves filters, and rules validate output rows), but any plan shape that would bypass local projection entirely is disabled for statements carrying `@expect` rules, with a regression test guarding the pin.
 - **QUARANTINE routing**: resolve the `TO` target via `context.ResolveDataSourceAsync` (auto-create for `#temp`), write with `WriteBatches(append:true)`. **The captured row is the pre-projection input row** — every input column the statement saw, available directly in the `ProjectRows` wrapper — not the projected output row. This is what makes v2 replay possible (re-feed the row through the statement) and it is also better for stewards: they fix the *cause* (the source value), not the symptom. Rows are **augmented** with `__dq_rule`, `__dq_column`, `__dq_value` (the projected value that failed), `__dq_reason`, `__dq_ts`, `__dq_run_id`, `__dq_capture_scope`, `__dq_status` (always `'quarantined'` when written — the v2 disposition column, shipped in v1 so remediation never breaks the schema), `__dq_row_id` — a deterministic hash of the captured row content + run id, the stable identity replay-once semantics key on — and a **reserved `__dq_origin_row_id`** written as NULL in v1. The latter is the forward-compat hook for decision 11: v2 replay populates it when an edited-but-still-failing row re-quarantines (linking the new row back to the original `__dq_row_id`), and because the quarantine schema is frozen on first write (§ Determinism), the column must be present in v1-created tables or v2 could not write to them. The engine routes and annotates; the **remediation workflow ships as v2** (designed below) — v1 users remediate by hand against the same schema.
@@ -233,13 +236,13 @@ The webhook is a general-purpose sink: any script can `INSERT INTO` it, not only
 
 ### 7. `ASSERT JOB` + HISTORICAL — Core parser, Engine handler, Orchestrator seam
 
-- In `FlowParser.ParseAssert`, peek for a contextual `JOB` token → `ParseAssertJob`. AST: `AssertJobStatement(string JobName, IReadOnlyList<JobMetricPredicate> Predicates, string? AlertConnection, bool ThrowOnCritical)`.
+- In `FlowParser.ParseAssert`, peek for a contextual `JOB` token → `ParseAssertJob`. AST: `AssertJobStatement(string JobName, IReadOnlyList<JobMetricPredicate> Predicates, string? FailureNotification, bool ThrowOnCritical)`.
 - v1 predicates: `ROW_COUNT WITHIN <frac> OF HISTORICAL`, `NULL_PERCENT(<col>) <op> <v>`, `QUARANTINE_PERCENT <op> <v>`, and simple recorded-metric compares. All current-run values come from the `JobMetricsCollector` (§6) — never a re-scan.
 - **HISTORICAL** = mean of the last N completed runs' recorded metric (N configurable, default 5) via `IJobHistoryStore.GetHistoryAsync`; `WITHIN f` ⇒ `|cur − base| / base ≤ f`.
 - **Cold start is defined, not accidental**: `HISTORICAL` requires a minimum of `MinHistoryRuns` completed runs (default **3**, configurable). Below the minimum, the predicate is **skipped with a `Diagnostic(Warning)`** ("insufficient history: n of 3 runs") — the job's first deployments must not alert-storm. Non-`HISTORICAL` predicates always evaluate.
 - **Seasonality is a known v2**: mean-of-last-N will false-positive on weekly load patterns (Monday ≠ Sunday). `JobHistoryDailySummary` / `GetJobHistoryDailyAsync` already exist, so a same-weekday baseline is a cheap follow-on — deliberately out of v1 scope, recorded below so it isn't forgotten.
 - **Engine→Orchestrator seam**: new narrow `src/ETL-SQL.Core/Data/IJobMetricsProvider.cs`, implemented in Orchestrator over `IJobHistoryStore`, exposed on `IExecutionContext`. Null in pure-engine/CLI contexts ⇒ `HISTORICAL` predicates fail cleanly ("requires orchestrator history"); collector-backed predicates (`NULL_PERCENT`, `QUARANTINE_PERCENT`, plain `ROW_COUNT` compares) still work everywhere.
-- Handler `AssertJobStatementHandler.cs`: on any predicate failure with `ON FAILURE ALERT`, POST a summary through the named webhook — with `@pii`-tagged column values masked (metric values and counts only, never sample data from PII columns); if `ON CRITICAL_FAILURE THROW`, throw after alerting. Webhook delivery failure has its own policy (log + continue by default), independent of `ON CRITICAL_FAILURE`.
+- Handler `AssertJobStatementHandler.cs`: on any predicate failure with `ON FAILURE NOTIFY`, resolve the named Orchestrator notification and POST a summary through its configured connection — with `@pii`-tagged column values masked (metric values and counts only, never sample data from PII columns); if `ON CRITICAL_FAILURE THROW`, throw after notification. Delivery failure has its own policy (log + continue by default), independent of `ON CRITICAL_FAILURE`.
 
 ---
 
@@ -469,7 +472,7 @@ because it only matters once a job has months of history.
 
 ## v2 — alert quality (shipped)
 
-Once `ASSERT JOB … ALERT` is in real use, the failure mode is **alert fatigue**: a job that fails
+Once `ASSERT JOB … NOTIFY` is in real use, the failure mode is **notification fatigue**: a job that fails
 its assertion every night posts to Slack every night, and the channel gets muted — at which point
 the alerting is worse than none, because it is trusted and silent.
 
@@ -634,7 +637,7 @@ Each slice ships its docs and LSP support **in the same PR** as the feature:
 
 - **Slice B**: reference entry for the `WEBHOOK` connection type (options, `FORMAT` payloads, egress-policy behavior, `SECRET:` usage); connector listed in the docs library map if applicable.
 - **Slice A**: reference entries for `@expect` / `@fail` tags (full rule grammar, actions, defaults) and the `ON FAILURE` clause; guide-level "data quality rules" walkthrough whose examples quarantine to **durable** tables; documented limitations (comment-strippability residual, spill-once cost, one action per column). LSP: tag-name/value completions for `expect`/`fail`, diagnostics surfaced from the new lint rules.
-- **Slice C**: reference entry for `ASSERT JOB` (predicates, `HISTORICAL` semantics incl. cold start, `ALERT`/`CRITICAL_FAILURE`); administration-guide note on the persisted DQ metrics columns. LSP: `ASSERT JOB` grammar in completions/diagnostics.
+- **Slice C**: reference entry for `ASSERT JOB` (predicates, `HISTORICAL` semantics incl. cold start, `NOTIFY`/`CRITICAL_FAILURE`); administration-guide note on the persisted DQ metrics columns. LSP: `ASSERT JOB` grammar in completions/diagnostics.
 - Stewardship docs: note that `expect`/`fail` appear in the tag catalog and what the per-run DQ metrics mean for stewards.
 
 ## Sequencing

@@ -1528,14 +1528,14 @@ public sealed record JobMetricPredicate(
 }
 
 /// <summary>
-/// <c>ASSERT JOB &lt;name&gt; (&lt;predicates&gt;) [ON FAILURE ALERT &lt;connection&gt;]
+/// <c>ASSERT JOB &lt;name&gt; (&lt;predicates&gt;) [ON FAILURE NOTIFY &lt;notification&gt;]
 /// [ON CRITICAL_FAILURE THROW]</c> — asserts on the run's own metrics, collected in-stream during
 /// execution rather than by a post-run re-scan.
 /// </summary>
 public sealed record AssertJobStatement(
     string JobName,
     IReadOnlyList<JobMetricPredicate> Predicates,
-    string? AlertConnection = null,
+    string? FailureNotification = null,
     bool ThrowOnCritical = false) : Statement;
 
 public sealed record ExpectedSchemaColumn

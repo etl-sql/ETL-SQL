@@ -215,7 +215,7 @@ ASSERT JOB import_csv (
     FRESHNESS(clean_users.UpdatedAt) < '2 HOURS',
     QUARANTINE_PERCENT < 0.01
 )
-ON FAILURE ALERT alerts_webhook
+ON FAILURE NOTIFY data_quality_alerts
 ON CRITICAL_FAILURE THROW;
 ```
 
@@ -231,10 +231,11 @@ its first execution. `NULL_PERCENT(target.column)` can also use `WITHIN ... OF H
 history. `FRESHNESS` is current-run only and checks the age of the newest timestamp observed in the
 named column.
 
-When `ON FAILURE ALERT` runs under the orchestrator, the alert channel is transition-based: the
-first failing run alerts, repeated failing runs are suppressed until the configured re-alert window
-elapses, and the first passing run after a failure sends a recovery notification. Suppressed alerts
-still appear in logs and run diagnostics, so Slack silence does not mean the run record is silent.
+When `ON FAILURE NOTIFY` runs under the orchestrator, the notification is transition-based: the
+first failing run notifies, repeated failing runs are suppressed until the configured re-notify
+window elapses, and the first passing run after a failure sends a recovery notification. Suppressed
+notifications still appear in logs and run diagnostics, so Slack silence does not mean the run
+record is silent.
 
 ## Related
 

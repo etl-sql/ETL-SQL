@@ -297,8 +297,8 @@ public class FlowParser : ParserComponent
     }
 
     /// <summary>
-    /// Parses <c>ASSERT JOB &lt;name&gt; (&lt;predicate&gt;, …) [ON FAILURE ALERT &lt;connection&gt;]
-    /// [ON CRITICAL_FAILURE THROW];</c>. <c>ALERT</c>, <c>FAILURE</c>, and <c>CRITICAL_FAILURE</c> are
+    /// Parses <c>ASSERT JOB &lt;name&gt; (&lt;predicate&gt;, …) [ON FAILURE NOTIFY &lt;notification&gt;]
+    /// [ON CRITICAL_FAILURE THROW];</c>. <c>NOTIFY</c>, <c>FAILURE</c>, and <c>CRITICAL_FAILURE</c> are
     /// matched as contextual identifiers, mirroring the other trailing action clauses.
     /// </summary>
     private Statement ParseAssertJob(Token startToken)
@@ -320,7 +320,7 @@ public class FlowParser : ParserComponent
             throw new SyntaxException("ASSERT JOB requires at least one metric predicate",
                 startToken.Line, startToken.Column);
 
-        string? alertConnection = null;
+        string? failureNotification = null;
         bool throwOnCritical = false;
         while (_parser.Current.Type == TokenType.ON)
         {
@@ -328,14 +328,19 @@ public class FlowParser : ParserComponent
             {
                 Advance(); // ON
                 Advance(); // FAILURE
-                if (!IsContextualWord(_parser.Current, "ALERT"))
-                    throw new SyntaxException("Expected ALERT after ASSERT JOB ... ON FAILURE",
+                if (IsContextualWord(_parser.Current, "ALERT"))
+                    throw new SyntaxException(
+                        "ASSERT JOB ... ON FAILURE ALERT <connection> has been retired. " +
+                        "Create a NOTIFICATION on the Orchestrator and use ON FAILURE NOTIFY <notification>.",
                         _parser.Current.Line, _parser.Current.Column);
-                Advance(); // ALERT
-                if (alertConnection != null)
-                    throw new SyntaxException("Duplicate ON FAILURE ALERT clause on ASSERT JOB",
+                if (!IsContextualWord(_parser.Current, "NOTIFY"))
+                    throw new SyntaxException("Expected NOTIFY after ASSERT JOB ... ON FAILURE",
                         _parser.Current.Line, _parser.Current.Column);
-                alertConnection = ConsumeIdentifier("Expected a webhook connection name after ON FAILURE ALERT").Value;
+                Advance(); // NOTIFY
+                if (failureNotification != null)
+                    throw new SyntaxException("Duplicate ON FAILURE NOTIFY clause on ASSERT JOB",
+                        _parser.Current.Line, _parser.Current.Column);
+                failureNotification = ConsumeIdentifier("Expected a notification name after ON FAILURE NOTIFY").Value;
             }
             else if (IsContextualWord(_parser.Peek, "CRITICAL_FAILURE"))
             {
@@ -351,7 +356,7 @@ public class FlowParser : ParserComponent
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new AssertJobStatement(jobName, predicates, alertConnection, throwOnCritical)
+        return new AssertJobStatement(jobName, predicates, failureNotification, throwOnCritical)
         {
             Line = startToken.Line,
             Column = startToken.Column
@@ -494,7 +499,7 @@ public class FlowParser : ParserComponent
 
     /// <summary>
     /// Matches a word by its text regardless of whether the lexer classified it as an identifier or
-    /// a keyword. Several words in the ASSERT JOB grammar (WITHIN, ALERT, OF, HISTORICAL) are
+    /// a keyword. Several words in the ASSERT JOB grammar (WITHIN, NOTIFY, OF, HISTORICAL) are
     /// keyword tokens elsewhere in the language, so type-based matching would miss them.
     /// </summary>
     private static bool IsContextualWord(Token token, string word) =>

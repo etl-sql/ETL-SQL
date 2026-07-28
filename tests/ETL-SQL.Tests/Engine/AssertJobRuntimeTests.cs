@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Engine
     /// <summary>
     /// ASSERT JOB at runtime: predicates evaluated against the in-stream collector, HISTORICAL
     /// baselines with defined cold-start behavior, the clean error when no orchestrator history is
-    /// available, NULL_PERCENT ambiguity, and ALERT routing through a webhook connection.
+    /// available, NULL_PERCENT ambiguity, and NOTIFY routing through a catalog notification.
     /// </summary>
     public class AssertJobRuntimeTests
     {
@@ -216,14 +216,12 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task Alert_NamesTheFailingColumnsAndTheirOwners()
+        public async Task Notification_NamesTheFailingColumnsAndTheirOwners()
         {
             // @steward/@owner/@contact already exist and already propagate; the alert should use
             // them so a failure reaches whoever can fix it, not just a shared channel.
             var eval = NewEvaluator();
             var sink = new CapturingSink();
-            eval.Connections["alerts"] = sink;
-
             await Run(eval, @"
                 CREATE TABLE #src (Id INT, Email VARCHAR(50), Ssn VARCHAR(20));
                 INSERT INTO #src (Id, Email, Ssn) VALUES (1, 'bad', '123-45-6789');");
@@ -235,7 +233,8 @@ namespace ETL_SQL.Tests.Engine
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+            await ConfigureNotification(eval, sink);
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
 
             var alert = Assert.Single(sink.Rows);
             var owners = alert["Owners"]?.ToString();
@@ -403,14 +402,14 @@ namespace ETL_SQL.Tests.Engine
         // ── ALERT routing ──────────────────────────────────────────────────
 
         [Fact]
-        public async Task FailingAssert_PostsASummaryThroughTheAlertConnection()
+        public async Task FailingAssert_PostsASummaryThroughTheNotification()
         {
             var eval = NewEvaluator();
             var sink = new CapturingSink();
-            eval.Connections["alerts"] = sink;
+            await ConfigureNotification(eval, sink);
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
 
             var alert = Assert.Single(sink.Rows);
             Assert.Equal("import", alert["JobName"]);
@@ -424,16 +423,16 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = NewEvaluator();
             var sink = new CapturingSink();
-            eval.Connections["alerts"] = sink;
+            await ConfigureNotification(eval, sink);
             await LoadWithQuarantine(eval, rows: 4, badRows: 0);
 
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.5) ON FAILURE ALERT alerts;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.5) ON FAILURE NOTIFY alerts;");
 
             Assert.Empty(sink.Rows);
         }
 
         [Fact]
-        public async Task AlertTransition_SuppressesRepeatedFailure_AndSendsRecovery()
+        public async Task NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery()
         {
             var provider = new FakeMetricsProvider();
             var sink = new CapturingSink();
@@ -452,37 +451,37 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task AlertDeliveryFailure_DoesNotDecideWhetherTheRunFails()
+        public async Task NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails()
         {
             var eval = NewEvaluator();
-            eval.Connections["alerts"] = new ThrowingSink();
+            await ConfigureNotification(eval, new ThrowingSink());
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
-            // The webhook is broken; without ON CRITICAL_FAILURE the run still succeeds.
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+            // The notification sink is broken; without ON CRITICAL_FAILURE the run still succeeds.
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
 
             // ...and with it, the assert's own failure is what throws — not the delivery error.
             var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval,
-                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts ON CRITICAL_FAILURE THROW;"));
+                "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts ON CRITICAL_FAILURE THROW;"));
             Assert.Contains("QUARANTINE_PERCENT", ex.Message);
             Assert.DoesNotContain("webhook exploded", ex.Message);
         }
 
         [Fact]
-        public async Task UndefinedAlertConnection_IsLoggedNotFatal()
+        public async Task UndefinedNotification_IsLoggedNotFatal()
         {
             var eval = NewEvaluator();
             await LoadWithQuarantine(eval, rows: 4, badRows: 3);
 
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT missing_conn;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY missing_notification;");
         }
 
         [Fact]
-        public async Task AlertPayload_CarriesCountsOnly_NoSampleValues()
+        public async Task NotificationPayload_CarriesCountsOnly_NoSampleValues()
         {
             var eval = NewEvaluator();
             var sink = new CapturingSink();
-            eval.Connections["alerts"] = sink;
+            await ConfigureNotification(eval, sink);
 
             await Run(eval, @"
                 CREATE TABLE #src (Id INT, Ssn VARCHAR(20));
@@ -493,7 +492,7 @@ namespace ETL_SQL.Tests.Engine
                 INTO #clean FROM #src
                 ON FAILURE QUARANTINE TO #q;");
 
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
 
             var alert = Assert.Single(sink.Rows);
             var payload = string.Join("|", alert.Columns.Select(kv => $"{kv.Key}={kv.Value}"));
@@ -536,9 +535,19 @@ namespace ETL_SQL.Tests.Engine
         private static async Task RunAssertWithRows(FakeMetricsProvider provider, CapturingSink sink, int rows, int badRows)
         {
             var eval = NewEvaluatorWithHistory(provider);
-            eval.Connections["alerts"] = sink;
+            await ConfigureNotification(eval, sink);
             await LoadWithQuarantine(eval, rows, badRows);
-            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE ALERT alerts;");
+            await Run(eval, "ASSERT JOB import (QUARANTINE_PERCENT < 0.1) ON FAILURE NOTIFY alerts;");
+        }
+
+        private static async Task ConfigureNotification(
+            Evaluator eval,
+            IDataSource sink,
+            string notificationName = "alerts",
+            string connectionName = "alerts")
+        {
+            eval.Connections[connectionName] = sink;
+            await Run(eval, $"CREATE OR REPLACE NOTIFICATION {notificationName} USING {connectionName};");
         }
 
         private sealed class FakeMetricsProvider : IJobMetricsProvider

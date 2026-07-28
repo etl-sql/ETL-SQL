@@ -14,7 +14,7 @@ Where [`ASSERT`](assert.md) guards a condition inside the script,
 ASSERT JOB <job_name> (
   <predicate> [, <predicate> ...]
 )
-[ON FAILURE ALERT <connection>]
+[ON FAILURE NOTIFY <notification>]
 [ON CRITICAL_FAILURE THROW];
 ```
 
@@ -67,24 +67,24 @@ absolute distance from that mean is greater than `n` standard deviations.
 
 By default a failing assertion is reported (log + run diagnostics) and the script continues.
 
-- **`ON FAILURE ALERT <connection>`** posts a summary through a named connection — typically a
-  [`WEBHOOK`](../../connectors/services/webhook.md) to Slack or Teams. The payload carries the job
-  name, the failed predicates, and the run counts. **It never carries sample data**, so values from
-  a `@pii`-tagged column cannot reach an alerting channel.
+- **`ON FAILURE NOTIFY <notification>`** posts a summary through a named Orchestrator notification.
+  The notification resolves to its configured connection alias and optional recipient at dispatch
+  time. The payload carries the job name, the failed predicates, and the run counts. **It never
+  carries sample data**, so values from a `@pii`-tagged column cannot reach an alerting channel.
 - **`ON CRITICAL_FAILURE THROW`** raises an execution error after alerting, failing the run.
 
-When orchestrator job state is available, alerts are transition-based per job/assertion signature:
+When orchestrator job state is available, notifications are transition-based per job/assertion signature:
 
-- pass → fail sends a failure alert.
-- fail → fail suppresses the repeated alert until `Engine:DataQuality:AlertRealertHours` elapses
+- pass → fail sends a failure notification.
+- fail → fail suppresses the repeated notification until `Engine:DataQuality:AlertRealertHours` elapses
   (default 24). The suppression is still logged and written to run diagnostics.
 - fail → pass sends a recovery notification.
 
-Pure engine hosts that do not expose orchestrator state keep the older behavior: every failing
-`ASSERT JOB ... ALERT` sends an alert, and recovery notifications are unavailable.
+`ON FAILURE NOTIFY` requires an Orchestrator notification catalog. Pure engine hosts without that
+catalog raise a clear execution error if notification delivery is needed.
 
-Alert delivery has its own policy: if the webhook is unreachable, that is logged and the run
-continues. A broken alerting channel never decides whether the job fails — only
+Notification delivery has its own policy: if the destination is unreachable, that is logged and the run
+continues. A broken notification channel never decides whether the job fails — only
 `ON CRITICAL_FAILURE THROW` does, and it raises the assertion's failure, not the delivery error.
 
 ## Examples
@@ -96,7 +96,7 @@ ASSERT JOB import_csv (
     NULL_PERCENT(clean_users.Email) < 0.02,
     QUARANTINE_PERCENT < 0.01
 )
-ON FAILURE ALERT alerts_webhook
+ON FAILURE NOTIFY data_quality_alerts
 ON CRITICAL_FAILURE THROW;
 ```
 
@@ -106,7 +106,7 @@ ASSERT JOB import_csv (
     NULL_PERCENT(#clean_users.Email) WITHIN 2 SIGMA OF HISTORICAL,
     FRESHNESS(clean_users.UpdatedAt) < '2 HOURS'
 )
-ON FAILURE ALERT alerts_webhook
+ON FAILURE NOTIFY data_quality_alerts
 ON CRITICAL_FAILURE THROW;
 ```
 
@@ -117,12 +117,14 @@ ASSERT JOB daily_feed (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;
 
 ```sql
 -- Notify, but do not fail, while a new rule is being calibrated
-ASSERT JOB customer_load (WARN_PERCENT < 0.05) ON FAILURE ALERT data_quality_channel;
+ASSERT JOB customer_load (WARN_PERCENT < 0.05) ON FAILURE NOTIFY data_quality_alerts;
 ```
 
 ```sql
--- The webhook the ALERT clause routes through
-CREATE CONNECTION alerts_webhook AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = 'slack');
+-- The notification the NOTIFY clause routes through
+CREATE CONNECTION dq_webhook AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = 'slack');
+CREATE NOTIFICATION data_quality_alerts USING dq_webhook
+  WITH (DESCRIPTION = 'Data-quality assertion failures');
 ```
 
 ## Notes
@@ -142,4 +144,4 @@ CREATE CONNECTION alerts_webhook AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = '
 - [Session Control](README.md)
 - [ASSERT](assert.md) — condition-level assertions
 - [Data Quality Rules](../dml/data-quality-rules.md) — the column rules that produce these metrics
-- [WEBHOOK connector](../../connectors/services/webhook.md) — the usual `ALERT` target
+- [WEBHOOK connector](../../connectors/services/webhook.md) — a common notification destination

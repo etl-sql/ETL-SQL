@@ -80,8 +80,9 @@ FROM #quarantine_users;
 -- FAILS and the script exits non-zero. That is the point -- comment the assertion
 -- out if you want a clean run.
 --
--- ON FAILURE ALERT <connection> would post a counts-only summary to Slack/Teams:
+-- ON FAILURE NOTIFY <notification> would post a counts-only summary to Slack/Teams:
 --   CREATE CONNECTION alerts AS WEBHOOK(URL = 'SECRET:slack_url', FORMAT = 'slack');
+--   CREATE NOTIFICATION dq_failures USING alerts;
 ASSERT JOB sample_user_import (
     QUARANTINE_PERCENT < 0.10,
     ROW_COUNT > 0

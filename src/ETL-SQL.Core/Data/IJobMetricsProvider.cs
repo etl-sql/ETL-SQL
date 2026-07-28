@@ -21,8 +21,9 @@ public sealed record ColumnRunMetrics(
     long NullRows);
 
 /// <summary>
-/// Last observed outcome for one <c>ASSERT JOB ... ALERT</c> assertion. Hosts persist this by
-/// job/assertion key so alerting can notify on transitions rather than every repeated failure.
+/// Last observed outcome for one <c>ASSERT JOB ... NOTIFY</c> assertion. Hosts persist this by
+/// job/assertion key so notification delivery can be transition-based rather than firing on every
+/// repeated failure.
 /// </summary>
 public sealed record AssertJobAlertState(
     bool LastFailed,
