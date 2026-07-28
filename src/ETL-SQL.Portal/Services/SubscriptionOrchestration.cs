@@ -87,9 +87,10 @@ public static class SubscriptionOrchestration
             Name: NotificationName(sub.Id),
             ConnectionName: sub.SmtpAlias.Trim(),
             Recipient: sub.Recipients,
-            // Keep the catalog object and attachment in place, but do not let the Orchestrator's
-            // generic job-notification dispatcher send a second, attachment-free email while the
-            // Portal delivery executor still owns report export, RLS, attachments, and the ledger.
+            // Keep the catalog object in place, but do not let the Orchestrator's generic
+            // job-success dispatcher send a second, attachment-free email. Portal subscription
+            // delivery explicitly dispatches SourceKind=SUBSCRIPTION after export, RLS, and ledger
+            // claim work finishes; that explicit dispatch path bypasses this disabled flag.
             IsEnabled: false,
             DisplayName: $"Subscription {sub.Id}",
             Description: "Portal subscription delivery destination");

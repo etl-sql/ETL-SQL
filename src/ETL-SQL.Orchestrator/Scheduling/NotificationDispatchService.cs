@@ -96,7 +96,10 @@ public sealed class NotificationDispatchService(
             return NotificationDispatchResult.Skip(payload.NotificationName, "Notification does not exist.");
         }
 
-        if (!notification.IsEnabled)
+        var explicitSubscriptionDispatch = payload.SourceKind.Equals(
+            "SUBSCRIPTION",
+            StringComparison.OrdinalIgnoreCase);
+        if (!notification.IsEnabled && !explicitSubscriptionDispatch)
         {
             logger.LogInformation(
                 "Notification '{Notification}' is disabled; skipping.",

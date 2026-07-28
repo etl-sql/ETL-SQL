@@ -421,7 +421,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      to that report. `SCRIPT` completions ignored. Verified 2026-07-28 with:
      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
      "FullyQualifiedName~FaultInjectionRecoveryTests"` (8 passed).
-   - **[PARTIAL]** Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
+   - **[DONE]** Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
      Subscription create/update/reconcile/delete now maintains unified Orchestrator metadata:
      `SUBSCHED:<subscriptionId>` + `JobSchedules` and `SUBNOTIFY:<subscriptionId>` +
      `JobNotifications`. The subscription notification is deliberately stored disabled while the
@@ -430,9 +430,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      named notification metadata for SMTP alias + recipients when it is available, falling back to
      the row only in degraded/local cases. The shared notification dispatcher now accepts
      subscription-source payloads with validated attachment paths and emits SMTP-shaped
-     `To`/`Subject`/`Body`/`Attachments` rows for SMTP notifications. Remaining work: have the
-     Portal delivery executor call that dispatcher for the final send after it renders the report
-     and claims the delivery ledger.
+     `To`/`Subject`/`Body`/`Attachments` rows for SMTP notifications. Portal subscription delivery
+     now keeps export, row-level-security evaluation, attachment creation, and delivery-ledger
+     claiming local, then calls the Orchestrator dispatcher for the final `SUBSCRIPTION` send.
    - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact

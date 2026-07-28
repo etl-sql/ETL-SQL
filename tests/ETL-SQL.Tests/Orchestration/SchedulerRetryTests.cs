@@ -372,6 +372,66 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task DispatchNotificationAsync_SubscriptionSourceBypassesDisabledNotification()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_disabled_{Guid.NewGuid():N}.db");
+            var catalogRoot = Path.Combine(Path.GetTempPath(), $"etlsql_notify_disabled_catalog_{Guid.NewGuid():N}");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                await store.SaveNotificationAsync(new NotificationDefinition(
+                    "SubscriptionMail",
+                    "notify_mail",
+                    Recipient: "recipient@example.com",
+                    IsEnabled: false));
+
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
+                    "notify_mail",
+                    "SMTP",
+                    "smtp.example.invalid",
+                    new Dictionary<string, string>
+                    {
+                        ["HOST"] = "smtp.example.invalid",
+                        ["DEFAULT_FROM"] = "noreply@example.com"
+                    },
+                    Disabled: false));
+
+                var mockExecutor = new Mock<IScriptExecutor>();
+                mockExecutor.Setup(e => e.ExecuteTextAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<CancellationToken>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<long>(),
+                        It.IsAny<ExecutionIdentity?>()))
+                    .ReturnsAsync(new ScriptExecutionResult(true, 1, null));
+
+                var dispatch = CreateNotificationDispatchService(store, connectionCatalog, mockExecutor.Object);
+
+                var result = await dispatch.DispatchNotificationAsync(new NotificationDispatchPayload(
+                    "SubscriptionMail",
+                    "SUBSCRIPTION",
+                    "Report ready",
+                    "Attached report."));
+
+                Assert.True(result.Delivered);
+                mockExecutor.Verify(e => e.ExecuteTextAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<long>(),
+                    It.IsAny<ExecutionIdentity?>()), Times.Once());
+            }
+            finally
+            {
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+                try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
         public void NotificationDispatchPayload_RejectsMissingAttachment()
         {
             var missing = Path.Combine(Path.GetTempPath(), $"etlsql_missing_attachment_{Guid.NewGuid():N}.csv");

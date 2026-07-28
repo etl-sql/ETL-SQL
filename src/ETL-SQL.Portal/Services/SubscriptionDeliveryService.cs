@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
@@ -66,7 +67,8 @@ public class SubscriptionDeliveryService(
     ISubscriptionScriptRunner runner,
     ILogger<SubscriptionDeliveryService> log,
     OrchestratorDbLocator? dbLocator = null,
-    IOrchestratorStoreFactory? orchestratorStoreFactory = null)
+    IOrchestratorStoreFactory? orchestratorStoreFactory = null,
+    OrchestratorProxyService? orchestrator = null)
 {
     /// <summary>Ad-hoc (manual) delivery — each call is a distinct trigger and is never deduped
     /// against another. Scheduled deliveries pass the completion's identity as the trigger key.</summary>
@@ -94,7 +96,13 @@ public class SubscriptionDeliveryService(
             try
             {
                 result = recipient.IsValid
-                    ? await ExecuteDeliveryAsync(subscriptionId, destination.SmtpAlias, recipient.Value, ledger.DeliveryId, ct)
+                    ? await ExecuteDeliveryAsync(
+                        subscriptionId,
+                        destination.NotificationName,
+                        destination.SmtpAlias,
+                        recipient.Value,
+                        ledger.DeliveryId,
+                        ct)
                     : SubscriptionDeliveryResult.Failed("Recipient address is invalid.");
             }
             catch (Exception ex)
@@ -170,6 +178,7 @@ public class SubscriptionDeliveryService(
 
     private async Task<SubscriptionDeliveryResult> ExecuteDeliveryAsync(
         int subscriptionId,
+        string? notificationName,
         string? smtpAlias,
         string recipient,
         string correlationId,
@@ -222,8 +231,11 @@ public class SubscriptionDeliveryService(
                 "Report script could not be read for row-level-security evaluation.", correlationId, ct);
         }
 
+        var useOrchestratorNotification = !string.IsNullOrWhiteSpace(notificationName)
+            && orchestrator is not null;
+
         IReadOnlyDictionary<string, string>? smtp = null;
-        if (!string.IsNullOrEmpty(smtpAlias))
+        if (!useOrchestratorNotification && !string.IsNullOrEmpty(smtpAlias))
         {
             try
             {
@@ -244,12 +256,12 @@ public class SubscriptionDeliveryService(
                 return await RecordFailureAsync(sub, recipient, ex.Message, correlationId, ct);
             }
         }
-        else if (sub.Format != SubscriptionFormat.Link)
+        else if (!useOrchestratorNotification && sub.Format != SubscriptionFormat.Link)
         {
             return await RecordFailureAsync(sub,
                 recipient, "Subscription has no SMTP alias for attachment delivery.", correlationId, ct);
         }
-        else
+        else if (!useOrchestratorNotification)
         {
             return SubscriptionDeliveryResult.Skipped(
                 "Link subscription has no SMTP alias — nothing to deliver.");
@@ -258,31 +270,56 @@ public class SubscriptionDeliveryService(
         string? exportPath = null;
         try
         {
-            var script = ComposeDeliveryScript(
-                sub, recipient, reportScriptPath, smtp, out exportPath);
-
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, config.Resources.ExecutionTimeoutSeconds)));
 
-            bool success;
-            string? error;
-            try
+            if (useOrchestratorNotification)
             {
-                (success, error) = await runner.RunAsync(
-                    script, $"sub-delivery-{sub.Id}-{RecipientKey(recipient)[..12]}", cts.Token, recipientIdentity);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                (success, error) = (false, "Delivery timed out.");
-            }
-            catch (Exception ex)
-            {
-                (success, error) = (false, ex.Message);
-            }
+                if (sub.Format != SubscriptionFormat.Link)
+                {
+                    var exportScript = ComposeExportScript(
+                        sub,
+                        reportScriptPath,
+                        config.SnapshotDirectory,
+                        out exportPath);
+                    var export = await RunDeliveryScriptAsync(
+                        exportScript,
+                        sub.Id,
+                        recipient,
+                        cts.Token,
+                        recipientIdentity,
+                        ct);
+                    if (!export.Success)
+                        return await RecordFailureAsync(
+                            sub, recipient, Sanitize(export.Error), correlationId, ct);
+                }
 
-            if (!success)
-                return await RecordFailureAsync(
-                    sub, recipient, Sanitize(error), correlationId, ct);
+                var dispatch = await DispatchSubscriptionNotificationAsync(
+                    notificationName!,
+                    sub,
+                    recipient,
+                    exportPath,
+                    correlationId,
+                    ct);
+                if (!dispatch.Success)
+                    return await RecordFailureAsync(
+                        sub, recipient, Sanitize(dispatch.Error), correlationId, ct);
+            }
+            else
+            {
+                var script = ComposeDeliveryScript(
+                    sub, recipient, reportScriptPath, smtp!, out exportPath);
+                var delivery = await RunDeliveryScriptAsync(
+                    script,
+                    sub.Id,
+                    recipient,
+                    cts.Token,
+                    recipientIdentity,
+                    ct);
+                if (!delivery.Success)
+                    return await RecordFailureAsync(
+                        sub, recipient, Sanitize(delivery.Error), correlationId, ct);
+            }
 
             // Recipient outcome and its audit record share one commit. The address is represented
             // by a fingerprint in operational records; the delivery ledger retains the address for
@@ -304,6 +341,72 @@ public class SubscriptionDeliveryService(
                 catch { /* best effort */ }
             }
         }
+    }
+
+    private async Task<(bool Success, string? Error)> RunDeliveryScriptAsync(
+        string script,
+        int subscriptionId,
+        string recipient,
+        CancellationToken timeoutToken,
+        ETL_SQL.Core.Governance.ExecutionIdentity? recipientIdentity,
+        CancellationToken callerToken)
+    {
+        try
+        {
+            return await runner.RunAsync(
+                script,
+                $"sub-delivery-{subscriptionId}-{RecipientKey(recipient)[..12]}",
+                timeoutToken,
+                recipientIdentity);
+        }
+        catch (OperationCanceledException) when (!callerToken.IsCancellationRequested)
+        {
+            return (false, "Delivery timed out.");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private async Task<(bool Success, string? Error)> DispatchSubscriptionNotificationAsync(
+        string notificationName,
+        Subscription sub,
+        string recipient,
+        string? exportPath,
+        string correlationId,
+        CancellationToken ct)
+    {
+        var linkBody = $"Your report is ready. View it here: {{portal_url}}/index.html#report/{sub.ReportId}";
+        var attachmentBody = $"Please find the attached report: {sub.Report.Name}.";
+        var response = await orchestrator!.DispatchNotificationAsync(
+            notificationName,
+            new OrchestratorNotificationDispatchRequest(
+                SourceKind: "SUBSCRIPTION",
+                Title: sub.Format == SubscriptionFormat.Link
+                    ? $"Report ready: {sub.Report.Name}"
+                    : $"Report: {sub.Report.Name}",
+                Text: sub.Format == SubscriptionFormat.Link ? linkBody : attachmentBody,
+                Trigger: "SCHEDULED_REFRESH",
+                Status: "READY",
+                JobName: correlationId,
+                ReportId: sub.ReportId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                RecipientOverride: recipient,
+                AttachmentPaths: exportPath is null ? null : [exportPath]),
+            ct);
+
+        if (response is null)
+            return (false, "Orchestrator notification dispatcher is unavailable.");
+        if (response.StatusCode == HttpStatusCode.OK)
+            return (true, null);
+
+        string? detail = null;
+        try { detail = await response.Content.ReadAsStringAsync(ct); }
+        catch { /* best effort */ }
+        return (false,
+            string.IsNullOrWhiteSpace(detail)
+                ? $"Orchestrator notification dispatch returned {(int)response.StatusCode}."
+                : $"Orchestrator notification dispatch returned {(int)response.StatusCode}: {detail}");
     }
 
     /// <summary>
@@ -398,12 +501,13 @@ public class SubscriptionDeliveryService(
         if (row is null)
             return null;
 
-        var fallback = new SubscriptionDeliveryDestination(row.SmtpAlias, row.Recipients);
+        var fallback = new SubscriptionDeliveryDestination(null, row.SmtpAlias, row.Recipients);
         var notification = await TryLoadNotificationAsync(subscriptionId);
         if (notification is null)
             return fallback;
 
         return new SubscriptionDeliveryDestination(
+            notification.Name,
             notification.ConnectionName,
             notification.Recipient ?? row.Recipients);
     }
@@ -499,6 +603,43 @@ public class SubscriptionDeliveryService(
         return sb.ToString();
     }
 
+    private static string ComposeExportScript(
+        Subscription sub,
+        string reportScriptPath,
+        string exportRootPath,
+        out string? exportPath)
+    {
+        var sb = new StringBuilder();
+
+        var parameters = DeserializeParams(sub.ParametersJson);
+        if (parameters is { Count: > 0 })
+        {
+            // RELDATE values are stored as-is and resolved fresh by the engine on each run.
+            foreach (var (k, v) in parameters)
+            {
+                var varName = k.StartsWith('@') ? k : "@" + k;
+                sb.AppendLine($"DECLARE {varName} STRING = '{Esc(v)}';");
+            }
+            sb.AppendLine();
+        }
+
+        var (ext, formatName) = sub.Format switch
+        {
+            SubscriptionFormat.CSV => ("csv", "CSV"),
+            SubscriptionFormat.Markdown => ("md", "MARKDOWN"),
+            _ => ("pdf", "PDF")
+        };
+        var exportRoot = string.IsNullOrWhiteSpace(exportRootPath)
+            ? Path.GetTempPath()
+            : exportRootPath;
+        var exportDir = Path.Combine(exportRoot, "subscription-delivery");
+        Directory.CreateDirectory(exportDir);
+        exportPath = Path.Combine(exportDir, $"sub_{sub.Id}_{Guid.NewGuid():N}.{ext}");
+        sb.AppendLine($"EXPORT REPORT '{reportScriptPath.Replace("\\", "/")}' FORMAT {formatName} TO '{exportPath.Replace("\\", "/")}';");
+
+        return sb.ToString();
+    }
+
     /// <summary>
     /// Emits the SMTP connection for the delivery script from cataloged options. Values are copied
     /// verbatim, so a <c>SECRET:name</c> reference stays a reference and the engine resolves it on
@@ -553,7 +694,10 @@ public class SubscriptionDeliveryService(
     }
 
     private sealed record NormalizedRecipient(string Value, bool IsValid);
-    private sealed record SubscriptionDeliveryDestination(string? SmtpAlias, string Recipients);
+    private sealed record SubscriptionDeliveryDestination(
+        string? NotificationName,
+        string? SmtpAlias,
+        string Recipients);
 
     private static IReadOnlyList<NormalizedRecipient> NormalizeRecipients(string recipients)
     {

@@ -2,6 +2,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -260,6 +261,70 @@ public sealed class SubscriptionDeliveryLedgerTests
     }
 
     [Fact]
+    public async Task NamedNotificationDelivery_ExportsThenDispatchesViaOrchestrator()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = ConfigurableRunner.Succeeds();
+        var h = await SeedAsync(
+            scope,
+            runner,
+            smtpAlias: $"row_smtp_{Guid.NewGuid():N}",
+            recipients: "row-recipient@test.local");
+
+        var notificationAlias = $"notify_smtp_{h.Suffix}";
+        var storeFactory = scope.ServiceProvider.GetRequiredService<IOrchestratorStoreFactory>();
+        var dbLocator = scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>();
+        var store = storeFactory.Create(dbLocator.Resolve());
+        await store.InitializeAsync();
+        var catalog = (IJobCatalogStore)store;
+        await catalog.SaveNotificationAsync(new NotificationDefinition(
+            SubscriptionOrchestration.NotificationName(h.SubscriptionId),
+            notificationAlias,
+            Recipient: "notify-recipient@test.local",
+            IsEnabled: false));
+
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        config.Orchestrator.ApiUrl = "https://orchestrator.example.invalid";
+        config.Orchestrator.ApiKey = "test-key";
+        var handler = new CapturingHandler();
+        var proxy = new OrchestratorProxyService(
+            new HttpClient(handler),
+            new OrchestratorSettingsService(
+                config,
+                new OrchestratorApiKeyProtector(
+                    DataProtectionProvider.Create(Path.Combine(factory.TempDir, "orchestrator-keys")))),
+            NullLogger<OrchestratorProxyService>.Instance);
+
+        var service = new SubscriptionDeliveryService(
+            h.Db,
+            config,
+            new PortalConnectionCatalogService(h.Db),
+            new FolderPermissionService(h.Db),
+            new AuditService(h.Db, new HttpContextAccessor()),
+            runner,
+            NullLogger<SubscriptionDeliveryService>.Instance,
+            dbLocator,
+            storeFactory,
+            proxy);
+
+        var result = await service.DeliverAsync(h.SubscriptionId, "trigger-dispatcher-send");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Delivered, result.Outcome);
+        Assert.Equal(1, runner.CallCount);
+        Assert.Contains("EXPORT REPORT", runner.LastScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SEND EMAIL", runner.LastScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, handler.RequestCount);
+        Assert.Equal(
+            $"https://orchestrator.example.invalid/api/notifications/{Uri.EscapeDataString(SubscriptionOrchestration.NotificationName(h.SubscriptionId))}/dispatch",
+            handler.LastUri);
+        Assert.Contains("\"sourceKind\":\"SUBSCRIPTION\"", handler.LastBody);
+        Assert.Contains("\"recipientOverride\":\"notify-recipient@test.local\"", handler.LastBody);
+        Assert.Contains("\"attachmentPaths\"", handler.LastBody);
+        Assert.DoesNotContain("row-recipient@test.local", handler.LastBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task DeniedDelivery_IsIsolated_FromAHealthyDelivery()
     {
         using var factory = new PortalWebFactory();
@@ -375,6 +440,25 @@ public sealed class SubscriptionDeliveryLedgerTests
         Assert.Equal(2, runner.CallCount);
         Assert.Equal(2, await h.Db.SubscriptionDeliveries.CountAsync(
             row => row.SubscriptionId == h.SubscriptionId));
+    }
+
+    private sealed class CapturingHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+        public string? LastUri { get; private set; }
+        public string LastBody { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            LastUri = request.RequestUri?.ToString();
+            LastBody = request.Content is null
+                ? ""
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
     }
 }
 
