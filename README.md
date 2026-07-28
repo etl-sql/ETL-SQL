@@ -305,6 +305,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 | Document | Description |
 | :--- | :--- |
+| [ETL-SQL Goals](GOALS.md) | Core product vision, language goals, and engineering principles. |
 | [Documentation Home](docs/README.md) | Main documentation map for guides, reference, cookbooks, architecture, and releases. |
 | [Getting Started](docs/guides/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
 | [ETL Notebook Guide](docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
