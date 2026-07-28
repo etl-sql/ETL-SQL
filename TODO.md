@@ -339,13 +339,13 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      migrations on both providers; API-created portal refresh jobs now mirror into `ReportJobLinks`, refresh
      job deletion removes both mappings, and legacy `DatasetJobs` remains for compatibility until import/export
      paths are fully moved.
-   - Add `Alerts` (`ReportId` FK, visual + operator + threshold, plus `LastState`/`LastEvaluatedAt`/
-     `LastNotifiedAt` for transition-based alerting) and `AlertNotifications` (orchestrator alias +
-     notification name — the destination lives in the orchestrator's catalog, so it cannot be an FK
-     and a dangling reference must be surfaced by the sweep, not discovered at dispatch).
-   - The `DropTable` violates `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRolling
-     ExpandContract`; add the migration to that test's `PreDeploymentBreakingMigrations` allow-list
-     with a written justification (precedent: `_DropSmtpConnections`).
+   - **[DONE]** `ReportAlerts` carries named alert definitions, visual/operator/threshold state,
+     transition timestamps, and attached `AlertNotifications` with Orchestrator alias +
+     notification name. The notification target intentionally stays in the Orchestrator catalog, not
+     as a Portal FK.
+   - **[DONE]** Alert-notification migrations follow the rolling-expand contract; no DropTable
+     exemption is needed. Verified with
+     `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRollingExpandContract`.
    - **[DONE]** Remove the default interface method bodies on `IDatasetRegistry` — a default body means deleting
      an override still compiles and silently binds to a no-op.
 3. **Parser, AST, formatter, linter:**
