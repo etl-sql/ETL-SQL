@@ -786,9 +786,9 @@ single-source shape `TRANSFORM` owns.
   - [x] Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite scoring, or any distance-based calculation where raw magnitude differences would dominate.
 - [x] **P3 — Add `ROLLING_AGGREGATE` algorithm (Smoothing / Moving Windows)**
   - [x] Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative sums on reports.
-- [ ] **Correctness, Testing, and the Triage Workflow (SLT)**
-  - Cover each algorithm with **Sqllogictest (SLT)** test files verifying standard execution logic, boundary transitions, and null values/edge cases.
-  - Apply the strict triage policy.
+- [x] **Correctness, Testing, and the Triage Workflow (SLT)**
+  - [x] Cover each algorithm with **Sqllogictest (SLT)** test files verifying standard execution logic, boundary transitions, and null values/edge cases.
+  - [x] Apply the strict triage policy.
 - [x] **Definition of done (P0).** `FILL_DATES` round-trips through the formatter in its canonical `TRANSFORM` form. Every existing sample and doc is updated. Each algorithm ships with a help file, a snippet, and at least one self-contained cookbook recipe showing it inside a full Extract → Stage → Transform → Load pipeline.
 
 ### Release-process RCI — issues found cutting v0.17.0 (scheduled last)
