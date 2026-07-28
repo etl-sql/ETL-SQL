@@ -89,16 +89,12 @@ public class SubscriptionsController(
         if (reports.Count > 1) return Conflict(new { error = $"Report '{reportName}' is ambiguous." });
 
         var report = reports[0];
-        var legacyJobs = await db.DatasetJobs
-            .Where(j => j.ReportId == report.Id)
-            .ToListAsync();
         var reportJobLinks = await db.ReportJobLinks
             .Where(j => j.ReportId == report.Id)
             .ToListAsync();
-        if (legacyJobs.Count == 0 && reportJobLinks.Count == 0)
+        if (reportJobLinks.Count == 0)
             return NotFound(new { error = $"Report '{reportName}' has no attached refresh jobs." });
 
-        db.DatasetJobs.RemoveRange(legacyJobs);
         db.ReportJobLinks.RemoveRange(reportJobLinks);
         await db.SaveChangesAsync();
 
@@ -107,7 +103,7 @@ public class SubscriptionsController(
             "DROP_REFRESH_JOB",
             "Report",
             report.Id.ToString(),
-            $"Removed {legacyJobs.Count} legacy refresh job(s) and {reportJobLinks.Count} report job link(s).");
+            $"Removed {reportJobLinks.Count} report job link(s).");
         return NoContent();
     }
 

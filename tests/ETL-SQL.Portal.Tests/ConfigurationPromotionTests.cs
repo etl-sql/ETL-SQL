@@ -121,18 +121,11 @@ public sealed class ConfigurationPromotionTests
         Assert.True(File.Exists(report.ScriptPath));
         Assert.NotEqual(devScriptPath, report.ScriptPath);
 
-        // Service-account rebinding: the refresh job targets the prod orchestrator, not dev's.
-        var refreshJob = await db.DatasetJobs.SingleAsync(j => j.Report.Name == $"report_{suffix}");
-        Assert.Contains("prod_orchestrator", refreshJob.OrchestratorJobName);
-        Assert.DoesNotContain("dev_orchestrator", refreshJob.OrchestratorJobName);
-        Assert.Equal("0 6 * * *", refreshJob.RefreshInterval);
-
         // Idempotent: the second promotion pass created no duplicates.
         Assert.Equal(1, await db.Reports.CountAsync(r => r.Name == $"report_{suffix}"));
         Assert.Equal(1, await db.Users.CountAsync(u => u.UserName == $"alice_{suffix}"));
         Assert.Equal(1, await db.PortalSharedConnections.CountAsync(c => c.Alias == $"corp_{suffix}"));
         Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.Name == $"sub_{suffix}"));
-        Assert.Equal(1, await db.DatasetJobs.CountAsync(j => j.Report.Name == $"report_{suffix}"));
     }
 
     private static async Task<string> SeedDevAsync(PortalWebFactory factory, string suffix)
@@ -183,12 +176,6 @@ public sealed class ConfigurationPromotionTests
         db.Reports.Add(report);
         await db.SaveChangesAsync();
 
-        db.DatasetJobs.Add(new DatasetJob
-        {
-            ReportId = report.Id,
-            OrchestratorJobName = $"portal-refresh:dev_orchestrator:{report.Id}",
-            RefreshInterval = "0 6 * * *"
-        });
         db.Subscriptions.Add(new Subscription
         {
             ReportId = report.Id,

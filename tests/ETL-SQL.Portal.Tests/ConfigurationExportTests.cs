@@ -183,12 +183,6 @@ public sealed class ConfigurationExportTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             var report = await db.Reports.SingleAsync(r => r.Name == $"Production Report {suffix}");
-            db.DatasetJobs.Add(new DatasetJob
-            {
-                ReportId = report.Id,
-                OrchestratorJobName = $"dev-refresh-{suffix}",
-                RefreshInterval = "0 2 * * *"
-            });
             db.ReportJobLinks.Add(new ReportJobLink
             {
                 ReportId = report.Id,
@@ -203,9 +197,6 @@ public sealed class ConfigurationExportTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var script = await response.Content.ReadAsStringAsync();
 
-        Assert.Contains($"legacy refresh job 'dev-refresh-{suffix}'", script);
-        Assert.Contains("CREATE REFRESH JOB is retired", script);
-        Assert.Contains("CREATE JOB ... FOR REPORT", script);
         Assert.Contains($"report job link 'link-only-refresh-{suffix}'", script);
         Assert.Contains("schedule metadata is not stored in Portal", script);
         Assert.DoesNotContain("Admin@Tests99!", script);

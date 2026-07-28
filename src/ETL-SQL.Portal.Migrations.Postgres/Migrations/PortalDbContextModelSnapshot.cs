@@ -307,35 +307,6 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("DatasetAcls");
                 });
 
-            modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetJob", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("LastRefreshedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("OrchestratorJobName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RefreshInterval")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("ReportId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReportId");
-
-                    b.ToTable("DatasetJobs");
-                });
-
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
                 {
                     b.Property<int>("Id")
@@ -1789,17 +1760,6 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Group");
                 });
 
-            modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetJob", b =>
-                {
-                    b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
-                        .WithMany("DatasetJobs")
-                        .HasForeignKey("ReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Report");
-                });
-
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
@@ -2201,8 +2161,6 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Acls");
 
                     b.Navigation("Alerts");
-
-                    b.Navigation("DatasetJobs");
 
                     b.Navigation("EmbedTokens");
 

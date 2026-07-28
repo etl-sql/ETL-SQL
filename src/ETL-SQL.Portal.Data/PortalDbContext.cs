@@ -21,7 +21,6 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<SubscriptionDelivery> SubscriptionDeliveries => Set<SubscriptionDelivery>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditOutboxMessage> AuditOutboxMessages => Set<AuditOutboxMessage>();
-    public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
     public DbSet<ReportJobLink> ReportJobLinks => Set<ReportJobLink>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
@@ -79,7 +78,6 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
-            e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
             e.HasMany(x => x.ReportJobLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
             e.HasMany(x => x.ShareLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
             e.HasMany(x => x.EmbedTokens).WithOne(t => t.Report).HasForeignKey(t => t.ReportId);

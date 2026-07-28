@@ -72,20 +72,7 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
                 j.LastRefreshedAt))
             .ToListAsync();
 
-        var legacyJobs = await db.DatasetJobs
-            .Where(j => j.ReportId == id)
-            .OrderBy(j => j.OrchestratorJobName)
-            .Select(j => new ReportDependencyRefreshJobDto(
-                j.Id,
-                j.OrchestratorJobName,
-                null,
-                j.RefreshInterval,
-                j.LastRefreshedAt))
-            .ToListAsync();
-        var jobs = reportJobLinks
-            .Concat(legacyJobs.Where(j => !reportJobLinks.Any(link =>
-                string.Equals(link.OrchestratorJobName, j.OrchestratorJobName, StringComparison.OrdinalIgnoreCase))))
-            .ToList();
+        var jobs = reportJobLinks;
 
         var alerts = await db.ReportAlerts
             .AsNoTracking()

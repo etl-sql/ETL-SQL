@@ -125,25 +125,6 @@ public class OrchestratorPollerService(
                     continue;
                 }
 
-                var datasetJob = await db.DatasetJobs
-                    .Include(j => j.Report)
-                    .FirstOrDefaultAsync(j => j.OrchestratorJobName == jobName, ct);
-
-                if (datasetJob is not null)
-                {
-                    log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after legacy job {JobName}",
-                        datasetJob.ReportId, jobName);
-
-                    datasetJob.LastRefreshedAt = endTime;
-                    await db.SaveChangesAsync(ct);
-
-                    await jobs.EnqueueRefreshAsync(
-                        datasetJob.ReportId,
-                        userId: 0,
-                        scriptPath: datasetJob.Report.ScriptPath,
-                        trustedDatasetExecution: true);
-                }
-
                 _lastPollTime = endTime;
             }
             catch (Exception ex)

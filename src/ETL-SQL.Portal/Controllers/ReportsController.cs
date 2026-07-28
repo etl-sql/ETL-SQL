@@ -1453,14 +1453,7 @@ public class ReportsController : ControllerBase
             .ThenBy(j => j.JobName)
             .Select(j => $"{j.OrchestratorAlias}:{j.JobName}")
             .ToListAsync();
-        var attachedLegacyRefreshJobs = await db.DatasetJobs
-            .Where(j => j.ReportId == report.Id)
-            .Select(j => j.OrchestratorJobName)
-            .ToListAsync();
-        var attachedRefreshJobs = attachedReportJobLinks
-            .Concat(attachedLegacyRefreshJobs.Where(jobName => !attachedReportJobLinks.Any(link =>
-                link.EndsWith($":{jobName}", StringComparison.OrdinalIgnoreCase))))
-            .ToList();
+        var attachedRefreshJobs = attachedReportJobLinks;
         if (attachedRefreshJobs.Count > 0)
         {
             return Conflict(new

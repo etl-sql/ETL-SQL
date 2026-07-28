@@ -211,18 +211,16 @@ Reports         (Id, FolderId, Name, Description, ScriptPath, ScriptLastModified
 ReportSnapshots (Id, ReportId, ManifestPath, BuiltAt, BuiltBy, ParametersJson)
 Subscriptions   (Id, ReportId, UserId, Schedule, DeliverOnRefresh, Format,
                  SmtpAlias, Recipients, LastSentAt, NextRunAt, FailCount, IsActive)
-SmtpConnections (Id, Alias, Host, Port, Username, EncryptedPassword, FromAddress, UseSsl)
 AuditLog        (Id, UserId, Action, ResourceType, ResourceId, Timestamp, Detail)
-DatasetJobs     (Id, ReportId, OrchestratorJobName, RefreshInterval, LastRefreshedAt)
+ReportJobLinks  (Id, ReportId, OrchestratorAlias, JobName, LastRefreshedAt)
 RefreshTokens   (Id, UserId, Token, ExpiresAt, RevokedAt)
 ```
 
 **Key schema notes:**
 - `ReportSnapshots.ManifestPath` — relative path to the manifest file on disk managed
   by `SnapshotStore`. Never the JSON body.
-- `Subscriptions.SmtpAlias` — references `SmtpConnections.Alias` by name.
-- `SmtpConnections` — registered via admin script; credentials stored `ENC:` encrypted
-  via .NET Data Protection API.
+- `Subscriptions.SmtpAlias` — references the governed Portal shared-connection catalog by alias.
+- Shared connection credentials are stored as encrypted options or `SECRET:name` references.
 - SQLite WAL mode must be explicitly enabled on `portal.db`. The portal's HTTP
   request handlers and both background services (`SubscriptionDispatcher`,
   Orchestrator poller) write concurrently — the default journal mode will cause
@@ -489,8 +487,8 @@ invalidated on dataset refresh or script change.
   against the per-user `DashboardService` session.
 
 ### 2.3 Orchestrator Integration
-- Dataset refresh jobs are created in the Orchestrator via `CREATE JOB ... AT orch`
-  executed through the engine. `DatasetJobs.OrchestratorJobName` stores the job name.
+- Report refresh jobs are created in the Orchestrator via `CREATE JOB ... FOR REPORT`
+  and linked to Portal reports through `ReportJobLinks` (`OrchestratorAlias`, `JobName`).
 - A portal `BackgroundService` polls the Orchestrator's `ExecutionHistory` SQLite
   table every 60 seconds for job completions.
 - On completion, the portal invalidates the snapshot and queues a background

@@ -182,6 +182,12 @@ public sealed class MigrationConvergenceTests : IDisposable
         // and SchemaUpToDate report false. No installation exists to roll, so the contract guards
         // nothing here.
         "_DropSmtpConnections",
+        // Drops DatasetJobs, superseded by normalized ReportJobLinks plus Orchestrator-owned
+        // JOB/SCHEDULE/NOTIFICATION metadata. Keeping the legacy table would preserve an unused
+        // second refresh-job model and force Portal code to maintain a fallback that conflicts
+        // with the unified job boundary. No installation exists to roll, so the contract guards
+        // nothing here.
+        "_DropDatasetJobs",
     ];
 
     private static bool IsRollingContractViolation(MigrationOperation operation, out string reason)

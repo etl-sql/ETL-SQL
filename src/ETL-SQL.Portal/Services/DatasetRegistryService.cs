@@ -214,27 +214,8 @@ namespace ETL_SQL.Portal.Services
             }
             else
             {
-                // Legacy callers may still pass an opaque job name with no Orchestrator alias.
-                // Keep those rows in DatasetJobs until the remaining compatibility endpoints are
-                // removed; API-created portal refresh jobs use the normalized portal-refresh:<alias>:<id>
-                // name and therefore no longer create new legacy rows.
-                var job = await _db.DatasetJobs
-                    .FirstOrDefaultAsync(j => j.OrchestratorJobName == orchestratorJobName);
-                if (job == null)
-                {
-                    job = new DatasetJob
-                    {
-                        ReportId = reportId,
-                        OrchestratorJobName = orchestratorJobName
-                    };
-                    _db.DatasetJobs.Add(job);
-                }
-                else
-                {
-                    job.ReportId = reportId;
-                }
-
-                job.RefreshInterval = refreshInterval;
+                throw new InvalidOperationException(
+                    "Report refresh jobs must use normalized portal-refresh:<orchestratorAlias>:<reportId> names.");
             }
 
             await _db.SaveChangesAsync();

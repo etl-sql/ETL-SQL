@@ -882,12 +882,6 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            db.DatasetJobs.Add(new DatasetJob
-            {
-                ReportId = reportId,
-                OrchestratorJobName = $"refresh_{suffix}",
-                RefreshInterval = "0 2 * * *"
-            });
             db.ReportJobLinks.Add(new ReportJobLink
             {
                 ReportId = reportId,
@@ -1043,8 +1037,6 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            Assert.False(await db.DatasetJobs
-                .AnyAsync(j => j.OrchestratorJobName == jobName));
             var link = Assert.Single(await db.ReportJobLinks
                 .Where(j => j.JobName == jobName)
                 .ToListAsync());
@@ -1092,7 +1084,6 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         using var verifyScope = _factory.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        Assert.False(await verifyDb.DatasetJobs.AnyAsync(j => j.ReportId == reportId));
         Assert.False(await verifyDb.ReportJobLinks.AnyAsync(j => j.ReportId == reportId));
     }
 

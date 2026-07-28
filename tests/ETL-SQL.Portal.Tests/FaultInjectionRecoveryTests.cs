@@ -197,7 +197,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
     }
 
     [Fact]
-    public async Task OrchestratorPoller_RefreshesNormalizedReportJobLinkBeforeLegacyDatasetJob()
+    public async Task OrchestratorPoller_RefreshesNormalizedReportJobLink()
     {
         using var factory = new PortalWebFactory();
         _ = factory.CreateClient(); // build the host and apply migrations
@@ -206,7 +206,6 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Poller Normalized Refresh';");
         const string jobName = "shared_refresh_job";
         int normalizedReportId;
-        int legacyReportId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -218,29 +217,15 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
                 ScriptPath = scriptPath,
                 CreatedBy = 1
             };
-            var legacyReport = new Report
-            {
-                Folder = folder,
-                Name = "Legacy",
-                ScriptPath = scriptPath,
-                CreatedBy = 1
-            };
-            db.Reports.AddRange(normalizedReport, legacyReport);
+            db.Reports.Add(normalizedReport);
             await db.SaveChangesAsync();
 
             normalizedReportId = normalizedReport.Id;
-            legacyReportId = legacyReport.Id;
             db.ReportJobLinks.Add(new ReportJobLink
             {
                 ReportId = normalizedReportId,
                 OrchestratorAlias = "default",
                 JobName = jobName
-            });
-            db.DatasetJobs.Add(new DatasetJob
-            {
-                ReportId = legacyReportId,
-                OrchestratorJobName = jobName,
-                RefreshInterval = "Hourly"
             });
             await db.SaveChangesAsync();
         }
@@ -265,9 +250,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         Assert.True(inMemoryJob!.TrustedDatasetExecution);
 
         var link = await verifyDb.ReportJobLinks.SingleAsync(j => j.ReportId == normalizedReportId);
-        var legacy = await verifyDb.DatasetJobs.SingleAsync(j => j.ReportId == legacyReportId);
         Assert.NotNull(link.LastRefreshedAt);
-        Assert.Null(legacy.LastRefreshedAt);
     }
 
     [Fact]

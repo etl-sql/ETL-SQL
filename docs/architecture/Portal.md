@@ -48,11 +48,10 @@ PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ─�
                                                                          ├──< ReportShareLink
                                                                          ├──< ReportEmbedToken
                                                                          ├──< SavedReportView
-                                                                         └──< ReportAlert
+                                                                         ├──< ReportAlert
+                                                                         └──< ReportJobLink
 Dataset ──< DatasetAcl
-Report ──< DatasetJob
 PortalUser ──< RefreshToken
-SmtpConnection  (standalone)
 AuditLog        (append-oriented portal event table)
 PortalExecutionJob (durable portal execution/refresh polling state)
 PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted execution)
@@ -74,7 +73,7 @@ AdminServiceRun         (per-run ledger for the native admin background services
 
 - **`Subscription.ScriptPath`** — the Orchestrator job script is generated at subscription-creation time and stored as a `.etlsql` file under `ScriptRootPath`. This path is recorded so the job file can be cleaned up on subscription deletion.
 
-- **`SmtpConnection.EncryptedPassword`** — stored via .NET Data Protection API. The `SmtpPasswordProtector` service wraps `IDataProtector`. The password is never returned to clients in any API response.
+- **Shared connection credentials** — stored in the governed Portal shared-connection catalog with encrypted options or `SECRET:name` references. Secret values are never returned to clients in API responses.
 
 - **Catalog and embedding records** — favorites, share links, embed tokens, saved views, alerts, dependencies, and usage metrics are first-class portal records exposed through the report/admin API and ETL-SQL portal scripting commands.
 

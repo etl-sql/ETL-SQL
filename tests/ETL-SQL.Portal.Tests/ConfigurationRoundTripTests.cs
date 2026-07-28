@@ -15,8 +15,7 @@ namespace ETL_SQL.Portal.Tests;
 
 /// <summary>
 /// Proves clean-server round-trip reconstruction. A source portal is seeded with the complete
-/// declarative graph (identity, permissions, SMTP, reports, datasets, refresh jobs, subscriptions,
-/// and alerts); its
+/// declarative graph (identity, permissions, SMTP, reports, datasets, subscriptions, and alerts); its
 /// configuration is exported, the <c>${...}</c> secrets are supplied, and the bootstrap is replayed
 /// <b>twice</b> into a fresh empty portal through the connector. The reconstructed effective state
 /// must equal the source's, the second pass must be a no-op (idempotent), and no source secret may
@@ -35,7 +34,7 @@ public sealed class ConfigurationRoundTripTests
         HashSet<string> Users, HashSet<string> Groups, HashSet<string> Memberships,
         HashSet<string> Folders, HashSet<string> Acls, HashSet<string> Smtp,
         HashSet<string> Reports, HashSet<string> Datasets, HashSet<string> DatasetAcls,
-        HashSet<string> RefreshJobs, HashSet<string> Subscriptions, HashSet<string> Alerts);
+        HashSet<string> Subscriptions, HashSet<string> Alerts);
 
     private sealed record DatasetSeed(
         string Name,
@@ -125,7 +124,6 @@ public sealed class ConfigurationRoundTripTests
             Assert.Equal(sourceState.Reports, targetState.Reports);
             Assert.Equal(sourceState.Datasets, targetState.Datasets);
             Assert.Equal(sourceState.DatasetAcls, targetState.DatasetAcls);
-            Assert.Equal(sourceState.RefreshJobs, targetState.RefreshJobs);
             Assert.True(
                 sourceState.Subscriptions.SetEquals(targetState.Subscriptions),
                 $"Subscriptions differ.\nSource: {string.Join("\n", sourceState.Subscriptions)}\n" +
@@ -138,7 +136,6 @@ public sealed class ConfigurationRoundTripTests
             Assert.Equal(1, await db.Reports.CountAsync(r => r.Name == $"report_{suffix}"));
             Assert.Equal(2, await db.Subscriptions.CountAsync(s => s.Name!.EndsWith($"_{suffix}")));
             Assert.Equal(2, await db.ReportAlerts.CountAsync(a => a.Name.EndsWith($"_{suffix}")));
-            Assert.Equal(1, await db.DatasetJobs.CountAsync(j => j.Report.Name == $"report_{suffix}"));
         }
     }
 
@@ -241,12 +238,6 @@ public sealed class ConfigurationRoundTripTests
             DatasetId = dataset.Id,
             GroupId = finance.Id,
             Permission = DatasetPermission.Refresh
-        });
-        db.DatasetJobs.Add(new DatasetJob
-        {
-            ReportId = report.Id,
-            OrchestratorJobName = $"source-refresh-{suffix}",
-            RefreshInterval = "0 6 * * *"
         });
         db.Subscriptions.AddRange(
             new Subscription
@@ -422,10 +413,6 @@ public sealed class ConfigurationRoundTripTests
             where dataset.Name.EndsWith($"_{suffix}")
             select dataset.Name + "|" + portalGroup.Name + "|" + acl.Permission)
             .ToListAsync()).ToHashSet();
-        var refreshJobs = (await db.DatasetJobs
-            .Where(j => j.Report.Name.EndsWith($"_{suffix}"))
-            .Select(j => j.Report.Folder.Path + "/" + j.Report.Name + "|" + j.RefreshInterval)
-            .ToListAsync()).ToHashSet();
         var rawSubscriptions = await db.Subscriptions
             .Where(s => s.Name != null && s.Name.EndsWith($"_{suffix}"))
             .Select(s => new
@@ -469,7 +456,7 @@ public sealed class ConfigurationRoundTripTests
 
         return new NormalizedState(
             users, groups, memberships, folders, acls, smtp,
-            reports, datasets, datasetAcls, refreshJobs, subscriptions, alerts);
+            reports, datasets, datasetAcls, subscriptions, alerts);
     }
 
     // ── Replay plumbing ──────────────────────────────────────────────────────────

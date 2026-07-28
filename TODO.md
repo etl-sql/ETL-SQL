@@ -335,11 +335,10 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      deleted, and changing its semantics now would break its tests for no benefit. `DateTime.Now`
      disappears from the path when it does.
 2. **Portal persistence:**
-   - **[PARTIAL]** Introduce `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`) with EF
+   - **[DONE]** Introduce `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`) with EF
      migrations on both providers; API-created portal refresh jobs now write only normalized
-     `ReportJobLinks`, refresh job deletion removes normalized links plus any old legacy mappings,
-     and legacy `DatasetJobs` remains only for compatibility/fallback until the explicit breaking EF
-     migration drops it.
+     `ReportJobLinks`, refresh job deletion removes normalized links, and the legacy `DatasetJobs`
+     table/model is dropped by the explicitly allow-listed pre-deployment breaking migration.
    - **[DONE]** `ReportAlerts` carries named alert definitions, visual/operator/threshold state,
      transition timestamps, and attached `AlertNotifications` with Orchestrator alias +
      notification name. The notification target intentionally stays in the Orchestrator catalog, not
@@ -418,7 +417,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      attached.
 5. **Consumers, UI, docs:**
    - **[DONE]** `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
-     Portal refresh, with legacy `DatasetJobs` fallback; completed trusted refreshes evaluate alerts attached
+     Portal refresh; completed trusted refreshes evaluate alerts attached
      to that report. `SCRIPT` completions ignored. Verified 2026-07-28 with:
      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
      "FullyQualifiedName~FaultInjectionRecoveryTests"` (8 passed).

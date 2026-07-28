@@ -12,14 +12,14 @@ with them; there are no open questions blocking implementation.
 
 ## 1. Problem Statement & Goals
 
-### The Current State
+### The Legacy State This Refactor Replaces
 
-1. **1:1 Schedule Coupling:** Schedules are coupled directly to report refresh entities
+1. **1:1 Schedule Coupling:** Schedules were coupled directly to report refresh entities
    (`DatasetJob`). Registering a second schedule on the same report silently overwrites the existing
    one, because `SubscriptionsController` keys the job as `portal-refresh:{alias}:{report.Id}` and
    `DatasetRegistryService.RegisterRefreshJobAsync` looks the job up by that key.
 2. **Two report-refresh paths, one of which never schedules anything.**
-   * `POST api/subscriptions/refresh-jobs` → `RegisterRefreshJobAsync` writes a `DatasetJobs` row and
+   * `POST api/subscriptions/refresh-jobs` → `RegisterRefreshJobAsync` wrote a `DatasetJobs` row and
      **nothing else**. It never calls `SaveJobAsync`, so no Orchestrator job exists, and
      `OrchestratorPollerService` waits forever on a completion nothing produces. This path has never
      worked.
@@ -30,7 +30,7 @@ with them; there are no open questions blocking implementation.
      removes: the inline `AS <statement>` job body and a 1:1 dataset↔schedule coupling.
 3. **Naming and vocabulary fragmentation.** Five schedule vocabularies exist today:
    * engine `CREATE JOB … ON SCHEDULE EVERY 5 MINUTES [AT '02:00']` → `JobDefinition{Interval, Unit, AtTime}`;
-   * portal refresh jobs → a **cron** string in `DatasetJob.RefreshInterval` that nothing consumes;
+   * portal refresh jobs → a **cron** string in `DatasetJob.RefreshInterval` that nothing consumed;
    * subscriptions → `Daily`/`Weekly`/`Monthly`/`Hourly`, mapped to an interval by
      `SubscriptionOrchestration.ParseSchedule`;
    * report datasets → `REFRESH EVERY '30m'` duration strings;
@@ -499,10 +499,11 @@ in the PK.
   `ReportId` stays a **real foreign key** so report deletion is enforced by the database; the job's
   `TargetPath` is a mutable property that `ALTER JOB … SET TARGET` changes, and the Portal keeps the
   two consistent when a report is renamed or moved.
-  API-created portal refresh jobs write only `ReportJobLinks`; `DatasetJobs` is retained only as a
-  temporary fallback for rows created by older development builds.
+  API-created portal refresh jobs write only `ReportJobLinks`; opaque refresh job names are rejected
+  because there is no legacy table left to persist them.
 
-Dropping `DatasetJobs` is a Portal EF migration, and a `DropTable` in `Up` violates
+Dropping `DatasetJobs` is implemented by the Portal EF migration `DropDatasetJobs`, and a
+`DropTable` in `Up` violates
 `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRollingExpandContract`. The mechanism
 is that test's `PreDeploymentBreakingMigrations` allow-list with a written justification —
 precedent: `_DropSmtpConnections`. Name the migration there rather than rediscovering the failure

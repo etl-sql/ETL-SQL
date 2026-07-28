@@ -357,32 +357,8 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         }
         emitted.Add($"{alertCount} alert(s)");
 
-        // ── Scheduled refresh jobs ────────────────────────────────────────────
-        var refreshJobCount = 0;
-        var refreshJobs = db.DatasetJobs.AsNoTracking()
-            .OrderBy(j => j.Report.Folder!.Path).ThenBy(j => j.Report.Name)
-            .Select(j => new
-            {
-                j.OrchestratorJobName,
-                j.RefreshInterval,
-                ReportName = j.Report.Name,
-                FolderPath = j.Report.Folder.Path
-            })
-            .AsAsyncEnumerable();
-        AppendSection(body, "Scheduled report refresh jobs");
-        await foreach (var j in refreshJobs.WithCancellation(ct))
-        {
-            refreshJobCount++;
-            skipped.Add(
-                $"legacy refresh job '{j.OrchestratorJobName}' for report '{j.FolderPath}/{j.ReportName}': " +
-                "CREATE REFRESH JOB is retired; export the Orchestrator catalog as CREATE SCHEDULE + " +
-                "CREATE JOB ... FOR REPORT + ALTER JOB ... ADD SCHEDULE");
-        }
-        var legacyRefreshJobNames = await db.DatasetJobs
-            .AsNoTracking()
-            .Select(j => j.OrchestratorJobName)
-            .ToListAsync(ct);
-        var legacyRefreshJobNameSet = legacyRefreshJobNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // ── Scheduled refresh job links ───────────────────────────────────────
+        AppendSection(body, "Scheduled report refresh job links");
         var reportJobLinks = await db.ReportJobLinks
             .AsNoTracking()
             .Include(j => j.Report)
@@ -392,16 +368,13 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             .ThenBy(j => j.OrchestratorAlias)
             .ThenBy(j => j.JobName)
             .ToListAsync(ct);
-        var unexportedReportJobLinks = reportJobLinks
-            .Where(j => !legacyRefreshJobNameSet.Contains(j.JobName))
-            .ToList();
-        foreach (var link in unexportedReportJobLinks)
+        foreach (var link in reportJobLinks)
         {
             skipped.Add(
                 $"report job link '{link.JobName}' for report '{link.Report.Folder.Path}/{link.Report.Name}' " +
                 $"on Orchestrator '{link.OrchestratorAlias}': schedule metadata is not stored in Portal; export the Orchestrator catalog and attach the schedule manually");
         }
-        emitted.Add($"{refreshJobCount} refresh job(s)");
+        emitted.Add($"{reportJobLinks.Count} refresh job link(s)");
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");
 

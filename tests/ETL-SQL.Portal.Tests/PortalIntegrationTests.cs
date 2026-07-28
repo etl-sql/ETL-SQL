@@ -1583,13 +1583,6 @@ CREATE VISUAL Total AS CARD (
                 RefreshInterval = "Hourly",
                 LastRefresh = DateTime.UtcNow
             });
-            db.DatasetJobs.Add(new DatasetJob
-            {
-                ReportId = reportId,
-                OrchestratorJobName = "refresh_sales_summary",
-                RefreshInterval = "Hourly",
-                LastRefreshedAt = DateTime.UtcNow
-            });
             db.ReportJobLinks.Add(new ReportJobLink
             {
                 ReportId = reportId,
