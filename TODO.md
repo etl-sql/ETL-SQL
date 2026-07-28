@@ -431,8 +431,10 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      round-trips to exactly what it describes.
    - `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile
      with the `SHOW`-retirement inventory above, which currently lists `eng.refresh_jobs`.
-   - Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using the retired
-     inline-`AS` job form or `REFRESH EVERY`.
+   - **[PARTIAL]** Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using
+     the retired inline-`AS` job form or `REFRESH EVERY`: current cookbook/job guidance and release
+     examples are normalized; remaining matches are parser diagnostics or architecture
+     decision/roadmap text that explicitly discusses retired syntax.
 
 #### P1 — Make lifecycle modifiers explicit and uniform
 

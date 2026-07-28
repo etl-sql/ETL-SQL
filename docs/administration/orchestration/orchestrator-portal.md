@@ -107,7 +107,7 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 - Hash Policy (`Warn`, `Block`, or `Off`)
 
 > [!NOTE]
-> Jobs created through the portal store the full script content in the database at creation time. If the `.etlsql` file on disk is edited later, the database copy is not automatically updated. Re-save the job through the portal (or via `CREATE JOB … AS …` in a script) to pick up changes.
+> Jobs created through the portal store the selected script target in the Orchestrator catalog. If the `.etlsql` file on disk is edited later, update the job through the portal or with `ALTER JOB <name> SET TARGET = '...'` / `CREATE OR REPLACE JOB <name> FOR SCRIPT '...'`.
 
 ### 14.6 Service Control
 

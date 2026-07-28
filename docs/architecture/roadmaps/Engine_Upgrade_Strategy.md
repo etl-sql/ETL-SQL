@@ -910,14 +910,13 @@ CREATE PAGE ExecutiveDashboard AS DASHBOARD (
 
 #### 9.2.3 CREATE DATASET — Materialized Snapshot Syntax
 
-For deployed dashboards where the ETL prep is expensive, a `CREATE DATASET` statement replaces the raw `#temp` population and tells the Orchestrator to own the refresh schedule. The dashboard player loads the snapshot from disk rather than hitting the live database on every page load.
+For deployed dashboards where the ETL prep is expensive, a `CREATE DATASET` statement replaces the raw `#temp` population. Refresh is owned by an Orchestrator `JOB` linked to a named `SCHEDULE`; the dashboard player loads the snapshot from disk rather than hitting the live database on every page load.
 
 ```sql
 -- Registered with the Orchestrator on first run.
 -- Subsequent loads read from the compressed/encrypted snapshot file.
 -- If no valid snapshot exists (first run or expired TTL), the SOURCE executes live.
 CREATE DATASET &SalesData
-    REFRESH EVERY '6 hours'
     TTL = '8 hours'          -- max age before snapshot is considered stale
     COMPRESS = ON
     ENCRYPT = ON
@@ -928,12 +927,23 @@ AS (
     JOIN DimDate ON FactSales.DateKey = DimDate.DateKey
     WHERE YEAR(Date) = YEAR(GETDATE())
 );
+
+CREATE SCHEDULE SalesDataEverySixHours
+    ON '0 */6 * * *'
+    AT TIME ZONE 'UTC';
+
+CREATE OR REPLACE JOB RefreshSalesData
+    FOR REPORT 'ExecutiveDashboard'
+    WITH (DISPLAY_NAME = 'Refresh SalesData');
+
+ALTER JOB RefreshSalesData
+    ADD SCHEDULE SalesDataEverySixHours;
 ```
 
 **Key behaviors the handler must implement:**
 - On first execution: run the `AS (...)` query, serialize the result to Parquet format, compress (LZ4 or GZip), optionally encrypt using the same key infrastructure as FLATFILE ENCRYPT. Store in a configurable snapshot directory (default: `%APPDATA%\ETL-SQL\snapshots\` on Windows).
 - On subsequent executions: check if a valid snapshot exists and is within TTL. If yes, load from snapshot and skip the query. If no, run the query and re-snapshot.
-- Register the `REFRESH EVERY` schedule with `SchedulerService` in Orchestrator exactly as a job registration. The refresh job re-runs only the `CREATE DATASET` statement, not the entire script.
+- Register refreshes as Orchestrator jobs linked to named schedules. The refresh job re-runs the trusted report refresh path instead of relying on retired inline `REFRESH EVERY` syntax.
 - The `&DatasetName` is available in the report dataset namespace after `CREATE DATASET` completes, regardless of whether it was loaded from snapshot or live — callers don't need to know which path was taken.
 - Staleness behavior: if snapshot exists but is beyond TTL, the dashboard player shows a staleness warning banner with the last-refresh timestamp and an optional manual refresh button. It does NOT block rendering — it shows the stale data with a warning.
 

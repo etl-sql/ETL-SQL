@@ -862,14 +862,19 @@ BEGIN TRY
         ENTRY 'main.etlsql'
         WITH (PASSWORD = 'lockbox-master-password');
 
-    -- 4. Schedule the job on the remote Orchestrator. 
-    -- Pinned version resolution occurs at job creation time (e.g. resolves to version 1)
+    -- 4. Schedule the job on the remote Orchestrator.
+    -- Pinned version resolution occurs at job creation time (e.g. resolves to version 1).
     EXECUTE local_orch BEGIN
-        CREATE JOB RunFinanceReconciliation
-            ON SCHEDULE EVERY 1 DAY AT '02:30'
-            WITH (MAX_RETRIES = 3, RETRY_DELAY = 60)
-        AS
-            RUN SCRIPT 'orch://finance-pipeline/main.etlsql';
+        CREATE SCHEDULE FinanceReconciliationNightly
+            ON '30 2 * * *'
+            AT TIME ZONE 'UTC';
+
+        CREATE OR REPLACE JOB RunFinanceReconciliation
+            FOR SCRIPT 'orch://finance-pipeline/main.etlsql'
+            WITH (MAX_RETRIES = 3, RETRY_DELAY = 60);
+
+        ALTER JOB RunFinanceReconciliation
+            ADD SCHEDULE FinanceReconciliationNightly;
     END;
 
     PRINT 'Bundle published and job scheduled successfully.';
@@ -972,18 +977,22 @@ Once a pipeline is published, register it as a scheduled job on the Orchestrator
 -- 1. Connect to the Orchestrator. An ENC: secret must be a quoted string.
 CREATE CONNECTION orch AS ORCHESTRATOR(HOST = 'http://localhost:5001', API_KEY = 'ENC:U2FsdGVkX1+...');
 
--- 2. Register the job ON the remote orchestrator. The WITH(...) retry options
---    must precede the AS block (see Grammar.md §15.1).
+-- 2. Register the named schedule and job on the remote orchestrator, then link them.
 EXECUTE orch BEGIN
-    CREATE JOB NightlyReconciliation
-        ON SCHEDULE EVERY 1 DAY AT '02:30'
-        WITH (MAX_RETRIES = 3, RETRY_DELAY = 60)
-    AS
-        RUN SCRIPT 'orch://finance-pipeline/main.etlsql';
+    CREATE SCHEDULE NightlyReconciliationSchedule
+        ON '30 2 * * *'
+        AT TIME ZONE 'UTC';
+
+    CREATE OR REPLACE JOB NightlyReconciliation
+        FOR SCRIPT 'orch://finance-pipeline/main.etlsql'
+        WITH (MAX_RETRIES = 3, RETRY_DELAY = 60);
+
+    ALTER JOB NightlyReconciliation
+        ADD SCHEDULE NightlyReconciliationSchedule;
 END;
 ```
 
-> Pair this with recipe 20: publish an immutable bundle, then schedule `orch://<bundle>/<entry>` so production runs are pinned to a specific version. See [Reference/Grammar.md](../guides/getting-started.md) §15 for `ALTER JOB`, `START`/`STOP JOB`, and `SHOW JOB HISTORY`.
+> Pair this with recipe 20: publish an immutable bundle, then schedule `orch://<bundle>/<entry>` so production runs are pinned to a specific version. See [Job Scheduling](../reference/orchestrator-jobs/schedule.md) for `CREATE SCHEDULE`, `CREATE JOB`, `ALTER JOB`, and `SHOW JOB HISTORY`.
 
 ---
 
