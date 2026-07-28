@@ -251,6 +251,7 @@ public class SubscriptionsController(
         var smtpAliasChanged = req.SmtpAlias is not null && req.SmtpAlias != sub.SmtpAlias;
         var recipientsChanged = req.Recipients is not null && req.Recipients != sub.Recipients;
         var scriptNeedsRewrite = formatChanged || parametersChanged || smtpAliasChanged || recipientsChanged;
+        var notificationChanged = formatChanged || smtpAliasChanged || recipientsChanged;
 
         if (req.Name is not null) sub.Name = req.Name;
         if (req.Schedule is not null)
@@ -299,10 +300,10 @@ public class SubscriptionsController(
             return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
         }
 
-        // Sync the Orchestrator job and its unified schedule link if scheduling or active state changed.
+        // Sync the Orchestrator job and its unified links if scheduling, notification, or active state changed.
         var orchDbPath = dbLocator.Resolve();
         if ((orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
-            && (scheduleChanged || atTimeChanged || req.IsActive.HasValue))
+            && (scheduleChanged || atTimeChanged || notificationChanged || req.IsActive.HasValue))
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
@@ -324,6 +325,7 @@ public class SubscriptionsController(
                     sub,
                     updated.Name,
                     rearmExisting: scheduleChanged || atTimeChanged);
+                await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, updated.Name);
             }
             else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
             {
@@ -392,7 +394,10 @@ public class SubscriptionsController(
                 {
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
                     if (!string.IsNullOrWhiteSpace(sub.ScriptPath))
+                    {
                         await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, jobName);
+                        await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, jobName);
+                    }
                 }
             }
             results.Add(new(item.Id, "Updated", sub.Version));
@@ -439,6 +444,7 @@ public class SubscriptionsController(
             await store.InitializeAsync();
             await store.DeleteJobAsync(jobName);
             await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, sub.Id);
+            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(store, sub.Id);
         }
 
         if (!string.IsNullOrEmpty(resolvedScriptPath) && System.IO.File.Exists(resolvedScriptPath))

@@ -16,12 +16,16 @@ public static class SubscriptionOrchestration
 {
     public const string JobNamePrefix = "SUB:";
     public const string ScheduleNamePrefix = "SUBSCHED:";
+    public const string NotificationNamePrefix = "SUBNOTIFY:";
 
     public static string JobName(int subscriptionId, string? reportName) =>
         $"{JobNamePrefix}{subscriptionId}:{reportName}";
 
     public static string ScheduleName(int subscriptionId) =>
         $"{ScheduleNamePrefix}{subscriptionId}";
+
+    public static string NotificationName(int subscriptionId) =>
+        $"{NotificationNamePrefix}{subscriptionId}";
 
     public static bool TryParseSubscriptionId(string jobName, out int subscriptionId)
     {
@@ -74,6 +78,23 @@ public static class SubscriptionOrchestration
             Description: "Portal subscription trigger schedule");
     }
 
+    public static NotificationDefinition? BuildNotificationDefinition(Subscription sub)
+    {
+        if (sub.Format == SubscriptionFormat.Link || string.IsNullOrWhiteSpace(sub.SmtpAlias))
+            return null;
+
+        return new NotificationDefinition(
+            Name: NotificationName(sub.Id),
+            ConnectionName: sub.SmtpAlias.Trim(),
+            Recipient: sub.Recipients,
+            // Keep the catalog object and attachment in place, but do not let the Orchestrator's
+            // generic job-notification dispatcher send a second, attachment-free email while the
+            // Portal delivery executor still owns report export, RLS, attachments, and the ledger.
+            IsEnabled: false,
+            DisplayName: $"Subscription {sub.Id}",
+            Description: "Portal subscription delivery destination");
+    }
+
     public static string ScriptFileName(int subscriptionId, string reportName) =>
         $"sub_{subscriptionId}_{SanitizeName(reportName)}.etlsql";
 
@@ -103,6 +124,7 @@ public static class SubscriptionOrchestration
         var job = BuildJobDefinition(sub, reportName, scriptPath);
         await store.SaveJobAsync(job);
         await SaveScheduleLinkAsync(store, sub, job.Name);
+        await SaveNotificationLinkAsync(store, sub, job.Name);
     }
 
     public static async Task SaveScheduleLinkAsync(
@@ -134,6 +156,36 @@ public static class SubscriptionOrchestration
             return;
 
         _ = await catalog.DeleteScheduleAsync(ScheduleName(subscriptionId));
+    }
+
+    public static async Task SaveNotificationLinkAsync(
+        IJobHistoryStore store,
+        Subscription sub,
+        string jobName)
+    {
+        if (store is not IJobCatalogStore catalog)
+            return;
+
+        var notificationName = NotificationName(sub.Id);
+        var notification = BuildNotificationDefinition(sub);
+        if (notification is null)
+        {
+            _ = await catalog.RemoveJobNotificationAsync(
+                jobName, notificationName, NotificationTrigger.Success);
+            _ = await catalog.DeleteNotificationAsync(notificationName);
+            return;
+        }
+
+        await catalog.SaveNotificationAsync(notification);
+        await catalog.AddJobNotificationAsync(jobName, notification.Name, NotificationTrigger.Success);
+    }
+
+    public static async Task DeleteNotificationIfUnusedAsync(IJobHistoryStore store, int subscriptionId)
+    {
+        if (store is not IJobCatalogStore catalog)
+            return;
+
+        _ = await catalog.DeleteNotificationAsync(NotificationName(subscriptionId));
     }
 
     public static string SanitizeName(string name) =>

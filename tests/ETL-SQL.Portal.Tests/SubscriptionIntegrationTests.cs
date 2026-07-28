@@ -535,6 +535,15 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.False(schedule.IsEnabled);
             Assert.Contains(await catalog.GetJobSchedulesAsync(jobName),
                 link => link.ScheduleName == scheduleName && link.NextRun is not null);
+            var notificationName = SubscriptionOrchestration.NotificationName(subId);
+            var notification = await catalog.GetNotificationAsync(notificationName);
+            Assert.NotNull(notification);
+            Assert.Equal(secondSmtpAlias, notification!.ConnectionName);
+            Assert.Equal("new-recipient@test.local", notification.Recipient);
+            Assert.False(notification.IsEnabled);
+            Assert.Contains(await catalog.GetJobNotificationsAsync(jobName),
+                link => link.NotificationName == notificationName
+                    && link.Trigger == NotificationTrigger.Success);
 
             // 5. Verify the persisted trigger remains free of delivery configuration.
             var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
@@ -557,6 +566,9 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var reenabledSchedule = await catalog.GetScheduleAsync(scheduleName);
             Assert.NotNull(reenabledSchedule);
             Assert.True(reenabledSchedule!.IsEnabled);
+            var reenabledNotification = await catalog.GetNotificationAsync(notificationName);
+            Assert.NotNull(reenabledNotification);
+            Assert.False(reenabledNotification!.IsEnabled);
         }
 
         [Fact]

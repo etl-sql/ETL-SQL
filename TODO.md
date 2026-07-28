@@ -422,10 +422,13 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
      "FullyQualifiedName~FaultInjectionRecoveryTests"` (8 passed).
    - **[PARTIAL]** Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
-     Subscription create/update/reconcile/delete now maintains a unified Orchestrator
-     `SCHEDULE` named `SUBSCHED:<subscriptionId>` plus the `JobSchedules` link while retaining the
-     legacy job interval fields for the bridge. Remaining work: model subscription delivery as a
-     named `NOTIFICATION` + `JobNotifications` attachment instead of the Portal delivery service.
+     Subscription create/update/reconcile/delete now maintains unified Orchestrator metadata:
+     `SUBSCHED:<subscriptionId>` + `JobSchedules` and `SUBNOTIFY:<subscriptionId>` +
+     `JobNotifications`. The subscription notification is deliberately stored disabled while the
+     Portal delivery executor remains active, otherwise the Orchestrator would send a second generic
+     job-success message with no report attachment. Remaining work: replace the Portal delivery
+     executor with the named notification path without losing report export, row-level-security,
+     attachment, and delivery ledger semantics.
    - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact

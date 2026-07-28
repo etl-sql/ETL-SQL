@@ -195,7 +195,10 @@ public static class SubscriptionScriptMaintenance
             {
                 await TryDeleteJob(store, job.Name, logger, "orphaned subscription job");
                 if (subId > 0)
+                {
                     await TryDeleteSchedule(store, subId, logger, "orphaned subscription schedule");
+                    await TryDeleteNotification(store, subId, logger, "orphaned subscription notification");
+                }
                 continue;
             }
 
@@ -243,6 +246,7 @@ public static class SubscriptionScriptMaintenance
                     if (!scheduleChanged && !enabledChanged && !scriptChanged)
                     {
                         await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, desired.Name);
+                        await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, desired.Name);
                         continue;
                     }
 
@@ -261,6 +265,7 @@ public static class SubscriptionScriptMaintenance
                         sub,
                         desired.Name,
                         rearmExisting: scheduleChanged);
+                    await SubscriptionOrchestration.SaveNotificationLinkAsync(store, sub, desired.Name);
                     logger.LogInformation(
                         "Realigned Orchestrator job for subscription {SubscriptionId} with the portal row.", sub.Id);
                 }
@@ -317,6 +322,26 @@ public static class SubscriptionScriptMaintenance
                 "Could not remove {Description}: {ScheduleName}",
                 description,
                 SubscriptionOrchestration.ScheduleName(subscriptionId));
+        }
+    }
+
+    private static async Task TryDeleteNotification(
+        IJobHistoryStore store, int subscriptionId, ILogger logger, string description)
+    {
+        try
+        {
+            await SubscriptionOrchestration.DeleteNotificationIfUnusedAsync(store, subscriptionId);
+            logger.LogWarning(
+                "Removed {Description}: {NotificationName}",
+                description,
+                SubscriptionOrchestration.NotificationName(subscriptionId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Could not remove {Description}: {NotificationName}",
+                description,
+                SubscriptionOrchestration.NotificationName(subscriptionId));
         }
     }
 }
