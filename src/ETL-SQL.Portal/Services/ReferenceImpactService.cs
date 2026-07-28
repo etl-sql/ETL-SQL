@@ -61,6 +61,23 @@ public sealed class ReferenceImpactService(
                 n.Alert.UpdatedAt,
                 null)));
 
+        var reportJobLinks = await db.ReportJobLinks
+            .AsNoTracking()
+            .Include(l => l.Report)
+                .ThenInclude(r => r.Folder)
+            .Where(l => l.OrchestratorAlias == alias && !l.Report.IsDeleted)
+            .OrderBy(l => l.Report.Folder.Path)
+            .ThenBy(l => l.Report.Name)
+            .ThenBy(l => l.JobName)
+            .ToListAsync(ct);
+        consumers.AddRange(reportJobLinks.Select(l =>
+            new ImpactConsumer(
+                "ReportJobLink",
+                l.JobName,
+                $"{l.Report.Folder.Path}/{l.Report.Name}",
+                l.LastRefreshedAt ?? l.UpdatedAt,
+                null)));
+
         return new ImpactReport(reference, consumers.Count, consumers);
     }
 

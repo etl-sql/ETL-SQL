@@ -363,6 +363,12 @@ public class PortalConnectionCatalogApiTests
                 NotificationName = "OpsNotify"
             });
             db.ReportAlerts.Add(alert);
+            db.ReportJobLinks.Add(new ReportJobLink
+            {
+                ReportId = report.Id,
+                OrchestratorAlias = "impact_dw",
+                JobName = "ImpactRefreshJob"
+            });
             await db.SaveChangesAsync();
         }
 
@@ -385,6 +391,7 @@ public class PortalConnectionCatalogApiTests
         Assert.Contains("ann", connBody);
         Assert.Contains("Impact Alert", connBody);
         Assert.Contains("OpsNotify", connBody);
+        Assert.Contains("ImpactRefreshJob", connBody);
 
         // the secret's impact includes the report script and the catalog entry that references it
         using (var scope = factory.Services.CreateScope())
