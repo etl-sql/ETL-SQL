@@ -93,6 +93,15 @@ public class CreateScheduleStatementHandler(IJobCatalogStore? catalog = null, IC
         var timeZone = stmt.TimeZone ?? CatalogStatementSupport.DefaultTimeZone(configuration);
         CatalogStatementSupport.ValidateSchedule(stmt.Cron, timeZone, stmt);
 
+        if (context.IsWhatIf)
+        {
+            var action = existing is null ? "create" : stmt.Mode == ObjectCreationMode.CreateOrReplace ? "replace" : "alter";
+            context.Log(
+                $"WHAT IF: Would {action} schedule '{stmt.Name}' on '{stmt.Cron}' in time zone '{timeZone}'.",
+                ConsoleColor.Yellow);
+            return;
+        }
+
         var identity = CatalogStatementSupport.ActingIdentity(context);
         await store.SaveScheduleAsync(new ScheduleDefinition(
             stmt.Name,
@@ -126,6 +135,15 @@ public class CreateNotificationStatementHandler(IJobCatalogStore? catalog = null
                 $"update it, CREATE OR REPLACE NOTIFICATION to redefine it, or DROP NOTIFICATION " +
                 $"{stmt.Name} first.",
                 null, stmt.Line, stmt.Column);
+
+        if (context.IsWhatIf)
+        {
+            var action = existing is null ? "create" : stmt.Mode == ObjectCreationMode.CreateOrReplace ? "replace" : "alter";
+            context.Log(
+                $"WHAT IF: Would {action} notification '{stmt.Name}' using connection '{stmt.ConnectionName}'.",
+                ConsoleColor.Yellow);
+            return;
+        }
 
         var identity = CatalogStatementSupport.ActingIdentity(context);
         await store.SaveNotificationAsync(new NotificationDefinition(
@@ -164,6 +182,14 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
             var timeZone = stmt.TimeZone ?? existing.TimeZone;
             CatalogStatementSupport.ValidateSchedule(cron, timeZone, stmt);
 
+            if (context.IsWhatIf)
+            {
+                context.Log(
+                    $"WHAT IF: Would alter schedule '{stmt.Name}' to cron '{cron}' in time zone '{timeZone}'.",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
             await store.SaveScheduleAsync(existing with
             {
                 Cron = cron,
@@ -178,6 +204,14 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
         {
             var existing = await store.GetNotificationAsync(stmt.Name)
                 ?? throw NotFound(stmt, kind);
+
+            if (context.IsWhatIf)
+            {
+                context.Log(
+                    $"WHAT IF: Would alter notification '{stmt.Name}'.",
+                    ConsoleColor.Yellow);
+                return;
+            }
 
             await store.SaveNotificationAsync(existing with
             {
@@ -229,6 +263,12 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
         }
 
+        if (context.IsWhatIf)
+        {
+            context.Log($"WHAT IF: Would drop {kind.ToLowerInvariant()} '{stmt.Name}'.", ConsoleColor.Yellow);
+            return;
+        }
+
         var blockers = stmt.Kind == CatalogObjectKind.Schedule
             ? await store.DeleteScheduleAsync(stmt.Name)
             : await store.DeleteNotificationAsync(stmt.Name);
@@ -258,6 +298,20 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         var verb = stmt.IsEnabled ? "ENABLE" : "DISABLE";
         var store = CatalogStatementSupport.Require(catalog, stmt, $"{verb} {kind}");
 
+        var exists = stmt.Kind == CatalogObjectKind.Schedule
+            ? await store.GetScheduleAsync(stmt.Name) is not null
+            : await store.GetNotificationAsync(stmt.Name) is not null;
+        if (!exists)
+            throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
+
+        if (context.IsWhatIf)
+        {
+            context.Log(
+                $"WHAT IF: Would {(stmt.IsEnabled ? "enable" : "disable")} {kind.ToLowerInvariant()} '{stmt.Name}'.",
+                ConsoleColor.Yellow);
+            return;
+        }
+
         var matched = stmt.Kind == CatalogObjectKind.Schedule
             ? await store.SetScheduleEnabledAsync(stmt.Name, stmt.IsEnabled)
             : await store.SetNotificationEnabledAsync(stmt.Name, stmt.IsEnabled);
@@ -285,6 +339,15 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         var kind = stmt.Kind.ToString().ToUpperInvariant();
         var verb = stmt.Action.ToString().ToUpperInvariant();
         var store = CatalogStatementSupport.Require(catalog, stmt, $"ALTER JOB … {verb} {kind}");
+
+        if (context.IsWhatIf)
+        {
+            context.Log(
+                $"WHAT IF: Would {verb.ToLowerInvariant()} {kind.ToLowerInvariant()} '{stmt.TargetName}' " +
+                $"{(stmt.Action == JobAttachmentAction.Add ? "to" : "from")} job '{stmt.JobName}'.",
+                ConsoleColor.Yellow);
+            return;
+        }
 
         if (stmt.Kind == CatalogObjectKind.Schedule)
             await ApplyScheduleAsync(stmt, store, context);

@@ -386,7 +386,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      way a script that stopped saying `ADD SCHEDULE S2` converges to what it now says. `ADD`/`REMOVE`
      must be idempotent too, or a replayed link statement fails on a duplicate key and breaks the
      import at statement three. This also heals a partially-applied `EXECUTE` block on re-run.
-   - `WHAT_IF` on every new statement, matching the managed-connection precedent.
+   - **[DONE]** `WHAT_IF` on every new statement, matching the managed-connection precedent.
    - Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
      from `AT <connection>` with the two-token lookahead `ExpressionParser` already uses.
    - Reject each retired form with a diagnostic naming its replacement — they all parse cleanly

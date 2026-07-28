@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
@@ -61,6 +62,7 @@ namespace ETL_SQL.Tests.Orchestration
             SetCatalogObjectEnabledStatement => new SetCatalogObjectEnabledStatementHandler(_store),
             AlterJobAttachmentStatement => new AlterJobAttachmentStatementHandler(_store),
             CreateJobStatement => new CreateJobStatementHandler(_store, _store),
+            SetWhatIfStatement => new SetWhatIfStatementHandler(new EngineLogger()),
             _ => throw new InvalidOperationException($"No catalog handler for {statement.GetType().Name}.")
         };
 
@@ -178,6 +180,18 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("ops@example.com", notification.Recipient);
         }
 
+        [Fact]
+        public async Task WhatIf_CreateScheduleAndNotification_DoNotPersist()
+        {
+            await RunAsync(
+                "SET WHAT_IF ON;" +
+                "CREATE SCHEDULE T ON '0 2 * * *';" +
+                "CREATE NOTIFICATION N USING local_mail;");
+
+            Assert.Empty(await _store.GetSchedulesAsync());
+            Assert.Empty(await _store.GetNotificationsAsync());
+        }
+
         // ── ALTER ─────────────────────────────────────────────────────────────────
 
         [Fact]
@@ -210,6 +224,21 @@ namespace ETL_SQL.Tests.Orchestration
                 () => RunAsync("ALTER SCHEDULE NoSuchThing SET CRON = '0 2 * * *';"));
 
             Assert.Contains("never renamed", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task WhatIf_AlterScheduleAndNotification_DoNotPersist()
+        {
+            await RunAsync("CREATE SCHEDULE T ON '0 2 * * *';");
+            await RunAsync("CREATE NOTIFICATION N USING local_mail TO 'ops@example.com';");
+
+            await RunAsync(
+                "SET WHAT_IF ON;" +
+                "ALTER SCHEDULE T SET CRON = '0 3 * * *';" +
+                "ALTER NOTIFICATION N SET TO 'audit@example.com';");
+
+            Assert.Equal("0 2 * * *", (await _store.GetScheduleAsync("T"))!.Cron);
+            Assert.Equal("ops@example.com", (await _store.GetNotificationAsync("N"))!.Recipient);
         }
 
         // ── Attachments ───────────────────────────────────────────────────────────
@@ -256,6 +285,22 @@ namespace ETL_SQL.Tests.Orchestration
 
             // No exception: removing what is absent is how a replayed script converges.
             await RunAsync("ALTER JOB Nightly REMOVE SCHEDULE T;");
+        }
+
+        [Fact]
+        public async Task WhatIf_Attachments_DoNotPersist()
+        {
+            await SaveJobAsync("Nightly");
+            await RunAsync("CREATE SCHEDULE T ON '0 2 * * *';");
+            await RunAsync("CREATE NOTIFICATION N USING local_mail;");
+
+            await RunAsync(
+                "SET WHAT_IF ON;" +
+                "ALTER JOB Nightly ADD SCHEDULE T;" +
+                "ALTER JOB Nightly ADD NOTIFICATION N ON FAILURE;");
+
+            Assert.Empty(await _store.GetJobSchedulesAsync("Nightly"));
+            Assert.Empty(await _store.GetJobNotificationsAsync("Nightly"));
         }
 
         [Fact]
@@ -320,6 +365,21 @@ namespace ETL_SQL.Tests.Orchestration
 
             await RunAsync("ENABLE SCHEDULE NIGHTLY;");
             Assert.True((await _store.GetScheduleAsync("Nightly"))!.IsEnabled);
+        }
+
+        [Fact]
+        public async Task WhatIf_DropAndDisable_DoNotPersist()
+        {
+            await RunAsync("CREATE SCHEDULE T ON '0 2 * * *';");
+            await RunAsync("CREATE NOTIFICATION N USING local_mail;");
+
+            await RunAsync(
+                "SET WHAT_IF ON;" +
+                "DISABLE SCHEDULE T;" +
+                "DROP NOTIFICATION N;");
+
+            Assert.True((await _store.GetScheduleAsync("T"))!.IsEnabled);
+            Assert.NotNull(await _store.GetNotificationAsync("N"));
         }
 
         /// <summary>
