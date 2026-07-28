@@ -355,7 +355,11 @@ supported for all four kinds, with distinct meanings:
 The link distinction is the one that matters. If a script stops saying
 `ALTER JOB X ADD SCHEDULE S2`, only a `REPLACE` that resets links converges to what the script now
 says; under `OR ALTER` the orphaned link survives forever and the export drifts from reality.
-`ConfigurationExportService` therefore emits `CREATE OR REPLACE` followed by the full set of links.
+The Orchestrator catalog export therefore emits `CREATE OR REPLACE` followed by the full set of
+job/schedule/notification links. The Portal configuration export cannot reconstruct those
+Orchestrator-owned objects from `ReportJobLinks`; the Portal deliberately stores only
+`ReportId`/`OrchestratorAlias`/`JobName`, so normalized-only report links are listed as explicit
+manual follow-up unless an Orchestrator catalog export is replayed alongside the Portal bootstrap.
 
 **`ADD` and `REMOVE` must be idempotent.** Fixing `CREATE` alone is not enough — a replayed
 `ALTER JOB X ADD SCHEDULE S` would otherwise fail on a duplicate primary key and break the import at
@@ -708,6 +712,9 @@ governed mutation that cannot be dry-run is one an operator has to test in produ
   `JobDefinition`.
 * `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`,
   `ReferenceImpactService`, `SubscriptionScriptMaintenance`, `OrchestratorProxyService`.
+  `ConfigurationExportService` owns Portal state only: it must surface `ReportJobLinks`, alerts,
+  and alert notification attachments, but Orchestrator-owned job/schedule/notification definitions
+  round-trip through the Orchestrator catalog export.
 * Parser/AST/formatter/linter, LSP completion, `eng.*` virtual tables (`eng.jobs`, `eng.schedules`,
   `eng.notifications`, `eng.alerts`, `eng.job_schedules`, `eng.job_notifications`).
 * Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using the retired

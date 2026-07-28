@@ -421,20 +421,22 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`. Current legacy
      subscription APIs at least preserve delivery time end to end: `atTime` is returned in DTOs,
      can be updated, and updates are mirrored to the Orchestrator job while this bridge remains.
-   - **[PARTIAL]** `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
-     the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
+   - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact
      includes report alerts with attached notification links; shared-connection impact also lists alert
      notification links and report job links that use that Orchestrator alias. Configuration export now
      surfaces normalized-only `ReportJobLinks` as skipped items instead of silently omitting them; it still
-     cannot emit the final canonical job/schedule script until the Portal stores or resolves the linked
-     Orchestrator schedule metadata.
+     cannot emit final canonical Orchestrator job/schedule/notification scripts for normalized-only links
+     because the Portal intentionally stores only the report→job link, not the Orchestrator catalog.
+     Export that catalog from the Orchestrator side, then replay the Portal bootstrap to restore report
+     attachments.
    - **[DONE]** Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).
-   - `ConfigurationExportService` emits `CREATE OR REPLACE` plus the full link set, so an export
-     round-trips to exactly what it describes.
+   - **[DONE]** Portal configuration export no longer claims to round-trip Orchestrator-owned
+     schedule/notification metadata from `ReportJobLinks`. It emits/skips only Portal-owned state;
+     exact job/schedule/notification round-trip belongs to Orchestrator catalog export.
    - **[DONE]** `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile
      with the `SHOW`-retirement inventory above.
    - **[DONE]** Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using
