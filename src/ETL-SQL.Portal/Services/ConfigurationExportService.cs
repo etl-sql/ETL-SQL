@@ -363,6 +363,7 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             .OrderBy(j => j.Report.Folder!.Path).ThenBy(j => j.Report.Name)
             .Select(j => new
             {
+                j.OrchestratorJobName,
                 j.RefreshInterval,
                 ReportName = j.Report.Name,
                 FolderPath = j.Report.Folder.Path
@@ -371,16 +372,11 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         AppendSection(body, "Scheduled report refresh jobs");
         await foreach (var j in refreshJobs.WithCancellation(ct))
         {
-            if (string.IsNullOrWhiteSpace(targetOrchestratorAlias))
-            {
-                skipped.Add(
-                    $"refresh job for report '{j.ReportName}': export again with a target Orchestrator alias");
-                continue;
-            }
             refreshJobCount++;
-            body.AppendLine(
-                $"    CREATE REFRESH JOB FOR REPORT {Q($"{j.FolderPath}/{j.ReportName}")} " +
-                $"SCHEDULE {Q(j.RefreshInterval)} AT {targetOrchestratorAlias};");
+            skipped.Add(
+                $"legacy refresh job '{j.OrchestratorJobName}' for report '{j.FolderPath}/{j.ReportName}': " +
+                "CREATE REFRESH JOB is retired; export the Orchestrator catalog as CREATE SCHEDULE + " +
+                "CREATE JOB ... FOR REPORT + ALTER JOB ... ADD SCHEDULE");
         }
         var legacyRefreshJobNames = await db.DatasetJobs
             .AsNoTracking()

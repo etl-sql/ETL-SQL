@@ -18,8 +18,10 @@ namespace ETL_SQL.Connectors.Orchestrator
     /// );
     ///
     /// EXECUTE orch BEGIN
-    ///     CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;
-    ///     DROP REFRESH JOB FOR REPORT 'Monthly Sales';
+    ///     CREATE SCHEDULE MonthlySalesNightly ON '0 2 * * *';
+    ///     CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Monthly Sales';
+    ///     ALTER JOB MonthlySalesRefresh ADD SCHEDULE MonthlySalesNightly;
+    ///     DROP JOB IF EXISTS MonthlySalesRefresh;
     /// END
     /// </code>
     /// </summary>

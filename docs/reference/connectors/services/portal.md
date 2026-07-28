@@ -46,9 +46,6 @@ EXECUTE portal BEGIN
     REFRESH DATASET 'sales_ds' IN FOLDER '/Finance';
     ALTER DATASET 'sales_ds' IN FOLDER '/Finance' WITH SCHEDULE='0 2 * * *';
 
-    -- Refresh jobs (routed to Orchestrator)
-    CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;
-
     -- Governed connections (SMTP is an ordinary connector; credentials are SECRET: references)
     CREATE CONNECTION corporate AS SMTP(
         HOST = 'smtp.corp.example', USERNAME = 'mailer',
@@ -58,6 +55,12 @@ EXECUTE portal BEGIN
     -- Discovery
     SHOW USERS;
     SHOW REPORTS IN FOLDER '/Finance/Reports';
+END;
+
+EXECUTE orch BEGIN
+    CREATE SCHEDULE MonthlySalesNightly ON '0 2 * * *';
+    CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Reports/Monthly Sales';
+    ALTER JOB MonthlySalesRefresh ADD SCHEDULE MonthlySalesNightly;
 END;
 ```
 

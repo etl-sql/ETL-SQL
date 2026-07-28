@@ -383,6 +383,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      from `AT <connection>` with the two-token lookahead `ExpressionParser` already uses.
    - **[DONE]** Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
      today, so a generic syntax error would leave the reader guessing.
+     `CREATE REFRESH JOB` / `DROP REFRESH JOB` now name the unified
+     `CREATE SCHEDULE` + `CREATE JOB ... FOR REPORT` + `ALTER JOB ... ADD SCHEDULE` replacement;
+     Portal export and docs no longer emit the retired syntax.
 4. **Notification dispatch and audit:**
    - **[DONE]** Scheduled jobs dispatch linked `NOTIFICATION`s once after retries settle:
      `SUCCESS`/`FAILURE` use the final outcome, `COMPLETION` fires for either, disabled or missing

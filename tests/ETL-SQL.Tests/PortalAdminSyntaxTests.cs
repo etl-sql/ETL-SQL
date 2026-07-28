@@ -51,14 +51,21 @@ namespace ETL_SQL.Tests
                 d.Message.Contains("string literal", StringComparison.OrdinalIgnoreCase));
         }
 
-        [Fact]
-        public void PortalAliases_RemainIdentifiers()
+        [Theory]
+        [InlineData(
+            "CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;",
+            "CREATE JOB")]
+        [InlineData(
+            "DROP REFRESH JOB FOR REPORT 'Monthly Sales';",
+            "DROP JOB")]
+        public void RetiredRefreshJobLanguage_IsRejectedWithItsReplacement(string sql, string expectedFix)
         {
-            var script = TestHelpers.Parse(
-                "CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;");
-            var stmt = Assert.IsType<CreatePortalRefreshJobStatement>(Assert.Single(script.Statements));
+            var script = TestHelpers.Parse(sql);
 
-            Assert.Equal("orch", stmt.OrchestratorAlias);
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains(expectedFix, diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
 
         [Fact]
@@ -395,7 +402,9 @@ PUBLISH REPORT 'Monthly Sales'
 ALTER REPORT 'Monthly Sales'
     SET DESCRIPTION = 'Certified monthly revenue by region';
 
-CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 6 * * *' AT orch;
+CREATE SCHEDULE MonthlySalesMorning ON '0 6 * * *';
+CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Monthly Sales';
+ALTER JOB MonthlySalesRefresh ADD SCHEDULE MonthlySalesMorning;
 REFRESH REPORT 'Monthly Sales';");
 
             Assert.DoesNotContain(script.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
@@ -405,7 +414,9 @@ REFRESH REPORT 'Monthly Sales';");
             Assert.Contains(script.Statements, s => s is GrantPortalPermissionStatement);
             Assert.Contains(script.Statements, s => s is PublishPortalReportStatement);
             Assert.Contains(script.Statements, s => s is AlterPortalReportStatement);
-            Assert.Contains(script.Statements, s => s is CreatePortalRefreshJobStatement);
+            Assert.Contains(script.Statements, s => s is CreateScheduleStatement);
+            Assert.Contains(script.Statements, s => s is CreateJobStatement);
+            Assert.Contains(script.Statements, s => s is AlterJobAttachmentStatement);
             Assert.Contains(script.Statements, s => s is RefreshPortalReportStatement);
         }
     }

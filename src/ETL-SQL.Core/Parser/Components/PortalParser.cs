@@ -786,17 +786,12 @@ public class PortalParser : ParserComponent
     // CREATE REFRESH JOB FOR REPORT 'name' SCHEDULE '0 2 * * *' AT orch
     public Statement ParseCreateRefreshJob(Token start)
     {
-        // Arrived after CREATE REFRESH
-        Consume(TokenType.JOB, "Expected JOB");
-        Consume(TokenType.FOR, "Expected FOR");
-        Consume(TokenType.REPORT, "Expected REPORT");
-        string report = ConsumeStringLiteral("Expected report name string literal");
-        ConsumeIdentifierValue("SCHEDULE", "Expected SCHEDULE");
-        string schedule = ConsumeStringLiteral("Expected cron expression string literal");
-        Consume(TokenType.AT, "Expected AT");
-        string alias = Advance().Value;
-        return new CreatePortalRefreshJobStatement(report, schedule, alias)
-        { Line = start.Line, Column = start.Column };
+        throw new SyntaxException(
+            "CREATE REFRESH JOB has been retired. Create a named schedule with CREATE SCHEDULE, " +
+            "create the report executable with CREATE JOB <name> FOR REPORT '<report>', then attach " +
+            "it with ALTER JOB <name> ADD SCHEDULE <schedule> inside EXECUTE <orchestrator> BEGIN ... END.",
+            start.Line,
+            start.Column);
     }
 
     // REFRESH REPORT 'name'
@@ -811,13 +806,11 @@ public class PortalParser : ParserComponent
     // DROP REFRESH JOB FOR REPORT 'name'
     public Statement ParseDropRefreshJob(Token start)
     {
-        // Arrived after DROP REFRESH
-        Consume(TokenType.JOB, "Expected JOB");
-        Consume(TokenType.FOR, "Expected FOR");
-        Consume(TokenType.REPORT, "Expected REPORT");
-        string report = ConsumeStringLiteral("Expected report name string literal");
-        return new DropPortalRefreshJobStatement(report)
-        { Line = start.Line, Column = start.Column };
+        throw new SyntaxException(
+            "DROP REFRESH JOB has been retired. Drop the named Orchestrator job with " +
+            "DROP JOB IF EXISTS <name> inside EXECUTE <orchestrator> BEGIN ... END.",
+            start.Line,
+            start.Column);
     }
 
     // ── Snapshots ─────────────────────────────────────────────────────────

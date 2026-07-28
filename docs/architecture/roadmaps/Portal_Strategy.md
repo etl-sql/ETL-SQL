@@ -329,11 +329,11 @@ EXECUTE portal BEGIN
     DROP REPORT 'Monthly Sales' CASCADE;
 
     -- Dataset refresh jobs (registered in the Orchestrator)
-    CREATE REFRESH JOB FOR REPORT 'Monthly Sales'
-        SCHEDULE '0 2 * * *'
-        AT orch;
+    CREATE SCHEDULE MonthlySalesNightly ON '0 2 * * *';
+    CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Monthly Sales';
+    ALTER JOB MonthlySalesRefresh ADD SCHEDULE MonthlySalesNightly;
     REFRESH REPORT 'Monthly Sales';
-    DROP REFRESH JOB FOR REPORT 'Monthly Sales';
+    DROP JOB IF EXISTS MonthlySalesRefresh;
 
     -- Dataset registry
     REFRESH DATASET 'Sales Summary' IN FOLDER '/Finance';

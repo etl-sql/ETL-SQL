@@ -498,8 +498,13 @@ BEGIN
         );
 
     GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
-    CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 6 * * *' AT orch;
 END
+
+EXECUTE orch BEGIN
+    CREATE SCHEDULE FinanceMorning ON '0 6 * * *';
+    CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Monthly Sales';
+    ALTER JOB MonthlySalesRefresh ADD SCHEDULE FinanceMorning;
+END;
 ```
 
 Promotion is a normal script replay with a different active set and explicit portal literals for the target environment. Use `PUBLISH REPORT ...` for first publish or the portal's report update flow when replacing the script behind an existing catalog entry; follow with `REFRESH REPORT` after the publish step succeeds.

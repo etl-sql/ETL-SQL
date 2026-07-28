@@ -203,13 +203,11 @@ public sealed class ConfigurationExportTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var script = await response.Content.ReadAsStringAsync();
 
-        Assert.Contains(
-            $"CREATE REFRESH JOB FOR REPORT '/prod_folder_{suffix}/Production Report {suffix}' " +
-            "SCHEDULE '0 2 * * *' AT prod_orchestrator;",
-            script);
+        Assert.Contains($"legacy refresh job 'dev-refresh-{suffix}'", script);
+        Assert.Contains("CREATE REFRESH JOB is retired", script);
+        Assert.Contains("CREATE JOB ... FOR REPORT", script);
         Assert.Contains($"report job link 'link-only-refresh-{suffix}'", script);
         Assert.Contains("schedule metadata is not stored in Portal", script);
-        Assert.DoesNotContain($"dev-refresh-{suffix}", script);
         Assert.DoesNotContain("Admin@Tests99!", script);
         Assert.DoesNotContain("Admin@12345!", script);
 

@@ -21,8 +21,10 @@ CREATE CONNECTION orch AS ORCHESTRATOR(HOST    = 'http://orchestrator.corp.examp
          API_KEY = ENC:U2FsdGVkX1+...);
 
 EXECUTE orch BEGIN
-    CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *';
-    DROP REFRESH JOB FOR REPORT 'Monthly Sales';
+    CREATE SCHEDULE MonthlySalesNightly ON '0 2 * * *';
+    CREATE JOB MonthlySalesRefresh FOR REPORT '/Finance/Monthly Sales';
+    ALTER JOB MonthlySalesRefresh ADD SCHEDULE MonthlySalesNightly;
+    DROP JOB IF EXISTS MonthlySalesRefresh;
 END;
 ```
 

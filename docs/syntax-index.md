@@ -197,8 +197,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DROP DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
 | `REBUILD SNAPSHOT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
 | `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `CREATE REFRESH JOB` | Portal / Orchestrator | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
-| `DROP REFRESH JOB` | Portal / Orchestrator | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](guides/job-orchestration.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](guides/job-orchestration.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
 | `SHOW USERS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
 | `SHOW REPORTS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
 | `SHOW ACTIVE SESSIONS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
@@ -999,12 +999,12 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `CREATE ALERT` | Portal | Creates a report alert |
 | `SHOW ALERTS` | Portal | Lists report alerts |
 | `DROP ALERT` | Portal | Deletes a report alert |
-| `CREATE REFRESH JOB` | Portal | Schedules automated snapshot refresh |
+| `CREATE JOB ... FOR REPORT` | Orchestrator | Schedules automated report snapshot refresh when linked to a schedule |
 | `REFRESH REPORT` | Portal | Manually starts a report refresh cycle |
 | `REFRESH DATASET` | Portal | Marks a portal dataset stale and queues refresh when possible |
 | `ALTER DATASET` | Portal | Updates portal dataset access/TTL metadata |
 | `DROP DATASET` | Portal | Removes a portal dataset registry entry |
-| `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
+| `DROP JOB` | Orchestrator | Removes a named refresh job |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Not supported — no portal endpoint exists; use REBUILD SNAPSHOT |
 | `CREATE CONNECTION <alias> AS SMTP(...)` | Portal | Registers a mail relay in the governed catalog; the password is a `SECRET:` reference, never a value |
