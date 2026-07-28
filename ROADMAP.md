@@ -45,6 +45,12 @@ USING <algorithm> (
 result from no source table, and `COMPARE` takes two sources joined by `WITH`. Neither fits the
 single-source shape `TRANSFORM` owns.
 
+> [!NOTE]
+> **Design Philosophy — Opinionated Helpers & The SQL Escape Hatch**
+> The `TRANSFORM` statement is intentionally an **opinionated "black box"**. It is designed to satisfy the 90% common convenience use cases with clean, simple parameters. It is **not** intended to grow into a multi-parameter monster supporting every custom edge case (e.g. non-linear custom interpolations, complex custom-weighted rolling aggregates, etc.).
+> 
+> * **The Escape Hatch:** Because ETL-SQL is a SQL engine first, users are never locked out. If a transformation has custom requirements that exceed the parameter list of a `TRANSFORM` algorithm, the user should simply write standard SQL (CTEs, window functions, and `CASE` statements) against the `#temp` tables directly instead of proposing syntax bloat.
+
 #### P0 — Migrate `FILL_DATES` to `TRANSFORM ... USING FILL_DATES`
 
 Retire the standalone `FILL_DATES(#source, ...) INTO #result` form, which reads as a function call
@@ -104,6 +110,67 @@ USING DEDUPLICATE (
 );
 ```
 
+#### P1 — Add `PIVOT` algorithm (Reporting & Cross-Tabulation)
+
+Rotates rows into columns for reporting matrices. Resolves the severe syntax differences across SQL dialects (and the lack of a simple, native pivot in Postgres).
+
+```sql
+TRANSFORM #monthly_sales_pivoted
+FROM #sales_raw
+USING PIVOT (
+    PIVOT_COL  = 'Month',
+    VALUE_COL  = 'Revenue',
+    GROUP_BY   = 'Year, Region',
+    COLUMNS    = 'Jan, Feb, Mar, Apr, May, Jun' -- optional, auto-detects if omitted
+);
+```
+
+#### P2 — Add `TOP_N_OTHERS` algorithm (Visual Hygiene / Slicing)
+
+Reduces high-cardinality values by aggregating low-volume categories into a single row. Essential for clean visuals (pie charts, bar charts).
+
+```sql
+TRANSFORM #top_categories
+FROM #product_sales
+USING TOP_N_OTHERS (
+    DIMENSION    = 'CategoryName',
+    VALUE_COL    = 'Sales',
+    N            = 5,
+    OTHERS_LABEL = 'All Other Products',
+    AGGREGATE    = 'SUM'  -- SUM | AVG | COUNT
+);
+```
+
+#### P2 — Add `PERIOD_COMPARISON` algorithm (Growth Metrics)
+
+Calculates period-over-period differences or growth percentages (MoM, YoY) without redundant, hard-to-read window query repetition.
+
+```sql
+TRANSFORM #growth_metrics
+FROM #monthly_sales
+USING PERIOD_COMPARISON (
+    DATE_COL   = 'ReportPeriod',
+    VALUE_COLS = 'Revenue, ActiveUsers',
+    BY_GROUP   = 'Region',
+    OFFSET     = 1, -- MoM. Use 12 for YoY on monthly periods
+    METHOD     = 'PERCENT_CHANGE' -- PERCENT_CHANGE | DIFFERENCE | VALUE
+);
+```
+
+#### P2 — Add `SHARE_OF_TOTAL` algorithm (Percentage Contribution)
+
+Computes the percentage contribution of a column relative to a parent or group total partition, preventing manual divide-by-zero checks and decimal scaling logic.
+
+```sql
+TRANSFORM #sales_shares
+FROM #sales_data
+USING SHARE_OF_TOTAL (
+    VALUE_COLS = 'Sales, Margin',
+    BY_GROUP   = 'Year, Region', -- optional partition
+    OUTPUT_SUFFIX = '_Share'     -- appends e.g., 'Sales_Share'
+);
+```
+
 #### P2 — Add `NORMALIZE` algorithm
 
 Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite
@@ -118,6 +185,36 @@ USING NORMALIZE (
     RANGE   = '0, 1'             -- applies to MIN_MAX only
 );
 ```
+
+#### P3 — Add `ROLLING_AGGREGATE` algorithm (Smoothing / Moving Windows)
+
+Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative sums on reports.
+
+```sql
+TRANSFORM #smoothed_sales
+FROM #daily_sales
+USING ROLLING_AGGREGATE (
+    DATE_COL   = 'OrderDate',
+    VALUE_COLS = 'Sales',
+    BY_GROUP   = 'Region',
+    METHOD     = 'AVG', -- SUM | AVG | COUNT
+    WINDOW     = '7'    -- 7-day moving window
+);
+```
+
+#### Correctness, Testing, and the Triage Workflow (SLT)
+
+To guarantee correctness, each algorithm must be covered by **Sqllogictest (SLT)** test files verifying:
+1. **Standard execution logic** (e.g. correct growth, sums, or pivots).
+2. **Boundary transitions** (ensuring `BY_GROUP` resets correctly without leaking states across groups).
+3. **Null values and edge cases** (handling empty datasets, `NULL` values in date/value columns, and single-row tables).
+
+If a user reports that a `TRANSFORM` algorithm is returning an incorrect result, we apply this strict triage policy:
+* **The Repro:** The reporter must provide a minimal reproducible example (the script + inputs).
+* **The Test:** The repro is converted directly into an SLT case.
+* **The Decision:**
+  * **It is a Bug** if the result violates the documented algorithm specification/contract (e.g., math error, partition leak). We update the engine code until the SLT passes, checking the test into the source control suite.
+  * **It is a Feature Request / Intent Difference** if the algorithm is operating correctly according to the spec, but the user wanted a different math flavor. We reject the bug report and direct the user to the native SQL escape hatch.
 
 **Definition of done.** `FILL_DATES` round-trips through the formatter in its canonical `TRANSFORM`
 form. Every existing sample and doc is updated. Each algorithm ships with a help file, a snippet,
@@ -149,20 +246,23 @@ single script's result and the full Portal governance workflow. A one-person sho
 answer "Is my data healthy?", "What failed?", and "What metadata is missing?" from the CLI,
 Orchestrator, or a generated report, using the same durable evidence the Portal later presents.
 
-**Product invariant.** Portal is a presentation, collaboration, and remediation layer—not a
-prerequisite for data quality or stewardship. The progression must remain additive:
+**Product invariant — Local and CLI First.** Portal is a presentation, collaboration, and remediation
+layer—not a prerequisite for data quality or stewardship. The progression must remain additive:
 
-1. **Workstation:** source-controlled rules and tags, current-run assertions, terminal results, and
-   a non-zero process exit when a critical gate fails.
-2. **Local Orchestrator:** optional SQLite-backed scheduling, history, baselines, tag/lineage
-   catalog, reports, and SMTP/WEBHOOK notifications with no Portal deployment.
-3. **Enterprise:** the same records and calculations gain Portal queues, assignments, approvals,
-   access control, remote audit, PostgreSQL/HA, and organization policy. Moving up a tier must not
-   require rewriting rules, tags, assertions, or score definitions.
+1. **Workstation:** Source-controlled rules and tags, local-first configuration policy, current-run assertions, terminal quality reports, and a non-zero process exit when a critical gate fails.
+2. **Local Orchestrator:** Optional SQLite-backed scheduling, history, baselines, tag/lineage catalog, reports, and SMTP/WEBHOOK notifications with no Portal deployment.
+3. **Enterprise:** The same records and calculations gain Portal queues, assignments, approvals, access control, remote audit, PostgreSQL/HA, and organization policy. Moving up a tier must not require rewriting rules, tags, assertions, or score definitions.
 
 #### P0 — Ship a no-Portal quality status surface
 
-1. Add `eng.data_quality_status` as a virtual table over the current run or the local Orchestrator
+1. **Local-First Policy Configuration (`etlsql-policy.json`):** Provide a schema for a local, source-controlled file in the workspace root. It defines:
+   * Required tags (e.g. `["@owner", "@steward", "@classification"]`).
+   * Regex rules for PII detection suggestions.
+   * Default thresholds for warning and failure gates.
+2. **CLI-Native Quality Reports:** Add CLI-native formatting flags:
+   * `etlsql run --quality-summary` — prints clean, formatted ANSI text tables showing rule failures and warned/quarantined counts.
+   * `etlsql run --output-json path.json` — dumps structured verification evidence for CI/CD pipeline runs.
+3. Add `eng.data_quality_status` as a virtual table over the current run or the local Orchestrator
    store:
 
    ```sql
@@ -180,7 +280,7 @@ prerequisite for data quality or stewardship. The progression must remain additi
    The virtual table must include job/run identity, time, status, rows processed, warned and
    quarantined counts and percentages, failed-rule count, freshness state, and error summary. It
    must consume structured history fields rather than parse display prose.
-2. Add `eng.data_quality_failures` as the drill-down paired with that summary:
+4. Add `eng.data_quality_failures` as the drill-down paired with that summary:
 
    ```sql
    -- Current run or local Orchestrator store
@@ -197,13 +297,11 @@ prerequisite for data quality or stewardship. The progression must remain additi
    Return one row per run, target, column, rule, and action with the failure count. Persist a
    normalized rule-failure record where necessary; keep the compact history string only as a
    compatibility/display field. Do not persist or return sample values.
-3. Expand `eng.job_history` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
+5. Expand `eng.job_history` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
    data-quality summary fields, or make the status command the documented quality projection over
    that history. Both commands must agree on run identity and status.
-4. Preserve `ASSERT JOB` as the executable gate. Document the zero-service pattern for Task
-   Scheduler/cron/CI and the local-Orchestrator pattern for history, baselines, recovery
-   notifications, and scheduled execution.
-5. Route optional alerts through the canonical managed connections from the language-consistency
+6. Preserve `ASSERT JOB` as the executable gate. Allow optional parameter configurations (e.g. `FAIL_ON_WARN = TRUE`) to enforce custom CI/CD exit-code behaviors. Document the zero-service pattern for Task Scheduler/cron/CI and the local-Orchestrator pattern for history, baselines, recovery notifications, and scheduled execution.
+7. Route optional alerts through the canonical managed connections from the language-consistency
    phase:
 
    ```sql
@@ -217,7 +315,9 @@ prerequisite for data quality or stewardship. The progression must remain additi
 
 #### P1 — Add transparent stewardship scoring
 
-1. Add `eng.stewardship_score` as a virtual table over the existing lineage/tag catalog:
+1. **Local CLI Scanning for PII/Stewardship Gaps:** Add a CLI scanner tool:
+   `etlsql scan --pii` (scans local schema, parquets, excels, or databases to suggest metadata classification matches based on `etlsql-policy.json` rules).
+2. Add `eng.stewardship_score` as a virtual table over the existing lineage/tag catalog:
 
    ```sql
    -- Current session or local Orchestrator store
