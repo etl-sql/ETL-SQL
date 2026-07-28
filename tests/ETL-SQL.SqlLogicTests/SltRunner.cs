@@ -457,7 +457,8 @@ SET TELEMETRY = OFF;";
                 new MergeStatementHandler(l),
                 new AlterTableStatementHandler(l),
                 new GenerateStatementHandler(l),
-                new TruncateTableStatementHandler(l)
+                new TruncateTableStatementHandler(l),
+                new TransformStatementHandler(l)
             };
 
             var evaluator = new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());

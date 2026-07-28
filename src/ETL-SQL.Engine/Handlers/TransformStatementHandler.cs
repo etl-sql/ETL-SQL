@@ -79,7 +79,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             ?? throw new ExecutionException($"Could not resolve source dataset: {stmt.SourceTable.TableName}");
 
         var rows = new List<Row>();
-        var columns = new List<string>();
+        var columns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
         long retainedBytes = 0;
         long operatorBudget = context.OperatorMemoryGrantMB > 0
             ? (long)context.OperatorMemoryGrantMB * 1024L * 1024L
@@ -88,11 +88,6 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         using var lease = context.MemoryArbiter.AcquireLease();
         await foreach (var batch in source.ReadBatches(context.EffectiveBatchSize, context.CancellationToken))
         {
-            if (columns.Count == 0)
-            {
-                columns.AddRange(batch.ColumnNames);
-            }
-
             foreach (var row in batch.Rows)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
