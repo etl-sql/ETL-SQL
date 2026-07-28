@@ -227,10 +227,12 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("refresh, editor, or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        [Fact]
-        public async Task CreateOrAlterDataset_NonEditor_Denied()
+        [Theory]
+        [InlineData("CREATE OR ALTER DATASET &pub AS (SELECT 1 AS v FROM t);")]
+        [InlineData("CREATE OR REPLACE DATASET &pub AS (SELECT 1 AS v FROM t);")]
+        public async Task RedefineDataset_NonEditor_Denied(string sql)
         {
-            // Redefining an existing dataset via CREATE OR ALTER requires editor/owner.
+            // Redefining an existing dataset requires editor/owner for every idempotent lifecycle form.
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
@@ -247,7 +249,7 @@ namespace ETL_SQL.Tests.Reporting
             eval.DatasetCallerContext = "UserId=99";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
-                () => eval.Evaluate(Parse("CREATE OR ALTER DATASET &pub AS (SELECT 1 AS v FROM t);")));
+                () => eval.Evaluate(Parse(sql)));
             Assert.Contains("editor or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 

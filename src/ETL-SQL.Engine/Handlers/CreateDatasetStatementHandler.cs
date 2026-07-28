@@ -58,13 +58,13 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
         {
             var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
 
-            // Redefining an existing dataset (CREATE OR ALTER) is a write — restrict to editor/owner
-            // (admin/scheduled jobs pass). A brand-new CREATE is unaffected.
-            if (stmt.Mode == ObjectCreationMode.CreateOrAlter
+            // Redefining an existing dataset is a write — restrict both idempotent lifecycle forms
+            // to editor/owner (admin/scheduled jobs pass). A brand-new CREATE is unaffected.
+            if ((stmt.Mode == ObjectCreationMode.CreateOrAlter || stmt.Mode == ObjectCreationMode.CreateOrReplace)
                 && await registry.Exists(stmt.TempTableName)
                 && !await registry.CanEditAsync(stmt.TempTableName, callerCtx))
                 throw new ExecutionException(
-                    $"CREATE OR ALTER DATASET '{stmt.TempTableName}' requires editor or owner permission.",
+                    $"{DatasetLifecycleVerb(stmt.Mode)} DATASET '{stmt.TempTableName}' requires editor or owner permission.",
                     null, stmt.Line, stmt.Column);
 
             var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
@@ -124,6 +124,13 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
+
+    private static string DatasetLifecycleVerb(ObjectCreationMode mode) => mode switch
+    {
+        ObjectCreationMode.CreateOrReplace => "CREATE OR REPLACE",
+        ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
+        _ => "CREATE"
+    };
 
     private static bool IsFreshEnough(DatasetMetadata? existing, string? ttlOverride)
     {
