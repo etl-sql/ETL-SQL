@@ -69,6 +69,48 @@ public class SubscriptionsController(
         return Ok(new { reportId = report.Id, jobName, schedule = req.Schedule.Trim(), orchestratorAlias = alias });
     }
 
+    [HttpDelete("api/subscriptions/refresh-jobs/{reportName}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteRefreshJob(string reportName)
+    {
+        if (string.IsNullOrWhiteSpace(reportName))
+            return BadRequest(new { error = "ReportName is required." });
+
+        var target = reportName.Trim().ToLower();
+        var reports = await db.Reports
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Where(r => !r.IsDeleted && (
+                r.Name.ToLower() == target
+                || (r.Folder.Path + "/" + r.Name).ToLower() == target
+            ))
+            .ToListAsync();
+        if (reports.Count == 0) return NotFound(new { error = $"Report '{reportName}' not found." });
+        if (reports.Count > 1) return Conflict(new { error = $"Report '{reportName}' is ambiguous." });
+
+        var report = reports[0];
+        var legacyJobs = await db.DatasetJobs
+            .Where(j => j.ReportId == report.Id)
+            .ToListAsync();
+        var reportJobLinks = await db.ReportJobLinks
+            .Where(j => j.ReportId == report.Id)
+            .ToListAsync();
+        if (legacyJobs.Count == 0 && reportJobLinks.Count == 0)
+            return NotFound(new { error = $"Report '{reportName}' has no attached refresh jobs." });
+
+        db.DatasetJobs.RemoveRange(legacyJobs);
+        db.ReportJobLinks.RemoveRange(reportJobLinks);
+        await db.SaveChangesAsync();
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "DROP_REFRESH_JOB",
+            "Report",
+            report.Id.ToString(),
+            $"Removed {legacyJobs.Count} legacy refresh job(s) and {reportJobLinks.Count} report job link(s).");
+        return NoContent();
+    }
+
     /// <summary>List subscriptions the current user owns (admins see all).</summary>
     [HttpGet("api/subscriptions")]
     public async Task<IActionResult> List()

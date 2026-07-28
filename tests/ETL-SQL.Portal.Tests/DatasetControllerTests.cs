@@ -1057,6 +1057,49 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task DeleteRefreshJob_RemovesLegacyAndReportJobLinkMappings()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new
+        {
+            name = $"drop_refresh_{suffix}",
+            parentId = (int?)null
+        });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"drop_refresh_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'drop refresh job';");
+        var reportName = $"drop_refresh_{suffix}";
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = reportName,
+            description = "",
+            scriptPath
+        });
+        reportRes.EnsureSuccessStatusCode();
+        var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var jobName = $"portal-refresh:prod_orchestrator:{reportId}";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            await registry.RegisterRefreshJobAsync(reportId, jobName, "0 2 * * *");
+        }
+
+        var deleteRes = await AuthDelete(token, $"/api/subscriptions/refresh-jobs/{Uri.EscapeDataString(reportName)}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await verifyDb.DatasetJobs.AnyAsync(j => j.ReportId == reportId));
+        Assert.False(await verifyDb.ReportJobLinks.AnyAsync(j => j.ReportId == reportId));
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Refresh_WithOwningReport_Returns202AndJobId()
     {
