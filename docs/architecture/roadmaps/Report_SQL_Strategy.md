@@ -254,11 +254,11 @@ Already tracked as **Rpt-1**. This must be addressed before adding more interact
 
 ---
 
-### 2.4 Auto-Refresh / Scheduled Dataset Refresh
+### 2.4 Auto-Refresh / Scheduled Report Refresh
 
-`CREATE DATASET` supports `REFRESH EVERY` and `TTL` advisory fields, but these are logged and not acted on (`Reporting.md §4.3`). The scheduler integration is unfinished.
+`CREATE DATASET ... REFRESH EVERY` has been retired. Report refresh cadence belongs in the normalized Orchestrator catalog: create a report-targeted job, attach a named schedule, and let the trusted Portal refresh path re-materialize datasets and snapshots.
 
-This matters for live operations dashboards where data changes every 5–15 minutes. Without it, the user must manually call `GET /api/refresh`. The `SchedulerService` already exists; this is a wiring task.
+This matters for live operations dashboards where data changes every 5–15 minutes. Without scheduled report refresh, the user must manually call the refresh API. The scheduler integration is now tracked through `CREATE JOB ... FOR REPORT`, `CREATE SCHEDULE`, and `ALTER JOB ... ADD SCHEDULE`.
 
 ---
 
@@ -311,7 +311,7 @@ Work is sequenced by dependency, risk, and user impact. Items in the same phase 
 | Linter warning when column aliases shadow Report-SQL keywords (Rpt-3) | Architecture debt | Parser-level check |
 | Wire `DrillDownAction` in `report-runtime.js` | Half-built feature | AST already supports it |
 | Selective re-evaluation on parameter change (Rpt-1) | Performance | Track changed `@params`; only re-run visuals whose source references them |
-| Auto-refresh: wire `REFRESH EVERY` advisory to `DashboardService` refresh cycle | Incomplete feature | `SchedulerService` already exists |
+| Auto-refresh: schedule report refresh through Orchestrator jobs and named schedules | Incomplete feature | Use `CREATE JOB ... FOR REPORT` + `ALTER JOB ... ADD SCHEDULE`; `REFRESH EVERY` is retired |
 | Empty / error state rendering in `report-runtime.js` | Missing behavior | Zero rows → placeholder; query error → error card |
 
 **Exit criteria:** No data corruption risk, no half-built features, no silent failures on parameter change.
