@@ -527,6 +527,14 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.Equal("WEEK", job.Unit);
             Assert.Equal("09:15", job.AtTime);
             Assert.False(job.IsEnabled);
+            var catalog = (IJobCatalogStore)store;
+            var scheduleName = SubscriptionOrchestration.ScheduleName(subId);
+            var schedule = await catalog.GetScheduleAsync(scheduleName);
+            Assert.NotNull(schedule);
+            Assert.Equal("15 9 * * 1", schedule!.Cron);
+            Assert.False(schedule.IsEnabled);
+            Assert.Contains(await catalog.GetJobSchedulesAsync(jobName),
+                link => link.ScheduleName == scheduleName && link.NextRun is not null);
 
             // 5. Verify the persisted trigger remains free of delivery configuration.
             var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
@@ -546,6 +554,9 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var reenabledJob = await store.GetJobAsync(jobName);
             Assert.NotNull(reenabledJob);
             Assert.True(reenabledJob.IsEnabled);
+            var reenabledSchedule = await catalog.GetScheduleAsync(scheduleName);
+            Assert.NotNull(reenabledSchedule);
+            Assert.True(reenabledSchedule!.IsEnabled);
         }
 
         [Fact]

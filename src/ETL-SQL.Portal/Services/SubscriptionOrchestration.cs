@@ -1,5 +1,7 @@
 using System.Globalization;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Engine.Scheduling;
+using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Portal.Data;
 
 namespace ETL_SQL.Portal.Services;
@@ -13,9 +15,13 @@ namespace ETL_SQL.Portal.Services;
 public static class SubscriptionOrchestration
 {
     public const string JobNamePrefix = "SUB:";
+    public const string ScheduleNamePrefix = "SUBSCHED:";
 
     public static string JobName(int subscriptionId, string? reportName) =>
         $"{JobNamePrefix}{subscriptionId}:{reportName}";
+
+    public static string ScheduleName(int subscriptionId) =>
+        $"{ScheduleNamePrefix}{subscriptionId}";
 
     public static bool TryParseSubscriptionId(string jobName, out int subscriptionId)
     {
@@ -41,6 +47,33 @@ public static class SubscriptionOrchestration
             _ => (0, "DAY")
         };
 
+    public static string ToCron(string? schedule, string? atTime)
+    {
+        var (hour, minute) = ParseAtTime(atTime);
+        return schedule?.ToUpperInvariant() switch
+        {
+            "HOURLY" => $"{minute} * * * *",
+            "DAILY" => $"{minute} {hour} * * *",
+            "WEEKLY" => $"{minute} {hour} * * 1",
+            "MONTHLY" => $"{minute} {hour} 1 * *",
+            _ => throw new ArgumentException(
+                "Invalid schedule. Use Daily, Weekly, Monthly, or Hourly.", nameof(schedule))
+        };
+    }
+
+    public static ScheduleDefinition BuildScheduleDefinition(Subscription sub)
+    {
+        var cron = ToCron(sub.Schedule, sub.AtTime);
+        CronSchedule.Validate(cron, CronSchedule.DefaultTimeZone);
+        return new ScheduleDefinition(
+            Name: ScheduleName(sub.Id),
+            Cron: cron,
+            TimeZone: CronSchedule.DefaultTimeZone,
+            IsEnabled: sub.IsActive,
+            DisplayName: $"Subscription {sub.Id}",
+            Description: "Portal subscription trigger schedule");
+    }
+
     public static string ScriptFileName(int subscriptionId, string reportName) =>
         $"sub_{subscriptionId}_{SanitizeName(reportName)}.etlsql";
 
@@ -61,6 +94,64 @@ public static class SubscriptionOrchestration
             RetryDelaySeconds: 60);
     }
 
+    public static async Task SaveJobAndScheduleAsync(
+        IJobHistoryStore store,
+        Subscription sub,
+        string reportName,
+        string scriptPath)
+    {
+        var job = BuildJobDefinition(sub, reportName, scriptPath);
+        await store.SaveJobAsync(job);
+        await SaveScheduleLinkAsync(store, sub, job.Name);
+    }
+
+    public static async Task SaveScheduleLinkAsync(
+        IJobHistoryStore store,
+        Subscription sub,
+        string jobName,
+        bool rearmExisting = false,
+        DateTimeOffset? asOf = null)
+    {
+        if (store is not IJobCatalogStore catalog)
+            return;
+
+        var schedule = BuildScheduleDefinition(sub);
+        await catalog.SaveScheduleAsync(schedule);
+        var added = await JobScheduleAttachment.AttachAsync(catalog, jobName, schedule.Name, asOf);
+        if (!added && rearmExisting)
+        {
+            var nextRun = CronSchedule.GetNextOccurrence(
+                schedule.Cron,
+                schedule.TimeZone,
+                asOf ?? DateTimeOffset.UtcNow);
+            await catalog.ArmJobScheduleAsync(jobName, schedule.Name, nextRun);
+        }
+    }
+
+    public static async Task DeleteScheduleIfUnusedAsync(IJobHistoryStore store, int subscriptionId)
+    {
+        if (store is not IJobCatalogStore catalog)
+            return;
+
+        _ = await catalog.DeleteScheduleAsync(ScheduleName(subscriptionId));
+    }
+
     public static string SanitizeName(string name) =>
         new(name.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+
+    private static (int Hour, int Minute) ParseAtTime(string? atTime)
+    {
+        if (string.IsNullOrWhiteSpace(atTime))
+            return (0, 0);
+
+        if (TimeSpan.TryParse(atTime, CultureInfo.InvariantCulture, out var parsed)
+            && parsed >= TimeSpan.Zero
+            && parsed < TimeSpan.FromDays(1))
+        {
+            return (parsed.Hours, parsed.Minutes);
+        }
+
+        throw new ArgumentException(
+            $"'{atTime}' is not a valid delivery time. Use HH:mm in 24-hour time.", nameof(atTime));
+    }
 }

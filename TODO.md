@@ -421,9 +421,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      to that report. `SCRIPT` completions ignored. Verified 2026-07-28 with:
      `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
      "FullyQualifiedName~FaultInjectionRecoveryTests"` (8 passed).
-   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`. Current legacy
-     subscription APIs at least preserve delivery time end to end: `atTime` is returned in DTOs,
-     can be updated, and updates are mirrored to the Orchestrator job while this bridge remains.
+   - **[PARTIAL]** Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
+     Subscription create/update/reconcile/delete now maintains a unified Orchestrator
+     `SCHEDULE` named `SUBSCHED:<subscriptionId>` plus the `JobSchedules` link while retaining the
+     legacy job interval fields for the bridge. Remaining work: model subscription delivery as a
+     named `NOTIFICATION` + `JobNotifications` attachment instead of the Portal delivery service.
    - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact

@@ -194,6 +194,8 @@ public static class SubscriptionScriptMaintenance
                 || !liveIds.Contains(subId))
             {
                 await TryDeleteJob(store, job.Name, logger, "orphaned subscription job");
+                if (subId > 0)
+                    await TryDeleteSchedule(store, subId, logger, "orphaned subscription schedule");
                 continue;
             }
 
@@ -226,15 +228,24 @@ public static class SubscriptionScriptMaintenance
                     // Crash between the portal row and the job DB: recreate from the row.
                     // NextRun starts null, so the healed occurrence runs at the next scheduler
                     // pass (at-least-once recovery, consistent with the P1.1 lease semantics).
-                    await store.SaveJobAsync(desired);
+                    await SubscriptionOrchestration.SaveJobAndScheduleAsync(
+                        store, sub, sub.Report.Name, sub.ScriptPath);
                     logger.LogWarning(
                         "Recreated missing Orchestrator job for subscription {SubscriptionId}.", sub.Id);
                 }
-                else if (current.Interval != desired.Interval
-                         || !string.Equals(current.Unit, desired.Unit, StringComparison.OrdinalIgnoreCase)
-                         || current.IsEnabled != desired.IsEnabled
-                         || !string.Equals(current.Script, desired.Script, StringComparison.Ordinal))
+                else
                 {
+                    var scheduleChanged = current.Interval != desired.Interval
+                        || !string.Equals(current.Unit, desired.Unit, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(current.AtTime, desired.AtTime, StringComparison.Ordinal);
+                    var enabledChanged = current.IsEnabled != desired.IsEnabled;
+                    var scriptChanged = !string.Equals(current.Script, desired.Script, StringComparison.Ordinal);
+                    if (!scheduleChanged && !enabledChanged && !scriptChanged)
+                    {
+                        await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, desired.Name);
+                        continue;
+                    }
+
                     // Drift: converge schedule/enablement/script to the row while preserving
                     // the job's run bookkeeping and configured delivery time.
                     await store.SaveJobAsync(current with
@@ -243,8 +254,13 @@ public static class SubscriptionScriptMaintenance
                         Unit = desired.Unit,
                         IsEnabled = desired.IsEnabled,
                         Script = desired.Script,
-                        AtTime = sub.AtTime ?? current.AtTime
+                        AtTime = desired.AtTime
                     });
+                    await SubscriptionOrchestration.SaveScheduleLinkAsync(
+                        store,
+                        sub,
+                        desired.Name,
+                        rearmExisting: scheduleChanged);
                     logger.LogInformation(
                         "Realigned Orchestrator job for subscription {SubscriptionId} with the portal row.", sub.Id);
                 }
@@ -281,6 +297,26 @@ public static class SubscriptionScriptMaintenance
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Could not remove {Description}: {JobName}", description, jobName);
+        }
+    }
+
+    private static async Task TryDeleteSchedule(
+        IJobHistoryStore store, int subscriptionId, ILogger logger, string description)
+    {
+        try
+        {
+            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, subscriptionId);
+            logger.LogWarning(
+                "Removed {Description}: {ScheduleName}",
+                description,
+                SubscriptionOrchestration.ScheduleName(subscriptionId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Could not remove {Description}: {ScheduleName}",
+                description,
+                SubscriptionOrchestration.ScheduleName(subscriptionId));
         }
     }
 }

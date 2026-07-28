@@ -155,6 +155,14 @@ public class SubscriptionsController(
 
         var (interval, _) = SubscriptionOrchestration.ParseSchedule(req.Schedule);
         if (interval == 0) return BadRequest(new { error = "Invalid schedule. Use Daily, Weekly, Monthly, or Hourly." });
+        try
+        {
+            _ = SubscriptionOrchestration.ToCron(req.Schedule, req.AtTime);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
 
         var recipientEmail = req.RecipientEmail?.Trim();
         if (string.IsNullOrEmpty(recipientEmail))
@@ -205,7 +213,7 @@ public class SubscriptionsController(
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
-            await store.SaveJobAsync(jobDef);
+            await SubscriptionOrchestration.SaveJobAndScheduleAsync(store, sub, report.Name, scriptPath);
         }
 
         await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobDef.Name);
@@ -245,6 +253,23 @@ public class SubscriptionsController(
         var scriptNeedsRewrite = formatChanged || parametersChanged || smtpAliasChanged || recipientsChanged;
 
         if (req.Name is not null) sub.Name = req.Name;
+        if (req.Schedule is not null)
+        {
+            var (interval, _) = SubscriptionOrchestration.ParseSchedule(req.Schedule);
+            if (interval == 0) return BadRequest(new { error = "Invalid schedule. Use Daily, Weekly, Monthly, or Hourly." });
+        }
+        if (req.Schedule is not null || req.AtTime is not null)
+        {
+            try
+            {
+                _ = SubscriptionOrchestration.ToCron(req.Schedule ?? sub.Schedule, requestedAtTime);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         if (req.Schedule is not null) sub.Schedule = req.Schedule;
         if (req.AtTime is not null) sub.AtTime = requestedAtTime;
         if (req.DeliverOnRefresh.HasValue) sub.DeliverOnRefresh = req.DeliverOnRefresh.Value;
@@ -274,7 +299,7 @@ public class SubscriptionsController(
             return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
         }
 
-        // Sync the Orchestrator job if scheduling or active state changed.
+        // Sync the Orchestrator job and its unified schedule link if scheduling or active state changed.
         var orchDbPath = dbLocator.Resolve();
         if ((orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
             && (scheduleChanged || atTimeChanged || req.IsActive.HasValue))
@@ -294,13 +319,18 @@ public class SubscriptionsController(
                     IsEnabled = sub.IsActive
                 };
                 await store.SaveJobAsync(updated);
+                await SubscriptionOrchestration.SaveScheduleLinkAsync(
+                    store,
+                    sub,
+                    updated.Name,
+                    rearmExisting: scheduleChanged || atTimeChanged);
             }
             else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
             {
                 // Heal a missing job from row state (e.g. a crash between the portal row and
                 // the job DB during create) instead of leaving the subscription dormant.
-                await store.SaveJobAsync(
-                    SubscriptionOrchestration.BuildJobDefinition(sub, sub.Report.Name, sub.ScriptPath));
+                await SubscriptionOrchestration.SaveJobAndScheduleAsync(
+                    store, sub, sub.Report.Name, sub.ScriptPath);
             }
         }
 
@@ -359,7 +389,11 @@ public class SubscriptionsController(
                 var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
                 var job = await store.GetJobAsync(jobName);
                 if (job is not null)
+                {
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
+                    if (!string.IsNullOrWhiteSpace(sub.ScriptPath))
+                        await SubscriptionOrchestration.SaveScheduleLinkAsync(store, sub, jobName);
+                }
             }
             results.Add(new(item.Id, "Updated", sub.Version));
             updated++;
@@ -404,6 +438,7 @@ public class SubscriptionsController(
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             await store.DeleteJobAsync(jobName);
+            await SubscriptionOrchestration.DeleteScheduleIfUnusedAsync(store, sub.Id);
         }
 
         if (!string.IsNullOrEmpty(resolvedScriptPath) && System.IO.File.Exists(resolvedScriptPath))
