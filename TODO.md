@@ -346,8 +346,8 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      disappears from the path when it does.
 2. **Portal persistence:**
    - **[PARTIAL]** Introduce `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`) with EF
-     migrations on both providers; legacy `DatasetJobs` remains for compatibility until creation/import/export
-     paths are fully moved.
+     migrations on both providers; API-created portal refresh jobs now mirror into `ReportJobLinks`, and
+     legacy `DatasetJobs` remains for compatibility until import/export paths are fully moved.
    - Add `Alerts` (`ReportId` FK, visual + operator + threshold, plus `LastState`/`LastEvaluatedAt`/
      `LastNotifiedAt` for transition-based alerting) and `AlertNotifications` (orchestrator alias +
      notification name — the destination lives in the orchestrator's catalog, so it cannot be an FK

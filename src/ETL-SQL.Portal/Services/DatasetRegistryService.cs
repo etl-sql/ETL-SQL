@@ -208,7 +208,50 @@ namespace ETL_SQL.Portal.Services
             }
 
             job.RefreshInterval = refreshInterval;
+            if (TryParsePortalRefreshJobName(orchestratorJobName, reportId, out var orchestratorAlias))
+            {
+                var link = await _db.ReportJobLinks.FirstOrDefaultAsync(j =>
+                    j.ReportId == reportId
+                    && j.OrchestratorAlias == orchestratorAlias
+                    && j.JobName == orchestratorJobName);
+                if (link is null)
+                {
+                    link = new ReportJobLink
+                    {
+                        ReportId = reportId,
+                        OrchestratorAlias = orchestratorAlias,
+                        JobName = orchestratorJobName
+                    };
+                    _db.ReportJobLinks.Add(link);
+                }
+                else
+                {
+                    link.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
             await _db.SaveChangesAsync();
+        }
+
+        private static bool TryParsePortalRefreshJobName(
+            string jobName,
+            int reportId,
+            out string orchestratorAlias)
+        {
+            orchestratorAlias = "";
+            const string prefix = "portal-refresh:";
+            if (!jobName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var remainder = jobName[prefix.Length..];
+            var separator = remainder.LastIndexOf(':');
+            if (separator <= 0 || separator == remainder.Length - 1)
+                return false;
+            if (!int.TryParse(remainder[(separator + 1)..], out var parsedReportId) || parsedReportId != reportId)
+                return false;
+
+            orchestratorAlias = remainder[..separator];
+            return !string.IsNullOrWhiteSpace(orchestratorAlias);
         }
 
         public async Task<DatasetPublishTarget?> AuthorizePublishAsync(

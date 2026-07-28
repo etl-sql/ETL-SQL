@@ -1031,7 +1031,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         });
         reportRes.EnsureSuccessStatusCode();
         var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
-        var jobName = $"__dataset_refresh_schedule_{suffix}__";
+        var jobName = $"portal-refresh:prod_orchestrator:{reportId}";
 
         using (var scope = _factory.Services.CreateScope())
         {
@@ -1048,6 +1048,11 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
                 .ToListAsync());
             Assert.Equal(reportId, job.ReportId);
             Assert.Equal("10m", job.RefreshInterval);
+            var link = Assert.Single(await db.ReportJobLinks
+                .Where(j => j.JobName == jobName)
+                .ToListAsync());
+            Assert.Equal(reportId, link.ReportId);
+            Assert.Equal("prod_orchestrator", link.OrchestratorAlias);
         }
     }
 
