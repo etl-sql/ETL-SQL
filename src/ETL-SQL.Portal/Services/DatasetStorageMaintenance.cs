@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,6 +7,9 @@ namespace ETL_SQL.Portal.Services;
 
 public static class DatasetStorageMaintenance
 {
+    public const string ClusterLockName = "portal-dataset-storage-reconciliation";
+    private static readonly TimeSpan ClusterLockTtl = TimeSpan.FromMinutes(10);
+
     private static readonly Regex ManagedFileName =
         new(@"^.+_\d+\.parquet$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -14,10 +18,26 @@ public static class DatasetStorageMaintenance
         PortalConfig config,
         ILogger logger,
         bool deepOrphanScan = false,
-        int pageSize = 1_000)
+        int pageSize = 1_000,
+        IClusterLockStore? clusterLockStore = null,
+        string? clusterLockOwner = null)
     {
         if (pageSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "Page size must be positive.");
+
+        if (clusterLockStore is not null)
+        {
+            var owner = string.IsNullOrWhiteSpace(clusterLockOwner)
+                ? $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}"
+                : clusterLockOwner;
+            if (!await clusterLockStore.TryAcquireLockAsync(ClusterLockName, owner, ClusterLockTtl))
+            {
+                logger.LogInformation(
+                    "Dataset storage reconciliation skipped because another Portal node owns cluster lock {LockName}.",
+                    ClusterLockName);
+                return;
+            }
+        }
 
         var root = Path.GetFullPath(config.DatasetRootPath);
         Directory.CreateDirectory(root);

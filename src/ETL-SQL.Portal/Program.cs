@@ -667,7 +667,8 @@ using (var scope = app.Services.CreateScope())
                         db,
                         portalConfig,
                         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                            .CreateLogger("DatasetStorageMaintenance"));
+                            .CreateLogger("DatasetStorageMaintenance"),
+                        clusterLockStore: scope.ServiceProvider.GetRequiredService<IClusterLockStore>());
                     // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
                     // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
                     // and converge Orchestrator jobs to subscription row state (the source of truth).
@@ -677,7 +678,8 @@ using (var scope = app.Services.CreateScope())
                         scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
                         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
                             .CreateLogger("SubscriptionScriptMaintenance"),
-                        scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
+                        scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>(),
+                        scope.ServiceProvider.GetRequiredService<IClusterLockStore>());
                 }
 
                 // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the

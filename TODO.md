@@ -427,7 +427,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      attached Orchestrator notification names; lineage impact includes report alerts with attached
      notification links; shared-connection impact also lists alert notification links that use that
      Orchestrator alias.
-   - Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
+   - **[DONE]** Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).
    - `ConfigurationExportService` emits `CREATE OR REPLACE` plus the full link set, so an export

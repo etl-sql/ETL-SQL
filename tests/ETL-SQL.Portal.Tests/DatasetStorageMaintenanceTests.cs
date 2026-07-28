@@ -133,4 +133,56 @@ public sealed class DatasetStorageMaintenanceTests : IDisposable
         Assert.False(File.Exists(stagingPath));
         Assert.False(File.Exists(backupPath));
     }
+
+    [Fact]
+    public async Task Reconcile_SkipsWhenAnotherPortalNodeOwnsClusterLock()
+    {
+        var datasetRoot = Path.Combine(_root, "datasets_locked");
+        Directory.CreateDirectory(datasetRoot);
+        var config = new PortalConfig
+        {
+            DatasetRootPath = datasetRoot
+        };
+
+        var stagingPath = Path.Combine(datasetRoot, ".valid_1.parquet.tmp-test");
+        await File.WriteAllTextAsync(stagingPath, "staging");
+
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_root, "portal_locked.db")}")
+            .Options;
+        await using var db = new PortalDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.Datasets.Add(new Dataset
+        {
+            Name = "#missing",
+            FolderPath = "/",
+            ParquetFilePath = Path.Combine(datasetRoot, "missing_2.parquet"),
+            AccessLevel = DatasetAccessLevel.Private
+        });
+        await db.SaveChangesAsync();
+
+        await DatasetStorageMaintenance.ReconcileAsync(
+            db,
+            config,
+            NullLogger.Instance,
+            clusterLockStore: new DenyingClusterLockStore());
+
+        Assert.True(await db.Datasets.AnyAsync(d => d.Name == "#missing"));
+        Assert.True(File.Exists(stagingPath));
+    }
+
+    private sealed class DenyingClusterLockStore : IClusterLockStore
+    {
+        public Task<bool> TryAcquireLockAsync(string lockName, string owner, TimeSpan ttl) =>
+            Task.FromResult(false);
+
+        public Task<bool> TryRenewLockAsync(string lockName, string owner, TimeSpan ttl) =>
+            Task.FromResult(false);
+
+        public Task ReleaseLockAsync(string lockName, string owner) =>
+            Task.CompletedTask;
+
+        public Task<string?> GetLockHolderAsync(string lockName) =>
+            Task.FromResult<string?>("other-node");
+    }
 }

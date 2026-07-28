@@ -161,4 +161,77 @@ public class SubscriptionLifecycleRecoveryTests
         Assert.NotNull(entity);
         Assert.NotNull(entity!.FindProperty(nameof(Subscription.AtTime)));
     }
+
+    [Fact]
+    public async Task Reconcile_SkipsWhenAnotherPortalNodeOwnsClusterLock()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        var locks = scope.ServiceProvider.GetRequiredService<IClusterLockStore>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var owner = new PortalUser
+        {
+            UserName = $"locked-owner-{suffix}",
+            Email = $"locked-owner-{suffix}@test.local",
+            IsActive = true
+        };
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder
+        {
+            Name = $"Locked Folder {suffix}",
+            Path = $"/locked-{suffix}",
+            OwnerId = owner.Id
+        };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report
+        {
+            FolderId = folder.Id,
+            Name = $"LockedReport{suffix}",
+            ScriptPath = Path.Combine(config.ScriptRootPath, $"locked-{suffix}.rptsql"),
+            CreatedBy = owner.Id
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var subscription = new Subscription
+        {
+            ReportId = report.Id,
+            UserId = owner.Id,
+            Schedule = "Daily",
+            Format = SubscriptionFormat.CSV,
+            SmtpAlias = "alias",
+            Recipients = "r@test.local",
+            IsActive = true
+        };
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        var startupHolder = await locks.GetLockHolderAsync(SubscriptionScriptMaintenance.ClusterLockName);
+        if (startupHolder is not null)
+            await locks.ReleaseLockAsync(SubscriptionScriptMaintenance.ClusterLockName, startupHolder);
+
+        Assert.True(await locks.TryAcquireLockAsync(
+            SubscriptionScriptMaintenance.ClusterLockName,
+            "other-node",
+            TimeSpan.FromMinutes(10)));
+
+        await SubscriptionScriptMaintenance.ReconcileAsync(
+            db,
+            config,
+            null,
+            NullLogger.Instance,
+            clusterLockStore: locks,
+            clusterLockOwner: "this-node");
+
+        await db.Entry(subscription).ReloadAsync();
+        Assert.Null(subscription.ScriptPath);
+    }
 }

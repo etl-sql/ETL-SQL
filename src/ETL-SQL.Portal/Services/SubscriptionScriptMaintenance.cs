@@ -24,6 +24,9 @@ namespace ETL_SQL.Portal.Services;
 /// </summary>
 public static class SubscriptionScriptMaintenance
 {
+    public const string ClusterLockName = "portal-subscription-reconciliation";
+    private static readonly TimeSpan ClusterLockTtl = TimeSpan.FromMinutes(10);
+
     private static readonly Regex GeneratedFileName =
         new(@"^sub_(\d+)_.*\.etlsql$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -32,8 +35,24 @@ public static class SubscriptionScriptMaintenance
         PortalConfig config,
         string? orchestratorDbPath,
         ILogger logger,
-        IOrchestratorStoreFactory? storeFactory = null)
+        IOrchestratorStoreFactory? storeFactory = null,
+        IClusterLockStore? clusterLockStore = null,
+        string? clusterLockOwner = null)
     {
+        if (clusterLockStore is not null)
+        {
+            var owner = string.IsNullOrWhiteSpace(clusterLockOwner)
+                ? $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}"
+                : clusterLockOwner;
+            if (!await clusterLockStore.TryAcquireLockAsync(ClusterLockName, owner, ClusterLockTtl))
+            {
+                logger.LogInformation(
+                    "Subscription reconciliation skipped because another Portal node owns cluster lock {LockName}.",
+                    ClusterLockName);
+                return;
+            }
+        }
+
         var subscriptions = await db.Subscriptions
             .Include(s => s.Report)
             .ToListAsync();
