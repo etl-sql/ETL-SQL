@@ -421,9 +421,10 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      Portal refresh; the completed trusted refresh evaluates alerts attached to that report.
      `SCRIPT` completions ignored.
    - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
-   - `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
+   - **[PARTIAL]** `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
-     `SubscriptionScriptMaintenance`.
+     `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
+     attached Orchestrator notification names.
    - Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).

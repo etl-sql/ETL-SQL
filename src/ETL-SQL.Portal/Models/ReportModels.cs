@@ -213,6 +213,7 @@ public record ReportDependencyDto(
     IReadOnlyList<ReportDependencyManifestDatasetDto> ManifestDatasets,
     IReadOnlyList<ReportDependencyDatasetDto> RegisteredDatasets,
     IReadOnlyList<ReportDependencyRefreshJobDto> RefreshJobs,
+    IReadOnlyList<ReportDependencyAlertDto> Alerts,
     IReadOnlyList<ReportDependencySourceDto> Sources,
     IReadOnlyList<ReportDependencyLineageDto> LineageEntries);
 
@@ -249,6 +250,21 @@ public record ReportDependencyRefreshJobDto(
     string OrchestratorJobName,
     string RefreshInterval,
     DateTime? LastRefreshedAt);
+
+public record ReportDependencyAlertDto(
+    int Id,
+    string Name,
+    string VisualName,
+    string Operator,
+    decimal Threshold,
+    bool IsActive,
+    string? LastState,
+    DateTime? LastEvaluatedAt,
+    IReadOnlyList<ReportDependencyAlertNotificationDto> Notifications);
+
+public record ReportDependencyAlertNotificationDto(
+    string OrchestratorAlias,
+    string NotificationName);
 
 public record ReportDependencySourceDto(
     string Name,

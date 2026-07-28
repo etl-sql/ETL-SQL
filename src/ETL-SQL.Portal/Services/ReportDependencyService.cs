@@ -70,6 +70,31 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
                 j.LastRefreshedAt))
             .ToListAsync();
 
+        var alerts = await db.ReportAlerts
+            .AsNoTracking()
+            .Include(a => a.Notifications)
+            .Where(a => a.ReportId == id)
+            .OrderBy(a => a.Name)
+            .ToListAsync();
+        var alertDtos = alerts
+            .Select(a => new ReportDependencyAlertDto(
+                a.Id,
+                a.Name,
+                a.VisualName,
+                a.Operator,
+                a.Threshold,
+                a.IsActive,
+                a.LastState,
+                a.LastEvaluatedAt,
+                a.Notifications
+                    .OrderBy(n => n.OrchestratorAlias, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(n => n.NotificationName, StringComparer.OrdinalIgnoreCase)
+                    .Select(n => new ReportDependencyAlertNotificationDto(
+                        n.OrchestratorAlias,
+                        n.NotificationName))
+                    .ToList()))
+            .ToList();
+
         var sourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in await scriptInspection.ReadScriptSourceTablesAsync(report.ScriptPath))
             sourceNames.Add(source);
@@ -83,6 +108,7 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
             manifestDatasets,
             datasetDtos,
             jobs,
+            alertDtos,
             scriptInspection.BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
             lineageEntries);
     }

@@ -1536,6 +1536,10 @@ CREATE VISUAL Total AS CARD (
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminId = await db.Users
+                .Where(u => u.UserName == "admin")
+                .Select(u => u.Id)
+                .SingleAsync();
             db.ReportSnapshots.Add(new ReportSnapshot
             {
                 ReportId = reportId,
@@ -1562,6 +1566,24 @@ CREATE VISUAL Total AS CARD (
                 RefreshInterval = "Hourly",
                 LastRefreshedAt = DateTime.UtcNow
             });
+            var alert = new ReportAlert
+            {
+                ReportId = reportId,
+                OwnerId = adminId,
+                Name = "RevenueDrop",
+                VisualName = "Total",
+                Operator = "<",
+                Threshold = 10,
+                IsActive = true,
+                LastState = "OK",
+                LastEvaluatedAt = DateTime.UtcNow
+            };
+            alert.Notifications.Add(new AlertNotification
+            {
+                OrchestratorAlias = "prod_orch",
+                NotificationName = "OpsPager"
+            });
+            db.ReportAlerts.Add(alert);
             await db.SaveChangesAsync();
         }
 
@@ -1573,6 +1595,10 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("#stage", body["manifestDatasets"]![0]!["tempTableName"]!.GetValue<string>());
         Assert.Equal("Sales Summary", body["registeredDatasets"]![0]!["name"]!.GetValue<string>());
         Assert.Equal("refresh_sales_summary", body["refreshJobs"]![0]!["orchestratorJobName"]!.GetValue<string>());
+        Assert.Equal("RevenueDrop", body["alerts"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("Total", body["alerts"]![0]!["visualName"]!.GetValue<string>());
+        Assert.Equal("prod_orch", body["alerts"]![0]!["notifications"]![0]!["orchestratorAlias"]!.GetValue<string>());
+        Assert.Equal("OpsPager", body["alerts"]![0]!["notifications"]![0]!["notificationName"]!.GetValue<string>());
         Assert.Contains(body["sources"]!.AsArray(), n => n!["name"]!.GetValue<string>() == "erp.InvoiceLines");
         Assert.Contains(body["lineageEntries"]!.AsArray(), n =>
             n!["target"]!.GetValue<string>() == "#stage" &&
