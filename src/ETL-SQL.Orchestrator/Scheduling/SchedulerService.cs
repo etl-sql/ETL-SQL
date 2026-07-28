@@ -155,6 +155,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         ? await scheduleQueryStore.GetDueJobsAsync(now)
                         : (await _store.GetActiveJobsAsync()).Where(job => job.NextRun == null || job.NextRun <= now);
 
+                    // Cron-scheduled jobs come from their schedule links; the query above covers only
+                    // jobs with no schedule attached. The two sets are disjoint by construction, so
+                    // there is nothing to de-duplicate between them.
+                    if (_store is IJobCatalogStore catalog)
+                        dueJobs = dueJobs.Concat(await catalog.GetJobsDueByScheduleAsync(DateTime.UtcNow));
+
                     foreach (var job in dueJobs)
                     {
                         if (!_scheduledJobStarts.TryAdd(job.Name, 0))
@@ -387,7 +393,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         blockedSw.Stop();
                         SchedulerObservability.CompleteScheduledJobActivity(
                             blockedActivity, "BLOCKED", blockedSw.ElapsedMilliseconds, 0, 0, 0);
-                        var blockedNextRun = CalculateNextRun(job);
+                        // A blocked run still consumed its occurrence: advance the schedule so the job
+                        // does not re-fire immediately and block again on every tick.
+                        var blockedNextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
                         try { await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, blockedNextRun, fenceToken); } catch { }
                         return;
                     }
@@ -541,7 +549,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 await leaseHeartbeat;
             }
 
-            var nextRun = CalculateNextRun(job);
+            var nextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
             try
             {
                 // Fenced write: if this node was paused past its lease and another instance took over the
@@ -669,6 +677,101 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
 
             return next;
+        }
+
+        /// <summary>
+        /// Advances a cron-scheduled job's links after a run and returns the earliest next occurrence
+        /// across them, or <c>null</c> when the job has no links (leaving the legacy interval path to
+        /// answer instead).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Every link that was due is marked as having fired, not just the earliest one. One run
+        /// satisfies all of them — that is what coalescing means — so leaving the others due would
+        /// re-fire the job on the very next tick.
+        /// </para>
+        /// <para>
+        /// The value returned is written to <c>Jobs.NextRun</c>, which for a cron-scheduled job is a
+        /// derived display value: the links are the schedule of record.
+        /// </para>
+        /// </remarks>
+        internal async Task<DateTime?> AdvanceScheduleLinksAsync(JobDefinition job, DateTime ranAtUtc)
+        {
+            if (_store is not IJobCatalogStore catalog) return null;
+
+            IReadOnlyList<JobScheduleLink> links;
+            try
+            {
+                links = await catalog.GetJobSchedulesAsync(job.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Job {JobName}: could not read schedule links to advance them.", job.Name);
+                return null;
+            }
+
+            if (links.Count == 0) return null;
+
+            DateTime? earliest = null;
+            foreach (var link in links)
+            {
+                var schedule = await catalog.GetScheduleAsync(link.ScheduleName);
+                if (schedule is null)
+                {
+                    _logger.LogWarning(
+                        "Job {JobName}: schedule '{Schedule}' is attached but no longer exists — the link is dead " +
+                        "and the job will not run on it.", job.Name, link.ScheduleName);
+                    continue;
+                }
+
+                DateTime? next;
+                try
+                {
+                    next = CronSchedule.GetNextOccurrence(schedule.Cron, schedule.TimeZone, new DateTimeOffset(ranAtUtc, TimeSpan.Zero));
+                }
+                catch (ArgumentException ex)
+                {
+                    // Stored expressions are validated on write, so this means the row was edited out
+                    // of band. Report it and leave the link alone rather than arming it with a guess.
+                    _logger.LogError(ex, "Job {JobName}: schedule '{Schedule}' has an unusable cron expression.",
+                        job.Name, link.ScheduleName);
+                    continue;
+                }
+
+                if (next is null)
+                    _logger.LogWarning(
+                        "Job {JobName}: schedule '{Schedule}' ('{Cron}') has no further occurrence; the link is now " +
+                        "dormant.", job.Name, link.ScheduleName, schedule.Cron);
+
+                var wasDue = link.NextRun is not null && link.NextRun <= ranAtUtc;
+                DateTime? armed;
+                if (wasDue)
+                {
+                    await catalog.UpdateJobScheduleRunAsync(job.Name, link.ScheduleName, ranAtUtc, next);
+                    armed = next;
+                }
+                else if (link.NextRun is null)
+                {
+                    // Not due — it had nothing armed at all. Arm it without claiming it ran.
+                    await catalog.ArmJobScheduleAsync(job.Name, link.ScheduleName, next);
+                    armed = next;
+                }
+                else
+                {
+                    // Not due and already armed: this run came from a sibling link, so leave it be.
+                    armed = link.NextRun;
+                }
+
+                // A disabled schedule cannot make the job due, so it must not contribute to the
+                // next-run figure an operator reads — but its link is still advanced above, so
+                // re-enabling it takes effect immediately rather than after one wasted cycle.
+                if (!schedule.IsEnabled) continue;
+
+                if (armed is not null && (earliest is null || armed < earliest))
+                    earliest = armed;
+            }
+
+            return earliest;
         }
     }
 }

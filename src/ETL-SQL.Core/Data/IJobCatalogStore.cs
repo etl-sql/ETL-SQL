@@ -138,6 +138,27 @@ public interface IJobCatalogStore
     Task UpdateJobScheduleRunAsync(string jobName, string scheduleName, DateTime lastRun, DateTime? nextRun);
 
     /// <summary>
+    /// Sets a link's <c>NextRun</c> without recording a run against it — used to re-arm a link whose
+    /// next occurrence is missing or stale.
+    /// </summary>
+    Task ArmJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun);
+
+    /// <summary>
+    /// Jobs with at least one enabled schedule link that is due at <paramref name="nowUtc"/>.
+    /// </summary>
+    /// <remarks>
+    /// Returns each job <b>once</b> however many of its links are due: two schedules that coincide
+    /// are one occurrence of one job, not two concurrent runs of it.
+    /// <para>
+    /// A link with no <c>NextRun</c> is <b>not</b> due. A cron expression can legitimately have no
+    /// further occurrence (<c>0 0 30 2 *</c>), and treating "never again" as "run now" would spin
+    /// that job on every tick. Links are armed when they are created, so a missing value means
+    /// something went wrong and the scheduler re-arms it rather than firing on it.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<JobDefinition>> GetJobsDueByScheduleAsync(DateTime nowUtc);
+
+    /// <summary>
     /// Attaches a notification to a job for one outcome. Idempotent; <c>false</c> when the link
     /// already existed.
     /// </summary>

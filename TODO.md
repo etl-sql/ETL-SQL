@@ -333,9 +333,17 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Cron is minute-granularity only; `EVERY n SECONDS` has no replacement, deliberately. DST policy:
      a local time that does not exist fires when the gap ends (so a nightly job still runs that
      night), a repeated local time runs once — pinned by tests on fixed dates.
-   - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
-     reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
-     run; no `DateTime.Now` anywhere in the path.
+   - **[DONE]** Catalog schema, `IJobCatalogStore`, and `CronSchedule` — commit `fe1cbc15`.
+   - **[DONE]** Scheduler reads schedule links: `GetJobsDueByScheduleAsync` (DISTINCT, so
+     simultaneous links coalesce into one run), `AdvanceScheduleLinksAsync` (marks *every* due link
+     fired, not just the earliest — otherwise the job re-fires on the next tick), and
+     `JobScheduleAttachment.AttachAsync`, which keeps "a link is always armed when created" in one
+     place. The legacy interval query now excludes jobs that have links, so the two paths are
+     disjoint; that exclusion and the whole interval branch go when `CREATE JOB` stops producing
+     interval jobs.
+   - The legacy `CalculateNextRun` is deliberately left on local time and untouched — it is being
+     deleted, and changing its semantics now would break its tests for no benefit. `DateTime.Now`
+     disappears from the path when it does.
 2. **Portal persistence:**
    - Replace `DatasetJobs` with `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`), EF
      migrations on both providers.

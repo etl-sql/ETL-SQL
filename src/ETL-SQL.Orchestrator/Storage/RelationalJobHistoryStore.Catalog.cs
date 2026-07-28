@@ -312,6 +312,49 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task ArmJobScheduleAsync(string jobName, string scheduleName, DateTime? nextRun)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE JobSchedules SET NextRun = @nextRun
+                WHERE JobName = @jobName COLLATE NOCASE AND ScheduleName = @scheduleName COLLATE NOCASE;";
+            command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@jobName", jobName);
+            command.AddParam("@scheduleName", scheduleName);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<IReadOnlyList<JobDefinition>> GetJobsDueByScheduleAsync(DateTime nowUtc)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            // DISTINCT is the coalescing rule: two links of one job falling due together are one
+            // occurrence of that job, not two concurrent runs of it.
+            // NextRun IS NOT NULL is deliberate — see IJobCatalogStore for why "no next occurrence"
+            // must not mean "run now".
+            command.CommandText = @"
+                SELECT DISTINCT j.* FROM Jobs j
+                JOIN JobSchedules js ON js.JobName = j.Name COLLATE NOCASE
+                JOIN Schedules s ON s.Name = js.ScheduleName COLLATE NOCASE
+                WHERE j.IsEnabled = 1
+                  AND s.IsEnabled = 1
+                  AND js.NextRun IS NOT NULL
+                  AND js.NextRun <= @now;";
+            command.AddParam("@now", nowUtc.ToString("O"));
+
+            var jobs = new List<JobDefinition>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) jobs.Add(ReadJob(reader));
+            return jobs;
+        }
+
         // ── Job ↔ Notification ────────────────────────────────────────────────────
 
         public async Task<bool> AddJobNotificationAsync(string jobName, string notificationName, NotificationTrigger trigger)

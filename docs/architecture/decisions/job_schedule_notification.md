@@ -517,9 +517,17 @@ var next = CronExpression.Parse(schedule.Cron).GetNextOccurrence(DateTimeOffset.
 
 * `Cronos` is currently referenced only by `ETL-SQL.Portal`; the Orchestrator project needs the
   reference. It is an existing, already-inventoried dependency.
-* A job with several schedules computes `NextRun` per link; the scheduler fires the earliest due link
-  and records `LastRun` on that link.
-* Two links of the same job falling due simultaneously must coalesce into **one** run, not two.
+* A job with several schedules computes `NextRun` per link.
+* Two links of the same job falling due simultaneously coalesce into **one** run, not two — the due
+  query returns each job once however many of its links are due.
+* One run then marks **every** link that was due as fired, not just the earliest. Advancing only one
+  would leave the others due and the job would re-fire on the next tick, undoing the coalescing a
+  step later.
+* A link that was *not* due keeps its own arming: it belongs to a different occurrence, and a run it
+  did not cause must not be recorded against it.
+* `Jobs.NextRun` remains for display, derived as the earliest across the job's **enabled** links. A
+  disabled schedule is still advanced — so re-enabling takes effect at once — but cannot be what an
+  operator reads as the next run, because it cannot make the job due.
 * `DateTime.Now` must not survive anywhere in the path: comparisons move to `DateTimeOffset` in UTC,
   with the timezone applied only inside the cron calculation.
 
@@ -568,11 +576,17 @@ being dropped. The existing per-job lease already makes the decision cluster-wid
 
 ### `NextRun` on a new link
 
-`NextRun IS NULL` currently means *due immediately*, which is how a newly created job starts running.
-Carried onto a link that would be surprising: linking a `0 2 * * *` schedule at 3pm would fire the
-job at 3pm and again at 02:00. **A link computes its `NextRun` from the cron expression at creation
-time** — an explicit cron time means what it says. `CREATE JOB` followed by a link therefore does not
-run the job immediately; trigger it by hand if that is wanted.
+`NextRun IS NULL` means *due immediately* on the legacy interval path, which is how a newly created
+job starts running. Carried onto a link that would be surprising: linking a `0 2 * * *` schedule at
+3pm would fire the job at 3pm and again at 02:00. **A link computes its `NextRun` from the cron
+expression at creation time** — an explicit cron time means what it says. `CREATE JOB` followed by a
+link therefore does not run the job immediately; trigger it by hand if that is wanted.
+`JobScheduleAttachment.AttachAsync` is the one place that composes the catalog with the cron
+calculation, so no caller can create an unarmed link by forgetting.
+
+On the link side, null therefore means the opposite: **not due**. A cron expression can legitimately
+have no further occurrence (`0 0 30 2 *`), and treating "never again" as "run now" would spin that
+job on every tick. A link left dormant that way is logged, not silently ignored.
 
 ### Timezone resolution
 

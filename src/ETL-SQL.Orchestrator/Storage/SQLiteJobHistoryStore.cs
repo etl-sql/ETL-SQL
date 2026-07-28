@@ -991,7 +991,16 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Jobs WHERE IsEnabled = 1 AND (NextRun IS NULL OR NextRun <= @now);";
+            // Legacy interval trigger, for jobs with no schedule attached. A job that has links is
+            // driven by GetJobsDueByScheduleAsync instead, and must be excluded here: its
+            // Jobs.NextRun is a derived display value that starts NULL, and NULL means "due now" on
+            // this path — so without the exclusion a link-scheduled job would fire on every tick.
+            // This whole branch goes away once CREATE JOB stops producing interval jobs.
+            command.CommandText = @"
+                SELECT * FROM Jobs
+                WHERE IsEnabled = 1
+                  AND (NextRun IS NULL OR NextRun <= @now)
+                  AND NOT EXISTS (SELECT 1 FROM JobSchedules js WHERE js.JobName = Jobs.Name COLLATE NOCASE);";
             command.AddParam("@now", now.ToString("O"));
 
             var jobs = new List<JobDefinition>();
