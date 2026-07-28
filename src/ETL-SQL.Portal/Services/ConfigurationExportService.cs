@@ -382,6 +382,29 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 $"    CREATE REFRESH JOB FOR REPORT {Q($"{j.FolderPath}/{j.ReportName}")} " +
                 $"SCHEDULE {Q(j.RefreshInterval)} AT {targetOrchestratorAlias};");
         }
+        var legacyRefreshJobNames = await db.DatasetJobs
+            .AsNoTracking()
+            .Select(j => j.OrchestratorJobName)
+            .ToListAsync(ct);
+        var legacyRefreshJobNameSet = legacyRefreshJobNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var reportJobLinks = await db.ReportJobLinks
+            .AsNoTracking()
+            .Include(j => j.Report)
+                .ThenInclude(r => r.Folder)
+            .OrderBy(j => j.Report.Folder.Path)
+            .ThenBy(j => j.Report.Name)
+            .ThenBy(j => j.OrchestratorAlias)
+            .ThenBy(j => j.JobName)
+            .ToListAsync(ct);
+        var unexportedReportJobLinks = reportJobLinks
+            .Where(j => !legacyRefreshJobNameSet.Contains(j.JobName))
+            .ToList();
+        foreach (var link in unexportedReportJobLinks)
+        {
+            skipped.Add(
+                $"report job link '{link.JobName}' for report '{link.Report.Folder.Path}/{link.Report.Name}' " +
+                $"on Orchestrator '{link.OrchestratorAlias}': schedule metadata is not stored in Portal; export the Orchestrator catalog and attach the schedule manually");
+        }
         emitted.Add($"{refreshJobCount} refresh job(s)");
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");

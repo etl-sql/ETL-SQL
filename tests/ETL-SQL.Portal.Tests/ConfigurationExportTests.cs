@@ -189,6 +189,12 @@ public sealed class ConfigurationExportTests
                 OrchestratorJobName = $"dev-refresh-{suffix}",
                 RefreshInterval = "0 2 * * *"
             });
+            db.ReportJobLinks.Add(new ReportJobLink
+            {
+                ReportId = report.Id,
+                OrchestratorAlias = "prod_orchestrator",
+                JobName = $"link-only-refresh-{suffix}"
+            });
             await db.SaveChangesAsync();
         }
 
@@ -201,6 +207,8 @@ public sealed class ConfigurationExportTests
             $"CREATE REFRESH JOB FOR REPORT '/prod_folder_{suffix}/Production Report {suffix}' " +
             "SCHEDULE '0 2 * * *' AT prod_orchestrator;",
             script);
+        Assert.Contains($"report job link 'link-only-refresh-{suffix}'", script);
+        Assert.Contains("schedule metadata is not stored in Portal", script);
         Assert.DoesNotContain($"dev-refresh-{suffix}", script);
         Assert.DoesNotContain("Admin@Tests99!", script);
         Assert.DoesNotContain("Admin@12345!", script);
