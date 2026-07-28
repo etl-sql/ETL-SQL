@@ -166,12 +166,26 @@ public sealed class NotificationDispatchService(
         NotificationDefinition notification,
         SharedConnectionDefinition connection)
     {
+        return connection.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase)
+            ? BuildSmtpNotificationScript(payload, notification)
+            : BuildEventNotificationScript(payload, notification, connection);
+    }
+
+    private static string BuildEventNotificationScript(
+        NotificationDispatchPayload payload,
+        NotificationDefinition notification,
+        SharedConnectionDefinition connection)
+    {
         const string alias = "__job_notification_sink";
         var recipient = payload.RecipientOverride ?? notification.Recipient ?? string.Empty;
+        var attachmentColumns = payload.AttachmentPaths.Count > 0 ? ", Attachments" : string.Empty;
+        var attachmentValues = payload.AttachmentPaths.Count > 0
+            ? $",{Environment.NewLine}                '{SqlString(string.Join(";", payload.AttachmentPaths))}'"
+            : string.Empty;
         return $"""
             CREATE CONNECTION {alias} AS {connection.ConnectorType}('SHARED:{SqlString(notification.ConnectionName)}');
             INSERT INTO {alias} (
-                Title, Text, SourceKind, JobName, AlertName, ReportId, NotificationName, Trigger, Status, HistoryId, RowsProcessed, Recipient, ErrorMessage, Actor
+                Title, Text, SourceKind, JobName, AlertName, ReportId, NotificationName, Trigger, Status, HistoryId, RowsProcessed, Recipient, ErrorMessage, Actor{attachmentColumns}
             )
             VALUES (
                 '{SqlString(payload.Title)}',
@@ -187,7 +201,30 @@ public sealed class NotificationDispatchService(
                 {payload.RowsProcessed},
                 '{SqlString(recipient)}',
                 '{SqlString(SecretRedactor.Redact(payload.ErrorMessage))}',
-                '{SqlString(payload.Actor)}'
+                '{SqlString(payload.Actor)}'{attachmentValues}
+            );
+            """;
+    }
+
+    private static string BuildSmtpNotificationScript(
+        NotificationDispatchPayload payload,
+        NotificationDefinition notification)
+    {
+        const string alias = "__job_notification_sink";
+        var recipient = payload.RecipientOverride ?? notification.Recipient ?? string.Empty;
+        var attachmentColumns = payload.AttachmentPaths.Count > 0 ? ", Attachments" : string.Empty;
+        var attachmentValues = payload.AttachmentPaths.Count > 0
+            ? $",{Environment.NewLine}                '{SqlString(string.Join(";", payload.AttachmentPaths))}'"
+            : string.Empty;
+        return $"""
+            CREATE CONNECTION {alias} AS SMTP('SHARED:{SqlString(notification.ConnectionName)}');
+            INSERT INTO {alias} (
+                To, Subject, Body{attachmentColumns}
+            )
+            VALUES (
+                '{SqlString(recipient)}',
+                '{SqlString(payload.Title)}',
+                '{SqlString(payload.Text)}'{attachmentValues}
             );
             """;
     }
@@ -195,21 +232,82 @@ public sealed class NotificationDispatchService(
     private static string SqlString(string? value) => (value ?? string.Empty).Replace("'", "''");
 }
 
-public sealed record NotificationDispatchPayload(
-    string NotificationName,
-    string SourceKind,
-    string Title,
-    string Text,
-    string? Trigger = null,
-    string? Status = null,
-    string? JobName = null,
-    string? AlertName = null,
-    string? ReportId = null,
-    long? HistoryId = null,
-    long RowsProcessed = 0,
-    string? RecipientOverride = null,
-    string? ErrorMessage = null,
-    string? Actor = null);
+public sealed record NotificationDispatchPayload
+{
+    public NotificationDispatchPayload(
+        string NotificationName,
+        string SourceKind,
+        string Title,
+        string Text,
+        string? Trigger = null,
+        string? Status = null,
+        string? JobName = null,
+        string? AlertName = null,
+        string? ReportId = null,
+        long? HistoryId = null,
+        long RowsProcessed = 0,
+        string? RecipientOverride = null,
+        string? ErrorMessage = null,
+        string? Actor = null,
+        IReadOnlyList<string>? AttachmentPaths = null)
+    {
+        this.NotificationName = NotificationName;
+        this.SourceKind = SourceKind;
+        this.Title = Title;
+        this.Text = Text;
+        this.Trigger = Trigger;
+        this.Status = Status;
+        this.JobName = JobName;
+        this.AlertName = AlertName;
+        this.ReportId = ReportId;
+        this.HistoryId = HistoryId;
+        this.RowsProcessed = RowsProcessed;
+        this.RecipientOverride = RecipientOverride;
+        this.ErrorMessage = ErrorMessage;
+        this.Actor = Actor;
+        this.AttachmentPaths = ValidateAttachmentPaths(AttachmentPaths);
+    }
+
+    public string NotificationName { get; init; }
+    public string SourceKind { get; init; }
+    public string Title { get; init; }
+    public string Text { get; init; }
+    public string? Trigger { get; init; }
+    public string? Status { get; init; }
+    public string? JobName { get; init; }
+    public string? AlertName { get; init; }
+    public string? ReportId { get; init; }
+    public long? HistoryId { get; init; }
+    public long RowsProcessed { get; init; }
+    public string? RecipientOverride { get; init; }
+    public string? ErrorMessage { get; init; }
+    public string? Actor { get; init; }
+    public IReadOnlyList<string> AttachmentPaths { get; init; }
+
+    private static IReadOnlyList<string> ValidateAttachmentPaths(IReadOnlyList<string>? paths)
+    {
+        if (paths is null || paths.Count == 0)
+            return [];
+
+        var normalized = new List<string>(paths.Count);
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("Notification attachment paths cannot be blank.", nameof(paths));
+
+            if (!Path.IsPathFullyQualified(path))
+                throw new ArgumentException(
+                    "Notification attachment paths must be absolute paths.", nameof(paths));
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath))
+                throw new FileNotFoundException(
+                    $"Notification attachment does not exist: {fullPath}", fullPath);
+            normalized.Add(fullPath.Replace("\\", "/"));
+        }
+
+        return normalized;
+    }
+}
 
 public sealed record NotificationDispatchResult(
     string NotificationName,

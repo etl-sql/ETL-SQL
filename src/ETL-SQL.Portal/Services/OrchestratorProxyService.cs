@@ -194,4 +194,5 @@ public sealed record OrchestratorNotificationDispatchRequest(
     long? HistoryId = null,
     long? RowsProcessed = null,
     string? RecipientOverride = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    IReadOnlyList<string>? AttachmentPaths = null);

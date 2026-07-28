@@ -358,15 +358,17 @@ namespace ETL_SQL.Orchestrator.Service
                 var sourceKind = string.IsNullOrWhiteSpace(req.SourceKind)
                     ? "ALERT"
                     : req.SourceKind.Trim().ToUpperInvariant();
-                if (sourceKind != "ALERT" && sourceKind != "JOB")
-                    return Results.BadRequest(new { Error = "SourceKind must be ALERT or JOB." });
+                if (sourceKind != "ALERT" && sourceKind != "JOB" && sourceKind != "SUBSCRIPTION")
+                    return Results.BadRequest(new { Error = "SourceKind must be ALERT, JOB, or SUBSCRIPTION." });
                 if (string.IsNullOrWhiteSpace(req.Title))
                     return Results.BadRequest(new { Error = "Title is required." });
                 if (string.IsNullOrWhiteSpace(req.Text))
                     return Results.BadRequest(new { Error = "Text is required." });
 
-                var result = await dispatch.DispatchNotificationAsync(
-                    new NotificationDispatchPayload(
+                NotificationDispatchPayload payload;
+                try
+                {
+                    payload = new NotificationDispatchPayload(
                         NotificationName: notificationName,
                         SourceKind: sourceKind,
                         Title: req.Title.Trim(),
@@ -380,8 +382,15 @@ namespace ETL_SQL.Orchestrator.Service
                         RowsProcessed: req.RowsProcessed ?? 0,
                         RecipientOverride: req.RecipientOverride,
                         ErrorMessage: req.ErrorMessage,
-                        Actor: ReadActor(ctx)),
-                    ct);
+                        Actor: ReadActor(ctx),
+                        AttachmentPaths: req.AttachmentPaths);
+                }
+                catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+                {
+                    return Results.BadRequest(new { Error = ex.Message });
+                }
+
+                var result = await dispatch.DispatchNotificationAsync(payload, ct);
 
                 return result.Delivered
                     ? Results.Ok(result)
@@ -978,7 +987,8 @@ namespace ETL_SQL.Orchestrator.Service
             long? HistoryId = null,
             long? RowsProcessed = null,
             string? RecipientOverride = null,
-            string? ErrorMessage = null
+            string? ErrorMessage = null,
+            IReadOnlyList<string>? AttachmentPaths = null
         );
 
         private static long? ReadExpectedVersion(HttpContext context)

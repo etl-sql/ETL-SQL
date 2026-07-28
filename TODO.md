@@ -428,9 +428,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      Portal delivery executor remains active, otherwise the Orchestrator would send a second generic
      job-success message with no report attachment. The Portal delivery executor now reads the
      named notification metadata for SMTP alias + recipients when it is available, falling back to
-     the row only in degraded/local cases. Remaining work: move the final send onto the shared
-     notification dispatcher without losing report export, row-level-security, attachment, and
-     delivery ledger semantics.
+     the row only in degraded/local cases. The shared notification dispatcher now accepts
+     subscription-source payloads with validated attachment paths and emits SMTP-shaped
+     `To`/`Subject`/`Body`/`Attachments` rows for SMTP notifications. Remaining work: have the
+     Portal delivery executor call that dispatcher for the final send after it renders the report
+     and claims the delivery ledger.
    - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact

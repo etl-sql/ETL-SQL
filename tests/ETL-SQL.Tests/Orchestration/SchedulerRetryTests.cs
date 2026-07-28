@@ -303,6 +303,87 @@ namespace ETL_SQL.Tests.Orchestration
             }
         }
 
+        [Fact]
+        public async Task DispatchNotificationAsync_SmtpPayloadIncludesRecipientAndAttachments()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_smtp_{Guid.NewGuid():N}.db");
+            var catalogRoot = Path.Combine(Path.GetTempPath(), $"etlsql_notify_smtp_catalog_{Guid.NewGuid():N}");
+            var attachment = Path.Combine(Path.GetTempPath(), $"etlsql_notify_attachment_{Guid.NewGuid():N}.csv");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                await File.WriteAllTextAsync(attachment, "id,value");
+                await store.SaveNotificationAsync(new NotificationDefinition(
+                    "SubscriptionMail",
+                    "notify_mail",
+                    Recipient: "recipient@example.com"));
+
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
+                    "notify_mail",
+                    "SMTP",
+                    "smtp.example.invalid",
+                    new Dictionary<string, string>
+                    {
+                        ["HOST"] = "smtp.example.invalid",
+                        ["DEFAULT_FROM"] = "noreply@example.com"
+                    },
+                    Disabled: false));
+
+                string? script = null;
+                var mockExecutor = new Mock<IScriptExecutor>();
+                mockExecutor.Setup(e => e.ExecuteTextAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<CancellationToken>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<long>(),
+                        It.IsAny<ExecutionIdentity?>()))
+                    .ReturnsAsync((string s, string? sessionId, CancellationToken ct, string? jobName, long queueWaitMs, ExecutionIdentity? identity) =>
+                    {
+                        script = s;
+                        return new ScriptExecutionResult(true, 1, null);
+                    });
+
+                var dispatch = CreateNotificationDispatchService(store, connectionCatalog, mockExecutor.Object);
+
+                var result = await dispatch.DispatchNotificationAsync(new NotificationDispatchPayload(
+                    "SubscriptionMail",
+                    "SUBSCRIPTION",
+                    "Report ready",
+                    "Attached report.",
+                    RecipientOverride: "override@example.com",
+                    AttachmentPaths: [attachment]));
+
+                Assert.True(result.Delivered);
+                Assert.NotNull(script);
+                Assert.Contains("CREATE CONNECTION __job_notification_sink AS SMTP('SHARED:notify_mail')", script);
+                Assert.Contains("To, Subject, Body, Attachments", script);
+                Assert.Contains("override@example.com", script);
+                Assert.Contains("Report ready", script);
+                Assert.Contains(attachment.Replace("\\", "/"), script);
+            }
+            finally
+            {
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+                try { if (File.Exists(attachment)) File.Delete(attachment); } catch { }
+                try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void NotificationDispatchPayload_RejectsMissingAttachment()
+        {
+            var missing = Path.Combine(Path.GetTempPath(), $"etlsql_missing_attachment_{Guid.NewGuid():N}.csv");
+
+            Assert.Throws<FileNotFoundException>(() => new NotificationDispatchPayload(
+                "SubscriptionMail",
+                "SUBSCRIPTION",
+                "Report ready",
+                "Attached report.",
+                AttachmentPaths: [missing]));
+        }
+
         private static async Task<LocalConnectionCatalogProvider> CreateNotificationConnectionCatalogAsync(string catalogRoot)
         {
             var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
