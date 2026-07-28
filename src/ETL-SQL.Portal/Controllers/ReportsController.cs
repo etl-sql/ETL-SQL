@@ -1447,10 +1447,20 @@ public class ReportsController : ControllerBase
         if (hasActive && !cascade)
             return Conflict(new { error = "Report has active subscriptions. Use ?cascade=true." });
 
-        var attachedRefreshJobs = await db.DatasetJobs
+        var attachedReportJobLinks = await db.ReportJobLinks
+            .Where(j => j.ReportId == report.Id)
+            .OrderBy(j => j.OrchestratorAlias)
+            .ThenBy(j => j.JobName)
+            .Select(j => $"{j.OrchestratorAlias}:{j.JobName}")
+            .ToListAsync();
+        var attachedLegacyRefreshJobs = await db.DatasetJobs
             .Where(j => j.ReportId == report.Id)
             .Select(j => j.OrchestratorJobName)
             .ToListAsync();
+        var attachedRefreshJobs = attachedReportJobLinks
+            .Concat(attachedLegacyRefreshJobs.Where(jobName => !attachedReportJobLinks.Any(link =>
+                link.EndsWith($":{jobName}", StringComparison.OrdinalIgnoreCase))))
+            .ToList();
         if (attachedRefreshJobs.Count > 0)
         {
             return Conflict(new

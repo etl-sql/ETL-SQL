@@ -336,6 +336,46 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("DatasetJobs");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("LastRefreshedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OrchestratorAlias")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobName");
+
+                    b.HasIndex("ReportId", "OrchestratorAlias", "JobName")
+                        .IsUnique();
+
+                    b.ToTable("ReportJobLinks");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.Property<int>("Id")
@@ -1760,6 +1800,17 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Report");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
+                        .WithMany("ReportJobLinks")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Folder", "Parent")
@@ -2156,6 +2207,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("EmbedTokens");
 
                     b.Navigation("Favorites");
+
+                    b.Navigation("ReportJobLinks");
 
                     b.Navigation("SavedViews");
 

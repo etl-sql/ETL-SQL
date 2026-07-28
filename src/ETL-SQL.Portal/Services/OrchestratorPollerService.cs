@@ -100,29 +100,49 @@ public class OrchestratorPollerService(
                     continue;
                 }
 
-                var datasetJob = await db.DatasetJobs
+                var reportJobLink = await db.ReportJobLinks
                     .Include(j => j.Report)
-                    .FirstOrDefaultAsync(j => j.OrchestratorJobName == jobName, ct);
+                    .FirstOrDefaultAsync(j => j.JobName == jobName, ct);
 
-                if (datasetJob is null)
+                if (reportJobLink is not null)
                 {
+                    log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after job {JobName}",
+                        reportJobLink.ReportId, jobName);
+
+                    reportJobLink.LastRefreshedAt = endTime;
+                    reportJobLink.UpdatedAt = endTime;
+                    await db.SaveChangesAsync(ct);
+
+                    // The poller is the sole trusted dataset execution path. Interactive execution and
+                    // user-triggered refreshes retain their real UserId caller context.
+                    await jobs.EnqueueRefreshAsync(
+                        reportJobLink.ReportId,
+                        userId: 0,
+                        scriptPath: reportJobLink.Report.ScriptPath,
+                        trustedDatasetExecution: true);
+
                     _lastPollTime = endTime;
                     continue;
                 }
 
-                log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after job {JobName}",
-                    datasetJob.ReportId, jobName);
+                var datasetJob = await db.DatasetJobs
+                    .Include(j => j.Report)
+                    .FirstOrDefaultAsync(j => j.OrchestratorJobName == jobName, ct);
 
-                datasetJob.LastRefreshedAt = endTime;
-                await db.SaveChangesAsync(ct);
+                if (datasetJob is not null)
+                {
+                    log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after legacy job {JobName}",
+                        datasetJob.ReportId, jobName);
 
-                // The poller is the sole trusted dataset execution path. Interactive execution and
-                // user-triggered refreshes retain their real UserId caller context.
-                await jobs.EnqueueRefreshAsync(
-                    datasetJob.ReportId,
-                    userId: 0,
-                    scriptPath: datasetJob.Report.ScriptPath,
-                    trustedDatasetExecution: true);
+                    datasetJob.LastRefreshedAt = endTime;
+                    await db.SaveChangesAsync(ct);
+
+                    await jobs.EnqueueRefreshAsync(
+                        datasetJob.ReportId,
+                        userId: 0,
+                        scriptPath: datasetJob.Report.ScriptPath,
+                        trustedDatasetExecution: true);
+                }
 
                 _lastPollTime = endTime;
             }

@@ -60,7 +60,18 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
                 scriptInspection.BuildSourceDtos(scriptInspection.ParseSourceTables(d.SourceQuery), "DatasetSource")))
             .ToList();
 
-        var jobs = await db.DatasetJobs
+        var reportJobLinks = await db.ReportJobLinks
+            .Where(j => j.ReportId == id)
+            .OrderBy(j => j.OrchestratorAlias)
+            .ThenBy(j => j.JobName)
+            .Select(j => new ReportDependencyRefreshJobDto(
+                j.Id,
+                j.JobName,
+                "",
+                j.LastRefreshedAt))
+            .ToListAsync();
+
+        var legacyJobs = await db.DatasetJobs
             .Where(j => j.ReportId == id)
             .OrderBy(j => j.OrchestratorJobName)
             .Select(j => new ReportDependencyRefreshJobDto(
@@ -69,6 +80,10 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
                 j.RefreshInterval,
                 j.LastRefreshedAt))
             .ToListAsync();
+        var jobs = reportJobLinks
+            .Concat(legacyJobs.Where(j => !reportJobLinks.Any(link =>
+                string.Equals(link.OrchestratorJobName, j.OrchestratorJobName, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
 
         var alerts = await db.ReportAlerts
             .AsNoTracking()

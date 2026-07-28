@@ -1590,6 +1590,13 @@ CREATE VISUAL Total AS CARD (
                 RefreshInterval = "Hourly",
                 LastRefreshedAt = DateTime.UtcNow
             });
+            db.ReportJobLinks.Add(new ReportJobLink
+            {
+                ReportId = reportId,
+                OrchestratorAlias = "prod_orch",
+                JobName = "refresh_sales_summary_v2",
+                LastRefreshedAt = DateTime.UtcNow
+            });
             var alert = new ReportAlert
             {
                 ReportId = reportId,
@@ -1618,7 +1625,10 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("Dependency Report", body!["report"]!["name"]!.GetValue<string>());
         Assert.Equal("#stage", body["manifestDatasets"]![0]!["tempTableName"]!.GetValue<string>());
         Assert.Equal("Sales Summary", body["registeredDatasets"]![0]!["name"]!.GetValue<string>());
-        Assert.Equal("refresh_sales_summary", body["refreshJobs"]![0]!["orchestratorJobName"]!.GetValue<string>());
+        Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
+            n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary");
+        Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
+            n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary_v2");
         Assert.Equal("RevenueDrop", body["alerts"]![0]!["name"]!.GetValue<string>());
         Assert.Equal("Total", body["alerts"]![0]!["visualName"]!.GetValue<string>());
         Assert.Equal("prod_orch", body["alerts"]![0]!["notifications"]![0]!["orchestratorAlias"]!.GetValue<string>());

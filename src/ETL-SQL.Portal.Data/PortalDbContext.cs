@@ -22,6 +22,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AuditOutboxMessage> AuditOutboxMessages => Set<AuditOutboxMessage>();
     public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
+    public DbSet<ReportJobLink> ReportJobLinks => Set<ReportJobLink>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
@@ -79,10 +80,19 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
+            e.HasMany(x => x.ReportJobLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
             e.HasMany(x => x.ShareLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
             e.HasMany(x => x.EmbedTokens).WithOne(t => t.Report).HasForeignKey(t => t.ReportId);
             e.HasMany(x => x.SavedViews).WithOne(v => v.Report).HasForeignKey(v => v.ReportId);
             e.HasMany(x => x.Alerts).WithOne(a => a.Report).HasForeignKey(a => a.ReportId);
+        });
+
+        builder.Entity<ReportJobLink>(e =>
+        {
+            e.HasIndex(x => new { x.ReportId, x.OrchestratorAlias, x.JobName }).IsUnique();
+            e.HasIndex(x => x.JobName);
+            e.Property(x => x.OrchestratorAlias).HasMaxLength(128);
+            e.Property(x => x.JobName).HasMaxLength(256);
         });
 
         builder.Entity<PortalExecutionJob>(e =>

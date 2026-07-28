@@ -130,6 +130,7 @@ public class Report : IVersionedEntity
     public ICollection<ReportSnapshot> Snapshots { get; set; } = [];
     public ICollection<Subscription> Subscriptions { get; set; } = [];
     public ICollection<DatasetJob> DatasetJobs { get; set; } = [];
+    public ICollection<ReportJobLink> ReportJobLinks { get; set; } = [];
     public ICollection<ReportFavorite> Favorites { get; set; } = [];
     public ICollection<ReportShareLink> ShareLinks { get; set; } = [];
     public ICollection<ReportEmbedToken> EmbedTokens { get; set; } = [];
@@ -579,7 +580,21 @@ public class PolicyMachineEntity
     public string? CanaryGroup { get; set; }
 }
 
-// ── Dataset Refresh Jobs ──────────────────────────────────────────────────────
+// ── Report Refresh Job Links ──────────────────────────────────────────────────
+
+public class ReportJobLink
+{
+    public int Id { get; set; }
+    public int ReportId { get; set; }
+    public Report Report { get; set; } = null!;
+    public string OrchestratorAlias { get; set; } = "";
+    public string JobName { get; set; } = "";
+    public DateTime? LastRefreshedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// ── Legacy Dataset Refresh Jobs ───────────────────────────────────────────────
 
 public class DatasetJob
 {

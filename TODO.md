@@ -345,8 +345,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      deleted, and changing its semantics now would break its tests for no benefit. `DateTime.Now`
      disappears from the path when it does.
 2. **Portal persistence:**
-   - Replace `DatasetJobs` with `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`), EF
-     migrations on both providers.
+   - **[PARTIAL]** Introduce `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`) with EF
+     migrations on both providers; legacy `DatasetJobs` remains for compatibility until creation/import/export
+     paths are fully moved.
    - Add `Alerts` (`ReportId` FK, visual + operator + threshold, plus `LastState`/`LastEvaluatedAt`/
      `LastNotifiedAt` for transition-based alerting) and `AlertNotifications` (orchestrator alias +
      notification name — the destination lives in the orchestrator's catalog, so it cannot be an FK
@@ -417,16 +418,16 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      while linked, cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are
      attached.
 5. **Consumers, UI, docs:**
-   - `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
-     Portal refresh; the completed trusted refresh evaluates alerts attached to that report.
-     `SCRIPT` completions ignored.
+   - **[PARTIAL]** `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
+     Portal refresh, with legacy `DatasetJobs` fallback; completed trusted refreshes evaluate alerts attached
+     to that report. `SCRIPT` completions ignored.
    - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
    - **[PARTIAL]** `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
-     attached Orchestrator notification names; lineage impact includes report alerts with attached
-     notification links; shared-connection impact also lists alert notification links that use that
-     Orchestrator alias.
+     attached Orchestrator notification names plus `ReportJobLinks`; lineage impact includes report alerts
+     with attached notification links; shared-connection impact also lists alert notification links that use
+     that Orchestrator alias.
    - **[DONE]** Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).

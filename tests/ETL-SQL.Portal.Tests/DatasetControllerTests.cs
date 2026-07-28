@@ -888,6 +888,12 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
                 OrchestratorJobName = $"refresh_{suffix}",
                 RefreshInterval = "0 2 * * *"
             });
+            db.ReportJobLinks.Add(new ReportJobLink
+            {
+                ReportId = reportId,
+                OrchestratorAlias = "prod_orchestrator",
+                JobName = $"refresh_v2_{suffix}"
+            });
             await db.SaveChangesAsync();
         }
 
@@ -896,6 +902,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.Conflict, deleteRes.StatusCode);
         var body = (await deleteRes.Content.ReadFromJsonAsync<JsonObject>(_json))!;
         Assert.Contains("attached refresh jobs", body["error"]!.GetValue<string>());
+        Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
+            n!.GetValue<string>() == $"prod_orchestrator:refresh_v2_{suffix}");
 
         using var verifyScope = _factory.Services.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
