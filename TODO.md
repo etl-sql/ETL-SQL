@@ -390,10 +390,13 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      notification's shared connection catalog alias so `SECRET:` resolution and connector policy stay
      on the normal engine path. Covered by `SchedulerRetryTests` final-outcome, trigger-selection,
      and missing/disabled skip cases.
-   - **[PARTIAL]** Portal-evaluated report alerts now use the same Orchestrator delivery path:
+   - **[DONE]** Portal-evaluated report alerts now use the same Orchestrator delivery path:
      trusted scheduled refreshes evaluate active alerts from the persisted snapshot, dispatch attached
      notification names through `/api/notifications/{name}/dispatch` only when the alert enters
      `TRIGGERED`, and update `LastState`/`LastEvaluatedAt`/`LastTriggeredAt`/`LastNotifiedAt`.
+     `PortalAlertEvaluationServiceTests` covers the transition-only dispatch and persisted state.
+     Alias-specific routing remains a later multi-Orchestrator configuration slice; the Portal
+     currently has one configured Orchestrator endpoint.
    - The Orchestrator dispatches, for jobs **and** for alerts — one catalog, one path, so an operator
      configures a mail destination once. The Portal evaluates the alert condition and calls the
      Orchestrator to deliver. Resolve connections through normal `SECRET:` resolution on the
