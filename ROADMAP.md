@@ -607,6 +607,50 @@ every report, dataset, connection, subscription, alert, saved view, and anonymou
 with a test per surface; and a newly-introduced authorship short-circuit fails the build rather than
 a release gate.
 
+### Orchestrator — Per-Object Authorization
+
+**Origin (2026-07-27).** Surfaced while designing the unified job/schedule/notification model
+([job_schedule_notification.md](docs/architecture/decisions/job_schedule_notification.md)). Making the
+Orchestrator the system of record for `JOB`, `SCHEDULE`, and `NOTIFICATION` moves durable, mutable,
+operationally significant objects into a store whose API authenticates with a **single shared key**
+(`X-Orchestrator-Key`). It has no user or group model at all.
+
+The consequence: anyone who can reach the orchestrator connection can create, alter, disable, or drop
+**anyone's** job. The only boundary is the use-ACL on the orchestrator connection in the Portal's
+governed catalog, which is connection-level, not per-object. That is a real asymmetry with the
+Portal, which enforces per-object RBAC — and it is a deliberate deferral, not an oversight.
+
+**Why it is acceptable for now:** the Portal is the only client, and it authenticates as a single
+principal. Per-object ACLs against one subject would be authorization theatre.
+
+**What ships in v0.18.0 instead — attribution, not authorization.** The Portal passes the acting
+user's identity through on every mutation, and the Orchestrator records `CreatedBy` / `ModifiedBy` on
+the job, schedule, and notification rows. One column each, purely additive, no identity model
+required. It makes "who scheduled this?" answerable — the question that will come up first — and it
+makes a silent takeover (see below) visible after the fact.
+
+**The trigger to build real authorization** is a second client, or one Orchestrator shared across
+teams or tenants. At that point the Orchestrator needs an identity model, which realistically means
+federating to the Portal's or directly to OIDC rather than inventing a third one. Sequence it with
+the enterprise identity work in `docs/guides/administration.md`.
+
+The work, when triggered:
+
+1. **Federate identity** rather than duplicating it — the caller's identity arrives as a verifiable
+   token, not a trusted header, which is the difference between authorization and attribution.
+2. **Per-object ACLs** on `JOB`, `SCHEDULE`, `NOTIFICATION`, reusing the Portal's grant vocabulary so
+   there is one permission model to reason about, not two.
+3. **Ownership on the shared-name hazard.** Names are unique per orchestrator and `CREATE OR ALTER`
+   is supported, so a second script importing an existing name silently takes the object over rather
+   than erroring. Until ACLs exist this is mitigated socially — naming conventions, a category in
+   `OPTIONS`, and the attribution columns above. Ownership makes it enforceable.
+4. **Audit parity** with the Portal: every mutation attributable to a real principal, not to "the
+   Portal".
+
+**Definition of done.** A user who can reach an orchestrator cannot mutate a job they do not own, the
+Orchestrator's audit records name a person rather than a service, and the permission vocabulary is
+the Portal's rather than a second one.
+
 ### Portal — Governance Dashboard
 
 Finish the data-steward-first dashboard described in

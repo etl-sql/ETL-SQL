@@ -5,7 +5,8 @@ and notification model in ETL-SQL. It details how the engine, portal, and orches
 replace fragmented scheduler mechanisms with a robust, enterprise-grade scheduler similar to SQL
 Agent.
 
-**Status:** design agreed 2026-07-27. Remaining open points are in §12.
+**Status:** design final as of 2026-07-27. §12 records every decision taken and the deferrals accepted
+with them; there are no open questions blocking implementation.
 
 ---
 
@@ -119,10 +120,16 @@ Orchestrator cannot know: which of its reports a job refreshes. Everything else 
 through `OrchestratorProxyService` (`api/scheduled-jobs`), not mirrored. There is therefore no
 Portal→Orchestrator catalog reconciler; §9 covers the smaller problem that remains.
 
-`NOTIFICATION` is defined **where it is used**, targeted by the `EXECUTE` block — the same grammar
-against two catalogs, exactly as `CREATE CONNECTION` already works in both. A notification is a thin
-object (connection alias + recipient), so this is not duplication of substance, and it keeps alert
-delivery inside the Portal where the alert is evaluated. See §12 Q1.
+**There is exactly one `NOTIFICATION` catalog, and it is the Orchestrator's.** An earlier draft split
+it — the Orchestrator's for job outcomes, the Portal's for alerts — which meant an operator
+configuring the same mail destination twice. Instead the Portal *evaluates* an alert condition and
+then asks the Orchestrator to dispatch through a named notification.
+
+That dependency is free: an alert fires on a refresh completion which came from the Orchestrator, so
+the Orchestrator is reachable by construction at exactly the moment an alert needs it. It also
+preserves the property that makes §10 worth having — a job's failure notification does not depend on
+the Portal being up. An `ALERT` therefore names the orchestrator connection whose notification it
+uses, in the same way a job does.
 
 ```mermaid
 erDiagram
@@ -131,6 +138,7 @@ erDiagram
     Job ||--o{ JobNotification : notifies
     Notification ||--o{ JobNotification : "is used by"
     Alert ||--o{ AlertNotification : notifies
+    Notification ||--o{ AlertNotification : "is used by (cross-store)"
     Connection ||--o{ Notification : transports
     Report ||--o{ ReportJobLink : "refreshed by"
     Report ||--o{ Alert : "watched by"
@@ -264,18 +272,25 @@ visualization has changed, so it lives with the Portal, which is the only compon
 evaluate the condition:
 
 ```sql
-EXECUTE portal_admin BEGIN
+-- The destination lives in the orchestrator's single notification catalog.
+EXECUTE orch_admin BEGIN
     CREATE NOTIFICATION FinanceOps
     USING local_mail TO 'finance-ops@example.com';
+END;
 
+EXECUTE portal_admin BEGIN
     CREATE ALERT RevenueDrop
     FOR REPORT 'folders/Finance Dashboard'
     WHEN VISUAL RevenueChart < 100000
     WITH (DESCRIPTION = 'Revenue below the quarterly floor');
 
-    ALTER ALERT RevenueDrop ADD NOTIFICATION FinanceOps;
+    ALTER ALERT RevenueDrop ADD NOTIFICATION orch_admin.FinanceOps;
 END;
 ```
+
+The qualified `orch_admin.FinanceOps` is deliberate: the alert lives in the Portal and the
+notification in an orchestrator, so the reference has to name which one. An unqualified name is
+rejected rather than assumed, since a Portal may talk to several orchestrators.
 
 * **The visual is an identifier, not a string literal** (`RevenueChart`, not `'RevenueChart'`),
   matching how visuals are named everywhere else in Report-SQL. Today's
@@ -284,10 +299,16 @@ END;
 * **`ADD NOTIFICATION` takes no `ON <condition>`** — the alert *is* the condition. Only jobs need a
   trigger qualifier.
 * **`FOR SCRIPT` is not offered in this pass.** `WHEN VISUAL` has no meaning for a script, and the
-  scalar-query predicate that would replace it is a larger grammar. See §12 Q2.
-* **Evaluation is on report refresh completion.** The Portal already learns of every refresh through
-  `OrchestratorPollerService`, so an alert needs no schedule of its own and cannot go stale relative
-  to the data it watches. See §12 Q2 for the alternative.
+  scalar-query predicate that would replace it is a larger grammar. Recorded in §12.
+* **Evaluation is on scheduled report refresh completion.** The Portal already learns of every
+  refresh through `OrchestratorPollerService`, so an alert needs no schedule of its own and cannot go
+  stale relative to the data it watches. Interactive refreshes do not evaluate alerts — a user
+  opening a report should not be able to trigger mail to a distribution list.
+* **Alerting is transition-based**, reusing the policy v0.17.0 established for data-quality
+  assertions: a pass→fail transition notifies, and repeated fail→fail evaluations are suppressed
+  until the condition recovers. Without this, a condition that stays true for ten refreshes sends ten
+  identical messages. This is stateful, so `Alerts` carries the previous evaluation result
+  (`LastState`, plus `LastEvaluatedAt` and `LastNotifiedAt` for operator diagnosis).
 * `ASSERT JOB … ON FAILURE ALERT <connection>` (v0.17.0) sends to a bare connection. It becomes
   `ON FAILURE NOTIFY <notification>` so there is one destination concept, not two.
 
@@ -319,8 +340,38 @@ There is no `RENAME TO`. Changing a name is `DROP` + `CREATE`, and the parser sa
 not found: the diagnostic names the closest existing object rather than only reporting absence, since
 a typo'd name is otherwise indistinguishable from a missing object.
 
-`CREATE OR ALTER` and `CREATE OR REPLACE` are **not** supported for these kinds in this pass; the
-parser must reject them by name rather than silently discarding the mode.
+### 4.5 Replay must converge — `CREATE OR ALTER`, `CREATE OR REPLACE`, idempotent links
+
+Keeping `Name` as the key is what makes an exported script reconcile with what exists (§2). That only
+pays off if re-running the script **converges** instead of failing, so both creation modes are
+supported for all four kinds, with distinct meanings:
+
+| Mode | Meaning |
+| :--- | :--- |
+| `CREATE` | Fails if the name exists. |
+| `CREATE OR ALTER` | Patches the named object. **Links are left alone.** |
+| `CREATE OR REPLACE` | Full redefinition. **Links are dropped** and must be restated. |
+
+The link distinction is the one that matters. If a script stops saying
+`ALTER JOB X ADD SCHEDULE S2`, only a `REPLACE` that resets links converges to what the script now
+says; under `OR ALTER` the orphaned link survives forever and the export drifts from reality.
+`ConfigurationExportService` therefore emits `CREATE OR REPLACE` followed by the full set of links.
+
+**`ADD` and `REMOVE` must be idempotent.** Fixing `CREATE` alone is not enough — a replayed
+`ALTER JOB X ADD SCHEDULE S` would otherwise fail on a duplicate primary key and break the import at
+the third statement. `ADD` on an existing link and `REMOVE` on an absent one are both no-ops, not
+errors.
+
+This also dissolves the atomicity problem: an `EXECUTE … BEGIN … END` block forwards statements one
+at a time, so a failure partway through leaves an orphan. With convergent replay, re-running the
+block heals it.
+
+**The hazard to accept:** with `CREATE OR ALTER`, a second script importing a name that already
+exists does not error — it silently takes the object over. Two teams' scripts then overwrite each
+other on every import, each looking correct in isolation. This is the SQL Agent problem and it has
+the same social answer: naming conventions plus a category in `OPTIONS`. The `CreatedBy`/`ModifiedBy`
+attribution columns (§10) at least make the takeover visible after the fact. Enforcing it needs
+per-object ownership on the Orchestrator, which is a roadmap item.
 
 **Referential rules, enforced and tested:**
 
@@ -334,7 +385,7 @@ parser must reject them by name rather than silently discarding the mode.
 Restrict is the default because these objects are shared: cascading a `DROP SCHEDULE` would silently
 unschedule unrelated jobs.
 
-### 4.5 Retired forms
+### 4.6 Retired forms
 
 Each is rejected by the parser with a diagnostic naming its replacement — they all parse cleanly
 today, so a generic syntax error would leave the reader guessing:
@@ -393,18 +444,33 @@ migrations. Because `Name` stays the primary key, **every change here is additiv
 how this store has always been modified. `JobHistory`, `JobState` and `HostMetricsDaily` are not
 touched at all.
 
-### `Jobs` (altered, additively)
+### `Jobs` (altered)
 
 * Add `DisplayName`, `Description`, `Options`, `JobType` (`TEXT NOT NULL DEFAULT 'SCRIPT'`),
-  `TargetPath` (`TEXT`).
-* `Interval`, `Unit` and `AtTime` become unused once schedules move to `Schedules`. They are
-  `NOT NULL`, so they are left in place with defaults rather than dropped, and the code stops reading
-  them. Removing them is a later contract step, not part of this change.
+  `TargetPath` (`TEXT`), `CreatedBy`, `ModifiedBy` (§10).
+* **Drop `Interval`, `Unit`, `AtTime`.** No installation exists, so there is no reason to carry dead
+  `NOT NULL` columns and explain them later. Developers with a local orchestrator database from
+  earlier testing should delete it: an existing `Jobs` row has no schedule link after this change and
+  will silently never fire, which is exactly the sort of thing that costs an afternoon to diagnose.
 
 ### `Schedules`, `Notifications` (new, Orchestrator)
 
-`Name` (PK), `DisplayName`, `Description`, `Options`, `IsEnabled`, plus:
-`Schedules` → `Cron`, `TimeZone`. `Notifications` → `ConnectionName`, `Recipient` (nullable).
+`Name` (PK, `COLLATE NOCASE`), `DisplayName`, `Description`, `Options`, `IsEnabled`, `CreatedBy`,
+`ModifiedBy`, plus: `Schedules` → `Cron`, `TimeZone`. `Notifications` → `ConnectionName`,
+`Recipient` (nullable).
+
+### Name collation
+
+Names are **case-insensitive**: `FinanceNightly` and `financenightly` are the same object, and the
+second `CREATE` reports the name as taken. `Jobs.Name` is `TEXT PRIMARY KEY` with no collation today,
+so this is a change — and a necessary one, because the name is now the identity and identifiers
+elsewhere in ETL-SQL are case-insensitive. The store already has the mechanism: `COLLATE NOCASE` with
+`IOrchestratorStoreDialect.CollationDdl` providing the Postgres ICU equivalent. Apply it to every
+name column and to the link tables' foreign keys.
+
+A compound key was considered for cross-script collisions and rejected: it reintroduces exactly the
+identity complexity §2 removes. One name per orchestrator, first writer wins, pick another — the SQL
+Agent model. See §4.5 for the sharper edge, which is takeover under `CREATE OR ALTER`.
 
 A credential is **never** stored on a `Notification`; the connection alias resolves through normal
 connection/secret resolution at dispatch time, keeping the `SECRET:`-reference rule intact.
@@ -419,8 +485,12 @@ in the PK.
 
 * `Alerts` and `AlertNotifications` (new, EF migrations on both providers). `Alerts.ReportId` is a
   real FK; the condition is stored as visual name + operator + threshold, replacing the columns on
-  the existing alert entity.
-* `Notifications` — the Portal's own destination catalog, for alert delivery (§3, §12 Q1).
+  the existing alert entity. `LastState`, `LastEvaluatedAt` and `LastNotifiedAt` carry the
+  transition-based alerting state (§4.3).
+  `AlertNotifications` stores the orchestrator alias alongside the notification name, because the
+  destination lives in that orchestrator's catalog and cannot be a foreign key across the boundary.
+  A dangling reference is therefore possible and must be surfaced by the sweep in §9, not discovered
+  at dispatch time.
 * `DatasetJobs` is replaced by `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`).
   `ReportId` stays a **real foreign key** so report deletion is enforced by the database; the job's
   `TargetPath` is a mutable property that `ALTER JOB … SET TARGET` changes, and the Portal keeps the
@@ -452,6 +522,55 @@ var next = CronExpression.Parse(schedule.Cron).GetNextOccurrence(DateTimeOffset.
 * Two links of the same job falling due simultaneously must coalesce into **one** run, not two.
 * `DateTime.Now` must not survive anywhere in the path: comparisons move to `DateTimeOffset` in UTC,
   with the timezone applied only inside the cron calculation.
+
+### Granularity: minutes, deliberately
+
+Standard five-field cron is minute-granularity, and that is the whole of what is supported. The
+retired `EVERY 5 SECONDS` form has no replacement, by decision rather than by omission.
+
+Cronos can parse six-field cron with seconds (`CronFormat.IncludeSeconds`), so this is recoverable if
+a need appears. It is left out because sub-minute scheduling would also be capped by
+`Scheduler:SleepIntervalSeconds`, which defaults to **30** — a `*/5 * * * * *` schedule would fire
+every 30 seconds, not every 5, and the discrepancy would depend on an unrelated configuration knob.
+Supporting seconds means dispatching on field count (5 → standard, 6 → seconds, anything else → a
+parse error) *and* documenting the tick-interval coupling. Neither is hard; both are unnecessary
+today.
+
+Non-divisor intervals also have no cron equivalent — `EVERY 90 MINUTES` cannot be expressed. Use two
+schedules on one job, or the nearest divisor.
+
+### Daylight saving
+
+A cron expression is evaluated in the schedule's named timezone, so local times can be skipped or
+repeated. `0 2 * * *` in `America/New_York`:
+
+* **Spring forward** — 02:00 does not exist. The occurrence is **skipped**; the job does not run that
+  day. Cronos returns the next valid occurrence, so this is its default behaviour, adopted rather
+  than worked around.
+* **Fall back** — 02:00 occurs twice. The job runs **once**, on the first occurrence.
+
+Both are what an operator expects from a wall-clock schedule, and both must be pinned by tests
+against fixed dates rather than left to the library's discretion.
+
+### Overlapping runs
+
+**Not addressed in this pass, matching today's behaviour.** `GetDueJobsAsync` selects on
+`IsEnabled = 1 AND (NextRun IS NULL OR NextRun <= @now)` and does not exclude a job that is still
+running, so a run that overruns its schedule can overlap with the next. Multiple schedules on one job
+do not change this — they still point at one job — but they do make it easier to reach.
+
+The intended behaviour when it is addressed: **refuse the new run and record it**, the SQL Agent
+model. Recording matters as much as refusing — a silent skip makes a job that always overruns look
+healthy while quietly running at half cadence, so the skip should write a history row rather than
+being dropped. The existing per-job lease already makes the decision cluster-wide.
+
+### `NextRun` on a new link
+
+`NextRun IS NULL` currently means *due immediately*, which is how a newly created job starts running.
+Carried onto a link that would be surprising: linking a `0 2 * * *` schedule at 3pm would fire the
+job at 3pm and again at 02:00. **A link computes its `NextRun` from the cron expression at creation
+time** — an explicit cron time means what it says. `CREATE JOB` followed by a link therefore does not
+run the job immediately; trigger it by hand if that is wanted.
 
 ### Timezone resolution
 
@@ -518,19 +637,45 @@ outage is exactly when one is needed. Dispatch resolves the connection alias thr
 normal connection and `SECRET:` resolution **on the orchestrator host**, the same path any script
 already uses to send mail. No new trust boundary, and no credential crosses a process boundary.
 
-**Alert notifications are dispatched by the Portal**, which is where the condition is evaluated and
-where the governed connection catalog already lives.
+**Alert notifications are dispatched by the Orchestrator too.** The Portal evaluates the condition —
+that is Report-SQL work only it can do — and then calls the Orchestrator to deliver through the named
+notification. One catalog, one dispatch path, and the operator configures a mail destination once.
 
-The consequence to accept: a job notification's connection alias must exist where the job runs. The
+The consequence to accept: a notification's connection alias must exist where the job runs. The
 governed `PortalSharedConnection` catalog stays in the Portal because it is a *governance* artifact —
 ACLs, ownership, usage ledger, per-user audit — and the Orchestrator has no user or group model at
 all (its API authenticates with a single `X-Orchestrator-Key`). Moving the catalog there would mean
 inventing an identity model in the Orchestrator, a far larger change than this one. The alias is
-therefore a **contract between the two**, not a shared row; see §12 Q3.
+therefore a **contract between the two**, not a shared row; recorded as a deferral in §12.
+
+### Delivery failure
+
+A notification that fails to send **never fails the job**. The run's status reflects the work it did,
+not whether an email left the building — otherwise an SMTP outage turns every successful job red and
+buries the real failures. Delivery failures are logged and recorded against the job run, and retried
+under the notification's own policy, independently of the job's `MAX_RETRIES`.
+
+### Attribution
+
+The Orchestrator's API authenticates with a single `X-Orchestrator-Key` and has no user model, so it
+cannot authorize per object — anyone who can reach the connection can mutate anyone's job. That is a
+deliberate deferral, recorded in `ROADMAP.md` under *Orchestrator — Per-Object Authorization*, with
+the trigger to build it being a second client or a shared multi-team orchestrator.
+
+What ships here is the cheap half: the Portal passes the acting user's identity through on every
+mutation, and `Jobs`, `Schedules` and `Notifications` record `CreatedBy` / `ModifiedBy`. One column
+each, purely additive, no identity model. It answers "who scheduled this?" and it makes the
+`CREATE OR ALTER` takeover in §4.5 visible after the fact. It is **attribution, not authorization** —
+a trusted header, not a verifiable token — and the spec should not be read as claiming otherwise.
+
+### Audit
 
 All mutations (`CREATE`, `ALTER`, `DROP`, `ENABLE`, `DISABLE`, `ADD`, `REMOVE`) log to the persistent
 audit outbox: `Action = CREATE_JOB | DROP_SCHEDULE | ATTACH_SCHEDULE | …`, `Target = <name>`,
-`Payload = cron / timezone / connection alias / trigger condition`.
+`Payload = cron / timezone / connection alias / trigger condition`, `Actor = <attributed identity>`.
+
+New statements support `WHAT_IF`, matching the precedent set by the managed-connection work: a
+governed mutation that cannot be dry-run is one an operator has to test in production.
 
 ---
 
@@ -555,29 +700,44 @@ audit outbox: `Action = CREATE_JOB | DROP_SCHEDULE | ATTACH_SCHEDULE | …`, `Ta
 
 ---
 
-## 12. Open Questions
+## 12. Decisions Log and Known Deferrals
 
-**Q1 — Is a Portal-side `NOTIFICATION` catalog right?** §3 defines notifications where they are used:
-the Orchestrator's for job outcomes, the Portal's for alerts, same grammar targeted by the `EXECUTE`
-block. The alternative is a single Portal-owned catalog that the Orchestrator reads, which removes
-the two-catalog surface but makes job notifications depend on the Portal being reachable — losing the
-property that makes §10 worth having. Confirm the split.
+Every question raised during design is settled. What remains is recorded here as deliberate, so it is
+not rediscovered as a surprise.
 
-**Q2 — Alert scope in this pass.** Two sub-parts, both currently answered conservatively:
-  * `FOR SCRIPT` alerts are excluded because `WHEN VISUAL` has no meaning there and a scalar-query
-    predicate is a larger grammar. Add later, or in scope now?
-  * Alerts evaluate on report refresh completion rather than carrying their own `SCHEDULE`. That
-    needs no new mechanism and cannot go stale relative to the data, but it means a report that never
-    refreshes never alerts, and an alert cannot be checked more often than its report refreshes.
-    Acceptable, or should `ALTER ALERT … ADD SCHEDULE` exist?
+### Settled
 
-**Q3 — Should the Portal provision connection aliases onto an orchestrator?** §10 makes the alias a
-contract an operator satisfies on each orchestrator host. That is honest but manual, and it means
-configuring SMTP twice for an operator who thinks of it as one thing. A provisioning path would
-remove the duplication but must carry the `SECRET:` reference without ever carrying the value, and
-must define what happens when the reference does not resolve on the target host.
+| Question | Decision |
+| :--- | :--- |
+| Notification catalog: one or two? | **One, on the Orchestrator.** The Portal evaluates an alert condition and asks the Orchestrator to dispatch. Keeps job notifications working during a Portal outage, and the Orchestrator is up by construction when an alert fires, because the refresh completion came from it. One place an operator configures SMTP. |
+| Alert scope | `FOR REPORT` only. `WHEN VISUAL` has no meaning for a script, and the scalar-query predicate that would replace it is a larger grammar than this pass needs. |
+| Alert cadence | Evaluated on scheduled refresh completion; no schedule of its own. |
+| Alert repetition | Transition-based, reusing the v0.17.0 data-quality policy. |
+| Sub-minute schedules | Not supported. Recoverable via `CronFormat.IncludeSeconds`, deliberately unbuilt (§7). |
+| Overlapping runs | Left as today's behaviour — overlap is possible. Intended fix recorded in §7. |
+| Name collation | Case-insensitive, `COLLATE NOCASE`, first writer wins. |
+| Rename | Not supported. `DISPLAY_NAME` covers the motive; identity stays stable for config-as-code. |
+| Idempotent replay | `CREATE OR ALTER` / `CREATE OR REPLACE` for all kinds, idempotent `ADD`/`REMOVE` (§4.5). |
+| Existing job data | None exists; `Interval`/`Unit`/`AtTime` are dropped outright. |
+| Orchestrator authorization | Attribution now, authorization on the roadmap (§10). |
 
-**Q4 — Subscription sugar: how much is user-visible?** Generated jobs appear in `eng.jobs` and the
-Portal job list, now with a readable `DisplayName`. Should they still be hidden by default behind an
-`IsSystemGenerated` flag, or is seeing them the point — one place where every scheduled thing is
-visible?
+### Known deferrals
+
+1. **No per-object authorization on the Orchestrator.** Anyone who can reach the orchestrator
+   connection can mutate anyone's job; the connection use-ACL is the only boundary and it is
+   connection-level. `ROADMAP.md` → *Orchestrator — Per-Object Authorization*.
+2. **Silent takeover under `CREATE OR ALTER`.** A second script importing an existing name adopts the
+   object rather than erroring. Mitigated by naming conventions, a category in `OPTIONS`, and the
+   attribution columns; enforceable only once ownership exists.
+3. **Overlapping runs are possible.** Refuse-and-record is the intended behaviour; §7 has the design.
+4. **Connection aliases are provisioned per host.** A job notification's alias must exist where the
+   job runs, so an operator configures it on the orchestrator rather than the Portal pushing it. A
+   provisioning path would have to carry the `SECRET:` reference without the value and define what
+   happens when it does not resolve on the target.
+5. **Subscription-generated jobs are visible** in `eng.jobs` and the Portal job list, with a readable
+   `DISPLAY_NAME`. No `IsSystemGenerated` filter is built; add one if the list becomes noisy.
+6. **`ASSERT JOB … ON FAILURE NOTIFY`** needs a defined behaviour when a script runs outside an
+   orchestrator context and no notification catalog exists — a clear error, not a silent no-op.
+7. **`KILL JOB`** is unaffected by the `SHOW`-retirement pass and keeps its current form.
+8. **`TargetPath` is informational for `REPORT` jobs.** `ReportJobLinks.ReportId` is authoritative;
+   the path is a label kept in step by the Portal, not a second source of truth to reconcile.

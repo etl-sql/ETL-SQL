@@ -320,20 +320,28 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 
 1. **Orchestrator store (system of record for `JOB`/`SCHEDULE`/`NOTIFICATION`):**
    - Add `Schedules`, `Notifications`, `JobSchedules`, `JobNotifications`; add `DisplayName`,
-     `Description`, `Options`, `JobType`, `TargetPath` to `Jobs`.
-   - `Interval`/`Unit`/`AtTime` become unused but are `NOT NULL`; leave them with defaults and stop
-     reading them. Removing them is a later contract step.
-   - **All additive**, matching how this raw-DDL store (`SqliteOrchestratorDialect`,
-     `NpgsqlOrchestratorDialect`, idempotent `ALTER TABLE … ADD COLUMN`) has always been changed.
-     `JobHistory`, `JobState` and `HostMetricsDaily` are untouched.
+     `Description`, `Options`, `JobType`, `TargetPath`, `CreatedBy`, `ModifiedBy` to `Jobs`.
+   - Drop `Interval`/`Unit`/`AtTime` — no installation exists, so carrying dead `NOT NULL` columns
+     buys nothing. Tell developers to delete a local orchestrator DB from earlier testing: an
+     existing `Jobs` row has no schedule link afterwards and silently never fires.
+   - Every name column is `COLLATE NOCASE` (`IOrchestratorStoreDialect.CollationDdl` supplies the
+     Postgres equivalent) — the name is now the identity, and identifiers elsewhere in ETL-SQL are
+     case-insensitive. `Jobs.Name` has no collation today, so this is a change.
+   - `JobHistory`, `JobState` and `HostMetricsDaily` are untouched.
+   - A `JobSchedules` link computes `NextRun` at creation rather than leaving it null: null means
+     "due now", so linking a `0 2 * * *` schedule at 3pm would otherwise fire immediately.
+   - Cron is minute-granularity only; `EVERY n SECONDS` has no replacement, deliberately. DST policy:
+     skipped local times do not run, repeated local times run once — pinned by tests on fixed dates.
    - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
      reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
      run; no `DateTime.Now` anywhere in the path.
 2. **Portal persistence:**
    - Replace `DatasetJobs` with `ReportJobLinks` (`ReportId` FK, `OrchestratorAlias`, `JobName`), EF
      migrations on both providers.
-   - Add `Alerts` (`ReportId` FK, visual + operator + threshold), `AlertNotifications`, and the
-     Portal's own `Notifications` catalog for alert delivery.
+   - Add `Alerts` (`ReportId` FK, visual + operator + threshold, plus `LastState`/`LastEvaluatedAt`/
+     `LastNotifiedAt` for transition-based alerting) and `AlertNotifications` (orchestrator alias +
+     notification name — the destination lives in the orchestrator's catalog, so it cannot be an FK
+     and a dangling reference must be surfaced by the sweep, not discovered at dispatch).
    - The `DropTable` violates `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRolling
      ExpandContract`; add the migration to that test's `PreDeploymentBreakingMigrations` allow-list
      with a written justification (precedent: `_DropSmtpConnections`).
@@ -346,15 +354,29 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Remove `REFRESH EVERY` from `CREATE DATASET`; delete
      `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
      `DatasetRefreshIntervalRule`.
-   - `IF EXISTS` before the name; reject `CREATE OR ALTER`/`CREATE OR REPLACE` for these kinds by
-     name rather than discarding the mode.
+   - `IF EXISTS` before the name. **`CREATE OR ALTER` and `CREATE OR REPLACE` are both supported** —
+     config-as-code only pays off if replay converges instead of failing. `OR ALTER` patches and
+     leaves links alone; `OR REPLACE` is a full redefinition that **drops links**, which is the only
+     way a script that stopped saying `ADD SCHEDULE S2` converges to what it now says. `ADD`/`REMOVE`
+     must be idempotent too, or a replayed link statement fails on a duplicate key and breaks the
+     import at statement three. This also heals a partially-applied `EXECUTE` block on re-run.
+   - `WHAT_IF` on every new statement, matching the managed-connection precedent.
    - Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
      from `AT <connection>` with the two-token lookahead `ExpressionParser` already uses.
    - Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
      today, so a generic syntax error would leave the reader guessing.
 4. **Notification dispatch and audit:**
-   - Implement dispatch per the answer to Q4, resolving connections through the governed catalog so
-     no credential is stored on the `Notification`.
+   - The Orchestrator dispatches, for jobs **and** for alerts — one catalog, one path, so an operator
+     configures a mail destination once. The Portal evaluates the alert condition and calls the
+     Orchestrator to deliver. Resolve connections through normal `SECRET:` resolution on the
+     orchestrator host so no credential is stored on the `Notification`.
+   - A delivery failure never fails the job — an SMTP outage must not turn every successful run red.
+     Log it, record it against the run, retry under the notification's own policy.
+   - Alerts are transition-based (reuse the v0.17.0 data-quality policy) and evaluate only on
+     *scheduled* refresh completion — an interactive refresh must not mail a distribution list.
+   - Attribution: the Portal passes the acting user through; `CreatedBy`/`ModifiedBy` are recorded.
+     This is attribution, not authorization — see `ROADMAP.md` → *Orchestrator — Per-Object
+     Authorization* for the deferral and its trigger.
    - Outbox audit for `CREATE_JOB`, `DROP_SCHEDULE`, `ATTACH_SCHEDULE`, `ATTACH_NOTIFICATION`, …
    - Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION` while linked,
      cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are attached.
@@ -368,10 +390,12 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).
-   - `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.job_schedules` — reconcile with the
-     `SHOW`-retirement inventory above, which currently lists `eng.refresh_jobs`.
+   - `ConfigurationExportService` emits `CREATE OR REPLACE` plus the full link set, so an export
+     round-trips to exactly what it describes.
+   - `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile
+     with the `SHOW`-retirement inventory above, which currently lists `eng.refresh_jobs`.
    - Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using the retired
-     inline-`AS` job form.
+     inline-`AS` job form or `REFRESH EVERY`.
 
 #### P1 — Make lifecycle modifiers explicit and uniform
 
