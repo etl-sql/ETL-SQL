@@ -412,7 +412,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Attribution: the Portal passes the acting user through; `CreatedBy`/`ModifiedBy` are recorded.
      This is attribution, not authorization — see `ROADMAP.md` → *Orchestrator — Per-Object
      Authorization* for the deferral and its trigger.
-   - Outbox audit for `CREATE_JOB`, `DROP_SCHEDULE`, `ATTACH_SCHEDULE`, `ATTACH_NOTIFICATION`, …
+   - **[DONE]** Outbox audit for `CREATE_JOB`, `DROP_SCHEDULE`, `ATTACH_SCHEDULE`, `ATTACH_NOTIFICATION`, …
    - **[DONE]** Enforce the referential rules: restrict on `DROP SCHEDULE`/`DROP NOTIFICATION`
      while linked, cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are
      attached.

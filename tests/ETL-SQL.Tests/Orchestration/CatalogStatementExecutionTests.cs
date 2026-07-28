@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
@@ -62,6 +63,7 @@ namespace ETL_SQL.Tests.Orchestration
             SetCatalogObjectEnabledStatement => new SetCatalogObjectEnabledStatementHandler(_store),
             AlterJobAttachmentStatement => new AlterJobAttachmentStatementHandler(_store),
             CreateJobStatement => new CreateJobStatementHandler(_store, _store),
+            DropJobStatement => new DropJobStatementHandler(_store),
             SetWhatIfStatement => new SetWhatIfStatementHandler(new EngineLogger()),
             _ => throw new InvalidOperationException($"No catalog handler for {statement.GetType().Name}.")
         };
@@ -304,6 +306,39 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CatalogMutations_EmitSecurityAuditEvents()
+        {
+            var sink = new RecordingSecurityEventSink();
+            using var eventScope = SecurityEventRuntime.UseSinkForScope(sink);
+
+            await RunAsync(
+                "CREATE SCHEDULE T ON '0 2 * * *';" +
+                "CREATE NOTIFICATION N USING local_mail;" +
+                "CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql';" +
+                "ALTER JOB Nightly ADD SCHEDULE T;" +
+                "ALTER JOB Nightly ADD NOTIFICATION N ON FAILURE;" +
+                "DROP JOB Nightly;");
+
+            Assert.Contains(sink.Events, e =>
+                e.Type == SecurityEventType.CatalogMutation &&
+                e.Decision == SecurityEventDecision.Allowed &&
+                e.SanitizedTarget == "JOB:Nightly" &&
+                e.Reason.Contains("CREATE_JOB", StringComparison.Ordinal));
+            Assert.Contains(sink.Events, e =>
+                e.Type == SecurityEventType.CatalogMutation &&
+                e.SanitizedTarget == "JOB:Nightly/SCHEDULE:T" &&
+                e.Reason.Contains("ATTACH_SCHEDULE", StringComparison.Ordinal));
+            Assert.Contains(sink.Events, e =>
+                e.Type == SecurityEventType.CatalogMutation &&
+                e.SanitizedTarget == "JOB:Nightly/NOTIFICATION:N/ON:FAILURE" &&
+                e.Reason.Contains("ATTACH_NOTIFICATION", StringComparison.Ordinal));
+            Assert.Contains(sink.Events, e =>
+                e.Type == SecurityEventType.CatalogMutation &&
+                e.SanitizedTarget == "JOB:Nightly" &&
+                e.Reason.Contains("DROP_JOB", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public async Task AddSchedule_UnknownSchedule_IsRefused()
         {
             await SaveJobAsync("Nightly");
@@ -396,6 +431,12 @@ namespace ETL_SQL.Tests.Orchestration
             var schedule = await _store.GetScheduleAsync("Nightly");
             Assert.Equal("0 5 * * *", schedule!.Cron);
             Assert.False(schedule.IsEnabled);
+        }
+
+        private sealed class RecordingSecurityEventSink : ISecurityEventSink
+        {
+            public List<SecurityEvent> Events { get; } = [];
+            public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
         }
     }
 }

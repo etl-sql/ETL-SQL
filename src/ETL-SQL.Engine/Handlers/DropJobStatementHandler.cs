@@ -32,6 +32,11 @@ public class DropJobStatementHandler : IStatementHandler
         {
             // DeleteJobAsync deletes both the job and its history entries.
             await _store.DeleteJobAsync(stmt.Name);
+            CatalogStatementSupport.AuditMutation(
+                context,
+                "DROP_JOB",
+                $"JOB:{stmt.Name}",
+                $"Job '{stmt.Name}' dropped.");
             context.Log($"Job '{stmt.Name}' dropped successfully.", ConsoleColor.Yellow);
         }
         catch (Exception ex)

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Scheduling;
 using Microsoft.Extensions.Configuration;
@@ -69,6 +70,33 @@ internal static class CatalogStatementSupport
             "an orchestrator — EXECUTE <orchestrator> BEGIN … END — or configure a local job store.",
             null, statement.Line, statement.Column);
     }
+
+    public static void AuditMutation(IExecutionContext context, string action, string target, string reason)
+    {
+        var policy = context.ExecutionPolicy;
+        var actor = context.ExecutionIdentity?.RealUser
+                    ?? context.ExecutionIdentity?.EffectiveUser
+                    ?? policy?.Actor
+                    ?? "system";
+        var effective = context.ExecutionIdentity?.EffectiveUser
+                        ?? policy?.Actor
+                        ?? actor;
+        SecurityEventRuntime.Emit(SecurityEventContract.Create(
+            SecurityEventSeverity.Information,
+            SecurityEventType.CatalogMutation,
+            actor,
+            effective,
+            target,
+            SecurityEventDecision.Allowed,
+            $"{action}: {reason}") with
+        {
+            ScriptHash = policy?.ScriptHash,
+            JobId = policy?.JobId,
+            CorrelationId = policy?.CorrelationId,
+            PolicyVersion = policy?.PolicyVersion,
+            PolicyHash = policy?.PolicyHash
+        });
+    }
 }
 
 /// <summary>Handles <c>CREATE [OR ALTER|OR REPLACE] SCHEDULE</c>.</summary>
@@ -114,6 +142,11 @@ public class CreateScheduleStatementHandler(IJobCatalogStore? catalog = null, IC
             CreatedBy: identity,
             ModifiedBy: identity));
 
+        CatalogStatementSupport.AuditMutation(
+            context,
+            existing is null ? "CREATE_SCHEDULE" : stmt.Mode == ObjectCreationMode.CreateOrReplace ? "REPLACE_SCHEDULE" : "ALTER_SCHEDULE",
+            $"SCHEDULE:{stmt.Name}",
+            $"Schedule '{stmt.Name}' {(existing is null ? "created" : "updated")}.");
         context.Log($"Schedule '{stmt.Name}' {(existing is null ? "created" : "updated")}.", ConsoleColor.Green);
     }
 }
@@ -157,6 +190,11 @@ public class CreateNotificationStatementHandler(IJobCatalogStore? catalog = null
             CreatedBy: identity,
             ModifiedBy: identity));
 
+        CatalogStatementSupport.AuditMutation(
+            context,
+            existing is null ? "CREATE_NOTIFICATION" : stmt.Mode == ObjectCreationMode.CreateOrReplace ? "REPLACE_NOTIFICATION" : "ALTER_NOTIFICATION",
+            $"NOTIFICATION:{stmt.Name}",
+            $"Notification '{stmt.Name}' {(existing is null ? "created" : "updated")}.");
         context.Log($"Notification '{stmt.Name}' {(existing is null ? "created" : "updated")}.", ConsoleColor.Green);
     }
 }
@@ -199,6 +237,11 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
                 Options = CatalogStatementSupport.SerializeOptions(stmt.Metadata.Options) ?? existing.Options,
                 ModifiedBy = identity
             });
+            CatalogStatementSupport.AuditMutation(
+                context,
+                "ALTER_SCHEDULE",
+                $"SCHEDULE:{stmt.Name}",
+                $"Schedule '{stmt.Name}' updated.");
         }
         else
         {
@@ -222,6 +265,11 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
                 Options = CatalogStatementSupport.SerializeOptions(stmt.Metadata.Options) ?? existing.Options,
                 ModifiedBy = identity
             });
+            CatalogStatementSupport.AuditMutation(
+                context,
+                "ALTER_NOTIFICATION",
+                $"NOTIFICATION:{stmt.Name}",
+                $"Notification '{stmt.Name}' updated.");
         }
 
         context.Log($"{kind} '{stmt.Name}' updated.", ConsoleColor.Green);
@@ -282,6 +330,11 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
                 $"Detach it with ALTER JOB <job> REMOVE {kind} {stmt.Name} before dropping it.",
                 null, stmt.Line, stmt.Column);
 
+        CatalogStatementSupport.AuditMutation(
+            context,
+            $"DROP_{kind}",
+            $"{kind}:{stmt.Name}",
+            $"{kind} '{stmt.Name}' dropped.");
         context.Log($"{kind} '{stmt.Name}' dropped.", ConsoleColor.Green);
     }
 }
@@ -319,6 +372,11 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         if (!matched)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
 
+        CatalogStatementSupport.AuditMutation(
+            context,
+            $"{verb}_{kind}",
+            $"{kind}:{stmt.Name}",
+            $"{kind} '{stmt.Name}' {(stmt.IsEnabled ? "enabled" : "disabled")}.");
         context.Log($"{kind} '{stmt.Name}' {(stmt.IsEnabled ? "enabled" : "disabled")}.", ConsoleColor.Green);
     }
 }
@@ -361,6 +419,12 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         if (stmt.Action == JobAttachmentAction.Remove)
         {
             var removed = await store.RemoveJobScheduleAsync(stmt.JobName, stmt.TargetName);
+            if (removed)
+                CatalogStatementSupport.AuditMutation(
+                    context,
+                    "DETACH_SCHEDULE",
+                    $"JOB:{stmt.JobName}/SCHEDULE:{stmt.TargetName}",
+                    $"Schedule '{stmt.TargetName}' detached from job '{stmt.JobName}'.");
             context.Log(removed
                 ? $"Schedule '{stmt.TargetName}' detached from job '{stmt.JobName}'."
                 : $"Schedule '{stmt.TargetName}' was not attached to job '{stmt.JobName}'; nothing to do.");
@@ -376,6 +440,12 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         // dormant in this model, so a job attached without one would silently never run.
         var nextRun = CronSchedule.GetNextOccurrence(schedule.Cron, schedule.TimeZone);
         var added = await store.AddJobScheduleAsync(stmt.JobName, schedule.Name, nextRun);
+        if (added)
+            CatalogStatementSupport.AuditMutation(
+                context,
+                "ATTACH_SCHEDULE",
+                $"JOB:{stmt.JobName}/SCHEDULE:{schedule.Name}",
+                $"Schedule '{schedule.Name}' attached to job '{stmt.JobName}'.");
 
         context.Log(added
             ? $"Job '{stmt.JobName}' now runs on schedule '{schedule.Name}'"
@@ -396,6 +466,12 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         if (stmt.Action == JobAttachmentAction.Remove)
         {
             var removed = await store.RemoveJobNotificationAsync(stmt.JobName, stmt.TargetName, trigger);
+            if (removed)
+                CatalogStatementSupport.AuditMutation(
+                    context,
+                    "DETACH_NOTIFICATION",
+                    $"JOB:{stmt.JobName}/NOTIFICATION:{stmt.TargetName}/ON:{trigger.ToString().ToUpperInvariant()}",
+                    $"Notification '{stmt.TargetName}' ON {trigger.ToString().ToUpperInvariant()} detached from job '{stmt.JobName}'.");
             context.Log(removed
                 ? $"Notification '{stmt.TargetName}' ON {trigger.ToString().ToUpperInvariant()} detached from job '{stmt.JobName}'."
                 : $"Notification '{stmt.TargetName}' ON {trigger.ToString().ToUpperInvariant()} was not attached to job '{stmt.JobName}'; nothing to do.");
@@ -410,6 +486,12 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         try
         {
             var added = await store.AddJobNotificationAsync(stmt.JobName, notification.Name, trigger);
+            if (added)
+                CatalogStatementSupport.AuditMutation(
+                    context,
+                    "ATTACH_NOTIFICATION",
+                    $"JOB:{stmt.JobName}/NOTIFICATION:{notification.Name}/ON:{trigger.ToString().ToUpperInvariant()}",
+                    $"Notification '{notification.Name}' ON {trigger.ToString().ToUpperInvariant()} attached to job '{stmt.JobName}'.");
             context.Log(added
                 ? $"Job '{stmt.JobName}' now notifies '{notification.Name}' ON {trigger.ToString().ToUpperInvariant()}."
                 : $"Job '{stmt.JobName}' already notifies '{notification.Name}' ON {trigger.ToString().ToUpperInvariant()}; left as it is.");

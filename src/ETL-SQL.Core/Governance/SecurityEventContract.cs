@@ -18,7 +18,8 @@ public enum SecurityEventType
     PolicyValidationFailure,
     PolicyAvailabilityFailure,
     EnrollmentChanged,
-    ResourceLimitViolation
+    ResourceLimitViolation,
+    CatalogMutation
 }
 
 public enum SecurityEventDecision

@@ -103,6 +103,11 @@ public class CreateJobStatementHandler : IStatementHandler
         if (existing is not null && stmt.Mode == ObjectCreationMode.CreateOrReplace)
             await ResetAttachmentsAsync(stmt.JobName);
 
+        CatalogStatementSupport.AuditMutation(
+            context,
+            existing is null ? "CREATE_JOB" : stmt.Mode == ObjectCreationMode.CreateOrReplace ? "REPLACE_JOB" : "ALTER_JOB",
+            $"JOB:{stmt.JobName}",
+            $"Job '{stmt.JobName}' {(existing is null ? "created" : "updated")} as {stmt.TargetKind.ToString().ToUpperInvariant()} '{targetPath}'.");
         context.Log($"Job '{stmt.JobName}' {(existing is null ? "created" : "updated")} as " +
                     $"{stmt.TargetKind.ToString().ToUpperInvariant()} '{targetPath}'.", ConsoleColor.Green);
     }
