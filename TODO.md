@@ -163,8 +163,8 @@ live users, remove contradictory forms now rather than carrying permanent compat
          schema-bound — but check the test fixtures that still resolve it first.
          Passwords are deliberately not migrated; re-entry as `SECRET:` references is the
          documented path.
-   - [ ] `SmtpPasswordProtector` becomes dead once the table goes — delete it and its DI
-         registration.
+   - [x] `SmtpPasswordProtector` is gone; no source or test references remain, and SMTP delivery
+         now copies `SECRET:` references instead of decrypting Portal-held ciphertext.
    - [ ] **Redact resolved credentials in engine output — a capability lost in this change.**
          `SubscriptionDeliveryService.Sanitize` used to take the plaintext password and scrub it
          from downstream error text by literal replacement. The Portal no longer holds the
