@@ -413,9 +413,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      while linked, cascade the links on `DROP JOB`, restrict report deletion while refresh jobs are
      attached.
 5. **Consumers, UI, docs:**
-   - **[PARTIAL]** `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
+   - **[DONE]** `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
      Portal refresh, with legacy `DatasetJobs` fallback; completed trusted refreshes evaluate alerts attached
-     to that report. `SCRIPT` completions ignored.
+     to that report. `SCRIPT` completions ignored. Verified 2026-07-28 with:
+     `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
+     "FullyQualifiedName~FaultInjectionRecoveryTests"` (8 passed).
    - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`. Current legacy
      subscription APIs at least preserve delivery time end to end: `atTime` is returned in DTOs,
      can be updated, and updates are mirrored to the Orchestrator job while this bridge remains.

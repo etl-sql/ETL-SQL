@@ -196,6 +196,99 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             && value.Contains(corruptOrchDb, StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public async Task OrchestratorPoller_RefreshesNormalizedReportJobLinkBeforeLegacyDatasetJob()
+    {
+        using var factory = new PortalWebFactory();
+        _ = factory.CreateClient(); // build the host and apply migrations
+
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", "normalized_refresh.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Poller Normalized Refresh';");
+        const string jobName = "shared_refresh_job";
+        int normalizedReportId;
+        int legacyReportId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder { Name = "Poller", Path = "/poller", OwnerId = 1 };
+            var normalizedReport = new Report
+            {
+                Folder = folder,
+                Name = "Normalized",
+                ScriptPath = scriptPath,
+                CreatedBy = 1
+            };
+            var legacyReport = new Report
+            {
+                Folder = folder,
+                Name = "Legacy",
+                ScriptPath = scriptPath,
+                CreatedBy = 1
+            };
+            db.Reports.AddRange(normalizedReport, legacyReport);
+            await db.SaveChangesAsync();
+
+            normalizedReportId = normalizedReport.Id;
+            legacyReportId = legacyReport.Id;
+            db.ReportJobLinks.Add(new ReportJobLink
+            {
+                ReportId = normalizedReportId,
+                OrchestratorAlias = "default",
+                JobName = jobName
+            });
+            db.DatasetJobs.Add(new DatasetJob
+            {
+                ReportId = legacyReportId,
+                OrchestratorJobName = jobName,
+                RefreshInterval = "Hourly"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.InitializeAsync();
+        var runId = await store.LogJobStartAsync(jobName);
+        await store.LogJobEndAsync(runId, "SUCCESS");
+
+        var poller = ActivatorUtilities.CreateInstance<OrchestratorPollerService>(factory.Services);
+        await poller.PollAsync(CancellationToken.None);
+
+        await using var verifyScope = factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var queued = await verifyDb.PortalExecutionJobs.SingleAsync(j => j.Kind == "Refresh");
+        Assert.Equal(normalizedReportId, queued.ReportId);
+        Assert.Equal(0, queued.UserId);
+
+        var jobs = factory.Services.GetRequiredService<ExecutionJobService>();
+        var inMemoryJob = await jobs.GetAsync(queued.Id);
+        Assert.NotNull(inMemoryJob);
+        Assert.True(inMemoryJob!.TrustedDatasetExecution);
+
+        var link = await verifyDb.ReportJobLinks.SingleAsync(j => j.ReportId == normalizedReportId);
+        var legacy = await verifyDb.DatasetJobs.SingleAsync(j => j.ReportId == legacyReportId);
+        Assert.NotNull(link.LastRefreshedAt);
+        Assert.Null(legacy.LastRefreshedAt);
+    }
+
+    [Fact]
+    public async Task OrchestratorPoller_IgnoresUnlinkedScriptCompletion()
+    {
+        using var factory = new PortalWebFactory();
+        _ = factory.CreateClient(); // build the host and apply migrations
+
+        var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.InitializeAsync();
+        var runId = await store.LogJobStartAsync("standalone_script_job");
+        await store.LogJobEndAsync(runId, "SUCCESS");
+
+        var poller = ActivatorUtilities.CreateInstance<OrchestratorPollerService>(factory.Services);
+        await poller.PollAsync(CancellationToken.None);
+
+        await using var verifyScope = factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await verifyDb.PortalExecutionJobs.AnyAsync());
+    }
+
     /// <summary>
     /// Storage unavailability must fail the load-balancer probe closed. The richer /health endpoint
     /// is for operators; /healthz is the traffic gate and should return 503 as soon as shared
