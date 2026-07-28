@@ -99,6 +99,7 @@ namespace ETL_SQL.Tests.Reporting
                 => Task.FromResult(_items.TryGetValue(name, out var m) ? m : null);
             public Task<bool> Exists(string name) => Task.FromResult(_items.ContainsKey(name));
             public Task<bool> CanEditAsync(string name, string callerPermissions) => Task.FromResult(true);
+            public Task<bool> CanRefreshAsync(string name, string callerPermissions) => Task.FromResult(true);
             public Task SetStale(string name) => Task.CompletedTask;
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
                 => Task.FromResult<IEnumerable<DatasetMetadata>>(_items.Values.ToList());
@@ -108,6 +109,10 @@ namespace ETL_SQL.Tests.Reporting
                 RefreshJob = (reportId, orchestratorJobName, refreshInterval);
                 return Task.CompletedTask;
             }
+            public Task<DatasetPublishTarget?> AuthorizePublishAsync(string targetFolderPath, string callerPermissions)
+                => Task.FromResult<DatasetPublishTarget?>(null);
+            public Task AuditPublishAsync(int? userId, string datasetName, string targetFolderPath, bool succeeded, string? failureReason = null)
+                => Task.CompletedTask;
             public string BuildDatasetFilePath(int datasetId, string name)
                 => Path.Combine(root, $"{name.TrimStart('&', '#')}_{datasetId}.parquet");
         }

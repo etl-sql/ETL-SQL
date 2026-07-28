@@ -72,11 +72,17 @@ namespace ETL_SQL.Tests.Reporting
 
             public Task<bool> Exists(string name) => Task.FromResult(true);
             public Task<bool> CanEditAsync(string name, string callerPermissions) => Task.FromResult(true);
+            public Task<bool> CanRefreshAsync(string name, string callerPermissions) => Task.FromResult(true);
             public Task SetStale(string name) => Task.CompletedTask;
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions) =>
                 Task.FromResult<IEnumerable<DatasetMetadata>>([new DatasetMetadata { Id = 42, Name = "secret-dataset" }]);
 
             public Task Delete(string name) => throw new InvalidOperationException("delete failed");
+            public Task RegisterRefreshJobAsync(int reportId, string orchestratorJobName, string refreshInterval) => Task.CompletedTask;
+            public Task<DatasetPublishTarget?> AuthorizePublishAsync(string targetFolderPath, string callerPermissions) =>
+                Task.FromResult<DatasetPublishTarget?>(null);
+            public Task AuditPublishAsync(int? userId, string datasetName, string targetFolderPath, bool succeeded,
+                string? failureReason = null) => Task.CompletedTask;
             public string BuildDatasetFilePath(int datasetId, string name) => $"dataset-{datasetId}.parquet";
         }
 

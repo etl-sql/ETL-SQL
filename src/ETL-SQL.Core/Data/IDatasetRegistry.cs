@@ -67,8 +67,7 @@ public interface IDatasetRegistry
     /// Refresh/Editor/Owner dataset grant). Registries that do not support the distinct
     /// Refresh permission retain the legacy editor check.
     /// </summary>
-    Task<bool> CanRefreshAsync(string name, string callerPermissions) =>
-        CanEditAsync(name, callerPermissions);
+    Task<bool> CanRefreshAsync(string name, string callerPermissions);
     Task SetStale(string name);
     Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);
     Task Delete(string name);
@@ -80,7 +79,7 @@ public interface IDatasetRegistry
     Task RegisterRefreshJobAsync(
         int reportId,
         string orchestratorJobName,
-        string refreshInterval) => Task.CompletedTask;
+        string refreshInterval);
 
     /// <summary>
     /// Resolves and authorizes a PUBLISH DATASET destination before any dataset row is allocated.
@@ -88,7 +87,7 @@ public interface IDatasetRegistry
     /// </summary>
     Task<DatasetPublishTarget?> AuthorizePublishAsync(
         string targetFolderPath,
-        string callerPermissions) => Task.FromResult<DatasetPublishTarget?>(null);
+        string callerPermissions);
 
     /// <summary>
     /// Records a sanitized publish result. Implementations must not include transport credentials.
@@ -98,7 +97,7 @@ public interface IDatasetRegistry
         string datasetName,
         string targetFolderPath,
         bool succeeded,
-        string? failureReason = null) => Task.CompletedTask;
+        string? failureReason = null);
 
     /// <summary>
     /// Computes the absolute Parquet file path for a dataset within the registry's

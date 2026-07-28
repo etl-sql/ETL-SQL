@@ -354,7 +354,7 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - The `DropTable` violates `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRolling
      ExpandContract`; add the migration to that test's `PreDeploymentBreakingMigrations` allow-list
      with a written justification (precedent: `_DropSmtpConnections`).
-   - Remove the default interface method bodies on `IDatasetRegistry` — a default body means deleting
+   - **[DONE]** Remove the default interface method bodies on `IDatasetRegistry` — a default body means deleting
      an override still compiles and silently binds to a no-op.
 3. **Parser, AST, formatter, linter:**
    - **[DONE — 3a]** `CREATE/ALTER/DROP/ENABLE/DISABLE SCHEDULE|NOTIFICATION` and

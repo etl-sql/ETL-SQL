@@ -983,6 +983,9 @@ namespace ETL_SQL.Tests.Scale
             public Task<bool> CanEditAsync(string name, string callerPermissions)
                 => Task.FromResult(_items.ContainsKey(name));
 
+            public Task<bool> CanRefreshAsync(string name, string callerPermissions)
+                => Task.FromResult(_items.ContainsKey(name));
+
             public Task SetStale(string name)
             {
                 if (_items.TryGetValue(name, out var metadata))
@@ -998,6 +1001,15 @@ namespace ETL_SQL.Tests.Scale
                 _items.Remove(name);
                 return Task.CompletedTask;
             }
+
+            public Task RegisterRefreshJobAsync(int reportId, string orchestratorJobName, string refreshInterval)
+                => Task.CompletedTask;
+
+            public Task<DatasetPublishTarget?> AuthorizePublishAsync(string targetFolderPath, string callerPermissions)
+                => Task.FromResult<DatasetPublishTarget?>(null);
+
+            public Task AuditPublishAsync(int? userId, string datasetName, string targetFolderPath, bool succeeded,
+                string? failureReason = null) => Task.CompletedTask;
 
             public string BuildDatasetFilePath(int datasetId, string name)
             {

@@ -824,6 +824,9 @@ namespace ETL_SQL.Tests.Reporting
                 return Task.CompletedTask;
             }
 
+            public Task RegisterRefreshJobAsync(int reportId, string orchestratorJobName, string refreshInterval)
+                => Task.CompletedTask;
+
             public Task<DatasetPublishTarget?> AuthorizePublishAsync(
                 string targetFolderPath,
                 string callerPermissions)
