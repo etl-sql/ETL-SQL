@@ -199,5 +199,136 @@ namespace ETL_SQL.Tests.Orchestration
                 try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
             }
         }
+
+        [Theory]
+        [InlineData("SUCCESS", "OnSuccess", "OnFailure", "Job succeeded: TriggerJob")]
+        [InlineData("FAILURE", "OnFailure", "OnSuccess", "Job failed: TriggerJob")]
+        public async Task DispatchJobNotificationsAsync_SelectsLinksForFinalOutcome(
+            string finalStatus,
+            string expectedNotification,
+            string unexpectedNotification,
+            string expectedTitle)
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_filter_{Guid.NewGuid():N}.db");
+            var catalogRoot = Path.Combine(Path.GetTempPath(), $"etlsql_notify_filter_catalog_{Guid.NewGuid():N}");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                var job = new JobDefinition("TriggerJob", "SELECT 1;", 1, "HOUR", null, null, null);
+                await store.SaveJobAsync(job);
+                await store.SaveNotificationAsync(new NotificationDefinition("OnSuccess", "notify_webhook"));
+                await store.SaveNotificationAsync(new NotificationDefinition("OnFailure", "notify_webhook"));
+                await store.AddJobNotificationAsync(job.Name, "OnSuccess", NotificationTrigger.Success);
+                await store.AddJobNotificationAsync(job.Name, "OnFailure", NotificationTrigger.Failure);
+
+                var connectionCatalog = await CreateNotificationConnectionCatalogAsync(catalogRoot);
+                var scripts = new List<string>();
+                var mockExecutor = new Mock<IScriptExecutor>();
+                mockExecutor.Setup(e => e.ExecuteTextAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<CancellationToken>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<long>(),
+                        It.IsAny<ExecutionIdentity?>()))
+                    .ReturnsAsync((string script, string? _, CancellationToken _, string? _, long _, ExecutionIdentity? _) =>
+                    {
+                        scripts.Add(script);
+                        return new ScriptExecutionResult(true, 1, null);
+                    });
+
+                var dispatch = CreateNotificationDispatchService(store, connectionCatalog, mockExecutor.Object);
+
+                await dispatch.DispatchJobNotificationsAsync(
+                    job,
+                    finalStatus,
+                    historyId: 42,
+                    new ScriptExecutionResult(finalStatus == "SUCCESS", 3, finalStatus == "SUCCESS" ? null : "boom"));
+
+                var script = Assert.Single(scripts);
+                Assert.Contains(expectedNotification, script);
+                Assert.Contains(expectedTitle, script);
+                Assert.DoesNotContain(unexpectedNotification, script);
+            }
+            finally
+            {
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+                try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
+            }
+        }
+
+        [Theory]
+        [InlineData("MissingNotification")]
+        [InlineData("DisabledNotification")]
+        public async Task DispatchJobNotificationsAsync_SkipsMissingOrDisabledNotifications(string notificationName)
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_skip_{Guid.NewGuid():N}.db");
+            var catalogRoot = Path.Combine(Path.GetTempPath(), $"etlsql_notify_skip_catalog_{Guid.NewGuid():N}");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                var job = new JobDefinition("SkipJob", "SELECT 1;", 1, "HOUR", null, null, null);
+                await store.SaveJobAsync(job);
+                if (notificationName == "DisabledNotification")
+                {
+                    await store.SaveNotificationAsync(new NotificationDefinition(
+                        notificationName,
+                        "notify_webhook",
+                        IsEnabled: false));
+                }
+                await store.AddJobNotificationAsync(job.Name, notificationName, NotificationTrigger.Completion);
+
+                var connectionCatalog = await CreateNotificationConnectionCatalogAsync(catalogRoot);
+                var mockExecutor = new Mock<IScriptExecutor>();
+                var dispatch = CreateNotificationDispatchService(store, connectionCatalog, mockExecutor.Object);
+
+                await dispatch.DispatchJobNotificationsAsync(
+                    job,
+                    "SUCCESS",
+                    historyId: 42,
+                    new ScriptExecutionResult(true, 3, null));
+
+                mockExecutor.Verify(e => e.ExecuteTextAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<long>(),
+                    It.IsAny<ExecutionIdentity?>()), Times.Never);
+            }
+            finally
+            {
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+                try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
+            }
+        }
+
+        private static async Task<LocalConnectionCatalogProvider> CreateNotificationConnectionCatalogAsync(string catalogRoot)
+        {
+            var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+            await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
+                "notify_webhook",
+                "WEBHOOK",
+                "https://hooks.example.invalid/dq",
+                new Dictionary<string, string> { ["FORMAT"] = "generic" },
+                Disabled: false));
+            return connectionCatalog;
+        }
+
+        private static NotificationDispatchService CreateNotificationDispatchService(
+            IJobCatalogStore store,
+            IConnectionCatalogProvider connectionCatalog,
+            IScriptExecutor executor)
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton(executor);
+            services.AddSingleton(connectionCatalog);
+            services.AddSingleton(store);
+            services.AddSingleton<ILogger<NotificationDispatchService>>(NullLogger<NotificationDispatchService>.Instance);
+            return new NotificationDispatchService(
+                services.BuildServiceProvider(),
+                store,
+                NullLogger<NotificationDispatchService>.Instance);
+        }
     }
 }

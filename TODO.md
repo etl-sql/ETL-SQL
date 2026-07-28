@@ -384,11 +384,12 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - **[DONE]** Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
      today, so a generic syntax error would leave the reader guessing.
 4. **Notification dispatch and audit:**
-   - **[PARTIAL]** Scheduled jobs dispatch linked `NOTIFICATION`s once after retries settle:
+   - **[DONE]** Scheduled jobs dispatch linked `NOTIFICATION`s once after retries settle:
      `SUCCESS`/`FAILURE` use the final outcome, `COMPLETION` fires for either, disabled or missing
      notifications are skipped, and delivery runs through an in-process script that opens the
      notification's shared connection catalog alias so `SECRET:` resolution and connector policy stay
-     on the normal engine path.
+     on the normal engine path. Covered by `SchedulerRetryTests` final-outcome, trigger-selection,
+     and missing/disabled skip cases.
    - **[PARTIAL]** Portal-evaluated report alerts now use the same Orchestrator delivery path:
      trusted scheduled refreshes evaluate active alerts from the persisted snapshot, dispatch attached
      notification names through `/api/notifications/{name}/dispatch` only when the alert enters
