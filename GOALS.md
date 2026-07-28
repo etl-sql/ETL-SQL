@@ -32,6 +32,7 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 - Preserve data stewardship context through transformations where practical.
 - Provide safe patterns for destructive changes, including validation, transactions, `WHAT_IF`, and rollback workflows.
 - Handle small files, operational datasets, and large data workloads through connector pushdown, batching, streaming, pagination, memory thresholds, and spill strategies where appropriate.
+- Provide native fuzzy record linkage and deduplication functions to clean low-quality source data prior to ingestion.
 - Support clear recovery behavior when a workflow fails partway through.
 
 ## Reporting Goals
@@ -54,6 +55,7 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 - Use a zero-trust architecture as a non-negotiable design constraint.
 - Ensure all file system access goes through governed path resolution and script immutability checks.
 - Prevent scripts from reading or writing protected locations, script source files, system directories, or drive roots.
+- Encrypt all ephemeral data spilled to disk (such as temporary table caches) using session-bound cryptographic keys.
 - Keep secrets encrypted or redacted in scripts, logs, manifests, generated files, and source-control workflows.
 - Avoid logging connection strings, passwords, API keys, encrypted payloads, or token material.
 - Require guardrails for destructive database and file operations.
@@ -66,6 +68,7 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 - Provide editor support through language services, syntax highlighting, diagnostics, completion, and documentation lookup.
 - Keep help, examples, grammar references, samples, and cookbook recipes aligned with parser and runtime behavior.
 - Make error messages actionable without exposing sensitive details.
+- Support local infrastructure emulation (like disposable container management via `USE DOCKER`) to make pipelines self-contained and testable in isolated CI environments.
 - Preserve compatibility for existing scripts where practical, and document migration paths when breaking changes are necessary.
 
 ## Engineering Quality Goals
@@ -86,6 +89,13 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 - Make lineage, tags, metadata, report dependencies, history, and permissions inspectable.
 - Support audit-friendly workflows for data movement, report publication, refreshes, and portal operations.
 - Make governance metadata exportable to systems that need it.
+
+## Multi-Tenancy And SaaS Goals
+
+- Enforce hard boundary isolation between untrusted tenant organizations across databases, memory spaces, caches, and jobs.
+- Prevent cross-tenant metadata leakage, ensuring lineage maps, PII scans, and schema discovery suggestion engines are tenant-scoped.
+- Support isolated connection catalogs, credential mapping, and dedicated encryption keys per tenant.
+- Provide secure tenant onboarding and data export without compromising shared infrastructure logs or performance bounds.
 
 ## Extensibility Goals
 
