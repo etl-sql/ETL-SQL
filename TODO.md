@@ -126,14 +126,12 @@ live users, remove contradictory forms now rather than carrying permanent compat
    - [x] `ConfigurationExportService` — enumerates the catalog and exports option values verbatim.
          The `${SMTP_<ALIAS>_PASSWORD}` placeholder machinery is gone for connections: a `SECRET:`
          reference is not a secret, so the exported script is directly replayable.
-   - [ ] **5 Portal tests still red — all fixture-shape, no product defect known.** They seed
-         `db.SmtpConnections` and assert the old export shape:
-         `ConfigurationRoundTripTests`, `ConfigurationExportSecretExclusionTests`,
-         `ConfigurationPromotionTests`, `ScriptedPortalImportTests` (use `SmtpCatalogSeed.Add`,
-         added for this purpose), and
-         `OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit`,
-         whose premise — that a plaintext credential could leak into logs — no longer holds and
-         should assert the reference is what appears.
+   - [x] The five stale SMTP-fixture Portal test areas are green after moving fixtures to the
+         shared catalog and narrowing the observability assertion to what the Portal can still
+         guarantee. Verified 2026-07-28 with:
+         `dotnet test tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj --no-restore --filter
+         "FullyQualifiedName~ConfigurationRoundTripTests|FullyQualifiedName~ConfigurationExportSecretExclusionTests|FullyQualifiedName~ConfigurationPromotionTests|FullyQualifiedName~ScriptedPortalImportTests|FullyQualifiedName~OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit"`
+         (9 passed).
    - [x] `OperationalMetricsService` and `ExecutionCapacityHealthCheck` count SMTP entries from the
          catalog. The public metric name (`etlsql_portal_smtp_connections`) and the record field
          are unchanged — renaming a scraped gauge would break dashboards for no gain.
