@@ -114,7 +114,7 @@ export function renderDependencies(data, downstream = [], helpers = {}) {
   const registryRows = (data.registeredDatasets || []).map(d => `
     <tr><td>${esc(d.name)}</td><td>${esc(d.folderPath)}</td><td>${esc(d.accessLevel)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc((d.sources || []).map(s => s.name).join(', ') || 'Not available')}</td></tr>`).join('');
   const jobRows = (data.refreshJobs || []).map(j => `
-    <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
+    <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.orchestratorAlias || 'Legacy')}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
   const sourceRows = (data.sources || []).map(s => `
     <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
 
@@ -136,7 +136,7 @@ export function renderDependencies(data, downstream = [], helpers = {}) {
     </div>
     ${renderDependencyTable('Manifest Datasets', ['Dataset', 'Rows', 'Refresh', 'TTL'], manifestRows)}
     ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
-    ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
+    ${renderDependencyTable('Refresh Jobs', ['Job', 'Orchestrator', 'Interval', 'Last Refresh'], jobRows)}
     ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
     ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources -> Columns', 'Tags'], lineageRows || null)}
     ${renderDownstreamImpact(downstream, formatBuiltAt)}`;

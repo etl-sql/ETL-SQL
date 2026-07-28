@@ -426,9 +426,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - **[PARTIAL]** `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
-     attached Orchestrator notification names plus `ReportJobLinks`; lineage impact includes report alerts
-     with attached notification links; shared-connection impact also lists alert notification links and
-     report job links that use that Orchestrator alias.
+     attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact
+     includes report alerts with attached notification links; shared-connection impact also lists alert
+     notification links and report job links that use that Orchestrator alias.
    - **[DONE]** Any Portal-node background sweep runs on every node — gate it on `IClusterLockStore` like
      `OperationalMetricsDigestService`, and never delete an Orchestrator job it does not recognise
      (a shared Orchestrator legitimately carries another Portal's jobs).

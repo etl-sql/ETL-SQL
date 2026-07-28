@@ -67,6 +67,7 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
             .Select(j => new ReportDependencyRefreshJobDto(
                 j.Id,
                 j.JobName,
+                j.OrchestratorAlias,
                 "",
                 j.LastRefreshedAt))
             .ToListAsync();
@@ -77,6 +78,7 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
             .Select(j => new ReportDependencyRefreshJobDto(
                 j.Id,
                 j.OrchestratorJobName,
+                null,
                 j.RefreshInterval,
                 j.LastRefreshedAt))
             .ToListAsync();

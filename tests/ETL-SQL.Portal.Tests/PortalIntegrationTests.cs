@@ -1628,7 +1628,8 @@ CREATE VISUAL Total AS CARD (
         Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
             n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary");
         Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
-            n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary_v2");
+            n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary_v2" &&
+            n["orchestratorAlias"]!.GetValue<string>() == "prod_orch");
         Assert.Equal("RevenueDrop", body["alerts"]![0]!["name"]!.GetValue<string>());
         Assert.Equal("Total", body["alerts"]![0]!["visualName"]!.GetValue<string>());
         Assert.Equal("prod_orch", body["alerts"]![0]!["notifications"]![0]!["orchestratorAlias"]!.GetValue<string>());

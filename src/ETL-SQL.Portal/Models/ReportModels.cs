@@ -248,6 +248,7 @@ public record ReportDependencyDatasetDto(
 public record ReportDependencyRefreshJobDto(
     int Id,
     string OrchestratorJobName,
+    string? OrchestratorAlias,
     string RefreshInterval,
     DateTime? LastRefreshedAt);
 
