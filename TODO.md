@@ -331,7 +331,8 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - A `JobSchedules` link computes `NextRun` at creation rather than leaving it null: null means
      "due now", so linking a `0 2 * * *` schedule at 3pm would otherwise fire immediately.
    - Cron is minute-granularity only; `EVERY n SECONDS` has no replacement, deliberately. DST policy:
-     skipped local times do not run, repeated local times run once — pinned by tests on fixed dates.
+     a local time that does not exist fires when the gap ends (so a nightly job still runs that
+     night), a repeated local time runs once — pinned by tests on fixed dates.
    - Rewrite `SchedulerService.CalculateNextRun` on `Cronos` + `TimeZoneInfo`; add the `Cronos`
      reference to the Orchestrator project. Per-link `NextRun`; coalesce simultaneous links into one
      run; no `DateTime.Now` anywhere in the path.

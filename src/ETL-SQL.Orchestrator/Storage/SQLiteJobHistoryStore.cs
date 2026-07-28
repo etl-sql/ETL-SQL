@@ -20,7 +20,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -51,9 +51,12 @@ namespace ETL_SQL.Orchestrator.Storage
 
                 try
                 {
+                    // Name is the identity: unique per orchestrator, case-insensitive, never renamed
+                    // (an exported configuration script refers to it). COLLATE NOCASE is placed before
+                    // the constraints because PostgreSQL requires that order; SQLite accepts either.
                     var createJobsTable = @"
                 CREATE TABLE IF NOT EXISTS Jobs (
-                    Name TEXT PRIMARY KEY,
+                    Name TEXT COLLATE NOCASE PRIMARY KEY,
                     Script TEXT NOT NULL,
                     Interval INTEGER NOT NULL,
                     Unit TEXT NOT NULL,
@@ -64,8 +67,59 @@ namespace ETL_SQL.Orchestrator.Storage
                     MaxRetries INTEGER NOT NULL DEFAULT 0,
                     RetryDelaySeconds INTEGER NOT NULL DEFAULT 30,
                     Version INTEGER NOT NULL DEFAULT 1,
-                    LeaseFenceToken INTEGER NOT NULL DEFAULT 0
+                    LeaseFenceToken INTEGER NOT NULL DEFAULT 0,
+                    JobType TEXT NOT NULL DEFAULT 'Script',
+                    TargetPath TEXT,
+                    DisplayName TEXT,
+                    Description TEXT,
+                    Options TEXT,
+                    CreatedBy TEXT,
+                    ModifiedBy TEXT
                 );";
+
+                    // Schedules, notifications, and their attachments to jobs. The Orchestrator is the
+                    // system of record for all three: it runs the jobs, so it holds the trigger,
+                    // computes the next run, and dispatches the outcome.
+                    var createCatalogTables = @"
+                CREATE TABLE IF NOT EXISTS Schedules (
+                    Name TEXT COLLATE NOCASE PRIMARY KEY,
+                    Cron TEXT NOT NULL,
+                    TimeZone TEXT NOT NULL DEFAULT 'UTC',
+                    IsEnabled INTEGER NOT NULL DEFAULT 1,
+                    DisplayName TEXT,
+                    Description TEXT,
+                    Options TEXT,
+                    CreatedBy TEXT,
+                    ModifiedBy TEXT,
+                    Version INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS Notifications (
+                    Name TEXT COLLATE NOCASE PRIMARY KEY,
+                    ConnectionName TEXT NOT NULL,
+                    Recipient TEXT,
+                    IsEnabled INTEGER NOT NULL DEFAULT 1,
+                    DisplayName TEXT,
+                    Description TEXT,
+                    Options TEXT,
+                    CreatedBy TEXT,
+                    ModifiedBy TEXT,
+                    Version INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS JobSchedules (
+                    JobName TEXT COLLATE NOCASE NOT NULL,
+                    ScheduleName TEXT COLLATE NOCASE NOT NULL,
+                    LastRun TEXT,
+                    NextRun TEXT,
+                    PRIMARY KEY (JobName, ScheduleName)
+                );
+                CREATE INDEX IF NOT EXISTS idx_js_schedule ON JobSchedules(ScheduleName);
+                CREATE TABLE IF NOT EXISTS JobNotifications (
+                    JobName TEXT COLLATE NOCASE NOT NULL,
+                    NotificationName TEXT COLLATE NOCASE NOT NULL,
+                    TriggerCondition TEXT NOT NULL,
+                    PRIMARY KEY (JobName, NotificationName, TriggerCondition)
+                );
+                CREATE INDEX IF NOT EXISTS idx_jn_notification ON JobNotifications(NotificationName);";
 
                     var createHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS JobHistory (
@@ -230,7 +284,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Day, NodeId)
                 );";
 
-                    var schema = createJobsTable + createHistoryTable + createColumnMetricsTable + createBundleTables
+                    var schema = createJobsTable + createCatalogTables + createHistoryTable + createColumnMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
@@ -366,6 +420,24 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;";
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            // Unified job/schedule/notification model. A job now names what it acts on rather than
+            // carrying an inline script body, and carries the human-facing label that lets its Name
+            // stay a stable machine identity.
+            if (!columns.Contains("JobType"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN JobType TEXT NOT NULL DEFAULT 'Script';";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy" })
+            {
+                if (columns.Contains(column)) continue;
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"ALTER TABLE Jobs ADD COLUMN {column} TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)
@@ -475,8 +547,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // Upsert (not INSERT OR REPLACE): REPLACE deletes and reinserts the row, which would
             // silently clear an active execution lease whenever a job definition is re-saved.
             var sql = @"
-                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy)
-                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy)
+                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy)
+                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy)
                 ON CONFLICT(Name) DO UPDATE SET
                     Script            = excluded.Script,
                     Interval          = excluded.Interval,
@@ -489,22 +561,17 @@ namespace ETL_SQL.Orchestrator.Storage
                     RetryDelaySeconds = excluded.RetryDelaySeconds,
                     ScriptHash        = excluded.ScriptHash,
                     HashPolicy        = excluded.HashPolicy,
+                    JobType           = excluded.JobType,
+                    TargetPath        = excluded.TargetPath,
+                    DisplayName       = excluded.DisplayName,
+                    Description       = excluded.Description,
+                    Options           = excluded.Options,
+                    ModifiedBy        = excluded.ModifiedBy,
                     Version           = Jobs.Version + 1;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.AddParam("@name", job.Name);
-            command.AddParam("@script", job.Script);
-            command.AddParam("@interval", job.Interval);
-            command.AddParam("@unit", job.Unit);
-            command.AddParam("@atTime", (object?)job.AtTime ?? DBNull.Value);
-            command.AddParam("@lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
-            command.AddParam("@nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
-            command.AddParam("@isEnabled", job.IsEnabled ? 1 : 0);
-            command.AddParam("@maxRetries", job.MaxRetries);
-            command.AddParam("@retryDelay", job.RetryDelaySeconds);
-            command.AddParam("@scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
-            command.AddParam("@hashPolicy", job.HashPolicy);
+            AddJobParameters(command, job);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -529,6 +596,13 @@ namespace ETL_SQL.Orchestrator.Storage
                     RetryDelaySeconds = @retryDelay,
                     ScriptHash = @scriptHash,
                     HashPolicy = @hashPolicy,
+                    JobType = @jobType,
+                    TargetPath = @targetPath,
+                    DisplayName = @displayName,
+                    Description = @description,
+                    Options = @options,
+                    ModifiedBy = @modifiedBy,
+                    CreatedBy = COALESCE(CreatedBy, @createdBy),
                     Version = Version + 1
                 WHERE Name = @name COLLATE NOCASE AND Version = @expectedVersion;";
             AddJobParameters(command, job);
@@ -550,6 +624,13 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@retryDelay", job.RetryDelaySeconds);
             command.AddParam("@scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
             command.AddParam("@hashPolicy", job.HashPolicy);
+            command.AddParam("@jobType", job.JobType.ToString());
+            command.AddParam("@targetPath", (object?)job.TargetPath ?? DBNull.Value);
+            command.AddParam("@displayName", (object?)job.DisplayName ?? DBNull.Value);
+            command.AddParam("@description", (object?)job.Description ?? DBNull.Value);
+            command.AddParam("@options", (object?)job.Options ?? DBNull.Value);
+            command.AddParam("@createdBy", (object?)job.CreatedBy ?? DBNull.Value);
+            command.AddParam("@modifiedBy", (object?)job.ModifiedBy ?? DBNull.Value);
         }
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
@@ -994,7 +1075,25 @@ namespace ETL_SQL.Orchestrator.Storage
                 reader.GetInt32(reader.GetOrdinal("RetryDelaySeconds")),
                 reader.IsDBNull(scriptHashOrdinal) ? null : reader.GetString(scriptHashOrdinal),
                 reader.IsDBNull(hashPolicyOrdinal) ? "Warn" : reader.GetString(hashPolicyOrdinal),
-                reader.GetInt64(versionOrdinal));
+                reader.GetInt64(versionOrdinal),
+                ReadJobType(reader),
+                ReadOptionalString(reader, "TargetPath"),
+                ReadOptionalString(reader, "DisplayName"),
+                ReadOptionalString(reader, "Description"),
+                ReadOptionalString(reader, "Options"),
+                ReadOptionalString(reader, "CreatedBy"),
+                ReadOptionalString(reader, "ModifiedBy"));
+        }
+
+        /// <summary>
+        /// An unparseable stored value falls back to <see cref="JobTargetKind.Script"/> rather than
+        /// throwing: a job whose type cannot be read is still a job an operator needs to see and drop,
+        /// and failing the whole listing would hide every other job alongside it.
+        /// </summary>
+        private static JobTargetKind ReadJobType(DbDataReader reader)
+        {
+            var raw = ReadOptionalString(reader, "JobType");
+            return Enum.TryParse<JobTargetKind>(raw, ignoreCase: true, out var kind) ? kind : JobTargetKind.Script;
         }
 
         public async Task DeleteJobAsync(string name)
@@ -1026,6 +1125,10 @@ namespace ETL_SQL.Orchestrator.Storage
                 command2.Transaction = transaction;
                 command2.AddParam("@name", name);
                 await command2.ExecuteNonQueryAsync();
+
+                // Attachments cascade with the job: a link has no meaning without one side of it.
+                // The schedules and notifications themselves survive — they are shared objects.
+                await DeleteJobLinksAsync(connection, transaction, name);
 
                 await transaction.CommitAsync();
             }
@@ -1065,6 +1168,9 @@ namespace ETL_SQL.Orchestrator.Storage
             deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobName = @name;";
             deleteHistory.AddParam("@name", name);
             await deleteHistory.ExecuteNonQueryAsync();
+
+            await DeleteJobLinksAsync(connection, transaction, name);
+
             await transaction.CommitAsync();
             return true;
         }

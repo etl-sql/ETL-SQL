@@ -544,13 +544,15 @@ schedules on one job, or the nearest divisor.
 A cron expression is evaluated in the schedule's named timezone, so local times can be skipped or
 repeated. `0 2 * * *` in `America/New_York`:
 
-* **Spring forward** — 02:00 does not exist. The occurrence is **skipped**; the job does not run that
-  day. Cronos returns the next valid occurrence, so this is its default behaviour, adopted rather
-  than worked around.
+* **Spring forward** — 02:00 never happens; the clock jumps 02:00 → 03:00. The occurrence fires at
+  the instant the gap **ends**, so a nightly job still runs that night.
 * **Fall back** — 02:00 occurs twice. The job runs **once**, on the first occurrence.
 
-Both are what an operator expects from a wall-clock schedule, and both must be pinned by tests
-against fixed dates rather than left to the library's discretion.
+Both are Cronos's behaviour, adopted after checking what it actually does rather than assuming. An
+earlier draft of this section asserted that a skipped local time means the job does not run that day;
+the test written against fixed dates disproved it. Firing at the end of the gap is also the better
+behaviour — the alternative silently drops one run a year from a nightly batch — so the library is
+followed rather than overridden. `CronScheduleTests` pins both transitions against fixed dates.
 
 ### Overlapping runs
 

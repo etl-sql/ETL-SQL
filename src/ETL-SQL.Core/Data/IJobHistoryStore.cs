@@ -62,6 +62,27 @@ public interface ILineageCatalogStore
     Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100);
 }
 
+/// <summary>
+/// A scheduled job. <see cref="Name"/> is the identity — unique per orchestrator, case-insensitive,
+/// and never renamed, because an exported configuration script refers to it. What an operator reads
+/// is <see cref="DisplayName"/>, which is free to change without disturbing any script.
+/// </summary>
+/// <param name="Interval">
+/// Legacy interval trigger, superseded by cron <see cref="ScheduleDefinition"/>s attached through
+/// <see cref="IJobCatalogStore.AddJobScheduleAsync"/>. Removed once the scheduler reads links.
+/// </param>
+/// <param name="Unit">See <paramref name="Interval"/>.</param>
+/// <param name="AtTime">See <paramref name="Interval"/>.</param>
+/// <param name="TargetPath">
+/// The report path or <c>.etlsql</c> path this job acts on. For a <see cref="JobTargetKind.Report"/>
+/// job this is a label: the Portal's report link is authoritative, so a moved report does not leave
+/// two disagreeing sources of truth to reconcile.
+/// </param>
+/// <param name="CreatedBy">
+/// Attribution passed through by the Portal, not authorization — the Orchestrator's API
+/// authenticates with a single shared key and has no identity model. See
+/// <c>ROADMAP.md → Orchestrator — Per-Object Authorization</c>.
+/// </param>
 public record JobDefinition(
     string Name,
     string Script,
@@ -75,7 +96,14 @@ public record JobDefinition(
     int RetryDelaySeconds = 30,
     string? ScriptHash = null,
     string HashPolicy = "Warn",
-    long Version = 1
+    long Version = 1,
+    JobTargetKind JobType = JobTargetKind.Script,
+    string? TargetPath = null,
+    string? DisplayName = null,
+    string? Description = null,
+    string? Options = null,
+    string? CreatedBy = null,
+    string? ModifiedBy = null
 );
 
 public record JobHistoryEntry(
