@@ -709,8 +709,7 @@ governed mutation that cannot be dry-run is one an operator has to test in produ
 * `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`,
   `ReferenceImpactService`, `SubscriptionScriptMaintenance`, `OrchestratorProxyService`.
 * Parser/AST/formatter/linter, LSP completion, `eng.*` virtual tables (`eng.jobs`, `eng.schedules`,
-  `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile with the `SHOW`-retirement
-  inventory in `TODO.md`, which currently lists `eng.refresh_jobs`).
+  `eng.notifications`, `eng.alerts`, `eng.job_schedules`, `eng.job_notifications`).
 * Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using the retired
   inline-`AS` job form or `REFRESH EVERY`.
 

@@ -432,8 +432,8 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      (a shared Orchestrator legitimately carries another Portal's jobs).
    - `ConfigurationExportService` emits `CREATE OR REPLACE` plus the full link set, so an export
      round-trips to exactly what it describes.
-   - `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile
-     with the `SHOW`-retirement inventory above, which currently lists `eng.refresh_jobs`.
+   - **[DONE]** `eng.jobs`, `eng.schedules`, `eng.notifications`, `eng.alerts`, `eng.job_schedules` — reconcile
+     with the `SHOW`-retirement inventory above.
    - **[PARTIAL]** Samples, snippets, hover help, `docs/syntax-index.md`, and every doc snippet using
      the retired inline-`AS` job form or `REFRESH EVERY`: current cookbook/job guidance and release
      examples are normalized; remaining matches are parser diagnostics or architecture
@@ -607,7 +607,8 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 
    -- Jobs and orchestration
    eng.jobs                 eng.job_history          eng.job_state
-   eng.refresh_jobs         eng.host_metrics         eng.subscriptions
+   eng.schedules            eng.notifications        eng.job_schedules
+   eng.job_notifications    eng.host_metrics         eng.subscriptions
 
    -- Portal catalog
    eng.users                eng.reports              eng.favorites
