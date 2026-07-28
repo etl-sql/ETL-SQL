@@ -776,16 +776,16 @@ single-source shape `TRANSFORM` owns.
   - [x] Removes duplicate rows with explicit control over which duplicate to retain. Addresses the gap between `SELECT DISTINCT` (no ordering) and writing `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)` boilerplate for every deduplication case.
 - [x] **P1 — Add `PIVOT` algorithm (Reporting & Cross-Tabulation)**
   - [x] Rotates rows into columns for reporting matrices. Resolves the severe syntax differences across SQL dialects (and the lack of a simple, native pivot in Postgres).
-- [ ] **P2 — Add `TOP_N_OTHERS` algorithm (Visual Hygiene / Slicing)**
-  - Reduces high-cardinality values by aggregating low-volume categories into a single row. Essential for clean visuals (pie charts, bar charts).
-- [ ] **P2 — Add `PERIOD_COMPARISON` algorithm (Growth Metrics)**
-  - Calculates period-over-period differences or growth percentages (MoM, YoY) without redundant, hard-to-read window query repetition.
-- [ ] **P2 — Add `SHARE_OF_TOTAL` algorithm (Percentage Contribution)**
-  - Computes the percentage contribution of a column relative to a parent or group total partition, preventing manual divide-by-zero checks and decimal scaling logic.
-- [ ] **P2 — Add `NORMALIZE` algorithm**
-  - Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite scoring, or any distance-based calculation where raw magnitude differences would dominate.
-- [ ] **P3 — Add `ROLLING_AGGREGATE` algorithm (Smoothing / Moving Windows)**
-  - Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative sums on reports.
+- [x] **P2 — Add `TOP_N_OTHERS` algorithm (Visual Hygiene / Slicing)**
+  - [x] Reduces high-cardinality values by aggregating low-volume categories into a single row. Essential for clean visuals (pie charts, bar charts).
+- [x] **P2 — Add `PERIOD_COMPARISON` algorithm (Growth Metrics)**
+  - [x] Calculates period-over-period differences or growth percentages (MoM, YoY) without redundant, hard-to-read window query repetition.
+- [x] **P2 — Add `SHARE_OF_TOTAL` algorithm (Percentage Contribution)**
+  - [x] Computes the percentage contribution of a column relative to a parent or group total partition, preventing manual divide-by-zero checks and decimal scaling logic.
+- [x] **P2 — Add `NORMALIZE` algorithm**
+  - [x] Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite scoring, or any distance-based calculation where raw magnitude differences would dominate.
+- [x] **P3 — Add `ROLLING_AGGREGATE` algorithm (Smoothing / Moving Windows)**
+  - [x] Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative sums on reports.
 - [ ] **Correctness, Testing, and the Triage Workflow (SLT)**
   - Cover each algorithm with **Sqllogictest (SLT)** test files verifying standard execution logic, boundary transitions, and null values/edge cases.
   - Apply the strict triage policy.

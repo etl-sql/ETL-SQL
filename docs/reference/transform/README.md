@@ -14,4 +14,6 @@ Table transformations are invoked using the `TRANSFORM` DML statement.
 | [PERIOD_COMPARISON](period_comparison.md) | Calculates period-over-period differences and growth. |
 | [SHARE_OF_TOTAL](share_of_total.md) | Computes percentage contribution relative to a group or grand total. |
 | [NORMALIZE](normalize.md) | Scales numeric columns using Min-Max or Z-Score. |
+| [ROLLING_AGGREGATE](rolling_aggregate.md) | Smooths data using rolling/moving window aggregations. |
+
 

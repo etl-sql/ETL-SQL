@@ -390,4 +390,43 @@ USING NORMALIZE (
         Assert.Equal(0.5m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Id"]) == 2)["Val_Normalized"]));
         Assert.Equal(1m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Id"]) == 3)["Val_Normalized"]));
     }
+
+    [Fact]
+    public async Task TestTransformRollingAggregate()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+        string script = @"
+CREATE TABLE #ts (Seq INT, Val INT);
+INSERT INTO #ts VALUES (1, 10);
+INSERT INTO #ts VALUES (2, 20);
+INSERT INTO #ts VALUES (3, 30);
+
+TRANSFORM #rolling
+FROM #ts
+USING ROLLING_AGGREGATE (
+  VALUE_COL = 'Val',
+  ORDER_COL = 'Seq',
+  WINDOW_SIZE = 2,
+  AGGREGATE = 'AVG'
+);
+";
+        var parsed = new Parser(new Lexer(script).Tokenize()).Parse();
+        await evaluator.Evaluate(parsed);
+
+        var rolling = evaluator.Connections["#rolling"] as InMemoryDataSource;
+        Assert.NotNull(rolling);
+
+        var batches = await rolling.ReadBatches().ToListAsync();
+        var rows = batches.SelectMany(b => b.Rows).ToList();
+
+        // Window size 2 trailing average.
+        // Row 1: [10] -> 10.
+        // Row 2: [10, 20] -> 15.
+        // Row 3: [20, 30] -> 25.
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(10m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Seq"]) == 1)["Val_Rolling"]));
+        Assert.Equal(15m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Seq"]) == 2)["Val_Rolling"]));
+        Assert.Equal(25m, Convert.ToDecimal(rows.Single(r => Convert.ToInt32(r["Seq"]) == 3)["Val_Rolling"]));
+    }
 }

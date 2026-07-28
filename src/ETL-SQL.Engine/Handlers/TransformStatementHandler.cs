@@ -55,6 +55,10 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         {
             await ExecuteNormalize(stmt, context);
         }
+        else if (string.Equals(stmt.Algorithm, "ROLLING_AGGREGATE", StringComparison.OrdinalIgnoreCase))
+        {
+            await ExecuteRollingAggregate(stmt, context);
+        }
         else
         {
             throw new ExecutionException($"Unsupported table transformation algorithm: {stmt.Algorithm}");
@@ -921,6 +925,84 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
 
         context.Telemetry.RowsProcessed += producedRows;
         _logger.Info("TRANSFORM NORMALIZE complete: {RowCount} rows staged into {Target}", producedRows, stmt.TargetTable.TableName);
+    }
+
+    private async Task ExecuteRollingAggregate(TransformStatement stmt, IExecutionContext context)
+    {
+        var valueCol = GetStringOption(stmt.Options, "VALUE_COL", "ROLLING_AGGREGATE");
+        var orderCol = GetStringOption(stmt.Options, "ORDER_COL", "ROLLING_AGGREGATE");
+        var windowSize = stmt.Options.TryGetValue("WINDOW_SIZE", out var wExpr) ? Convert.ToInt32(await context.EvaluationContext.EvaluateValue(wExpr, Row.Empty)) : 7;
+        var aggregate = stmt.Options.TryGetValue("AGGREGATE", out var aggExpr) ? GetStringOption(stmt.Options, "AGGREGATE", "ROLLING_AGGREGATE") : "AVG";
+        var groupColumns = stmt.Options.TryGetValue("BY_GROUP", out var grpCol) ? GetGroupColumns(grpCol) : new List<string>();
+        var rollingCol = stmt.Options.TryGetValue("ROLLING_COL", out var rCol) ? GetStringOption(stmt.Options, "ROLLING_COL", "ROLLING_AGGREGATE") : $"{valueCol}_Rolling";
+
+        var (rows, columns) = await StageSourceRows(stmt, context, "ROLLING_AGGREGATE");
+
+        if (!columns.Contains(valueCol, StringComparer.OrdinalIgnoreCase))
+            throw new ExecutionException($"ROLLING_AGGREGATE VALUE_COL '{valueCol}' was not found in source dataset.");
+        if (!columns.Contains(orderCol, StringComparer.OrdinalIgnoreCase))
+            throw new ExecutionException($"ROLLING_AGGREGATE ORDER_COL '{orderCol}' was not found in source dataset.");
+
+        var targetColumns = new List<string>(columns);
+        if (!targetColumns.Contains(rollingCol, StringComparer.OrdinalIgnoreCase)) targetColumns.Add(rollingCol);
+
+        if (stmt.TargetTable.TableName.StartsWith("#") && !context.Connections.ContainsKey(stmt.TargetTable.TableName))
+        {
+            context.Connections[stmt.TargetTable.TableName] = new InMemoryDataSource
+            {
+                Validator = context as IDataValidator,
+                ExecutionContext = context,
+                MaxInMemoryBatches = context.MaxInMemoryBatches
+            };
+        }
+
+        var target = await context.ResolveDataSourceAsync(stmt.TargetTable)
+            ?? throw new ExecutionException($"Could not resolve target dataset: {stmt.TargetTable.TableName}");
+        await target.TruncateAsync();
+
+        var output = new DataTable();
+        output.SetColumns(targetColumns);
+
+        int producedRows = 0;
+        foreach (var group in rows.GroupBy(row => BuildGroupKey(row, groupColumns)))
+        {
+            var sortedGroup = group.OrderBy(row => GetNumericOrderValue(row[orderCol])).ToList();
+            int n = sortedGroup.Count;
+
+            for (int i = 0; i < n; i++)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                var startIdx = Math.Max(0, i - windowSize + 1);
+                var windowRows = sortedGroup.GetRange(startIdx, i - startIdx + 1);
+
+                var outRow = new Row(output.Schema);
+                foreach (var col in columns)
+                {
+                    outRow[col] = sortedGroup[i][col];
+                }
+
+                var windowValues = windowRows.Select(r => r[valueCol]).ToList();
+                outRow[rollingCol] = AggregateValues(windowValues, aggregate);
+
+                await output.AddRowAsync(outRow);
+                producedRows++;
+
+                if (output.Rows.Count >= context.EffectiveBatchSize)
+                {
+                    await target.WriteBatches(new[] { output }.ToAsyncEnumerable(), append: true, context.CancellationToken);
+                    output = new DataTable();
+                    output.SetColumns(targetColumns);
+                }
+            }
+        }
+
+        if (output.Rows.Count > 0)
+        {
+            await target.WriteBatches(new[] { output }.ToAsyncEnumerable(), append: true, context.CancellationToken);
+        }
+
+        context.Telemetry.RowsProcessed += producedRows;
+        _logger.Info("TRANSFORM ROLLING_AGGREGATE complete: {RowCount} rows staged into {Target}", producedRows, stmt.TargetTable.TableName);
     }
 
     private static string GetStringOption(Dictionary<string, Expression> options, string key, string algorithm)
