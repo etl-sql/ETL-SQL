@@ -20,7 +20,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `MERGE` | DML | [Statement Reference](reference/statements/README.md) | [MERGE.md](reference/statements/dml/merge.md) |
 | `TRUNCATE` | DML | [Statement Reference](reference/statements/README.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
 | `GENERATE CALENDAR` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
-| `FILL_DATES` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `TRANSFORM` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
@@ -197,8 +197,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DROP DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
 | `REBUILD SNAPSHOT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
 | `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](guides/job-orchestration.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
-| `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](guides/job-orchestration.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
 | `SHOW USERS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
 | `SHOW REPORTS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
 | `SHOW ACTIVE SESSIONS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
@@ -771,7 +771,7 @@ CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 | `REFERENCES tbl(col)`| Column/Table | Foreign key constraint |
 
 ### 7.3 CREATE JOB
-```sql
+```text
 CREATE [OR ALTER|OR REPLACE] JOB name
 FOR SCRIPT|REPORT 'target-path'
 [WITH (MAX_RETRIES = n, RETRY_DELAY = seconds, DISPLAY_NAME = '...', ...)]

@@ -173,9 +173,9 @@ live users, remove contradictory forms now rather than carrying permanent compat
 
 2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
    superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.
-   The examples below are retained only to show the intended *option shapes* (`SECRET:` references,
-   never resolved values); read `... AT portal_admin` as `EXECUTE portal_admin BEGIN ... END`.
-   A connection created outside such a block remains session-local.
+   A connection created outside such a block remains session-local; a connection created inside a
+   management block performs an audited remote catalog mutation. Keep option values as
+   `SECRET:` references, never resolved credential values.
 
    ```sql
    CREATE CONNECTION portal_admin AS PORTAL(
@@ -183,21 +183,24 @@ live users, remove contradictory forms now rather than carrying permanent compat
        API_KEY = 'SECRET:portal_admin_key'
    );
 
-   CREATE CONNECTION portal_mail AS SMTP(
-       HOST = 'smtp.corp.example',
-       PORT = 587,
-       USERNAME = 'portal-notify',
-       PASSWORD = 'SECRET:portal_smtp_password',
-       DEFAULT_FROM = 'reports@example.com'
-   ) AT portal_admin;
+   EXECUTE portal_admin BEGIN
+       CREATE CONNECTION portal_mail AS SMTP(
+           HOST = 'smtp.corp.example',
+           PORT = 587,
+           USERNAME = 'portal-notify',
+           PASSWORD = 'SECRET:portal_smtp_password',
+           DEFAULT_FROM = 'reports@example.com'
+       );
 
-   CREATE CONNECTION portal_alerts AS WEBHOOK(
-       URL = 'SECRET:portal_alert_webhook',
-       FORMAT = 'slack'
-   ) AT portal_admin;
+       CREATE CONNECTION portal_alerts AS WEBHOOK(
+           URL = 'SECRET:portal_alert_webhook',
+           FORMAT = 'slack'
+       );
+   END;
    ```
 
-   The same syntax must work for Orchestrator-owned failure and operations notifications:
+   The same block-targeting model must work for Orchestrator-owned failure and operations
+   notifications:
 
    ```sql
    CREATE CONNECTION orch_admin AS ORCHESTRATOR(
@@ -205,36 +208,35 @@ live users, remove contradictory forms now rather than carrying permanent compat
        API_KEY = 'SECRET:orchestrator_admin_key'
    );
 
-   CREATE CONNECTION orch_mail AS SMTP(
-       HOST = 'smtp.corp.example',
-       USERNAME = 'orchestrator-notify',
-       PASSWORD = 'SECRET:orchestrator_smtp_password'
-   ) AT orch_admin;
+   EXECUTE orch_admin BEGIN
+       CREATE CONNECTION orch_mail AS SMTP(
+           HOST = 'smtp.corp.example',
+           USERNAME = 'orchestrator-notify',
+           PASSWORD = 'SECRET:orchestrator_smtp_password'
+       );
 
-   CREATE CONNECTION orch_failures AS WEBHOOK(
-       URL = 'SECRET:orchestrator_failure_webhook',
-       FORMAT = 'teams'
-   ) AT orch_admin;
+       CREATE CONNECTION orch_failures AS WEBHOOK(
+           URL = 'SECRET:orchestrator_failure_webhook',
+           FORMAT = 'teams'
+       );
+   END;
    ```
 
-   `AT` must reject targets that are not management-capable `PORTAL` or `ORCHESTRATOR`
-   connections. Define whether the statement also opens a local connection; the preferred contract
-   is that `AT` performs an audited remote catalog mutation while the unqualified form creates a
-   session-local connection. Never copy resolved secret values across the boundary: catalog entries
-   store `SECRET:name` references or host-owned protected values under the existing zero-trust
-   rules.
-   
-   **Do we use this syntax to create shared connections?**
+   The `AT` clause is not used for managed shared connections. Never copy resolved secret values
+   across the boundary: catalog entries store `SECRET:name` references or host-owned protected
+   values under the existing zero-trust rules.
 
 3. **Use one managed-connection lifecycle.** Extend the same object-first grammar to remote
    administration:
 
    ```sql
-   ALTER CONNECTION portal_mail WITH (...) AT portal_admin;
-   TEST CONNECTION portal_mail AT portal_admin INTO #test_result;
-   SELECT * FROM portal_admin.eng.connection_config WHERE connection_name = 'portal_mail' INTO #config;
-   SELECT * FROM portal_admin.eng.connections INTO #connections;
-   DROP CONNECTION IF EXISTS portal_mail AT portal_admin;
+   EXECUTE portal_admin BEGIN
+       ALTER CONNECTION portal_mail WITH (...);
+       TEST CONNECTION portal_mail INTO #test_result;
+       SELECT * FROM eng.connection_config WHERE connection_name = 'portal_mail' INTO #config;
+       SELECT * FROM eng.connections INTO #connections;
+       DROP CONNECTION IF EXISTS portal_mail;
+   END;
    ```
 
    Portal and Orchestrator must share the catalog contract, connector metadata, authorization
@@ -300,11 +302,11 @@ normalized schema and unified syntax.
   creation), under a reserved prefix `CREATE JOB` refuses. Readability is `DISPLAY_NAME`'s job, so a
   generated name can stay stable and export-safe without being what an operator reads.
 
-**Open — see §12 of the spec.** None block the job/schedule slice. Q1: notifications are defined
-where they are used (Orchestrator's for job outcomes, Portal's for alerts, same grammar targeted by
-the `EXECUTE` block) — confirm the two-catalog split. Q2: alerts are `FOR REPORT` only and evaluate
-on refresh completion rather than carrying their own schedule. Q3: whether the Portal should
-provision connection aliases onto an orchestrator instead of an operator doing it by hand.
+**Design is final — see §12 of the spec.** `JOB`, `SCHEDULE`, and `NOTIFICATION` are
+Orchestrator-owned; `ALERT` is Portal-owned and evaluates on scheduled report-refresh completion.
+The Portal asks the Orchestrator to dispatch named notifications, so operators configure a
+destination once. Connection aliases are provisioned per host for now; Portal-driven alias
+provisioning is a known deferral, not a blocking question.
 
 **Implementation Steps:**
 
@@ -568,13 +570,15 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 5. Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` for genuine
    resources with clear identity and lifecycle. Do not encode an implementation type before
    `CONNECTION`.
-6. **Retire `SHOW` as a data-retrieval verb. Replace all row-returning `SHOW` commands with
+6. **Retire `SHOW` as a data-retrieval verb. Replace every row-returning `SHOW` command with
    `SELECT` against the `eng.*` virtual schema.** Engine metadata, session state, lineage,
    governance, jobs, orchestration, and portal catalog are all queryable as virtual tables under
-   the `eng.` schema prefix — a dedicated namespace that no remote database engine claims. The
+   the `eng.` schema prefix. `eng` is the reserved engine catalog schema name, not a connector
+   type: `sys` collides with common database catalogs, `etl` is plausible user/application schema
+   territory, and `etlsql` is too product-specific/noisy for routine queries. The
    three-part `connection.eng.table` form targets a remote connection's `eng.*` catalog using
-   the existing identifier routing rules, eliminating the need for an `INTO` escape hatch or a
-   separate `SHOW ... INTO #table` pattern:
+   the existing identifier routing rules, eliminating the need for an `INTO` escape hatch, `AT`
+   target clauses, or a separate `SHOW ... INTO #table` pattern:
 
    ```sql
    -- Engine-local (schema.table, no connection prefix)
@@ -593,8 +597,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    Full `SELECT` power — `WHERE`, `JOIN`, `GROUP BY`, `ORDER BY`, `INTO`, subqueries — applies
    immediately. Autocomplete discovers the `eng.*` catalog via the `eng.` prefix. The
    `EXECUTE portal BEGIN ... SHOW ... INTO #t; END` two-step collapses to a single `SELECT`.
-   The `eng` namespace is a reserved connection name; the engine must reject `CREATE CONNECTION
-   eng AS ...` at parse time.
+   Because the product is not live yet, do not preserve legacy `SHOW` compatibility forms or
+   formatter output. Remove the parser branches, AST nodes, handlers, LSP completions, help
+   pages, snippets, docs, and samples for `SHOW` data retrieval in the same change. The `eng`
+   namespace is reserved for the virtual schema; reject `CREATE CONNECTION eng AS ...` to avoid
+   ambiguous `eng.<table>` resolution.
 
    Parameterized catalog queries that cannot be expressed as a WHERE filter on a static virtual
    table use a table-valued function under the same schema:
@@ -608,8 +615,8 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 
    The `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` form is a file-write operation, not
    data retrieval. Rename it to `EXPORT LINEAGE AS OPENLINEAGE TO '...'` alongside this change.
-   REPL shortcuts such as `SHOW TABLES` may remain as display-only aliases that expand to the
-   underlying `SELECT` at parse time and are never emitted by the formatter or autocomplete.
+   Do not keep `SHOW TABLES` or other REPL shortcuts as display-only aliases; the canonical
+   inspection surface is `SELECT * FROM eng.<table>` everywhere.
 
    **Complete `eng.*` virtual table catalog:**
    ```
@@ -644,37 +651,22 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 
    Update the engine, parser, formatter, linter, LSP autocomplete, help, snippets, samples, and
    all documentation together with this change. Every `SHOW <data>` form must become a `SELECT
-   FROM eng.*` form; every `SHOW ... INTO #table` pattern in the ROADMAP, guides, cookbook, and
-   sample files must be rewritten accordingly.
+   FROM eng.*` form; every `SHOW ... INTO #table`, `SHOW ... AT <connection>`, and `SHOW ... ON
+   <connection>` pattern in the ROADMAP, guides, cookbook, and sample files must be rewritten to
+   normal `SELECT` syntax using `INTO`, `WHERE`, and the `[connection.]eng.<table>` source name.
 
 #### P1 — Normalize inspection and target clauses
 
-1. Remove the `SHOW TABLES ON <connection>` parser-only alias. The canonical form is
-   `SELECT * FROM <connection>.eng.tables`; there is no `ON` variant.
-2. Implement `eng.tags` as a globally enumerable virtual table over the current session's tag
+1. Implement `eng.tags` as a globally enumerable virtual table over the current session's tag
    catalog. Remove `SHOW TAGS FOR SCRIPT` and `SHOW TAGS FOR TABLE <name>` as special forms;
    filter with `WHERE` instead: `SELECT * FROM eng.tags WHERE table_name = '#orders'`.
-3. Remove the `SHOW <object> [qualifier] [target] [filter] [AT conn] [INTO #table]` ordering
-   rule — it is superseded by `SELECT ... FROM [connection.]eng.<table> [WHERE ...] [AT conn]`.
+2. Remove the `SHOW <object> [qualifier] [target] [filter] [AT conn] [INTO #table]` ordering
+   rule — it is superseded by `SELECT ... FROM [connection.]eng.<table> [WHERE ...] [INTO #table]`.
    Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
    and effective permissions as `eng.*` virtual tables with `WHERE` filters.
-4. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
+3. Correct Portal share/embed syntax drift. Parser, formatter, docs, and configuration export must
    agree on one expiration clause; prefer structural `EXPIRES <timestamp>` over a second
    `WITH(EXPIRES_AT=...)` spelling.
-5. **Retire `SHOW SMTP CONNECTIONS` in favour of `eng.connections`.** Carried over from the P0
-   managed-connection work (2026-07-27): the bespoke SMTP store is gone, so the statement now
-   lists the whole governed catalog and its name is actively misleading. Replace with a filter on
-   the connector type, against a Portal-qualified catalog:
-
-   ```sql
-   SELECT * FROM my_portal.eng.connections WHERE connector_type = 'SMTP';
-   ```
-
-   Delete `ShowPortalSmtpConnectionsStatement`, its `SHOW SMTP CONNECTION[S]` parser branch in
-   `SystemParser`, its `INTO #table` rewrite case, and the `PortalDataSource` handler that now
-   points at `api/admin/connections`. `eng.connections` is already listed in the catalog inventory
-   under the P1 `SHOW` retirement item, so this is a consumer of that work rather than a new
-   surface.
 
 #### P2 — Retire duplicate surface syntax
 
@@ -735,6 +727,70 @@ reuse normal SMTP/WEBHOOK connections, multiple named refresh jobs can target th
 unsupported lifecycle parses successfully, and every canonical statement round-trips through the
 formatter and documentation test lane.
 
+### Language — Table Transformation Algorithms (`TRANSFORM`)
+
+**Active development started 2026-07-28.**
+ETL-SQL's data-preparation helpers (`FILL_DATES`, `GENERATE CALENDAR`,
+`COMPARE DATASETS`) are useful but lack a coherent statement family. `FILL_DATES` in particular
+uses an awkward function-call-as-statement shape that is inconsistent with the rest of the language.
+Users migrating from Power Query (M), dbt macros, or pandas also expect a single-verb operation for
+common table transformations — operations that are too domain-specific for standard SQL but too
+common to warrant writing full window-function or CTE boilerplate each time.
+
+The `TRANSFORM` verb fills this gap. It does not appear in ETL-SQL's current statement surface,
+has no conflict with any SQL standard statement keyword, and is on-brand for a product whose name
+begins with the T in ETL.
+
+**Pattern:**
+
+```sql
+TRANSFORM #result
+FROM #source
+USING <algorithm> (
+    <named parameters>
+);
+```
+
+- **`TRANSFORM`** — the verb; always produces a `#temp` table output
+- **`#result`** — the output temp table name; comes immediately after the verb
+- **`FROM #source`** — the input temp table; omitted only for zero-source generators
+- **`USING <algorithm>`** — the named algorithm applied to the source
+- **`(...)`** — named keyword parameters specific to that algorithm
+
+`GENERATE CALENDAR` and `COMPARE DATASETS` retain their existing verbs: `GENERATE` produces a
+result from no source table, and `COMPARE` takes two sources joined by `WITH`. Neither fits the
+single-source shape `TRANSFORM` owns.
+
+> [!NOTE]
+> **Design Philosophy — Opinionated Helpers & The SQL Escape Hatch**
+> The `TRANSFORM` statement is intentionally an **opinionated "black box"**. It is designed to satisfy the 90% common convenience use cases with clean, simple parameters. It is **not** intended to grow into a multi-parameter monster supporting every custom edge case (e.g. non-linear custom interpolations, complex custom-weighted rolling aggregates, etc.).
+> 
+> * **The Escape Hatch:** Because ETL-SQL is a SQL engine first, users are never locked out. If a transformation has custom requirements that exceed the parameter list of a `TRANSFORM` algorithm, the user should simply write standard SQL (CTEs, window functions, and `CASE` statements) against the `#temp` tables directly instead of proposing syntax bloat.
+
+- [x] **P0 — Migrate `FILL_DATES` to `TRANSFORM ... USING FILL_DATES`**
+  - [x] Retire the standalone `FILL_DATES(#source, ...) INTO #result` form, which reads as a function call being used as a statement. Replace it with the canonical `TRANSFORM` form.
+  - [x] Update all existing samples, docs, snippets, help files, and formatter output together. Emit a deprecation diagnostic for the retired form with an exact replacement.
+- [x] **P1 — Add `INTERPOLATE` algorithm**
+  - [x] Fills missing numeric values between known data points using a named method. The `BY_GROUP` clause partitions independently — identical to the `FILL_DATES` grouping model.
+- [x] **P1 — Add `DEDUPLICATE` algorithm**
+  - [x] Removes duplicate rows with explicit control over which duplicate to retain. Addresses the gap between `SELECT DISTINCT` (no ordering) and writing `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)` boilerplate for every deduplication case.
+- [x] **P1 — Add `PIVOT` algorithm (Reporting & Cross-Tabulation)**
+  - [x] Rotates rows into columns for reporting matrices. Resolves the severe syntax differences across SQL dialects (and the lack of a simple, native pivot in Postgres).
+- [ ] **P2 — Add `TOP_N_OTHERS` algorithm (Visual Hygiene / Slicing)**
+  - Reduces high-cardinality values by aggregating low-volume categories into a single row. Essential for clean visuals (pie charts, bar charts).
+- [ ] **P2 — Add `PERIOD_COMPARISON` algorithm (Growth Metrics)**
+  - Calculates period-over-period differences or growth percentages (MoM, YoY) without redundant, hard-to-read window query repetition.
+- [ ] **P2 — Add `SHARE_OF_TOTAL` algorithm (Percentage Contribution)**
+  - Computes the percentage contribution of a column relative to a parent or group total partition, preventing manual divide-by-zero checks and decimal scaling logic.
+- [ ] **P2 — Add `NORMALIZE` algorithm**
+  - Scales numeric columns to a standard range or distribution. Useful before fuzzy matching, composite scoring, or any distance-based calculation where raw magnitude differences would dominate.
+- [ ] **P3 — Add `ROLLING_AGGREGATE` algorithm (Smoothing / Moving Windows)**
+  - Smooths noisy data trends (e.g. 7-day moving average) or tracks running/cumulative sums on reports.
+- [ ] **Correctness, Testing, and the Triage Workflow (SLT)**
+  - Cover each algorithm with **Sqllogictest (SLT)** test files verifying standard execution logic, boundary transitions, and null values/edge cases.
+  - Apply the strict triage policy.
+- [x] **Definition of done (P0).** `FILL_DATES` round-trips through the formatter in its canonical `TRANSFORM` form. Every existing sample and doc is updated. Each algorithm ships with a help file, a snippet, and at least one self-contained cookbook recipe showing it inside a full Extract → Stage → Transform → Load pipeline.
+
 ### Release-process RCI — issues found cutting v0.17.0 (scheduled last)
 
 Thirteen process problems surfaced during this release. Four are already fixed (noted below); the
@@ -790,11 +846,9 @@ defects**, they were the gate measuring the wrong thing, hiding things, or being
 
 #### Smaller items
 
-- [ ] **Warn when `gpg.ssh.allowedSignersFile` is unset while `gpg.format=ssh`.** Commits verified as
-      `N` (unsigned) purely because git could not check its own signatures; `main` requires signed
-      commits, so a reviewer gets a false negative.
-- [ ] **Consider installing the .NET SDK in WSL** so a Linux lane can run locally. Accepted for now
-      — the CI `Enterprise Certification (linux)` matrix covers it.
+- [ ] **Add a release/preflight warning when `gpg.ssh.allowedSignersFile` is unset while
+      `gpg.format=ssh`.** Commits verified as `N` (unsigned) purely because git could not check its
+      own signatures; `main` requires signed commits, so a reviewer gets a false negative.
 - [ ] **Pause Dependabot during a release window.** Pushing `main` rebased both open PRs and
       re-triggered four CI/CodeQL runs that competed with the release-critical jobs for Windows
       runners.
@@ -930,9 +984,12 @@ The fix is to make the apparatus trustworthy, not to chase the numbers:
       produced the v0.17.0 false alarm.
 - [ ] **Emit `CONFIG_FINGERPRINT` and `COMMIT_METADATA`** in every certification run so comparisons
       can verify they are comparing like with like.
-- [ ] Confirm the `StreamingSelect` GC_PAUSE warning (+29%, warmed and reproducible) is acceptable
-      given the data-quality work's per-row allocation, or reduce it. Warning only — elapsed and
-      throughput are in band.
+- [x] Accept the `StreamingSelect` GC_PAUSE warning (+29%, warmed and reproducible) for v0.18.0 as
+      the current cost of data-quality allocation. Warning only — elapsed and throughput are in
+      band.
+- [ ] Investigate performance improvements when data-quality allocation is active. Focus on reducing
+      per-row allocation and GC pause time without weakening `@expect`/`@fail` behavior, quarantine
+      routing, or lineage/tag capture.
 
 Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
 measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.

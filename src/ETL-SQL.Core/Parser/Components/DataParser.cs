@@ -129,57 +129,45 @@ public class DataParser : ParserComponent
         };
     }
 
-    public Statement ParseFillDates(Token startToken)
+
+
+    public Statement ParseTransform(Token startToken)
     {
-        Consume(TokenType.LPAREN, "Expected '(' after FILL_DATES");
-        var sourceTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
-
-        string? dateColumn = null;
-        Expression? gapFill = null;
-        var groupColumns = new List<string>();
-
-        while (Match(TokenType.COMMA))
+        var targetTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        TableReference? sourceTable = null;
+        if (Match(TokenType.FROM))
         {
-            var option = ConsumeIdentifier("Expected FILL_DATES option name").Value;
-            Consume(TokenType.EQUALS, $"Expected '=' after {option}");
-            var value = ParseExpression();
+            sourceTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+        }
+        Consume(TokenType.USING, "Expected 'USING' after FROM source");
+        Token algorithmTok;
+        if (_parser.Current.Type < TokenType.STAR)
+        {
+            algorithmTok = Advance();
+        }
+        else
+        {
+            algorithmTok = ConsumeIdentifier("Expected algorithm name after USING");
+        }
+        var algorithm = algorithmTok.Value;
 
-            if (option.Equals("DATE_COL", StringComparison.OrdinalIgnoreCase))
+        var options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+        Consume(TokenType.LPAREN, $"Expected '(' after {algorithm}");
+        while (!Match(TokenType.RPAREN))
+        {
+            var keyTok = ConsumeIdentifier("Expected parameter name");
+            Consume(TokenType.EQUALS, "Expected '='");
+            var valTok = ParseExpression();
+            options[keyTok.Value] = valTok;
+            if (!Match(TokenType.COMMA))
             {
-                dateColumn = ExpressionToOptionString(value, "DATE_COL");
-            }
-            else if (option.Equals("GAPS_FILL", StringComparison.OrdinalIgnoreCase))
-            {
-                gapFill = value;
-            }
-            else if (option.Equals("BY_GROUP", StringComparison.OrdinalIgnoreCase))
-            {
-                var groups = ExpressionToOptionString(value, "BY_GROUP")
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                groupColumns.AddRange(groups);
-            }
-            else
-            {
-                throw new SyntaxException($"Unknown FILL_DATES option: {option}", _parser.Current.Line, _parser.Current.Column);
+                Consume(TokenType.RPAREN, "Expected ')' or ','");
+                break;
             }
         }
-
-        Consume(TokenType.RPAREN, "Expected ')' after FILL_DATES options");
-        Consume(TokenType.INTO, "Expected 'INTO' after FILL_DATES(...)");
-        var targetTable = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
         Match(TokenType.SEMICOLON);
 
-        if (string.IsNullOrWhiteSpace(dateColumn))
-        {
-            throw new SyntaxException("FILL_DATES requires DATE_COL = 'ColumnName'", startToken.Line, startToken.Column);
-        }
-
-        return new FillDatesStatement(
-            sourceTable,
-            dateColumn!,
-            gapFill ?? new LiteralExpression(0m, TokenType.NUMERIC),
-            groupColumns,
-            targetTable)
+        return new TransformStatement(targetTable, sourceTable, algorithm, options)
         {
             Line = startToken.Line,
             Column = startToken.Column

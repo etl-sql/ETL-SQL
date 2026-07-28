@@ -2275,10 +2275,13 @@ public sealed record CompareDatasetsStatement(TableReference SourceTable, TableR
     public override IEnumerable<string> GetSourceTables() => new[] { SourceTable.TableName, BaselineTable.TableName };
 }
 
-public sealed record FillDatesStatement(TableReference SourceTable, string DateColumn, Expression GapFillValue, List<string> GroupColumns, TableReference TargetTable) : Statement
+public sealed record TransformStatement(TableReference TargetTable, TableReference? SourceTable, string Algorithm, Dictionary<string, Expression> Options) : Statement
 {
-    public override IEnumerable<string> GetSourceTables() => new[] { SourceTable.TableName };
+    public override IEnumerable<string> GetSourceTables() => SourceTable != null ? new[] { SourceTable.TableName } : Enumerable.Empty<string>();
+    public override string? GetCreatedTable() => TargetTable.TableName;
 }
+
+
 
 public sealed record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
 {

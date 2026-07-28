@@ -2,7 +2,7 @@
 Create portal alert definitions through a `PORTAL` connection.
 
 ## Syntax
-```sql
+```text
 CREATE [OR REPLACE | OR ALTER] ALERT AlertName
   FOR REPORT '/Folder/ReportName'
   WHEN VISUAL VisualName >= 1000

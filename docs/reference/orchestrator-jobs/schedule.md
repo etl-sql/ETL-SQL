@@ -5,7 +5,7 @@ destinations are independent catalog objects; link them explicitly with `ALTER J
 
 ## Syntax
 
-```sql
+```text
 CREATE [OR ALTER|OR REPLACE] JOB JobName
   FOR SCRIPT|REPORT 'target-path'
   [WITH (

@@ -83,4 +83,4 @@ References:
 - [ALTER](ddl/alter.md)
 - [DROP](ddl/drop.md)
 - [Report-SQL Guide](../../guides/report-sql.md)
-- [Job Orchestration](../../guides/job-orchestration.md)
+- [Job Orchestration](../orchestrator-jobs/schedule.md)

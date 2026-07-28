@@ -74,6 +74,9 @@
     <!-- Global & Session Configuration (Options Category) -->
     <EmbeddedResource Include="..\..\docs\administration\platform\appsettings-reference.md" Link="Resources\Help\Options\settings.md" />
 
+    <!-- Table Transformation Algorithms (Algorithms Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\transform\*.md" Link="Resources\Help\Algorithms\%(Filename)%(Extension)" Exclude="..\..\docs\reference\transform\README.md" />
+
     <!-- Code Autocomplete Snippets -->
     <EmbeddedResource Include="..\..\snippets\*.md" Link="Resources\Help\Snippets\%(Filename)%(Extension)" Exclude="..\..\snippets\README.md" />
   </ItemGroup>

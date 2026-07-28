@@ -1619,8 +1619,6 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("#stage", body["manifestDatasets"]![0]!["tempTableName"]!.GetValue<string>());
         Assert.Equal("Sales Summary", body["registeredDatasets"]![0]!["name"]!.GetValue<string>());
         Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
-            n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary");
-        Assert.Contains(body["refreshJobs"]!.AsArray(), n =>
             n!["orchestratorJobName"]!.GetValue<string>() == "refresh_sales_summary_v2" &&
             n["orchestratorAlias"]!.GetValue<string>() == "prod_orch");
         Assert.Equal("RevenueDrop", body["alerts"]![0]!["name"]!.GetValue<string>());

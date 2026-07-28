@@ -15,26 +15,32 @@ GENERATE CALENDAR FROM '2026-01-01' TO '2026-01-31' INTO #calendar;
 SELECT * FROM #calendar;
 ```
 
-## FILL_DATES
+## TRANSFORM
+
+Applies a table transformation algorithm to a source table to produce a target table.
 
 ```sql
-FILL_DATES(
-  #source,
-  DATE_COL = 'date_column',
-  GAPS_FILL = <value>,
-  BY_GROUP = 'group_column[, group_column...]'
-) INTO #filled;
+TRANSFORM #target
+FROM #source
+USING <algorithm> (
+  <parameters>
+);
 ```
+
+### Supported Algorithms
+
+#### FILL_DATES
 
 Fills missing daily rows between the minimum and maximum date in each group. Existing rows are copied unchanged. Generated rows keep the date and group values; all other columns receive `GAPS_FILL` (default `0`).
 
 ```sql
-FILL_DATES(
-  #daily_sales,
+TRANSFORM #daily_sales_filled
+FROM #daily_sales
+USING FILL_DATES (
   DATE_COL = 'OrderDate',
   GAPS_FILL = 0,
   BY_GROUP = 'Region'
-) INTO #daily_sales_filled;
+);
 ```
 
 ## COMPARE DATASETS

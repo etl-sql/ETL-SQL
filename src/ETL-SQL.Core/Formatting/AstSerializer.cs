@@ -176,6 +176,7 @@ public static class AstSerializer
         CreateButtonStatement s => FormatCreateButton(s),
         CreateStyleStatement s => FormatCreateStyle(s),
         LineageStatement s => FormatLineage(s),
+        TransformStatement s => FormatTransform(s),
         LintStatement s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
         HelpStatement s => $"HELP {(s.Topic != null ? s.Topic + (s.SubTopic != null ? " " + s.SubTopic : "") : "")}",
         DropReportObjectStatement s => $"DROP {s.ObjectType.ToString().ToUpper()} {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
@@ -766,6 +767,15 @@ public static class AstSerializer
         return sql + ";";
     }
 
+    private static string FormatTransform(TransformStatement s)
+    {
+        var sourceStr = s.SourceTable != null ? $" FROM {s.SourceTable.ToSql()}" : "";
+        var optionsStr = s.Options != null && s.Options.Count > 0
+            ? " (" + string.Join(", ", s.Options.Select(o => $"{o.Key} = {o.Value.ToSql()}")) + ")"
+            : "()";
+        return $"TRANSFORM {s.TargetTable.ToSql()}{sourceStr} USING {s.Algorithm}{optionsStr};";
+    }
+
     private static string FormatLineageTarget(TableReference target)
     {
         if (target.TableName.StartsWith("report:", StringComparison.OrdinalIgnoreCase))
@@ -1094,7 +1104,7 @@ public static class AstSerializer
         foreach (var axis in s.AxisOptions)
             sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
         if (s.Actions.Count > 0)
-            sb.AppendLine($"    ACTIONS ( {string.Join(", ", s.Actions.Select(a => a.ToSql()))} ),");
+            sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
         if (s.DefaultValue != null && s.VisualType != VisualType.Text)
             sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
 
@@ -1182,13 +1192,33 @@ public static class AstSerializer
         return $"{CreationVerb(s.Mode)} NAVIGATION {s.Name} AS {s.NavType.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
     }
 
+    private static string FormatActions(List<VisualAction> actions)
+    {
+        var grouped = actions.GroupBy(a => a.Trigger);
+        var parts = new List<string>();
+        foreach (var g in grouped)
+        {
+            var trigger = g.Key;
+            var list = g.ToList();
+            if (list.Count == 1)
+            {
+                parts.Add($"{trigger} = {list[0].ToSql()}");
+            }
+            else
+            {
+                parts.Add($"{trigger} = ({string.Join(", ", list.Select(a => a.ToSql()))})");
+            }
+        }
+        return string.Join(", ", parts);
+    }
+
     private static string FormatCreateButton(CreateButtonStatement s)
     {
         var parts = new List<string>();
         if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
         if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
         if (s.Options.Count > 0) parts.Add("OPTIONS (" + FormatVisualOptions(s.Options) + ")");
-        if (s.Actions.Count > 0) parts.Add("ACTIONS (" + string.Join(", ", s.Actions.Select(a => a.ToSql())) + ")");
+        if (s.Actions.Count > 0) parts.Add("ACTIONS (" + FormatActions(s.Actions) + ")");
         if (s.StyleName != null)
             parts.Add($"STYLE = {s.StyleName}");
         else if (s.Styles.Count > 0)

@@ -57,5 +57,5 @@ ORDER BY started_at DESC;
 - See: PORTAL_DATASET, PORTAL_REPORT, PORTAL_SHOW
 
 References:
-- [Job Orchestration](../../guides/job-orchestration.md)
+- [Job Orchestration](../orchestrator-jobs/schedule.md)
 - [Portal Admin Commands](README.md)

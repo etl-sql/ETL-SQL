@@ -48,7 +48,7 @@ public class StatementParser
         _dispatchMap[TokenType.TRUNCATE] = () => { var t = _parser.Previous; return DataParser.ParseTruncate(t); };
         _dispatchMap[TokenType.GENERATE] = () => { var t = _parser.Previous; return DataParser.ParseGenerate(t); };
         _dispatchMap[TokenType.COMPARE] = () => { var t = _parser.Previous; return DataParser.ParseCompare(t); };
-        _dispatchMap[TokenType.FILL_DATES] = () => { var t = _parser.Previous; return DataParser.ParseFillDates(t); };
+        _dispatchMap[TokenType.TRANSFORM] = () => { var t = _parser.Previous; return DataParser.ParseTransform(t); };
         _dispatchMap[TokenType.DELETE] = () => { var t = _parser.Previous; return DataParser.ParseDelete(t); };
         _dispatchMap[TokenType.DECLARE] = () => SystemParser.ParseDeclare();
         _dispatchMap[TokenType.RUN] = () => { var t = _parser.Previous; return SystemParser.ParseRun(t); };

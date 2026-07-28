@@ -6,6 +6,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 
 - [Syntax Index](../syntax-index.md) - searchable map of statements, functions, options, visuals, and related focused pages.
 - [Statements](statements/README.md) - DDL, DML, query syntax, and session-control statements.
+- [Table Transformations](transform/README.md) - FILL_DATES, INTERPOLATE, DEDUPLICATE, and PIVOT algorithms.
 - [Control Flow](control-flow/README.md) - `IF`, `WHILE`, `FOREACH`, `TRY...CATCH`, `WAITFOR`, `PARALLEL`, and script execution.
 - [Variables and Parameters](variables-parameters/README.md) - `DECLARE`, `USE`, system variables, and runtime parameters.
 - [SET Commands](set-commands/set.md) - session and engine configuration options.

@@ -72,6 +72,10 @@ public class LanguageHelpRegistry : ILanguageHelpRegistry
                     mappedTopic = "REPORT";
                     mappedSubTopic = topic;
                     break;
+                case "ALGORITHMS":
+                    mappedTopic = "TRANSFORM";
+                    mappedSubTopic = topic;
+                    break;
                 default:
                     mappedTopic = topic;
                     mappedSubTopic = subTopic;
