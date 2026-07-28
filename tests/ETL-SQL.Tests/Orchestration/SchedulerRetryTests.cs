@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -97,6 +99,101 @@ namespace ETL_SQL.Tests.Orchestration
 
             throttle.Dispose();
             try { if (File.Exists(throttleDbPath)) File.Delete(throttleDbPath); } catch { /* best-effort temp cleanup */ }
+        }
+
+        [Fact]
+        public async Task ExecuteJobAsync_DispatchesCompletionNotificationAfterFinalOutcome()
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_test_{Guid.NewGuid():N}.db");
+            var catalogRoot = Path.Combine(Path.GetTempPath(), $"etlsql_notify_catalog_{Guid.NewGuid():N}");
+            var throttleDbPath = Path.Combine(Path.GetTempPath(), $"etlsql_notify_throttle_{Guid.NewGuid():N}.db");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                var job = new JobDefinition(
+                    "NotifyJob",
+                    "SELECT 1;",
+                    1, "HOUR", null, null, null, true,
+                    MaxRetries: 1,
+                    RetryDelaySeconds: 1);
+                await store.SaveJobAsync(job);
+                await store.SaveNotificationAsync(new NotificationDefinition(
+                    "NotifyOps",
+                    "notify_webhook",
+                    Recipient: "ops@example.com"));
+                await store.AddJobNotificationAsync(job.Name, "NotifyOps", NotificationTrigger.Completion);
+
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
+                    "notify_webhook",
+                    "WEBHOOK",
+                    "https://hooks.example.invalid/dq",
+                    new Dictionary<string, string> { ["FORMAT"] = "generic" },
+                    Disabled: false));
+
+                var mockExecutor = new Mock<IScriptExecutor>();
+                string? notificationScript = null;
+                mockExecutor.Setup(e => e.ExecuteTextAsync(
+                        It.IsAny<string>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<CancellationToken>(),
+                        It.IsAny<string?>(),
+                        It.IsAny<long>(),
+                        It.IsAny<ExecutionIdentity?>()))
+                    .ReturnsAsync((string script, string? sessionId, CancellationToken ct, string? jobName, long queueWaitMs, ExecutionIdentity? identity) =>
+                    {
+                        if (script == job.Script)
+                            return new ScriptExecutionResult(true, 42, null, SessionId: "job-session");
+
+                        notificationScript = script;
+                        return new ScriptExecutionResult(true, 1, null);
+                    });
+
+                var services = new ServiceCollection();
+                services.AddSingleton(mockExecutor.Object);
+                services.AddSingleton<IConnectionCatalogProvider>(connectionCatalog);
+                var serviceProvider = services.BuildServiceProvider();
+
+                var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 1 });
+                var throttleConfig = new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?> { ["Orchestrator:DatabasePath"] = throttleDbPath })
+                    .Build();
+                using var throttle = new JobThrottle(
+                    throttleOptions,
+                    new Mock<ILogger<JobThrottle>>().Object,
+                    throttleConfig);
+                var scheduler = new SchedulerService(
+                    serviceProvider,
+                    store,
+                    new Mock<ILogger<SchedulerService>>().Object,
+                    throttle,
+                    new ConfigurationBuilder().Build(),
+                    new Mock<ISessionStateManager>().Object);
+
+                var method = typeof(SchedulerService).GetMethod(
+                    "ExecuteJobAsync",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                await (Task)method!.Invoke(scheduler, [job])!;
+
+                Assert.NotNull(notificationScript);
+                Assert.Contains("CREATE CONNECTION __job_notification_sink AS WEBHOOK('SHARED:notify_webhook')", notificationScript);
+                Assert.Contains("Job succeeded: NotifyJob", notificationScript);
+                Assert.Contains("ops@example.com", notificationScript);
+                mockExecutor.Verify(e => e.ExecuteTextAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<long>(),
+                    It.IsAny<ExecutionIdentity?>()), Times.Exactly(2));
+            }
+            finally
+            {
+                try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+                try { if (File.Exists(throttleDbPath)) File.Delete(throttleDbPath); } catch { }
+                try { if (Directory.Exists(catalogRoot)) Directory.Delete(catalogRoot, recursive: true); } catch { }
+            }
         }
     }
 }

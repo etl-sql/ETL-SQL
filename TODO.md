@@ -392,6 +392,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
      today, so a generic syntax error would leave the reader guessing.
 4. **Notification dispatch and audit:**
+   - **[PARTIAL]** Scheduled jobs dispatch linked `NOTIFICATION`s once after retries settle:
+     `SUCCESS`/`FAILURE` use the final outcome, `COMPLETION` fires for either, disabled or missing
+     notifications are skipped, and delivery runs through an in-process script that opens the
+     notification's shared connection catalog alias so `SECRET:` resolution and connector policy stay
+     on the normal engine path.
    - The Orchestrator dispatches, for jobs **and** for alerts — one catalog, one path, so an operator
      configures a mail destination once. The Portal evaluates the alert condition and calls the
      Orchestrator to deliver. Resolve connections through normal `SECRET:` resolution on the
