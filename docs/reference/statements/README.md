@@ -14,6 +14,7 @@ Statement reference pages define the executable language surface.
 - [Containerized Test Databases](use-docker.md) - `USE DOCKER` for ephemeral test databases.
 - [Data Prep Helpers](data-prep.md) - `GENERATE CALENDAR`, `FILL_DATES`, and `COMPARE DATASETS`.
 - [Session Control](session-control/help.md) - `HELP`, `LINT`, `EXPLAIN`, lineage, transactions, assertions, and diagnostics.
+- [Lifecycle Capability Matrix](lifecycle-matrix.md) - supported `CREATE`, `CREATE OR ALTER`, `CREATE OR REPLACE`, `ALTER`, `DROP`, and `DROP IF EXISTS` forms by object kind.
 
 Use the [Syntax Index](../../syntax-index.md) when you need to find the focused page for a command, clause, option, or visual type.
 

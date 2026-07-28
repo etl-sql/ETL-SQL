@@ -51,6 +51,7 @@ END;
 
 ## Notes
 - Connection types: MSSQL, POSTGRES, MYSQL, SQLITE, ORACLE, FLATFILE, SFTP, S3, SMTP, API, SNOWFLAKE, BIGQUERY, REDSHIFT, ODBC.
+- Supported lifecycle modifiers vary by object kind. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md) before using `CREATE IF NOT EXISTS`, `CREATE OR ALTER`, or `CREATE OR REPLACE`.
 - `ENC:` prefix marks an encrypted credential value decrypted at connect time.
 - `CREATE TABLE` is optional when using `SELECT ... INTO #table`. The schema is inferred automatically.
 - `CREATE VIEW` stores a query definition only; rows are evaluated when the view is selected.

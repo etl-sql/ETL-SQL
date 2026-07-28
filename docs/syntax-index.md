@@ -908,7 +908,8 @@ Lifecycle: every report object above supports `CREATE OR REPLACE <kind> <name>` 
 `DROP <kind> [IF EXISTS] <name>`. `ALTER <kind> <name> (...)` patches named clauses and is supported
 for `VISUAL`, `PAGE`, `CONTAINER`, `BUTTON`, and `TEMPLATE` only; `STYLE`, `NAVIGATION`, `THEME`, and
 `DATASET` are redefined with `CREATE OR REPLACE` instead. Each kind accepts only the clauses it can
-patch — see its reference page — and anything else is refused at parse time.
+patch — see its reference page — and anything else is refused at parse time. For all object kinds,
+see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 
 ### 8.2 Visual Types
 | Type | Category | Help File |

@@ -458,10 +458,14 @@ provision connection aliases onto an orchestrator instead of an operator doing i
 
 #### P1 — Make lifecycle modifiers explicit and uniform
 
-1. Publish one capability matrix for every creatable object covering `CREATE`, `CREATE IF NOT
+1. **[DONE]** Publish one capability matrix for every creatable object covering `CREATE`, `CREATE IF NOT
    EXISTS`, `CREATE OR ALTER`, `CREATE OR REPLACE`, standalone `ALTER`, `DROP`, and `DROP IF EXISTS`.
    The parser must reject unsupported combinations immediately; it must never silently discard a
-   requested mode or let handlers interpret an unknown mode differently.
+   requested mode or let handlers interpret an unknown mode differently. The matrix is now
+   [Lifecycle Capability Matrix](docs/reference/statements/lifecycle-matrix.md), linked from the
+   statement reference and syntax index. Parser dispatch now rejects unsupported mode prefixes for
+   the non-mode-aware create forms (`INDEX`, key pairs, `SETS`, `TAG`, `LINEAGE`, file-directory
+   creation, and Portal operational resources) instead of dropping `OR ALTER`/`OR REPLACE`.
 2. **[DONE]** Canonicalize existence modifiers before the object name:
 
    ```sql

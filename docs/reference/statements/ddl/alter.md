@@ -20,6 +20,7 @@ WHERE status = 'Active';
 ```
 
 ## Notes
+- Supported `ALTER` forms vary by object kind. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md).
 - Only `ADD COLUMN` and `DROP COLUMN` are supported.
 - Adding a column with no default fills existing rows with NULL.
 - Dropping a column permanently removes it and all its data from the in-memory table.

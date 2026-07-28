@@ -212,7 +212,7 @@ public class DataParser : ParserComponent
         if (Match(TokenType.CONNECTION)) return ParseCreateConnection(startToken, mode);
         if (Match(TokenType.TABLE))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for TABLE.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "TABLE", ObjectCreationMode.CreateOrReplace);
             var ct = (CreateTableStatement)ParseCreateTable(startToken);
             return orReplace ? ct with { OrReplace = true } : ct;
         }
@@ -233,6 +233,7 @@ public class DataParser : ParserComponent
 
         if (Match(TokenType.DIRECTORY))
         {
+            RejectUnsupportedCreateMode(mode, "DIRECTORY");
             var path = ParseExpression();
             Expression? overwrite = null;
             if (Match(TokenType.WITH)) overwrite = ParseWithOverwrite();
@@ -244,38 +245,38 @@ public class DataParser : ParserComponent
 
         if (_parser.Current.Type == TokenType.UNIQUE || _parser.Current.Type == TokenType.INDEX)
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for INDEX.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "INDEX");
             bool isUnique = Match(TokenType.UNIQUE);
             return ParseCreateIndex(startToken, isUnique);
         }
 
         if (Match(TokenType.SSH_KEY_PAIR))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SSH_KEY_PAIR.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "SSH_KEY_PAIR");
             return ParseCreateSshKeyPair(startToken);
         }
 
         if (Match(TokenType.PGP_KEY_PAIR))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for PGP_KEY_PAIR.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "PGP_KEY_PAIR");
             return ParseCreatePgpKeyPair(startToken);
         }
 
         if (Match(TokenType.SETS))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SETS.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "SETS");
             return ParseCreateSets(startToken);
         }
 
         if (Match(TokenType.TAG))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for TAG.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "TAG");
             return ParseCreateTag(startToken);
         }
 
         if (Match(TokenType.LINEAGE))
         {
-            if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for LINEAGE.", _parser.Current.Line, _parser.Current.Column);
+            RejectUnsupportedCreateMode(mode, "LINEAGE");
             return ParseCreateLineage(startToken);
         }
 
@@ -291,18 +292,69 @@ public class DataParser : ParserComponent
         if (Match(TokenType.THEME)) return _parent.ReportParser.ParseCreateTheme(startToken, mode);
 
         // Portal admin
-        if (Match(TokenType.USER)) return _parent.PortalParser.ParseCreateUser(startToken);
-        if (Match(TokenType.GROUP)) return _parent.PortalParser.ParseCreateGroup(startToken);
-        if (Match(TokenType.FOLDER)) return _parent.PortalParser.ParseCreateFolder(startToken);
+        if (Match(TokenType.USER))
+        {
+            RejectUnsupportedCreateMode(mode, "USER");
+            return _parent.PortalParser.ParseCreateUser(startToken);
+        }
+        if (Match(TokenType.GROUP))
+        {
+            RejectUnsupportedCreateMode(mode, "GROUP");
+            return _parent.PortalParser.ParseCreateGroup(startToken);
+        }
+        if (Match(TokenType.FOLDER))
+        {
+            RejectUnsupportedCreateMode(mode, "FOLDER");
+            return _parent.PortalParser.ParseCreateFolder(startToken);
+        }
         if (Match(TokenType.REFRESH)) return _parent.PortalParser.ParseCreateRefreshJob(startToken);
-        if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
-        if (Match(TokenType.SHARE)) return _parent.PortalParser.ParseCreateShareLink(startToken);
-        if (Match(TokenType.EMBED)) return _parent.PortalParser.ParseCreateEmbedToken(startToken);
-        if (Match(TokenType.SAVED)) return _parent.PortalParser.ParseCreateSavedView(startToken);
+        if (Match(TokenType.SUBSCRIPTION))
+        {
+            RejectUnsupportedCreateMode(mode, "SUBSCRIPTION");
+            return _parent.PortalParser.ParseCreateSubscription(startToken);
+        }
+        if (Match(TokenType.SHARE))
+        {
+            RejectUnsupportedCreateMode(mode, "SHARE LINK");
+            return _parent.PortalParser.ParseCreateShareLink(startToken);
+        }
+        if (Match(TokenType.EMBED))
+        {
+            RejectUnsupportedCreateMode(mode, "EMBED TOKEN");
+            return _parent.PortalParser.ParseCreateEmbedToken(startToken);
+        }
+        if (Match(TokenType.SAVED))
+        {
+            RejectUnsupportedCreateMode(mode, "SAVED VIEW");
+            return _parent.PortalParser.ParseCreateSavedView(startToken);
+        }
         if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken, mode);
         if (Match(TokenType.SMTP)) return _parent.PortalParser.ParseCreateSmtpConnection(startToken);
 
         throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
+    }
+
+    private void RejectUnsupportedCreateMode(
+        ObjectCreationMode mode,
+        string objectKind,
+        params ObjectCreationMode[] additionallyAllowed)
+    {
+        if (mode == ObjectCreationMode.Create
+            || additionallyAllowed.Contains(mode))
+        {
+            return;
+        }
+
+        var modifier = mode switch
+        {
+            ObjectCreationMode.CreateOrAlter => "ALTER",
+            ObjectCreationMode.CreateOrReplace => "REPLACE",
+            _ => mode.ToString().ToUpperInvariant()
+        };
+        throw new SyntaxException(
+            $"CREATE OR {modifier} is not supported for {objectKind}.",
+            _parser.Current.Line,
+            _parser.Current.Column);
     }
 
     public Statement ParseAlter(Token startToken)

@@ -32,6 +32,7 @@ END;
 ```
 
 ## Notes
+- Use `DROP <kind> IF EXISTS <name>` where supported; the post-name form `DROP <kind> <name> IF EXISTS` is retired. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md).
 - Dropping a #temp table that does not exist raises a runtime error; guard with `IF` checks if needed.
 - Connections are session-scoped by default; they are automatically released when the script ends.
 - Dropping an index does not drop the table.
