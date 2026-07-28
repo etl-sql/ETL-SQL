@@ -106,6 +106,7 @@ public record LineageImpactSummaryDto(
     int Datasets,
     int Subscriptions,
     int Jobs,
+    int Alerts,
     int Stewards);
 
 public record LineageImpactItemDto(
@@ -124,6 +125,7 @@ public record LineageImpactDto(
     IReadOnlyList<LineageImpactItemDto> Datasets,
     IReadOnlyList<LineageImpactItemDto> Subscriptions,
     IReadOnlyList<LineageImpactItemDto> Jobs,
+    IReadOnlyList<LineageImpactItemDto> Alerts,
     IReadOnlyList<LineageImpactItemDto> Stewards);
 
 public record ConsumerHomeDto(

@@ -75,6 +75,13 @@ public sealed class LineageImpactService(
             .Where(s => reportIdSet.Contains(s.ReportId))
             .ToListAsync(cancellationToken);
 
+        var alerts = await db.ReportAlerts
+            .AsNoTracking()
+            .Include(a => a.Report)
+            .Include(a => a.Notifications)
+            .Where(a => reportIdSet.Contains(a.ReportId))
+            .ToListAsync(cancellationToken);
+
         var scheduledJobs = await SafeJobsAsync();
         var relatedJobNames = related.Select(e => e.JobName).Where(j => !string.IsNullOrWhiteSpace(j)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var jobItems = scheduledJobs
@@ -113,6 +120,16 @@ public sealed class LineageImpactService(
             .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var alertItems = alerts
+            .Select(a => new LineageImpactItemDto(
+                "Alert",
+                a.Name,
+                AlertDetail(a),
+                a.LastEvaluatedAt ?? a.LastTriggeredAt ?? a.UpdatedAt,
+                a.Notifications.Count))
+            .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var stewardItems = related
             .SelectMany(e => PickTags(e.Tags, "owner", "steward"))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -122,13 +139,14 @@ public sealed class LineageImpactService(
 
         return new LineageImpactDto(
             new LineageImpactRequestDto(kind, name, column, direction, depth, limit),
-            new LineageImpactSummaryDto(tableItems.Count, columns.Count, reportItems.Count, datasetItems.Count, subscriptionItems.Count, jobItems.Count, stewardItems.Count),
+            new LineageImpactSummaryDto(tableItems.Count, columns.Count, reportItems.Count, datasetItems.Count, subscriptionItems.Count, jobItems.Count, alertItems.Count, stewardItems.Count),
             tableItems,
             columns,
             reportItems,
             datasetItems,
             subscriptionItems,
             jobItems,
+            alertItems,
             stewardItems);
     }
 
@@ -308,6 +326,19 @@ public sealed class LineageImpactService(
         foreach (var key in keys)
             if (tags.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
                 yield return $"{key}:{value}";
+    }
+
+    private static string AlertDetail(ReportAlert alert)
+    {
+        var notifications = alert.Notifications
+            .OrderBy(n => n.OrchestratorAlias, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(n => n.NotificationName, StringComparer.OrdinalIgnoreCase)
+            .Select(n => $"{n.OrchestratorAlias}.{n.NotificationName}")
+            .ToList();
+        var baseDetail = $"{alert.Report.Name} → {alert.VisualName} {alert.Operator} {alert.Threshold}";
+        return notifications.Count == 0
+            ? baseDetail
+            : $"{baseDetail}; notifications: {string.Join(", ", notifications)}";
     }
 
     private readonly record struct NodeKey(string Kind, string Name)

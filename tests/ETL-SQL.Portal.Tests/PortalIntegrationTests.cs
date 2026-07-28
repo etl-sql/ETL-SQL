@@ -715,6 +715,24 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
                 scriptPath,
                 DateTime.UtcNow.AddDays(-10));
 
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var alert = new ReportAlert
+            {
+                ReportId = reportId,
+                OwnerId = 1,
+                Name = $"LineageAlert_{suffix}",
+                VisualName = $"SalesCard_{suffix}",
+                Operator = ">",
+                Threshold = 100
+            };
+            alert.Notifications.Add(new AlertNotification
+            {
+                OrchestratorAlias = "lineage_orch",
+                NotificationName = $"NotifySales_{suffix}"
+            });
+            db.ReportAlerts.Add(alert);
+            await db.SaveChangesAsync();
+
             var notifier = scope.ServiceProvider.GetRequiredService<LineageStewardNotificationService>();
             await notifier.NotifyAsync(1, reportId, $"report:{reportId}:manual-session", scriptPath, [stewardQueueEntry], CancellationToken.None);
         }
@@ -801,12 +819,18 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             r!["name"]!.GetValue<string>() == visualTarget);
         Assert.Contains(impact["reports"]!.AsArray(), r =>
             r!["name"]!.GetValue<string>() == $"Lineage Report {suffix}");
+        Assert.True(impact["summary"]!["alerts"]!.GetValue<int>() >= 1);
+        Assert.Contains(impact["alerts"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == $"LineageAlert_{suffix}" &&
+            r["detail"]!.GetValue<string>().Contains($"lineage_orch.NotifySales_{suffix}", StringComparison.Ordinal));
 
         var reportImpactRes = await AuthGet(token, $"/api/catalog/impact?kind=report&name={Uri.EscapeDataString($"Lineage Report {suffix}")}&direction=both&depth=4");
         Assert.Equal(HttpStatusCode.OK, reportImpactRes.StatusCode);
         var reportImpact = await reportImpactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.Contains(reportImpact!["tables"]!.AsArray(), r =>
             r!["name"]!.GetValue<string>() == $"sales.Orders_{suffix}");
+        Assert.Contains(reportImpact["alerts"]!.AsArray(), r =>
+            r!["name"]!.GetValue<string>() == $"LineageAlert_{suffix}");
 
         var stewardImpactRes = await AuthGet(token, "/api/catalog/impact?kind=steward&name=DataSteward&direction=both&depth=2");
         Assert.Equal(HttpStatusCode.OK, stewardImpactRes.StatusCode);
