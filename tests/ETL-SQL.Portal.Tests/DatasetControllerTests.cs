@@ -1007,7 +1007,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     // ── 8. Phase 6 — Portal-Triggered Refresh ────────────────────────────────
 
     [Fact]
-    public async Task RefreshJobRegistration_UpsertsOwningReportMapping()
+    public async Task RefreshJobRegistration_UpsertsNormalizedReportJobLink()
     {
         var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -1043,11 +1043,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            var job = Assert.Single(await db.DatasetJobs
-                .Where(j => j.OrchestratorJobName == jobName)
-                .ToListAsync());
-            Assert.Equal(reportId, job.ReportId);
-            Assert.Equal("10m", job.RefreshInterval);
+            Assert.False(await db.DatasetJobs
+                .AnyAsync(j => j.OrchestratorJobName == jobName));
             var link = Assert.Single(await db.ReportJobLinks
                 .Where(j => j.JobName == jobName)
                 .ToListAsync());
@@ -1057,7 +1054,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
-    public async Task DeleteRefreshJob_RemovesLegacyAndReportJobLinkMappings()
+    public async Task DeleteRefreshJob_RemovesReportJobLinkMappings()
     {
         var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];

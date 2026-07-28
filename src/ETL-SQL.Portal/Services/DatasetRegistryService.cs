@@ -191,23 +191,6 @@ namespace ETL_SQL.Portal.Services
             string orchestratorJobName,
             string refreshInterval)
         {
-            var job = await _db.DatasetJobs
-                .FirstOrDefaultAsync(j => j.OrchestratorJobName == orchestratorJobName);
-            if (job == null)
-            {
-                job = new DatasetJob
-                {
-                    ReportId = reportId,
-                    OrchestratorJobName = orchestratorJobName
-                };
-                _db.DatasetJobs.Add(job);
-            }
-            else
-            {
-                job.ReportId = reportId;
-            }
-
-            job.RefreshInterval = refreshInterval;
             if (TryParsePortalRefreshJobName(orchestratorJobName, reportId, out var orchestratorAlias))
             {
                 var link = await _db.ReportJobLinks.FirstOrDefaultAsync(j =>
@@ -228,6 +211,30 @@ namespace ETL_SQL.Portal.Services
                 {
                     link.UpdatedAt = DateTime.UtcNow;
                 }
+            }
+            else
+            {
+                // Legacy callers may still pass an opaque job name with no Orchestrator alias.
+                // Keep those rows in DatasetJobs until the remaining compatibility endpoints are
+                // removed; API-created portal refresh jobs use the normalized portal-refresh:<alias>:<id>
+                // name and therefore no longer create new legacy rows.
+                var job = await _db.DatasetJobs
+                    .FirstOrDefaultAsync(j => j.OrchestratorJobName == orchestratorJobName);
+                if (job == null)
+                {
+                    job = new DatasetJob
+                    {
+                        ReportId = reportId,
+                        OrchestratorJobName = orchestratorJobName
+                    };
+                    _db.DatasetJobs.Add(job);
+                }
+                else
+                {
+                    job.ReportId = reportId;
+                }
+
+                job.RefreshInterval = refreshInterval;
             }
 
             await _db.SaveChangesAsync();

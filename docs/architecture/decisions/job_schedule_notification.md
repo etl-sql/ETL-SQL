@@ -499,6 +499,8 @@ in the PK.
   `ReportId` stays a **real foreign key** so report deletion is enforced by the database; the job's
   `TargetPath` is a mutable property that `ALTER JOB … SET TARGET` changes, and the Portal keeps the
   two consistent when a report is renamed or moved.
+  API-created portal refresh jobs write only `ReportJobLinks`; `DatasetJobs` is retained only as a
+  temporary fallback for rows created by older development builds.
 
 Dropping `DatasetJobs` is a Portal EF migration, and a `DropTable` in `Up` violates
 `MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRollingExpandContract`. The mechanism
