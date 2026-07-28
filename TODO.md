@@ -357,9 +357,18 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - Remove the default interface method bodies on `IDatasetRegistry` — a default body means deleting
      an override still compiles and silently binds to a no-op.
 3. **Parser, AST, formatter, linter:**
-   - `CreateJobStatement` holds `FOR REPORT`/`FOR SCRIPT` (mutually exclusive) plus retry options;
-     new `SCHEDULE`, `NOTIFICATION` and reshaped `ALERT` statements; `ALTER <kind> … ADD|REMOVE`
-     and `ALTER <kind> … RENAME TO`.
+   - **[DONE — 3a]** `CREATE/ALTER/DROP/ENABLE/DISABLE SCHEDULE|NOTIFICATION` and
+     `ALTER JOB … ADD|REMOVE SCHEDULE|NOTIFICATION`, end to end: `CatalogParser`, AST, formatter
+     round-trip, handlers writing to `IJobCatalogStore`. Purely additive — nothing retired yet — so
+     the tree stays green while 3b reshapes `CREATE JOB`.
+     `NOTIFICATION`/`REMOVE`/`CRON`/`SUCCESS`/`FAILURE`/`COMPLETION` are matched contextually as
+     identifiers, not promoted to keywords: the lexer maps every keyword everywhere, so reserving
+     them would break `SELECT success FROM …`.
+     Timezone validation happens at write time and `CronSchedule` moved to `ETL-SQL.Engine` — the
+     handlers are tier 1 and cannot reference the Orchestrator.
+   - **[3b — next]** `CreateJobStatement` holds `FOR REPORT`/`FOR SCRIPT` (mutually exclusive) plus
+     retry options; reshaped `ALERT`. This is the breaking half: it retires the inline
+     `AS <statement>` body and touches the four connector call sites, samples, and tests.
    - Remove `REFRESH EVERY` from `CREATE DATASET`; delete
      `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
      `DatasetRefreshIntervalRule`.

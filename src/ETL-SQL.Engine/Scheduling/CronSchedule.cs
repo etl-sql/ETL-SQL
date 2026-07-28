@@ -1,8 +1,8 @@
 using System;
 using Cronos;
-using ETL_SQL.Engine;
 
-namespace ETL_SQL.Orchestrator.Scheduling
+
+namespace ETL_SQL.Engine.Scheduling
 {
     /// <summary>
     /// Cron plus a named timezone — the one schedule representation in ETL-SQL. Parsing, timezone

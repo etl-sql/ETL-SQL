@@ -737,6 +737,122 @@ public sealed record KillJobStatement(Expression JobIdExpr) : Statement;
 
 public sealed record DropJobStatement(string Name, bool IfExists) : Statement;
 
+// ── Schedules and notifications ───────────────────────────────────────────────
+// Peer entities to JOB, owned by the Orchestrator. Design and rationale in
+// docs/architecture/decisions/job_schedule_notification.md.
+
+/// <summary>
+/// Presentation and classification metadata shared by every catalog object. None of it is ever
+/// referenced by a script, which is what lets the object's <c>Name</c> stay a stable identity while
+/// what an operator reads stays freely editable.
+/// </summary>
+public sealed record CatalogObjectOptions
+{
+    public string? DisplayName { get; init; }
+    public string? Description { get; init; }
+    /// <summary>Free-form classification metadata. Never read by the scheduler.</summary>
+    public Dictionary<string, string>? Options { get; init; }
+}
+
+/// <summary>
+/// <c>CREATE [OR ALTER|OR REPLACE] SCHEDULE &lt;name&gt; ON '&lt;cron&gt;' [AT TIME ZONE '&lt;tz&gt;']
+/// [WITH (...)]</c>
+/// </summary>
+public sealed record CreateScheduleStatement : Statement
+{
+    public required string Name { get; init; }
+    public required string Cron { get; init; }
+    /// <summary>Null resolves to the configured default at execution, and is then stored.</summary>
+    public string? TimeZone { get; init; }
+    public CatalogObjectOptions Metadata { get; init; } = new();
+    public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+/// <summary>
+/// <c>CREATE [OR ALTER|OR REPLACE] NOTIFICATION &lt;name&gt; USING &lt;connection&gt;
+/// [TO '&lt;recipient&gt;'] [WITH (...)]</c>
+/// </summary>
+public sealed record CreateNotificationStatement : Statement
+{
+    public required string Name { get; init; }
+    /// <summary>Connection alias. Resolved where dispatch happens; never a credential.</summary>
+    public required string ConnectionName { get; init; }
+    public string? Recipient { get; init; }
+    public CatalogObjectOptions Metadata { get; init; } = new();
+    public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+/// <summary>Which catalog object an <c>ALTER</c>/<c>DROP</c>/<c>ENABLE</c> names.</summary>
+public enum CatalogObjectKind
+{
+    Schedule,
+    Notification
+}
+
+/// <summary>
+/// <c>ALTER SCHEDULE &lt;name&gt; SET CRON = '…' | SET TIME ZONE '…' | SET (…)</c> and
+/// <c>ALTER NOTIFICATION &lt;name&gt; SET TO '…' | SET USING &lt;connection&gt; | SET (…)</c>.
+/// A null property is absent from the statement and keeps its stored value.
+/// </summary>
+public sealed record AlterCatalogObjectStatement : Statement
+{
+    public required CatalogObjectKind Kind { get; init; }
+    public required string Name { get; init; }
+    public string? Cron { get; init; }
+    public string? TimeZone { get; init; }
+    public string? ConnectionName { get; init; }
+    public string? Recipient { get; init; }
+    public CatalogObjectOptions Metadata { get; init; } = new();
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+/// <summary><c>DROP SCHEDULE|NOTIFICATION [IF EXISTS] &lt;name&gt;</c></summary>
+public sealed record DropCatalogObjectStatement : Statement
+{
+    public required CatalogObjectKind Kind { get; init; }
+    public required string Name { get; init; }
+    public bool IfExists { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+/// <summary><c>ENABLE|DISABLE SCHEDULE|NOTIFICATION &lt;name&gt;</c></summary>
+public sealed record SetCatalogObjectEnabledStatement : Statement
+{
+    public required CatalogObjectKind Kind { get; init; }
+    public required string Name { get; init; }
+    public required bool IsEnabled { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+/// <summary>Whether an <c>ALTER JOB</c> attachment adds or removes.</summary>
+public enum JobAttachmentAction
+{
+    Add,
+    Remove
+}
+
+/// <summary>
+/// <c>ALTER JOB &lt;job&gt; ADD|REMOVE SCHEDULE &lt;name&gt;</c> and
+/// <c>ALTER JOB &lt;job&gt; ADD|REMOVE NOTIFICATION &lt;name&gt; ON SUCCESS|FAILURE|COMPLETION</c>.
+/// </summary>
+/// <remarks>
+/// Both directions are idempotent by contract: adding an attachment that exists and removing one
+/// that does not are no-ops. An exported configuration script re-issues every attachment on replay,
+/// so anything else would fail the import on its second run.
+/// </remarks>
+public sealed record AlterJobAttachmentStatement : Statement
+{
+    public required JobAttachmentAction Action { get; init; }
+    public required CatalogObjectKind Kind { get; init; }
+    public required string JobName { get; init; }
+    public required string TargetName { get; init; }
+    /// <summary>Required for a notification, meaningless for a schedule.</summary>
+    public string? Trigger { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
 /// <summary>ENABLE JOB 'name'; — enables a disabled job in the scheduler.</summary>
 public sealed record EnableJobStatement(string Name) : Statement
 {

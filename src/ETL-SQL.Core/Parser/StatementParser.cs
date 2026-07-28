@@ -19,6 +19,7 @@ public class StatementParser
     internal ExtensionParser ExtensionParser { get; }
     internal ReportParser ReportParser { get; }
     internal PortalParser PortalParser { get; }
+    internal CatalogParser CatalogParser { get; }
 
     public StatementParser(IParser parser)
     {
@@ -29,6 +30,7 @@ public class StatementParser
         ExtensionParser = new ExtensionParser(parser, this);
         ReportParser = new ReportParser(parser, this);
         PortalParser = new PortalParser(parser, this);
+        CatalogParser = new CatalogParser(parser, this);
         InitializeDispatchMap();
     }
 
@@ -510,8 +512,35 @@ public class StatementParser
         };
     }
 
+    /// <summary>
+    /// ENABLE/DISABLE reach the scheduler catalog as well as jobs. Disabling a SCHEDULE pauses every
+    /// job attached to it, and disabling a NOTIFICATION silences that destination everywhere — both
+    /// are operations on the shared object, not on any one job.
+    /// </summary>
+    private bool TryParseCatalogEnable(bool isEnabled, out Statement? statement)
+    {
+        var start = _parser.Previous;
+
+        if (_parser.Match(TokenType.SCHEDULE))
+        {
+            statement = CatalogParser.ParseSetCatalogObjectEnabled(start, CatalogObjectKind.Schedule, isEnabled);
+            return true;
+        }
+
+        if (CatalogParser.IsNotificationKeyword())
+        {
+            _parser.Advance();
+            statement = CatalogParser.ParseSetCatalogObjectEnabled(start, CatalogObjectKind.Notification, isEnabled);
+            return true;
+        }
+
+        statement = null;
+        return false;
+    }
+
     private Statement ParseEnableJob()
     {
+        if (TryParseCatalogEnable(isEnabled: true, out var catalogStatement)) return catalogStatement!;
         _parser.Consume(TokenType.JOB, "Expected 'JOB' after 'ENABLE'");
         var nameTok = _parser.ConsumeIdentifier("Expected job name");
         string? atConn = null;
@@ -526,6 +555,7 @@ public class StatementParser
 
     private Statement ParseDisableJob()
     {
+        if (TryParseCatalogEnable(isEnabled: false, out var catalogStatement)) return catalogStatement!;
         _parser.Consume(TokenType.JOB, "Expected 'JOB' after 'DISABLE'");
         var nameTok = _parser.ConsumeIdentifier("Expected job name");
         string? atConn = null;

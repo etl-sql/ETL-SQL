@@ -107,6 +107,27 @@ public static class AstSerializer
         EnableJobStatement s => $"ENABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         DisableJobStatement s => $"DISABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         TriggerJobStatement s => $"TRIGGER JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
+
+        // ── Scheduler catalog ──
+        // These must round-trip: ConfigurationExportService emits them and the export has to replay
+        // into exactly what it describes.
+        CreateScheduleStatement s =>
+            $"{CreationVerb(s.Mode)} SCHEDULE {s.Name} ON {Quote(s.Cron)}"
+            + (s.TimeZone != null ? $" AT TIME ZONE {Quote(s.TimeZone)}" : "")
+            + FormatCatalogMetadata(s.Metadata) + ";",
+        CreateNotificationStatement s =>
+            $"{CreationVerb(s.Mode)} NOTIFICATION {s.Name} USING {s.ConnectionName}"
+            + (s.Recipient != null ? $" TO {Quote(s.Recipient)}" : "")
+            + FormatCatalogMetadata(s.Metadata) + ";",
+        AlterCatalogObjectStatement s => FormatAlterCatalogObject(s),
+        DropCatalogObjectStatement s =>
+            $"DROP {s.Kind.ToString().ToUpperInvariant()} {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
+        SetCatalogObjectEnabledStatement s =>
+            $"{(s.IsEnabled ? "ENABLE" : "DISABLE")} {s.Kind.ToString().ToUpperInvariant()} {s.Name};",
+        AlterJobAttachmentStatement s =>
+            $"ALTER JOB {s.JobName} {s.Action.ToString().ToUpperInvariant()} "
+            + $"{s.Kind.ToString().ToUpperInvariant()} {s.TargetName}"
+            + (s.Trigger != null ? $" ON {s.Trigger.ToUpperInvariant()}" : "") + ";",
         ShowJobHistoryStatement s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowJobsStatement s => "SHOW JOBS" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
@@ -638,6 +659,48 @@ public static class AstSerializer
             if (s.Overwrite != null) args.Add(s.Overwrite.ToSql());
             return $"{op}({string.Join(", ", args)});";
         }
+    }
+
+    /// <summary>Single-quoted SQL string literal, doubling any embedded quote.</summary>
+    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    /// <summary>
+    /// The creation verb for a catalog object. <c>CREATE OR REPLACE</c> is a full redefinition that
+    /// drops the object's attachments; <c>CREATE OR ALTER</c> patches and leaves them alone. An
+    /// export emits the former plus the full attachment set, so a replayed script converges on
+    /// exactly what it describes rather than accumulating stale links.
+    /// </summary>
+    private static string CreationVerb(ObjectCreationMode mode) => mode switch
+    {
+        ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
+        ObjectCreationMode.CreateOrReplace => "CREATE OR REPLACE",
+        _ => "CREATE"
+    };
+
+    private static string FormatCatalogMetadata(CatalogObjectOptions metadata)
+    {
+        var parts = new List<string>();
+        if (metadata.DisplayName != null) parts.Add($"DISPLAY_NAME = {Quote(metadata.DisplayName)}");
+        if (metadata.Description != null) parts.Add($"DESCRIPTION = {Quote(metadata.Description)}");
+        if (metadata.Options != null)
+            foreach (var (key, value) in metadata.Options.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase))
+                parts.Add($"{key.ToUpperInvariant()} = {Quote(value)}");
+
+        return parts.Count == 0 ? "" : $" WITH ({string.Join(", ", parts)})";
+    }
+
+    private static string FormatAlterCatalogObject(AlterCatalogObjectStatement s)
+    {
+        var clauses = new List<string>();
+        if (s.Cron != null) clauses.Add($"SET CRON = {Quote(s.Cron)}");
+        if (s.TimeZone != null) clauses.Add($"SET TIME ZONE {Quote(s.TimeZone)}");
+        if (s.ConnectionName != null) clauses.Add($"SET USING {s.ConnectionName}");
+        if (s.Recipient != null) clauses.Add($"SET TO {Quote(s.Recipient)}");
+
+        var metadata = FormatCatalogMetadata(s.Metadata);
+        if (metadata.Length > 0) clauses.Add("SET " + metadata.Substring(" WITH ".Length));
+
+        return $"ALTER {s.Kind.ToString().ToUpperInvariant()} {s.Name} {string.Join(" ", clauses)};";
     }
 
     private static string FormatDockerAction(DockerActionStatement s)

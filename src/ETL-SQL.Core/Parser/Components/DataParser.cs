@@ -224,6 +224,15 @@ public class DataParser : ParserComponent
             return orAlter ? (Statement)(stmt with { IsOrAlter = true }) : stmt;
         }
 
+        // Scheduler catalog. Both creation modes are supported: an exported configuration script
+        // must converge when replayed, which is the whole reason these objects keep a stable name.
+        if (Match(TokenType.SCHEDULE)) return _parent.CatalogParser.ParseCreateSchedule(startToken, mode);
+        if (_parent.CatalogParser.IsNotificationKeyword())
+        {
+            Advance();
+            return _parent.CatalogParser.ParseCreateNotification(startToken, mode);
+        }
+
         if (Match(TokenType.DIRECTORY))
         {
             var path = ParseExpression();
@@ -328,6 +337,12 @@ public class DataParser : ParserComponent
 
         // Orchestrator job management
         if (Match(TokenType.JOB)) return ParseAlterJob(startToken);
+        if (Match(TokenType.SCHEDULE)) return _parent.CatalogParser.ParseAlterSchedule(startToken);
+        if (_parent.CatalogParser.IsNotificationKeyword())
+        {
+            Advance();
+            return _parent.CatalogParser.ParseAlterNotification(startToken);
+        }
 
         // Portal admin
         if (Match(TokenType.USER)) return _parent.PortalParser.ParseAlterUser(startToken);
@@ -358,6 +373,13 @@ public class DataParser : ParserComponent
     private Statement ParseAlterJob(Token startToken)
     {
         var jobName = ConsumeIdentifier("Expected job name after ALTER JOB").Value;
+
+        // Attachments come first: ADD/REMOVE link a job to a named SCHEDULE or NOTIFICATION, which
+        // is a different operation from editing the job's own definition below.
+        if (Match(TokenType.ADD))
+            return _parent.CatalogParser.ParseAlterJobAttachment(startToken, jobName, JobAttachmentAction.Add);
+        if (MatchIdentifier("REMOVE"))
+            return _parent.CatalogParser.ParseAlterJobAttachment(startToken, jobName, JobAttachmentAction.Remove);
 
         ScheduleInfo? schedule = null;
         Statement? script = null;
@@ -494,7 +516,12 @@ public class DataParser : ParserComponent
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
-        else if (Match(TokenType.VISUAL) || (Match(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("CHART", StringComparison.OrdinalIgnoreCase)))
+        // CHART is a legacy alias for VISUAL. It is tested without consuming: the previous spelling
+        // was `Match(TokenType.VISUAL) || (Match(TokenType.IDENTIFIER) && …Equals("CHART"))`, where
+        // the second Match consumed *any* identifier before the value check rejected it — leaving the
+        // parser a token ahead, so every later identifier-dispatched DROP reported a syntax error
+        // pointing past the word it had already eaten.
+        else if (Match(TokenType.VISUAL) || MatchIdentifier("CHART"))
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected visual name").Value;
@@ -575,6 +602,15 @@ public class DataParser : ParserComponent
             RejectTrailingIfExists("JOB", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropJobStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
+        }
+        else if (Match(TokenType.SCHEDULE))
+        {
+            return _parent.CatalogParser.ParseDropCatalogObject(startToken, CatalogObjectKind.Schedule);
+        }
+        else if (_parent.CatalogParser.IsNotificationKeyword())
+        {
+            Advance();
+            return _parent.CatalogParser.ParseDropCatalogObject(startToken, CatalogObjectKind.Notification);
         }
 
         // Portal admin
