@@ -156,36 +156,98 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("listScheduledJobs");
 
             app.MapPost("/api/scheduled-jobs", async (HttpContext ctx, CreateScheduledJobRequest req,
-                IJobHistoryStore store, IBundleStore bundleStore, IConfiguration cfg) =>
+                IJobHistoryStore store, IJobCatalogStore catalog, IBundleStore bundleStore, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (string.IsNullOrWhiteSpace(req.Name))
                     return Results.BadRequest(new { Error = "Name is required." });
-                if (string.IsNullOrWhiteSpace(req.ScriptText))
-                    return Results.BadRequest(new { Error = "ScriptText is required." });
-                if (req.Interval <= 0)
-                    return Results.BadRequest(new { Error = "Interval must be positive." });
 
-                var validUnits = new[] { "SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH" };
-                if (!validUnits.Contains((req.Unit ?? "").ToUpperInvariant()))
-                    return Results.BadRequest(new { Error = $"Unit must be one of: {string.Join(", ", validUnits)}" });
+                JobDefinition job;
+                var normalized = !string.IsNullOrWhiteSpace(req.TargetPath)
+                    || !string.IsNullOrWhiteSpace(req.JobType);
+                var existing = await store.GetJobAsync(req.Name);
 
-                var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore);
-                var job = new JobDefinition(
-                    req.Name,
-                    scriptText,
-                    req.Interval,
-                    (req.Unit ?? "HOUR").ToUpperInvariant(),
-                    req.AtTime,
-                    null, null,
-                    true,
-                    req.MaxRetries,
-                    req.RetryDelaySeconds,
-                    null,
-                    req.HashPolicy ?? "Warn"
-                );
+                if (normalized)
+                {
+                    if (req.Name.StartsWith("sub_", StringComparison.OrdinalIgnoreCase))
+                        return Results.BadRequest(new { Error = "Job names beginning with 'sub_' are reserved for generated subscriptions." });
+                    if (!Enum.TryParse<JobTargetKind>(req.JobType, ignoreCase: true, out var targetKind))
+                        return Results.BadRequest(new { Error = "JobType must be SCRIPT or REPORT." });
+                    if (string.IsNullOrWhiteSpace(req.TargetPath))
+                        return Results.BadRequest(new { Error = "TargetPath is required." });
+                    if (!Enum.TryParse<ObjectCreationMode>(req.Mode, ignoreCase: true, out var mode))
+                        mode = ObjectCreationMode.Create;
+                    if (existing is not null && mode == ObjectCreationMode.Create)
+                        return Results.Conflict(new
+                        {
+                            Error = $"Job '{req.Name}' already exists. Use CREATE OR ALTER or CREATE OR REPLACE."
+                        });
 
-                await store.SaveJobAsync(job);
+                    var targetPath = targetKind == JobTargetKind.Script
+                        ? await PinBundleTargetAsync(req.TargetPath, bundleStore)
+                        : req.TargetPath;
+                    var scriptText = targetKind == JobTargetKind.Script
+                        ? new RunScriptStatement(
+                            new LiteralExpression(targetPath, TokenType.STRING_LITERAL),
+                            []).ToSql()
+                        : string.Empty;
+                    var scriptHash = targetKind == JobTargetKind.Script
+                        ? "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant()
+                        : null;
+                    var patches = existing is not null && mode == ObjectCreationMode.CreateOrAlter;
+
+                    job = new JobDefinition(
+                        req.Name,
+                        scriptText,
+                        1,
+                        "HOUR",
+                        null,
+                        existing?.LastRun,
+                        null,
+                        existing?.IsEnabled ?? true,
+                        req.MaxRetries ?? (patches ? existing!.MaxRetries : 0),
+                        req.RetryDelaySeconds ?? (patches ? existing!.RetryDelaySeconds : 30),
+                        scriptHash,
+                        targetKind == JobTargetKind.Script ? req.HashPolicy ?? "Warn" : "Off",
+                        existing?.Version ?? 1,
+                        targetKind,
+                        targetPath,
+                        req.DisplayName ?? (patches ? existing!.DisplayName : req.Name),
+                        req.Description ?? (patches ? existing!.Description : null),
+                        req.Options is null ? (patches ? existing!.Options : null) : JsonSerializer.Serialize(req.Options),
+                        existing?.CreatedBy,
+                        ReadActor(ctx));
+
+                    await store.SaveJobAsync(job);
+                    if (existing is not null && mode == ObjectCreationMode.CreateOrReplace)
+                    {
+                        foreach (var link in await catalog.GetJobSchedulesAsync(req.Name))
+                            await catalog.RemoveJobScheduleAsync(req.Name, link.ScheduleName);
+                        foreach (var link in await catalog.GetJobNotificationsAsync(req.Name))
+                            await catalog.RemoveJobNotificationAsync(req.Name, link.NotificationName, link.Trigger);
+                    }
+                }
+                else
+                {
+                    // Compatibility for the Portal management API while its UI is migrated to the
+                    // normalized job/schedule endpoints. ETL-SQL source can no longer produce this form.
+                    if (string.IsNullOrWhiteSpace(req.ScriptText))
+                        return Results.BadRequest(new { Error = "TargetPath is required for normalized jobs." });
+                    if (!req.Interval.HasValue || req.Interval <= 0)
+                        return Results.BadRequest(new { Error = "Interval must be positive." });
+
+                    var validUnits = new[] { "SECOND", "MINUTE", "HOUR", "DAY", "WEEK", "MONTH" };
+                    if (!validUnits.Contains((req.Unit ?? "").ToUpperInvariant()))
+                        return Results.BadRequest(new { Error = $"Unit must be one of: {string.Join(", ", validUnits)}" });
+
+                    var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore);
+                    job = new JobDefinition(
+                        req.Name, scriptText, req.Interval.Value, (req.Unit ?? "HOUR").ToUpperInvariant(),
+                        req.AtTime, null, null, true, req.MaxRetries ?? 0, req.RetryDelaySeconds ?? 30,
+                        null, req.HashPolicy ?? "Warn");
+                    await store.SaveJobAsync(job);
+                }
+
                 return Results.Created($"/api/scheduled-jobs/{Uri.EscapeDataString(req.Name)}", job);
             }).WithName("createScheduledJob");
 
@@ -204,16 +266,32 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
                 var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
+                var targetPath = req.TargetPath;
+                if (targetPath is not null && existing.JobType == JobTargetKind.Script)
+                    targetPath = await PinBundleTargetAsync(targetPath, bundleStore);
+                if (targetPath is not null && existing.JobType == JobTargetKind.Script)
+                    pinnedScript = new RunScriptStatement(
+                        new LiteralExpression(targetPath, TokenType.STRING_LITERAL),
+                        []).ToSql();
+                var scriptHash = pinnedScript is not null && existing.JobType == JobTargetKind.Script
+                    ? "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(pinnedScript))).ToLowerInvariant()
+                    : existing.ScriptHash;
                 var updated = existing with
                 {
                     Script = pinnedScript ?? existing.Script,
+                    TargetPath = targetPath ?? existing.TargetPath,
                     Interval = req.Interval ?? existing.Interval,
                     Unit = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
                     AtTime = req.AtTime ?? existing.AtTime,
                     IsEnabled = req.IsEnabled ?? existing.IsEnabled,
                     MaxRetries = req.MaxRetries ?? existing.MaxRetries,
                     RetryDelaySeconds = req.RetryDelaySeconds ?? existing.RetryDelaySeconds,
-                    HashPolicy = req.HashPolicy ?? existing.HashPolicy
+                    DisplayName = req.DisplayName ?? existing.DisplayName,
+                    Description = req.Description ?? existing.Description,
+                    Options = req.Options is null ? existing.Options : JsonSerializer.Serialize(req.Options),
+                    ScriptHash = scriptHash,
+                    HashPolicy = req.HashPolicy ?? existing.HashPolicy,
+                    ModifiedBy = ReadActor(ctx)
                 };
 
                 if (!await store.TrySaveJobAsync(updated, expectedVersion.Value))
@@ -588,6 +666,21 @@ namespace ETL_SQL.Orchestrator.Service
                 : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
         }
 
+        private static async Task<string> PinBundleTargetAsync(string targetPath, IBundleStore store)
+        {
+            if (!BundleUri.TryParse(targetPath, out var uri) || uri == null || uri.Version.HasValue)
+                return targetPath;
+            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            return latest == null ? targetPath : uri.ToPinnedString(latest.Version);
+        }
+
+        private static string? ReadActor(HttpContext context)
+        {
+            context.Request.Headers.TryGetValue("X-ETL-SQL-Actor", out var actor);
+            var value = actor.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
         private static async Task<string> BuildPrometheusMetricsAsync(
             JobThrottleMetrics metrics,
             int activeProcesses,
@@ -801,13 +894,19 @@ namespace ETL_SQL.Orchestrator.Service
 
         private sealed record CreateScheduledJobRequest(
             string Name,
-            string ScriptText,
-            int Interval,
-            string Unit,
+            string? ScriptText = null,
+            int? Interval = null,
+            string? Unit = null,
             string? AtTime = null,
-            int MaxRetries = 0,
-            int RetryDelaySeconds = 30,
-            string? HashPolicy = "Warn"
+            int? MaxRetries = null,
+            int? RetryDelaySeconds = null,
+            string? HashPolicy = "Warn",
+            string? JobType = null,
+            string? TargetPath = null,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null,
+            string? Mode = null
         );
 
         private sealed record UpdateScheduledJobRequest(
@@ -818,7 +917,11 @@ namespace ETL_SQL.Orchestrator.Service
             bool? IsEnabled = null,
             int? MaxRetries = null,
             int? RetryDelaySeconds = null,
-            string? HashPolicy = null
+            string? HashPolicy = null,
+            string? TargetPath = null,
+            string? DisplayName = null,
+            string? Description = null,
+            Dictionary<string, string>? Options = null
         );
 
         private static long? ReadExpectedVersion(HttpContext context)

@@ -35,7 +35,7 @@ Required fields:
 The body after the frontmatter is inserted when the snippet is accepted.
 
 ```sql
-CREATE DATASET &«name» REFRESH EVERY '«1h»' AS (
+CREATE DATASET &«name» TTL = '«1h»' AS (
   SELECT «col1», «col2»
   FROM «source»
   WHERE «condition»

@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
-/// Handles the ALTER JOB statement: modifies an existing job's schedule and/or script body.
+/// Handles ALTER JOB definition changes. Schedule and notification links are separate statements.
 /// Throws <see cref="ExecutionException"/> if the named job does not exist.
 /// </summary>
 public class AlterJobStatementHandler : IStatementHandler
@@ -31,49 +31,54 @@ public class AlterJobStatementHandler : IStatementHandler
         var existing = await _store.GetJobAsync(stmt.JobName)
             ?? throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found. Use CREATE JOB to create it.");
 
-        // Build the updated definition, applying only what was specified.
-        string newScript = stmt.Script != null
-            ? await PinBundlePathsAsync(stmt.Script.ToSql(), context)
-            : existing.Script;
+        if (context.IsWhatIf)
+        {
+            context.Log($"WHAT IF: Would alter job '{stmt.JobName}'.", ConsoleColor.Yellow);
+            return;
+        }
 
-        int newInterval = stmt.Schedule?.Interval ?? existing.Interval;
-        string newUnit = stmt.Schedule?.Unit ?? existing.Unit;
-        string? newAtTime = stmt.Schedule != null ? stmt.Schedule.AtTime : existing.AtTime;
-
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(newScript));
-        var scriptHash = "sha256:" + Convert.ToHexString(hashBytes).ToLowerInvariant();
+        var targetPath = stmt.TargetPath ?? existing.TargetPath;
+        var newScript = existing.Script;
+        var scriptHash = existing.ScriptHash;
+        if (stmt.TargetPath is not null && existing.JobType == JobTargetKind.Script)
+        {
+            targetPath = await PinBundlePathAsync(stmt.TargetPath, context);
+            newScript = new RunScriptStatement(
+                new LiteralExpression(targetPath, TokenType.STRING_LITERAL),
+                []).ToSql();
+            var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(newScript));
+            scriptHash = "sha256:" + Convert.ToHexString(hashBytes).ToLowerInvariant();
+        }
 
         var updated = existing with
         {
             Script = newScript,
-            Interval = newInterval,
-            Unit = newUnit,
-            AtTime = newAtTime,
+            TargetPath = targetPath,
+            MaxRetries = stmt.MaxRetries ?? existing.MaxRetries,
+            RetryDelaySeconds = stmt.RetryDelaySeconds ?? existing.RetryDelaySeconds,
+            DisplayName = stmt.Metadata.DisplayName ?? existing.DisplayName,
+            Description = stmt.Metadata.Description ?? existing.Description,
+            Options = CatalogStatementSupport.SerializeOptions(stmt.Metadata.Options) ?? existing.Options,
             ScriptHash = scriptHash,
-            HashPolicy = context.ScriptHashPolicy
+            HashPolicy = existing.JobType == JobTargetKind.Script ? context.ScriptHashPolicy : existing.HashPolicy,
+            ModifiedBy = CatalogStatementSupport.ActingIdentity(context)
         };
 
         await _store.SaveJobAsync(updated);
         context.Log($"Job '{stmt.JobName}' altered successfully.", ConsoleColor.Green);
     }
 
-    private static async Task<string> PinBundlePathsAsync(string scriptText, IExecutionContext context)
+    private static async Task<string> PinBundlePathAsync(string path, IExecutionContext context)
     {
-        var tokens = new Lexer(scriptText).Tokenize();
-        var script = new Parser(tokens, scriptText).Parse();
-        if (script.Statements.Count != 1 || script.Statements[0] is not RunScriptStatement run)
-            return scriptText;
-        if (run.PathExpression is not LiteralExpression lit || lit.Value is not string path)
-            return scriptText;
         if (!BundleUri.TryParse(path, out var uri) || uri == null || uri.Version.HasValue)
-            return scriptText;
+            return path;
 
         var store = context.ServiceProvider.GetService<IBundleStore>();
-        if (store == null) return scriptText;
+        if (store == null) return path;
         var latest = await store.GetLatestVersionAsync(uri.BundleName);
-        if (latest == null) return scriptText;
+        if (latest == null) return path;
         var pinned = uri.ToPinnedString(latest.Version);
         context.Log($"Resolved {path} to {pinned} for scheduled job stability.", ConsoleColor.Cyan);
-        return new RunScriptStatement(new LiteralExpression(pinned, TokenType.STRING_LITERAL), run.Parameters).ToSql();
+        return pinned;
     }
 }

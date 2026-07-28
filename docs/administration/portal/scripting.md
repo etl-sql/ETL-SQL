@@ -127,12 +127,12 @@ EXECUTE portal BEGIN
     SHOW SAVED VIEWS FOR REPORT 'Daily Sales';
     DROP SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales';
 
-    CREATE ALERT 'HighFailures' FOR REPORT 'Ops'
-        WHEN VISUAL 'FailureCard' > 10
-        DELIVER TO 'ops@example.com'
-        AT corporate-smtp;
+    CREATE ALERT HighFailures FOR REPORT 'Ops'
+        WHEN VISUAL FailureCard > 10
+        WITH (DESCRIPTION = 'Failure card threshold');
+    ALTER ALERT HighFailures ADD NOTIFICATION orchestrator.OpsEmail;
     SHOW ALERTS FOR REPORT 'Ops';
-    DROP ALERT 'HighFailures' FOR REPORT 'Ops';
+    DROP ALERT IF EXISTS HighFailures;
 END;
 ```
 
@@ -179,4 +179,3 @@ Service-control commands require an Admin user and are disabled by default. Enab
 `RESTART PORTAL` requests process shutdown so Docker, systemd, Windows Service, or another supervisor can start it again. The portal does not self-spawn a replacement process.
 
 ---
-

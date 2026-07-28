@@ -32,6 +32,7 @@ namespace ETL_SQL.Tests.Orchestration
             var dbName = $"test_jobs_{Guid.NewGuid()}.db";
             var store = new SQLiteJobHistoryStore(dbName);
             services.AddSingleton<IJobHistoryStore>(store);
+            services.AddSingleton<IJobCatalogStore>(store);
             services.AddSingleton<IBundleStore>(store);
             services.AddSingleton<ILineageCatalogStore>(store);
             // The relational store also backs the host-metrics time series; register it so the
@@ -82,7 +83,8 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task TestCreateJobParsing()
         {
-            var sql = "CREATE JOB MyJob ON SCHEDULE EVERY 1 MINUTE AS PRINT 'Hello';";
+            var sql = "CREATE JOB MyJob FOR SCRIPT 'jobs/my-job.etlsql' " +
+                      "WITH (MAX_RETRIES = 2, RETRY_DELAY = 15);";
             var lexer = new Lexer(sql);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
@@ -91,9 +93,10 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Single(script.Statements);
             var createJob = Assert.IsType<CreateJobStatement>(script.Statements[0]);
             Assert.Equal("MyJob", createJob.JobName);
-            Assert.Equal(1, createJob.Schedule.Interval);
-            Assert.Equal("MINUTE", createJob.Schedule.Unit);
-            Assert.IsType<PrintStatement>(createJob.Script);
+            Assert.Equal(JobTargetKind.Script, createJob.TargetKind);
+            Assert.Equal("jobs/my-job.etlsql", createJob.TargetPath);
+            Assert.Equal(2, createJob.MaxRetries);
+            Assert.Equal(15, createJob.RetryDelaySeconds);
         }
 
         [Fact]
@@ -107,7 +110,7 @@ namespace ETL_SQL.Tests.Orchestration
             // Clear existing data for test isolation if needed
             await store.DeleteJobAsync("TestJob");
 
-            var sql = "CREATE JOB TestJob ON SCHEDULE EVERY 5 SECONDS AS PRINT 'Test Run';";
+            var sql = "CREATE JOB TestJob FOR SCRIPT 'jobs/test-job.etlsql';";
             var lexer = new Lexer(sql);
             var script = new Parser(lexer.Tokenize()).Parse();
 
@@ -141,7 +144,7 @@ namespace ETL_SQL.Tests.Orchestration
             var store = provider.GetRequiredService<IJobHistoryStore>();
             await store.InitializeAsync();
 
-            await evaluator.Evaluate(new Parser(new Lexer("CREATE JOB Job1 ON SCHEDULE EVERY 1 HOUR AS PRINT '1';").Tokenize()).Parse());
+            await evaluator.Evaluate(new Parser(new Lexer("CREATE JOB Job1 FOR SCRIPT 'jobs/job1.etlsql';").Tokenize()).Parse());
             await evaluator.Evaluate(new Parser(new Lexer("SHOW JOBS;").Tokenize()).Parse());
 
             var result = evaluator.LastResult;

@@ -229,7 +229,6 @@ CREATE PAGE SimplePage AS DASHBOARD (
         {
             var sql = @"
 CREATE DATASET &daily_sales
-    REFRESH EVERY '1h'
     TTL = '24h'
     COMPRESS = ON
     ENCRYPT = ON
@@ -240,12 +239,23 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
 
             Assert.NotNull(stmt);
             Assert.Equal("&daily_sales", stmt!.TempTableName);
-            Assert.Equal("1h", stmt.RefreshInterval);
+            Assert.Null(stmt.RefreshInterval);
             Assert.Equal("24h", stmt.Ttl);
             Assert.True(stmt.Compress);
             Assert.Equal(DatasetEncryptionMode.MachineBound, stmt.EncryptionMode);
             Assert.Equal("/keys/sales.key", stmt.KeyFile);
             Assert.NotNull(stmt.SourceQuery);
+        }
+
+        [Fact]
+        public void ParseCreateDataset_RefreshEvery_NamesTheJobScheduleReplacement()
+        {
+            var script = Parse("CREATE DATASET &summary REFRESH EVERY '1h' AS (SELECT 1 AS Val);");
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CREATE JOB", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Contains("CREATE SCHEDULE", diagnostic.Message, StringComparison.Ordinal);
         }
 
         [Fact]

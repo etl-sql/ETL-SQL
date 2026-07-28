@@ -55,8 +55,9 @@ END
 
 -- Using EXEC (Shorthand)
 EXEC orch BEGIN
-    CREATE JOB 'NightlyArchive' ON SCHEDULE EVERY 1 DAY AT '02:00' AS
-        RUN SCRIPT '/scripts/nightly.etlsql';
+    CREATE SCHEDULE NightlyAtTwo ON '0 2 * * *' AT TIME ZONE 'UTC';
+    CREATE JOB NightlyArchive FOR SCRIPT '/scripts/nightly.etlsql';
+    ALTER JOB NightlyArchive ADD SCHEDULE NightlyAtTwo;
 END
 ```
 

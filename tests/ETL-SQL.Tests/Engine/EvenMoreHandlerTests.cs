@@ -143,19 +143,19 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task CreateJob_HourlySchedule_Persists()
         {
-            await Run("CREATE JOB TestJobHourly ON SCHEDULE EVERY 1 HOUR AS SELECT 1;");
+            await Run("CREATE JOB TestJobHourly FOR SCRIPT 'jobs/hourly.etlsql';");
         }
 
         [Fact]
         public async Task CreateJob_DailyAtTime_Persists()
         {
-            await Run("CREATE JOB TestJobDaily ON SCHEDULE EVERY 1 DAY AT '02:00' AS SELECT 1;");
+            await Run("CREATE JOB TestJobDaily FOR SCRIPT 'jobs/daily.etlsql';");
         }
 
         [Fact]
         public async Task CreateJob_MinuteSchedule_Persists()
         {
-            await Run("CREATE JOB TestJobMin ON SCHEDULE EVERY 30 MINUTES AS SELECT 1;");
+            await Run("CREATE JOB TestJobMin FOR SCRIPT 'jobs/minutely.etlsql';");
         }
 
         // ── SET PERSIST ───────────────────────────────────────────────────────
@@ -423,10 +423,10 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task CreateDataset_WithRefreshInterval_MaterializesTable()
+        public async Task CreateDataset_WithTtl_MaterializesTable()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET &myds2 REFRESH EVERY 'daily' AS (SELECT 1 AS n);" +
+                "CREATE DATASET &myds2 TTL = '1h' AS (SELECT 1 AS n);" +
                 "SELECT * FROM #myds2;");
             Assert.NotNull(eval.LastResult);
         }

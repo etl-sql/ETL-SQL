@@ -320,33 +320,40 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         }
         emitted.Add($"{subscriptionCount} subscription(s) considered");
 
-        // ── Alerts (definition-only metadata, P0.5) ──────────────────────────
+        // ── Alerts ───────────────────────────────────────────────────────────
         var alertCount = 0;
-        var alerts = db.ReportAlerts.AsNoTracking()
-            .OrderBy(a => a.Report.Name).ThenBy(a => a.Name)
-            .Select(a => new
-            {
-                a.Name,
-                a.VisualName,
-                a.Operator,
-                a.Threshold,
-                a.Recipient,
-                a.SmtpAlias,
-                a.IsActive,
-                ReportName = a.Report.Name,
-                FolderPath = a.Report.Folder.Path
-            })
-            .AsAsyncEnumerable();
-        AppendSection(body, "Alerts (definition-only metadata)");
-        await foreach (var a in alerts.WithCancellation(ct))
+        var alerts = await db.ReportAlerts.AsNoTracking()
+            .Include(a => a.Notifications)
+            .Include(a => a.Report).ThenInclude(r => r.Folder)
+            .OrderBy(a => a.Report.Name)
+            .ThenBy(a => a.Name)
+            .ToListAsync(ct);
+        AppendSection(body, "Alerts");
+        foreach (var a in alerts)
         {
             alertCount++;
-            var reportPath = $"{a.FolderPath}/{a.ReportName}";
-            body.Append($"    CREATE ALERT {Q(a.Name)} FOR REPORT {Q(reportPath)} WHEN VISUAL {Q(a.VisualName)} {a.Operator} {a.Threshold}");
-            if (!string.IsNullOrWhiteSpace(a.Recipient)) body.Append($" DELIVER TO {Q(a.Recipient)}");
-            if (!string.IsNullOrWhiteSpace(a.SmtpAlias)) body.Append($" AT {a.SmtpAlias}");
-            if (!a.IsActive) body.Append(" DISABLE");
+            if (!IsIdentifier(a.Name) || !IsIdentifier(a.VisualName))
+            {
+                skipped.Add(
+                    $"alert '{a.Name}': name and visual must be identifier-safe before canonical export");
+                continue;
+            }
+            var reportPath = $"{a.Report.Folder.Path}/{a.Report.Name}";
+            body.Append($"    CREATE OR REPLACE ALERT {Ident(a.Name)} FOR REPORT {Q(reportPath)} WHEN VISUAL {Ident(a.VisualName)} {a.Operator} {a.Threshold}");
+            var metadata = AlertMetadata(a);
+            if (metadata.Count > 0)
+                body.Append($" WITH ({string.Join(", ", metadata)})");
             body.AppendLine(";");
+            foreach (var notification in a.Notifications
+                         .OrderBy(n => n.OrchestratorAlias, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(n => n.NotificationName, StringComparer.OrdinalIgnoreCase))
+                body.AppendLine(
+                    $"    ALTER ALERT {Ident(a.Name)} ADD NOTIFICATION {Ident(notification.OrchestratorAlias)}.{Ident(notification.NotificationName)};");
+            if (!a.IsActive)
+                body.AppendLine($"    DISABLE ALERT {Ident(a.Name)};");
+            if (!string.IsNullOrWhiteSpace(a.Recipient) || !string.IsNullOrWhiteSpace(a.SmtpAlias))
+                skipped.Add(
+                    $"alert '{a.Name}': legacy inline recipient/SMTP fields were not exported; create a NOTIFICATION and attach it");
         }
         emitted.Add($"{alertCount} alert(s)");
 
@@ -483,6 +490,32 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    private static List<string> AlertMetadata(ReportAlert alert)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(alert.DisplayName))
+            parts.Add($"DISPLAY_NAME = {Q(alert.DisplayName)}");
+        if (!string.IsNullOrWhiteSpace(alert.Description))
+            parts.Add($"DESCRIPTION = {Q(alert.Description)}");
+        var options = DeserializeParameters(alert.OptionsJson);
+        if (options is not null)
+            parts.AddRange(options
+                .OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(o => $"{o.Key.ToUpperInvariant()} = {Q(o.Value)}"));
+        return parts;
+    }
+
+    private static string Ident(string value)
+    {
+        if (IsIdentifier(value)) return value;
+        throw new InvalidOperationException($"'{value}' is not an identifier-safe name.");
+    }
+
+    private static bool IsIdentifier(string value) =>
+        value.Length > 0
+        && (char.IsLetter(value[0]) || value[0] == '_')
+        && value.All(c => char.IsLetterOrDigit(c) || c == '_');
 
     /// <summary>Single-quoted ETL-SQL string literal with embedded quotes doubled.</summary>
     private static string Q(string value) => $"'{value.Replace("'", "''")}'";

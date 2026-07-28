@@ -101,9 +101,11 @@ public static class AstSerializer
         DockerActionStatement s => FormatDockerAction(s),
 
         // ── Jobs & scheduling ──
-        CreateJobStatement s => $"{(s.IsOrAlter ? "CREATE OR ALTER" : "CREATE")} JOB {s.JobName} ON SCHEDULE {s.Schedule.ToSql()} AS {s.Script.ToSql()}",
+        CreateJobStatement s =>
+            $"{CreationVerb(s.Mode)} JOB {s.JobName} FOR {s.TargetKind.ToString().ToUpperInvariant()} {Quote(s.TargetPath)}"
+            + FormatJobOptions(s) + ";",
         DropJobStatement s => $"DROP JOB {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
-        AlterJobStatement s => $"ALTER JOB {s.JobName}" + (s.Schedule != null ? $" ON SCHEDULE {s.Schedule.ToSql()}" : "") + (s.Script != null ? $" AS {s.Script.ToSql()}" : "") + ";",
+        AlterJobStatement s => FormatAlterJob(s),
         EnableJobStatement s => $"ENABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         DisableJobStatement s => $"DISABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         TriggerJobStatement s => $"TRIGGER JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
@@ -128,6 +130,18 @@ public static class AstSerializer
             $"ALTER JOB {s.JobName} {s.Action.ToString().ToUpperInvariant()} "
             + $"{s.Kind.ToString().ToUpperInvariant()} {s.TargetName}"
             + (s.Trigger != null ? $" ON {s.Trigger.ToUpperInvariant()}" : "") + ";",
+
+        // ── Portal alerts ──
+        CreatePortalAlertStatement s =>
+            $"{CreationVerb(s.Mode)} ALERT {s.Name} FOR REPORT {Quote(s.ReportName)} "
+            + $"WHEN VISUAL {s.VisualName} {s.Operator} {s.Threshold}"
+            + FormatCatalogMetadata(s.Metadata) + ";",
+        AlterPortalAlertNotificationStatement s =>
+            $"ALTER ALERT {s.AlertName} {s.Action.ToString().ToUpperInvariant()} NOTIFICATION {s.Notification};",
+        AlterPortalAlertStatement s =>
+            $"ALTER ALERT {s.Name} SET" + FormatCatalogMetadata(s.Metadata).Replace(" WITH", "") + ";",
+        DropPortalAlertStatement s => $"DROP ALERT {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
+        SetPortalAlertEnabledStatement s => $"{(s.IsEnabled ? "ENABLE" : "DISABLE")} ALERT {s.Name};",
         ShowJobHistoryStatement s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowJobsStatement s => "SHOW JOBS" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
@@ -687,6 +701,39 @@ public static class AstSerializer
                 parts.Add($"{key.ToUpperInvariant()} = {Quote(value)}");
 
         return parts.Count == 0 ? "" : $" WITH ({string.Join(", ", parts)})";
+    }
+
+    private static string FormatJobOptions(CreateJobStatement statement)
+    {
+        var parts = new List<string>();
+        if (statement.MaxRetries.HasValue) parts.Add($"MAX_RETRIES = {statement.MaxRetries.Value}");
+        if (statement.RetryDelaySeconds.HasValue) parts.Add($"RETRY_DELAY = {statement.RetryDelaySeconds.Value}");
+        if (statement.Metadata.DisplayName != null)
+            parts.Add($"DISPLAY_NAME = {Quote(statement.Metadata.DisplayName)}");
+        if (statement.Metadata.Description != null)
+            parts.Add($"DESCRIPTION = {Quote(statement.Metadata.Description)}");
+        if (statement.Metadata.Options != null)
+            foreach (var (key, value) in statement.Metadata.Options.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase))
+                parts.Add($"{key.ToUpperInvariant()} = {Quote(value)}");
+        return parts.Count == 0 ? "" : $" WITH ({string.Join(", ", parts)})";
+    }
+
+    private static string FormatAlterJob(AlterJobStatement statement)
+    {
+        if (statement.TargetPath != null)
+            return $"ALTER JOB {statement.JobName} SET TARGET = {Quote(statement.TargetPath)};";
+
+        var parts = new List<string>();
+        if (statement.MaxRetries.HasValue) parts.Add($"MAX_RETRIES = {statement.MaxRetries.Value}");
+        if (statement.RetryDelaySeconds.HasValue) parts.Add($"RETRY_DELAY = {statement.RetryDelaySeconds.Value}");
+        if (statement.Metadata.DisplayName != null)
+            parts.Add($"DISPLAY_NAME = {Quote(statement.Metadata.DisplayName)}");
+        if (statement.Metadata.Description != null)
+            parts.Add($"DESCRIPTION = {Quote(statement.Metadata.Description)}");
+        if (statement.Metadata.Options != null)
+            foreach (var (key, value) in statement.Metadata.Options.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase))
+                parts.Add($"{key.ToUpperInvariant()} = {Quote(value)}");
+        return $"ALTER JOB {statement.JobName} SET ({string.Join(", ", parts)});";
     }
 
     private static string FormatAlterCatalogObject(AlterCatalogObjectStatement s)

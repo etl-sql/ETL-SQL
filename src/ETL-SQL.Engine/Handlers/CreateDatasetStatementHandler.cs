@@ -18,9 +18,7 @@ namespace ETL_SQL.Engine.Handlers;
 ///
 /// In portal mode (IDatasetRegistry is available on the Evaluator): also persists
 /// the result as an encrypted Parquet file, registers the dataset in portal.db,
-/// and optionally creates a scheduled trigger mapped to the owning report when
-/// REFRESH EVERY is specified. On subsequent executions within the TTL the Parquet
-/// cache is loaded instead of re-running the source query.
+/// and loads a still-valid TTL cache instead of re-running the source query.
 /// </summary>
 public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
 {
@@ -121,10 +119,8 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
         await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
         new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
 
-        var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval) ? ""
-            : $" (refresh every {stmt.RefreshInterval})";
         context.Log(
-            $"Dataset '{stmt.TempTableName}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}{intervalNote}.");
+            $"Dataset '{stmt.TempTableName}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -206,9 +202,6 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
             throw;
         }
 
-        // A refresh-job failure does not roll back a valid cache and registry update.
-        if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
-            await CreateRefreshJob(stmt, registry, context);
     }
 
     private async Task MaterializeSourceQuery(CreateDatasetStatement stmt, IExecutionContext context)
@@ -293,44 +286,6 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
         await context.EvaluateStatement(selectStmt);
     }
 
-    private async Task CreateRefreshJob(
-        CreateDatasetStatement stmt,
-        IDatasetRegistry registry,
-        IExecutionContext context)
-    {
-        var schedule = ParseRefreshInterval(stmt.RefreshInterval!);
-        if (schedule == null)
-        {
-            _logger.Debug(
-                "Dataset '{Name}': could not parse refresh interval '{Interval}' — skipping job creation.",
-                stmt.TempTableName, stmt.RefreshInterval);
-            return;
-        }
-
-        var reportId = (context as Evaluator)?.DatasetOwningReportId;
-        if (reportId is null)
-        {
-            _logger.Warning(
-                "Dataset '{Name}' declares REFRESH EVERY but has no owning report. " +
-                "Durable refresh scheduling requires portal report execution.",
-                stmt.TempTableName);
-            return;
-        }
-
-        var jobName = $"__dataset_refresh_{MakeSafeAlias(stmt.TempTableName)}__";
-        var jobScript = new PrintStatement(
-            [new LiteralExpression(
-                $"Dataset refresh trigger for {stmt.TempTableName}",
-                TokenType.STRING_LITERAL)]);
-
-        var jobStmt = new CreateJobStatement(jobName, schedule, jobScript);
-        await context.EvaluateStatement(jobStmt);
-        await registry.RegisterRefreshJobAsync(
-            reportId.Value,
-            jobName,
-            stmt.RefreshInterval!);
-    }
-
     private static void RegisterReportContext(CreateDatasetStatement stmt, IExecutionContext context)
     {
         if (context is IReportContext rc)
@@ -382,23 +337,6 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
 
     private static string MakeSafeAlias(string name) =>
         Regex.Replace(name.TrimStart('&', '#'), @"[^\w]", "_").ToLowerInvariant();
-
-    private static ScheduleInfo? ParseRefreshInterval(string interval)
-    {
-        var match = Regex.Match(interval.Trim(), @"^(\d+)([smhd])$", RegexOptions.IgnoreCase);
-        if (!match.Success) return null;
-
-        int value = int.Parse(match.Groups[1].Value);
-        string unit = match.Groups[2].Value.ToUpperInvariant() switch
-        {
-            "S" => "SECOND",
-            "M" => "MINUTE",
-            "H" => "HOUR",
-            "D" => "DAY",
-            _ => "MINUTE"
-        };
-        return new ScheduleInfo(value, unit);
-    }
 
     private static TimeSpan? ParseDuration(string? duration)
     {

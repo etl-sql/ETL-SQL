@@ -130,10 +130,10 @@ The example assumes an SMTP connection named `mailer` already exists. Keep alert
 For transient failures (network blips), use the **Job Scheduler** retry policy:
 
 ```sql
-CREATE JOB NightlyETL ON SCHEDULE EVERY 1 DAY AT '02:00'
-WITH (MAX_RETRIES = 3, RETRY_DELAY = 60)
-AS
-    RUN SCRIPT 'master_pipeline.etlsql';
+CREATE SCHEDULE NightlyAtTwo ON '0 2 * * *' AT TIME ZONE 'UTC';
+CREATE JOB NightlyETL FOR SCRIPT 'master_pipeline.etlsql'
+    WITH (MAX_RETRIES = 3, RETRY_DELAY = 60);
+ALTER JOB NightlyETL ADD SCHEDULE NightlyAtTwo;
 ```
 
 ---
@@ -178,4 +178,3 @@ ETL-SQL run orchestrator.etlsql --progress
 ```
 
 The console will render a live, dynamic **Execution Tree** showing which scripts are currently running, which are queued in `PARALLEL` blocks, and their individual progress bars.
-

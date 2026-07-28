@@ -3,32 +3,42 @@ Create portal alert definitions through a `PORTAL` connection.
 
 ## Syntax
 ```sql
-CREATE ALERT 'AlertName' FOR REPORT '/Folder/ReportName'
-  WHEN VISUAL 'VisualName' >= 1000
-  [DELIVER TO 'recipient@corp.com']
-  [AT smtp_alias]
-  [ENABLE | DISABLE];
+CREATE [OR REPLACE | OR ALTER] ALERT AlertName
+  FOR REPORT '/Folder/ReportName'
+  WHEN VISUAL VisualName >= 1000
+  [WITH (DISPLAY_NAME = 'Alert label', DESCRIPTION = 'Alert description')];
+
+ALTER ALERT AlertName ADD NOTIFICATION orchestrator_alias.NotificationName;
+ALTER ALERT AlertName REMOVE NOTIFICATION orchestrator_alias.NotificationName;
+ALTER ALERT AlertName SET (DESCRIPTION = 'Updated description');
+
+ENABLE ALERT AlertName;
+DISABLE ALERT AlertName;
 
 SHOW ALERTS FOR REPORT '/Folder/ReportName' [INTO #alerts];
-DROP ALERT 'AlertName' FOR REPORT '/Folder/ReportName';
+DROP ALERT [IF EXISTS] AlertName;
 ```
 
 ## Example
 ```sql
 EXECUTE portal BEGIN
-  CREATE ALERT 'RevenueFloor' FOR REPORT '/Finance/Finance Dashboard'
-    WHEN VISUAL 'Revenue' < 50000
-    DELIVER TO 'finance@corp.com'
-    AT corporate_smtp
-    DISABLE;
+  CREATE OR REPLACE ALERT RevenueFloor
+    FOR REPORT '/Finance/Finance Dashboard'
+    WHEN VISUAL Revenue < 50000
+    WITH (DESCRIPTION = 'Finance KPI floor');
+
+  ALTER ALERT RevenueFloor ADD NOTIFICATION orchestrator.FinanceOps;
+  DISABLE ALERT RevenueFloor;
 END;
 ```
 
 ## Notes
-- Alerts are definition-only portal metadata in v0.11.0; the portal does not yet evaluate or send them.
-- New alerts are enabled unless `DISABLE` is specified.
-- Configuration import uses report path and alert name as its stable key. Replay updates drifted
-  definitions and skips equal definitions.
+- Alert names and visual names are identifiers. Report names remain string paths.
+- Delivery is attached through named Orchestrator notifications; inline `DELIVER TO ... AT ...`
+  on `CREATE ALERT` is retired.
+- New alerts are enabled by default. Use `DISABLE ALERT` to pause one.
+- Configuration import uses alert name as its stable key. Replay updates drifted definitions and skips
+  equal definitions.
 
 References:
 - [Data Connectors](../../administration/platform/README.md)

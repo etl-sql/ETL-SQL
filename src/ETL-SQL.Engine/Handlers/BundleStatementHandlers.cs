@@ -140,7 +140,7 @@ public static partial class BundlePublishSupport
                     "Bundle publish failed: dynamic RUN SCRIPT paths cannot be packaged.\n\n" +
                     $"Found:\n  {virtualPath}:{run.Line}  {run.ToSql()}\n\n" +
                     "Published bundles require literal script paths so dependencies can be versioned and stored safely.\n" +
-                    "Use live mode instead:\n  CREATE JOB JobName ON SCHEDULE EVERY 1 DAY AS RUN SCRIPT 'C:\\ETL\\main.etlsql';");
+                    "Use a literal live script target instead:\n  CREATE JOB JobName FOR SCRIPT 'C:\\ETL\\main.etlsql';");
             }
 
             if (BundleUri.TryParse(childRaw, out _))

@@ -772,13 +772,17 @@ CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 
 ### 7.3 CREATE JOB
 ```sql
-CREATE JOB name ON SCHEDULE EVERY n unit [AT 'time'] [WITH (option = value, ...)] AS statement
+CREATE [OR ALTER|OR REPLACE] JOB name
+FOR SCRIPT|REPORT 'target-path'
+[WITH (MAX_RETRIES = n, RETRY_DELAY = seconds, DISPLAY_NAME = '...', ...)]
+
+ALTER JOB name ADD SCHEDULE schedule_name
 ```
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `MAX_RETRIES` | 0 | Number of retry attempts on failure (integer) |
 | `RETRY_DELAY` | 30 | Delay between retries in seconds (integer) |
-| `RETRY_DELAY_SECONDS` | 30 | Alias for RETRY_DELAY |
+| `DISPLAY_NAME` | Job name | Operator-facing label |
 
 ### 7.4 CREATE SSH_KEY_PAIR / PGP_KEY_PAIR
 ```sql
@@ -798,7 +802,6 @@ CREATE DATASET &name [OPTIONS] AS SELECT ...
 ```
 | Option | Syntax | Description |
 | :--- | :--- | :--- |
-| `REFRESH` | `REFRESH EVERY 'hh:mm:ss'` | Auto-refresh interval |
 | `TTL` | `TTL = 'hh:mm:ss'` | Data expiration period |
 | `COMPRESS` | `COMPRESS = ON/OFF` | Enable row compression |
 | `ENCRYPT` | `ENCRYPT = MACHINE/PASSWORD/KEYFILE` | Data at rest encryption mode |

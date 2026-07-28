@@ -366,10 +366,17 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      them would break `SELECT success FROM …`.
      Timezone validation happens at write time and `CronSchedule` moved to `ETL-SQL.Engine` — the
      handlers are tier 1 and cannot reference the Orchestrator.
-   - **[3b — next]** `CreateJobStatement` holds `FOR REPORT`/`FOR SCRIPT` (mutually exclusive) plus
-     retry options; reshaped `ALERT`. This is the breaking half: it retires the inline
-     `AS <statement>` body and touches the four connector call sites, samples, and tests.
-   - Remove `REFRESH EVERY` from `CREATE DATASET`; delete
+   - **[3b — CREATE JOB + PORTAL ALERT SYNTAX DONE; ASSERT JOB NOTIFY NEXT]** `CreateJobStatement` now holds mutually exclusive
+     `FOR REPORT`/`FOR SCRIPT` targets plus retry and catalog metadata options. The inline
+     `AS <statement>` body and interval schedule grammar are retired with replacement diagnostics;
+     local and remote handlers, API payloads, samples, snippets, docs, and tests use the normalized
+     model. `CREATE OR ALTER` preserves links and omitted properties; `CREATE OR REPLACE` drops
+     links. Portal alert definitions now use identifier names/visuals, metadata options, separate
+     `ALTER ALERT ... ADD|REMOVE NOTIFICATION` links, `ENABLE|DISABLE ALERT`, name-based drop, Portal
+     API endpoints, export/import support, and additive alert-notification migrations. The remaining
+     3b follow-up is replacing `ASSERT JOB ... ON FAILURE ALERT <connection>` with
+     `ASSERT JOB ... ON FAILURE NOTIFY <notification>`.
+   - **[DONE]** Remove `REFRESH EVERY` from `CREATE DATASET`; delete
      `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
      `DatasetRefreshIntervalRule`.
    - `IF EXISTS` before the name. **`CREATE OR ALTER` and `CREATE OR REPLACE` are both supported** —
@@ -890,5 +897,3 @@ The fix is to make the apparatus trustworthy, not to chase the numbers:
 
 Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
 measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.
-
-

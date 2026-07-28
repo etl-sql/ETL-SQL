@@ -32,6 +32,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
+    public DbSet<AlertNotification> AlertNotifications => Set<AlertNotification>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
@@ -188,6 +189,18 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.Owner).WithMany(u => u.ReportAlerts).HasForeignKey(x => x.OwnerId);
             e.HasOne(x => x.Report).WithMany(r => r.Alerts).HasForeignKey(x => x.ReportId);
             e.Property(x => x.Recipient).HasConversion(piiNullableConverter);
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.DisplayName).HasMaxLength(300);
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.HasMany(x => x.Notifications).WithOne(n => n.Alert).HasForeignKey(n => n.AlertId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AlertNotification>(e =>
+        {
+            e.HasIndex(x => new { x.AlertId, x.OrchestratorAlias, x.NotificationName }).IsUnique();
+            e.Property(x => x.OrchestratorAlias).HasMaxLength(200);
+            e.Property(x => x.NotificationName).HasMaxLength(200);
         });
 
         builder.Entity<PortalSecret>(e =>

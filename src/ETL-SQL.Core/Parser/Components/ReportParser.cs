@@ -360,7 +360,6 @@ public class ReportParser : ParserComponent
         if (!tableName.StartsWith("&"))
             throw new SyntaxException("CREATE DATASET names must use the &dataset form", startToken.Line, startToken.Column);
 
-        string? refreshInterval = null;
         string? ttl = null;
         bool compress = false;
         var encryptionMode = DatasetEncryptionMode.MachineBound;
@@ -372,8 +371,11 @@ public class ReportParser : ParserComponent
         {
             if (Match(TokenType.REFRESH))
             {
-                Consume(TokenType.EVERY, "Expected EVERY after REFRESH");
-                refreshInterval = Consume(TokenType.STRING_LITERAL, "Expected interval string after REFRESH EVERY").Value;
+                throw new SyntaxException(
+                    "CREATE DATASET ... REFRESH EVERY has been retired. Keep TTL on the dataset, " +
+                    "then use CREATE SCHEDULE and CREATE JOB ... FOR REPORT and attach them " +
+                    "with ALTER JOB ... ADD SCHEDULE.",
+                    _parser.Previous.Line, _parser.Previous.Column);
             }
             else if (Match(TokenType.TTL))
             {
@@ -451,7 +453,7 @@ public class ReportParser : ParserComponent
         return new CreateDatasetStatement
         {
             TempTableName = tableName,
-            RefreshInterval = refreshInterval,
+            RefreshInterval = null,
             Ttl = ttl,
             Compress = compress,
             EncryptionMode = encryptionMode,

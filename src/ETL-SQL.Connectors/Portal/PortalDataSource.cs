@@ -174,6 +174,9 @@ namespace ETL_SQL.Connectors.Portal
                 case ShowPortalSavedViewsStatement s: await ShowSavedViewsAsync(s, context); break;
                 case DropPortalSavedViewStatement s: await DropSavedViewAsync(s, context); break;
                 case CreatePortalAlertStatement s: await CreateAlertAsync(s, context); break;
+                case AlterPortalAlertStatement s: await AlterAlertAsync(s, context); break;
+                case AlterPortalAlertNotificationStatement s: await AlterAlertNotificationAsync(s, context); break;
+                case SetPortalAlertEnabledStatement s: await SetAlertEnabledAsync(s, context); break;
                 case ShowPortalAlertsStatement s: await ShowAlertsAsync(s, context); break;
                 case DropPortalAlertStatement s: await DropAlertAsync(s, context); break;
                 case ShowPortalFavoritesStatement s: await ShowFavoritesAsync(s, context); break;
@@ -709,26 +712,21 @@ namespace ETL_SQL.Connectors.Portal
                 VisualName = stmt.VisualName,
                 Operator = stmt.Operator,
                 Threshold = stmt.Threshold,
-                Recipient = stmt.Recipient,
-                SmtpAlias = stmt.SmtpAlias,
-                IsActive = stmt.IsActive
+                DisplayName = stmt.Metadata.DisplayName,
+                Description = stmt.Metadata.Description,
+                Options = stmt.Metadata.Options
             };
             var existing = await TryLookupAlertAsync(reportId, stmt.Name);
             JsonElement json;
             if (existing is null)
             {
                 json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/alerts", request);
-                if (!stmt.IsActive)
-                    json = await SendJsonAsync(
-                        HttpMethod.Put,
-                        $"api/reports/{reportId}/alerts/{TryGet(json, "id")}",
-                        request);
             }
             else if (AlertMatches(existing.Value, stmt))
             {
                 json = existing.Value;
                 _logger.WriteLine(
-                    $"Alert '{stmt.Name}' for report '{stmt.ReportName}' already matches — skipped.",
+                    $"Alert '{stmt.Name}' for report '{stmt.ReportName}' already matches - skipped.",
                     ConsoleColor.DarkGray);
             }
             else
@@ -741,6 +739,54 @@ namespace ETL_SQL.Connectors.Portal
             await PublishJsonResultAsync(json, null, context);
         }
 
+        private async Task AlterAlertAsync(AlterPortalAlertStatement stmt, IExecutionContext context)
+        {
+            var alert = await LookupAlertByNameAsync(stmt.Name);
+            var json = await SendJsonAsync(
+                HttpMethod.Put,
+                $"api/alerts/{TryGet(alert, "id")}",
+                new
+                {
+                    DisplayName = stmt.Metadata.DisplayName,
+                    Description = stmt.Metadata.Description,
+                    Options = stmt.Metadata.Options
+                });
+            await PublishJsonResultAsync(json, null, context);
+        }
+
+        private async Task AlterAlertNotificationAsync(AlterPortalAlertNotificationStatement stmt, IExecutionContext context)
+        {
+            var alert = await LookupAlertByNameAsync(stmt.AlertName);
+            var alertId = TryGet(alert, "id");
+            var req = new
+            {
+                OrchestratorAlias = stmt.Notification.OrchestratorAlias,
+                NotificationName = stmt.Notification.NotificationName
+            };
+            if (stmt.Action == PortalAlertAttachmentAction.Add)
+            {
+                var json = await SendJsonAsync(HttpMethod.Post, $"api/alerts/{alertId}/notifications", req);
+                await PublishJsonResultAsync(json, null, context);
+                return;
+            }
+
+            await CallAsync(
+                HttpMethod.Delete,
+                $"api/alerts/{alertId}/notifications/{Uri.EscapeDataString(stmt.Notification.OrchestratorAlias)}/{Uri.EscapeDataString(stmt.Notification.NotificationName)}",
+                null,
+                $"Notification '{stmt.Notification}' removed from alert '{stmt.AlertName}'.");
+        }
+
+        private async Task SetAlertEnabledAsync(SetPortalAlertEnabledStatement stmt, IExecutionContext context)
+        {
+            var alert = await LookupAlertByNameAsync(stmt.Name);
+            var json = await SendJsonAsync(
+                HttpMethod.Put,
+                $"api/alerts/{TryGet(alert, "id")}",
+                new { IsActive = stmt.IsEnabled });
+            await PublishJsonResultAsync(json, null, context);
+        }
+
         private async Task ShowAlertsAsync(ShowPortalAlertsStatement stmt, IExecutionContext context)
         {
             var reportId = await LookupReportIdAsync(stmt.ReportName);
@@ -749,10 +795,19 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task DropAlertAsync(DropPortalAlertStatement stmt, IExecutionContext context)
         {
-            var reportId = await LookupReportIdAsync(stmt.ReportName);
-            var alertId = await LookupNamedChildIdAsync($"api/reports/{reportId}/alerts", stmt.Name, "alert");
-            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/alerts/{alertId}", null,
-                $"Alert '{stmt.Name}' dropped for report '{stmt.ReportName}'.");
+            var existing = await TryLookupAlertByNameAsync(stmt.Name);
+            if (existing is null)
+            {
+                if (stmt.IfExists)
+                {
+                    _logger.WriteLine($"Alert '{stmt.Name}' does not exist - skipped.", ConsoleColor.DarkGray);
+                    return;
+                }
+                throw new ExecutionException($"Portal alert '{stmt.Name}' not found.");
+            }
+
+            await CallAsync(HttpMethod.Delete, $"api/alerts/{TryGet(existing.Value, "id")}", null,
+                $"Alert '{stmt.Name}' dropped.");
         }
 
         private async Task ShowFavoritesAsync(ShowPortalFavoritesStatement stmt, IExecutionContext context)
@@ -1128,9 +1183,23 @@ namespace ETL_SQL.Connectors.Portal
                         return existing is null
                             ? $"WHAT IF: would create alert '{s.Name}' for report '{s.ReportName}'."
                             : AlertMatches(existing.Value, s)
-                                ? $"WHAT IF: alert '{s.Name}' for report '{s.ReportName}' already matches — would skip."
+                                ? $"WHAT IF: alert '{s.Name}' for report '{s.ReportName}' already matches - would skip."
                                 : $"WHAT IF: would update alert '{s.Name}' for report '{s.ReportName}'.";
                     }
+
+                case AlterPortalAlertStatement s:
+                    _ = await LookupAlertByNameAsync(s.Name);
+                    return $"WHAT IF: would update alert '{s.Name}'.";
+
+                case AlterPortalAlertNotificationStatement s:
+                    _ = await LookupAlertByNameAsync(s.AlertName);
+                    return s.Action == PortalAlertAttachmentAction.Add
+                        ? $"WHAT IF: would attach notification '{s.Notification}' to alert '{s.AlertName}'."
+                        : $"WHAT IF: would remove notification '{s.Notification}' from alert '{s.AlertName}'.";
+
+                case SetPortalAlertEnabledStatement s:
+                    _ = await LookupAlertByNameAsync(s.Name);
+                    return $"WHAT IF: would {(s.IsEnabled ? "enable" : "disable")} alert '{s.Name}'.";
 
                 case CreatePortalSubscriptionStatement s:
                     {
@@ -1228,6 +1297,21 @@ namespace ETL_SQL.Connectors.Portal
             return null;
         }
 
+        private async Task<JsonElement> LookupAlertByNameAsync(string name) =>
+            await TryLookupAlertByNameAsync(name)
+            ?? throw new ExecutionException($"Portal alert '{name}' not found.");
+
+        private async Task<JsonElement?> TryLookupAlertByNameAsync(string name)
+        {
+            using var response = await _http.GetAsync($"api/alerts/by-name/{Uri.EscapeDataString(name)}");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return null;
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var document = await JsonDocument.ParseAsync(stream);
+            return document.RootElement.Clone();
+        }
+
         private async Task<JsonElement?> TryLookupSubscriptionAsync(
             int reportId,
             string? name,
@@ -1256,9 +1340,8 @@ namespace ETL_SQL.Connectors.Portal
             GetString(alert, "visualName")?.Equals(stmt.VisualName, StringComparison.OrdinalIgnoreCase) == true
             && GetString(alert, "operator") == stmt.Operator
             && GetDecimal(alert, "threshold") == stmt.Threshold
-            && StringEquals(GetString(alert, "recipient"), stmt.Recipient)
-            && StringEquals(GetString(alert, "smtpAlias"), stmt.SmtpAlias)
-            && GetBoolean(alert, "isActive") == stmt.IsActive;
+            && StringEquals(GetString(alert, "displayName"), stmt.Metadata.DisplayName)
+            && StringEquals(GetString(alert, "description"), stmt.Metadata.Description);
 
         private static bool SubscriptionMatches(
             JsonElement subscription,

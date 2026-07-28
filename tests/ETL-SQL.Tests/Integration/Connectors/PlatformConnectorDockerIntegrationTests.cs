@@ -16,6 +16,7 @@ using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using Xunit;
 
@@ -45,8 +46,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 var jobName = "docker_smoke_" + Guid.NewGuid().ToString("N");
                 var create = new CreateJobStatement(
                     jobName,
-                    new ScheduleInfo(1, "HOUR"),
-                    new PrintStatement([new LiteralExpression("docker smoke", TokenType.STRING)]));
+                    JobTargetKind.Script,
+                    "docker-smoke.etlsql");
 
                 await ds.ExecuteAdminStatementAsync(create, context);
                 await ds.ExecuteAdminStatementAsync(new ShowJobsStatement(), context);

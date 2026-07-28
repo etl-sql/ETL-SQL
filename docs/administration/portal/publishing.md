@@ -447,23 +447,24 @@ DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 ### 6.13 Alerts
 
 Alerts store threshold definitions for KPI-style visuals such as cards and gauges. Alert ownership follows
-the creating user; admins can see all alerts. In v0.11.0 alerts are definition-only/browser-consumed
-metadata: the portal does not evaluate thresholds, schedule checks, or deliver email server-side.
-`Recipient` and `SmtpAlias` are reserved metadata for a future trusted delivery implementation.
+the creating user; admins can see all alerts. Alert delivery is modeled as a link to a named
+Orchestrator notification instead of inline SMTP fields, so delivery policy, secrets, retries, and
+audit remain centralized.
 
 Any future server-side alert delivery must use the same security boundary as subscriptions: reload the
 owner and current report permission immediately before evaluation/send, resolve SMTP secrets only at
 runtime, and never persist credentials in jobs or generated scripts.
 
 ```sql
-CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
-    WHEN VISUAL 'Revenue' >= 1000
-    DELIVER TO 'ops@example.com'
-    AT smtp
-    DISABLE;
+CREATE OR REPLACE ALERT RevenueFloor FOR REPORT 'Monthly Sales'
+    WHEN VISUAL Revenue >= 1000
+    WITH (DESCRIPTION = 'Monthly sales revenue floor');
+
+ALTER ALERT RevenueFloor ADD NOTIFICATION orchestrator.OpsEmail;
+DISABLE ALERT RevenueFloor;
 
 SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
-DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
+DROP ALERT IF EXISTS RevenueFloor;
 ```
 
 ### 6.14 Environment Promotion Pattern

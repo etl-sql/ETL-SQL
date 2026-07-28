@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
@@ -2419,42 +2420,60 @@ public sealed record DockerActionStatement(DockerAction action, string? alias = 
 public sealed record CreateJobStatement : Statement
 {
     public string JobName { get; }
-    public ScheduleInfo Schedule { get; }
-    public Statement Script { get; }
-    public int MaxRetries { get; }
-    public int RetryDelaySeconds { get; }
-    /// <summary>True when parsed as CREATE OR ALTER JOB — upsert semantics.</summary>
-    public bool IsOrAlter { get; init; }
+    public JobTargetKind TargetKind { get; }
+    public string TargetPath { get; }
+    /// <summary>Null means the option was omitted. CREATE applies the catalog default; OR ALTER preserves it.</summary>
+    public int? MaxRetries { get; }
+    /// <summary>Null means the option was omitted. CREATE applies the catalog default; OR ALTER preserves it.</summary>
+    public int? RetryDelaySeconds { get; }
+    public CatalogObjectOptions Metadata { get; }
+    public ObjectCreationMode Mode { get; }
 
-    public CreateJobStatement(string jobName, ScheduleInfo schedule, Statement script, int maxRetries = 0, int retryDelaySeconds = 30)
+    public CreateJobStatement(
+        string jobName,
+        JobTargetKind targetKind,
+        string targetPath,
+        int? maxRetries = null,
+        int? retryDelaySeconds = null,
+        CatalogObjectOptions? metadata = null,
+        ObjectCreationMode mode = ObjectCreationMode.Create)
     {
         JobName = jobName;
-        Schedule = schedule;
-        Script = script;
+        TargetKind = targetKind;
+        TargetPath = targetPath;
         MaxRetries = maxRetries;
         RetryDelaySeconds = retryDelaySeconds;
+        Metadata = metadata ?? new CatalogObjectOptions();
+        Mode = mode;
     }
+
+    public override string ToSql() => AstSerializer.Format(this);
 }
 
-/// <summary>
-/// ALTER JOB &lt;name&gt; [ON SCHEDULE EVERY n unit [AT 'time']] [AS &lt;statement&gt;];
-/// Modifies an existing job's schedule and/or script body.
-/// Fails at execution time if the job does not exist.
-/// </summary>
+/// <summary>ALTER JOB &lt;name&gt; SET TARGET = '…' | SET (job options).</summary>
 public sealed record AlterJobStatement : Statement
 {
     public string JobName { get; }
-    /// <summary>New schedule — null means leave the existing schedule unchanged.</summary>
-    public ScheduleInfo? Schedule { get; }
-    /// <summary>New script body — null means leave the existing script unchanged.</summary>
-    public Statement? Script { get; }
+    public string? TargetPath { get; }
+    public int? MaxRetries { get; }
+    public int? RetryDelaySeconds { get; }
+    public CatalogObjectOptions Metadata { get; }
 
-    public AlterJobStatement(string jobName, ScheduleInfo? schedule, Statement? script)
+    public AlterJobStatement(
+        string jobName,
+        string? targetPath,
+        int? maxRetries,
+        int? retryDelaySeconds,
+        CatalogObjectOptions? metadata = null)
     {
         JobName = jobName;
-        Schedule = schedule;
-        Script = script;
+        TargetPath = targetPath;
+        MaxRetries = maxRetries;
+        RetryDelaySeconds = retryDelaySeconds;
+        Metadata = metadata ?? new CatalogObjectOptions();
     }
+
+    public override string ToSql() => AstSerializer.Format(this);
 }
 
 public sealed record ScheduleInfo : AstNode
@@ -2816,16 +2835,37 @@ public sealed record CreatePortalSavedViewStatement(string ReportName, string Na
 public sealed record DropPortalSavedViewStatement(string ReportName, string Name) : Statement;
 
 public sealed record CreatePortalAlertStatement(
-    string ReportName,
     string Name,
+    string ReportName,
     string VisualName,
     string Operator,
     decimal Threshold,
-    string? Recipient,
-    string? SmtpAlias,
-    bool IsActive = true) : Statement;
+    CatalogObjectOptions Metadata,
+    ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement;
 
-public sealed record DropPortalAlertStatement(string ReportName, string Name) : Statement;
+public enum PortalAlertAttachmentAction
+{
+    Add,
+    Remove
+}
+
+public sealed record PortalAlertNotificationReference(string OrchestratorAlias, string NotificationName)
+{
+    public override string ToString() => $"{OrchestratorAlias}.{NotificationName}";
+}
+
+public sealed record AlterPortalAlertNotificationStatement(
+    string AlertName,
+    PortalAlertAttachmentAction Action,
+    PortalAlertNotificationReference Notification) : Statement;
+
+public sealed record AlterPortalAlertStatement(
+    string Name,
+    CatalogObjectOptions Metadata) : Statement;
+
+public sealed record DropPortalAlertStatement(string Name, bool IfExists = false) : Statement;
+
+public sealed record SetPortalAlertEnabledStatement(string Name, bool IsEnabled) : Statement;
 
 public sealed record CreatePortalRefreshJobStatement(
     string ReportName, string Schedule, string OrchestratorAlias) : Statement;

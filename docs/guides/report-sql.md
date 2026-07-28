@@ -395,9 +395,9 @@ SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
 DROP CONNECTION IF EXISTS c;
 CREATE CONNECTION c AS FLATFILE('testdata/test_sales.csv');
 
--- Shared base dataset (refreshed every hour)
+-- Shared base dataset (cache expires after one hour)
 CREATE DATASET &summary
-  REFRESH EVERY '1h'
+  TTL = '1h'
   ENCRYPT = MACHINE
   AS (SELECT month, region, product,
              SUM(units)   AS units,

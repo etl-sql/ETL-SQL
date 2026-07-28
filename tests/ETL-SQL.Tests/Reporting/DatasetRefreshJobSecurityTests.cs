@@ -72,51 +72,14 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public async Task RefreshEvery_PersistsParseableTriggerAndOwningReportMapping()
+        public void RefreshEvery_IsRejectedWithTheNormalizedReplacement()
         {
-            const string atRestKey = "U0VDUkVULWF0LXJlc3Qta2V5LURPLU5PVC1MRUFL";   // distinctive
-            var root = Path.Combine(Path.GetTempPath(), "etlsql_rjsec_" + Guid.NewGuid().ToString("N")[..8]);
-            Directory.CreateDirectory(root);
-            var suffix = Guid.NewGuid().ToString("N")[..8];
-            var dsName = $"&rj_{suffix}";
-            var jobName = $"__dataset_refresh_rj_{suffix}__";
+            var script = Parse(
+                "CREATE DATASET &sales TTL = '1h' REFRESH EVERY '1m' AS (SELECT 1 AS v);");
 
-            var provider = DependencyInjectionSetup.BuildServiceProvider();
-            var store = provider.GetRequiredService<IJobHistoryStore>();
-            await store.InitializeAsync();
-            try
-            {
-                var eval = provider.GetRequiredService<Evaluator>();
-                var registry = new TempRegistry(root);
-                eval.DatasetRegistry = registry;
-                eval.DatasetCallerContext = "IsAdmin=true";
-                eval.DatasetAtRestKey = atRestKey;
-                eval.DatasetOwningReportId = 42;
-
-                await eval.Evaluate(Parse($@"
-                    CREATE TABLE #seed (v INT);
-                    INSERT INTO #seed VALUES (1);
-                    CREATE DATASET {dsName} TTL = '1h' REFRESH EVERY '1m' AS (SELECT v FROM #seed);"));
-
-                var job = (await store.GetActiveJobsAsync()).Single(j => j.Name == jobName);
-
-                // The orchestrator job is only a schedule trigger. The portal poller maps its
-                // completion to the owning report and re-runs that report with registry/key context.
-                Assert.DoesNotContain(atRestKey, job.Script);
-                Assert.DoesNotContain("PASSWORD", job.Script, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("BEGIN ... END", job.Script, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("SELECT v FROM #seed", job.Script, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain(atRestKey, job.Name);
-                Assert.DoesNotContain(atRestKey, job.ScriptHash ?? "");
-                Assert.DoesNotContain(atRestKey, job.HashPolicy);
-                Assert.IsType<PrintStatement>(Assert.Single(Parse(job.Script).Statements));
-                Assert.Equal((42, jobName, "1m"), registry.RefreshJob);
-            }
-            finally
-            {
-                try { await store.DeleteJobAsync(jobName); } catch { }
-                try { Directory.Delete(root, recursive: true); } catch { }
-            }
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Contains("CREATE SCHEDULE", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Contains("FOR REPORT", diagnostic.Message, StringComparison.Ordinal);
         }
 
         // Minimal in-memory registry that writes parquet under a temp root.

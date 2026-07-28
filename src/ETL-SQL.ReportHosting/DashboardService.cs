@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -44,10 +43,6 @@ namespace ETL_SQL.ReportHosting
         private readonly HashSet<string> _runPages = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, VisualDrillState> _drillStates = new(StringComparer.OrdinalIgnoreCase);
 
-        // Background auto-refresh state
-        private CancellationTokenSource? _refreshCts;
-        private static readonly Regex _intervalPattern = new(@"^(\d+)([smhd])$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
         public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
@@ -78,11 +73,6 @@ namespace ETL_SQL.ReportHosting
                 _evaluator = null;
             }
 
-            if (_refreshCts != null)
-            {
-                await _refreshCts.CancelAsync();
-                _refreshCts.Dispose();
-            }
             _lock.Dispose();
         }
 
@@ -90,8 +80,6 @@ namespace ETL_SQL.ReportHosting
         {
             // Fallback for sync disposal (though we prefer DisposeAsync)
             _currentScope?.Dispose();
-            _refreshCts?.Cancel();
-            _refreshCts?.Dispose();
             _lock.Dispose();
         }
 
@@ -410,7 +398,6 @@ namespace ETL_SQL.ReportHosting
                 _evaluator = evaluator;
                 _manifest = await builder.BuildAsync(_scriptPath, runPages: _runPages);
 
-                ScheduleRefresh(_manifest);
                 return _manifest;
             }
             finally
@@ -499,63 +486,5 @@ namespace ETL_SQL.ReportHosting
             return new SnapshotStore().IsStale(_manifest, _scriptPath, ttl);
         }
 
-        /// <summary>
-        /// Starts (or restarts) a background task that rebuilds the manifest at the shortest
-        /// REFRESH EVERY interval declared across all CREATE DATASET statements.
-        /// Cancels any previously scheduled refresh before starting a new one.
-        /// </summary>
-        private void ScheduleRefresh(ReportManifest manifest)
-        {
-            // Cancel previous timer if any
-            _refreshCts?.Cancel();
-            _refreshCts?.Dispose();
-            _refreshCts = null;
-
-            // Find the minimum non-null refresh interval across all datasets
-            TimeSpan? minInterval = null;
-            foreach (var ds in manifest.Datasets)
-            {
-                if (string.IsNullOrWhiteSpace(ds.RefreshInterval)) continue;
-                var parsed = ParseInterval(ds.RefreshInterval);
-                if (parsed.HasValue && (!minInterval.HasValue || parsed.Value < minInterval.Value))
-                    minInterval = parsed;
-            }
-
-            if (!minInterval.HasValue) return;
-
-            var cts = new CancellationTokenSource();
-            _refreshCts = cts;
-
-            // Fire-and-forget background loop; exceptions are swallowed so the server stays up.
-            _ = Task.Run(async () =>
-            {
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    try { await Task.Delay(minInterval.Value, cts.Token); }
-                    catch (OperationCanceledException) { break; }
-
-                    if (cts.Token.IsCancellationRequested) break;
-
-                    try { await RebuildAsync(); }
-                    catch { /* keep the timer running even if a rebuild fails */ }
-                }
-            }, CancellationToken.None);
-        }
-
-        private static TimeSpan? ParseInterval(string interval)
-        {
-            var m = _intervalPattern.Match(interval.Trim());
-            if (!m.Success) return null;
-
-            var amount = int.Parse(m.Groups[1].Value);
-            return m.Groups[2].Value.ToLowerInvariant() switch
-            {
-                "s" => TimeSpan.FromSeconds(amount),
-                "m" => TimeSpan.FromMinutes(amount),
-                "h" => TimeSpan.FromHours(amount),
-                "d" => TimeSpan.FromDays(amount),
-                _ => null
-            };
-        }
     }
 }

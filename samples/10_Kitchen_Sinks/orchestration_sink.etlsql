@@ -34,7 +34,9 @@ RUN SCRIPT 'sub_script.etlsql' WITH (@param1 = 'KitchenSinkTest');
 
 -- 4. Job Management (Local)
 PRINT 'Testing Job Creation...';
-CREATE JOB 'KitchenSinkJob' ON SCHEDULE EVERY 5 MINUTES AS RUN SCRIPT 'sub_script.etlsql';
+CREATE SCHEDULE KitchenSinkEveryFiveMinutes ON '*/5 * * * *' AT TIME ZONE 'UTC';
+CREATE JOB KitchenSinkJob FOR SCRIPT 'sub_script.etlsql';
+ALTER JOB KitchenSinkJob ADD SCHEDULE KitchenSinkEveryFiveMinutes;
 
 PRINT 'Job Created. Verifying Listing...';
 SHOW JOBS;
@@ -42,4 +44,5 @@ SHOW JOB HISTORY;
 
 -- 5. Cleanup
 PRINT 'Cleaning up...';
-DROP JOB 'KitchenSinkJob';
+DROP JOB KitchenSinkJob;
+DROP SCHEDULE KitchenSinkEveryFiveMinutes;

@@ -273,8 +273,7 @@ public sealed class ConfigurationRoundTripTests
                 Recipients = $"disabled_{suffix}@test.local",
                 IsActive = false
             });
-        db.ReportAlerts.AddRange(
-            new ReportAlert
+        var activeAlert = new ReportAlert
             {
                 ReportId = report.Id,
                 OwnerId = alice.Id,
@@ -282,11 +281,15 @@ public sealed class ConfigurationRoundTripTests
                 VisualName = "Revenue",
                 Operator = ">=",
                 Threshold = 100,
-                Recipient = $"active_{suffix}@test.local",
-                SmtpAlias = $"corp_{suffix}",
+                Description = "Active revenue alert",
                 IsActive = true
-            },
-            new ReportAlert
+            };
+        activeAlert.Notifications.Add(new AlertNotification
+        {
+            OrchestratorAlias = "target_orchestrator",
+            NotificationName = $"active_notification_{suffix}"
+        });
+        var disabledAlert = new ReportAlert
             {
                 ReportId = report.Id,
                 OwnerId = alice.Id,
@@ -294,10 +297,15 @@ public sealed class ConfigurationRoundTripTests
                 VisualName = "Failures",
                 Operator = ">",
                 Threshold = 5,
-                Recipient = $"disabled_{suffix}@test.local",
-                SmtpAlias = $"corp_{suffix}",
+                Description = "Disabled failure alert",
                 IsActive = false
-            });
+            };
+        disabledAlert.Notifications.Add(new AlertNotification
+        {
+            OrchestratorAlias = "target_orchestrator",
+            NotificationName = $"disabled_notification_{suffix}"
+        });
+        db.ReportAlerts.AddRange(activeAlert, disabledAlert);
         await db.SaveChangesAsync();
     }
 
@@ -441,24 +449,22 @@ public sealed class ConfigurationRoundTripTests
             .ToHashSet();
 
         var rawAlerts = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .Include(a => a.Report).ThenInclude(r => r.Folder)
             .Where(a => a.Name.EndsWith($"_{suffix}"))
-            .Select(a => new
-            {
-                FolderPath = a.Report.Folder.Path,
-                ReportName = a.Report.Name,
-                a.Name,
-                a.VisualName,
-                a.Operator,
-                a.Threshold,
-                a.Recipient,
-                a.SmtpAlias,
-                a.IsActive
-            })
             .ToListAsync();
         var alerts = rawAlerts
-            .Select(a => a.FolderPath + "/" + a.ReportName + "|" + a.Name + "|" +
-                a.VisualName + "|" + a.Operator + "|" + a.Threshold + "|" + a.Recipient + "|" +
-                a.SmtpAlias + "|" + a.IsActive)
+            .Select(a =>
+            {
+                var notifications = string.Join(",",
+                    a.Notifications
+                        .OrderBy(n => n.OrchestratorAlias, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(n => n.NotificationName, StringComparer.OrdinalIgnoreCase)
+                        .Select(n => $"{n.OrchestratorAlias}.{n.NotificationName}"));
+                return a.Report.Folder.Path + "/" + a.Report.Name + "|" + a.Name + "|" +
+                    a.VisualName + "|" + a.Operator + "|" + a.Threshold + "|" +
+                    a.Description + "|" + a.OptionsJson + "|" + a.IsActive + "|" + notifications;
+            })
             .ToHashSet();
 
         return new NormalizedState(

@@ -6,7 +6,6 @@ Defines a shared, optionally cached data source that can be used by multiple vis
 
 ```sql
 CREATE DATASET &<name>
-  [REFRESH EVERY '<interval>']
   [TTL = '<duration>']
   [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
 AS (SELECT ...);
@@ -14,15 +13,14 @@ AS (SELECT ...);
 
 ## Options
 
-- **`REFRESH EVERY`**: Re-evaluate the query on this schedule during an interactive session (e.g. `'5m'`, `'1h'`).
 - **`TTL`**: Time-to-live for the cached result; stale results trigger a refresh.
 - **`ENCRYPT`**: Store the cached result encrypted (`MACHINE` = OS key, `PASSWORD` = passphrase, `KEYFILE` = key file).
 
 ## Examples
 
 ```sql
--- Sales dataset refreshed every hour
-CREATE DATASET &sales_summary REFRESH EVERY '1h' AS (
+-- Sales dataset cached for one hour
+CREATE DATASET &sales_summary TTL = '1h' AS (
   SELECT
     region,
     product_category,

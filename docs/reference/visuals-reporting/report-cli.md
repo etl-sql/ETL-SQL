@@ -161,7 +161,6 @@ The language server checks `.rptsql` files automatically:
 | `VisualSourceExists` | Warning | `SOURCE = &dataset` (or `#table`) references a source not defined earlier in the script. |
 | `VisualMappingColumnExists` | Warning | A `MAPPINGS` role references a column not returned by the `SOURCE` inline SELECT. |
 | `PageVisualReferenced` | Warning | A `MAP` entry references a visual or container name not defined in the script. |
-| `DatasetRefreshInterval` | Warning | `REFRESH EVERY` value does not match the `<n>s/m/h/d` format. |
 | `DatasetEncryptWithoutKey` | **Error** | `ENCRYPT = KEYFILE` without a `KEYFILE` clause, or `ENCRYPT = PASSWORD` without a `PASSWORD` clause. |
 | `LayerOrder` | Warning | A visual references a dataset defined later in the script, or a page references a later visual. Forward references are not supported. |
 | `InsertColumnCountMismatch` | Warning | `INSERT INTO` omits the column list and the SELECT provides fewer columns than the target table. |

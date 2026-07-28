@@ -534,6 +534,12 @@ public class StatementParser
             return true;
         }
 
+        if (_parser.Match(TokenType.ALERT))
+        {
+            statement = PortalParser.ParseSetAlertEnabled(start, isEnabled);
+            return true;
+        }
+
         statement = null;
         return false;
     }

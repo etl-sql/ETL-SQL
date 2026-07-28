@@ -27,7 +27,7 @@ DROP SETS !Regions;
 EXECUTE portal BEGIN
   DROP SUBSCRIPTION 12;
   DROP SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales';
-  DROP ALERT 'HighFailures' FOR REPORT 'Operations';
+  DROP ALERT IF EXISTS HighFailures;
 END;
 ```
 

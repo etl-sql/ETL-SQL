@@ -334,7 +334,6 @@ public record CreatePageStatement : Statement
 
 /// <summary>
 /// CREATE DATASET &name
-///     REFRESH EVERY '&lt;interval&gt;'
 ///     TTL = '&lt;duration&gt;'
 ///     COMPRESS = ON|OFF
 ///     ENCRYPT = ON|OFF

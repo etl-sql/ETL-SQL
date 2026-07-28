@@ -364,12 +364,12 @@ EXECUTE portal BEGIN
     SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;
     DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 
-    CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
-        WHEN VISUAL 'Revenue' >= 100000
-        DELIVER TO 'finance-ops@example.com'
-        AT corporate_smtp;
+    CREATE ALERT RevenueFloor FOR REPORT 'Monthly Sales'
+        WHEN VISUAL Revenue >= 100000
+        WITH (DESCRIPTION = 'Finance revenue floor');
+    ALTER ALERT RevenueFloor ADD NOTIFICATION orchestrator.FinanceOpsEmail;
     SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
-    DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
+    DROP ALERT IF EXISTS RevenueFloor;
 
     -- Snapshots
     DROP SNAPSHOT FOR REPORT 'Monthly Sales';

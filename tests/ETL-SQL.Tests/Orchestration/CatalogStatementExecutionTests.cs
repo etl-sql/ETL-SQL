@@ -60,6 +60,7 @@ namespace ETL_SQL.Tests.Orchestration
             DropCatalogObjectStatement => new DropCatalogObjectStatementHandler(_store),
             SetCatalogObjectEnabledStatement => new SetCatalogObjectEnabledStatementHandler(_store),
             AlterJobAttachmentStatement => new AlterJobAttachmentStatementHandler(_store),
+            CreateJobStatement => new CreateJobStatementHandler(_store, _store),
             _ => throw new InvalidOperationException($"No catalog handler for {statement.GetType().Name}.")
         };
 
@@ -67,6 +68,58 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveJobAsync(new JobDefinition(name, "reports/x.rptsql", 1, "HOUR", null, null, null));
 
         // ── CREATE ────────────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task CreateJob_PersistsANormalizedScriptTarget()
+        {
+            await RunAsync(
+                "CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql' " +
+                "WITH (MAX_RETRIES = 3, RETRY_DELAY = 60, DISPLAY_NAME = 'Nightly load');");
+
+            var job = await _store.GetJobAsync("Nightly");
+            Assert.NotNull(job);
+            Assert.Equal(JobTargetKind.Script, job.JobType);
+            Assert.Equal("jobs/nightly.etlsql", job.TargetPath);
+            Assert.Contains("RUN SCRIPT", job.Script, StringComparison.Ordinal);
+            Assert.Equal(3, job.MaxRetries);
+            Assert.Equal("Nightly load", job.DisplayName);
+            Assert.NotNull(job.ScriptHash);
+            Assert.Null(job.NextRun);
+        }
+
+        [Fact]
+        public async Task CreateOrAlterJob_PatchesDefinitionAndKeepsLinks()
+        {
+            await RunAsync("CREATE SCHEDULE T ON '0 2 * * *' AT TIME ZONE 'UTC';");
+            await RunAsync("CREATE JOB Nightly FOR SCRIPT 'jobs/v1.etlsql' WITH (MAX_RETRIES = 4);");
+            await RunAsync("ALTER JOB Nightly ADD SCHEDULE T;");
+
+            await RunAsync("CREATE OR ALTER JOB Nightly FOR SCRIPT 'jobs/v2.etlsql';");
+
+            var job = await _store.GetJobAsync("Nightly");
+            Assert.Equal("jobs/v2.etlsql", job!.TargetPath);
+            Assert.Equal(4, job.MaxRetries);
+            Assert.Single(await _store.GetJobSchedulesAsync("Nightly"));
+        }
+
+        [Fact]
+        public async Task CreateOrReplaceJob_FullyRedefinesAndDropsLinks()
+        {
+            await RunAsync("CREATE SCHEDULE T ON '0 2 * * *' AT TIME ZONE 'UTC';");
+            await RunAsync("CREATE NOTIFICATION N USING mail;");
+            await RunAsync("CREATE JOB Nightly FOR SCRIPT 'jobs/v1.etlsql';");
+            await RunAsync("ALTER JOB Nightly ADD SCHEDULE T;");
+            await RunAsync("ALTER JOB Nightly ADD NOTIFICATION N ON FAILURE;");
+
+            await RunAsync("CREATE OR REPLACE JOB Nightly FOR REPORT 'reports/Finance';");
+
+            var job = await _store.GetJobAsync("Nightly");
+            Assert.Equal(JobTargetKind.Report, job!.JobType);
+            Assert.Equal(string.Empty, job.Script);
+            Assert.Null(job.ScriptHash);
+            Assert.Empty(await _store.GetJobSchedulesAsync("Nightly"));
+            Assert.Empty(await _store.GetJobNotificationsAsync("Nightly"));
+        }
 
         [Fact]
         public async Task CreateSchedule_PersistsAndDefaultsTheTimeZone()

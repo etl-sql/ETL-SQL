@@ -85,18 +85,23 @@ public sealed class ConfigurationExportTests
                 ParametersJson = """{"region":"North"}""",
                 IsActive = false
             });
-            db.ReportAlerts.Add(new ReportAlert
+            var alert = new ReportAlert
             {
                 ReportId = report.Id,
                 OwnerId = admin.Id,
-                Name = $"Paused Alert {suffix}",
+                Name = $"PausedAlert_{suffix}",
                 VisualName = "Revenue",
                 Operator = ">",
                 Threshold = 100,
-                Recipient = "ops@test.local",
-                SmtpAlias = $"exp_smtp_{suffix}",
+                Description = "Revenue threshold",
                 IsActive = false
+            };
+            alert.Notifications.Add(new AlertNotification
+            {
+                OrchestratorAlias = $"orch_{suffix}",
+                NotificationName = $"NotifyFinance_{suffix}"
             });
+            db.ReportAlerts.Add(alert);
             await db.SaveChangesAsync();
         }
 
@@ -123,9 +128,14 @@ public sealed class ConfigurationExportTests
         Assert.Contains("@region = 'North'", script);
         Assert.Contains(") DISABLE;", script);
         Assert.Contains(
-            $"CREATE ALERT 'Paused Alert {suffix}' FOR REPORT '/exp_folder_{suffix}/Export Report {suffix}'",
+            $"CREATE OR REPLACE ALERT PausedAlert_{suffix} FOR REPORT '/exp_folder_{suffix}/Export Report {suffix}'",
             script);
-        Assert.Contains($"AT exp_smtp_{suffix} DISABLE;", script);
+        Assert.Contains("WHEN VISUAL Revenue > 100", script);
+        Assert.Contains("WITH (DESCRIPTION = 'Revenue threshold')", script);
+        Assert.Contains(
+            $"ALTER ALERT PausedAlert_{suffix} ADD NOTIFICATION orch_{suffix}.NotifyFinance_{suffix};",
+            script);
+        Assert.Contains($"DISABLE ALERT PausedAlert_{suffix};", script);
         Assert.Contains("REQUIRED SECRETS", script);
         Assert.Contains("Export summary", script);
         Assert.Contains("Runtime-only (never exported as configuration):", script);

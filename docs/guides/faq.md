@@ -275,8 +275,9 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > Published bundles must know every sub-script at publish time so the Orchestrator can version and store the full dependency graph. Dynamic script paths cannot be packaged safely. Use live mode for those jobs:
 >
 > ```sql
-> CREATE JOB MyJob ON SCHEDULE EVERY 1 DAY AS
->     RUN SCRIPT 'C:\Scripts\my_pipeline.etlsql';
+> CREATE SCHEDULE Daily ON '0 0 * * *' AT TIME ZONE 'UTC';
+> CREATE JOB MyJob FOR SCRIPT 'C:\Scripts\my_pipeline.etlsql';
+> ALTER JOB MyJob ADD SCHEDULE Daily;
 > ```
 
 **Q: Can I recover a script after publishing if I lose the source files?**

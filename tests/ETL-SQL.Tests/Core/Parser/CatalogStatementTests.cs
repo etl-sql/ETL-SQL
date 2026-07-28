@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using Xunit;
 
@@ -19,6 +20,44 @@ namespace ETL_SQL.Tests.Core.Parsing
             var script = Parse(sql);
             Assert.Empty(script.Diagnostics);
             return Assert.IsType<T>(Assert.Single(script.Statements));
+        }
+
+        // ── CREATE JOB ────────────────────────────────────────────────────────────
+
+        [Theory]
+        [InlineData("CREATE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql';", JobTargetKind.Script)]
+        [InlineData("CREATE JOB FinanceRefresh FOR REPORT 'folders/Finance';", JobTargetKind.Report)]
+        public void CreateJob_RequiresOneNamedTarget(string sql, JobTargetKind expected)
+        {
+            var stmt = ParseOne<CreateJobStatement>(sql);
+
+            Assert.Equal(expected, stmt.TargetKind);
+            Assert.False(string.IsNullOrWhiteSpace(stmt.TargetPath));
+        }
+
+        [Fact]
+        public void CreateJob_ParsesRetryAndPresentationOptions()
+        {
+            var stmt = ParseOne<CreateJobStatement>(
+                "CREATE OR REPLACE JOB Nightly FOR SCRIPT 'jobs/nightly.etlsql' " +
+                "WITH (MAX_RETRIES = 3, RETRY_DELAY = 60, DISPLAY_NAME = 'Nightly', TEAM = 'Finance');");
+
+            Assert.Equal(ObjectCreationMode.CreateOrReplace, stmt.Mode);
+            Assert.Equal(3, stmt.MaxRetries);
+            Assert.Equal(60, stmt.RetryDelaySeconds);
+            Assert.Equal("Nightly", stmt.Metadata.DisplayName);
+            Assert.Equal("Finance", stmt.Metadata.Options!["TEAM"]);
+        }
+
+        [Fact]
+        public void CreateJob_RetiredInlineScheduleNamesItsReplacement()
+        {
+            var diagnostic = Assert.Single(
+                Parse("CREATE JOB Nightly ON SCHEDULE EVERY 1 DAY AS PRINT 'old';").Diagnostics);
+
+            Assert.Contains("retired", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CREATE SCHEDULE", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Contains("FOR SCRIPT", diagnostic.Message, StringComparison.Ordinal);
         }
 
         // ── CREATE SCHEDULE ───────────────────────────────────────────────────────
@@ -203,16 +242,25 @@ namespace ETL_SQL.Tests.Core.Parsing
             Assert.Contains("SUCCESS, FAILURE, or COMPLETION", diagnostic.Message, StringComparison.Ordinal);
         }
 
-        /// <summary>
-        /// The attachment forms must not swallow the job's own ALTER grammar, which is a different
-        /// operation on a different object.
-        /// </summary>
         [Fact]
-        public void AlterJob_StillParsesTheJobsOwnDefinition()
+        public void AlterJob_ParsesTargetAndPropertyChanges()
         {
-            var script = Parse("ALTER JOB Nightly ON SCHEDULE EVERY 2 HOURS;");
-            Assert.Empty(script.Diagnostics);
-            Assert.IsType<AlterJobStatement>(Assert.Single(script.Statements));
+            var target = ParseOne<AlterJobStatement>("ALTER JOB Nightly SET TARGET = 'jobs/v2.etlsql';");
+            Assert.Equal("jobs/v2.etlsql", target.TargetPath);
+
+            var options = ParseOne<AlterJobStatement>(
+                "ALTER JOB Nightly SET (MAX_RETRIES = 5, RETRY_DELAY = 90, DISPLAY_NAME = 'Overnight');");
+            Assert.Equal(5, options.MaxRetries);
+            Assert.Equal(90, options.RetryDelaySeconds);
+            Assert.Equal("Overnight", options.Metadata.DisplayName);
+        }
+
+        [Fact]
+        public void AlterJob_RetiredScheduleFormNamesItsReplacement()
+        {
+            var diagnostic = Assert.Single(Parse("ALTER JOB Nightly ON SCHEDULE EVERY 2 HOURS;").Diagnostics);
+            Assert.Contains("retired", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ALTER SCHEDULE", diagnostic.Message, StringComparison.Ordinal);
         }
 
         // ── DROP / ENABLE / DISABLE ───────────────────────────────────────────────
@@ -295,10 +343,14 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("CREATE SCHEDULE T ON '0 2 * * *' WITH (DISPLAY_NAME = 'Overnight');")]
         [InlineData("CREATE NOTIFICATION N USING local_mail;")]
         [InlineData("CREATE OR ALTER NOTIFICATION N USING local_mail TO 'ops@example.com';")]
+        [InlineData("CREATE JOB J FOR SCRIPT 'jobs/j.etlsql';")]
+        [InlineData("CREATE OR REPLACE JOB J FOR REPORT 'reports/J' WITH (MAX_RETRIES = 2, DISPLAY_NAME = 'J');")]
         [InlineData("ALTER SCHEDULE T SET CRON = '0 3 * * *';")]
         [InlineData("ALTER NOTIFICATION N SET TO 'ops@example.com';")]
         [InlineData("ALTER JOB J ADD SCHEDULE T;")]
         [InlineData("ALTER JOB J REMOVE NOTIFICATION N ON FAILURE;")]
+        [InlineData("ALTER JOB J SET TARGET = 'jobs/v2.etlsql';")]
+        [InlineData("ALTER JOB J SET (MAX_RETRIES = 5, DISPLAY_NAME = 'J');")]
         [InlineData("DROP SCHEDULE IF EXISTS T;")]
         [InlineData("DROP NOTIFICATION N;")]
         [InlineData("ENABLE SCHEDULE T;")]

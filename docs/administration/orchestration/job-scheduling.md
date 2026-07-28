@@ -2,7 +2,9 @@
 
 ## 3. Job Scheduling
 
-Jobs are scheduled from within your `.etlsql` scripts using the `CREATE JOB` statement. Once registered, they are stored in a SQLite database and executed automatically by the background scheduler — no cron job or Windows Task Scheduler entry is required.
+Jobs are declared in `.etlsql` scripts with `CREATE JOB`, linked to named cron schedules, and executed
+by the Orchestrator. Single-node deployments use SQLite by default; HA deployments use shared
+PostgreSQL state. No operating-system cron or Windows Task Scheduler entry is required.
 
 ### 3.0 Live Files vs Published Bundles
 
@@ -65,60 +67,39 @@ VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
 ### 3.1 `CREATE JOB` — Schedule a Job
 
 ```sql
--- Run every 30 minutes
-CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
-    RUN SCRIPT 'C:\ETL\Scripts\cleanup.etlsql';
+CREATE SCHEDULE EveryThirtyMinutes
+  ON '*/30 * * * *'
+  AT TIME ZONE 'UTC';
 
--- Run every hour
-CREATE JOB HourlySync ON SCHEDULE EVERY 1 HOURS AS
-BEGIN
-    INSERT INTO dest.dbo.Events SELECT * FROM #events;
-    PRINT 'Sync complete.';
-END;
+CREATE JOB CleanupJob
+  FOR SCRIPT 'C:\ETL\Scripts\cleanup.etlsql';
 
--- Run once daily at 2:00 AM with retries
-CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00'
-WITH (MAX_RETRIES = 3, RETRY_DELAY = 30)
-AS
-BEGIN
-    INSERT INTO archive.dbo.Logs
-    SELECT * FROM prod.dbo.Logs
-    WHERE log_date < DATEADD(DAY, -30, GETDATE());
+ALTER JOB CleanupJob ADD SCHEDULE EveryThirtyMinutes;
 
-    DELETE FROM prod.dbo.Logs
-    WHERE log_date < DATEADD(DAY, -30, GETDATE());
+CREATE SCHEDULE NightlyAtTwo
+  ON '0 2 * * *'
+  AT TIME ZONE 'America/Chicago';
 
-    PRINT 'Archive complete.';
-END;
+CREATE JOB NightlyArchive
+  FOR SCRIPT 'C:\ETL\Scripts\archive.etlsql'
+  WITH (MAX_RETRIES = 3, RETRY_DELAY = 30);
+
+ALTER JOB NightlyArchive ADD SCHEDULE NightlyAtTwo;
 ```
 
 **Syntax:**
-```
-CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM']
-[WITH (MAX_RETRIES = <n>, RETRY_DELAY = <seconds>)]
-AS
-    <single_statement>;
 
--- or with a block:
-CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM']
-[WITH (MAX_RETRIES = <n>, RETRY_DELAY = <seconds>)]
-AS
-BEGIN
-    <statements>
-END;
+```sql
+CREATE [OR ALTER|OR REPLACE] JOB <name>
+  FOR SCRIPT|REPORT '<target-path>'
+  [WITH (MAX_RETRIES = <n>, RETRY_DELAY = <seconds>)];
+
+ALTER JOB <name> ADD SCHEDULE <schedule-name>;
 ```
 
-**Schedule units:**
-
-| Unit | Example |
-|------|---------|
-| `SECONDS` | `EVERY 30 SECONDS` |
-| `MINUTES` | `EVERY 15 MINUTES` |
-| `HOURS` | `EVERY 4 HOURS` |
-| `DAYS` | `EVERY 1 DAY AT '22:00'` — use `AT` to pin a wall-clock time |
-
-> [!TIP]
-> When using `EVERY 1 DAY AT '02:00'`, the job fires at 2:00 AM regardless of when the previous run ended. If the engine is restarted late, the next run is scheduled to the next 2:00 AM occurrence.
+Cron and time zone belong to `CREATE SCHEDULE`. This lets several jobs share one trigger and lets
+one job run on several independent schedules. Cron is minute-granularity; seconds schedules are not
+supported.
 
 ### 3.2 Retry Policies & Resilience
 

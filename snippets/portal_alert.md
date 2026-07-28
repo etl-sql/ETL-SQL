@@ -1,12 +1,12 @@
 ---
 trigger: $portal_alert
 label: EXECUTE portal BEGIN CREATE ALERT
-description: Create a data-driven alert that emails when a condition is met
+description: Create a portal visual threshold alert and attach a notification
 ---
 EXECUTE portal BEGIN
-  CREATE ALERT '«AlertName»'
-    FOR REPORT '«Report Name»'
-    WHEN '«column < threshold»'
-    NOTIFY '«recipient@corp.com»'
-    WITH (SCHEDULE = '«0 8 * * 1-5»');
+  CREATE ALERT «AlertName»
+    FOR REPORT '«/Folder/Report Name»'
+    WHEN VISUAL «VisualName» «>=» «1000»
+    WITH (DESCRIPTION = '«Alert description»');
+  ALTER ALERT «AlertName» ADD NOTIFICATION «orchestrator_alias».«NotificationName»;
 END;

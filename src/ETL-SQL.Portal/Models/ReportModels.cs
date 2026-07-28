@@ -131,7 +131,10 @@ public record CreateReportAlertRequest(
     string Operator,
     decimal Threshold,
     string? Recipient,
-    string? SmtpAlias);
+    string? SmtpAlias,
+    string? DisplayName,
+    string? Description,
+    Dictionary<string, string>? Options);
 
 public record UpdateReportAlertRequest(
     string? Name,
@@ -140,22 +143,40 @@ public record UpdateReportAlertRequest(
     decimal? Threshold,
     string? Recipient,
     string? SmtpAlias,
+    string? DisplayName,
+    string? Description,
+    Dictionary<string, string>? Options,
     bool? IsActive);
+
+public record AlterAlertNotificationRequest(string OrchestratorAlias, string NotificationName);
+
+public record AlertNotificationDto(
+    int Id,
+    string OrchestratorAlias,
+    string NotificationName,
+    DateTime CreatedAt);
 
 public record ReportAlertDto(
     int Id,
     int ReportId,
     string Name,
+    string? DisplayName,
+    string? Description,
+    Dictionary<string, string>? Options,
     string VisualName,
     string Operator,
     decimal Threshold,
     string? Recipient,
     string? SmtpAlias,
     bool IsActive,
+    IReadOnlyList<AlertNotificationDto> Notifications,
     DateTime CreatedAt,
     DateTime UpdatedAt,
+    string? LastState,
+    DateTime? LastEvaluatedAt,
     DateTime? LastCheckedAt,
-    DateTime? LastTriggeredAt);
+    DateTime? LastTriggeredAt,
+    DateTime? LastNotifiedAt);
 
 public record ReportDto(
     int Id,

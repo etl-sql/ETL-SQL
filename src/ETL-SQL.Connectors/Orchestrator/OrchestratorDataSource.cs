@@ -181,20 +181,18 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task CreateScriptJobAsync(CreateJobStatement stmt, IExecutionContext context)
         {
-            // Serialize the full script body as a SQL statement (e.g. "RUN SCRIPT '/path';")
-            // so the scheduler can re-parse and execute it correctly. The old code stored just
-            // the bare path string, causing "Unexpected token SLASH" at runtime when the path
-            // was fed to the ETL-SQL parser as if it were a SQL script.
-            string scriptText = stmt.Script.ToSql();
-
-            var schedule = stmt.Schedule;
             var req = new
             {
                 Name = stmt.JobName,
-                ScriptText = scriptText,
-                Interval = schedule?.Interval ?? 1,
-                Unit = (schedule?.Unit ?? "HOUR").ToUpperInvariant(),
-                AtTime = schedule?.AtTime
+                JobType = stmt.TargetKind.ToString(),
+                TargetPath = stmt.TargetPath,
+                stmt.MaxRetries,
+                stmt.RetryDelaySeconds,
+                stmt.Metadata.DisplayName,
+                stmt.Metadata.Description,
+                stmt.Metadata.Options,
+                Mode = stmt.Mode.ToString(),
+                HashPolicy = context.ScriptHashPolicy
             };
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
             var resp = await SendHttpAsync(() => _http.PostAsync("api/scheduled-jobs", content));
@@ -711,10 +709,13 @@ namespace ETL_SQL.Connectors.Orchestrator
             // Build a partial update — only set fields that the ALTER statement changed.
             var req = new
             {
-                ScriptText = stmt.Script != null ? (string?)stmt.Script.ToSql() : null,
-                Interval = stmt.Schedule != null ? (int?)stmt.Schedule.Interval : null,
-                Unit = stmt.Schedule != null ? (string?)stmt.Schedule.Unit.ToUpperInvariant() : null,
-                AtTime = stmt.Schedule != null ? stmt.Schedule.AtTime : null
+                stmt.TargetPath,
+                stmt.MaxRetries,
+                stmt.RetryDelaySeconds,
+                stmt.Metadata.DisplayName,
+                stmt.Metadata.Description,
+                stmt.Metadata.Options,
+                HashPolicy = context.ScriptHashPolicy
             };
             var encoded = Uri.EscapeDataString(stmt.JobName);
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");

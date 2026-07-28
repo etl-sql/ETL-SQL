@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Core.Parser.Components;
 
@@ -219,10 +220,7 @@ public class DataParser : ParserComponent
         if (Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, mode);
         if (Match(TokenType.VIEW)) return ParseCreateView(startToken, mode);
         if (Match(TokenType.JOB))
-        {
-            var stmt = ParseCreateJob(startToken);
-            return orAlter ? (Statement)(stmt with { IsOrAlter = true }) : stmt;
-        }
+            return ParseCreateJob(startToken, mode);
 
         // Scheduler catalog. Both creation modes are supported: an exported configuration script
         // must converge when replayed, which is the whole reason these objects keep a stable name.
@@ -301,7 +299,7 @@ public class DataParser : ParserComponent
         if (Match(TokenType.SHARE)) return _parent.PortalParser.ParseCreateShareLink(startToken);
         if (Match(TokenType.EMBED)) return _parent.PortalParser.ParseCreateEmbedToken(startToken);
         if (Match(TokenType.SAVED)) return _parent.PortalParser.ParseCreateSavedView(startToken);
-        if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken);
+        if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken, mode);
         if (Match(TokenType.SMTP)) return _parent.PortalParser.ParseCreateSmtpConnection(startToken);
 
         throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
@@ -349,6 +347,7 @@ public class DataParser : ParserComponent
         if (Match(TokenType.FOLDER)) return _parent.PortalParser.ParseAlterFolder(startToken);
         if (Match(TokenType.REPORT)) return _parent.PortalParser.ParseAlterReport(startToken);
         if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseAlterSubscription(startToken);
+        if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseAlterAlert(startToken);
 
         throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
     }
@@ -366,10 +365,7 @@ public class DataParser : ParserComponent
         return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
     }
 
-    /// <summary>
-    /// ALTER JOB &lt;name&gt; [ON SCHEDULE EVERY n unit [AT 'time']] [AS &lt;statement&gt;];
-    /// At least one of schedule or script must be provided.
-    /// </summary>
+    /// <summary>ALTER JOB &lt;name&gt; SET TARGET = '…' | SET (job options).</summary>
     private Statement ParseAlterJob(Token startToken)
     {
         var jobName = ConsumeIdentifier("Expected job name after ALTER JOB").Value;
@@ -381,46 +377,88 @@ public class DataParser : ParserComponent
         if (MatchIdentifier("REMOVE"))
             return _parent.CatalogParser.ParseAlterJobAttachment(startToken, jobName, JobAttachmentAction.Remove);
 
-        ScheduleInfo? schedule = null;
-        Statement? script = null;
+        if (_parser.Current.Type is TokenType.ON or TokenType.AS)
+            throw new SyntaxException(
+                "ALTER JOB ... ON SCHEDULE / AS has been retired. Use ALTER SCHEDULE ... SET CRON " +
+                "for cadence changes, ALTER JOB ... SET TARGET for executable changes, and " +
+                "ALTER JOB ... ADD|REMOVE SCHEDULE for links.",
+                _parser.Current.Line, _parser.Current.Column);
 
-        // Form 1: ALTER JOB name ON SCHEDULE EVERY n unit [AT 'time'] [AS script]
-        if (Match(TokenType.ON))
+        Consume(TokenType.SET, "Expected ADD, REMOVE, or SET after ALTER JOB name");
+        string? targetPath = null, displayName = null, description = null;
+        int? maxRetries = null, retryDelay = null;
+        Dictionary<string, string>? options = null;
+
+        if (Match(TokenType.TARGET) || MatchIdentifier("TARGET"))
         {
-            Consume(TokenType.SCHEDULE, "Expected SCHEDULE after ON");
-            schedule = ParseSchedule();
-            if (Match(TokenType.AS))
-                script = _parser.ParseStatement();
+            Match(TokenType.EQUALS);
+            targetPath = Consume(TokenType.STRING_LITERAL, "Expected a quoted path after SET TARGET").Value;
         }
-        // Form 2: ALTER JOB name SET SCHEDULE = EVERY n unit [AT 'time']
-        else if (Match(TokenType.SET))
+        else if (Match(TokenType.LPAREN))
         {
-            if (MatchIdentifier("SCHEDULE") || Match(TokenType.SCHEDULE))
+            while (!Match(TokenType.RPAREN) && _parser.Current.Type != TokenType.EOF)
             {
-                Match(TokenType.EQUALS);
-                schedule = ParseSchedule();
+                var keyToken = Advance();
+                var key = keyToken.Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, "Expected '=' after ALTER JOB option");
+                var expression = ParseExpression();
+
+                if (key is "MAX_RETRIES" or "RETRY_DELAY")
+                {
+                    if (expression is not LiteralExpression { Type: TokenType.NUMBER } number)
+                        throw new SyntaxException($"Expected numeric literal for JOB option {key}", keyToken.Line, keyToken.Column);
+                    var value = (int)(Convert.ChangeType(number.Value, typeof(int)) ?? 0);
+                    if (value < 0)
+                        throw new SyntaxException($"JOB option {key} cannot be negative", keyToken.Line, keyToken.Column);
+                    if (key == "MAX_RETRIES") maxRetries = value; else retryDelay = value;
+                }
+                else
+                {
+                    var value = expression switch
+                    {
+                        LiteralExpression { Value: string s } => s,
+                        IdentifierExpression identifier => identifier.Name,
+                        _ => throw new SyntaxException(
+                            $"Expected a string literal or identifier for JOB option {key}",
+                            keyToken.Line, keyToken.Column)
+                    };
+                    if (key == "DISPLAY_NAME") displayName = value;
+                    else if (key == "DESCRIPTION") description = value;
+                    else
+                    {
+                        options ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        options[key] = value;
+                    }
+                }
+
+                if (!Match(TokenType.COMMA))
+                {
+                    Consume(TokenType.RPAREN, "Expected ')' or ',' after ALTER JOB option");
+                    break;
+                }
             }
-            else if (Match(TokenType.AS))
-            {
-                script = _parser.ParseStatement();
-            }
-            else
-                throw new SyntaxException("Expected SCHEDULE or AS after ALTER JOB ... SET", _parser.Current.Line, _parser.Current.Column);
-        }
-        // Form 3: ALTER JOB name AS script  (replace script only)
-        else if (Match(TokenType.AS))
-        {
-            script = _parser.ParseStatement();
         }
         else
-        {
             throw new SyntaxException(
-                "Expected ON SCHEDULE, SET, or AS after ALTER JOB name",
+                "Expected TARGET or '(' after ALTER JOB ... SET. Use SET TARGET = '<path>' or SET (MAX_RETRIES = ...).",
                 _parser.Current.Line, _parser.Current.Column);
-        }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-        return new AlterJobStatement(jobName, schedule, script) { Line = startToken.Line, Column = startToken.Column };
+        return new AlterJobStatement(
+            jobName,
+            targetPath,
+            maxRetries,
+            retryDelay,
+            new CatalogObjectOptions
+            {
+                DisplayName = displayName,
+                Description = description,
+                Options = options
+            })
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
     }
 
     /// <summary>
@@ -1542,15 +1580,36 @@ public class DataParser : ParserComponent
         return new CreateSshKeyPairStatement(path!, bits, algorithm, passphrase, comment) { Line = startToken.Line, Column = startToken.Column };
     }
 
-    private CreateJobStatement ParseCreateJob(Token startToken)
+    private CreateJobStatement ParseCreateJob(Token startToken, ObjectCreationMode mode)
     {
         var jobName = ConsumeIdentifier("Expected job name").Value;
-        Consume(TokenType.ON, "Expected ON after job name");
-        Consume(TokenType.SCHEDULE, "Expected SCHEDULE after ON");
-        var schedule = ParseSchedule();
 
-        int maxRetries = 0;
-        int retryDelay = 30;
+        if (_parser.Current.Type == TokenType.ON)
+            throw new SyntaxException(
+                "CREATE JOB ... ON SCHEDULE EVERY ... AS ... has been retired. " +
+                "Create a named cron schedule with CREATE SCHEDULE, create the executable with " +
+                "CREATE JOB ... FOR SCRIPT '<path>', then attach it with ALTER JOB ... ADD SCHEDULE.",
+                _parser.Current.Line, _parser.Current.Column);
+
+        Consume(TokenType.FOR, "Expected FOR SCRIPT '<path>' or FOR REPORT '<path>' after the job name");
+        JobTargetKind targetKind;
+        if (Match(TokenType.SCRIPT)) targetKind = JobTargetKind.Script;
+        else if (Match(TokenType.REPORT)) targetKind = JobTargetKind.Report;
+        else
+            throw new SyntaxException(
+                "Expected SCRIPT or REPORT after FOR in CREATE JOB. A job must name exactly one executable target.",
+                _parser.Current.Line, _parser.Current.Column);
+
+        var targetPath = Consume(
+            TokenType.STRING_LITERAL,
+            $"Expected a quoted {(targetKind == JobTargetKind.Script ? "script" : "report")} path after FOR {targetKind.ToString().ToUpperInvariant()}"
+        ).Value;
+
+        int? maxRetries = null;
+        int? retryDelay = null;
+        string? displayName = null;
+        string? description = null;
+        Dictionary<string, string>? options = null;
 
         if (Match(TokenType.WITH))
         {
@@ -1562,25 +1621,67 @@ public class DataParser : ParserComponent
                 Consume(TokenType.EQUALS, "Expected '=' after option key");
 
                 var valExpr = ParseExpression();
-                if (valExpr is LiteralExpression lit && lit.Type == TokenType.NUMBER)
+                if (key is "MAX_RETRIES" or "RETRY_DELAY")
                 {
+                    if (valExpr is not LiteralExpression { Type: TokenType.NUMBER } lit)
+                        throw new SyntaxException($"Expected numeric literal for JOB option {key}", keyTok.Line, keyTok.Column);
                     int val = (int)(Convert.ChangeType(lit.Value, typeof(int)) ?? 0);
+                    if (val < 0)
+                        throw new SyntaxException($"JOB option {key} cannot be negative", keyTok.Line, keyTok.Column);
                     if (key == "MAX_RETRIES") maxRetries = val;
-                    else if (key == "RETRY_DELAY" || key == "RETRY_DELAY_SECONDS") retryDelay = val;
-                    else throw new SyntaxException($"Unknown JOB option: {key}", keyTok.Line, keyTok.Column);
+                    else retryDelay = val;
                 }
                 else
                 {
-                    throw new SyntaxException($"Expected numeric literal for JOB option {key}", keyTok.Line, keyTok.Column);
+                    var value = valExpr switch
+                    {
+                        LiteralExpression { Value: string s } => s,
+                        IdentifierExpression identifier => identifier.Name,
+                        _ => throw new SyntaxException(
+                            $"Expected a string literal or identifier for JOB option {key}",
+                            keyTok.Line, keyTok.Column)
+                    };
+                    if (key == "DISPLAY_NAME") displayName = value;
+                    else if (key == "DESCRIPTION") description = value;
+                    else
+                    {
+                        options ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        options[key] = value;
+                    }
                 }
 
                 if (!Match(TokenType.COMMA)) { Consume(TokenType.RPAREN, "Expected ')' or ','"); break; }
             }
         }
 
-        Consume(TokenType.AS, "Expected AS before job script");
-        var script = _parser.ParseStatement();
-        return new CreateJobStatement(jobName, schedule, script, maxRetries, retryDelay) { Line = startToken.Line, Column = startToken.Column };
+        if (_parser.Current.Type == TokenType.AS)
+            throw new SyntaxException(
+                "Inline AS <statement> job bodies have been retired. Put the statements in a .etlsql file " +
+                "and use CREATE JOB ... FOR SCRIPT '<path>'.",
+                _parser.Current.Line, _parser.Current.Column);
+        if (_parser.Current.Type == TokenType.FOR)
+            throw new SyntaxException(
+                "FOR SCRIPT and FOR REPORT are mutually exclusive; CREATE JOB accepts exactly one target.",
+                _parser.Current.Line, _parser.Current.Column);
+
+        Match(TokenType.SEMICOLON);
+        return new CreateJobStatement(
+            jobName,
+            targetKind,
+            targetPath,
+            maxRetries,
+            retryDelay,
+            new CatalogObjectOptions
+            {
+                DisplayName = displayName,
+                Description = description,
+                Options = options
+            },
+            mode)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
     }
 
     private ScheduleInfo ParseSchedule()

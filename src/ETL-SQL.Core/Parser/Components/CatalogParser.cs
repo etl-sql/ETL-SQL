@@ -35,8 +35,8 @@ public class CatalogParser : ParserComponent
     {
         var name = ConsumeIdentifier("Expected a schedule name after CREATE SCHEDULE").Value;
 
-        // ON carries the cron expression. It reads as "runs on this cadence" and matches
-        // CREATE JOB's existing ON SCHEDULE spelling.
+        // ON carries the cron expression: the cadence belongs to this reusable schedule rather
+        // than to any one job.
         Consume(TokenType.ON, $"Expected ON '<cron>' after the schedule name in CREATE SCHEDULE {name}");
         var cron = Consume(TokenType.STRING_LITERAL,
             "Expected a cron expression in quotes, e.g. ON '0 2 * * *'").Value;

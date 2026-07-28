@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Tests.Core;
 using Xunit;
 
@@ -304,22 +305,29 @@ namespace ETL_SQL.Tests
             Assert.Single(saved.Parameters);
 
             var alertScript = TestHelpers.Parse(
-                "CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales' WHEN VISUAL 'Revenue' >= 1000 DELIVER TO 'ops@example.com' AT smtp;");
+                "CREATE OR REPLACE ALERT RevenueFloor FOR REPORT 'Monthly Sales' WHEN VISUAL Revenue >= 1000 WITH (DESCRIPTION = 'Revenue floor');");
             var alert = Assert.IsType<CreatePortalAlertStatement>(Assert.Single(alertScript.Statements));
             Assert.Equal("Monthly Sales", alert.ReportName);
-            Assert.Equal("Revenue Floor", alert.Name);
+            Assert.Equal("RevenueFloor", alert.Name);
             Assert.Equal("Revenue", alert.VisualName);
             Assert.Equal(">=", alert.Operator);
             Assert.Equal(1000m, alert.Threshold);
-            Assert.Equal("ops@example.com", alert.Recipient);
-            Assert.Equal("smtp", alert.SmtpAlias);
+            Assert.Equal("Revenue floor", alert.Metadata.Description);
+            Assert.Equal(ObjectCreationMode.CreateOrReplace, alert.Mode);
 
-            var disabledAlertScript = TestHelpers.Parse(
-                "CREATE ALERT 'Disabled Alert' FOR REPORT 'Monthly Sales' " +
-                "WHEN VISUAL 'Revenue' >= 1000 AT smtp DISABLE;");
-            var disabledAlert = Assert.IsType<CreatePortalAlertStatement>(
+            var linkScript = TestHelpers.Parse(
+                "ALTER ALERT RevenueFloor ADD NOTIFICATION orch_admin.FinanceOps;");
+            var link = Assert.IsType<AlterPortalAlertNotificationStatement>(
+                Assert.Single(linkScript.Statements));
+            Assert.Equal("RevenueFloor", link.AlertName);
+            Assert.Equal(PortalAlertAttachmentAction.Add, link.Action);
+            Assert.Equal("orch_admin", link.Notification.OrchestratorAlias);
+            Assert.Equal("FinanceOps", link.Notification.NotificationName);
+
+            var disabledAlertScript = TestHelpers.Parse("DISABLE ALERT RevenueFloor;");
+            var disabledAlert = Assert.IsType<SetPortalAlertEnabledStatement>(
                 Assert.Single(disabledAlertScript.Statements));
-            Assert.False(disabledAlert.IsActive);
+            Assert.False(disabledAlert.IsEnabled);
         }
 
         [Fact]
@@ -345,9 +353,21 @@ namespace ETL_SQL.Tests
             var dropView = Assert.IsType<DropPortalSavedViewStatement>(Assert.Single(dropViewScript.Statements));
             Assert.Equal("West Coast", dropView.Name);
 
-            var dropAlertScript = TestHelpers.Parse("DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';");
+            var dropAlertScript = TestHelpers.Parse("DROP ALERT IF EXISTS RevenueFloor;");
             var dropAlert = Assert.IsType<DropPortalAlertStatement>(Assert.Single(dropAlertScript.Statements));
-            Assert.Equal("Revenue Floor", dropAlert.Name);
+            Assert.Equal("RevenueFloor", dropAlert.Name);
+            Assert.True(dropAlert.IfExists);
+        }
+
+        [Fact]
+        public void RetiredInlineAlertDelivery_ReportsReplacement()
+        {
+            var script = TestHelpers.Parse(
+                "CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales' WHEN VISUAL 'Revenue' >= 1000 DELIVER TO 'ops@example.com' AT smtp;");
+            var diagnostic = Assert.Single(script.Diagnostics);
+
+            Assert.Contains("ALTER ALERT", diagnostic.Message);
+            Assert.Contains("ADD NOTIFICATION", diagnostic.Message);
         }
 
         [Fact]

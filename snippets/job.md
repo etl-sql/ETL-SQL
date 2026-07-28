@@ -1,9 +1,13 @@
 ---
 trigger: $job
-label: CREATE JOB … ON SCHEDULE EVERY … AS
-description: Scheduled job that runs a script or statement on a recurring interval
+label: CREATE JOB & link schedule
+description: Script job with a reusable cron schedule
 ---
+CREATE SCHEDULE «ScheduleName»
+  ON '«0 2 * * *»'
+  AT TIME ZONE '«UTC»';
+
 CREATE JOB «JobName»
-  ON SCHEDULE EVERY «1» «HOUR»
-AS
-  RUN SCRIPT '«scripts/job.etlsql»';
+  FOR SCRIPT '«scripts/job.etlsql»';
+
+ALTER JOB «JobName» ADD SCHEDULE «ScheduleName»;

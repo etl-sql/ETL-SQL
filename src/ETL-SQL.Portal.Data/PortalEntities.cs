@@ -215,16 +215,35 @@ public class ReportAlert
     public int OwnerId { get; set; }
     public PortalUser Owner { get; set; } = null!;
     public string Name { get; set; } = "";
+    public string? DisplayName { get; set; }
+    public string? Description { get; set; }
+    public string? OptionsJson { get; set; }
     public string VisualName { get; set; } = "";
     public string Operator { get; set; } = ">=";
     public decimal Threshold { get; set; }
+    // Legacy inline delivery fields. New scripts use AlertNotifications instead.
     public string? Recipient { get; set; }
     public string? SmtpAlias { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public string? LastState { get; set; }
+    public DateTime? LastEvaluatedAt { get; set; }
     public DateTime? LastCheckedAt { get; set; }
     public DateTime? LastTriggeredAt { get; set; }
+    public DateTime? LastNotifiedAt { get; set; }
+
+    public ICollection<AlertNotification> Notifications { get; set; } = [];
+}
+
+public class AlertNotification
+{
+    public int Id { get; set; }
+    public int AlertId { get; set; }
+    public ReportAlert Alert { get; set; } = null!;
+    public string OrchestratorAlias { get; set; } = "";
+    public string NotificationName { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class ReportSnapshot

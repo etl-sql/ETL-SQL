@@ -1,13 +1,15 @@
 -- This script demonstrates Job Scheduling and History
 
--- 1. Create a job to run every minute
--- Syntax: CREATE JOB name ON SCHEDULE EVERY n MINUTES AS statement
-CREATE JOB 'CleanupTask' ON SCHEDULE EVERY 1 MINUTES AS RUN SCRIPT 'samples/cleanup.etlsql';
+-- 1. Create a reusable schedule, create the script job, then link them
+CREATE SCHEDULE EveryMinute ON '*/1 * * * *' AT TIME ZONE 'UTC';
+CREATE JOB CleanupTask FOR SCRIPT 'samples/cleanup.etlsql';
+ALTER JOB CleanupTask ADD SCHEDULE EveryMinute;
 
 SHOW JOBS;
 
 -- Cleanup
-DROP JOB 'CleanupTask';
+DROP JOB CleanupTask;
+DROP SCHEDULE EveryMinute;
 
 -- 2. View current jobs and their status
 -- Note: This requires the scheduler service to be running

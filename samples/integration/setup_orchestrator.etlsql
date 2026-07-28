@@ -21,13 +21,21 @@ BEGIN
         FROM '/samples/integration'
         ENTRY 'generate_manufacturing.etlsql';
 
-    -- 3. Schedule Job 1: Generate Data (Top of the hour)
-    CREATE OR ALTER JOB GenerateManufacturingData ON SCHEDULE EVERY 1 HOUR AS
-        RUN SCRIPT 'orch://manufacturing-integration/generate_manufacturing.etlsql';
+    -- 3. Schedule Job 1: Generate Data (top of the hour)
+    CREATE OR ALTER SCHEDULE ManufacturingTopOfHour
+        ON '0 * * * *'
+        AT TIME ZONE 'UTC';
+    CREATE OR ALTER JOB GenerateManufacturingData
+        FOR SCRIPT 'orch://manufacturing-integration/generate_manufacturing.etlsql';
+    ALTER JOB GenerateManufacturingData ADD SCHEDULE ManufacturingTopOfHour;
 
-    -- 4. Schedule Job 2: Append to Parquet (5 minutes past the hour)
-    CREATE OR ALTER JOB AppendToParquet ON SCHEDULE EVERY 1 HOUR AT '00:05' AS
-        RUN SCRIPT 'orch://manufacturing-integration/append_to_parquet.etlsql';
+    -- 4. Schedule Job 2: Append to Parquet (five minutes past the hour)
+    CREATE OR ALTER SCHEDULE ManufacturingFivePast
+        ON '5 * * * *'
+        AT TIME ZONE 'UTC';
+    CREATE OR ALTER JOB AppendToParquet
+        FOR SCRIPT 'orch://manufacturing-integration/append_to_parquet.etlsql';
+    ALTER JOB AppendToParquet ADD SCHEDULE ManufacturingFivePast;
 END;
 
 PRINT 'Orchestrator Jobs created successfully.';

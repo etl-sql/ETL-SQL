@@ -440,7 +440,6 @@ CREATE STYLE AccentButton (
 -- ============================================================================
 
 CREATE DATASET &monthly_snap
-    REFRESH EVERY '30m'
     TTL = '2h'
     COMPRESS = ON
     ENCRYPT = MACHINE

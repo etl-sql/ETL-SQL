@@ -262,6 +262,6 @@ public class SnippetLibraryTests
     {
         var ds = SnippetLibrary.Instance.GetAll().First(s => s.Trigger == "$dataset");
         Assert.Contains("CREATE DATASET &", ds.TuiBody);
-        Assert.Contains("REFRESH EVERY", ds.TuiBody);
+        Assert.Contains("TTL =", ds.TuiBody);
     }
 }

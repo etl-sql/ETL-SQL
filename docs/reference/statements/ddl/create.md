@@ -45,7 +45,7 @@ EXECUTE portal BEGIN
   CREATE SHARE LINK FOR REPORT 'Daily Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #link;
   CREATE EMBED TOKEN FOR REPORT 'Operations' NAME 'Ops wallboard' INTO #embed;
   CREATE SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales' PARAMETERS (@region = 'EMEA');
-  CREATE ALERT 'HighFailures' FOR REPORT 'Operations' WHEN VISUAL 'Failures' > 10;
+  CREATE ALERT HighFailures FOR REPORT 'Operations' WHEN VISUAL Failures > 10;
 END;
 ```
 

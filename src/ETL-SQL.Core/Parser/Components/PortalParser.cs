@@ -648,36 +648,88 @@ public class PortalParser : ParserComponent
         { Line = start.Line, Column = start.Column };
     }
 
-    // CREATE ALERT 'name' FOR REPORT 'report' WHEN VISUAL 'Card' >= 100 [DELIVER TO 'addr'] [AT smtp]
-    public Statement ParseCreateAlert(Token start)
+    // CREATE [OR ALTER|OR REPLACE] ALERT name FOR REPORT 'report' WHEN VISUAL Visual >= 100 [WITH (...)]
+    public Statement ParseCreateAlert(Token start, ObjectCreationMode mode)
     {
-        string name = ConsumeStringLiteral("Expected alert name string literal");
+        if (_parser.Current.Type == TokenType.STRING_LITERAL)
+            throw new SyntaxException(
+                "CREATE ALERT with quoted alert and visual names plus inline DELIVER TO ... AT ... has been retired. " +
+                "Use CREATE ALERT AlertName FOR REPORT '<report>' WHEN VISUAL VisualName < 100 WITH (...), " +
+                "then ALTER ALERT AlertName ADD NOTIFICATION orchestrator_alias.NotificationName.",
+                _parser.Current.Line, _parser.Current.Column);
+
+        string name = ConsumeIdentifier("Expected alert name after CREATE ALERT").Value;
         Consume(TokenType.FOR, "Expected FOR");
         Consume(TokenType.REPORT, "Expected REPORT");
         string report = ConsumeStringLiteral("Expected report name string literal");
         Consume(TokenType.WHEN, "Expected WHEN");
         Consume(TokenType.VISUAL, "Expected VISUAL");
-        string visual = ConsumeStringLiteral("Expected visual name string literal");
+        if (_parser.Current.Type == TokenType.STRING_LITERAL)
+            throw new SyntaxException(
+                "Alert visual names are identifiers in the canonical syntax. Use WHEN VISUAL VisualName < 100.",
+                _parser.Current.Line, _parser.Current.Column);
+        string visual = ConsumeIdentifier("Expected visual name after WHEN VISUAL").Value;
         string op = Advance().Value;
         if (op is not (">" or ">=" or "<" or "<=" or "=" or "!=" or "<>"))
             throw new SyntaxException("Expected alert comparison operator", _parser.Previous.Line, _parser.Previous.Column);
         decimal threshold = ParseDecimalLiteral("Expected numeric alert threshold");
-        string? recipient = null;
-        string? smtpAlias = null;
         if (Match(TokenType.DELIVER) || MatchIdentifier("DELIVER"))
         {
-            Consume(TokenType.TO, "Expected TO");
-            recipient = ConsumeStringLiteral("Expected alert recipient string literal");
+            throw new SyntaxException(
+                "Inline alert delivery has been retired. Create a NOTIFICATION on the Orchestrator, " +
+                "then attach it with ALTER ALERT <alert> ADD NOTIFICATION <orchestrator>.<notification>.",
+                _parser.Previous.Line, _parser.Previous.Column);
         }
         if (Match(TokenType.AT))
-            smtpAlias = Advance().Value;
-        var isActive = true;
-        if (Match(TokenType.DISABLE)) isActive = false;
-        else Match(TokenType.ENABLE);
+            throw new SyntaxException(
+                "CREATE ALERT no longer takes AT <smtp>. Target the Portal with EXECUTE <portal_conn> BEGIN ... END " +
+                "and attach destinations with ALTER ALERT ... ADD NOTIFICATION.",
+                _parser.Previous.Line, _parser.Previous.Column);
+        if (_parser.Current.Type is TokenType.DISABLE or TokenType.ENABLE)
+            throw new SyntaxException(
+                "Use ENABLE ALERT <name> or DISABLE ALERT <name> as a separate lifecycle statement.",
+                _parser.Current.Line, _parser.Current.Column);
+        var metadata = ParseOptionalWithMetadata("CREATE ALERT");
         Match(TokenType.SEMICOLON);
         return new CreatePortalAlertStatement(
-            report, name, visual, op == "<>" ? "!=" : op, threshold, recipient, smtpAlias, isActive)
+            name, report, visual, op == "<>" ? "!=" : op, threshold, metadata, mode)
         { Line = start.Line, Column = start.Column };
+    }
+
+    // ALTER ALERT name ADD|REMOVE NOTIFICATION orch.Notification; or ALTER ALERT name SET (...);
+    public Statement ParseAlterAlert(Token start)
+    {
+        var name = ConsumeIdentifier("Expected alert name after ALTER ALERT").Value;
+        if (Match(TokenType.ADD) || MatchIdentifier("REMOVE"))
+        {
+            var action = _parser.Previous.Value.Equals("ADD", StringComparison.OrdinalIgnoreCase)
+                ? PortalAlertAttachmentAction.Add
+                : PortalAlertAttachmentAction.Remove;
+            if (!MatchIdentifier("NOTIFICATION"))
+                throw new SyntaxException(
+                    $"Expected NOTIFICATION after ALTER ALERT {name} {action.ToString().ToUpperInvariant()}.",
+                    _parser.Current.Line, _parser.Current.Column);
+            var reference = ParseQualifiedNotificationReference();
+            Match(TokenType.SEMICOLON);
+            return new AlterPortalAlertNotificationStatement(name, action, reference)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        if (Match(TokenType.SET))
+        {
+            if (_parser.Current.Type != TokenType.LPAREN)
+                throw new SyntaxException(
+                    $"ALTER ALERT {name} only supports SET (DISPLAY_NAME = '...', DESCRIPTION = '...', ...).",
+                    _parser.Current.Line, _parser.Current.Column);
+            var metadata = ParseMetadataBody("ALTER ALERT");
+            Match(TokenType.SEMICOLON);
+            return new AlterPortalAlertStatement(name, metadata)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        throw new SyntaxException(
+            $"Expected ADD NOTIFICATION, REMOVE NOTIFICATION, or SET after ALTER ALERT {name}.",
+            _parser.Current.Line, _parser.Current.Column);
     }
 
     // DROP SAVED VIEW 'name' FOR REPORT 'report'
@@ -693,15 +745,39 @@ public class PortalParser : ParserComponent
         { Line = start.Line, Column = start.Column };
     }
 
-    // DROP ALERT 'name' FOR REPORT 'report'
+    // DROP ALERT [IF EXISTS] name
     public Statement ParseDropAlert(Token start)
     {
-        string name = ConsumeStringLiteral("Expected alert name string literal");
-        Consume(TokenType.FOR, "Expected FOR");
-        Consume(TokenType.REPORT, "Expected REPORT");
-        string report = ConsumeStringLiteral("Expected report name string literal");
+        var ifExists = false;
+        if (Match(TokenType.IF))
+        {
+            Consume(TokenType.EXISTS, "Expected EXISTS after IF in DROP ALERT");
+            ifExists = true;
+        }
+        if (_parser.Current.Type == TokenType.STRING_LITERAL)
+            throw new SyntaxException(
+                "DROP ALERT with a quoted name and FOR REPORT clause has been retired. " +
+                "Use DROP ALERT IF EXISTS AlertName.",
+                _parser.Current.Line, _parser.Current.Column);
+        string name = ConsumeIdentifier("Expected alert name after DROP ALERT").Value;
+        if (_parser.Current.Type == TokenType.IF && _parser.Peek.Type == TokenType.EXISTS)
+            throw new SyntaxException(
+                $"IF EXISTS must come before the object name. Use 'DROP ALERT IF EXISTS {name}'.",
+                _parser.Current.Line, _parser.Current.Column);
+        if (Match(TokenType.FOR))
+            throw new SyntaxException(
+                "DROP ALERT no longer takes FOR REPORT; alert names are Portal-scoped identities.",
+                _parser.Previous.Line, _parser.Previous.Column);
         Match(TokenType.SEMICOLON);
-        return new DropPortalAlertStatement(report, name)
+        return new DropPortalAlertStatement(name, ifExists)
+        { Line = start.Line, Column = start.Column };
+    }
+
+    public Statement ParseSetAlertEnabled(Token start, bool isEnabled)
+    {
+        var name = ConsumeIdentifier($"Expected alert name after {(isEnabled ? "ENABLE" : "DISABLE")} ALERT").Value;
+        Match(TokenType.SEMICOLON);
+        return new SetPortalAlertEnabledStatement(name, isEnabled)
         { Line = start.Line, Column = start.Column };
     }
 
@@ -966,6 +1042,57 @@ public class PortalParser : ParserComponent
     {
         do { parseOne(); } while (Match(TokenType.COMMA));
         Consume(TokenType.RPAREN, "Expected ')'");
+    }
+
+    private PortalAlertNotificationReference ParseQualifiedNotificationReference()
+    {
+        var orchestratorAlias = ConsumeIdentifier(
+            "Expected orchestrator alias before '.' in alert notification reference").Value;
+        Consume(TokenType.DOT,
+            "Expected '.' between orchestrator alias and notification name, e.g. orch_admin.FinanceOps");
+        var notificationName = ConsumeIdentifier(
+            "Expected notification name after '.' in alert notification reference").Value;
+        return new PortalAlertNotificationReference(orchestratorAlias, notificationName);
+    }
+
+    private CatalogObjectOptions ParseOptionalWithMetadata(string statement) =>
+        Match(TokenType.WITH) ? ParseMetadataBody(statement) : new CatalogObjectOptions();
+
+    private CatalogObjectOptions ParseMetadataBody(string statement)
+    {
+        Consume(TokenType.LPAREN, $"Expected '(' after WITH in {statement}");
+
+        string? displayName = null, description = null;
+        Dictionary<string, string>? options = null;
+
+        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+        {
+            var keyToken = Advance();
+            var key = keyToken.Value.ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after '{keyToken.Value}' in {statement}");
+            var value = Consume(TokenType.STRING_LITERAL,
+                $"Expected a quoted value for '{keyToken.Value}' in {statement}").Value;
+
+            switch (key)
+            {
+                case "DISPLAY_NAME": displayName = value; break;
+                case "DESCRIPTION": description = value; break;
+                default:
+                    options ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    options[key] = value;
+                    break;
+            }
+
+            if (!Match(TokenType.COMMA)) break;
+        }
+
+        Consume(TokenType.RPAREN, $"Expected ')' to close the WITH options in {statement}");
+        return new CatalogObjectOptions
+        {
+            DisplayName = displayName,
+            Description = description,
+            Options = options
+        };
     }
 
     private (string Name, string FolderPath) ParsePortalDatasetReference()

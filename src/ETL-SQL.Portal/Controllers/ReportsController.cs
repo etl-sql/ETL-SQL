@@ -229,16 +229,31 @@ public class ReportsController : ControllerBase
             alert.Id,
             alert.ReportId,
             alert.Name,
+            alert.DisplayName,
+            alert.Description,
+            DeserializeDictionary(alert.OptionsJson),
             alert.VisualName,
             alert.Operator,
             alert.Threshold,
             alert.Recipient,
             alert.SmtpAlias,
             alert.IsActive,
+            alert.Notifications
+                .OrderBy(n => n.OrchestratorAlias)
+                .ThenBy(n => n.NotificationName)
+                .Select(n => new AlertNotificationDto(
+                    n.Id,
+                    n.OrchestratorAlias,
+                    n.NotificationName,
+                    n.CreatedAt))
+                .ToList(),
             alert.CreatedAt,
             alert.UpdatedAt,
+            alert.LastState,
+            alert.LastEvaluatedAt,
             alert.LastCheckedAt,
-            alert.LastTriggeredAt);
+            alert.LastTriggeredAt,
+            alert.LastNotifiedAt);
 
     private async Task ClearDefaultSavedViewsAsync(int reportId)
     {
@@ -1107,7 +1122,11 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
-        var alerts = await db.ReportAlerts.Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId)).OrderBy(a => a.Name).ToListAsync();
+        var alerts = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId))
+            .OrderBy(a => a.Name)
+            .ToListAsync();
         return Ok(alerts.Select(ToAlertDto));
     }
 
@@ -1121,6 +1140,8 @@ public class ReportsController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.VisualName))
             return BadRequest(new { error = "Alert name and visualName are required." });
         if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
+        if (await db.ReportAlerts.AnyAsync(a => a.Name == req.Name))
+            return Conflict(new { error = $"Alert '{req.Name}' already exists." });
 
         var alert = new ReportAlert
         {
@@ -1131,7 +1152,10 @@ public class ReportsController : ControllerBase
             Operator = req.Operator,
             Threshold = req.Threshold,
             Recipient = req.Recipient,
-            SmtpAlias = req.SmtpAlias
+            SmtpAlias = req.SmtpAlias,
+            DisplayName = req.DisplayName,
+            Description = req.Description,
+            OptionsJson = SerializeDictionary(req.Options)
         };
         db.ReportAlerts.Add(alert);
         audit.Stage(CurrentUserId, "CREATE_REPORT_ALERT", "Report", id.ToString(), req.Name);
@@ -1142,7 +1166,9 @@ public class ReportsController : ControllerBase
     [HttpPut("reports/{id:int}/alerts/{alertId:int}")]
     public async Task<IActionResult> UpdateAlert(int id, int alertId, [FromBody] UpdateReportAlertRequest req)
     {
-        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
+        var alert = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
         if (alert is null) return NotFound();
         if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
         if (req.Name is not null) alert.Name = req.Name;
@@ -1155,11 +1181,113 @@ public class ReportsController : ControllerBase
         if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
         if (req.Recipient is not null) alert.Recipient = req.Recipient;
         if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
+        if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
+        if (req.Description is not null) alert.Description = req.Description;
+        if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);
         if (req.IsActive.HasValue) alert.IsActive = req.IsActive.Value;
         alert.UpdatedAt = DateTime.UtcNow;
         audit.Stage(CurrentUserId, "UPDATE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         await db.SaveChangesAsync();
         return Ok(ToAlertDto(alert));
+    }
+
+    [HttpGet("alerts/by-name/{name}")]
+    public async Task<IActionResult> GetAlertByName(string name)
+    {
+        var alert = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .Include(a => a.Report)
+            .FirstOrDefaultAsync(a => a.Name == name && !a.Report.IsDeleted);
+        if (alert is null) return NotFound();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+        return Ok(ToAlertDto(alert));
+    }
+
+    [HttpPut("alerts/{alertId:int}")]
+    public async Task<IActionResult> UpdateAlertById(int alertId, [FromBody] UpdateReportAlertRequest req)
+    {
+        var alert = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .FirstOrDefaultAsync(a => a.Id == alertId);
+        if (alert is null) return NotFound();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+        return await ApplyAlertUpdateAsync(alert, req);
+    }
+
+    [HttpDelete("alerts/{alertId:int}")]
+    public async Task<IActionResult> DeleteAlertById(int alertId)
+    {
+        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId);
+        if (alert is null) return NoContent();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+        db.ReportAlerts.Remove(alert);
+        audit.Stage(CurrentUserId, "DELETE_REPORT_ALERT", "Report", alert.ReportId.ToString(), alert.Name);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPost("alerts/{alertId:int}/notifications")]
+    public async Task<IActionResult> AddAlertNotification(int alertId, [FromBody] AlterAlertNotificationRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.OrchestratorAlias) || string.IsNullOrWhiteSpace(req.NotificationName))
+            return BadRequest(new { error = "orchestratorAlias and notificationName are required." });
+
+        var alert = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .FirstOrDefaultAsync(a => a.Id == alertId);
+        if (alert is null) return NotFound();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+
+        var existing = alert.Notifications.FirstOrDefault(n =>
+            n.OrchestratorAlias == req.OrchestratorAlias
+            && n.NotificationName == req.NotificationName);
+        if (existing is not null)
+            return Ok(ToAlertDto(alert));
+
+        alert.Notifications.Add(new AlertNotification
+        {
+            AlertId = alertId,
+            OrchestratorAlias = req.OrchestratorAlias,
+            NotificationName = req.NotificationName
+        });
+        alert.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(
+            CurrentUserId,
+            "ATTACH_ALERT_NOTIFICATION",
+            "Report",
+            alert.ReportId.ToString(),
+            $"{alert.Name}:{req.OrchestratorAlias}.{req.NotificationName}");
+        await db.SaveChangesAsync();
+        return Ok(ToAlertDto(alert));
+    }
+
+    [HttpDelete("alerts/{alertId:int}/notifications/{orchestratorAlias}/{notificationName}")]
+    public async Task<IActionResult> RemoveAlertNotification(
+        int alertId,
+        string orchestratorAlias,
+        string notificationName)
+    {
+        var alert = await db.ReportAlerts
+            .Include(a => a.Notifications)
+            .FirstOrDefaultAsync(a => a.Id == alertId);
+        if (alert is null) return NotFound();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+
+        var existing = alert.Notifications.FirstOrDefault(n =>
+            n.OrchestratorAlias == orchestratorAlias
+            && n.NotificationName == notificationName);
+        if (existing is null) return NoContent();
+
+        db.AlertNotifications.Remove(existing);
+        alert.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(
+            CurrentUserId,
+            "DETACH_ALERT_NOTIFICATION",
+            "Report",
+            alert.ReportId.ToString(),
+            $"{alert.Name}:{orchestratorAlias}.{notificationName}");
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 
     [HttpDelete("reports/{id:int}/alerts/{alertId:int}")]
@@ -1172,6 +1300,33 @@ public class ReportsController : ControllerBase
         audit.Stage(CurrentUserId, "DELETE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         await db.SaveChangesAsync();
         return NoContent();
+    }
+
+    private async Task<IActionResult> ApplyAlertUpdateAsync(ReportAlert alert, UpdateReportAlertRequest req)
+    {
+        if (req.Name is not null && !req.Name.Equals(alert.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (await db.ReportAlerts.AnyAsync(a => a.Id != alert.Id && a.Name == req.Name))
+                return Conflict(new { error = $"Alert '{req.Name}' already exists." });
+            alert.Name = req.Name;
+        }
+        if (req.VisualName is not null) alert.VisualName = req.VisualName;
+        if (req.Operator is not null)
+        {
+            if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
+            alert.Operator = req.Operator;
+        }
+        if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
+        if (req.Recipient is not null) alert.Recipient = req.Recipient;
+        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
+        if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
+        if (req.Description is not null) alert.Description = req.Description;
+        if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);
+        if (req.IsActive.HasValue) alert.IsActive = req.IsActive.Value;
+        alert.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(CurrentUserId, "UPDATE_REPORT_ALERT", "Report", alert.ReportId.ToString(), alert.Name);
+        await db.SaveChangesAsync();
+        return Ok(ToAlertDto(alert));
     }
 
     // ── GET /api/reports/{id}/parameters ─────────────────────────────────────

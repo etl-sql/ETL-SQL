@@ -160,7 +160,7 @@ public sealed class ScriptedPortalImportTests
         var reportName = $"Import Report {suffix}";
         var reportPath = $"/import_{suffix}/{reportName}";
         var subscriptionName = $"Import Subscription {suffix}";
-        var alertName = $"Import Alert {suffix}";
+        var alertName = $"ImportAlert_{suffix}";
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -201,19 +201,19 @@ public sealed class ScriptedPortalImportTests
             [new SubscriptionParameter("@region", "North")],
             IsActive: false);
         var alert = new CreatePortalAlertStatement(
-            reportPath,
             alertName,
+            reportPath,
             "Revenue",
             ">=",
             1000m,
-            "recipient@test.local",
-            $"smtp_{suffix}",
-            IsActive: false);
+            new CatalogObjectOptions());
+        var disableAlert = new SetPortalAlertEnabledStatement(alertName, false);
 
         foreach (var _ in Enumerable.Range(0, 2))
         {
             await connector.ExecuteAdminStatementAsync(subscription, context);
             await connector.ExecuteAdminStatementAsync(alert, context);
+            await connector.ExecuteAdminStatementAsync(disableAlert, context);
         }
 
         var subscriptionUpdate = subscription with
@@ -223,11 +223,14 @@ public sealed class ScriptedPortalImportTests
             Parameters = [new SubscriptionParameter("@region", "South")],
             IsActive = true
         };
-        var alertUpdate = alert with { Threshold = 2000m, IsActive = true };
+        var alertUpdate = alert with { Threshold = 2000m };
+        var enableAlert = new SetPortalAlertEnabledStatement(alertName, true);
         Assert.Contains("would update", await connector.PlanAdminStatementAsync(subscriptionUpdate, context));
         Assert.Contains("would update", await connector.PlanAdminStatementAsync(alertUpdate, context));
+        Assert.Contains("would enable", await connector.PlanAdminStatementAsync(enableAlert, context));
         await connector.ExecuteAdminStatementAsync(subscriptionUpdate, context);
         await connector.ExecuteAdminStatementAsync(alertUpdate, context);
+        await connector.ExecuteAdminStatementAsync(enableAlert, context);
         Assert.Contains("would skip", await connector.PlanAdminStatementAsync(subscriptionUpdate, context));
         Assert.Contains("would skip", await connector.PlanAdminStatementAsync(alertUpdate, context));
 
