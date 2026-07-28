@@ -438,10 +438,15 @@ Treat **Solo / Workstation**, **Team / SME**, **Enterprise / Corporate**, and
    scheduling/notifications, quality/stewardship, report publication, identity/ownership mapping,
    backup/restore, environment promotion, topology growth, N → N+1 upgrade, SaaS import/export, and
    tenant isolation/failure containment.
-3. Retain commit-bound JSON and Markdown evidence under `certification-results/` with topology,
+3. **Certify Enforceable Quality and Stewardship at All Stages:**
+   - **Workstation:** Prove static metadata tag audits (`@owner`, `@steward`) and `@expect` rule failures correctly fail local CLI runs with non-zero exit codes to block garbage ingestion.
+   - **Team/SME:** Prove local SQLite quality logs and history baselines successfully trigger notifications (SMTP/Webhook) without requiring Portal.
+   - **Enterprise:** Prove OIDC-authenticated report publishing is rejected if the underlying datasets violate organization-wide tag requirements (e.g., missing `@classification`).
+   - **SaaS/Multi-Organization:** Prove hard database and memory isolation of metadata. Verify Tenant A's lineage maps, PII scans, and audit log pipelines cannot be exposed to Tenant B via shared memory, global caches, or shared outbox queues.
+4. Retain commit-bound JSON and Markdown evidence under `certification-results/` with topology,
    artifact hashes, mapping decisions, continuity counts, negative isolation results, and
    rollback/restore outcomes.
-4. Add the profile/transition matrix to release claims. A capability is not certified for every
+5. Add the profile/transition matrix to release claims. A capability is not certified for every
    deployment merely because its Solo or Enterprise test passes; each applicable profile and
    transition needs its own current evidence.
 

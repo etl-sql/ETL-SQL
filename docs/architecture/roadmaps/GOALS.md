@@ -42,6 +42,13 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 - Support paginated report patterns, dashboard layouts, interactive filtering, saved views, subscriptions, alerts, catalog operations, and portal administration.
 - Keep report runtime behavior consistent across hosts, with shared assets maintained from the canonical report runtime source.
 
+## Governance, Quality, and Stewardship Goals
+
+- Treat lineage (`TAG`, `LINEAGE`) and stewardship (`@owner`, `@steward`, `@classification`) as first-class language keywords that are declared inline in script source code.
+- Enforce column-level data quality rules (`@expect` / `@fail` tags) directly on data streams, supporting native stream routing (like `QUARANTINE` and `WARN`) without pipeline rebuilds.
+- Make compliance verifiable across all environments. The runtime must be able to reject script execution or report publication if declared policies (e.g., "all tables must have an `@owner` classification") are violated.
+- Keep data stewardship information fully portable. Lineage and stewardship must be inspectable and queryable via engine-context virtual tables (`eng.*`), regardless of the underlying database engine dialect.
+
 ## Security Goals
 
 - Use a zero-trust architecture as a non-negotiable design constraint.
