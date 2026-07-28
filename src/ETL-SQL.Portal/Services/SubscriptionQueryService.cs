@@ -73,7 +73,7 @@ public sealed class SubscriptionQueryService(PortalDbContext db)
         var summary = BuildParameterSummary(parameters);
         return new SubscriptionDto(
             s.Id, s.ReportId, s.Report?.Name ?? "",
-            s.Name, s.Schedule, s.DeliverOnRefresh, s.Format.ToString(),
+            s.Name, s.Schedule, s.AtTime, s.DeliverOnRefresh, s.Format.ToString(),
             s.SmtpAlias, s.Recipients, s.LastSentAt, s.NextRunAt, s.FailCount, s.IsActive,
             parameters, summary, s.Version);
     }

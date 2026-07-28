@@ -234,6 +234,11 @@ public class SubscriptionsController(
             return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
 
         var scheduleChanged = req.Schedule is not null && req.Schedule != sub.Schedule;
+        var requestedAtTime = req.AtTime is null
+            ? sub.AtTime
+            : string.IsNullOrWhiteSpace(req.AtTime) ? null : req.AtTime.Trim();
+        var atTimeChanged = req.AtTime is not null
+            && !string.Equals(requestedAtTime, sub.AtTime, StringComparison.Ordinal);
         var newFormat = sub.Format;
         var formatChanged = req.Format is not null &&
                                  Enum.TryParse<SubscriptionFormat>(req.Format, true, out newFormat) &&
@@ -245,6 +250,7 @@ public class SubscriptionsController(
 
         if (req.Name is not null) sub.Name = req.Name;
         if (req.Schedule is not null) sub.Schedule = req.Schedule;
+        if (req.AtTime is not null) sub.AtTime = requestedAtTime;
         if (req.DeliverOnRefresh.HasValue) sub.DeliverOnRefresh = req.DeliverOnRefresh.Value;
         if (formatChanged) sub.Format = newFormat;
         if (req.SmtpAlias is not null) sub.SmtpAlias = req.SmtpAlias;
@@ -272,10 +278,10 @@ public class SubscriptionsController(
             return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
         }
 
-        // Sync the Orchestrator job if schedule or active state changed
+        // Sync the Orchestrator job if scheduling or active state changed.
         var orchDbPath = dbLocator.Resolve();
         if ((orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
-            && (scheduleChanged || req.IsActive.HasValue))
+            && (scheduleChanged || atTimeChanged || req.IsActive.HasValue))
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
@@ -288,6 +294,7 @@ public class SubscriptionsController(
                 {
                     Interval = interval > 0 ? interval : job.Interval,
                     Unit = interval > 0 ? unit : job.Unit,
+                    AtTime = sub.AtTime,
                     IsEnabled = sub.IsActive
                 };
                 await store.SaveJobAsync(updated);

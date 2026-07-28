@@ -13,6 +13,7 @@ public record SubscriptionDto(
     string ReportName,
     string? Name,
     string? Schedule,
+    string? AtTime,
     bool DeliverOnRefresh,
     string Format,
     string SmtpAlias,
@@ -38,6 +39,7 @@ public record CreateSubscriptionRequest(
 public record UpdateSubscriptionRequest(
     string? Name,
     string? Schedule,
+    string? AtTime,
     bool? DeliverOnRefresh,
     string? Format,
     string? SmtpAlias,

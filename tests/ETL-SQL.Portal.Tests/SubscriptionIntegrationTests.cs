@@ -499,6 +499,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var updateRes = await AuthPut(portalClient, token, $"/api/subscriptions/{subId}", new
             {
                 schedule = "Weekly",
+                atTime = "09:15",
                 format = "Markdown",
                 smtpAlias = secondSmtpAlias,
                 recipients = "new-recipient@test.local",
@@ -511,6 +512,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var getRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
             var subBody = await getRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             Assert.Equal("Weekly", subBody!["schedule"]!.GetValue<string>());
+            Assert.Equal("09:15", subBody!["atTime"]!.GetValue<string>());
             Assert.Equal("Markdown", subBody!["format"]!.GetValue<string>());
             Assert.Equal(secondSmtpAlias, subBody!["smtpAlias"]!.GetValue<string>());
             Assert.Equal("new-recipient@test.local", subBody!["recipients"]!.GetValue<string>());
@@ -523,6 +525,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.NotNull(job);
             Assert.Equal(1, job.Interval); // Weekly parses to Interval 1, Unit WEEK
             Assert.Equal("WEEK", job.Unit);
+            Assert.Equal("09:15", job.AtTime);
             Assert.False(job.IsEnabled);
 
             // 5. Verify the persisted trigger remains free of delivery configuration.

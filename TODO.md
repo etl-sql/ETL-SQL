@@ -422,7 +422,9 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - **[PARTIAL]** `OrchestratorPollerService` matches `ReportJobLinks` by job name, then schedules a trusted
      Portal refresh, with legacy `DatasetJobs` fallback; completed trusted refreshes evaluate alerts attached
      to that report. `SCRIPT` completions ignored.
-   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`.
+   - Subscriptions become sugar over `JOB` + `SCHEDULE` + `NOTIFICATION`. Current legacy
+     subscription APIs at least preserve delivery time end to end: `atTime` is returned in DTOs,
+     can be updated, and updates are mirrored to the Orchestrator job while this bridge remains.
    - **[PARTIAL]** `ReportDependencyService`, `ConfigurationExportService` (emit `SCHEDULE`/`NOTIFICATION` before
      the linking `JOB`), `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
