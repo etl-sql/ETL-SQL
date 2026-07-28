@@ -198,6 +198,27 @@ public class SubscriptionLifecycleRecoveryTests
     }
 
     [Fact]
+    public void BuildNotificationDefinition_KeepsLinkSubscriptionsThatHaveSmtp()
+    {
+        var sub = new Subscription
+        {
+            Id = 42,
+            Format = SubscriptionFormat.Link,
+            SmtpAlias = "portal_mail",
+            Recipients = "link-recipient@test.local",
+            IsActive = true
+        };
+
+        var notification = SubscriptionOrchestration.BuildNotificationDefinition(sub);
+
+        Assert.NotNull(notification);
+        Assert.Equal(SubscriptionOrchestration.NotificationName(42), notification!.Name);
+        Assert.Equal("portal_mail", notification.ConnectionName);
+        Assert.Equal("link-recipient@test.local", notification.Recipient);
+        Assert.False(notification.IsEnabled);
+    }
+
+    [Fact]
     public async Task Reconcile_SkipsWhenAnotherPortalNodeOwnsClusterLock()
     {
         using var factory = new PortalWebFactory();

@@ -1,3 +1,5 @@
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Http;
@@ -20,6 +22,7 @@ public sealed class SubscriptionDeliveryLedgerTests
     {
         private readonly Func<int, (bool, string?)> _result;
         public int CallCount { get; private set; }
+        public string? LastScript { get; private set; }
 
         public ConfigurableRunner(Func<int, (bool, string?)> result) => _result = result;
         public static ConfigurableRunner Succeeds() => new(_ => (true, null));
@@ -31,6 +34,7 @@ public sealed class SubscriptionDeliveryLedgerTests
             ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
             CallCount++;
+            LastScript = scriptText;
             return Task.FromResult(_result(CallCount));
         }
     }
@@ -202,6 +206,57 @@ public sealed class SubscriptionDeliveryLedgerTests
         var ledger = await h.Db.SubscriptionDeliveries.SingleAsync(d => d.SubscriptionId == h.SubscriptionId);
         Assert.Equal("Failed", ledger.Outcome);
         Assert.Contains("no-such-alias", ledger.Detail);
+    }
+
+    [Fact]
+    public async Task NamedNotificationMetadata_OverridesRowDeliveryDestination()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = ConfigurableRunner.Succeeds();
+        var h = await SeedAsync(
+            scope,
+            runner,
+            smtpAlias: $"row_smtp_{Guid.NewGuid():N}",
+            recipients: "row-recipient@test.local");
+
+        var notificationAlias = $"notify_smtp_{h.Suffix}";
+        SmtpCatalogSeed.Add(
+            h.Db,
+            notificationAlias,
+            username: "notify-user@test.local",
+            defaultFrom: null);
+        await h.Db.SaveChangesAsync();
+
+        var storeFactory = scope.ServiceProvider.GetRequiredService<IOrchestratorStoreFactory>();
+        var dbLocator = scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>();
+        var store = storeFactory.Create(dbLocator.Resolve());
+        await store.InitializeAsync();
+        var catalog = (IJobCatalogStore)store;
+        await catalog.SaveNotificationAsync(new NotificationDefinition(
+            SubscriptionOrchestration.NotificationName(h.SubscriptionId),
+            notificationAlias,
+            Recipient: "notify-recipient@test.local",
+            IsEnabled: false));
+
+        var service = new SubscriptionDeliveryService(
+            h.Db,
+            scope.ServiceProvider.GetRequiredService<PortalConfig>(),
+            new PortalConnectionCatalogService(h.Db),
+            new FolderPermissionService(h.Db),
+            new AuditService(h.Db, new HttpContextAccessor()),
+            runner,
+            NullLogger<SubscriptionDeliveryService>.Instance,
+            dbLocator,
+            storeFactory);
+
+        var result = await service.DeliverAsync(h.SubscriptionId, "trigger-notify-metadata");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Delivered, result.Outcome);
+        Assert.Equal(1, runner.CallCount);
+        Assert.Contains("notify-recipient@test.local", runner.LastScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("notify-user@test.local", runner.LastScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("row-recipient@test.local", runner.LastScript, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

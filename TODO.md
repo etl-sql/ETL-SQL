@@ -426,9 +426,11 @@ provision connection aliases onto an orchestrator instead of an operator doing i
      `SUBSCHED:<subscriptionId>` + `JobSchedules` and `SUBNOTIFY:<subscriptionId>` +
      `JobNotifications`. The subscription notification is deliberately stored disabled while the
      Portal delivery executor remains active, otherwise the Orchestrator would send a second generic
-     job-success message with no report attachment. Remaining work: replace the Portal delivery
-     executor with the named notification path without losing report export, row-level-security,
-     attachment, and delivery ledger semantics.
+     job-success message with no report attachment. The Portal delivery executor now reads the
+     named notification metadata for SMTP alias + recipients when it is available, falling back to
+     the row only in degraded/local cases. Remaining work: move the final send onto the shared
+     notification dispatcher without losing report export, row-level-security, attachment, and
+     delivery ledger semantics.
    - **[DONE]** `ReportDependencyService`, `ConfigurationExportService`, `LineageImpactService`, `ReferenceImpactService`,
      `SubscriptionScriptMaintenance`: report dependency output now includes report alerts and their
      attached Orchestrator notification names plus `ReportJobLinks` with Orchestrator aliases; lineage impact

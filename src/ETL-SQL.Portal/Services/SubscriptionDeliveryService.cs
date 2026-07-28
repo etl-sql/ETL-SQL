@@ -2,6 +2,8 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -62,7 +64,9 @@ public class SubscriptionDeliveryService(
     FolderPermissionService folderPermissions,
     AuditService audit,
     ISubscriptionScriptRunner runner,
-    ILogger<SubscriptionDeliveryService> log)
+    ILogger<SubscriptionDeliveryService> log,
+    OrchestratorDbLocator? dbLocator = null,
+    IOrchestratorStoreFactory? orchestratorStoreFactory = null)
 {
     /// <summary>Ad-hoc (manual) delivery — each call is a distinct trigger and is never deduped
     /// against another. Scheduled deliveries pass the completion's identity as the trigger key.</summary>
@@ -72,14 +76,11 @@ public class SubscriptionDeliveryService(
     public async Task<SubscriptionDeliveryResult> DeliverAsync(
         int subscriptionId, string triggerKey, CancellationToken ct = default)
     {
-        var subscription = await db.Subscriptions
-            .Where(s => s.Id == subscriptionId)
-            .Select(s => new { s.Recipients })
-            .FirstOrDefaultAsync(ct);
-        if (subscription is null)
+        var destination = await ResolveDeliveryDestinationAsync(subscriptionId, ct);
+        if (destination is null)
             return SubscriptionDeliveryResult.Skipped("Subscription no longer exists.");
 
-        var recipients = NormalizeRecipients(subscription.Recipients);
+        var recipients = NormalizeRecipients(destination.Recipients);
         var results = new List<SubscriptionDeliveryResult>();
         foreach (var recipient in recipients)
         {
@@ -93,7 +94,7 @@ public class SubscriptionDeliveryService(
             try
             {
                 result = recipient.IsValid
-                    ? await ExecuteDeliveryAsync(subscriptionId, recipient.Value, ledger.DeliveryId, ct)
+                    ? await ExecuteDeliveryAsync(subscriptionId, destination.SmtpAlias, recipient.Value, ledger.DeliveryId, ct)
                     : SubscriptionDeliveryResult.Failed("Recipient address is invalid.");
             }
             catch (Exception ex)
@@ -169,6 +170,7 @@ public class SubscriptionDeliveryService(
 
     private async Task<SubscriptionDeliveryResult> ExecuteDeliveryAsync(
         int subscriptionId,
+        string? smtpAlias,
         string recipient,
         string correlationId,
         CancellationToken ct)
@@ -221,21 +223,21 @@ public class SubscriptionDeliveryService(
         }
 
         IReadOnlyDictionary<string, string>? smtp = null;
-        if (!string.IsNullOrEmpty(sub.SmtpAlias))
+        if (!string.IsNullOrEmpty(smtpAlias))
         {
             try
             {
-                var definition = await connectionCatalog.ResolveDefinitionAsync(sub.SmtpAlias, identity: null, ct);
+                var definition = await connectionCatalog.ResolveDefinitionAsync(smtpAlias, identity: null, ct);
                 if (!definition.ConnectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
                     return await RecordFailureAsync(sub, recipient,
-                        $"Connection '{sub.SmtpAlias}' is a {definition.ConnectorType} connection, not SMTP.",
+                        $"Connection '{smtpAlias}' is a {definition.ConnectorType} connection, not SMTP.",
                         correlationId, ct);
                 smtp = definition.Options;
             }
             catch (KeyNotFoundException)
             {
                 return await RecordFailureAsync(sub,
-                    recipient, $"SMTP connection '{sub.SmtpAlias}' no longer exists.", correlationId, ct);
+                    recipient, $"SMTP connection '{smtpAlias}' no longer exists.", correlationId, ct);
             }
             catch (InvalidOperationException ex)
             {
@@ -385,6 +387,57 @@ public class SubscriptionDeliveryService(
             .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
             .AnyAsync(x => x.UserId == userId && x.Name == "Admin", ct);
 
+    private async Task<SubscriptionDeliveryDestination?> ResolveDeliveryDestinationAsync(
+        int subscriptionId,
+        CancellationToken ct)
+    {
+        var row = await db.Subscriptions
+            .Where(s => s.Id == subscriptionId)
+            .Select(s => new { s.SmtpAlias, s.Recipients })
+            .FirstOrDefaultAsync(ct);
+        if (row is null)
+            return null;
+
+        var fallback = new SubscriptionDeliveryDestination(row.SmtpAlias, row.Recipients);
+        var notification = await TryLoadNotificationAsync(subscriptionId);
+        if (notification is null)
+            return fallback;
+
+        return new SubscriptionDeliveryDestination(
+            notification.ConnectionName,
+            notification.Recipient ?? row.Recipients);
+    }
+
+    private async Task<NotificationDefinition?> TryLoadNotificationAsync(int subscriptionId)
+    {
+        if (dbLocator is null || orchestratorStoreFactory is null)
+            return null;
+
+        var orchDbPath = dbLocator.Resolve();
+        if (orchestratorStoreFactory.Provider == DatabaseProvider.Sqlite
+            && (orchDbPath is null || !File.Exists(orchDbPath)))
+        {
+            return null;
+        }
+
+        try
+        {
+            var store = orchestratorStoreFactory.Create(orchDbPath);
+            await store.InitializeAsync();
+            return store is IJobCatalogStore catalog
+                ? await catalog.GetNotificationAsync(SubscriptionOrchestration.NotificationName(subscriptionId))
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(
+                "Could not load notification metadata for subscription {SubscriptionId}: {Message}",
+                subscriptionId,
+                ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
+            return null;
+        }
+    }
+
     // ── In-memory delivery script (P0.1) ──────────────────────────────────────
 
     private static string ComposeDeliveryScript(
@@ -500,6 +553,7 @@ public class SubscriptionDeliveryService(
     }
 
     private sealed record NormalizedRecipient(string Value, bool IsValid);
+    private sealed record SubscriptionDeliveryDestination(string? SmtpAlias, string Recipients);
 
     private static IReadOnlyList<NormalizedRecipient> NormalizeRecipients(string recipients)
     {

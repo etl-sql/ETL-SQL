@@ -80,7 +80,7 @@ public static class SubscriptionOrchestration
 
     public static NotificationDefinition? BuildNotificationDefinition(Subscription sub)
     {
-        if (sub.Format == SubscriptionFormat.Link || string.IsNullOrWhiteSpace(sub.SmtpAlias))
+        if (string.IsNullOrWhiteSpace(sub.SmtpAlias))
             return null;
 
         return new NotificationDefinition(
