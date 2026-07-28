@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core.Formatting;
@@ -168,6 +169,12 @@ public static class AstSerializer
         WaitForStatement s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",
         ExplainStatement s => (s.IsAnalyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + s.Query.ToSql() + (s.IntoTable != null ? " INTO " + s.IntoTable.ToSql() : ""),
         CreateVisualStatement s => FormatCreateVisual(s),
+        CreatePageStatement s => FormatCreatePage(s),
+        CreateDatasetStatement s => FormatCreateDataset(s),
+        CreateContainerStatement s => FormatCreateContainer(s),
+        CreateNavigationStatement s => FormatCreateNavigation(s),
+        CreateButtonStatement s => FormatCreateButton(s),
+        CreateStyleStatement s => FormatCreateStyle(s),
         LineageStatement s => FormatLineage(s),
         LintStatement s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
         HelpStatement s => $"HELP {(s.Topic != null ? s.Topic + (s.SubTopic != null ? " " + s.SubTopic : "") : "")}",
@@ -417,12 +424,7 @@ public static class AstSerializer
 
     private static string FormatCreateConnection(CreateConnectionStatement s)
     {
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         string body;
         if (s.TargetExpression != null && s.Options != null && s.Options.Count > 0)
             body = "(" + s.TargetExpression.ToSql() + ", " + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")";
@@ -507,36 +509,21 @@ public static class AstSerializer
 
     private static string FormatCreateProcedure(CreateProcedureStatement s)
     {
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         var paramsStr = string.Join(", ", s.Parameters.Select(p => p.ToSql()));
         return $"{modeStr} PROCEDURE {s.ProcedureName} ({paramsStr}) AS BEGIN ... END;";
     }
 
     private static string FormatCreateFunction(CreateFunctionStatement s)
     {
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         var paramsStr = string.Join(", ", s.Parameters.Select(p => p.ToSql()));
         return $"{modeStr} FUNCTION {s.FunctionName} ({paramsStr}) RETURNS {s.ReturnType} AS BEGIN ... END;";
     }
 
     private static string FormatCreateView(CreateViewStatement s)
     {
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         return $"{modeStr} VIEW {s.ViewName} AS {s.Query.ToSql()}";
     }
 
@@ -679,13 +666,13 @@ public static class AstSerializer
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
     /// <summary>
-    /// The creation verb for a catalog object. <c>CREATE OR REPLACE</c> is a full redefinition that
-    /// drops the object's attachments; <c>CREATE OR ALTER</c> patches and leaves them alone. An
-    /// export emits the former plus the full attachment set, so a replayed script converges on
-    /// exactly what it describes rather than accumulating stale links.
+    /// The lifecycle verb for a mode-aware object. Catalog objects give CREATE OR REPLACE
+    /// full-redefinition semantics; non-catalog objects use the same AST mode so formatters must
+    /// still preserve the caller's requested verb.
     /// </summary>
     private static string CreationVerb(ObjectCreationMode mode) => mode switch
     {
+        ObjectCreationMode.Alter => "ALTER",
         ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
         ObjectCreationMode.CreateOrReplace => "CREATE OR REPLACE",
         _ => "CREATE"
@@ -1087,7 +1074,7 @@ public static class AstSerializer
     private static string FormatCreateVisual(CreateVisualStatement s)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"CREATE VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
+        sb.AppendLine($"{CreationVerb(s.Mode)} VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
         if (s.Title != null) sb.AppendLine($"    TITLE = {s.Title.ToSql()},");
         if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = {s.Subtitle.ToSql()},");
         // TEXT visuals use CONTENT; controls use DEFAULT; both map to DefaultValue on the AST node
@@ -1115,6 +1102,123 @@ public static class AstSerializer
         return result + "\n);";
     }
 
+    private static string FormatCreatePage(CreatePageStatement s)
+    {
+        var parts = new List<string>();
+        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
+        if (s.Subtitle != null) parts.Add($"SUBTITLE = {s.Subtitle.ToSql()}");
+        if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
+        parts.Add($"STRUCTURE = {Quote(s.Structure)}");
+        if (s.SlotMap.Count > 0)
+            parts.Add("MAP (" + string.Join(", ", s.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
+        if (s.StyleName != null)
+            parts.Add($"STYLE = {s.StyleName}");
+        else if (s.Styles.Count > 0)
+            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+        if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
+        if (s.RefreshIntervalSeconds > 0) parts.Add($"REFRESH = {s.RefreshIntervalSeconds}");
+
+        return $"{CreationVerb(s.Mode)} PAGE {s.Name} AS {s.PageMode.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
+    }
+
+    private static string FormatCreateDataset(CreateDatasetStatement s)
+    {
+        var options = new List<string>();
+        if (s.Ttl != null) options.Add($"TTL = {Quote(s.Ttl)}");
+        if (s.Compress) options.Add("COMPRESS = ON");
+        if (s.AccessLevel == DatasetAccessLevel.Public) options.Add("ACCESS PUBLIC");
+        switch (s.EncryptionMode)
+        {
+            case DatasetEncryptionMode.None:
+                options.Add("ENCRYPT = OFF");
+                break;
+            case DatasetEncryptionMode.Password:
+                options.Add("ENCRYPT = PASSWORD");
+                if (s.EncryptionPassword != null) options.Add($"PASSWORD = {Quote(s.EncryptionPassword)}");
+                break;
+            case DatasetEncryptionMode.KeyFile:
+                options.Add("ENCRYPT = KEYFILE");
+                if (s.KeyFile != null) options.Add($"KEYFILE = {Quote(s.KeyFile)}");
+                break;
+        }
+
+        var optionText = options.Count > 0 ? " " + string.Join(" ", options) : "";
+        return $"{CreationVerb(s.Mode)} DATASET {s.TempTableName}{optionText} AS ({s.SourceQuery.ToSql().TrimEnd(';')});";
+    }
+
+    private static string FormatCreateContainer(CreateContainerStatement s)
+    {
+        var parts = new List<string>();
+        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
+        if (s.Subtitle != null) parts.Add($"SUBTITLE = {s.Subtitle.ToSql()}");
+        if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
+        if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
+        if (s.Icon != null) parts.Add($"ICON = {Quote(s.Icon)}");
+        if (s.StyleName != null)
+            parts.Add($"STYLE = {s.StyleName}");
+        else if (s.Styles.Count > 0)
+            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+        if (s.Structure != null || s.SlotMap.Count > 0 || !s.IsPinnable)
+        {
+            var layout = new List<string>();
+            if (s.Structure != null) layout.Add($"STRUCTURE = {Quote(s.Structure)}");
+            if (s.SlotMap.Count > 0)
+                layout.Add("MAP (" + string.Join(", ", s.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
+            if (!s.IsPinnable) layout.Add("PINNABLE = OFF");
+            parts.Add("LAYOUT (" + string.Join(", ", layout) + ")");
+        }
+
+        return $"{CreationVerb(s.Mode)} CONTAINER {s.Name} AS {s.ContainerType.ToUpperInvariant()} ({string.Join(", ", parts)});";
+    }
+
+    private static string FormatCreateNavigation(CreateNavigationStatement s)
+    {
+        var parts = new List<string>
+        {
+            $"ORIENTATION = {s.Orientation.ToString().ToUpperInvariant()}"
+        };
+        if (s.DefaultPage != null) parts.Add($"DEFAULT = {s.DefaultPage}");
+        if (s.Pages.Count > 0) parts.Add($"PAGES ({string.Join(", ", s.Pages)})");
+        return $"{CreationVerb(s.Mode)} NAVIGATION {s.Name} AS {s.NavType.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
+    }
+
+    private static string FormatCreateButton(CreateButtonStatement s)
+    {
+        var parts = new List<string>();
+        if (s.Title != null) parts.Add($"TITLE = {s.Title.ToSql()}");
+        if (s.Tooltip != null) parts.Add($"TOOLTIP {FormatTooltip(s.Tooltip)}");
+        if (s.Options.Count > 0) parts.Add("OPTIONS (" + FormatVisualOptions(s.Options) + ")");
+        if (s.Actions.Count > 0) parts.Add("ACTIONS (" + string.Join(", ", s.Actions.Select(a => a.ToSql())) + ")");
+        if (s.StyleName != null)
+            parts.Add($"STYLE = {s.StyleName}");
+        else if (s.Styles.Count > 0)
+            parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
+
+        return $"{CreationVerb(s.Mode)} BUTTON {s.Name} AS ({string.Join(", ", parts)});";
+    }
+
+    private static string FormatCreateStyle(CreateStyleStatement s)
+    {
+        if (s.StyleName != null)
+            return $"STYLE = {s.StyleName};";
+        return $"{CreationVerb(s.Mode)} STYLE {s.Name} ({FormatStringAssignments(s.Styles)});";
+    }
+
+    private static string FormatTooltip(TooltipDefinition tooltip)
+    {
+        if (tooltip.PlainText != null)
+            return $"= {tooltip.PlainText.ToSql()}";
+        if (tooltip.ContainerRef != null)
+            return tooltip.ContainerRef;
+
+        var parts = new List<string>();
+        if (tooltip.InlineMarkdown != null)
+            parts.Add(Quote(tooltip.InlineMarkdown));
+        if (tooltip.InlineVisuals is { Count: > 0 })
+            parts.Add("VISUALS (" + string.Join(", ", tooltip.InlineVisuals) + ")");
+        return "(" + string.Join(", ", parts) + ")";
+    }
+
     private static string FormatSetThreshold(SetThresholdStatement s)
     {
         string name = s.Type switch
@@ -1132,26 +1236,22 @@ public static class AstSerializer
     private static string FormatCreateTemplate(CreateTemplateStatement s)
     {
         var options = string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"));
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         return $"{modeStr} TEMPLATE {s.Name} AS ({options});";
     }
 
     private static string FormatCreateTheme(CreateThemeStatement s)
     {
         var props = string.Join(", ", s.Properties.Select(p => $"{p.Key} = '{p.Value.Replace("'", "''")}'"));
-        var modeStr = s.Mode switch
-        {
-            ObjectCreationMode.Alter => "ALTER",
-            ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-            _ => "CREATE"
-        };
+        var modeStr = CreationVerb(s.Mode);
         return $"{modeStr} THEME {s.Name} AS ({props});";
     }
+
+    private static string FormatStringAssignments(IReadOnlyDictionary<string, string> values) =>
+        string.Join(", ", values.Select(kv => $"{kv.Key} = {Quote(kv.Value)}"));
+
+    private static string FormatVisualOptions(IEnumerable<VisualOption> options) =>
+        string.Join(", ", options.Select(o => $"{o.Key} = {Quote(o.Value)}"));
 
     private static string FormatPublishBundle(PublishBundleStatement s)
     {

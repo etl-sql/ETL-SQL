@@ -55,5 +55,53 @@ namespace ETL_SQL.Tests.Core.Parsing
             Assert.Empty(script.Diagnostics);
             Assert.Single(script.Statements);
         }
+
+        [Theory]
+        [InlineData("CREATE OR REPLACE CONNECTION c AS MOCKDB();", "CREATE OR REPLACE CONNECTION")]
+        [InlineData("CREATE OR REPLACE PROCEDURE p() AS PRINT('ok');", "CREATE OR REPLACE PROCEDURE")]
+        [InlineData("CREATE OR REPLACE FUNCTION f() RETURNS INT AS RETURN 1;", "CREATE OR REPLACE FUNCTION")]
+        [InlineData("CREATE OR REPLACE VIEW v AS SELECT 1 AS id;", "CREATE OR REPLACE VIEW")]
+        [InlineData("CREATE OR REPLACE JOB J FOR SCRIPT 'jobs/j.etlsql';", "CREATE OR REPLACE JOB")]
+        [InlineData("CREATE OR REPLACE SCHEDULE T ON '0 2 * * *';", "CREATE OR REPLACE SCHEDULE")]
+        [InlineData("CREATE OR REPLACE NOTIFICATION Ops USING mail TO 'ops@example.com';", "CREATE OR REPLACE NOTIFICATION")]
+        [InlineData("CREATE OR REPLACE ALERT A FOR REPORT 'Daily Sales' WHEN VISUAL Failures > 0;", "CREATE OR REPLACE ALERT")]
+        [InlineData("CREATE OR REPLACE VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id), MAPPINGS (id));", "CREATE OR REPLACE VISUAL")]
+        [InlineData("CREATE OR REPLACE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));", "CREATE OR REPLACE PAGE")]
+        [InlineData("CREATE OR REPLACE DATASET &sales AS (SELECT 1 AS id);", "CREATE OR REPLACE DATASET")]
+        [InlineData("CREATE OR REPLACE CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));", "CREATE OR REPLACE CONTAINER")]
+        [InlineData("CREATE OR REPLACE NAVIGATION N AS TAB (PAGES (P));", "CREATE OR REPLACE NAVIGATION")]
+        [InlineData("CREATE OR REPLACE STYLE S (COLOR = 'red');", "CREATE OR REPLACE STYLE")]
+        [InlineData("CREATE OR REPLACE BUTTON B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));", "CREATE OR REPLACE BUTTON")]
+        [InlineData("CREATE OR REPLACE TEMPLATE T AS (TYPE = 'table');", "CREATE OR REPLACE TEMPLATE")]
+        [InlineData("CREATE OR REPLACE THEME Dark AS (BACKGROUND = '#000');", "CREATE OR REPLACE THEME")]
+        public void CreateOrReplace_SerializesWithoutDroppingLifecycleMode(string sql, string expectedPrefix)
+        {
+            var statement = Assert.Single(Parse(sql).Statements);
+
+            var serialized = statement.ToSql();
+
+            Assert.StartsWith(expectedPrefix, serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("UNKNOWN STATEMENT", serialized, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("CREATE OR ALTER CONNECTION c AS MOCKDB();")]
+        [InlineData("CREATE OR ALTER VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id), MAPPINGS (id));")]
+        [InlineData("CREATE OR ALTER PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));")]
+        [InlineData("CREATE OR ALTER DATASET &sales AS (SELECT 1 AS id);")]
+        [InlineData("CREATE OR ALTER CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));")]
+        [InlineData("CREATE OR ALTER NAVIGATION N AS TAB (PAGES (P));")]
+        [InlineData("CREATE OR ALTER STYLE S (COLOR = 'red');")]
+        [InlineData("CREATE OR ALTER BUTTON B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));")]
+        [InlineData("CREATE OR ALTER TEMPLATE T AS (TYPE = 'table');")]
+        [InlineData("CREATE OR ALTER THEME Dark AS (BACKGROUND = '#000');")]
+        public void CreateOrAlter_ReportAndConnectionStatements_RoundTripThroughFormatter(string sql)
+        {
+            var serialized = Assert.Single(Parse(sql).Statements).ToSql();
+            var reparsed = Parse(serialized);
+
+            Assert.Empty(reparsed.Diagnostics);
+            Assert.Equal(serialized, Assert.Single(reparsed.Statements).ToSql());
+        }
     }
 }
