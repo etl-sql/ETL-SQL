@@ -380,16 +380,16 @@ provision connection aliases onto an orchestrator instead of an operator doing i
    - **[DONE]** Remove `REFRESH EVERY` from `CREATE DATASET`; delete
      `CreateDatasetStatementHandler.CreateRefreshJob`, `ParseRefreshInterval`, and
      `DatasetRefreshIntervalRule`.
-   - `IF EXISTS` before the name. **`CREATE OR ALTER` and `CREATE OR REPLACE` are both supported** —
+   - **[DONE]** `IF EXISTS` before the name. **`CREATE OR ALTER` and `CREATE OR REPLACE` are both supported** —
      config-as-code only pays off if replay converges instead of failing. `OR ALTER` patches and
      leaves links alone; `OR REPLACE` is a full redefinition that **drops links**, which is the only
      way a script that stopped saying `ADD SCHEDULE S2` converges to what it now says. `ADD`/`REMOVE`
      must be idempotent too, or a replayed link statement fails on a duplicate key and breaks the
      import at statement three. This also heals a partially-applied `EXECUTE` block on re-run.
    - **[DONE]** `WHAT_IF` on every new statement, matching the managed-connection precedent.
-   - Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
+   - **[DONE]** Validate the timezone at parse/execute time, not at first fire. `AT TIME ZONE` disambiguates
      from `AT <connection>` with the two-token lookahead `ExpressionParser` already uses.
-   - Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
+   - **[DONE]** Reject each retired form with a diagnostic naming its replacement — they all parse cleanly
      today, so a generic syntax error would leave the reader guessing.
 4. **Notification dispatch and audit:**
    - **[PARTIAL]** Scheduled jobs dispatch linked `NOTIFICATION`s once after retries settle:
