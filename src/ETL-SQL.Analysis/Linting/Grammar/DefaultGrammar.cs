@@ -1491,7 +1491,6 @@ public static class DefaultGrammar
         var alterStartNode = tree.GetStartNode("ALTER");
 
         var replaceNode = new StateNode("REPLACE");
-        tree.RegisterStartNode("REPLACE", replaceNode);
 
         StateNode? alterNode = null;
         if (createNode != null)
@@ -1511,43 +1510,61 @@ public static class DefaultGrammar
             "<expression_token>"
         ));
 
-        var ddlKeywords = new[] {
+        var createKeywords = new[] {
             "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER",
-            "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX", "TAG", "LINEAGE",
-            "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION", "SHARE", "EMBED", "SAVED", "ALERT",
-            "SMTP", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR", "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "REPORT", "UNIQUE"
+            "NAVIGATION", "JOB", "SCHEDULE", "NOTIFICATION", "DIRECTORY", "PROCEDURE", "FUNCTION",
+            "INDEX", "TAG", "LINEAGE", "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION",
+            "SHARE", "EMBED", "SAVED", "ALERT", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR",
+            "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE"
         };
 
-        foreach (var keyword in ddlKeywords)
+        var createOrAlterKeywords = new[] {
+            "CONNECTION", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
+            "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
+            "THEME", "ALERT"
+        };
+
+        var createOrReplaceKeywords = new[] {
+            "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
+            "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
+            "THEME", "ALERT"
+        };
+
+        var alterKeywords = new[] {
+            "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
+            "VISUAL", "PAGE", "CONTAINER", "BUTTON", "TEMPLATE", "USER", "FOLDER", "REPORT",
+            "DATASET", "SUBSCRIPTION", "ALERT"
+        };
+
+        foreach (var keyword in createKeywords)
         {
             if (createNode != null)
             {
                 createNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
             }
+        }
+
+        foreach (var keyword in alterKeywords)
+        {
             if (alterStartNode != null)
             {
                 alterStartNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
             }
+        }
+
+        foreach (var keyword in createOrAlterKeywords)
+        {
             if (alterNode != null)
             {
                 alterNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
             }
+        }
+
+        foreach (var keyword in createOrReplaceKeywords)
+        {
             replaceNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
         }
 
-        // For REPLACE, we can also support SETS and CONNECTION using the generic loop state
-        replaceNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
-        replaceNode.AddTransitionTo("CONNECTION", ddlExpr, SuggestionType.Keyword);
-
-        // For ALTER, we also want to support SETS using the generic loop state
-        if (alterStartNode != null)
-        {
-            alterStartNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
-        }
-        if (alterNode != null)
-        {
-            alterNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
-        }
     }
 
     private static void ConfigureExecute(GrammarStateTree tree)

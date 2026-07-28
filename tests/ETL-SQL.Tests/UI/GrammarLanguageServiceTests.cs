@@ -56,6 +56,54 @@ public class GrammarLanguageServiceTests
         Assert.Contains("MyConn.Orders", texts);
     }
 
+    [Fact]
+    public async Task LifecycleSuggestions_AfterCreateOrAlter_OnlyIncludeSupportedKinds()
+    {
+        var service = new GrammarLanguageService(new MockMetadataManager());
+        var suggestions = await service.GetSuggestionsAsync(new SuggestionContext
+        {
+            Prefix = "",
+            ScriptBefore = "CREATE OR ALTER ",
+            FullScript = "CREATE OR ALTER ",
+            DocumentUri = "test://doc"
+        });
+
+        var texts = suggestions.Select(s => s.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("CONNECTION", texts);
+        Assert.Contains("VIEW", texts);
+        Assert.Contains("VISUAL", texts);
+        Assert.Contains("ALERT", texts);
+        Assert.DoesNotContain("TABLE", texts);
+        Assert.DoesNotContain("INDEX", texts);
+        Assert.DoesNotContain("DIRECTORY", texts);
+        Assert.DoesNotContain("USER", texts);
+    }
+
+    [Fact]
+    public async Task LifecycleSuggestions_AfterCreateOrReplace_OnlyIncludeSupportedKinds()
+    {
+        var service = new GrammarLanguageService(new MockMetadataManager());
+        var suggestions = await service.GetSuggestionsAsync(new SuggestionContext
+        {
+            Prefix = "",
+            ScriptBefore = "CREATE OR REPLACE ",
+            FullScript = "CREATE OR REPLACE ",
+            DocumentUri = "test://doc"
+        });
+
+        var texts = suggestions.Select(s => s.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("CONNECTION", texts);
+        Assert.Contains("TABLE", texts);
+        Assert.Contains("VIEW", texts);
+        Assert.Contains("DATASET", texts);
+        Assert.DoesNotContain("INDEX", texts);
+        Assert.DoesNotContain("DIRECTORY", texts);
+        Assert.DoesNotContain("USER", texts);
+        Assert.DoesNotContain("SUBSCRIPTION", texts);
+    }
+
     private class MockMetadataManager : IMetadataManager
     {
         public bool DebugMode { get; set; }
