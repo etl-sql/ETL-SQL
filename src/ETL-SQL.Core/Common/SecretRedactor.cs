@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.Core.Common;
@@ -9,6 +11,10 @@ namespace ETL_SQL.Core.Common;
 public static partial class SecretRedactor
 {
     public const string Mask = "********";
+    private const int RuntimeSecretMinimumLength = 4;
+    private const int MaxRuntimeSecrets = 1024;
+    private static readonly object RuntimeSecretsLock = new();
+    private static readonly List<string> RuntimeSecrets = [];
 
     [GeneratedRegex(@"\b(ENC|DPAPI-M|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex ProtectedValuePattern();
@@ -94,7 +100,41 @@ public static partial class SecretRedactor
             var key = match.Groups[1].Value;
             return $"{key}={match.Groups[2].Value}{Mask}{match.Groups[3].Value}";
         });
+        foreach (var secret in RegisteredRuntimeSecrets())
+            redacted = redacted.Replace(secret, Mask, StringComparison.Ordinal);
         return redacted;
+    }
+
+    /// <summary>
+    /// Registers a concrete secret value that was resolved inside this process so later log,
+    /// diagnostic, audit, and exception redaction also catches provider errors that echo the bare
+    /// value without a sensitive key shape.
+    /// </summary>
+    public static void RegisterRuntimeSecret(string? value)
+    {
+        if (string.IsNullOrEmpty(value)
+            || value.Length < RuntimeSecretMinimumLength
+            || string.Equals(value, Mask, StringComparison.Ordinal))
+            return;
+
+        lock (RuntimeSecretsLock)
+        {
+            if (RuntimeSecrets.Contains(value, StringComparer.Ordinal))
+                return;
+            if (RuntimeSecrets.Count >= MaxRuntimeSecrets)
+                RuntimeSecrets.RemoveAt(0);
+            RuntimeSecrets.Add(value);
+        }
+    }
+
+    private static IReadOnlyList<string> RegisteredRuntimeSecrets()
+    {
+        lock (RuntimeSecretsLock)
+        {
+            return RuntimeSecrets
+                .OrderByDescending(value => value.Length)
+                .ToArray();
+        }
     }
 
     public static object? RedactValue(string? key, object? value)

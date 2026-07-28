@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 
@@ -96,6 +97,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 
         var name = reference[SecretPrefix.Length..].Trim();
         var result = await secretProvider.ResolveAsync(name, cancellationToken).ConfigureAwait(false);
+        SecretRedactor.RegisterRuntimeSecret(result.Value);
         return result.Value;
     }
 

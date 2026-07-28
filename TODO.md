@@ -165,19 +165,11 @@ live users, remove contradictory forms now rather than carrying permanent compat
          documented path.
    - [x] `SmtpPasswordProtector` is gone; no source or test references remain, and SMTP delivery
          now copies `SECRET:` references instead of decrypting Portal-held ciphertext.
-   - [ ] **Redact resolved credentials in engine output — a capability lost in this change.**
-         `SubscriptionDeliveryService.Sanitize` used to take the plaintext password and scrub it
-         from downstream error text by literal replacement. The Portal no longer holds the
-         plaintext, so it cannot scrub what it cannot know, and pattern-based `SecretRedactor`
-         matches `SECRET:`/`SHARED:`/Bearer/URL/JSON shapes — not a bare password in free text.
-         An engine error quoting the resolved password verbatim would therefore reach the delivery
-         ledger and audit detail.
-         The fix belongs where the secret is resolved: whichever component turns `SECRET:name`
-         into a value must redact that value from its own error output before returning it. Net
-         exposure is still lower than before (the credential is no longer written into script text
-         at all), but this specific mitigation is currently absent and should not be assumed.
-         `OperationalObservabilityTests.DeliveryFailure_SanitizesSmtpCredentialFromLogsAndAudit`
-         documents the narrowed boundary.
+   - [x] **Redact resolved credentials in engine output.** `ConnectionSecretResolver` registers each
+         resolved `SECRET:name` value with `SecretRedactor`, and the shared last-mile redactor now
+         masks those concrete runtime values even when a provider error echoes the bare password
+         without a sensitive key shape. Verified with `SecretRedactorTests` and
+         `ConnectionSecretReferenceTests`.
 
 2. ~~**Add an optional management target to `CREATE CONNECTION`.**~~ **WITHDRAWN 2026-07-27** —
    superseded by the `EXECUTE <portal_conn> BEGIN … END` block, which already carries the target.

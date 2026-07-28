@@ -1,5 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -36,6 +37,32 @@ public class ConnectionSecretReferenceTests
         Assert.Equal("resolved-password", connector.LastOptions?["PASSWORD"]);
         Assert.Equal("Sales", connector.LastOptions?["DATABASE"]);
         Assert.True(connections.ContainsKey("sales"));
+    }
+
+    [Fact]
+    public async Task CreateConnection_RegistersResolvedSecretForLastMileRedaction()
+    {
+        var secret = $"resolved-password-{Guid.NewGuid():N}";
+        var connector = new CapturingConnector();
+        var registry = Registry(connector);
+        var context = Context();
+        var handler = new CreateConnectionStatementHandler(
+            registry.Object,
+            new Mock<ILogger>().Object,
+            secretProvider: new DictionarySecretProvider(("sales_db_password", secret)));
+        var statement = new CreateConnectionStatement(
+            "sales",
+            "CAPTURE",
+            options: new Dictionary<string, Expression>
+            {
+                ["PASSWORD"] = new LiteralExpression("SECRET:sales_db_password", TokenType.STRING_LITERAL)
+            });
+
+        await handler.Execute(statement, context);
+        var redacted = SecretRedactor.Redact($"Provider echoed bare credential {secret}")!;
+
+        Assert.DoesNotContain(secret, redacted);
+        Assert.Contains(SecretRedactor.Mask, redacted);
     }
 
     [Fact]

@@ -76,6 +76,18 @@ public sealed class SecretRedactorTests
     }
 
     [Fact]
+    public void Redact_MasksRegisteredRuntimeSecretsWithoutKeyShape()
+    {
+        var secret = $"runtime-secret-{Guid.NewGuid():N}";
+
+        SecretRedactor.RegisterRuntimeSecret(secret);
+        var redacted = SecretRedactor.Redact($"Provider rejected {secret} during AUTH")!;
+
+        Assert.DoesNotContain(secret, redacted);
+        Assert.Contains(SecretRedactor.Mask, redacted);
+    }
+
+    [Fact]
     public void RedactValue_MasksSensitiveColumnsBeforeSerialization()
     {
         var data = new Dictionary<string, object?>
