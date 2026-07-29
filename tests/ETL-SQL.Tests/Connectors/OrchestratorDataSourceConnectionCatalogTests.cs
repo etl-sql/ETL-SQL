@@ -61,6 +61,7 @@ public class OrchestratorDataSourceConnectionCatalogTests
                 ["USER"] = Literal("etl")
             }), context);
         await source.ExecuteAdminStatementAsync(new TestConnectionStatement("notify_smtp"), context);
+        await source.ExecuteAdminStatementAsync(new ShowConnectionConfigStatement("notify_smtp"), context);
 
         Assert.Equal(HttpMethod.Get, requests[0].Method);
         Assert.Equal("/api/admin/connections/notify_smtp", requests[0].RequestUri!.AbsolutePath);
@@ -68,8 +69,11 @@ public class OrchestratorDataSourceConnectionCatalogTests
         Assert.Contains("\"USER\":\"etl\"", await requests[1].Content!.ReadAsStringAsync());
         Assert.Equal(HttpMethod.Post, requests[2].Method);
         Assert.Equal("/api/admin/connections/notify_smtp/test", requests[2].RequestUri!.AbsolutePath);
-        Assert.Equal("POLICY", context.LastResult!.Rows[0]["Layer"]);
-        Assert.Equal("OK", context.LastResult.Rows[0]["Status"]);
+        Assert.Equal(HttpMethod.Get, requests[3].Method);
+        Assert.Equal("/api/admin/connections/notify_smtp", requests[3].RequestUri!.AbsolutePath);
+        Assert.Contains(context.LastResult!.Rows, r =>
+            r["Option"]?.ToString() == "PASSWORD"
+            && r["Value"]?.ToString() == "SECRET:smtp_password");
     }
 
     [Fact]
@@ -141,6 +145,7 @@ public class OrchestratorDataSourceConnectionCatalogTests
             }), context);
         await source.ExecuteAdminStatementAsync(new ShowConnectionsStatement(), context);
         await source.ExecuteAdminStatementAsync(new TestConnectionStatement("notify_smtp"), context);
+        await source.ExecuteAdminStatementAsync(new ShowConnectionConfigStatement("notify_smtp"), context);
         await source.ExecuteAdminStatementAsync(new DropConnectionStatement("notify_smtp", ifExists: false), context);
 
         Assert.Equal(HttpMethod.Put, requests[0].Method);
@@ -157,10 +162,13 @@ public class OrchestratorDataSourceConnectionCatalogTests
         Assert.Equal("/api/admin/connections", requests[3].RequestUri!.AbsolutePath);
         Assert.Equal(HttpMethod.Post, requests[4].Method);
         Assert.Equal("/api/admin/connections/notify_smtp/test", requests[4].RequestUri!.AbsolutePath);
-        Assert.Equal(HttpMethod.Delete, requests[5].Method);
+        Assert.Equal(HttpMethod.Get, requests[5].Method);
         Assert.Equal("/api/admin/connections/notify_smtp", requests[5].RequestUri!.AbsolutePath);
-        Assert.Equal("POLICY", context.LastResult!.Rows[0]["Layer"]);
-        Assert.Equal("OK", context.LastResult.Rows[0]["Status"]);
+        Assert.Equal(HttpMethod.Delete, requests[6].Method);
+        Assert.Equal("/api/admin/connections/notify_smtp", requests[6].RequestUri!.AbsolutePath);
+        Assert.Contains(context.LastResult!.Rows, r =>
+            r["Option"]?.ToString() == "PASSWORD"
+            && r["Value"]?.ToString() == "SECRET:smtp_password");
         await source.ExecuteAdminStatementAsync(new ShowConnectionsStatement(), context);
         Assert.Equal("notify_smtp", context.LastResult!.Rows[0]["Alias"]);
         Assert.Equal("SMTP", context.LastResult.Rows[0]["ConnectorType"]);

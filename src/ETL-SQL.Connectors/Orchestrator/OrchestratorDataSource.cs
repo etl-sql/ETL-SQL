@@ -117,6 +117,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
                 case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
+                case ShowConnectionConfigStatement s: await ShowSharedConnectionConfigAsync(s, context); break;
                 case ShowPublishedBundlesStatement s: await FetchPublishedBundlesAsync(s, context); break;
                 case ShowBundleVersionsStatement s: await FetchBundleVersionsAsync(s, context); break;
                 case ShowBundleFilesStatement s: await FetchBundleFilesAsync(s, context); break;
@@ -367,6 +368,37 @@ namespace ETL_SQL.Connectors.Orchestrator
                     : string.Join(", ", entry.SensitiveFields);
                 await table.AddRowAsync(row);
             }
+
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task ShowSharedConnectionConfigAsync(ShowConnectionConfigStatement stmt, IExecutionContext context)
+        {
+            var entry = await GetJsonAsync<ConnectionCatalogEntryDto>(
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}")
+                ?? throw new ExecutionException($"Shared connection '{stmt.ConnectionName}' was not found in Orchestrator.");
+
+            var table = new DataTable();
+            table.AddColumn("Option");
+            table.AddColumn("Value");
+
+            async Task AddAsync(string option, object? value)
+            {
+                var row = new Row();
+                row["Option"] = option;
+                row["Value"] = value?.ToString() ?? string.Empty;
+                await table.AddRowAsync(row);
+            }
+
+            await AddAsync("Alias", entry.Alias);
+            await AddAsync("ConnectorType", entry.ConnectorType);
+            await AddAsync("Target", entry.Target);
+            await AddAsync("Status", entry.Status);
+            if (entry.SensitiveFields is not null)
+                await AddAsync("SensitiveFields", string.Join(", ", entry.SensitiveFields));
+
+            foreach (var option in (entry.Options ?? []).OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                await AddAsync(option.Key, option.Value);
 
             await WriteResultAsync(table, stmt.IntoTable, context);
         }

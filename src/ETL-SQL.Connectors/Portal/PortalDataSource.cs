@@ -148,6 +148,7 @@ namespace ETL_SQL.Connectors.Portal
                 case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
                 case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
+                case ShowConnectionConfigStatement s: await ShowSharedConnectionConfigAsync(s, context); break;
 
                 case CreatePortalFolderStatement s: await CreateFolderAsync(s, context); break;
                 case AlterPortalFolderStatement s: await AlterFolderAsync(s, context); break;
@@ -513,6 +514,50 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task ShowSharedConnectionsAsync(ShowConnectionsStatement stmt, IExecutionContext context) =>
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/connections", null), stmt.IntoTable, context);
+
+        private async Task ShowSharedConnectionConfigAsync(ShowConnectionConfigStatement stmt, IExecutionContext context)
+        {
+            var entry = await SendJsonAsync(
+                HttpMethod.Get,
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
+                null);
+
+            var table = new DataTable();
+            table.AddColumn("Option");
+            table.AddColumn("Value");
+
+            async Task AddAsync(string option, object? value)
+            {
+                var row = new Row();
+                row["Option"] = option;
+                row["Value"] = value?.ToString() ?? string.Empty;
+                await table.AddRowAsync(row);
+            }
+
+            await AddAsync("Alias", TryGetString(entry, "alias"));
+            await AddAsync("ConnectorType", TryGetString(entry, "connectorType"));
+            await AddAsync("Target", TryGetString(entry, "target"));
+            await AddAsync("Status", TryGetString(entry, "status"));
+            if (entry.TryGetProperty("sensitiveFields", out var sensitiveFields)
+                && sensitiveFields.ValueKind == JsonValueKind.Array)
+            {
+                await AddAsync("SensitiveFields", string.Join(", ",
+                    sensitiveFields.EnumerateArray().Select(v => v.GetString()).Where(v => v is not null)));
+            }
+
+            if (entry.TryGetProperty("options", out var options)
+                && options.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var option in options.EnumerateObject().OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    await AddAsync(option.Name, option.Value.ValueKind == JsonValueKind.String
+                        ? option.Value.GetString()
+                        : option.Value.GetRawText());
+                }
+            }
+
+            await PublishTableResultAsync(table, stmt.IntoTable, context);
+        }
 
         // ── Folders ───────────────────────────────────────────────────────────────
 
