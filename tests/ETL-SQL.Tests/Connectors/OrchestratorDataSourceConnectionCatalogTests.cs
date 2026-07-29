@@ -42,6 +42,7 @@ public class OrchestratorDataSourceConnectionCatalogTests
             NullLogger.Instance))
         {
             await ExerciseWhatIfConnectionMutationsAsync(portal);
+            await ExerciseWhatIfWebhookConnectionMutationsAsync(portal);
         }
 
         Assert.DoesNotContain(portalRequests, r => r.Method is { } m && (m == HttpMethod.Put || m == HttpMethod.Delete));
@@ -68,6 +69,7 @@ public class OrchestratorDataSourceConnectionCatalogTests
             NullLogger.Instance))
         {
             await ExerciseWhatIfConnectionMutationsAsync(orchestrator);
+            await ExerciseWhatIfWebhookConnectionMutationsAsync(orchestrator);
         }
 
         Assert.DoesNotContain(orchestratorRequests, r => r.Method is { } m && (m == HttpMethod.Put || m == HttpMethod.Delete));
@@ -313,6 +315,27 @@ public class OrchestratorDataSourceConnectionCatalogTests
             target: null,
             new Dictionary<string, Expression> { ["USER"] = Literal("etl") }), context);
         await source.ExecuteAdminStatementAsync(new DropConnectionStatement("notify_smtp", ifExists: true), context);
+    }
+
+    private static async Task ExerciseWhatIfWebhookConnectionMutationsAsync(
+        IPortalAdminConnection source)
+    {
+        var context = new LiteralEvalContext { IsWhatIf = true };
+        await source.ExecuteAdminStatementAsync(new CreateConnectionStatement(
+            "notify_webhook",
+            "WEBHOOK",
+            target: null,
+            new Dictionary<string, Expression>
+            {
+                ["URL"] = Literal("SECRET:webhook_url"),
+                ["FORMAT"] = Literal("generic")
+            }), context);
+        await source.ExecuteAdminStatementAsync(new AlterConnectionStatement(
+            "notify_webhook",
+            type: null,
+            target: null,
+            new Dictionary<string, Expression> { ["FORMAT"] = Literal("slack") }), context);
+        await source.ExecuteAdminStatementAsync(new DropConnectionStatement("notify_webhook", ifExists: true), context);
     }
 
     private static HttpResponseMessage JsonResponse(string json) =>

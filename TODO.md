@@ -64,8 +64,10 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       secret diagnostics, disabled entries, and configuration export/import.
 - [x] Cover Portal managed WEBHOOK catalog lifecycle: `SECRET:` URL preservation, missing secret
       verify/test failures, disabled entries, configuration export/import, and audit behavior.
-- [ ] Add remaining Portal managed WEBHOOK notification delivery coverage, unauthorized-caller
-      negative coverage beyond generic admin endpoint checks, and `WHAT_IF` admin-block coverage.
+- [x] Cover WEBHOOK `WHAT_IF` admin-block connection mutations for both Portal and Orchestrator
+      connectors.
+- [ ] Add remaining Portal managed WEBHOOK notification delivery coverage and unauthorized-caller
+      negative coverage beyond generic admin endpoint checks.
 - [ ] Add remaining managed SMTP/WEBHOOK delivery coverage that exercises Portal-to-Orchestrator
       notification dispatch end to end rather than only catalog lifecycle and generated scripts.
 
