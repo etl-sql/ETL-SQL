@@ -571,15 +571,12 @@ public class ExtensionParser : ParserComponent
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new WaitForStatement(e, WaitType.Time) { Line = startToken.Line, Column = startToken.Column };
             }
-            var condition = ParseExpression();
-            Consume(TokenType.RPAREN, "Expected ')' after WAITFOR condition");
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new WaitForStatement(condition, WaitType.Until) { Line = startToken.Line, Column = startToken.Column };
+            throw new SyntaxException("WAITFOR (<condition>) has been retired. Use WAIT UNTIL <condition>.", startToken.Line, startToken.Column);
         }
 
         WaitType type = WaitType.Delay;
         if (Match(TokenType.TIME)) type = WaitType.Time;
-        else if (!Match(TokenType.DELAY)) Consume(TokenType.DELAY, "Expected DELAY, TIME, or (condition) after WAITFOR");
+        else if (!Match(TokenType.DELAY)) Consume(TokenType.DELAY, "Expected DELAY or TIME after WAITFOR. Use WAIT UNTIL <condition> for condition polling.");
         var expr = ParseExpression();
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
         return new WaitForStatement(expr, type) { Line = startToken.Line, Column = startToken.Column };

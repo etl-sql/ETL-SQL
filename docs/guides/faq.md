@@ -48,8 +48,8 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 >
 > SQL style is preferred in new scripts — it's more readable and closer to natural language.  Function style is available to those who feel more comfortable with this style.
 
-**Q: Can I use `WAITFOR (SELECT ...)` to poll until a condition is true?**
-> Yes — the `WAITFOR (condition)` form is supported. The engine evaluates the expression repeatedly at a 200ms interval and continues execution as soon as the result is truthy (non-zero, non-empty, or `true`):
+**Q: Can I use `WAIT UNTIL (SELECT ...)` to poll until a condition is true?**
+> Yes — `WAIT UNTIL condition` evaluates the expression repeatedly at a 200ms interval and continues execution as soon as the result is truthy (non-zero, non-empty, or `true`):
 > ```sql
 > -- Polls every 200ms until the condition returns a non-zero count
 > WAIT UNTIL (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready') > 0;

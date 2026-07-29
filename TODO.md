@@ -151,7 +151,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       `COPY_FILE(...)`, `MOVE_FILE(...)`, `DELETE_FILE(...)`, `CREATE_DIRECTORY(...)`, and sibling
       underscore forms.
 - [x] Retire `FOR EACH`; `FOREACH` is the only loop spelling.
-- [ ] Retire `WAITFOR (<condition>)`; `WAIT UNTIL <condition>` is the condition-polling form.
+- [x] Retire `WAITFOR (<condition>)`; `WAIT UNTIL <condition>` is the condition-polling form.
       Keep `WAITFOR DELAY` and `WAITFOR TIME`.
 - [ ] Retire `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE`; use
       `SELECT * FROM eng.columns WHERE table_name = ...`.

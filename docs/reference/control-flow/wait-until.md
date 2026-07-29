@@ -21,8 +21,8 @@ WAIT UNTIL @is_ready = TRUE;
 ```
 
 ## Notes
-- `WAIT UNTIL condition` is the preferred spelling for condition polling.
-- `WAITFOR (condition)` remains accepted for compatibility with the `WAITFOR` statement family.
+- `WAIT UNTIL condition` is the only condition-polling spelling.
+- `WAITFOR (<condition>)` has been retired.
 - Use `WAITFOR FILE UNLOCKED` for file-arrival waits.
 - Use a `WHILE` loop with `WAITFOR DELAY` inside when you need a custom poll interval or logic between checks.
 

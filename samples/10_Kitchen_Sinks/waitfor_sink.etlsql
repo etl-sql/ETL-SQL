@@ -1,6 +1,5 @@
 -- WAITFOR Kitchen Sink
--- Covers: WAITFOR DELAY, WAITFOR TIME (near-future), WAITFOR (condition poll),
---         WAIT UNTIL alias
+-- Covers: WAITFOR DELAY, WAITFOR TIME (near-future), and WAIT UNTIL condition polling.
 SET WHAT_IF OFF;
 
 -- 1. WAITFOR DELAY (fixed duration)
@@ -11,13 +10,13 @@ PRINT 'WAITFOR DELAY 1s: Pass';
 WAITFOR DELAY '00:00:00.250';
 PRINT 'WAITFOR DELAY 250ms: Pass';
 
--- 2. WAITFOR (condition poll) — immediate condition
-PRINT 'Testing WAITFOR (condition)...';
+-- 2. WAIT UNTIL condition poll — immediate condition
+PRINT 'Testing WAIT UNTIL condition...';
 DECLARE @ready INT = 1;
-WAITFOR (@ready = 1);
-PRINT 'WAITFOR (condition) immediate: Pass';
+WAIT UNTIL @ready = 1;
+PRINT 'WAIT UNTIL condition immediate: Pass';
 
--- 3. WAIT UNTIL alias
+-- 3. WAIT UNTIL with another scalar condition
 PRINT 'Testing WAIT UNTIL...';
 DECLARE @flag INT = 1;
 WAIT UNTIL @flag = 1;

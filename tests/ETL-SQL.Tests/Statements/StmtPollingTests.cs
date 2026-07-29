@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Statements
 
             var sql = @"
                 DECLARE @ready INT = 0;
-                WAITFOR (@ready = 1);
+                WAIT UNTIL @ready = 1;
                 SELECT 'Done' AS Status;
             ";
 
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Statements
             var cts = new CancellationTokenSource();
 
             var sql = @"
-                WAITFOR (1 = 0); -- Infinite wait
+                WAIT UNTIL 1 = 0; -- Infinite wait
             ";
 
             var evalTask = eval.Evaluate(Parse(sql), cts.Token);
@@ -97,6 +97,17 @@ namespace ETL_SQL.Tests.Statements
             // on where the cancel lands. ThrowsAny accepts either, so this no longer needs a precise 2 s
             // wait and cannot flake on a slow/loaded runner.
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await evalTask);
+        }
+
+        [Fact]
+        public void WaitForCondition_IsRejectedWithReplacement()
+        {
+            var script = Parse("WAITFOR (@ready = 1);");
+
+            Assert.Contains(script.Diagnostics, diagnostic =>
+                diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error &&
+                diagnostic.Message.Contains("WAIT UNTIL <condition>", StringComparison.Ordinal));
+            Assert.Empty(script.Statements);
         }
     }
 }
