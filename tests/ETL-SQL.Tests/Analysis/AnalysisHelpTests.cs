@@ -46,6 +46,13 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Contains("HELP: CONFIG", output);
             Assert.Contains("inspect the configuration options", output);
             Assert.Contains("redacted", output);
+
+            evaluator.Messages.Clear();
+            await evaluator.Evaluate(Parse("HELP ENG;"));
+            output = string.Join("\n", evaluator.Messages);
+            Assert.Contains("HELP: ENG", output);
+            Assert.Contains("eng.*", output);
+            Assert.Contains("eng.connections", output);
         }
 
         private static Script Parse(string source)

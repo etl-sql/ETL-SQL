@@ -100,7 +100,7 @@ public sealed class HelpDocsCouplingTests
             $"LanguageHelpRegistry loaded only {topics.Count} top-level topics — the docs/reference embed is likely broken.");
 
         // Statements & control flow (KEYWORDS category → topic addressable directly).
-        foreach (var keyword in new[] { "SELECT", "INSERT", "UPDATE", "DELETE", "IF", "WHILE", "DECLARE", "SHOW", "SET" })
+        foreach (var keyword in new[] { "SELECT", "INSERT", "UPDATE", "DELETE", "IF", "WHILE", "DECLARE", "ENG", "SET" })
             AssertHelp(registry, keyword, () => registry.GetHelp(keyword));
 
         // Functions (FUNCTIONS category → FUNCTION/<name>).

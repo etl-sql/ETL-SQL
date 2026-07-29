@@ -24,7 +24,7 @@
     <EmbeddedResource Include="..\..\docs\reference\control-flow\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\control-flow\README.md" />
     
     <!-- Engine catalog & SET commands (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\eng\show.md" Link="Resources\Help\Keywords\SHOW.md" />
+    <EmbeddedResource Include="..\..\docs\reference\eng\eng.md" Link="Resources\Help\Keywords\ENG.md" />
     <EmbeddedResource Include="..\..\docs\reference\set-commands\set.md" Link="Resources\Help\Keywords\SET.md" />
 
     <!-- Variables & Parameters (Variables & Keywords Categories) -->
