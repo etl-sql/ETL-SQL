@@ -130,6 +130,16 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public void TestWaitUntil_ParsesAsConditionWait()
+        {
+            var script = TestHelpers.Parse("WAIT UNTIL @is_ready = TRUE;");
+            var stmt = Assert.IsType<WaitForStatement>(Assert.Single(script.Statements));
+
+            Assert.Equal(WaitType.Until, stmt.Type);
+            Assert.Empty(script.Diagnostics);
+        }
+
+        [Fact]
         public async Task TestWaitForDelay_InvalidFormat_Throws()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

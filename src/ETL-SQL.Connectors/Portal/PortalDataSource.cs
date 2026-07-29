@@ -145,8 +145,7 @@ namespace ETL_SQL.Connectors.Portal
                 // Governed connection catalog — every connector type, not just SMTP.
                 case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
                 case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
-
-                case ShowPortalSmtpConnectionsStatement s: await ShowSmtpConnectionsAsync(s, context); break;
+                case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
 
                 case CreatePortalFolderStatement s: await CreateFolderAsync(s, context); break;
                 case AlterPortalFolderStatement s: await AlterFolderAsync(s, context); break;
@@ -437,11 +436,7 @@ namespace ETL_SQL.Connectors.Portal
                 $"Shared connection '{stmt.ConnectionName}' deleted.");
         }
 
-        // ── Portal connection listing ─────────────────────────────────────────────
-
-        // SHOW SMTP CONNECTIONS now lists the governed catalog: the bespoke SMTP store is gone.
-        // Retiring the statement itself belongs with the wider SHOW -> eng.* work.
-        private async Task ShowSmtpConnectionsAsync(ShowPortalSmtpConnectionsStatement stmt, IExecutionContext context) =>
+        private async Task ShowSharedConnectionsAsync(ShowConnectionsStatement stmt, IExecutionContext context) =>
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/connections", null), stmt.IntoTable, context);
 
         // ── Folders ───────────────────────────────────────────────────────────────
@@ -1565,8 +1560,7 @@ namespace ETL_SQL.Connectors.Portal
             new(@"^(?<r>api/datasets/\d+)(/acl(/\d+)?|/move)?$", RegexOptions.Compiled),
             new(@"^(?<r>api/folders/\d+)(/acl(/\d+)?)?$", RegexOptions.Compiled),
             new(@"^(?<r>api/reports/\d+)(/script-content)?$", RegexOptions.Compiled),
-            new(@"^(?<r>api/subscriptions/\d+)$", RegexOptions.Compiled),
-            new(@"^(?<r>api/admin/smtp/\d+)$", RegexOptions.Compiled)
+            new(@"^(?<r>api/subscriptions/\d+)$", RegexOptions.Compiled)
         ];
 
         private async Task ApplyVersionHeaderAsync(HttpRequestMessage req)
@@ -1616,7 +1610,7 @@ namespace ETL_SQL.Connectors.Portal
             }
         }
 
-        /// <summary>Fallback for resources without a single-item GET (e.g. api/admin/smtp/{id}).</summary>
+        /// <summary>Fallback for resources without a single-item GET.</summary>
         private async Task<long?> TryReadVersionFromListAsync(string resourceUrl)
         {
             var lastSlash = resourceUrl.LastIndexOf('/');

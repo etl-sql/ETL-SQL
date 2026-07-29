@@ -114,6 +114,15 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Third-party inventory drift" "node scripts/generate-third-party-inventory.js --check" "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
+    if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
+        print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+    fi
+    if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
+        print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
+    fi
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Bounded quick-feedback lane: smoke coverage plus language-server tests."; i=$((i + 1))
     print_plan_phase "$i" "Engine lane" "./scripts/test-lane.sh --lane engine" "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane."; i=$((i + 1))
@@ -139,19 +148,8 @@ show_pre_release_plan() {
         print_plan_phase "$i" "VS Code unit tests" "npm run test:unit" "Extension unit tests pass."; i=$((i + 1))
     fi
 
-    if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
-        print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
-    fi
-
     if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
         print_plan_phase "$i" "Docker integration lane" "./scripts/test-lane.sh --lane integration" "External connector boundaries pass against local containers."; i=$((i + 1))
-    fi
-
-    if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
-        print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
-        print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
@@ -665,6 +663,30 @@ run_phase "Format verify" \
     "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" \
     format_verify_phase
 
+if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
+    run_phase "Scale certification smoke" \
+        "./scripts/test-scale-certification.sh --tier Smoke" \
+        bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
+
+    run_phase "Cert baseline regression check (smoke)" \
+        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/cert-baseline-smoke.md"
+fi
+
+if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
+    run_phase "Scale certification standard" \
+        "./scripts/test-scale-certification.sh --tier Standard" \
+        bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
+
+    run_phase "Cert baseline regression check (standard)" \
+        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/cert-baseline-standard.md"
+
+    run_phase "Spill allocation budget (10M)" \
+        "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" \
+        spill_allocation_budget_phase
+fi
+
 run_phase "Smoke lane" \
     "./scripts/test-lane.sh --lane smoke --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "smoke" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
@@ -745,34 +767,10 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm run test:unit"
 fi
 
-if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
-    run_phase "Scale certification smoke" \
-        "./scripts/test-scale-certification.sh --tier Smoke" \
-        bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
-
-    run_phase "Cert baseline regression check (smoke)" \
-        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
-        cert_baseline_phase "$RUN_DIR/cert-baseline-smoke.md"
-fi
-
 if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
     run_phase "Docker integration lane" \
         "./scripts/test-lane.sh --lane integration --configuration $CONFIGURATION --no-restore --no-build" \
         bash "./scripts/test-lane.sh" "--lane" "integration" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
-fi
-
-if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
-    run_phase "Scale certification standard" \
-        "./scripts/test-scale-certification.sh --tier Standard" \
-        bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
-
-    run_phase "Cert baseline regression check (standard)" \
-        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
-        cert_baseline_phase "$RUN_DIR/cert-baseline-standard.md"
-
-    run_phase "Spill allocation budget (10M)" \
-        "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" \
-        spill_allocation_budget_phase
 fi
 
 if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then

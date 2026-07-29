@@ -2780,10 +2780,6 @@ public sealed record AddUserToPortalGroupStatement(string Username, string Group
 // an ordinary connector, so it uses CreateConnectionStatement/DropConnectionStatement like every
 // other type. An EXECUTE <portal> BEGIN ... END block routes those to the governed catalog.
 
-/// <summary>Lists the Portal's governed connection catalog. Retiring this in favour of a
-/// <c>SELECT ... FROM eng.connections</c> form belongs with the wider SHOW retirement.</summary>
-public sealed record ShowPortalSmtpConnectionsStatement(string? IntoTable = null) : Statement;
-
 public sealed record CreatePortalFolderStatement(string Path) : Statement;
 
 public sealed record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;

@@ -36,6 +36,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `FOREACH` | Flow Control | [Statement Reference](reference/statements/README.md) | [FOREACH.md](reference/control-flow/foreach.md) |
 | `TRY / CATCH` | Flow Control | [Statement Reference](reference/statements/README.md) | [TRY.md](reference/control-flow/try-catch.md) |
 | `WAITFOR` | Flow Control | [Statement Reference](reference/statements/README.md) | [WAITFOR.md](reference/control-flow/waitfor.md) |
+| `WAIT UNTIL` | Flow Control | [Statement Reference](reference/statements/README.md) | [WAIT UNTIL.md](reference/control-flow/wait-until.md) |
 | `BREAK` | Flow Control | [Statement Reference](reference/statements/README.md) | [BREAK.md](reference/control-flow/break.md) |
 | `CONTINUE` | Flow Control | [Statement Reference](reference/statements/README.md) | [CONTINUE.md](reference/control-flow/continue.md) |
 | `RETURN` | Flow Control | [Statement Reference](reference/statements/README.md) | [RETURN.md](reference/control-flow/return.md) |
@@ -1009,7 +1010,6 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Not supported — no portal endpoint exists; use REBUILD SNAPSHOT |
 | `CREATE CONNECTION <alias> AS SMTP(...)` | Portal | Registers a mail relay in the governed catalog; the password is a `SECRET:` reference, never a value |
-| `SHOW SMTP CONNECTIONS` | Portal | Lists the portal connection catalog (credential references are masked) |
 | `DROP CONNECTION [IF EXISTS] <alias>` | Portal | Removes a cataloged connection by alias |
 | `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
 | `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |

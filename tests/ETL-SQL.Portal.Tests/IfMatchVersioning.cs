@@ -33,8 +33,8 @@ internal static partial class IfMatchVersioning
     [GeneratedRegex(@"^(?<r>/api/subscriptions/\d+)$")]
     private static partial Regex SubscriptionRoute();
 
-    // No SMTP route: api/admin/smtp is retired. Connections are keyed by alias under
-    // api/admin/connections and are not id-versioned mutations.
+    // No SMTP-specific route: shared connections are keyed by alias under the governed
+    // connection catalog and are not id-versioned mutations.
 
     /// <summary>
     /// Resolves the targeted resource's current version and adds <c>If-Match</c> to
@@ -94,7 +94,7 @@ internal static partial class IfMatchVersioning
         }
     }
 
-    /// <summary>Fallback for resources without a single-item GET (e.g. /api/admin/smtp/{id}).</summary>
+    /// <summary>Fallback for resources without a single-item GET.</summary>
     private static async Task<long?> TryReadVersionFromParentListAsync(
         HttpClient client, string resourceUrl, string readToken)
     {

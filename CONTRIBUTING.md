@@ -35,8 +35,13 @@ Thank you for your interest in contributing! This document explains how to set u
 ```bash
 git clone https://github.com/etl-sql/ETL-SQL.git
 cd ETL-SQL
+git config core.hooksPath scripts
 dotnet build
 ```
+
+The repository hook runs `dotnet format` on staged C# files before each commit and re-stages formatter
+output. If a staged C# file also has unstaged edits, the hook stops so unrelated local changes are not
+swept into the commit.
 
 ### Running the Test Suite
 
@@ -224,6 +229,7 @@ When your change affects user-facing behavior, update the relevant docs:
 | New connector implementation | [Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
 | Breaking syntax change | [docs/guides/migration-guide.md](docs/guides/migration-guide.md) |
+| User-facing code, docs, samples, scripts, or workflow changes | Add a `changelog.d/<feature>.md` fragment; the pre-release gate compiles it into [CHANGELOG.md](CHANGELOG.md) |
 | New release | [CHANGELOG.md](CHANGELOG.md) — use Keep a Changelog format |
 
 See [AGENTS.md](AGENTS.md) §7 for the complete documentation stewardship rules.
@@ -274,7 +280,7 @@ Before opening a PR, verify:
 - [ ] All new AST nodes are `record` types
 - [ ] Connector exceptions are caught and re-thrown as `ExecutionException`
 - [ ] Documentation updated per Section 6 above
-- [ ] `CHANGELOG.md` updated with your change under `[Unreleased]`
+- [ ] `changelog.d/<feature>.md` added, or `CHANGELOG.md` updated directly for release-only edits
 - [ ] Every commit includes a valid DCO `Signed-off-by` line
 - [ ] PR description explains *why* the change is needed, not just *what* it does
 

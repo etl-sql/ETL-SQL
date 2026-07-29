@@ -98,6 +98,15 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Third-party inventory drift"; Command = "node scripts/generate-third-party-inventory.js --check"; Reason = "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
+    if (-not $EffectiveSkipScale) {
+        $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+    }
+    if ($EffectiveIncludeStandardScale) {
+        $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline before the long test lanes heat the machine." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+        $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
+    }
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
     $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine"; Reason = "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane." })
@@ -123,19 +132,8 @@ function Get-PlannedPreReleasePhases {
         $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
     }
 
-    if (-not $EffectiveSkipScale) {
-        $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
-    }
-
     if ($EffectiveIncludeDockerIntegration) {
         $phases.Add([ordered]@{ Phase = "Docker integration lane"; Command = ".\scripts\test-lane.ps1 -Lane integration"; Reason = "External connector boundaries pass against local containers." })
-    }
-
-    if ($EffectiveIncludeStandardScale) {
-        $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
-        $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
     }
 
     if ($EffectiveBuildInstallers) {
@@ -391,6 +389,77 @@ function Save-State {
     $state | ConvertTo-Json -Depth 8 | Set-Content -Path $StatePath -Encoding UTF8
 }
 
+function Get-PreReleasePhaseDependencies {
+    param([string]$Name)
+
+    switch ($Name) {
+        "Dotnet build" { return @("Dotnet restore") }
+        "Format verify" { return @("Dotnet restore") }
+        "Smoke lane" { return @("Dotnet build") }
+        "Fast lane" { return @("Dotnet build") }
+        "Engine lane" { return @("Dotnet build") }
+        "Portal lane" { return @("Dotnet build") }
+        "N->N+1 upgrade-path drill" { return @("Dotnet build") }
+        "SLT lane" { return @("Dotnet build") }
+        "Docker integration lane" { return @("Dotnet build") }
+        "Release publish artifacts" { return @("Dotnet build") }
+        "Windows MSI" { return @("Release publish artifacts") }
+        "VS Code npm audit" { return @("VS Code npm ci", "VS Code UI npm ci") }
+        "VS Code compile" { return @("VS Code npm ci") }
+        "VS Code lint" { return @("VS Code npm ci") }
+        "VS Code VSIX package" { return @("VS Code npm ci", "VS Code compile") }
+        "VS Code unit tests" { return @("VS Code npm ci", "VS Code compile") }
+        "VS Code UI lint" { return @("VS Code UI npm ci") }
+        "VS Code UI build" { return @("VS Code UI npm ci") }
+        "VS Code UI unit tests" { return @("VS Code UI npm ci", "VS Code UI build") }
+        "Scale certification smoke" { return @("Dotnet build") }
+        "Cert baseline regression check (smoke)" { return @("Scale certification smoke") }
+        "Scale certification standard" { return @("Dotnet build") }
+        "Cert baseline regression check (standard)" { return @("Scale certification standard") }
+        "Spill allocation budget (10M)" { return @("Dotnet build") }
+        default { return @() }
+    }
+}
+
+function Get-FailedPreReleasePrerequisites {
+    param(
+        [string]$Name,
+        [System.Collections.Generic.List[object]]$Results
+    )
+
+    $failedDependencies = New-Object System.Collections.Generic.List[string]
+    foreach ($dependencyName in @(Get-PreReleasePhaseDependencies $Name)) {
+        $dependency = $Results | Where-Object { $_.name -eq $dependencyName } | Select-Object -Last 1
+        if (-not $dependency) {
+            continue
+        }
+
+        $isDependencySkip = $dependency.status -eq "Skipped" -and $dependency.note -like "Skipped because prerequisite phase*"
+        if ($dependency.status -eq "Failed" -or $isDependencySkip) {
+            $failedDependencies.Add($dependencyName)
+        }
+    }
+
+    return $failedDependencies.ToArray()
+}
+
+function Write-PreReleaseFailureSummary {
+    param([array]$Failures)
+
+    if (-not $Failures -or $Failures.Count -eq 0) {
+        return
+    }
+
+    Write-Host ""
+    Write-Host "Failed phases:" -ForegroundColor Red
+    foreach ($failure in $Failures) {
+        Write-Host ("  - {0}: {1}" -f $failure.name, $failure.note) -ForegroundColor Red
+        if ($failure.log) {
+            Write-Host ("    Log: {0}" -f $failure.log) -ForegroundColor Yellow
+        }
+    }
+}
+
 function Invoke-LoggedPhase {
     param(
         [string]$Name,
@@ -419,6 +488,28 @@ function Invoke-LoggedPhase {
             Write-Host "SKIP $Name" -ForegroundColor DarkGray
             return
         }
+    }
+
+    $failedDependencies = @(Get-FailedPreReleasePrerequisites -Name $Name -Results $Results)
+    if ($failedDependencies.Count -gt 0) {
+        $phaseLog = Join-Path $RunDir (($Name -replace '[^A-Za-z0-9_.-]', '_') + ".log")
+        $note = "Skipped because prerequisite phase(s) failed: $($failedDependencies -join ', ')."
+        $note | Set-Content -Path $phaseLog -Encoding UTF8
+
+        $Results.Add([ordered]@{
+            name = $Name
+            command = $Command
+            status = "Skipped"
+            elapsedSeconds = 0
+            log = $phaseLog
+            artifacts = @($Artifacts)
+            note = $note
+        })
+
+        $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
+        Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
+        Write-Host "SKIP $Name - $note" -ForegroundColor DarkGray
+        return
     }
 
     Write-Host ""
@@ -536,11 +627,16 @@ function Write-Reports {
     }
     $lines.Add("")
     if ($Status -ne "Passed") {
-        $lastFailure = $Results | Where-Object { $_.status -eq "Failed" } | Select-Object -Last 1
-        if ($lastFailure) {
-            $lines.Add("Last failure: **$($lastFailure.name)**")
+        $failures = @($Results | Where-Object { $_.status -eq "Failed" })
+        if ($failures.Count -gt 0) {
+            $lines.Add("## Failed phases")
             $lines.Add("")
-            $lines.Add($lastFailure.note)
+            foreach ($failure in $failures) {
+                $lines.Add(('- **{0}** - {1}' -f $failure.name, $failure.note))
+                if ($failure.log) {
+                    $lines.Add(('  Log: `{0}`' -f $failure.log))
+                }
+            }
         }
     }
 
@@ -701,10 +797,42 @@ try {
                 if ($LASTEXITCODE -ne 0) {
                     throw "dotnet format failed to apply fixes (exit $LASTEXITCODE)."
                 }
-                throw "Formatting drift was found and automatically fixed in the working tree. Review and commit the reformatted files, then re-run (use -Resume)."
+                throw "Formatting drift was found and automatically fixed in the working tree. Review and commit the reformatted files, then re-run without -Resume."
             }
         } `
         $previousPhaseMap $fingerprint $results
+
+    if (-not $EffectiveSkipScale) {
+        Invoke-LoggedPhase "Scale certification smoke" `
+            ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
+            $previousPhaseMap $fingerprint $results
+
+        $smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
+        Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
+            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $smokeBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $smokeBaselineReport } `
+            $previousPhaseMap $fingerprint $results @($smokeBaselineReport)
+    }
+
+    if ($EffectiveIncludeStandardScale) {
+        Invoke-LoggedPhase "Scale certification standard" `
+            ".\scripts\Test-ScaleCertification.ps1 -Tier Standard" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
+            $previousPhaseMap $fingerprint $results
+
+        $standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
+        Invoke-LoggedPhase "Cert baseline regression check (standard)" `
+            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $standardBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $standardBaselineReport } `
+            $previousPhaseMap $fingerprint $results @($standardBaselineReport)
+
+        # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.
+        Invoke-LoggedPhase "Spill allocation budget (10M)" `
+            ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-SpillAllocProfile.ps1" "-Rows" "10000000" "-SkipBuild" } `
+            $previousPhaseMap $fingerprint $results
+    }
 
     Invoke-LoggedPhase "Smoke lane" `
         ".\scripts\test-lane.ps1 -Lane smoke -Configuration $Configuration -NoRestore -NoBuild" `
@@ -853,42 +981,10 @@ try {
             $previousPhaseMap $fingerprint $results
     }
 
-    if (-not $EffectiveSkipScale) {
-        Invoke-LoggedPhase "Scale certification smoke" `
-            ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
-            $previousPhaseMap $fingerprint $results
-
-        $smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
-        Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
-            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $smokeBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $smokeBaselineReport } `
-            $previousPhaseMap $fingerprint $results @($smokeBaselineReport)
-    }
-
     if ($EffectiveIncludeDockerIntegration) {
         Invoke-LoggedPhase "Docker integration lane" `
             ".\scripts\test-lane.ps1 -Lane integration -Configuration $Configuration -NoRestore -NoBuild" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "integration" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
-            $previousPhaseMap $fingerprint $results
-    }
-
-    if ($EffectiveIncludeStandardScale) {
-        Invoke-LoggedPhase "Scale certification standard" `
-            ".\scripts\Test-ScaleCertification.ps1 -Tier Standard" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
-            $previousPhaseMap $fingerprint $results
-
-        $standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
-        Invoke-LoggedPhase "Cert baseline regression check (standard)" `
-            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $standardBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $standardBaselineReport } `
-            $previousPhaseMap $fingerprint $results @($standardBaselineReport)
-
-        # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.
-        Invoke-LoggedPhase "Spill allocation budget (10M)" `
-            ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-SpillAllocProfile.ps1" "-Rows" "10000000" "-SkipBuild" } `
             $previousPhaseMap $fingerprint $results
     }
 

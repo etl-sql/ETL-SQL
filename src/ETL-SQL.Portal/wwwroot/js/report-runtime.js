@@ -4052,11 +4052,13 @@
                 let rowsStr = '';
                 if (node.rowsProcessed != null) rowsStr = `(${escHtml(node.rowsProcessed)} rows)`;
 
+                const status = node.status || 'Completed';
+                const statusClass = cssClassToken(status, 'completed');
                 content.innerHTML = `
                     <span class="tree-icon" style="color:#888">${iconStr}</span>
                     <span class="node-name">${escHtml(node.name || 'Unnamed')}</span>
                     <span class="node-meta">
-                        <span class="status-${escHtml(node.status || 'Completed')}">${escHtml(node.status || 'Completed')}</span>
+                        <span class="status-${statusClass}">${escHtml(status)}</span>
                         ${timeStr} ${rowsStr}
                     </span>
                 `;
@@ -4097,7 +4099,7 @@
                 entry.className = 'log-entry';
 
                 const time = new Date(msg.timestamp).toLocaleTimeString();
-                const colorClass = msg.color ? `log-${escHtml(msg.color)}` : 'log-white';
+                const colorClass = `log-${cssClassToken(msg.color, 'white')}`;
 
                 entry.innerHTML = `
                     <span class="log-time">[${time}]</span>
@@ -4606,6 +4608,15 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function cssClassToken(value, fallback) {
+        const token = String(value == null ? '' : value)
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        return token || fallback;
     }
 
     function parseHexColor(hex) {

@@ -404,14 +404,13 @@ are deleted with the user.
 | POST | `/api/admin/groups/{id}/members` | Admin | Add member |
 | DELETE | `/api/admin/groups/{id}/members/{userId}` | Admin | Remove member |
 
-### Admin — SMTP
+### Admin — Shared Connections
 
 | Method | Path | Auth | Description |
 | :--- | :--- | :--- | :--- |
-| GET | `/api/admin/smtp` | Admin | List SMTP connections |
-| POST | `/api/admin/smtp` | Admin | Create SMTP connection |
-| PUT | `/api/admin/smtp/{id}` | Admin | Update SMTP connection |
-| DELETE | `/api/admin/smtp/{id}` | Admin | Delete SMTP connection |
+| GET | `/api/admin/connections` | Admin | List governed shared connections |
+| PUT | `/api/admin/connections/{alias}` | Admin | Create or update a governed shared connection |
+| DELETE | `/api/admin/connections/{alias}` | Admin | Delete a governed shared connection |
 
 ### Admin — Audit
 

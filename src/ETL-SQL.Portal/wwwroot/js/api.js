@@ -451,9 +451,6 @@ export const adminApi = {
         apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}`),
     operationalMetrics: () => apiJson('/api/admin/metrics/operational'),
 
-    // smtp
-    listSmtp: () => apiJson('/api/admin/smtp'),
-
     // subscriptions (admin sees all)
     listAllSubscriptions: () => apiJson('/api/subscriptions'),
     subscriptionCatalog: (query = '') => apiJson(`/api/admin/subscriptions/catalog${query ? `?${query}` : ''}`),

@@ -69,6 +69,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`compare-capacity-results.mjs`](./compare-capacity-results.mjs)** | Node.js | Cross-platform | Compares two service-capacity reports for p95 latency, throughput, and error-rate regressions. |
 | **[`test-service-capacity-smoke.mjs`](./test-service-capacity-smoke.mjs)** | Node.js | Cross-platform | Runs the capacity harness against local mock endpoints to verify report generation without deployed services. |
 | **[`Test-PreRelease.ps1`](./Test-PreRelease.ps1)** / **[`test-pre-release.sh`](./test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
+| **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles `changelog.d/*.md` fragments into `CHANGELOG.md` and fails the release gate when feature-surface changes have no changelog coverage. |
 | **[`Test-VulnerablePackages.ps1`](./Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](./sync-assets.ps1)** / **[`sync-assets.js`](./sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
 | **[`generate-syntax-index.js`](./generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |
@@ -86,6 +87,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`Invoke-Release.ps1`](./Invoke-Release.ps1)** / **[`invoke-release.sh`](./invoke-release.sh)** | PowerShell / Bash | Cross-platform | Mechanical release driver: lands `main`, tags, sets curated release notes, and drives the tag-to-publish steps. Run with `-DryRun` first; `-Force` continues a partial release. |
 | **[`generate-sbom.js`](./generate-sbom.js)** | JavaScript | Cross-platform | Emits the CycloneDX `sbom.json` published with each release. Called by the release pipeline. |
 | **[`scan-secrets.js`](./scan-secrets.js)** | JavaScript | Cross-platform | Dependency-free pre-release secret scan over the tree. Called by the release pipeline. |
+| **[`pre-commit`](./pre-commit)** | POSIX shell | Cross-platform via Git | Optional Git hook enabled with `git config core.hooksPath scripts`; formats staged C# files and refuses partially staged C# files with unstaged edits. |
 
 ### Certification and performance gates
 

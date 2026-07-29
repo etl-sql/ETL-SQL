@@ -2,7 +2,7 @@
 
 ## 7. SMTP Connections
 
-SMTP connections are named credentials used by subscriptions to send email. Open **Admin → SMTP**.
+SMTP connections are named governed connection-catalog entries used by subscriptions to send email. Open **Admin → Connections** and choose connector type `SMTP`.
 
 ### 7.1 Creating a Connection
 
@@ -12,7 +12,7 @@ SMTP connections are named credentials used by subscriptions to send email. Open
 | **Host** | SMTP server hostname |
 | **Port** | Typically `587` (STARTTLS) or `465` (SSL) |
 | **Username** | Login for the SMTP server |
-| **Password** | Stored encrypted via .NET Data Protection API — never stored in plaintext |
+| **Password** | `SECRET:name` reference into the portal secret store |
 | **From Address** | The `From:` address on outgoing emails |
 | **Use SSL** | Whether to use SSL/TLS |
 
@@ -41,7 +41,7 @@ EXECUTE portal BEGIN
         DEFAULT_FROM = 'reports@corp.example',
         USE_SSL      = TRUE
     );
-    SHOW SMTP CONNECTIONS;                 -- credential references are masked
+    SHOW CONNECTIONS;                      -- filter for SMTP aliases in eng.connections when needed
     DROP CONNECTION IF EXISTS corporate;
 END;
 ```
@@ -78,7 +78,7 @@ Subscriptions are owned by individual users but visible and manageable by Admins
 
 Subscription jobs are handed to the **ETL-SQL Orchestrator** for scheduling. If the Orchestrator is not reachable, subscriptions are created in the database but jobs will not fire until the Orchestrator comes online.
 
-The scheduled job itself is a **credential-free trigger**: the generated `.etlsql` script contains only the subscription ID — no SMTP credentials, recipients, or report parameters. When the trigger completes, the portal's trusted delivery executor re-checks the subscription owner's active state and current report permission, exports the report, and sends the email in-process. The SMTP credential is decrypted only for the duration of that delivery and is never written to disk. On startup the portal also rewrites any pre-upgrade subscription script that embedded credentials to the trigger form and removes generated scripts whose subscription no longer exists.
+The scheduled job itself is a **credential-free trigger**: the generated `.etlsql` script contains only the subscription ID — no SMTP credentials, recipients, or report parameters. When the trigger completes, the portal's trusted delivery executor re-checks the subscription owner's active state and current report permission, exports the report, and sends the email in-process. The generated delivery script carries the `SECRET:name` reference and the engine resolves it when opening the SMTP connector. On startup the portal also rewrites any pre-upgrade subscription script that embedded credentials to the trigger form and removes generated scripts whose subscription no longer exists.
 
 Because delivery happens in the portal, the **portal process must be running** for subscription email to be sent — the Orchestrator alone only fires the trigger.
 
@@ -251,4 +251,3 @@ DROP SUBSCRIPTION <id>;
 ```
 
 ---
-

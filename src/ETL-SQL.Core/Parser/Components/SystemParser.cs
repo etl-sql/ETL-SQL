@@ -663,9 +663,9 @@ public class SystemParser : ParserComponent
         }
         else if (Match(TokenType.SMTP))
         {
-            if (!Match(TokenType.CONNECTION) && !Match(TokenType.CONNECTIONS))
-                throw new SyntaxException("Expected CONNECTIONS after SHOW SMTP", _parser.Current.Line, _parser.Current.Column);
-            stmt = new ShowPortalSmtpConnectionsStatement();
+            if (Match(TokenType.CONNECTION) || Match(TokenType.CONNECTIONS))
+                throw new SyntaxException("SHOW SMTP CONNECTIONS is retired. Use SHOW CONNECTIONS or SELECT from eng.connections and filter connector_type = 'SMTP'.", startToken.Line, startToken.Column);
+            throw new SyntaxException("Expected CONNECTIONS after SHOW SMTP", _parser.Current.Line, _parser.Current.Column);
         }
         else if (MatchIdentifier("RECENT"))
         {
@@ -800,7 +800,6 @@ public class SystemParser : ParserComponent
                 ShowPortalOperationalMetricsStatement spom => spom with { IntoTable = tempTable },
                 ShowPortalAuditStatement spaudit => spaudit with { IntoTable = tempTable },
                 ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
-                ShowPortalSmtpConnectionsStatement ssmtp => ssmtp with { IntoTable = tempTable },
                 LineageStatement lin => lin with { IntoTable = tempTable },
                 ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
                 ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },

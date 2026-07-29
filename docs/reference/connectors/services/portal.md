@@ -3,7 +3,7 @@
 Admin service connector for an ETL-SQL Portal service. Does not transfer data — statements inside an
 `EXECUTE portal BEGIN ... END` block are dispatched to the Portal's REST API for scripted
 administration: user/group management, folder ACLs, report publishing, dataset refresh, snapshots,
-SMTP connections, and more.
+shared connections, and more.
 
 ## Options
 
@@ -50,7 +50,7 @@ EXECUTE portal BEGIN
     CREATE CONNECTION corporate AS SMTP(
         HOST = 'smtp.corp.example', USERNAME = 'mailer',
         PASSWORD = 'SECRET:corporate_smtp_password', DEFAULT_FROM = 'reports@corp.example');
-    SHOW SMTP CONNECTIONS;   -- credential references are masked
+    SHOW CONNECTIONS;   -- filter for SMTP aliases in eng.connections when needed
 
     -- Discovery
     SHOW USERS;

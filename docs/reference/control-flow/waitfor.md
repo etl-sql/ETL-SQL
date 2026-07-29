@@ -7,12 +7,14 @@ Suspends script execution for a duration, until a specific time, or until a cond
 WAITFOR DELAY 'hh:mm:ss';
 WAITFOR TIME  'hh:mm:ss';
 WAITFOR (condition);
+WAIT UNTIL condition;
 ```
 
 ## Forms
 - **DELAY** — wait for the specified duration (hours:minutes:seconds)
 - **TIME** — wait until the wall-clock reaches the given time today
 - **(condition)** — poll the expression/subquery at 200ms intervals until it returns a truthy value
+- **WAIT UNTIL** — preferred alias for condition polling
 
 ## Examples
 ```sql
@@ -24,6 +26,9 @@ WAITFOR TIME '00:00:00';
 
 -- Poll until a table has data
 WAITFOR (SELECT COUNT(*) FROM dbo.Incoming) > 0;
+
+-- Preferred condition-polling spelling
+WAIT UNTIL (SELECT COUNT(*) FROM #Incoming) > 0;
 ```
 
 > [!NOTE]
@@ -31,3 +36,4 @@ WAITFOR (SELECT COUNT(*) FROM dbo.Incoming) > 0;
 
 References:
 - [Control Flow](README.md)
+- [WAIT UNTIL](wait-until.md)

@@ -162,15 +162,14 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void ShowSmtpConnections_StillParses()
+        public void ShowSmtpConnections_IsRejectedWithItsReplacement()
         {
-            var show = TestHelpers.Parse("SHOW SMTP CONNECTIONS;");
-            var showStmt = Assert.IsType<ShowPortalSmtpConnectionsStatement>(Assert.Single(show.Statements));
-            Assert.Null(showStmt.IntoTable);
+            var script = TestHelpers.Parse("SHOW SMTP CONNECTIONS;");
 
-            var showInto = TestHelpers.Parse("SHOW SMTP CONNECTIONS INTO #smtp;");
-            var showIntoStmt = Assert.IsType<ShowPortalSmtpConnectionsStatement>(Assert.Single(showInto.Statements));
-            Assert.Equal("#smtp", showIntoStmt.IntoTable);
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains("SHOW CONNECTIONS", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
 
         [Fact]
