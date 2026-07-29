@@ -4042,10 +4042,10 @@
                 const iconStr = hasChildren ? '&#x25BC;' : '&nbsp;';
 
                 let timeStr = '';
-                if (node.durationMs != null) timeStr = `[${node.durationMs}ms]`;
+                if (node.durationMs != null) timeStr = `[${escHtml(node.durationMs)}ms]`;
 
                 let rowsStr = '';
-                if (node.rowsProcessed != null) rowsStr = `(${node.rowsProcessed} rows)`;
+                if (node.rowsProcessed != null) rowsStr = `(${escHtml(node.rowsProcessed)} rows)`;
 
                 content.innerHTML = `
                     <span class="tree-icon" style="color:#888">${iconStr}</span>

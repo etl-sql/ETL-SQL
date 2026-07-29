@@ -224,6 +224,24 @@ function Add-Issue {
     }
 }
 
+function Get-MetricSpread {
+    param(
+        [object]$Scenario,
+        [string]$MetricName
+    )
+
+    $distName = "${MetricName}Distribution"
+    $dist = Get-PropValue $Scenario @($distName)
+    if ($null -eq $dist) { return 0.0 }
+
+    $max = Convert-ToDoubleOrNull (Get-PropValue $dist @('max'))
+    $min = Convert-ToDoubleOrNull (Get-PropValue $dist @('min'))
+    if ($null -ne $max -and $null -ne $min) {
+        return [math]::Max(0.0, $max - $min)
+    }
+    return 0.0
+}
+
 function Compare-HigherIsWorse {
     param(
         [string]$Scenario,
@@ -233,18 +251,28 @@ function Compare-HigherIsWorse {
         [double]$WarnPct,
         [double]$FailPct,
         [bool]$SuppressFailure,
-        [string]$Unit = ""
+        [string]$Unit = "",
+        [double]$Spread = 0.0
     )
 
     if ($BaselineValue -le 0) { return }
 
-    $delta = [math]::Round((($CurrentValue - $BaselineValue) / $BaselineValue) * 100.0, 1)
+    $absChange = $CurrentValue - $BaselineValue
+    $delta = [math]::Round(($absChange / $BaselineValue) * 100.0, 1)
+
+    # Treat delta smaller than spread as no result
+    if ($absChange -gt 0 -and $absChange -le $Spread) {
+        return
+    }
+
+    $spreadText = if ($Spread -gt 0) { " (Spread: {0:N1}$Unit)" -f $Spread } else { "" }
+
     if ($delta -gt $FailPct) {
         $level = if ($SuppressFailure) { 'WARN' } else { 'FAIL' }
-        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%." }
+        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%.$spreadText" }
         Add-Issue $level $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta $note
     } elseif ($delta -gt $WarnPct) {
-        Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%."
+        Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%.$spreadText"
     }
 }
 
@@ -257,18 +285,28 @@ function Compare-LowerIsWorse {
         [double]$WarnPct,
         [double]$FailPct,
         [bool]$SuppressFailure,
-        [string]$Unit = ""
+        [string]$Unit = "",
+        [double]$Spread = 0.0
     )
 
     if ($BaselineValue -le 0) { return }
 
-    $delta = [math]::Round((($BaselineValue - $CurrentValue) / $BaselineValue) * 100.0, 1)
+    $absChange = $BaselineValue - $CurrentValue
+    $delta = [math]::Round(($absChange / $BaselineValue) * 100.0, 1)
+
+    # Treat delta smaller than spread as no result
+    if ($absChange -gt 0 -and $absChange -le $Spread) {
+        return
+    }
+
+    $spreadText = if ($Spread -gt 0) { " (Spread: {0:N1}$Unit)" -f $Spread } else { "" }
+
     if ($delta -gt $FailPct) {
         $level = if ($SuppressFailure) { 'WARN' } else { 'FAIL' }
-        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%." }
+        $note = if ($SuppressFailure) { 'Performance failure suppressed because baseline hardware differs.' } else { "Failure band $FailPct%.$spreadText" }
         Add-Issue $level $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta $note
     } elseif ($delta -gt $WarnPct) {
-        Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%."
+        Add-Issue 'WARN' $Scenario $Kind ("$BaselineValue$Unit") ("$CurrentValue$Unit") $delta "Warning band $WarnPct%.$spreadText"
     }
 }
 
@@ -395,6 +433,15 @@ if ((Get-PropValue $base @('tier')) -ne $tier) {
     exit 0
 }
 
+# Refuse single-sample reports
+foreach ($scenario in @($new.scenarios)) {
+    $currentSamples = Convert-ToDoubleOrNull (Get-PropValue $scenario @('samples'))
+    if ($null -ne $currentSamples -and [int]$currentSamples -eq 1) {
+        Write-Error "Current run has scenarios with only 1 sample (e.g., '$(Get-ScenarioName $scenario)'). Single-sample runs are refused for regression decisions to prevent false alerts."
+        exit 1
+    }
+}
+
 $issues = @()
 $hardwareMismatch = Test-HardwareMismatch $base $new
 Test-ReportMetadata $base $new
@@ -457,31 +504,40 @@ foreach ($scenario in @($new.scenarios)) {
     $baselineElapsed = Get-MetricValue $baselineScenario @('elapsedMs') @('median', 'p50', 'value')
     $currentElapsed = Get-MetricValue $scenario @('elapsedMs') @('median', 'p50', 'value')
     if ($null -ne $baselineElapsed -and $null -ne $currentElapsed) {
-        Compare-HigherIsWorse $name 'ELAPSED_MS' $baselineElapsed $currentElapsed $bands.WarnPct $bands.FailPct $suppressPerformanceFailures ' ms'
+        $spread = Get-MetricSpread $baselineScenario 'elapsedMs'
+        Compare-HigherIsWorse $name 'ELAPSED_MS' $baselineElapsed $currentElapsed $bands.WarnPct $bands.FailPct $suppressPerformanceFailures ' ms' $spread
     }
 
     $baselineRowsPerSecond = Get-MetricValue $baselineScenario @('rowsPerSecond') @('median', 'p50', 'value')
     $currentRowsPerSecond = Get-MetricValue $scenario @('rowsPerSecond') @('median', 'p50', 'value')
     if ($null -ne $baselineRowsPerSecond -and $null -ne $currentRowsPerSecond) {
-        Compare-LowerIsWorse $name 'ROWS_PER_SECOND' $baselineRowsPerSecond $currentRowsPerSecond $bands.WarnPct $bands.FailPct $suppressPerformanceFailures ' rows/s'
+        $spread = Get-MetricSpread $baselineScenario 'rowsPerSecond'
+        Compare-LowerIsWorse $name 'ROWS_PER_SECOND' $baselineRowsPerSecond $currentRowsPerSecond $bands.WarnPct $bands.FailPct $suppressPerformanceFailures ' rows/s' $spread
     }
 
     $baselinePeak = Get-MetricValue $baselineScenario @('peakWorkingSetMB', 'peakProcessWorkingSetMB') @('max', 'median', 'value')
     $currentPeak = Get-MetricValue $scenario @('peakWorkingSetMB', 'peakProcessWorkingSetMB') @('max', 'median', 'value')
     if ($null -ne $baselinePeak -and $null -ne $currentPeak) {
-        Compare-HigherIsWorse $name 'PEAK_WORKING_SET_MB' $baselinePeak $currentPeak 10.0 15.0 $suppressPerformanceFailures ' MB'
+        $spread = Get-MetricSpread $baselineScenario 'peakProcessWorkingSetMB'
+        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'peakWorkingSetMB' }
+        Compare-HigherIsWorse $name 'PEAK_WORKING_SET_MB' $baselinePeak $currentPeak 10.0 15.0 $suppressPerformanceFailures ' MB' $spread
     }
 
     $baselineSpill = Get-MetricValue $baselineScenario @('totalSpilledBytes', 'spilledBytes', 'spillWriteBytes') @('median', 'max', 'value')
     $currentSpill = Get-MetricValue $scenario @('totalSpilledBytes', 'spilledBytes', 'spillWriteBytes') @('median', 'max', 'value')
     if ($null -ne $baselineSpill -and $null -ne $currentSpill) {
-        Compare-HigherIsWorse $name 'SPILLED_BYTES' $baselineSpill $currentSpill 25.0 50.0 $suppressPerformanceFailures ' bytes'
+        $spread = Get-MetricSpread $baselineScenario 'totalSpilledBytes'
+        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'spilledBytes' }
+        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'spillWriteBytes' }
+        Compare-HigherIsWorse $name 'SPILLED_BYTES' $baselineSpill $currentSpill 25.0 50.0 $suppressPerformanceFailures ' bytes' $spread
     }
 
     $baselineGc = Get-MetricValue $baselineScenario @('gcPauseMs', 'gcPause') @('median', 'max', 'value')
     $currentGc = Get-MetricValue $scenario @('gcPauseMs', 'gcPause') @('median', 'max', 'value')
     if ($null -ne $baselineGc -and $null -ne $currentGc) {
-        Compare-HigherIsWorse $name 'GC_PAUSE_MS' $baselineGc $currentGc 20.0 35.0 $suppressPerformanceFailures ' ms'
+        $spread = Get-MetricSpread $baselineScenario 'gcPauseMs'
+        if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'gcPause' }
+        Compare-HigherIsWorse $name 'GC_PAUSE_MS' $baselineGc $currentGc 20.0 35.0 $suppressPerformanceFailures ' ms' $spread
     }
 }
 

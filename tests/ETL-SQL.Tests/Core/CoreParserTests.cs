@@ -173,6 +173,16 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
+        public void ExportTable_RejectsDirectExportSyntax()
+        {
+            var source = "EXPORT #orders TO 'output/orders.csv';";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Contains("Expected REPORT after EXPORT", diagnostic.Message);
+        }
+
+        [Fact]
         public void TestParseExpressionPrecedence()
         {
             var source = "PRINT 1 + 2 * 3;";

@@ -687,6 +687,7 @@ Generated scripts, samples, snippets, formatter output, autocomplete, hover help
 messages must emit only the canonical forms. If a short migration window is retained, every alias
 must produce a deprecation diagnostic with an exact replacement and a declared removal release;
 do not describe both forms as equally canonical.
+[ ] **WAIT UNTIL needs documentation**  No /docs/reference document exists for WAIT UNTIL
 
 #### P2 — Restore parser/formatter/documentation round-trip guarantees
 
@@ -907,9 +908,9 @@ anywhere in `release.yml`, so neither can affect a tag-triggered build or publis
 during the release would have changed the tag candidate and forced another full CI cycle for no
 release benefit.
 
-- [ ] Merge **#21** — `actions/setup-dotnet` 5 → 6 (`ci.yml:163`)
-- [ ] Merge **#22** — `actions/upload-artifact` 6 → 7 (`ci.yml:176`)
-- [ ] Re-check the pin inventory afterwards: `grep -rhoE "uses: actions/[a-z-]+@v[0-9]+"
+- [x] Merge **#21** — `actions/setup-dotnet` 5 → 6 (`ci.yml:163`)
+- [x] Merge **#22** — `actions/upload-artifact` 6 → 7 (`ci.yml:176`)
+- [x] Re-check the pin inventory afterwards: `grep -rhoE "uses: actions/[a-z-]+@v[0-9]+"
       .github/workflows/*.yml | sort | uniq -c`
 
 Contrast with `actions/attest-build-provenance`, which **was** merged into v0.17.0 (v2 → v4): it
@@ -972,17 +973,17 @@ The fix is to make the apparatus trustworthy, not to chase the numbers:
       v0.17.0. Removes most of the effect on its own.
 - [x] **Default a full-tier run to 3 samples** (previously 1 for Smoke) — done in v0.17.0. Warm-up
       alone was not sufficient: Smoke still failed on a single sample, and passed at 3.
-- [ ] **Refuse single-sample reports for regression decisions** in `Compare-CertBaseline.ps1`. The
+- [x] **Refuse single-sample reports for regression decisions** in `Compare-CertBaseline.ps1`. The
       producer now defaults to 3, but the consumer should reject `samples == 1` outright rather than
       trusting its input — one sample read 717 ms where five read 888 ms on identical code.
-- [ ] **Report the within-arm spread alongside every delta**, and treat a delta smaller than the
+- [x] **Report the within-arm spread alongside every delta**, and treat a delta smaller than the
       spread as no result. Noise floor is ~2% with warm-up and ~56% without.
 - [ ] **Run scale certification before the long test lanes**, or quiesce the machine first. Running
       it last guarantees the worst measurement conditions in the gate.
 - [ ] **Add a same-worktree A/B mode** for comparing two commits, so version comparisons cannot be
       contaminated by comparing two directories in different thermal states — the exact error that
       produced the v0.17.0 false alarm.
-- [ ] **Emit `CONFIG_FINGERPRINT` and `COMMIT_METADATA`** in every certification run so comparisons
+- [x] **Emit `CONFIG_FINGERPRINT` and `COMMIT_METADATA`** in every certification run so comparisons
       can verify they are comparing like with like.
 - [x] Accept the `StreamingSelect` GC_PAUSE warning (+29%, warmed and reproducible) for v0.18.0 as
       the current cost of data-quality allocation. Warning only — elapsed and throughput are in
