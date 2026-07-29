@@ -24,12 +24,11 @@ product story suggests:
   alerts become available when the script runs through Orchestrator.
 - The single-node Orchestrator already uses local SQLite by default and persists job history,
   warning/quarantine totals, compact per-rule failure counts, and structured per-column metrics.
-- `SELECT * FROM eng.data_quality_rules` exposes the rules recorded by the current execution.
-- `SELECT * FROM eng.stewardship_gaps` audits required `@owner`, `@steward`, `@contact`,
-  `@classification`, and `@quality` metadata locally; `SELECT * FROM ProdOrch.eng.stewardship_gaps`
-  targets a remote Orchestrator or Portal connection.
-  `SELECT * FROM eng.protected_data` and `SELECT * FROM eng.protected_data_suggestions` provide
-  the corresponding protected-data inventory.
+- The `eng.*` catalog already exposes core runtime and orchestration metadata such as tags,
+  columns, connections, tables, jobs, job history, job state, host metrics, and bundles.
+- Data-quality rule, stewardship-gap, protected-data, and protected-data-suggestion catalog tables
+  are still future work. The roadmap below keeps those as the normalized read model to add rather
+  than treating current engine/session diagnostics as complete catalog surfaces.
 
 The gap is not a second data-quality engine. It is a coherent operator-facing read model between a
 single script's result and the full Portal governance workflow. A one-person shop should be able to
@@ -629,11 +628,12 @@ each affects day-to-day use.
    exists for humans reading run history; it already needed careful handling because rule text
    contains both `:` and `=` (a `MATCHES` regex). v2 records per-column run metrics — the trend
    should read those instead of parsing prose.
-3. **No rule visibility in the Portal.** `eng.data_quality_rules` is currently engine-session-only,
-   so a steward who lives in the Portal cannot see which rules protect which columns — the thing
-   they most need when a quarantine rate jumps. Wants a read-only endpoint plus a panel beside the
-   trend. Making `eng.data_quality_rules` queryable via `my_portal.eng.data_quality_rules` is the
-   fix once the `eng.*` virtual table layer is wired through the Portal API.
+3. **No rule visibility in the Portal.** Data-quality rule visibility is currently tied to
+   engine/session diagnostics, so a steward who lives in the Portal cannot see which rules protect
+   which columns — the thing they most need when a quarantine rate jumps. Wants a read-only endpoint
+   plus a panel beside the trend. Adding `eng.data_quality_rules`, then making it queryable via
+   `my_portal.eng.data_quality_rules`, is the fix once the `eng.*` virtual table layer is wired
+   through the Portal API.
 4. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
    new `ExecutionSession`. Acceptable at current volume; worth revisiting before any endpoint like
    this becomes a polled or dashboard-refreshed surface.
