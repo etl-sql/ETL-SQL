@@ -25,7 +25,7 @@ None of these can be inherited from v0.17.0 — evidence is per-release, against
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
 - [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
       and `evidence` before `validate` — see the RCI item below)
-- [ ] Security-boundary docs — `SecurityBoundaryDocTests` green
+- [x] Security-boundary docs — `SecurityBoundaryDocTests` green
 - [ ] Evidence indexed under `artifacts/release-evidence/0.18.0/`, recording what was **not**
       covered as well as what was
 
@@ -89,7 +89,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       can be misread as an object identity.
 - [ ] Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
       formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
-- [ ] Add negative tests for every unsupported object/mode pair in the lifecycle capability matrix.
+- [x] Add negative tests for every unsupported object/mode pair in the lifecycle capability matrix.
 
 #### P1 — Identity, type, and clause ordering
 
