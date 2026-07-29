@@ -112,7 +112,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Make publish commands identify the published object before the source:
       `PUBLISH REPORT 'name' FROM 'file.rptsql'`, `PUBLISH BUNDLE 'name' FROM 'folder'`, and
       `PUBLISH DATASET &name FROM 'file.parquet'`. Remove `PUBLISH DATASET FROM ... AS &name`.
-- [ ] Use `AS` consistently for typed objects and definition/property-bag report objects, including
+- [x] Use `AS` consistently for typed objects and definition/property-bag report objects, including
       forms such as `CREATE STYLE name AS (...)`.
 - [ ] Treat tags and lineage as metadata records, not unnamed DDL objects: add canonical
       `INSERT/UPDATE/DELETE TAG` and `INSERT/DELETE LINEAGE` forms, retire `CREATE TAG`,

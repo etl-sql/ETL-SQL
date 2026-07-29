@@ -410,26 +410,26 @@ ORDER BY Revenue DESC;
 -- Phase 2: Named Shared Styles
 -- ============================================================================
 
-CREATE STYLE CardGlass (
+CREATE STYLE CardGlass AS (
     BACKGROUND = 'rgba(255,255,255,0.08)',
     BORDER     = '1px solid rgba(255,255,255,0.18)',
     PADDING    = '20px',
     SHADOW     = ON
 );
 
-CREATE STYLE ChartPanel (
+CREATE STYLE ChartPanel AS (
     BACKGROUND = 'rgba(255,255,255,0.05)',
     PADDING    = '12px',
     SHADOW     = ON
 );
 
-CREATE STYLE FilterPanel (
+CREATE STYLE FilterPanel AS (
     BACKGROUND = 'rgba(124,58,237,0.12)',
     BORDER     = '1px solid rgba(124,58,237,0.35)',
     PADDING    = '14px'
 );
 
-CREATE STYLE AccentButton (
+CREATE STYLE AccentButton AS (
     BACKGROUND = '#7c3aed',
     COLOR      = '#ffffff',
     PADDING    = '10px 20px'

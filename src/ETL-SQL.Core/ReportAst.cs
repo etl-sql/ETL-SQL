@@ -253,7 +253,7 @@ public record TypedSeries : AstNode
     public new required string Column { get; init; }
 }
 
-/// <summary>CREATE STYLE <name> (key = value, ...)</summary>
+/// <summary>CREATE STYLE <name> AS (key = value, ...)</summary>
 public record CreateStyleStatement : Statement
 {
     public required string Name { get; init; }

@@ -840,7 +840,7 @@ UNION ALL SELECT 'West',  279000;
 
 -- ── Named styles ─────────────────────────────────────────────────────────
 -- Base dark theme applied to most visuals
-CREATE STYLE DarkTheme (
+CREATE STYLE DarkTheme AS (
   background-color = '#1e1e2e',
   color            = '#cdd6f4',
   border-radius    = '8px',
@@ -849,7 +849,7 @@ CREATE STYLE DarkTheme (
 );
 
 -- Accent for KPI cards that need emphasis
-CREATE STYLE KpiAccent (
+CREATE STYLE KpiAccent AS (
   background-color = '#313244',
   color            = '#89dceb',
   border           = '1px solid #45475a',
@@ -859,7 +859,7 @@ CREATE STYLE KpiAccent (
 );
 
 -- Subtle border for layout containers
-CREATE STYLE PanelFrame (
+CREATE STYLE PanelFrame AS (
   border        = '1px solid #45475a',
   border-radius = '6px',
   padding       = '8px'
@@ -942,7 +942,7 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ### Key Points
 
-- **`CREATE STYLE <name> (...)`** defines a reusable style block. Declare styles before the visuals that reference them.
+- **`CREATE STYLE <name> AS (...)`** defines a reusable style block. Declare styles before the visuals that reference them.
 - **`STYLE = <name>`** applies the named style as a base. All properties from the named style are inherited.
 - **`STYLE (...)`** on the same visual overrides specific properties; other properties from the named style are unchanged.
 - Both `STYLE = <name>` and an inline `STYLE (...)` block can appear on the same visual — the named style is the base and the inline block wins on any overlapping key.

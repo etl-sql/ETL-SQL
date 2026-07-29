@@ -624,7 +624,8 @@ public class ReportParser : ParserComponent
     public Statement ParseCreateStyle(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
     {
         var name = ConsumeIdentifier("Expected style name after CREATE STYLE").Value;
-        Consume(TokenType.LPAREN, "Expected '(' after style name");
+        Consume(TokenType.AS, "Expected AS after style name");
+        Consume(TokenType.LPAREN, "Expected '(' after AS");
         var styles = new Dictionary<string, string>();
         ParseStyleBody(styles);
         Consume(TokenType.RPAREN, "Expected ')' to close CREATE STYLE");

@@ -5,7 +5,7 @@ Defines a reusable visual theme that can be referenced by pages and visuals to a
 ## Syntax
 
 ```sql
-CREATE STYLE <name> (
+CREATE STYLE <name> AS (
   THEME      = 'light' | 'dark',
   BACKGROUND = '#rrggbb',
   FONT       = 'font-name',
@@ -23,7 +23,7 @@ Apply a named style with `STYLE = StyleName` on a visual, page, container, or bu
 ## Examples
 
 ```sql
-CREATE STYLE Corporate (
+CREATE STYLE Corporate AS (
   THEME      = 'light',
   BACKGROUND = '#f8f9fa',
   FONT       = 'Segoe UI',

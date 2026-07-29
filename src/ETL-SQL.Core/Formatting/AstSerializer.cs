@@ -1231,7 +1231,7 @@ public static class AstSerializer
     {
         if (s.StyleName != null)
             return $"STYLE = {s.StyleName};";
-        return $"{CreationVerb(s.Mode)} STYLE {s.Name} ({FormatStringAssignments(s.Styles)});";
+        return $"{CreationVerb(s.Mode)} STYLE {s.Name} AS ({FormatStringAssignments(s.Styles)});";
     }
 
     private static string FormatTooltip(TooltipDefinition tooltip)

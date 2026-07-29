@@ -313,7 +313,7 @@ CREATE PAGE Main AS DASHBOARD (
 SELECT 'North' AS Region, 100 AS Amount INTO #Sales;
 INSERT INTO #Sales (Region, Amount) VALUES ('South', -5);
 
-CREATE STYLE DarkPanel (
+CREATE STYLE DarkPanel AS (
     THEME = dark,
     COLOR = '#f8fafc',
     HEIGHT = '240px'
@@ -359,7 +359,7 @@ SET REPORT THEME = 'light';
 
 SELECT 'North' AS Region, 100 AS Amount INTO #Sales;
 
-CREATE STYLE PageDark (
+CREATE STYLE PageDark AS (
     THEME = dark,
     BACKGROUND = '#111827'
 );
@@ -635,7 +635,7 @@ SET REPORT THEME = 'dark';
 DECLARE @Region STRING INPUT = '';
 SELECT 'North' AS Region, 'Hardware' AS Category, 10 AS Sales INTO #Sales;
 INSERT INTO #Sales (Region, Category, Sales) VALUES ('South', 'Software', 20);
-CREATE STYLE Panel (THEME = dark, HEIGHT = '260px');
+CREATE STYLE Panel AS (THEME = dark, HEIGHT = '260px');
 CREATE VISUAL RegionFilter AS SLICER (
     SOURCE = (SELECT Region FROM #Sales),
     MAPPINGS (VALUE = Region),

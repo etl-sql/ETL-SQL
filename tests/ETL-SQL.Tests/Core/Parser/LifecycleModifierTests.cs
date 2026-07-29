@@ -105,7 +105,7 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("CREATE VISUAL IF NOT EXISTS V AS TABLE (SOURCE = (SELECT 1 AS id), MAPPINGS (id));")]
         [InlineData("CREATE PAGE IF NOT EXISTS P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));")]
         [InlineData("CREATE DATASET IF NOT EXISTS &sales AS (SELECT 1 AS id);")]
-        [InlineData("CREATE STYLE IF NOT EXISTS S (COLOR = 'red');")]
+        [InlineData("CREATE STYLE IF NOT EXISTS S AS (COLOR = 'red');")]
         [InlineData("CREATE CONTAINER IF NOT EXISTS C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));")]
         [InlineData("CREATE NAVIGATION IF NOT EXISTS N AS TAB (PAGES (P));")]
         [InlineData("CREATE BUTTON IF NOT EXISTS B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));")]
@@ -141,7 +141,7 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("CREATE OR REPLACE DATASET &sales AS (SELECT 1 AS id);", "CREATE OR REPLACE DATASET")]
         [InlineData("CREATE OR REPLACE CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));", "CREATE OR REPLACE CONTAINER")]
         [InlineData("CREATE OR REPLACE NAVIGATION N AS TAB (PAGES (P));", "CREATE OR REPLACE NAVIGATION")]
-        [InlineData("CREATE OR REPLACE STYLE S (COLOR = 'red');", "CREATE OR REPLACE STYLE")]
+        [InlineData("CREATE OR REPLACE STYLE S AS (COLOR = 'red');", "CREATE OR REPLACE STYLE")]
         [InlineData("CREATE OR REPLACE BUTTON B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));", "CREATE OR REPLACE BUTTON")]
         [InlineData("CREATE OR REPLACE TEMPLATE T AS (TYPE = 'table');", "CREATE OR REPLACE TEMPLATE")]
         [InlineData("CREATE OR REPLACE THEME Dark AS (BACKGROUND = '#000');", "CREATE OR REPLACE THEME")]
@@ -162,7 +162,7 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("CREATE OR ALTER DATASET &sales AS (SELECT 1 AS id);")]
         [InlineData("CREATE OR ALTER CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));")]
         [InlineData("CREATE OR ALTER NAVIGATION N AS TAB (PAGES (P));")]
-        [InlineData("CREATE OR ALTER STYLE S (COLOR = 'red');")]
+        [InlineData("CREATE OR ALTER STYLE S AS (COLOR = 'red');")]
         [InlineData("CREATE OR ALTER BUTTON B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));")]
         [InlineData("CREATE OR ALTER TEMPLATE T AS (TYPE = 'table');")]
         [InlineData("CREATE OR ALTER THEME Dark AS (BACKGROUND = '#000');")]
@@ -173,6 +173,17 @@ namespace ETL_SQL.Tests.Core.Parsing
 
             Assert.Empty(reparsed.Diagnostics);
             Assert.Equal(serialized, Assert.Single(reparsed.Statements).ToSql());
+        }
+
+        [Fact]
+        public void CreateStyle_WithoutAs_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE STYLE Panel (COLOR = 'red');");
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal("SYNTAX", diagnostic.Code);
+            Assert.Contains("Expected AS after style name", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
     }
 }
