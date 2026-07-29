@@ -441,7 +441,7 @@ public record ExportDatasetStatement : Statement
 }
 
 /// <summary>
-/// PUBLISH DATASET FROM '&lt;file&gt;' AS &amp;name [INTO '&lt;folder&gt;'] [ACCESS PUBLIC|PRIVATE]
+/// PUBLISH DATASET &amp;name FROM '&lt;file&gt;' [INTO '&lt;folder&gt;'] [ACCESS PUBLIC|PRIVATE]
 /// ENCRYPT = PASSWORD|KEYFILE [PASSWORD=… | KEYFILE=…] — imports a portable EXPORTed file into the
 /// portal: decrypts once with the supplied transport credential, then re-encrypts with the portal
 /// at-rest key and registers it. The published copy is at-rest-encrypted (not movable); the author

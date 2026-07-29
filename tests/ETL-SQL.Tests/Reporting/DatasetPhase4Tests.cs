@@ -7,6 +7,7 @@ using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
@@ -75,6 +76,40 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(DatasetAccessLevel.Public, ds.AccessLevel);
             Assert.Equal("1h", ds.Ttl);
             Assert.Equal(DatasetEncryptionMode.MachineBound, ds.EncryptionMode);
+        }
+
+        [Fact]
+        public void PublishDataset_CanonicalOrder_ParsesNameBeforeSource()
+        {
+            var script = Parse("PUBLISH DATASET &sales FROM 'sales.etlds' INTO '/Finance' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = 'p';");
+
+            var publish = Assert.IsType<PublishDatasetStatement>(Assert.Single(script.Statements));
+            Assert.Equal("&sales", publish.DatasetName);
+            Assert.Equal("sales.etlds", publish.SourcePath);
+            Assert.Equal("/Finance", publish.TargetFolder);
+            Assert.Equal(DatasetAccessLevel.Public, publish.AccessLevel);
+        }
+
+        [Fact]
+        public void PublishDataset_BareIdentifier_ReportsSyntaxError()
+        {
+            var script = Parse("PUBLISH DATASET sales FROM 'sales.etlds';");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
+        [Fact]
+        public void PublishDataset_RetiredFromAsOrder_ReportsSyntaxError()
+        {
+            var script = Parse("PUBLISH DATASET FROM 'sales.etlds' AS &sales;");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("has been retired", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
         }
 
         // ── UseBeforeCreateRule ───────────────────────────────────────────────────
@@ -532,7 +567,7 @@ namespace ETL_SQL.Tests.Reporting
                 await portalB.Evaluate(Parse(
                     "/* @owner: DataOps; @steward: steward@example.com; @contact: data@example.com; "
                     + "@classification: internal; @quality: gold */ "
-                    + $"PUBLISH DATASET FROM '{exportPath}' AS &imported INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
+                    + $"PUBLISH DATASET &imported FROM '{exportPath}' INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
                     "USE DATASET &imported; SELECT COUNT(*) AS n, SUM(v) AS s FROM &imported;"));
 
                 var row = portalB.LastResult!.Rows[0];
@@ -587,7 +622,7 @@ namespace ETL_SQL.Tests.Reporting
                 portalB.DatasetCallerContext = "UserId=2";
                 portalB.DatasetAtRestKey = atRestB;
                 await portalB.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{exportPath}' AS &secret_import INTO '/imports' " +
+                    $"PUBLISH DATASET &secret_import FROM '{exportPath}' INTO '/imports' " +
                     $"ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
 
                 foreach (var metadata in new[]
@@ -622,7 +657,7 @@ namespace ETL_SQL.Tests.Reporting
                 }
 
                 var wrong = await Assert.ThrowsAnyAsync<Exception>(() => portalB.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{exportPath}' AS &secret_failed INTO '/imports' " +
+                    $"PUBLISH DATASET &secret_failed FROM '{exportPath}' INTO '/imports' " +
                     $"ENCRYPT = PASSWORD PASSWORD = '{transport}-wrong';")));
                 Assert.DoesNotContain(transport, wrong.ToString(), StringComparison.Ordinal);
                 Assert.False(await registryB.Exists("&secret_failed"));
@@ -653,7 +688,7 @@ namespace ETL_SQL.Tests.Reporting
             eval.DatasetCallerContext = "IsAdmin=true";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
-                () => eval.Evaluate(Parse("PUBLISH DATASET FROM 'whatever.parquet' AS &taken ENCRYPT = PASSWORD PASSWORD = 'p';")));
+                () => eval.Evaluate(Parse("PUBLISH DATASET &taken FROM 'whatever.parquet' ENCRYPT = PASSWORD PASSWORD = 'p';")));
             Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -675,7 +710,7 @@ namespace ETL_SQL.Tests.Reporting
                 eval.DatasetCallerContext = "UserId=7";
 
                 var ex = await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{sourcePath.Replace('\\', '/')}' AS &denied INTO '/restricted' " +
+                    $"PUBLISH DATASET &denied FROM '{sourcePath.Replace('\\', '/')}' INTO '/restricted' " +
                     "ENCRYPT = PASSWORD PASSWORD = 'transport-secret';")));
 
                 Assert.Contains("Manage permission", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -704,7 +739,7 @@ namespace ETL_SQL.Tests.Reporting
                 eval.DatasetAtRestKey = "cG9ydGFsLWF0LXJlc3Qta2V5";
 
                 await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{sourcePath.Replace('\\', '/')}' AS &retryable INTO '/imports' " +
+                    $"PUBLISH DATASET &retryable FROM '{sourcePath.Replace('\\', '/')}' INTO '/imports' " +
                     "ENCRYPT = PASSWORD PASSWORD = 'wrong-password';")));
 
                 Assert.False(await registry.Exists("&retryable"));

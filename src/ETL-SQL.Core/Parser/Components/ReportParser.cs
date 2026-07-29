@@ -534,13 +534,18 @@ public class ReportParser : ParserComponent
 
     public Statement ParsePublishDataset(Token startToken)
     {
-        Consume(TokenType.FROM, "Expected FROM after PUBLISH DATASET");
-        var sourcePath = Consume(TokenType.STRING_LITERAL, "Expected source file path after FROM").Value;
+        if (ReportCheck(TokenType.FROM))
+            throw new SyntaxException(
+                "PUBLISH DATASET FROM ... AS &name has been retired. Use PUBLISH DATASET &name FROM 'file.parquet'.",
+                _parser.Current.Line,
+                _parser.Current.Column);
 
-        Consume(TokenType.AS, "Expected AS &datasetName after the source file");
-        var name = ConsumeIdentifier("Expected &datasetName after AS").Value;
+        var name = ConsumeIdentifier("Expected &datasetName after PUBLISH DATASET").Value;
         if (!name.StartsWith("&"))
             throw new SyntaxException("PUBLISH DATASET names must use the &dataset form", startToken.Line, startToken.Column);
+
+        Consume(TokenType.FROM, "Expected FROM after PUBLISH DATASET name");
+        var sourcePath = Consume(TokenType.STRING_LITERAL, "Expected source file path after FROM").Value;
 
         string? targetFolder = null;
         var accessLevel = ETL_SQL.Core.Data.DatasetAccessLevel.Private;

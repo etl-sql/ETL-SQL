@@ -12,9 +12,8 @@ EXPORT DATASET &sales_public
     ENCRYPT = PASSWORD
     PASSWORD = 'deck-password-change-me';
 
-PUBLISH DATASET
+PUBLISH DATASET &sales_public_password_copy
     FROM 'C:\ETL-SQL-Dataset-Deck\sales-public-password.parquet.enc'
-    AS &sales_public_password_copy
     INTO '/Dataset Deck/Imports'
     ACCESS PRIVATE
     ENCRYPT = PASSWORD
@@ -30,9 +29,8 @@ EXPORT DATASET &sales_public
     ENCRYPT = KEYFILE
     KEYFILE = 'C:\ETL-SQL\samples\10_Kitchen_Sinks\test_key\id_rsa.pub';
 
-PUBLISH DATASET
+PUBLISH DATASET &sales_public_keyfile_copy
     FROM 'C:\ETL-SQL-Dataset-Deck\sales-public-keyfile.parquet.enc'
-    AS &sales_public_keyfile_copy
     INTO '/Dataset Deck/Imports'
     ACCESS PRIVATE
     ENCRYPT = KEYFILE

@@ -11,7 +11,7 @@ using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
-/// Handles PUBLISH DATASET FROM '&lt;file&gt;' AS &amp;name [INTO '&lt;folder&gt;'] [ACCESS PUBLIC|PRIVATE]
+/// Handles PUBLISH DATASET &amp;name FROM '&lt;file&gt;' [INTO '&lt;folder&gt;'] [ACCESS PUBLIC|PRIVATE]
 /// ENCRYPT = PASSWORD|KEYFILE — imports a portable EXPORTed file into the portal: decrypts once with
 /// the supplied transport credential, re-encrypts with the portal at-rest key, and registers it.
 /// The published copy is at-rest-encrypted (not movable); the author keeps the original export file.

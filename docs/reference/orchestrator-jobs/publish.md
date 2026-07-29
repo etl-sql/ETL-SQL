@@ -8,17 +8,15 @@ FROM 'C:\ETL\bundle-folder'
 ENTRY 'main.etlsql'
 WITH (PASSWORD = 'publish-password', ENCRYPT = MACHINE);
 
-PUBLISH DATASET
+PUBLISH DATASET &sales_imported
 FROM 'C:\Transfer\sales.parquet'
-AS &sales_imported
 INTO '/Finance/Imported'
 ACCESS PRIVATE
 ENCRYPT = PASSWORD
 PASSWORD = 'transport-secret';
 
-PUBLISH DATASET
+PUBLISH DATASET &sales_imported
 FROM 'C:\Transfer\sales.parquet'
-AS &sales_imported
 INTO '/Finance/Imported'
 ACCESS PUBLIC
 ENCRYPT = KEYFILE

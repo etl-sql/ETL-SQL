@@ -95,6 +95,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 - [x] Enforce `&name` for local/report `DROP DATASET` and update parser/handler tests to reject
       bare or `#temp` dataset identities while preserving quoted Portal dataset drops.
+- [x] Make `PUBLISH DATASET` use canonical identity-first order:
+      `PUBLISH DATASET &name FROM 'file.parquet'`, reject retired `FROM ... AS &name`, and
+      update publish examples/tests.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.
