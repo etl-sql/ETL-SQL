@@ -117,6 +117,11 @@ public class StatementParser
                 _parser.Advance();
                 return PortalParser.ParseExportPortalConfiguration(t);
             }
+            if (_parser.Current.Type == TokenType.LINEAGE)
+            {
+                _parser.Advance();
+                return ExtensionParser.ParseExportLineage(t);
+            }
             if (_parser.Current.Type == TokenType.SCRIPT || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("SCRIPT", StringComparison.OrdinalIgnoreCase)))
             {
                 _parser.Advance();

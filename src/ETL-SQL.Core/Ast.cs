@@ -2625,7 +2625,7 @@ public sealed record DeleteTagStatement : Statement
 
 /// <summary>
 /// INSERT LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; imports lineage from an OpenLineage
-/// JSON document (file path or inline JSON string), mirroring SHOW LINEAGE EXPORT AS OPENLINEAGE.
+/// JSON document (file path or inline JSON string), mirroring EXPORT LINEAGE AS OPENLINEAGE.
 /// </summary>
 public sealed record CreateLineageStatement : Statement
 {

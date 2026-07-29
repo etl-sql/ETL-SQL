@@ -18,6 +18,19 @@ SHOW LINEAGE FOR #target_table COLUMN revenue;
 SHOW LINEAGE INTO #lineage;
 ```
 
+## Exporting Lineage
+
+`SHOW LINEAGE` returns rows or renders lineage for inspection. Use `EXPORT LINEAGE` for file-writing
+OpenLineage exports:
+
+```sql
+-- Export the full session lineage
+EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.jsonl';
+
+-- Export lineage for a specific target
+EXPORT LINEAGE FOR TABLE #target_table AS OPENLINEAGE TO 'exports/target.openlineage.jsonl';
+```
+
 ### Report Nodes
 
 `CREATE DATASET` and `CREATE VISUAL` statements are automatically tracked. Their nodes appear with distinct prefixes and rendering:

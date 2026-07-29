@@ -410,11 +410,11 @@ Each script run appends one event to a `.jsonl` file (one JSON object per line).
 **Mode 2 — HTTP endpoint**  
 POST each event to an OpenLineage-compatible API endpoint (Marquez, DataHub's OpenLineage receiver, Airflow's `lineage` API). Configured via `appsettings.json → Lineage:OpenLineageEndpoint`. Fire-and-forget with retry — a failed POST should warn but never block script execution.
 
-**Mode 3 — LINEAGE EXPORT AS OPENLINEAGE**  
-A new syntax option on the existing `LINEAGE` statement:
+**Mode 3 — EXPORT LINEAGE AS OPENLINEAGE**  
+A file-writing export statement:
 ```sql
-LINEAGE #target_table EXPORT AS OPENLINEAGE TO 'output.jsonl';
-LINEAGE EXPORT AS OPENLINEAGE TO 'full_run.jsonl';   -- entire session
+EXPORT LINEAGE FOR #target_table AS OPENLINEAGE TO 'output.jsonl';
+EXPORT LINEAGE AS OPENLINEAGE TO 'full_run.jsonl';   -- entire session
 ```
 
 ### Namespace Convention
@@ -552,7 +552,7 @@ Lineage is particularly vulnerable to silent regression — a change to the AST 
 |----------|-------|-------|
 | `docs/reference/statements/lineage.md` | Phase 1 | Standard tag catalog, usage guide, examples |
 | `Help/Operations/LINEAGE.md` | Phase 1 | Update with standard tags, transformation output |
-| `docs/guides/getting-started.md` | Phase 1, 3, 5 | Tag syntax, LINEAGE_TAGS, LINEAGE EXPORT syntax |
+| `docs/guides/getting-started.md` | Phase 1, 3, 5 | Tag syntax, LINEAGE_TAGS, EXPORT LINEAGE syntax |
 | `Docs/Architecture/Engine.md` | Phase 2 | Document TransformationKind, LineageAnalyzer changes |
 | `docs/cookbooks/report-recipes.md` | Phase 2, 4 | Lineage cookbook recipes |
 | OpenLineage integration guide | Phase 5 | How to connect ETL-SQL to Marquez/DataHub/Airflow |

@@ -894,7 +894,6 @@ public class SystemParser : ParserComponent
         TableReference? targetTable = null;
         string? columnName = null;
         string? exportPath = null;
-        bool exportAsOpenLineage = false;
 
         if (Match(TokenType.FOR))
         {
@@ -919,23 +918,17 @@ public class SystemParser : ParserComponent
 
         if (_parser.Current.Type == TokenType.EXPORT)
         {
-            Advance();
-            if (Match(TokenType.AS))
-            {
-                var format = ConsumeIdentifier("Expected export format after AS").Value;
-                if (!format.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
-                    throw new SyntaxException("Expected OPENLINEAGE after AS", _parser.Previous.Line, _parser.Previous.Column);
-                exportAsOpenLineage = true;
-            }
-            Consume(TokenType.TO, "Expected TO after lineage export format");
-            exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+            var replacement = targetTable == null
+                ? "EXPORT LINEAGE AS OPENLINEAGE TO '...'"
+                : "EXPORT LINEAGE FOR <target> AS OPENLINEAGE TO '...'";
+            throw new SyntaxException($"SHOW LINEAGE ... EXPORT has been retired because it writes a file. Use {replacement}.", _parser.Current.Line, _parser.Current.Column);
         }
         else if (Match(TokenType.TO))
         {
             exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
         }
 
-        return new LineageStatement(targetTable, columnName, exportPath, exportAsOpenLineage)
+        return new LineageStatement(targetTable, columnName, exportPath)
         {
             Line = startToken.Line,
             Column = startToken.Column

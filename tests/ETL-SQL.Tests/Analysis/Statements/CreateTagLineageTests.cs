@@ -312,7 +312,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
                     INSERT INTO #src VALUES (1, 'Alice');
                     CREATE TABLE #dst (id INT, name VARCHAR(50));
                     INSERT INTO #dst SELECT id, name FROM #src;
-                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
+                    EXPORT LINEAGE AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
 
                 var consumer = NewEval();
                 await TestHelpers.Execute(consumer, $"INSERT LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';");
@@ -338,7 +338,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
                     CREATE TABLE #dst (id INT, name VARCHAR(50));
                     INSERT INTO #dst SELECT id, name FROM #src;
                     INSERT TAG FOR TABLE #dst (owner = 'ImportedCatalog');
-                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
+                    EXPORT LINEAGE AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
 
                 var consumer = NewEval();
                 await TestHelpers.Execute(consumer, $@"

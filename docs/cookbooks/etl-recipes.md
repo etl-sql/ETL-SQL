@@ -918,7 +918,7 @@ WHERE TargetTable = '#daily' AND TargetColumn = 'Revenue';
 
 -- 3. Round-trip lineage through an OpenLineage document. In production the file
 --    would come from a prior run or an upstream system rather than this export.
-SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'output/daily_lineage.json';
+EXPORT LINEAGE AS OPENLINEAGE TO 'output/daily_lineage.json';
 INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
 SHOW LINEAGE FOR #daily TO 'output/daily_lineage_report.md';
 ```

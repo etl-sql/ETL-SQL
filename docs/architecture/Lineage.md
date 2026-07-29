@@ -107,7 +107,7 @@ The columns returned in `INTO` mode match the `LineageEntry` model:
 SHOW LINEAGE FOR TABLE #Orders EXPORT TO 'reports/orders_lineage.md';
 
 -- Export in OpenLineage JSON format
-SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'exports/run.openlineage.json';
+EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.json';
 ```
 
 The Mermaid export wraps the graph in a fenced ` ```mermaid ` block and appends a full audit log table, ready for GitHub rendering or import into Notion/Confluence.
@@ -185,7 +185,7 @@ ETL-SQL supports emitting lineage in the [OpenLineage](https://openlineage.io/) 
 
 **File export** (one-shot from a script):
 ```sql
-SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'lineage/run.json';
+EXPORT LINEAGE AS OPENLINEAGE TO 'lineage/run.json';
 ```
 
 **HTTP push** (automatic after every run):
@@ -216,7 +216,7 @@ Script execution
       │
       ├─► EXPORT TO '*.md' ──────────► Mermaid + audit log file
       │
-      ├─► EXPORT AS OPENLINEAGE ─────► .json file
+      ├─► EXPORT LINEAGE ────────────► OpenLineage .json/.jsonl file
       │
       └─► ILineageCatalogStore ──────► Orchestrator state store
                                              (SQLite or PostgreSQL LineageHistory)

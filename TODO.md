@@ -140,7 +140,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       after replacing them with `SELECT ... FROM eng.tags`.
 - [ ] Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
       and effective permissions as `eng.*` virtual tables with `WHERE` filters.
-- [ ] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to
+- [x] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to
       `EXPORT LINEAGE AS OPENLINEAGE TO '...'` because it writes a file rather than returning rows.
 - [x] Reserve `eng` as the engine catalog schema name and reject `CREATE CONNECTION eng AS ...`.
 

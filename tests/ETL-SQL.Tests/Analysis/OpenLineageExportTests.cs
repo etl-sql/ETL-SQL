@@ -220,7 +220,7 @@ namespace ETL_SQL.Tests.Analysis
                     INSERT INTO #src VALUES (1, 'Alice');
                     CREATE TABLE #dst (id INT, name VARCHAR(50));
                     INSERT INTO #dst SELECT id, name FROM #src;
-                    SHOW LINEAGE FOR #dst EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
+                    EXPORT LINEAGE FOR #dst AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
 
                 await TestHelpers.Execute(eval, script);
 
@@ -250,7 +250,7 @@ namespace ETL_SQL.Tests.Analysis
                     INSERT INTO #a VALUES (1);
                     CREATE TABLE #b (x INT);
                     INSERT INTO #b SELECT x FROM #a;
-                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
+                    EXPORT LINEAGE AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
 
                 await TestHelpers.Execute(eval, script);
 
@@ -261,6 +261,28 @@ namespace ETL_SQL.Tests.Analysis
             {
                 File.Delete(tmpFile);
             }
+        }
+
+        [Fact]
+        public void LineageExport_ToSql_UsesExportStatement()
+        {
+            var script = TestHelpers.Parse("EXPORT LINEAGE FOR #dst AS OPENLINEAGE TO 'out.jsonl';");
+
+            Assert.Empty(script.Diagnostics);
+            Assert.Equal("EXPORT LINEAGE FOR #dst AS OPENLINEAGE TO 'out.jsonl';", script.Statements.Single().ToSql());
+        }
+
+        [Theory]
+        [InlineData("SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'out.jsonl';", "EXPORT LINEAGE AS OPENLINEAGE")]
+        [InlineData("SHOW LINEAGE FOR #dst EXPORT AS OPENLINEAGE TO 'out.jsonl';", "EXPORT LINEAGE FOR <target>")]
+        public void ShowLineageExport_IsRejectedWithReplacement(string source, string expectedReplacement)
+        {
+            var script = TestHelpers.Parse(source);
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(ETL_SQL.Core.Common.DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains(expectedReplacement, diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
 
         // ── HTTP export ─────────────────────────────────────────────────────

@@ -783,13 +783,15 @@ public static class AstSerializer
 
     private static string FormatLineage(LineageStatement s)
     {
-        if (s.ExportAsOpenLineage && s.TargetTable == null)
-            return $"SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{s.ExportPath}';";
+        if (s.ExportAsOpenLineage)
+        {
+            var target = s.TargetTable != null ? $" FOR {FormatLineageTarget(s.TargetTable)}" : "";
+            var column = s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "";
+            return $"EXPORT LINEAGE{target}{column} AS OPENLINEAGE TO '{s.ExportPath}';";
+        }
         var sql = s.TargetTable != null ? $"SHOW LINEAGE FOR {FormatLineageTarget(s.TargetTable)}" : "SHOW LINEAGE";
         if (s.ColumnName != null) sql += $" COLUMN {s.ColumnName}";
-        if (s.ExportAsOpenLineage && s.ExportPath != null)
-            sql += $" EXPORT AS OPENLINEAGE TO '{s.ExportPath}'";
-        else if (s.ExportPath != null) sql += $" TO '{s.ExportPath}'";
+        if (s.ExportPath != null) sql += $" TO '{s.ExportPath}'";
         if (s.IntoTable != null) sql += $" INTO {s.IntoTable}";
         return sql + ";";
     }
