@@ -23,6 +23,7 @@ Replace `x.y.z` with the target version (current target: **0.17.0**) throughout.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
+- [ ] **Pause Dependabot during the release window.** Temporarily pause or comment out Dependabot update schedules in `.github/dependabot.yml` so automatic PR rebases and CI runs do not compete for runner capacity during release builds.
 - [ ] **Release path is actually open** (these blocked v0.16.0 mid-release):
       - The `refs/tags/v*` ruleset must permit **creation** (keep *deletion* / *update* / *non-fast-forward*
         restricted so released tags stay immutable — an empty bypass list blocks creation for admins too).
@@ -219,6 +220,7 @@ Linux (WSL/Docker) as part of the gate.
 
 - [ ] `docs/guides/faq.md` / `docs/guides/migration-guide.md` baseline lines reflect x.y.z (Set-Version updates these — confirm).
 - [ ] Open a fresh `## [Unreleased]` section in `CHANGELOG.md`.
+- [ ] **Re-enable Dependabot.** Restore any commented-out or paused Dependabot schedules in `.github/dependabot.yml`.
 - [ ] Move any deferred work back to `ROADMAP.md` / `TODO.md`.
 - [ ] Announce / update any deployment runbooks if operational behavior changed.
 - [ ] **Clean up branches merged this release** so they don't accumulate release over release.
