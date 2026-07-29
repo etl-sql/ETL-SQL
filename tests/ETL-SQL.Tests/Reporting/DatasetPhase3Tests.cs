@@ -102,6 +102,17 @@ namespace ETL_SQL.Tests.Reporting
                 d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
         }
 
+        [Fact]
+        public void RefreshDataset_HashPrefixed_ReportsSyntaxError()
+        {
+            var script = Parse("REFRESH DATASET #sales;");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
         // ── Parser — DROP DATASET ────────────────────────────────────────────────
 
         [Fact]

@@ -58,6 +58,19 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(DatasetAccessLevel.Private, ds.AccessLevel);
         }
 
+        [Theory]
+        [InlineData("CREATE DATASET sales AS (SELECT 1 AS v FROM t);")]
+        [InlineData("CREATE DATASET #sales AS (SELECT 1 AS v FROM t);")]
+        public void CreateDataset_LocalNameWithoutAmpersand_ReportsSyntaxError(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
         [Fact]
         public void CreateDataset_InvalidAccessValue_ProducesDiagnosticError()
         {
@@ -109,6 +122,19 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(script.Diagnostics, d =>
                 d.Severity == DiagnosticSeverity.Error &&
                 d.Message.Contains("has been retired", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
+        [Theory]
+        [InlineData("EXPORT DATASET sales TO 'sales.etlds';")]
+        [InlineData("EXPORT DATASET #sales TO 'sales.etlds';")]
+        public void ExportDataset_LocalNameWithoutAmpersand_ReportsSyntaxError(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", StringComparison.OrdinalIgnoreCase));
             Assert.Empty(script.Statements);
         }
 

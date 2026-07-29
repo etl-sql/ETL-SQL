@@ -106,7 +106,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Clean up Portal report publish documentation so examples use
       `PUBLISH REPORT 'name' FROM 'file.rptsql' IN FOLDER '/path'` instead of retired
       source-first `TO FOLDER` / `FROM SCRIPT` forms.
-- [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
+- [x] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.
 - [x] Make publish commands identify the published object before the source:
