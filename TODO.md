@@ -51,9 +51,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       catalog values.
 - [x] Preserve disabled-entry definitions in shared connection export/import across Local, Portal,
       and Orchestrator catalogs.
-- [ ] Align shared connection impact analysis, fail-closed audit vocabulary, and
-      authorization/redaction behavior across local engine execution and
-      `EXECUTE <admin_conn> BEGIN ... END`.
+- [x] Align shared connection impact analysis across Portal and Orchestrator admin APIs.
+- [ ] Align shared connection fail-closed audit vocabulary and authorization/redaction behavior
+      across local engine execution and `EXECUTE <admin_conn> BEGIN ... END`.
 - [ ] Add end-to-end managed-connection coverage for SMTP and WEBHOOK in both Portal and
       Orchestrator: notification delivery, disabled entries, missing secrets, unauthorized callers,
       `WHAT_IF`, configuration export/import, and fail-closed audit behavior.

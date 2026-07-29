@@ -635,6 +635,38 @@ namespace ETL_SQL.Orchestrator.Service
                 }
             }).WithName("testAdminConnection");
 
+            app.MapGet("/api/admin/connections/{alias}/impact", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, IJobHistoryStore store, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var decodedAlias = Uri.UnescapeDataString(alias);
+                if (await writable.GetStatusAsync(decodedAlias, ct) == SecretLifecycleStatus.NotFound)
+                    return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
+
+                var reference = $"SHARED:{decodedAlias}";
+                var consumers = new List<ImpactConsumerResponse>();
+                foreach (var job in await store.GetAllJobsAsync())
+                {
+                    var content = File.Exists(job.Script)
+                        ? await ReadBoundedAsync(job.Script, ct)
+                        : job.Script;
+                    if (ContainsReference(content, reference))
+                    {
+                        consumers.Add(new ImpactConsumerResponse(
+                            "ScheduledJob",
+                            job.Name,
+                            job.TargetPath ?? job.Script,
+                            job.LastRun,
+                            null));
+                    }
+                }
+
+                return Results.Ok(new ImpactReportResponse(reference, consumers.Count, consumers));
+            }).WithName("impactAdminConnection");
+
             app.MapDelete("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
@@ -1283,6 +1315,18 @@ namespace ETL_SQL.Orchestrator.Service
             IReadOnlyCollection<string>? SensitiveFields = null
         );
 
+        private sealed record ImpactConsumerResponse(
+            string Type,
+            string Name,
+            string? Detail,
+            DateTime? LastUsedAtUtc,
+            long? UseCount);
+
+        private sealed record ImpactReportResponse(
+            string Reference,
+            int ConsumerCount,
+            IReadOnlyList<ImpactConsumerResponse> Consumers);
+
         private static ConnectionCatalogEntryResponse ToConnectionCatalogEntry(
             string alias,
             SecretLifecycleStatus status,
@@ -1299,6 +1343,41 @@ namespace ETL_SQL.Orchestrator.Service
                 status.ToString().ToLowerInvariant(),
                 definition?.SensitiveFields);
         }
+
+        private static async Task<string?> ReadBoundedAsync(string path, CancellationToken ct)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > 1024 * 1024)
+                    return null;
+                return await File.ReadAllTextAsync(path, ct);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool ContainsReference(string? text, string reference)
+        {
+            if (string.IsNullOrEmpty(text))
+                return false;
+
+            var index = 0;
+            while ((index = text.IndexOf(reference, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                var end = index + reference.Length;
+                if (end >= text.Length || !IsNameChar(text[end]))
+                    return true;
+                index = end;
+            }
+
+            return false;
+        }
+
+        private static bool IsNameChar(char c) =>
+            char.IsLetterOrDigit(c) || c is '_' or '.' or '-';
 
         private static long? ReadExpectedVersion(HttpContext context)
         {

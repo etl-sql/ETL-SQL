@@ -29,6 +29,7 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/connections/export")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.PostAsJsonAsync("/api/admin/connections/import", Array.Empty<object>())).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/connections/x/impact")).StatusCode);
     }
 
     [Fact]
@@ -72,6 +73,23 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         var definition = await provider.ResolveAsync("notify_smtp");
         Assert.Equal("smtp.example.test", definition.Options["HOST"]);
         Assert.Equal("SECRET:smtp_password", definition.Options["PASSWORD"]);
+
+        var job = await SendAsync(client, HttpMethod.Post, "/api/scheduled-jobs", new
+        {
+            name = "notify-impact-job",
+            scriptText = "CREATE CONNECTION smtp AS SMTP('SHARED:notify_smtp');",
+            interval = 1,
+            unit = "HOUR"
+        });
+        Assert.Equal(HttpStatusCode.Created, job.StatusCode);
+
+        var impact = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/notify_smtp/impact", null);
+        Assert.Equal(HttpStatusCode.OK, impact.StatusCode);
+        var impactBody = await impact.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("SHARED:notify_smtp", impactBody!["reference"]!.GetValue<string>());
+        Assert.Equal(1, impactBody["consumerCount"]!.GetValue<int>());
+        Assert.Equal("notify-impact-job",
+            impactBody["consumers"]!.AsArray()[0]!["name"]!.GetValue<string>());
 
         var mockSet = await SendAsync(client, HttpMethod.Put, "/api/admin/connections/mock_conn", new
         {
