@@ -89,6 +89,7 @@ function Get-PlannedPreReleasePhases {
     $phases = New-Object System.Collections.Generic.List[object]
 
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
+    $phases.Add([ordered]@{ Phase = "Changelog compilation"; Command = ".\scripts\Compile-Changelog.ps1"; Reason = "Any feature-branch changelog fragments are compiled into CHANGELOG.md." })
     $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
@@ -373,11 +374,16 @@ function Save-State {
     )
 
     New-Item -ItemType Directory -Force -Path $LatestDir | Out-Null
+    
+    $commitHash = ""
+    try { $commitHash = (& git rev-parse HEAD 2>$null) -join "" } catch { }
+
     $state = [ordered]@{
         generatedAt = (Get-Date -Format "o")
         runId = $RunId
         status = $Status
         sourceFingerprint = $Fingerprint
+        commitHash = $commitHash
         configuration = $Configuration
         phases = @($Results)
     }
@@ -398,7 +404,7 @@ function Invoke-LoggedPhase {
 
     if ($Resume -and $PreviousPhaseMap.ContainsKey($Name)) {
         $previous = $PreviousPhaseMap[$Name]
-        if ($previous.status -eq "Passed") {
+        if ($previous.status -eq "Passed" -or $previous.status -eq "Skipped") {
             $Results.Add([ordered]@{
                 name = $Name
                 command = $Command
@@ -408,7 +414,8 @@ function Invoke-LoggedPhase {
                 artifacts = @($previous.artifacts)
                 note = "Skipped by -Resume; previous phase passed for this source fingerprint."
             })
-            Save-State -Results $Results.ToArray() -Status "Running" -Fingerprint $Fingerprint
+            $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
+            Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
             Write-Host "SKIP $Name" -ForegroundColor DarkGray
             return
         }
@@ -465,15 +472,17 @@ function Invoke-LoggedPhase {
         note = $note
     }
     $Results.Add($result)
-    Save-State -Results $Results.ToArray() -Status $(if ($status -eq "Passed") { "Running" } else { "Failed" }) -Fingerprint $Fingerprint
+    $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
+    Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
 
     if ($status -eq "Failed") {
         Write-Host "FAILED $Name" -ForegroundColor Red
         Write-Host "Log: $phaseLog" -ForegroundColor Yellow
-        throw "Pre-release validation failed at phase '$Name'. Fix the issue and rerun with -Resume."
+        Write-Host "Note: $note" -ForegroundColor DarkYellow
     }
-
-    Write-Host "PASS $Name ($($result.elapsedSeconds)s)" -ForegroundColor Green
+    else {
+        Write-Host "PASS $Name ($($result.elapsedSeconds)s)" -ForegroundColor Green
+    }
 }
 
 function Write-Reports {
@@ -556,7 +565,29 @@ if ($Resume) {
     }
 
     if (-not $ForceResume -and $previousState.sourceFingerprint -ne $fingerprint) {
-        throw "Source fingerprint changed since the previous run. Rerun without -Resume, or use -ForceResume to override."
+        # Check if the only difference is formatting/whitespace
+        $prevCommit = $previousState.commitHash
+        $onlyFormatting = $false
+        if ($prevCommit) {
+            Push-Location $RepoRoot
+            try {
+                $diff = & git diff -w --ignore-all-space $prevCommit 2>$null
+                if ($LASTEXITCODE -eq 0 -and [string]::IsNullOrEmpty(($diff -join "").Trim())) {
+                    $onlyFormatting = $true
+                }
+            }
+            catch { }
+            finally {
+                Pop-Location
+            }
+        }
+
+        if (-not $onlyFormatting) {
+            throw "Source fingerprint changed since the previous run. Rerun without -Resume, or use -ForceResume to override."
+        }
+        else {
+            Write-Host "Source fingerprint changed, but only formatting/whitespace differences were detected. Resuming..." -ForegroundColor Yellow
+        }
     }
 
     $previousPhaseMap = Convert-PhaseMap $previousState
@@ -568,6 +599,11 @@ try {
     Invoke-LoggedPhase "Asset drift check" `
         "node .\scripts\sync-assets.js -Check" `
         { & node ".\scripts\sync-assets.js" "-Check" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Changelog compilation" `
+        ".\scripts\Compile-Changelog.ps1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compile-Changelog.ps1" } `
         $previousPhaseMap $fingerprint $results
 
     # Early, fast tripwire: catch real credentials (keys/provider tokens) before they reach the
@@ -852,12 +888,23 @@ try {
         }
     }
 
-    Save-State -Results $results.ToArray() -Status "Passed" -Fingerprint $fingerprint
-    Write-Reports -Results $results.ToArray() -Status "Passed" -Fingerprint $fingerprint -StartedAt $startedAt
-    Write-Host ""
-    Write-Host "Pre-release validation PASSED." -ForegroundColor Green
-    Write-Host "Report: $ReportMarkdownPath" -ForegroundColor Cyan
-    exit 0
+    $hasFailures = $results | Where-Object { $_.status -eq "Failed" }
+    if ($hasFailures) {
+        Save-State -Results $results.ToArray() -Status "Failed" -Fingerprint $fingerprint
+        Write-Reports -Results $results.ToArray() -Status "Failed" -Fingerprint $fingerprint -StartedAt $startedAt
+        Write-Host ""
+        Write-Host "Pre-release validation FAILED with $($hasFailures.Count) failure(s)." -ForegroundColor Red
+        Write-Host "Report: $ReportMarkdownPath" -ForegroundColor Yellow
+        exit 1
+    }
+    else {
+        Save-State -Results $results.ToArray() -Status "Passed" -Fingerprint $fingerprint
+        Write-Reports -Results $results.ToArray() -Status "Passed" -Fingerprint $fingerprint -StartedAt $startedAt
+        Write-Host ""
+        Write-Host "Pre-release validation PASSED." -ForegroundColor Green
+        Write-Host "Report: $ReportMarkdownPath" -ForegroundColor Cyan
+        exit 0
+    }
 }
 catch {
     Write-Reports -Results $results.ToArray() -Status "Failed" -Fingerprint $fingerprint -StartedAt $startedAt

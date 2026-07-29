@@ -1,0 +1,18 @@
+#!/bin/sh
+# Pre-commit hook to format staged C# files automatically.
+
+# Find staged C# files
+STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.cs$')
+
+if [ -n "$STAGED_CS_FILES" ]; then
+    echo "Formatting staged C# files..."
+    # Convert newline-separated list to space-separated string for --include option
+    FILES_STRING=$(echo "$STAGED_CS_FILES" | tr '\n' ' ')
+    
+    dotnet format ETL-SQL.slnx --no-restore --include "$FILES_STRING"
+    
+    # Re-stage any files that were reformatted
+    git add $STAGED_CS_FILES
+fi
+
+exit 0

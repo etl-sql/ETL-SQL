@@ -106,6 +106,15 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration
       ```
+- [ ] Run the gate detached to avoid terminal interruption during long runs (PowerShell on Windows):
+      ```powershell
+      Start-Process pwsh -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale" -WindowStyle Hidden
+      ```
+- [ ] Run the gate from a detached checkout of the exact release commit to guarantee reproducibility:
+      ```powershell
+      git checkout --detach <release-commit-hash>
+      .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
+      ```
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
