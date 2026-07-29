@@ -2666,6 +2666,20 @@ public sealed record CreateLineageStatement : Statement
     }
 }
 
+/// <summary>
+/// DELETE LINEAGE FOR TABLE &lt;table&gt; removes imported lineage records for the target table.
+/// Auto-captured lineage remains immutable.
+/// </summary>
+public sealed record DeleteLineageStatement : Statement
+{
+    public Expression TableName { get; }
+
+    public DeleteLineageStatement(Expression tableName)
+    {
+        TableName = tableName;
+    }
+}
+
 /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
 public sealed record DropSetsStatement : Statement
 {

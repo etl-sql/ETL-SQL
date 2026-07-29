@@ -178,6 +178,7 @@ public static class AstSerializer
         CreateTagStatement s => FormatCreateTag(s),
         DeleteTagStatement s => FormatDeleteTag(s),
         CreateLineageStatement s => FormatCreateLineageImport(s),
+        DeleteLineageStatement s => $"DELETE LINEAGE FOR TABLE {FormatMetadataNameExpression(s.TableName)};",
         LineageStatement s => FormatLineage(s),
         TransformStatement s => FormatTransform(s),
         LintStatement s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",

@@ -166,7 +166,12 @@ Explicit metadata records use DML-style syntax:
 INSERT TAG FOR TABLE #orders COLUMN customer_id (pii = 'true', owner = 'FinanceOps');
 UPDATE TAG FOR TABLE #orders COLUMN customer_id (owner = 'Privacy Review');
 DELETE TAG FOR TABLE #orders COLUMN customer_id (owner);
+INSERT LINEAGE FOR TABLE #orders FROM 'lineage/openlineage.json';
+DELETE LINEAGE FOR TABLE #orders;
 ```
+
+`DELETE LINEAGE` removes only lineage rows imported with `INSERT LINEAGE`; lineage captured by
+executing ETL-SQL statements remains immutable.
 
 ### Tag Syntax
 

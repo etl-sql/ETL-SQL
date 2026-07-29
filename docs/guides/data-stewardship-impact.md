@@ -52,7 +52,12 @@ UPDATE TAG FOR TABLE #orders_curated COLUMN customer_id (
 );
 
 DELETE TAG FOR TABLE #orders_curated COLUMN customer_id (steward);
+INSERT LINEAGE FOR TABLE #orders_curated FROM 'governance/openlineage.json';
+DELETE LINEAGE FOR TABLE #orders_curated;
 ```
+
+`DELETE LINEAGE` removes imported lineage records only. It does not remove lineage captured by
+running the script.
 
 ## Finding Metadata Gaps
 

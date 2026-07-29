@@ -854,6 +854,8 @@ public class DataParser : ParserComponent
     {
         if (Match(TokenType.TAG))
             return ParseDeleteTag(startToken);
+        if (Match(TokenType.LINEAGE))
+            return ParseDeleteLineage(startToken);
 
         if (Match(TokenType.FILE))
         {
@@ -1531,6 +1533,16 @@ public class DataParser : ParserComponent
             throw new SyntaxException("DELETE TAG requires at least one tag name.", startToken.Line, startToken.Column);
 
         return new DeleteTagStatement(tableExpr, columnExpr, tagNames) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    /// <summary>DELETE LINEAGE FOR TABLE &lt;table&gt;</summary>
+    private Statement ParseDeleteLineage(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after DELETE LINEAGE");
+        Consume(TokenType.TABLE, "Expected TABLE after DELETE LINEAGE FOR");
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+        Consume(TokenType.SEMICOLON, "Expected ';' at the end of DELETE LINEAGE");
+        return new DeleteLineageStatement(tableExpr) { Line = startToken.Line, Column = startToken.Column };
     }
 
     private Dictionary<string, Expression> ParseTagAssignments(Token startToken, string statementName)

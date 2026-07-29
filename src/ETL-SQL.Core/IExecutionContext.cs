@@ -503,6 +503,7 @@ public interface ILineageTracker
     Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions);
     IEnumerable<LineageEntry> GetFullLineage();
     void LoadState(IEnumerable<LineageEntry> entries);
+    int RemoveImportedLineage(string tableName);
     void Clear();
 }
 

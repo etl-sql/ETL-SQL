@@ -115,31 +115,7 @@ public class LineageTracker : ILineageTracker
 
             AddEntry(entry);
             _lookup[key] = entry;
-
-            // Track latest metadata for inheritance
-            if (entry.Metadata.Count > 0)
-            {
-                if (string.IsNullOrEmpty(targetColumn) || operation.Equals("TABLE_TAGS", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Table-level or direct table tags
-                    if (!_latestTableMetadata.ContainsKey(target))
-                        _latestTableMetadata[target] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var kv in entry.Metadata) _latestTableMetadata[target][kv.Key] = kv.Value;
-                }
-
-                if (!string.IsNullOrEmpty(targetColumn))
-                {
-                    // Column-level
-                    if (!_latestColumnMetadata.ContainsKey(target))
-                        _latestColumnMetadata[target] = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
-                    if (!_latestColumnMetadata[target].ContainsKey(targetColumn))
-                        _latestColumnMetadata[target][targetColumn] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var kv in entry.Metadata) _latestColumnMetadata[target][targetColumn][kv.Key] = kv.Value;
-                }
-            }
+            ApplyMetadataFromEntry(entry);
         }
     }
 
@@ -276,6 +252,11 @@ public class LineageTracker : ILineageTracker
     private void AddEntry(LineageEntry entry)
     {
         _entries.Add(entry);
+        IndexEntry(entry);
+    }
+
+    private void IndexEntry(LineageEntry entry)
+    {
         AddIndexedEntry(_entriesByTable, entry.TargetTable, entry);
 
         if (string.IsNullOrEmpty(entry.TargetColumn))
@@ -292,6 +273,49 @@ public class LineageTracker : ILineageTracker
             }
 
             columnEntries.Add(entry);
+        }
+    }
+
+    private void ApplyMetadataFromEntry(LineageEntry entry)
+    {
+        if (entry.Metadata.Count == 0) return;
+
+        if (entry.Operation.Equals("TABLE_TAG_DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(entry.TargetColumn))
+            {
+                if (_latestTableMetadata.TryGetValue(entry.TargetTable, out var tm))
+                {
+                    foreach (var tagName in entry.Metadata.Keys) tm.Remove(tagName);
+                }
+            }
+            else if (_latestColumnMetadata.TryGetValue(entry.TargetTable, out var cols)
+                     && cols.TryGetValue(entry.TargetColumn, out var cm))
+            {
+                foreach (var tagName in entry.Metadata.Keys) cm.Remove(tagName);
+            }
+            return;
+        }
+
+        if (string.IsNullOrEmpty(entry.TargetColumn)
+            || entry.Operation.Equals("TABLE_TAGS", StringComparison.OrdinalIgnoreCase)
+            || entry.Operation.Equals("IMPORTED", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_latestTableMetadata.ContainsKey(entry.TargetTable))
+                _latestTableMetadata[entry.TargetTable] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kv in entry.Metadata) _latestTableMetadata[entry.TargetTable][kv.Key] = kv.Value;
+        }
+
+        if (!string.IsNullOrEmpty(entry.TargetColumn))
+        {
+            if (!_latestColumnMetadata.ContainsKey(entry.TargetTable))
+                _latestColumnMetadata[entry.TargetTable] = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+            if (!_latestColumnMetadata[entry.TargetTable].ContainsKey(entry.TargetColumn))
+                _latestColumnMetadata[entry.TargetTable][entry.TargetColumn] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kv in entry.Metadata) _latestColumnMetadata[entry.TargetTable][entry.TargetColumn][kv.Key] = kv.Value;
         }
     }
 
@@ -455,6 +479,39 @@ public class LineageTracker : ILineageTracker
         foreach (var entry in entries)
         {
             Record(entry.TargetTable, entry.SourceTables, entry.Operation, entry.TargetColumn, entry.SourceColumns, entry.Metadata, entry.DerivedFromDescriptions, entry.Line, entry.Column, entry.EndLine, entry.EndColumn, entry.SourceFile);
+        }
+    }
+
+    public int RemoveImportedLineage(string tableName)
+    {
+        if (string.IsNullOrWhiteSpace(tableName)) return 0;
+
+        lock (_lock)
+        {
+            var removed = _entries.RemoveAll(entry =>
+                entry.Operation.Equals("IMPORTED", StringComparison.OrdinalIgnoreCase) &&
+                entry.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+                RebuildIndexesAndMetadataLocked();
+            return removed;
+        }
+    }
+
+    private void RebuildIndexesAndMetadataLocked()
+    {
+        _entriesByTable.Clear();
+        _tableWideEntriesByTable.Clear();
+        _entriesByColumn.Clear();
+        _lookup.Clear();
+        _latestTableMetadata.Clear();
+        _latestColumnMetadata.Clear();
+        _detectedCycles.Clear();
+
+        foreach (var entry in _entries)
+        {
+            IndexEntry(entry);
+            _lookup[(entry.TargetTable.ToLowerInvariant(), entry.Operation.ToLowerInvariant(), entry.TargetColumn?.ToLowerInvariant(), entry.Line, entry.Column, entry.SourceFile)] = entry;
+            ApplyMetadataFromEntry(entry);
         }
     }
 

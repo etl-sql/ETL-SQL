@@ -132,6 +132,17 @@ namespace ETL_SQL.Tests.Analysis.Statements
 
             Assert.NotNull(stmt.Source);
             Assert.NotNull(stmt.TableName);
+            Assert.Equal("INSERT LINEAGE FOR TABLE #final FROM 'lineage.json';", stmt.ToSql());
+        }
+
+        [Fact]
+        public void ParseDeleteLineage_ForTable()
+        {
+            var stmt = TestHelpers.Parse("DELETE LINEAGE FOR TABLE #final;")
+                .Statements.OfType<DeleteLineageStatement>().Single();
+
+            Assert.NotNull(stmt.TableName);
+            Assert.Equal("DELETE LINEAGE FOR TABLE #final;", stmt.ToSql());
         }
 
         // ── CREATE TAG: seeding + inheritance ───────────────────────────────
@@ -354,6 +365,43 @@ namespace ETL_SQL.Tests.Analysis.Statements
                 await TestHelpers.Execute(consumer, $"INSERT LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';");
 
                 Assert.Contains(consumer.LineageTracker.GetFullLineage(), e => e.TargetTable == "#dst");
+            }
+            finally
+            {
+                File.Delete(tmp);
+            }
+        }
+
+        [Fact]
+        public async Task DeleteLineage_RemovesImportedRowsAndPreservesCapturedRows()
+        {
+            var tmp = Path.GetTempFileName();
+            try
+            {
+                var producer = NewEval();
+                await TestHelpers.Execute(producer, $@"
+                    CREATE TABLE #src (id INT, name VARCHAR(50));
+                    INSERT INTO #src VALUES (1, 'Alice');
+                    CREATE TABLE #dst (id INT, name VARCHAR(50));
+                    INSERT INTO #dst SELECT id, name FROM #src;
+                    INSERT TAG FOR TABLE #dst (owner = 'ImportedCatalog');
+                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
+
+                var consumer = NewEval();
+                await TestHelpers.Execute(consumer, $@"
+                    CREATE TABLE #local (id INT);
+                    INSERT INTO #local VALUES (1);
+                    SELECT id INTO #dst FROM #local;
+                    INSERT LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';
+                    DELETE LINEAGE FOR TABLE #dst;");
+
+                var targetEntries = consumer.LineageTracker.GetFullLineage()
+                    .Where(e => e.TargetTable.Equals("#dst", System.StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                Assert.DoesNotContain(targetEntries, e => e.Operation.Equals("IMPORTED", System.StringComparison.OrdinalIgnoreCase));
+                Assert.Contains(targetEntries, e => !e.Operation.Equals("IMPORTED", System.StringComparison.OrdinalIgnoreCase));
+                Assert.False(consumer.LineageTracker.GetTableMetadata("#dst").ContainsKey("owner"));
             }
             finally
             {
