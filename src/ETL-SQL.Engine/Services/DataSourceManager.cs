@@ -136,6 +136,10 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             return new StreamingSubqueryDataSource(EvaluateViewBatches(name, view!.Query));
         }
+        else if (IsEngineVirtualTable(table, "tags"))
+        {
+            return new LineageTagsDataSource(_evaluator.LineageTracker, "eng.tags");
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);
@@ -197,6 +201,11 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         if (table.ConnectionName != null) return source.WithTable(table.TableName);
         return source;
     }
+
+    private static bool IsEngineVirtualTable(TableReference table, string tableName) =>
+        table.ConnectionName != null
+        && table.ConnectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)
+        && table.TableName.Equals(tableName, StringComparison.OrdinalIgnoreCase);
 
     private async IAsyncEnumerable<DataTable> EvaluateViewBatches(string viewName, Statement query)
     {

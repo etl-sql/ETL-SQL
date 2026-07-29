@@ -24,13 +24,16 @@ namespace ETL_SQL.Engine.Storage
             "Line", "SourceFile"
         };
 
-        public string Path => "LINEAGE_TAGS";
+        public string Path { get; }
         public Dictionary<string, string>? Options => null;
-        public string ConnectorType => "LINEAGE_TAGS";
+        public string ConnectorType => Path.Equals("LINEAGE_TAGS", StringComparison.OrdinalIgnoreCase)
+            ? "LINEAGE_TAGS"
+            : "ENG";
 
-        public LineageTagsDataSource(ILineageTracker tracker)
+        public LineageTagsDataSource(ILineageTracker tracker, string path = "LINEAGE_TAGS")
         {
             _tracker = tracker;
+            Path = path;
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
@@ -90,7 +93,7 @@ namespace ETL_SQL.Engine.Storage
             WriteBatches(batches, append, CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
-            => throw new NotSupportedException("LINEAGE_TAGS is read-only.");
+            => throw new NotSupportedException($"{Path} is read-only.");
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)_columns);
 

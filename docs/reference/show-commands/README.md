@@ -28,7 +28,7 @@
 | [SHOW SHARE LINKS FOR REPORT](show-share-links.md) | Displays active portal share links for a named report. |
 | [SHOW SUBSCRIPTIONS](show-subscriptions.md) | Displays defined report subscriptions. |
 | [SHOW TABLES](show-tables.md) | Displays tables available on a connection or in the engine session. |
-| [SHOW TAGS](show-tags.md) | Displays lineage tags applied in the current session. |
+| [SHOW TAGS](show-tags.md) | Legacy tag listing; prefer `SELECT ... FROM eng.tags`. |
 | [SHOW VARIABLES](show-variables.md) | Displays all declared variables in the current session scope. |
 | [SHOW VERSION](show-version.md) | Displays the engine version and build metadata. |
 | [SHOW VIEWS](show-views.md) | Displays session-scoped ETL-SQL query views. |

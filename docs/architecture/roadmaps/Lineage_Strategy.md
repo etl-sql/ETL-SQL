@@ -213,7 +213,7 @@ This makes Phase 2 a prerequisite for a complete Phase 5 export.
 **Effort: Medium (1–1.5 weeks)**  
 **Files:** `LineageTracker.cs`, `LineageDataSource.cs`, new `LineageTagsDataSource.cs`, `IExecutionContext.cs`, `LineageStatementHandler.cs`, lint rules
 
-### LINEAGE_TAGS Virtual Table
+### `eng.tags` Virtual Table
 
 A flat key-value projection of all tag data, making tag queries first-class:
 
@@ -221,14 +221,14 @@ A flat key-value projection of all tag data, making tag queries first-class:
 -- Current (awkward):
 SELECT * FROM LINEAGE WHERE JSON_VALUE(Metadata, '$.pii') = 'true';
 
--- Phase 3:
-SELECT * FROM LINEAGE_TAGS WHERE tag_name = 'pii' AND tag_value = 'true';
+-- Canonical:
+SELECT * FROM eng.tags WHERE tag_name = 'pii' AND tag_value = 'true';
 
 -- Find all PII columns and their owners:
 SELECT lt.target_table, lt.target_column, lt.tag_value AS pii,
        lo.tag_value AS owner
-FROM LINEAGE_TAGS lt
-LEFT JOIN LINEAGE_TAGS lo
+FROM eng.tags lt
+LEFT JOIN eng.tags lo
     ON lo.target_table = lt.target_table
     AND lo.target_column = lt.target_column
     AND lo.tag_name = 'owner'

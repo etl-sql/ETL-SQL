@@ -1052,7 +1052,8 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
 | `DESCRIBE <table>` | Diagnostics | Alias for `SHOW COLUMNS FOR <table>` |
 | `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
-| `SHOW TAGS` | Lineage | Lists tags on a table/column |
+| `eng.tags` | Lineage | Queryable virtual table for lineage tags |
+| `SHOW TAGS` | Lineage | Legacy tag-listing command; prefer `SELECT ... FROM eng.tags` |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |
 | `SHOW LOCKS` | Diagnostics | Lists active database/job throttle slots and concurrency queue details |
@@ -1888,7 +1889,7 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `LINEAGE` | General | Canonical language token |
 | `LINEAGE_IMPORT_CATALOG` | General | Canonical language token |
 | `LINEAGE_NAMESPACE` | General | Canonical language token |
-| `LINEAGE_TAGS` | General | Canonical language token |
+| `LINEAGE_TAGS` | General | Legacy alias for `eng.tags` |
 | `LOAD` | General | Canonical language token |
 | `LOCAL` | General | Canonical language token |
 | `MAP_BY_HEADER_NAME` | General | Canonical language token |

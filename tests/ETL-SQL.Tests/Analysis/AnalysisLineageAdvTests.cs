@@ -191,6 +191,37 @@ SELECT * FROM #result;
         }
 
         [Fact]
+        public async Task EngTags_VirtualTable_IsCanonicalTagReadModel()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT id /* @owner: Finance; @pii: false */
+INTO #t
+FROM (SELECT 1 AS id) AS x;
+
+SELECT TargetTable, TargetColumn, TagName, TagValue, Scope
+INTO #result
+FROM eng.tags
+WHERE TargetTable = '#t'
+ORDER BY TagName;
+
+SELECT * FROM #result;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.Contains(rows, r =>
+                r["TargetTable"]?.ToString() == "#t"
+                && r["TargetColumn"]?.ToString() == "id"
+                && r["TagName"]?.ToString() == "owner"
+                && r["TagValue"]?.ToString() == "Finance"
+                && r["Scope"]?.ToString() == "column");
+            Assert.Contains(rows, r => r["TagName"]?.ToString() == "pii" && r["TagValue"]?.ToString() == "false");
+        }
+
+        [Fact]
         public async Task HasTag_ReturnsTrueWhenTagExists()
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();

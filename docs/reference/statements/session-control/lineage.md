@@ -256,21 +256,21 @@ SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 100 INTO #missing_stewa
 The result includes `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`, `RunAt`,
 `JobName`, and `ScriptPath`.
 
-## LINEAGE_TAGS Virtual Table
+## `eng.tags` Virtual Table
 
-`LINEAGE_TAGS` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of the `LINEAGE` table.
+`eng.tags` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of the `LINEAGE` table. `LINEAGE_TAGS` remains available as a legacy alias while the `eng.*` catalog is adopted.
 
 ```sql
 -- Find all PII columns in the session
 SELECT TargetTable, TargetColumn
 INTO #pii_columns
-FROM LINEAGE_TAGS
+FROM eng.tags
 WHERE TagName = 'pii' AND TagValue = 'true';
 
 -- Audit all classification levels
 SELECT DISTINCT TagValue AS classification
 INTO #levels
-FROM LINEAGE_TAGS
+FROM eng.tags
 WHERE TagName = 'classification'
 ORDER BY classification;
 
@@ -280,14 +280,14 @@ INTO #unowned
 FROM LINEAGE l
 WHERE l.TargetColumn IS NOT NULL
   AND NOT EXISTS (
-      SELECT 1 FROM LINEAGE_TAGS t
+      SELECT 1 FROM eng.tags t
       WHERE t.TargetTable = l.TargetTable
         AND t.TargetColumn = l.TargetColumn
         AND t.TagName = 'owner'
   );
 ```
 
-### LINEAGE_TAGS Columns
+### `eng.tags` Columns
 
 | Column | Description |
 | :--- | :--- |
@@ -318,6 +318,8 @@ SELECT HAS_TAG('#orders', 'amount', 'unit', 'USD') AS is_usd;
 ```
 
 ## SHOW TAGS
+
+`SHOW TAGS` is a legacy row-returning command. Prefer `SELECT ... FROM eng.tags` for new scripts.
 
 ```sql
 -- List all tag events in the session

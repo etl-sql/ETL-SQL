@@ -242,7 +242,7 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
 
-After a script runs, lineage is queryable with `LINEAGE` / `LINEAGE_TAGS`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) for the full tag catalog and examples.
+After a script runs, lineage is queryable with `LINEAGE` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) for the full tag catalog and examples.
 
 ---
 
