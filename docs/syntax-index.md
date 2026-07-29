@@ -57,12 +57,12 @@ Statements are the top-level actions in an ETL-SQL script.
 | `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
-| `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW PROFILE](reference/show-commands/show-profile.md) |
-| `SHOW VARIABLES` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW VARIABLES](reference/show-commands/show-variables.md) |
-| `SHOW LOCAL VARIABLES`| Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `eng.profile` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.profile](reference/eng/profile.md) |
+| `eng.variables` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.variables](reference/eng/variables.md) |
+| `SHOW LOCAL VARIABLES`| Diagnostics| [Statement Reference](reference/statements/README.md) | [eng.variables](reference/eng/variables.md) |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Statement Reference](reference/statements/README.md) | [CONFIG.md](reference/statements/session-control/config.md) |
-| `SHOW CONNECTIONS` | Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW CONNECTIONS](reference/show-commands/show-connections.md) |
-| `SHOW LOCKS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW LOCKS](reference/show-commands/show-locks.md) |
+| `eng.connections` | Diagnostics| [Engine Catalog](reference/eng/README.md) | [eng.connections](reference/eng/connections.md) |
+| `SHOW LOCKS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [Statement Reference](reference/statements/README.md) |
 | `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
 | `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
 | `USE SETS` | Session | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
@@ -92,11 +92,11 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CREATE VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
 | `DROP VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `SHOW VIEWS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW VIEWS](reference/show-commands/show-views.md) |
+| `eng.views` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.views](reference/eng/views.md) |
 | `DIRECTORY Operations` | File IO | [Statement Reference](reference/statements/README.md) | [DIRECTORY Operations](reference/file-operations/directory.md) |
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/receive-file.md) |
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/send-file.md) |
-| `SHOW ACTIVE SESSIONS` | Portal Admin | [Statement Reference](reference/statements/README.md) | [SHOW ACTIVE SESSIONS](reference/show-commands/show-active-sessions.md) |
+| `SHOW ACTIVE SESSIONS` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
 | `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-admin/service-accounts.md) |
 | `EXPECT SCHEMA` | DDL / Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
 | `TEST CONNECTION` | DDL / Diagnostics | [Statement Reference](reference/statements/README.md) | [TEST CONNECTION](reference/statements/ddl/test-connection.md) |
@@ -112,26 +112,26 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WINDOW` | Window Functions | [Statement Reference](reference/statements/README.md) | [WINDOW](reference/statements/query-syntax/window.md) |
 | `` | Date/Time | [Statement Reference](reference/statements/README.md) | [](reference/dates-times/reldate.md) |
 | `Data Types` | Data Types | [Statement Reference](reference/statements/README.md) | [Data Types](reference/data-types.md) |
-| `SHOW ALERTS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW ALERTS FOR REPORT](reference/show-commands/show-alerts.md) |
-| `SHOW CATALOG SEARCH` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW CATALOG SEARCH](reference/show-commands/show-catalog-search.md) |
-| `SHOW CONNECTION CONFIG` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW CONNECTION CONFIG](reference/show-commands/show-connection-config.md) |
-| `SHOW EFFECTIVE PERMISSIONS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW EFFECTIVE PERMISSIONS](reference/show-commands/show-effective-permissions.md) |
-| `SHOW EMBED TOKENS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW EMBED TOKENS FOR REPORT](reference/show-commands/show-embed-tokens.md) |
-| `SHOW FAVORITES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW FAVORITES](reference/show-commands/show-favorites.md) |
-| `SHOW HOST METRICS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW HOST METRICS](reference/show-commands/show-host-metrics.md) |
-| `SHOW JOB HISTORY` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOB HISTORY](reference/show-commands/show-job-history.md) |
-| `SHOW JOB STATE` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOB STATE](reference/show-commands/show-job-state.md) |
-| `SHOW JOBS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW JOBS](reference/show-commands/show-jobs.md) |
-| `SHOW PORTAL USAGE METRICS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW PORTAL USAGE METRICS](reference/show-commands/show-portal-usage-metrics.md) |
-| `SHOW RECENT REPORTS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW RECENT REPORTS](reference/show-commands/show-recent-reports.md) |
-| `SHOW REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT](reference/show-commands/show-report.md) |
-| `SHOW REPORT DEPENDENCIES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT DEPENDENCIES](reference/show-commands/show-report-dependencies.md) |
-| `SHOW REPORT HISTORY` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW REPORT HISTORY](reference/show-commands/show-report-history.md) |
-| `SHOW SAVED VIEWS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SAVED VIEWS FOR REPORT](reference/show-commands/show-saved-views.md) |
-| `SHOW SHARE LINKS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SHARE LINKS FOR REPORT](reference/show-commands/show-share-links.md) |
-| `SHOW SUBSCRIPTIONS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SUBSCRIPTIONS](reference/show-commands/show-subscriptions.md) |
-| `SHOW TABLES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW TABLES](reference/show-commands/show-tables.md) |
-| `SHOW VERSION` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW VERSION](reference/show-commands/show-version.md) |
+| `SHOW ALERTS FOR REPORT` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW CATALOG SEARCH` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `eng.connection_config` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
+| `SHOW EFFECTIVE PERMISSIONS` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW EMBED TOKENS FOR REPORT` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW FAVORITES` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `eng.host_metrics` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.host_metrics](reference/eng/host-metrics.md) |
+| `eng.job_history` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.job_history](reference/eng/job-history.md) |
+| `eng.job_state` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.job_state](reference/eng/job-state.md) |
+| `eng.jobs` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.jobs](reference/eng/jobs.md) |
+| `SHOW PORTAL USAGE METRICS` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW RECENT REPORTS` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW REPORT` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW REPORT DEPENDENCIES` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW REPORT HISTORY` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW SAVED VIEWS FOR REPORT` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW SHARE LINKS FOR REPORT` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW SUBSCRIPTIONS` | Diagnostics / Portal | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `eng.tables` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.tables](reference/eng/tables.md) |
+| `eng.version` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.version](reference/eng/version.md) |
 | `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
@@ -1035,9 +1035,13 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW PORTAL AUDIT`  | Portal   | Lists Portal audit rows, optionally filtered by action |
 | `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
+| `eng.jobs` | Orch | Queryable virtual table for scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
+| `eng.job_history` | Orch | Queryable virtual table for job execution history |
 | `SHOW JOB STATE`      | Orch     | Lists saved job-state key/value pairs (SET_JOB_STATE watermarks/markers) for any job |
+| `eng.job_state` | Orch | Queryable virtual table for saved job-state key/value pairs |
 | `SHOW HOST METRICS`   | Orch     | Host-utilization time series (memory/CPU/free disk) per node for capacity planning; last 24h |
+| `eng.host_metrics` | Orch | Queryable virtual table for recent host-utilization samples |
 | `SHOW LINEAGE HISTORY FOR TABLE` | Lineage | Cross-run catalog: all lineage entries that wrote to a table; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR TAG`   | Lineage | Cross-run catalog: all entries whose tags match a key/value; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR MISSING TAGS` | Lineage | Cross-run stewardship catalog: newest targets missing owner/steward/contact/classification/quality metadata; supports `AT <connection>` |
@@ -1045,9 +1049,12 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW PROTECTED DATA SUGGESTIONS` | Lineage | Reviewable protected-data classifier findings from names, metadata hints, and supported samples; supports `AT <connection>` |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
 | `SHOW BUNDLES`           | Orch  | Alias for `SHOW PUBLISHED BUNDLES` |
+| `eng.bundles` | Orch | Queryable virtual table for latest published bundle versions |
 | `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |
 | `SHOW BUNDLE FILES`   | Orch     | Lists files in a bundle version |
+| `eng.bundle_files` | Orch | Queryable virtual table for files in published bundle versions |
 | `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |
+| `eng.bundle_dependencies` | Orch | Queryable virtual table for packaged `RUN SCRIPT` dependencies |
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `eng.connections` | Diagnostics | Queryable virtual table for active session connections |

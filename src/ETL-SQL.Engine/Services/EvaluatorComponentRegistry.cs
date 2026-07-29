@@ -1,7 +1,9 @@
 using System;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Engine.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Services;
 /// <summary>
@@ -23,14 +25,20 @@ public class EvaluatorComponentRegistry
     /// <summary>
     /// Initializes all components with the provided context.
     /// </summary>
-    public void Initialize(Evaluator evaluator, ILogger logger, VariableScopeManager variableScopeManager, IReportContext? reportContext = null)
+    public void Initialize(Evaluator evaluator, ILogger logger, VariableScopeManager variableScopeManager, IReportContext? reportContext = null, IServiceProvider? serviceProvider = null)
     {
         TelemetryManager = new ExecutionTelemetryManager();
         QueryCompiler = new QueryCompiler(evaluator);
         MetricsReporter = new ExecutionMetricsReporter(evaluator);
         ExpressionEvaluator = new ExpressionEvaluator(evaluator);
         SpillStore = new Spill.SpillStore(evaluator);
-        DataSourceManager = new DataSourceManager(logger, evaluator, ExpressionEvaluator);
+        DataSourceManager = new DataSourceManager(
+            logger,
+            evaluator,
+            ExpressionEvaluator,
+            serviceProvider?.GetService<IJobHistoryStore>(),
+            serviceProvider?.GetService<IHostMetricsStore>(),
+            serviceProvider?.GetService<IBundleStore>());
         SchemaManager = new SchemaManager(logger, evaluator, variableScopeManager);
         ProcedureExecutor = new ProcedureExecutor(variableScopeManager, evaluator);
         ReportContext = reportContext ?? new ReportRegistry();

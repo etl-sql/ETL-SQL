@@ -519,7 +519,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         };
 
         _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
-        _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
+        _registry.Initialize(this, _logger, _variableScopeManager, reportContext, _serviceProvider);
 
         Telemetry.ExecutionTree.Clear();
         if (executionTree != null)

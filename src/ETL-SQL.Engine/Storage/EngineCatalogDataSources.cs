@@ -501,6 +501,372 @@ public sealed class ConnectionConfigDataSource : IDataSource
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+public sealed class JobsDataSource : IDataSource
+{
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns = ["name", "schedule", "last_run", "next_run", "script", "enabled"];
+
+    public JobsDataSource(IJobHistoryStore? store) => _store = store;
+
+    public string Path => "eng.jobs";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var job in (await _store.GetAllJobsAsync()).OrderBy(j => j.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["name"] = job.Name,
+                    ["schedule"] = $"EVERY {job.Interval} {job.Unit}" + (job.AtTime != null ? $" AT {job.AtTime}" : ""),
+                    ["last_run"] = job.LastRun,
+                    ["next_run"] = job.NextRun,
+                    ["script"] = job.Script,
+                    ["enabled"] = job.IsEnabled ? 1 : 0
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.jobs is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class JobHistoryDataSource : IDataSource
+{
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns = ["id", "job_name", "start_time", "end_time", "status", "rows_processed", "peak_ram_mb", "cpu_time_s", "error_message"];
+
+    public JobHistoryDataSource(IJobHistoryStore? store) => _store = store;
+
+    public string Path => "eng.job_history";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var entry in await _store.GetHistoryAsync(null, Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["id"] = entry.Id,
+                    ["job_name"] = entry.JobName,
+                    ["start_time"] = entry.StartTime,
+                    ["end_time"] = entry.EndTime,
+                    ["status"] = entry.Status,
+                    ["rows_processed"] = entry.RowsProcessed,
+                    ["peak_ram_mb"] = entry.PeakMemoryBytes / (1024.0 * 1024.0),
+                    ["cpu_time_s"] = entry.CpuTimeSeconds,
+                    ["error_message"] = entry.ErrorMessage
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.job_history is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class JobStateDataSource : IDataSource
+{
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns = ["job_name", "state_key", "state_value", "updated_at"];
+
+    public JobStateDataSource(IJobHistoryStore? store) => _store = store;
+
+    public string Path => "eng.job_state";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var entry in await _store.GetJobStatesAsync(null, Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["job_name"] = entry.JobName,
+                    ["state_key"] = entry.StateKey,
+                    ["state_value"] = entry.StateValue,
+                    ["updated_at"] = entry.UpdatedAt
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.job_state is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class HostMetricsDataSource : IDataSource
+{
+    private readonly IHostMetricsStore? _store;
+    private static readonly string[] Columns = ["node_id", "captured_at", "memory_load_percent", "process_cpu_percent", "host_cpu_percent", "state_disk_free_mb", "spill_disk_free_mb"];
+
+    public HostMetricsDataSource(IHostMetricsStore? store) => _store = store;
+
+    public string Path => "eng.host_metrics";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var sample in await _store.GetHostMetricsAsync(null, DateTime.UtcNow.AddDays(-1), Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["node_id"] = sample.NodeId,
+                    ["captured_at"] = sample.CapturedAt,
+                    ["memory_load_percent"] = sample.MemoryLoadPercent,
+                    ["process_cpu_percent"] = sample.ProcessCpuPercent,
+                    ["host_cpu_percent"] = sample.HostCpuPercent,
+                    ["state_disk_free_mb"] = sample.StateDiskFreeBytes / (1024.0 * 1024.0),
+                    ["spill_disk_free_mb"] = sample.SpillDiskFreeBytes / (1024.0 * 1024.0)
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.host_metrics is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class BundlesDataSource : IDataSource
+{
+    private readonly IBundleStore? _store;
+    private static readonly string[] Columns = ["bundle_name", "version", "entry_path", "content_hash", "published_at", "publisher", "description"];
+
+    public BundlesDataSource(IBundleStore? store) => _store = store;
+
+    public string Path => "eng.bundles";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var bundle in await _store.GetBundlesAsync())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AddBundleVersionRow(rows, bundle);
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    internal static void AddBundleVersionRow(List<Row> rows, BundleVersionInfo version)
+    {
+        rows.Add(new Row
+        {
+            ["bundle_name"] = version.BundleName,
+            ["version"] = version.Version,
+            ["entry_path"] = version.EntryPath,
+            ["content_hash"] = version.ContentHash,
+            ["published_at"] = version.PublishedAt,
+            ["publisher"] = version.Publisher,
+            ["description"] = version.Description
+        });
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.bundles is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class BundleFilesDataSource : IDataSource
+{
+    private readonly IBundleStore? _store;
+    private static readonly string[] Columns = ["bundle_name", "version", "virtual_path", "content_hash", "size_bytes", "content_type"];
+
+    public BundleFilesDataSource(IBundleStore? store) => _store = store;
+
+    public string Path => "eng.bundle_files";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var bundle in await _store.GetBundlesAsync())
+            foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+            foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["bundle_name"] = file.BundleName,
+                    ["version"] = file.Version,
+                    ["virtual_path"] = file.VirtualPath,
+                    ["content_hash"] = file.ContentHash,
+                    ["size_bytes"] = file.SizeBytes,
+                    ["content_type"] = file.ContentType
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.bundle_files is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class BundleDependenciesDataSource : IDataSource
+{
+    private readonly IBundleStore? _store;
+    private static readonly string[] Columns = ["bundle_name", "version", "from_path", "to_path"];
+
+    public BundleDependenciesDataSource(IBundleStore? store) => _store = store;
+
+    public string Path => "eng.bundle_dependencies";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_store != null)
+        {
+            foreach (var bundle in await _store.GetBundlesAsync())
+            foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+            foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["bundle_name"] = dependency.BundleName,
+                    ["version"] = dependency.Version,
+                    ["from_path"] = dependency.FromPath,
+                    ["to_path"] = dependency.ToPath
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.bundle_dependencies is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 internal static class EngineCatalogTableBuilder
 {
     public static async Task<DataTable> BuildAsync(IEnumerable<string> columns, IEnumerable<Row> rows)

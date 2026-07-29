@@ -10,7 +10,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 - [Control Flow](control-flow/README.md) - `IF`, `WHILE`, `FOREACH`, `TRY...CATCH`, `WAITFOR`, `PARALLEL`, and script execution.
 - [Variables and Parameters](variables-parameters/README.md) - `DECLARE`, `USE`, system variables, and runtime parameters.
 - [SET Commands](set-commands/set.md) - session and engine configuration options.
-- [SHOW Commands](show-commands/show.md) - introspection commands.
+- [Engine Catalog](eng/README.md) - queryable `eng.*` virtual tables for inspection and diagnostics.
 
 ## Data Access
 

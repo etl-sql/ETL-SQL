@@ -301,6 +301,23 @@ WHERE connection_name = 'cfg_conn';";
             }
         }
 
+        [Theory]
+        [InlineData("eng.jobs", "name")]
+        [InlineData("eng.job_history", "job_name")]
+        [InlineData("eng.job_state", "state_key")]
+        [InlineData("eng.host_metrics", "node_id")]
+        [InlineData("eng.bundles", "bundle_name")]
+        [InlineData("eng.bundle_files", "virtual_path")]
+        [InlineData("eng.bundle_dependencies", "from_path")]
+        public async Task EngOrchestratorCatalogTables_AreQueryable(string tableName, string expectedColumn)
+        {
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse($"SELECT * FROM {tableName};"));
+
+            Assert.NotNull(eval.LastResult);
+            Assert.Contains(expectedColumn, eval.LastResult!.ColumnNames);
+        }
+
         // ── SHOW JOB HISTORY ───────────────────────────────────────────────────
 
         [Fact]

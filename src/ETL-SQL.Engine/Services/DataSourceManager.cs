@@ -16,11 +16,20 @@ namespace ETL_SQL.Engine.Services;
 /// Handles the resolution of table references to physical or virtual data sources.
 /// Manages temporary tables, subqueries, and table-level operators (PIVOT/UNPIVOT).
 /// </summary>
-public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
+public class DataSourceManager(
+    ILogger logger,
+    Evaluator evaluator,
+    ExpressionEvaluator expressionEvaluator,
+    IJobHistoryStore? jobHistoryStore = null,
+    IHostMetricsStore? hostMetricsStore = null,
+    IBundleStore? bundleStore = null)
 {
     private readonly ILogger _logger = logger;
     private readonly Evaluator _evaluator = evaluator;
     private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
+    private readonly IJobHistoryStore? _jobHistoryStore = jobHistoryStore;
+    private readonly IHostMetricsStore? _hostMetricsStore = hostMetricsStore;
+    private readonly IBundleStore? _bundleStore = bundleStore;
     private readonly Stack<string> _viewResolutionStack = new();
 
     /// <summary>
@@ -175,6 +184,34 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         else if (IsEngineVirtualTable(table, "connection_config"))
         {
             return new ConnectionConfigDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "jobs"))
+        {
+            return new JobsDataSource(_jobHistoryStore);
+        }
+        else if (IsEngineVirtualTable(table, "job_history"))
+        {
+            return new JobHistoryDataSource(_jobHistoryStore);
+        }
+        else if (IsEngineVirtualTable(table, "job_state"))
+        {
+            return new JobStateDataSource(_jobHistoryStore);
+        }
+        else if (IsEngineVirtualTable(table, "host_metrics"))
+        {
+            return new HostMetricsDataSource(_hostMetricsStore);
+        }
+        else if (IsEngineVirtualTable(table, "bundles"))
+        {
+            return new BundlesDataSource(_bundleStore);
+        }
+        else if (IsEngineVirtualTable(table, "bundle_files"))
+        {
+            return new BundleFilesDataSource(_bundleStore);
+        }
+        else if (IsEngineVirtualTable(table, "bundle_dependencies"))
+        {
+            return new BundleDependenciesDataSource(_bundleStore);
         }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {

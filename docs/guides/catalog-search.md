@@ -56,5 +56,6 @@ Returns a composite view with four curated categories:
 - `popular` — Most frequently viewed reports
 
 ## References
-- [SHOW CATALOG SEARCH Reference](../reference/show-commands/show-catalog-search.md)
+- [Portal Admin Commands](../reference/portal-admin/README.md)
+- [Engine Catalog Reference](../reference/eng/README.md)
 - [Portal User Guide](portal-user.md)

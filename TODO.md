@@ -140,6 +140,11 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Implement local diagnostics virtual tables for `eng.version`, `eng.safe_zones`, and
       `eng.profile`.
 - [x] Implement `eng.connection_config` for redacted active connection configuration.
+- [x] Implement Orchestrator and bundle inspection virtual tables for `eng.jobs`,
+      `eng.job_history`, `eng.job_state`, `eng.host_metrics`, `eng.bundles`,
+      `eng.bundle_files`, and `eng.bundle_dependencies`.
+- [x] Replace `docs/reference/show-commands` with `docs/reference/eng` table reference
+      pages for implemented `eng.*` virtual tables.
 - [x] Implement `eng.tags` as a globally enumerable virtual table over lineage tag metadata.
 - [x] Remove `SHOW TAGS FOR SCRIPT`, `SHOW TAGS FOR TABLE <name>`, and `SHOW TAG VALUE`
       after replacing them with `SELECT ... FROM eng.tags`.
