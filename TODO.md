@@ -77,6 +77,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 - [x] Align local `CREATE OR REPLACE CONNECTION` with `CREATE OR ALTER CONNECTION` patch/upsert
       behavior and cover report-object replacement execution for local report definitions.
+- [x] Cover unsupported `CREATE OR ALTER` / `CREATE OR REPLACE` pairs for the core,
+      Report-SQL, and Portal object kinds in the lifecycle matrix.
 - [ ] Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
       formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
 - [ ] Add negative tests for every unsupported object/mode pair in the lifecycle capability matrix.
