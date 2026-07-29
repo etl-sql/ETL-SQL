@@ -132,6 +132,20 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal("PIPE", delimVal);
         }
 
+        [Theory]
+        [InlineData("CREATE CONNECTION eng AS MOCKDB();")]
+        [InlineData("CREATE OR ALTER CONNECTION eng AS MOCKDB();")]
+        [InlineData("CREATE OR REPLACE CONNECTION ENG AS MOCKDB();")]
+        public void CreateConnection_RejectsReservedEngineCatalogName(string source)
+        {
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(ETL_SQL.Core.Common.DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains("engine catalog schema", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(script.Statements);
+        }
+
         [Fact]
         public void ExportReport_WithPdfOptions_ParsesAndSerializes()
         {

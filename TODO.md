@@ -142,7 +142,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       and effective permissions as `eng.*` virtual tables with `WHERE` filters.
 - [ ] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to
       `EXPORT LINEAGE AS OPENLINEAGE TO '...'` because it writes a file rather than returning rows.
-- [ ] Reserve `eng` as the engine catalog schema name and reject `CREATE CONNECTION eng AS ...`.
+- [x] Reserve `eng` as the engine catalog schema name and reject `CREATE CONNECTION eng AS ...`.
 
 #### P2 — Duplicate surface syntax
 

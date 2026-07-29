@@ -1348,6 +1348,8 @@ public class DataParser : ParserComponent
     private Statement ParseCreateConnection(Token startToken, ObjectCreationMode mode)
     {
         var name = ConsumeIdentifier("Expected connection name after CREATE CONNECTION").Value;
+        if (name.Equals("eng", StringComparison.OrdinalIgnoreCase))
+            throw new SyntaxException("eng is reserved for the engine catalog schema and cannot be used as a connection name.", startToken.Line, startToken.Column);
 
         Consume(TokenType.AS, "Expected AS after connection name in CREATE CONNECTION");
         var connectionType = Advance().Value;
