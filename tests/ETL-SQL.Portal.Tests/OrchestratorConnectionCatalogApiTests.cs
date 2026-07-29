@@ -172,6 +172,56 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
             || e.SanitizedTarget.Contains("SECRET:", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task WebhookLifecycle_PreservesSecretUrlAndFailsClosedWhenSecretIsMissing()
+    {
+        var client = _factory.CreateClient();
+
+        var set = await SendAsync(client, HttpMethod.Put, "/api/admin/connections/notify_webhook", new
+        {
+            connectorType = "WEBHOOK",
+            options = new Dictionary<string, string>
+            {
+                ["URL"] = "SECRET:webhook_url",
+                ["FORMAT"] = "generic"
+            }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, set.StatusCode);
+
+        var detail = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/notify_webhook", null);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var detailBody = await detail.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("WEBHOOK", detailBody!["connectorType"]!.GetValue<string>());
+        Assert.Equal("SECRET:webhook_url", detailBody["options"]!["URL"]!.GetValue<string>());
+
+        var test = await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_webhook/test", null);
+        Assert.Equal(HttpStatusCode.Conflict, test.StatusCode);
+        var testBody = await test.Content.ReadAsStringAsync();
+        Assert.Contains("unresolvable", testBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://", testBody, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_webhook/disable", null)).StatusCode);
+
+        var disabledExport = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/export", null);
+        Assert.Equal(HttpStatusCode.OK, disabledExport.StatusCode);
+        var exported = await disabledExport.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var exportedWebhook = Assert.Single(exported!, e => e!["alias"]!.GetValue<string>() == "notify_webhook");
+        Assert.Equal("disabled", exportedWebhook!["status"]!.GetValue<string>());
+        Assert.Equal("SECRET:webhook_url", exportedWebhook["options"]!["URL"]!.GetValue<string>());
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/notify_webhook", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/import", exported)).StatusCode);
+
+        var provider = (IWritableConnectionCatalogProvider)_factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        Assert.Equal(SecretLifecycleStatus.Disabled, await provider.GetStatusAsync("notify_webhook"));
+        var definition = await provider.GetDefinitionAsync("notify_webhook");
+        Assert.True(definition.Disabled);
+        Assert.Equal("SECRET:webhook_url", definition.Options["URL"]);
+    }
+
     private static Task<HttpResponseMessage> SendAsync(
         HttpClient client,
         HttpMethod method,

@@ -58,9 +58,15 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       Portal-aligned `SHARED_CONNECTION_*` vocabulary and redacted targets/reasons.
 - [x] Align remaining shared connection fail-closed authorization/redaction behavior
       across local engine execution and `EXECUTE <admin_conn> BEGIN ... END`.
-- [ ] Add end-to-end managed-connection coverage for SMTP and WEBHOOK in both Portal and
-      Orchestrator: notification delivery, disabled entries, missing secrets, unauthorized callers,
-      `WHAT_IF`, configuration export/import, and fail-closed audit behavior.
+- [x] Cover Orchestrator managed SMTP catalog lifecycle: unauthorized callers, disabled entries,
+      configuration export/import, diagnostics, impact analysis, and fail-closed audit behavior.
+- [x] Cover Orchestrator managed WEBHOOK catalog lifecycle: `SECRET:` URL preservation, missing
+      secret diagnostics, disabled entries, and configuration export/import.
+- [ ] Add remaining Portal managed WEBHOOK coverage for notification delivery, disabled entries,
+      missing secrets, unauthorized callers, `WHAT_IF`, configuration export/import, and
+      fail-closed audit behavior.
+- [ ] Add remaining managed SMTP/WEBHOOK delivery coverage that exercises Portal-to-Orchestrator
+      notification dispatch end to end rather than only catalog lifecycle and generated scripts.
 
 #### P1 — Lifecycle modifiers
 
