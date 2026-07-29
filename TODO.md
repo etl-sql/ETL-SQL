@@ -109,7 +109,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.
-- [ ] Make publish commands identify the published object before the source:
+- [x] Make publish commands identify the published object before the source:
       `PUBLISH REPORT 'name' FROM 'file.rptsql'`, `PUBLISH BUNDLE 'name' FROM 'folder'`, and
       `PUBLISH DATASET &name FROM 'file.parquet'`. Remove `PUBLISH DATASET FROM ... AS &name`.
 - [ ] Use `AS` consistently for typed objects and definition/property-bag report objects, including
