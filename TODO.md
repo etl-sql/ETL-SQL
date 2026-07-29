@@ -125,7 +125,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       `CREATE LINEAGE`, and bare `TAG ... WITH (...)`, and preserve immutable auto-captured lineage.
 - [x] Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` only for
       named resources with real lifecycle; do not encode implementation type before `CONNECTION`.
-- [ ] Correct Portal share/embed expiration syntax drift so parser, formatter, docs, and
+- [x] Correct Portal share/embed expiration syntax drift so parser, formatter, docs, and
       configuration export agree on one structural `EXPIRES <timestamp>` clause.
 
 #### P1 — Inspection via `eng.*`

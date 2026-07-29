@@ -609,6 +609,10 @@ public class PortalParser : ParserComponent
         string? expiresAt = null;
         if (Match(TokenType.EXPIRES))
             expiresAt = ConsumeStringLiteral("Expected expiration timestamp string literal");
+        if (MatchIdentifier("EXPIRES_AT"))
+            throw new SyntaxException(
+                "CREATE SHARE LINK uses EXPIRES '<timestamp>'; EXPIRES_AT has been retired.",
+                _parser.Previous.Line, _parser.Previous.Column);
         string? intoTable = null;
         if (Match(TokenType.INTO))
             intoTable = ConsumeTempTableName("CREATE SHARE LINK ... INTO target must be a temporary table starting with '#'");
@@ -637,6 +641,10 @@ public class PortalParser : ParserComponent
                 _parser.Previous.Line, _parser.Previous.Column);
         if (Match(TokenType.EXPIRES))
             expiresAt = ConsumeStringLiteral("Expected expiration timestamp string literal");
+        if (MatchIdentifier("EXPIRES_AT"))
+            throw new SyntaxException(
+                "CREATE EMBED TOKEN uses EXPIRES '<timestamp>'; EXPIRES_AT has been retired.",
+                _parser.Previous.Line, _parser.Previous.Column);
         string? intoTable = null;
         if (Match(TokenType.INTO))
             intoTable = ConsumeTempTableName("CREATE EMBED TOKEN ... INTO target must be a temporary table starting with '#'");

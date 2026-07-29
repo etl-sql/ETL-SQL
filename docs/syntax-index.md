@@ -1771,7 +1771,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `EFFECTIVE` | Portal Administration | Canonical language token |
 | `EMBED` | Portal Administration | Canonical language token |
 | `EXPIRES` | Portal Administration | Canonical language token |
-| `EXPIRES_AT` | Portal Administration | Canonical language token |
 | `EXPORT` | Portal Administration | Canonical language token |
 | `FAVORITE` | Portal Administration | Canonical language token |
 | `HISTORY` | Portal Administration | Canonical language token |

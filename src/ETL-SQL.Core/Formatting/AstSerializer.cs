@@ -143,6 +143,32 @@ public static class AstSerializer
             $"ALTER ALERT {s.Name} SET" + FormatCatalogMetadata(s.Metadata).Replace(" WITH", "") + ";",
         DropPortalAlertStatement s => $"DROP ALERT {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
         SetPortalAlertEnabledStatement s => $"{(s.IsEnabled ? "ENABLE" : "DISABLE")} ALERT {s.Name};",
+        CreatePortalShareLinkStatement s =>
+            $"CREATE SHARE LINK {Quote(s.Name)} FOR REPORT {Quote(s.ReportName)}"
+            + (s.ExpiresAt != null ? $" EXPIRES {Quote(s.ExpiresAt)}" : "")
+            + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "")
+            + ";",
+        RevokePortalShareLinkStatement s =>
+            $"REVOKE SHARE LINK {Quote(s.Name)}"
+            + (s.ReportName != null ? $" FOR REPORT {Quote(s.ReportName)}" : "")
+            + ";",
+        CreatePortalEmbedTokenStatement s =>
+            $"CREATE EMBED TOKEN {Quote(s.Name)} FOR REPORT {Quote(s.ReportName)}"
+            + (s.ExpiresAt != null ? $" EXPIRES {Quote(s.ExpiresAt)}" : "")
+            + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "")
+            + ";",
+        RevokePortalEmbedTokenStatement s =>
+            $"REVOKE EMBED TOKEN {Quote(s.Name)}"
+            + (s.ReportName != null ? $" FOR REPORT {Quote(s.ReportName)}" : "")
+            + ";",
+        ShowPortalShareLinksStatement s =>
+            $"SHOW SHARE LINKS FOR REPORT {Quote(s.ReportName)}"
+            + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "")
+            + ";",
+        ShowPortalEmbedTokensStatement s =>
+            $"SHOW EMBED TOKENS FOR REPORT {Quote(s.ReportName)}"
+            + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "")
+            + ";",
         ShowJobHistoryStatement s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowJobsStatement s => "SHOW JOBS" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 

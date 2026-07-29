@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -296,6 +297,39 @@ namespace ETL_SQL.Tests
 
         [Theory]
         [InlineData(
+            "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;",
+            "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;")]
+        [InlineData(
+            "SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;",
+            "SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;")]
+        [InlineData(
+            "REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';",
+            "REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';")]
+        [InlineData(
+            "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;",
+            "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;")]
+        [InlineData(
+            "SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;",
+            "SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;")]
+        [InlineData(
+            "REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';",
+            "REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';")]
+        public void PortalAnonymousAccessStatements_RoundTripWithCanonicalExpires(string sql, string expected)
+        {
+            var script = TestHelpers.Parse(sql);
+            var statement = Assert.Single(script.Statements);
+
+            var serialized = statement.ToSql();
+            Assert.Equal(expected, serialized);
+            Assert.DoesNotContain("UNKNOWN STATEMENT", serialized, StringComparison.Ordinal);
+
+            var reparsed = TestHelpers.Parse(serialized);
+            Assert.Empty(reparsed.Diagnostics);
+            Assert.Equal(serialized, Assert.Single(reparsed.Statements).ToSql());
+        }
+
+        [Theory]
+        [InlineData(
             "CREATE SHARE LINK FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z';",
             "CREATE SHARE LINK '<name>' FOR REPORT")]
         [InlineData(
@@ -309,6 +343,30 @@ namespace ETL_SQL.Tests
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
             Assert.Contains(expectedFix, diagnostic.Message, StringComparison.Ordinal);
             Assert.Empty(script.Statements);
+        }
+
+        [Theory]
+        [InlineData(
+            "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES_AT '2026-12-31T23:59:59Z';",
+            "EXPIRES '<timestamp>'")]
+        [InlineData(
+            "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES_AT '2026-12-31T23:59:59Z';",
+            "EXPIRES '<timestamp>'")]
+        public void PortalAnonymousAccessCreate_RejectsExpiresAtAlias(string sql, string expectedFix)
+        {
+            var script = TestHelpers.Parse(sql);
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains(expectedFix, diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
+        }
+
+        [Fact]
+        public void PortalAnonymousAccess_KeywordInventoryOnlyAdvertisesExpires()
+        {
+            Assert.Contains("EXPIRES", LanguageMetadata.Keywords);
+            Assert.DoesNotContain("EXPIRES_AT", LanguageMetadata.Keywords);
         }
 
         [Fact]
