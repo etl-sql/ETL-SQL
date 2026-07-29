@@ -25,7 +25,7 @@ public static class LanguageMetadata
 
     public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "IF", "ELSE", "WHILE", "FOR", "FOREACH", "EACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
+        "IF", "ELSE", "WHILE", "FOR", "FOREACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
         "RAISEERROR", "RAISERROR", "ASSERT", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "GO", "CASE", "WHEN", "THEN", "SEND_EMAIL", "GOTO"
     };
 

@@ -1416,7 +1416,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `CASE` | Control Flow | Canonical language token |
 | `CATCH` | Control Flow | Canonical language token |
 | `CONTINUE` | Control Flow | Canonical language token |
-| `EACH` | Control Flow | Canonical language token |
 | `ELSE` | Control Flow | Canonical language token |
 | `END` | Control Flow | Canonical language token |
 | `EXEC` | Control Flow | Canonical language token |

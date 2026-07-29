@@ -150,7 +150,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       `SEND_EMAIL(...)`, `SEND_FILE(...)`, `RECEIVE_FILE(...)`, `FILE_SEND`, `FILE_RECEIVE`,
       `COPY_FILE(...)`, `MOVE_FILE(...)`, `DELETE_FILE(...)`, `CREATE_DIRECTORY(...)`, and sibling
       underscore forms.
-- [ ] Retire `FOR EACH`; `FOREACH` is the only loop spelling.
+- [x] Retire `FOR EACH`; `FOREACH` is the only loop spelling.
 - [ ] Retire `WAITFOR (<condition>)`; `WAIT UNTIL <condition>` is the condition-polling form.
       Keep `WAITFOR DELAY` and `WAITFOR TIME`.
 - [ ] Retire `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE`; use

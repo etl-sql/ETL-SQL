@@ -248,7 +248,11 @@ public class StatementParser
 
         if (_parser.Match(TokenType.FOR))
         {
-            if (_parser.Match(TokenType.EACH)) return FlowParser.ParseForeach();
+            if (_parser.Match(TokenType.EACH))
+            {
+                var eachToken = _parser.Previous;
+                throw new SyntaxException("FOR EACH has been retired. Use FOREACH @item IN <collection>.", eachToken.Line, eachToken.Column);
+            }
             return FlowParser.ParseFor();
         }
 

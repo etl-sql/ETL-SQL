@@ -77,7 +77,7 @@ public static class ScriptDagBuilder
         IfStatement => ("IF", "conditional"),
         WhileStatement => ("WHILE", "loop"),
         ForStatement s => ($"FOR @{s.VariableName}", "loop"),
-        ForeachStatement s => ($"FOR EACH @{s.VariableName}", "loop"),
+        ForeachStatement s => ($"FOREACH @{s.VariableName}", "loop"),
         ParallelStatement => ("PARALLEL", "loop"),
         ExecuteStatement s => ($"CALL {s.ProcedureName}", "procedure"),
         RunScriptStatement => ("RUN SCRIPT", "io"),

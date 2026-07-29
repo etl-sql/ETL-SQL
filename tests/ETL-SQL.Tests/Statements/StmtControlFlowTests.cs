@@ -77,6 +77,17 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public void ForEachAlias_IsRejectedWithReplacement()
+        {
+            var script = TestHelpers.Parse("FOR EACH @row IN #Items BEGIN PRINT @row; END;");
+
+            Assert.Contains(script.Diagnostics, diagnostic =>
+                diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error &&
+                diagnostic.Message.Contains("FOREACH @item IN <collection>", StringComparison.Ordinal));
+            Assert.Empty(script.Statements);
+        }
+
+        [Fact]
         public async Task TestLoopBreak()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

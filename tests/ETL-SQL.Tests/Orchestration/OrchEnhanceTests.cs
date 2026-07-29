@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             string scriptText = $@"
                 DECLARE @count INT = 0;
-                FOR EACH @f IN DIRECTORY('{_testDir.Replace("\\", "\\\\")}', false)
+                FOREACH @f IN DIRECTORY('{_testDir.Replace("\\", "\\\\")}', false)
                 BEGIN
                     SET @count = @count + 1;
                     PRINT @f.Name;
@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             string scriptText = $@"
                 DECLARE @count INT = 0;
-                FOR EACH @f IN DIRECTORY('{_testDir.Replace("\\", "\\\\")}', true)
+                FOREACH @f IN DIRECTORY('{_testDir.Replace("\\", "\\\\")}', true)
                 BEGIN
                     SET @count = @count + 1;
                 END
