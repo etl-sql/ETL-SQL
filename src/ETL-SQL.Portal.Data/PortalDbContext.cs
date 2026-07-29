@@ -180,6 +180,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<ReportShareLink>(e =>
         {
             e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => new { x.ReportId, x.Name }).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(200);
             e.HasOne(x => x.Report).WithMany(r => r.ShareLinks).HasForeignKey(x => x.ReportId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
         });
@@ -187,6 +189,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<ReportEmbedToken>(e =>
         {
             e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => new { x.ReportId, x.Name }).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(200);
             e.HasOne(x => x.Report).WithMany(r => r.EmbedTokens).HasForeignKey(x => x.ReportId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
         });

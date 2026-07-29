@@ -2853,13 +2853,13 @@ public sealed record FavoritePortalReportStatement(string ReportName, string? Us
 
 public sealed record UnfavoritePortalReportStatement(string ReportName, string? Username) : Statement;
 
-public sealed record CreatePortalShareLinkStatement(string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
+public sealed record CreatePortalShareLinkStatement(string Name, string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
 
-public sealed record RevokePortalShareLinkStatement(string Token) : Statement;
+public sealed record RevokePortalShareLinkStatement(string Name, string? ReportName = null) : Statement;
 
-public sealed record CreatePortalEmbedTokenStatement(string ReportName, string? Name, string? ExpiresAt, string? IntoTable = null) : Statement;
+public sealed record CreatePortalEmbedTokenStatement(string Name, string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
 
-public sealed record RevokePortalEmbedTokenStatement(string Token) : Statement;
+public sealed record RevokePortalEmbedTokenStatement(string Name, string? ReportName = null) : Statement;
 
 public sealed record CreatePortalSavedViewStatement(string ReportName, string Name, IReadOnlyList<SubscriptionParameter> Parameters, bool IsDefault, string? IntoTable = null) : Statement;
 

@@ -775,7 +775,7 @@ namespace ETL_SQL.Connectors.Portal
         private async Task CreateShareLinkAsync(CreatePortalShareLinkStatement stmt, IExecutionContext context)
         {
             var reportId = await LookupReportIdAsync(stmt.ReportName);
-            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/share-links", new { ExpiresAt = stmt.ExpiresAt });
+            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/share-links", new { Name = stmt.Name, ExpiresAt = stmt.ExpiresAt });
             await PublishJsonResultAsync(json, stmt.IntoTable, context);
         }
 
@@ -787,9 +787,11 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task RevokeShareLinkAsync(RevokePortalShareLinkStatement stmt, IExecutionContext context)
         {
-            var (reportId, token) = await LookupReportTokenAsync("share-links", stmt.Token);
+            var (reportId, token) = stmt.ReportName is { Length: > 0 }
+                ? await LookupReportTokenByNameAsync("share-links", stmt.ReportName, stmt.Name, "share link")
+                : await LookupReportTokenAsync("share-links", stmt.Name);
             await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/share-links/{Uri.EscapeDataString(token)}", null,
-                $"Share link '{stmt.Token}' revoked.");
+                $"Share link '{stmt.Name}' revoked.");
         }
 
         private async Task CreateEmbedTokenAsync(CreatePortalEmbedTokenStatement stmt, IExecutionContext context)
@@ -807,9 +809,11 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task RevokeEmbedTokenAsync(RevokePortalEmbedTokenStatement stmt, IExecutionContext context)
         {
-            var (reportId, token) = await LookupReportTokenAsync("embed-tokens", stmt.Token);
+            var (reportId, token) = stmt.ReportName is { Length: > 0 }
+                ? await LookupReportTokenByNameAsync("embed-tokens", stmt.ReportName, stmt.Name, "embed token")
+                : await LookupReportTokenAsync("embed-tokens", stmt.Name);
             await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/embed-tokens/{Uri.EscapeDataString(token)}", null,
-                $"Embed token '{stmt.Token}' revoked.");
+                $"Embed token '{stmt.Name}' revoked.");
         }
 
         private async Task CreateSavedViewAsync(CreatePortalSavedViewStatement stmt, IExecutionContext context)
@@ -1938,6 +1942,25 @@ namespace ETL_SQL.Connectors.Portal
         {
             var redacted = SecretRedactor.Redact(body) ?? string.Empty;
             return redacted.Length > 500 ? redacted[..500] + "..." : redacted;
+        }
+
+        private async Task<(int ReportId, string Token)> LookupReportTokenByNameAsync(
+            string tokenKind,
+            string reportName,
+            string name,
+            string kind)
+        {
+            var reportId = await LookupReportIdAsync(reportName);
+            var json = await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/{tokenKind}", null);
+            var matches = json.EnumerateArray()
+                .Where(e => e.TryGetProperty("name", out var n)
+                    && n.GetString()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+            if (matches.Count == 0)
+                throw new ExecutionException($"Portal {kind} '{name}' not found for report '{reportName}'.");
+            if (matches.Count > 1)
+                throw new ExecutionException($"Portal {kind} '{name}' is ambiguous for report '{reportName}'.");
+            return (reportId, matches[0].GetProperty("token").GetString()!);
         }
 
         private static object? TryGet(JsonElement el, string prop)

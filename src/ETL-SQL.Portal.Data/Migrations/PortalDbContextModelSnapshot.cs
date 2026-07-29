@@ -1135,6 +1135,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
@@ -1151,9 +1152,10 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasIndex("CreatedBy");
 
-                    b.HasIndex("ReportId");
-
                     b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("ReportId", "Name")
                         .IsUnique();
 
                     b.ToTable("ReportEmbedTokens");
@@ -1237,6 +1239,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ReportId")
                         .HasColumnType("INTEGER");
 
@@ -1251,9 +1258,10 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasIndex("CreatedBy");
 
-                    b.HasIndex("ReportId");
-
                     b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("ReportId", "Name")
                         .IsUnique();
 
                     b.ToTable("ReportShareLinks");

@@ -276,8 +276,9 @@ namespace ETL_SQL.Tests
         public void PortalShareLinks_ParseCreateShowAndRevoke()
         {
             var createScript = TestHelpers.Parse(
-                "CREATE SHARE LINK FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;");
+                "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;");
             var create = Assert.IsType<CreatePortalShareLinkStatement>(Assert.Single(createScript.Statements));
+            Assert.Equal("External Review", create.Name);
             Assert.Equal("Monthly Sales", create.ReportName);
             Assert.Equal("2026-12-31T23:59:59Z", create.ExpiresAt);
             Assert.Equal("#share", create.IntoTable);
@@ -287,16 +288,34 @@ namespace ETL_SQL.Tests
             Assert.Equal("Monthly Sales", show.ReportName);
             Assert.Equal("#shares", show.IntoTable);
 
-            var revokeScript = TestHelpers.Parse("REVOKE SHARE LINK 'abc123';");
+            var revokeScript = TestHelpers.Parse("REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';");
             var revoke = Assert.IsType<RevokePortalShareLinkStatement>(Assert.Single(revokeScript.Statements));
-            Assert.Equal("abc123", revoke.Token);
+            Assert.Equal("External Review", revoke.Name);
+            Assert.Equal("Monthly Sales", revoke.ReportName);
+        }
+
+        [Theory]
+        [InlineData(
+            "CREATE SHARE LINK FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z';",
+            "CREATE SHARE LINK '<name>' FOR REPORT")]
+        [InlineData(
+            "CREATE EMBED TOKEN FOR REPORT 'Monthly Sales' NAME 'Intranet';",
+            "CREATE EMBED TOKEN '<name>' FOR REPORT")]
+        public void PortalAnonymousAccessCreate_RequiresNamedResources(string sql, string expectedFix)
+        {
+            var script = TestHelpers.Parse(sql);
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains(expectedFix, diagnostic.Message, StringComparison.Ordinal);
+            Assert.Empty(script.Statements);
         }
 
         [Fact]
         public void PortalEmbedTokensSavedViewsAndAlerts_ParseScriptCommands()
         {
             var embedScript = TestHelpers.Parse(
-                "CREATE EMBED TOKEN FOR REPORT 'Monthly Sales' NAME 'Intranet' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;");
+                "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;");
             var embed = Assert.IsType<CreatePortalEmbedTokenStatement>(Assert.Single(embedScript.Statements));
             Assert.Equal("Monthly Sales", embed.ReportName);
             Assert.Equal("Intranet", embed.Name);
@@ -351,9 +370,10 @@ namespace ETL_SQL.Tests
             var showAlerts = Assert.IsType<ShowPortalAlertsStatement>(Assert.Single(showAlertsScript.Statements));
             Assert.Equal("#alerts", showAlerts.IntoTable);
 
-            var revokeEmbedScript = TestHelpers.Parse("REVOKE EMBED TOKEN 'embed123';");
+            var revokeEmbedScript = TestHelpers.Parse("REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';");
             var revokeEmbed = Assert.IsType<RevokePortalEmbedTokenStatement>(Assert.Single(revokeEmbedScript.Statements));
-            Assert.Equal("embed123", revokeEmbed.Token);
+            Assert.Equal("Intranet", revokeEmbed.Name);
+            Assert.Equal("Monthly Sales", revokeEmbed.ReportName);
 
             var dropViewScript = TestHelpers.Parse("DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';");
             var dropView = Assert.IsType<DropPortalSavedViewStatement>(Assert.Single(dropViewScript.Statements));

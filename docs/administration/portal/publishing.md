@@ -396,7 +396,7 @@ account disablement explicitly revokes all capabilities created by that user. Su
 are audited without recording the token. Administrators can inventory all capabilities through
 `GET /api/admin/anonymous-report-access`; the inventory intentionally excludes the bearer token itself.
 
-Use `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK` for script-first administration, or the backing REST endpoints:
+Use `CREATE SHARE LINK '<name>' FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK '<name>' FOR REPORT` for script-first administration, or the backing REST endpoints:
 
 | Endpoint | Purpose |
 | :--- | :--- |
@@ -408,12 +408,12 @@ Use `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK` 
 | `GET /api/admin/anonymous-report-access` | Admin inventory of active, expired, revoked, disabled-creator, and permission-lost capabilities. |
 
 ```sql
-CREATE SHARE LINK FOR REPORT 'Monthly Sales'
+CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales'
     EXPIRES '2026-12-31T23:59:59Z'
     INTO #share;
 
 SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
-REVOKE SHARE LINK 'share-token';
+REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';
 ```
 
 ### 6.11 Embed Tokens
@@ -421,13 +421,12 @@ REVOKE SHARE LINK 'share-token';
 Embed tokens are scoped report tokens intended for trusted internal applications. They are created by users with manage permission on the report and resolve through `GET /api/embed/{token}`. They do not grant portal administration rights and can be expired or revoked independently.
 
 ```sql
-CREATE EMBED TOKEN FOR REPORT 'Monthly Sales'
-    NAME 'Finance Intranet'
+CREATE EMBED TOKEN 'Finance Intranet' FOR REPORT 'Monthly Sales'
     EXPIRES '2026-12-31T23:59:59Z'
     INTO #embed;
 
 SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
-REVOKE EMBED TOKEN 'embed-token';
+REVOKE EMBED TOKEN 'Finance Intranet' FOR REPORT 'Monthly Sales';
 ```
 
 ### 6.12 Saved Views

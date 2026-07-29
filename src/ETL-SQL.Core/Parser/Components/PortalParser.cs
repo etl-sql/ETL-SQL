@@ -271,18 +271,24 @@ public class PortalParser : ParserComponent
         if (Match(TokenType.SHARE))
         {
             Consume(TokenType.LINK, "Expected LINK after REVOKE SHARE");
-            string token = ConsumeStringLiteral("Expected share-link token string literal");
+            string name = ConsumeStringLiteral("Expected share-link name string literal");
+            Consume(TokenType.FOR, "Expected FOR after share-link name");
+            Consume(TokenType.REPORT, "Expected REPORT after REVOKE SHARE LINK ... FOR");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             Match(TokenType.SEMICOLON);
-            return new RevokePortalShareLinkStatement(token)
+            return new RevokePortalShareLinkStatement(name, report)
             { Line = start.Line, Column = start.Column };
         }
 
         if (Match(TokenType.EMBED))
         {
             Consume(TokenType.TOKEN, "Expected TOKEN after REVOKE EMBED");
-            string token = ConsumeStringLiteral("Expected embed token string literal");
+            string name = ConsumeStringLiteral("Expected embed token name string literal");
+            Consume(TokenType.FOR, "Expected FOR after embed token name");
+            Consume(TokenType.REPORT, "Expected REPORT after REVOKE EMBED TOKEN ... FOR");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             Match(TokenType.SEMICOLON);
-            return new RevokePortalEmbedTokenStatement(token)
+            return new RevokePortalEmbedTokenStatement(name, report)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -588,10 +594,15 @@ public class PortalParser : ParserComponent
         };
     }
 
-    // CREATE SHARE LINK FOR REPORT 'name' [EXPIRES '2026-12-31T23:59:59Z'] [INTO #share]
+    // CREATE SHARE LINK 'name' FOR REPORT 'report' [EXPIRES '2026-12-31T23:59:59Z'] [INTO #share]
     public Statement ParseCreateShareLink(Token start)
     {
         Consume(TokenType.LINK, "Expected LINK after CREATE SHARE");
+        if (Match(TokenType.FOR))
+            throw new SyntaxException(
+                "CREATE SHARE LINK must name the resource. Use CREATE SHARE LINK '<name>' FOR REPORT '<report>' ...",
+                _parser.Previous.Line, _parser.Previous.Column);
+        string name = ConsumeStringLiteral("Expected share link name string literal");
         Consume(TokenType.FOR, "Expected FOR");
         Consume(TokenType.REPORT, "Expected REPORT");
         string report = ConsumeStringLiteral("Expected report name string literal");
@@ -603,28 +614,34 @@ public class PortalParser : ParserComponent
             intoTable = ConsumeTempTableName("CREATE SHARE LINK ... INTO target must be a temporary table starting with '#'");
 
         Match(TokenType.SEMICOLON);
-        return new CreatePortalShareLinkStatement(report, expiresAt, intoTable)
+        return new CreatePortalShareLinkStatement(name, report, expiresAt, intoTable)
         { Line = start.Line, Column = start.Column };
     }
 
-    // CREATE EMBED TOKEN FOR REPORT 'name' [NAME 'label'] [EXPIRES 'timestamp'] [INTO #embed]
+    // CREATE EMBED TOKEN 'name' FOR REPORT 'report' [EXPIRES 'timestamp'] [INTO #embed]
     public Statement ParseCreateEmbedToken(Token start)
     {
         Consume(TokenType.TOKEN, "Expected TOKEN after CREATE EMBED");
+        if (Match(TokenType.FOR))
+            throw new SyntaxException(
+                "CREATE EMBED TOKEN must name the resource. Use CREATE EMBED TOKEN '<name>' FOR REPORT '<report>' ...",
+                _parser.Previous.Line, _parser.Previous.Column);
+        string name = ConsumeStringLiteral("Expected embed token name string literal");
         Consume(TokenType.FOR, "Expected FOR");
         Consume(TokenType.REPORT, "Expected REPORT");
         string report = ConsumeStringLiteral("Expected report name string literal");
-        string? name = null;
         string? expiresAt = null;
         if (MatchIdentifier("NAME"))
-            name = ConsumeStringLiteral("Expected embed token name string literal");
+            throw new SyntaxException(
+                "CREATE EMBED TOKEN NAME has been retired. Put the token name after TOKEN: CREATE EMBED TOKEN '<name>' FOR REPORT '<report>'.",
+                _parser.Previous.Line, _parser.Previous.Column);
         if (Match(TokenType.EXPIRES))
             expiresAt = ConsumeStringLiteral("Expected expiration timestamp string literal");
         string? intoTable = null;
         if (Match(TokenType.INTO))
             intoTable = ConsumeTempTableName("CREATE EMBED TOKEN ... INTO target must be a temporary table starting with '#'");
         Match(TokenType.SEMICOLON);
-        return new CreatePortalEmbedTokenStatement(report, name, expiresAt, intoTable)
+        return new CreatePortalEmbedTokenStatement(name, report, expiresAt, intoTable)
         { Line = start.Line, Column = start.Column };
     }
 

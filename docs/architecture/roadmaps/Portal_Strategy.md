@@ -342,18 +342,17 @@ EXECUTE portal BEGIN
     DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
     -- Sharing and embedded consumption
-    CREATE SHARE LINK FOR REPORT 'Monthly Sales'
+    CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales'
         EXPIRES '2026-12-31T23:59:59Z'
         INTO #share;
     SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
-    REVOKE SHARE LINK 'share-token';
+    REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';
 
-    CREATE EMBED TOKEN FOR REPORT 'Monthly Sales'
-        NAME 'Intranet'
+    CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales'
         EXPIRES '2026-12-31T23:59:59Z'
         INTO #embed;
     SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
-    REVOKE EMBED TOKEN 'embed-token';
+    REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';
 
     CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales'
         DEFAULT

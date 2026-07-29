@@ -114,13 +114,13 @@ Name lookups are case-insensitive. If multiple reports share the same name, the 
 
 ```sql
 EXECUTE portal BEGIN
-    CREATE SHARE LINK FOR REPORT 'Daily Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;
+    CREATE SHARE LINK 'External Review' FOR REPORT 'Daily Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;
     SHOW SHARE LINKS FOR REPORT 'Daily Sales';
-    REVOKE SHARE LINK '<token>';
+    REVOKE SHARE LINK 'External Review' FOR REPORT 'Daily Sales';
 
-    CREATE EMBED TOKEN FOR REPORT 'Daily Sales' NAME 'Finance Wallboard' INTO #embed;
+    CREATE EMBED TOKEN 'Finance Wallboard' FOR REPORT 'Daily Sales' INTO #embed;
     SHOW EMBED TOKENS FOR REPORT 'Daily Sales';
-    REVOKE EMBED TOKEN '<token>';
+    REVOKE EMBED TOKEN 'Finance Wallboard' FOR REPORT 'Daily Sales';
 
     CREATE SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales'
         PARAMETERS (@region = 'EMEA', @start = 'D-1');

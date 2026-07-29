@@ -178,6 +178,7 @@ public class ReportsController : ControllerBase
             link.ReportId,
             report.Name,
             folderPath,
+            link.Name,
             link.Token,
             $"{Request.Scheme}://{Request.Host}/api/share/{link.Token}",
             link.CreatedBy,
@@ -817,10 +818,15 @@ public class ReportsController : ControllerBase
         if (expiresAt <= DateTime.UtcNow)
             return BadRequest(new { error = "Share link expiration must be in the future." });
 
+        var name = string.IsNullOrWhiteSpace(req?.Name) ? "Share link" : req!.Name!.Trim();
+        if (await db.ReportShareLinks.AnyAsync(l => l.ReportId == id && l.Name == name))
+            return Conflict(new { error = $"A share link named '{name}' already exists for this report." });
+
         var link = new ReportShareLink
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
+            Name = name,
             Token = await GenerateUniqueShareTokenAsync(),
             ExpiresAt = expiresAt
         };
@@ -919,11 +925,15 @@ public class ReportsController : ControllerBase
         if (expiresAt <= DateTime.UtcNow)
             return BadRequest(new { error = "Embed token expiration must be in the future." });
 
+        var name = string.IsNullOrWhiteSpace(req?.Name) ? "Embed token" : req!.Name!.Trim();
+        if (await db.ReportEmbedTokens.AnyAsync(t => t.ReportId == id && t.Name == name))
+            return Conflict(new { error = $"An embed token named '{name}' already exists for this report." });
+
         var token = new ReportEmbedToken
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
-            Name = string.IsNullOrWhiteSpace(req?.Name) ? "Embed token" : req!.Name!,
+            Name = name,
             Token = await GenerateUniqueEmbedTokenAsync(),
             ExpiresAt = expiresAt
         };
@@ -1016,7 +1026,7 @@ public class ReportsController : ControllerBase
             var creatorAuthorized = await CreatorCanResolveAsync(link.CreatedBy, link.Report);
             items.Add(new AnonymousReportAccessDto(
                 "ShareLink", link.Id, link.ReportId, link.Report.Name, link.Report.Folder.Path,
-                null, link.CreatedBy, link.Creator.UserName, link.Creator.IsActive, link.CreatedAt,
+                link.Name, link.CreatedBy, link.Creator.UserName, link.Creator.IsActive, link.CreatedAt,
                 link.ExpiresAt, link.RevokedAt,
                 Status(link.RevokedAt, link.ExpiresAt, link.Creator.IsActive,
                     link.Report.IsDeleted, creatorAuthorized, now)));

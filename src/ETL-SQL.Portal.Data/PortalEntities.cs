@@ -172,6 +172,7 @@ public class ReportShareLink
     public Report Report { get; set; } = null!;
     public int CreatedBy { get; set; }
     public PortalUser Creator { get; set; } = null!;
+    public string Name { get; set; } = "";
     public string Token { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ExpiresAt { get; set; }

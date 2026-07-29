@@ -53,13 +53,14 @@ public record ReportValidationImpactSourceDto(
     string Source,
     LineageImpactSummaryDto Summary);
 
-public record CreateReportShareLinkRequest(DateTime? ExpiresAt);
+public record CreateReportShareLinkRequest(string? Name, DateTime? ExpiresAt);
 
 public record ReportShareLinkDto(
     int Id,
     int ReportId,
     string ReportName,
     string FolderPath,
+    string Name,
     string Token,
     string Url,
     int CreatedBy,
