@@ -125,6 +125,75 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    public async Task WebhookLifecycle_PreservesSecretUrlAndFailsClosedWhenSecretIsMissing()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        var set = await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/notify_webhook", new
+        {
+            connectorType = "WEBHOOK",
+            options = new Dictionary<string, string>
+            {
+                ["URL"] = "SECRET:webhook_url",
+                ["FORMAT"] = "generic"
+            }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, set.StatusCode);
+
+        var detail = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/notify_webhook", null);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var detailBody = await detail.Content.ReadAsStringAsync();
+        Assert.Contains("SECRET:webhook_url", detailBody);
+        Assert.DoesNotContain("https://hooks.example", detailBody, StringComparison.OrdinalIgnoreCase);
+
+        var verify = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/notify_webhook/verify", null);
+        Assert.Equal(HttpStatusCode.Conflict, verify.StatusCode);
+        var verifyBody = await verify.Content.ReadAsStringAsync();
+        Assert.Contains("unresolvable", verifyBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://hooks.example", verifyBody, StringComparison.OrdinalIgnoreCase);
+
+        var test = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/notify_webhook/test", null);
+        Assert.Equal(HttpStatusCode.Conflict, test.StatusCode);
+        var testBody = await test.Content.ReadAsStringAsync();
+        Assert.Contains("unresolvable", testBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://hooks.example", testBody, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/notify_webhook/disable", null)).StatusCode);
+
+        var export = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/export", null);
+        Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+        var exported = await export.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var exportedWebhook = Assert.Single(exported!, e => e!["alias"]!.GetValue<string>() == "notify_webhook");
+        Assert.True(exportedWebhook!["disabled"]!.GetValue<bool>());
+        Assert.Equal("SECRET:webhook_url", exportedWebhook["options"]!["URL"]!.GetValue<string>());
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, token, "/api/admin/connections/notify_webhook", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/import", exported)).StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var catalog = scope.ServiceProvider.GetRequiredService<PortalConnectionCatalogService>();
+        Assert.Equal(SecretLifecycleStatus.Disabled, await catalog.GetStatusAsync("notify_webhook"));
+        var imported = await catalog.GetDetailAsync("notify_webhook");
+        Assert.NotNull(imported);
+        Assert.Equal("SECRET:webhook_url", imported!.Options["URL"]);
+
+        var actions = await scope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .AuditLogs.Where(a => a.ResourceType == "PortalSharedConnection" && a.ResourceId == "notify_webhook")
+            .Select(a => a.Action).ToListAsync();
+        Assert.Contains("SHARED_CONNECTION_CREATE", actions);
+        Assert.Contains("SHARED_CONNECTION_VERIFY", actions);
+        Assert.Contains("SHARED_CONNECTION_TEST", actions);
+        Assert.Contains("SHARED_CONNECTION_DISABLE", actions);
+        Assert.Contains("SHARED_CONNECTION_DELETE", actions);
+        Assert.Contains("SHARED_CONNECTION_IMPORT", actions);
+    }
+
+    [Fact]
     public async Task UseAcls_RestrictExpansionToAdminsOwnersAndGrantedGroups()
     {
         using var factory = new CatalogFactory();
