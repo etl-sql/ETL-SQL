@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("DROP CONTAINER IF EXISTS ctr;")]
         [InlineData("DROP STYLE IF EXISTS sty;")]
         [InlineData("DROP NAVIGATION IF EXISTS nav;")]
-        [InlineData("DROP DATASET IF EXISTS ds;")]
+        [InlineData("DROP DATASET IF EXISTS &ds;")]
         [InlineData("DROP TEMPLATE IF EXISTS tpl;")]
         [InlineData("DROP THEME IF EXISTS thm;")]
         [InlineData("DROP ALERT IF EXISTS a;")]
@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("DROP CONTAINER ctr IF EXISTS;", "DROP CONTAINER IF EXISTS ctr")]
         [InlineData("DROP STYLE sty IF EXISTS;", "DROP STYLE IF EXISTS sty")]
         [InlineData("DROP NAVIGATION nav IF EXISTS;", "DROP NAVIGATION IF EXISTS nav")]
-        [InlineData("DROP DATASET ds IF EXISTS;", "DROP DATASET IF EXISTS ds")]
+        [InlineData("DROP DATASET &ds IF EXISTS;", "DROP DATASET IF EXISTS &ds")]
         [InlineData("DROP TEMPLATE tpl IF EXISTS;", "DROP TEMPLATE IF EXISTS tpl")]
         [InlineData("DROP THEME thm IF EXISTS;", "DROP THEME IF EXISTS thm")]
         public void RetiredPostNameForm_IsRejected_WithTheCanonicalSpelling(string sql, string expectedFix)

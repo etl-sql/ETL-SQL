@@ -93,6 +93,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 #### P1 — Identity, type, and clause ordering
 
+- [x] Enforce `&name` for local/report `DROP DATASET` and update parser/handler tests to reject
+      bare or `#temp` dataset identities while preserving quoted Portal dataset drops.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.

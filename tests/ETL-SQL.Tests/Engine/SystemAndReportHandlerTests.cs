@@ -297,14 +297,14 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task DropDataset_IfExists_NoThrow()
         {
-            await Run("DROP DATASET IF EXISTS #nonexistent_ds;");
+            await Run("DROP DATASET IF EXISTS &nonexistent_ds;");
         }
 
         [Fact]
         public async Task DropDataset_WithoutIfExists_Throws()
         {
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("DROP DATASET #totally_nonexistent_ds_xyz;"));
+                Run("DROP DATASET &totally_nonexistent_ds_xyz;"));
         }
 
         [Fact]
@@ -312,7 +312,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
-                "DROP DATASET IF EXISTS #myds;");
+                "DROP DATASET IF EXISTS &myds;");
             Assert.NotNull(eval);
         }
 

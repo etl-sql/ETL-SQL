@@ -755,6 +755,8 @@ public class DataParser : ParserComponent
                     _parser.Current.Line,
                     _parser.Current.Column);
             var name = ConsumeIdentifier("Expected dataset name").Value;
+            if (!name.StartsWith("&", StringComparison.Ordinal))
+                throw new SyntaxException("DROP DATASET names must use the &dataset form", _parser.Previous.Line, _parser.Previous.Column);
             RejectTrailingIfExists("DATASET", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };

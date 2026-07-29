@@ -102,6 +102,31 @@ namespace ETL_SQL.Tests.Reporting
                 d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
         }
 
+        // ── Parser — DROP DATASET ────────────────────────────────────────────────
+
+        [Fact]
+        public void DropDataset_WithAmpersandSigil_ParsesName()
+        {
+            var script = Parse("DROP DATASET IF EXISTS &sales;");
+            var stmt = Assert.Single(script.Statements);
+            var drop = Assert.IsType<DropReportObjectStatement>(stmt);
+            Assert.Equal("&sales", drop.Name);
+            Assert.True(drop.IfExists);
+        }
+
+        [Theory]
+        [InlineData("DROP DATASET sales;")]
+        [InlineData("DROP DATASET #sales;")]
+        public void DropDataset_LocalNameWithoutAmpersand_ReportsSyntaxError(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
         // ── UseDatasetRedundantRule ───────────────────────────────────────────────
 
         [Fact]
