@@ -122,7 +122,7 @@ For release or production go-live evidence, capture:
 - Portal and Orchestrator application logs with correlation IDs.
 - Job history, audit outbox state, security-event delivery state, and subscription delivery ledgers.
 - Artifact root listings or storage snapshots that prove no missing durable artifacts were referenced.
-- `etl-sql admin ha-soak fault-run` and `etl-sql admin ha-soak validate` outputs when using the native
+- `etl-sql admin ha-soak` sequence (`fault-plan` → `fault-run` → `evidence` → `validate`) outputs when using the native
   HA soak harness.
 
 The certification pass condition is not "no failures observed." The pass condition is that each

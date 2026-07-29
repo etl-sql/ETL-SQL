@@ -83,7 +83,7 @@ Before enterprise release claims are made, collect current evidence from these s
 | Migration/upgrade | `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain` plus the N to N+1 upgrade-path phase | Forward migration and release packaging confidence. |
 | Enterprise hardening | `.\scripts\Test-EnterpriseHardeningCertification.ps1` on Windows and Linux | Enrollment, signed policy, operation-boundary enforcement, standalone behavior, and security-event delivery. |
 | Recovery | `etl-sql admin restore --validate --report recovery-report.json` and `BackupRestoreDrillTests` | Archive integrity, key coverage, clone-safety actions, service-account/audit/job continuity. |
-| HA failure certification | `etl-sql admin ha-soak fault-run` and `etl-sql admin ha-soak validate` | PostgreSQL/shared-storage failover, node loss, duplicate ownership, orphaned work, and recovery evidence. |
+| HA failure certification | Bounded run ordering: `fault-plan` → `fault-run` → `evidence` → `validate` | PostgreSQL/shared-storage failover, node loss, duplicate ownership, orphaned work, and recovery evidence. |
 | Scale/performance | `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`; Standard tier when advertising scale claims | Bounded-memory and spill behavior. |
 | Standalone regression | `StandaloneRegressionTests` | Unenrolled standalone hosts remain unrestricted by enterprise policy. |
 | Security boundary docs | `SecurityBoundaryDocTests` | Documentation does not overclaim OS-level containment and mandates WDAC/AppLocker or equivalent where required. |

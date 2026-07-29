@@ -23,7 +23,7 @@ None of these can be inherited from v0.17.0 — evidence is per-release, against
 - [ ] Enterprise hardening certification — `scripts/Test-EnterpriseHardeningCertification.ps1`,
       Windows **and** Linux
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
-- [ ] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
+- [x] HA fault injection — `etl-sql admin ha-soak validate` (run `fault-plan` before `fault-run`,
       and `evidence` before `validate` — see the RCI item below)
 - [ ] Security-boundary docs — `SecurityBoundaryDocTests` green
 - [ ] Evidence indexed under `artifacts/release-evidence/0.18.0/`, recording what was **not**
@@ -841,7 +841,7 @@ defects**, they were the gate measuring the wrong thing, hiding things, or being
       *in-pipeline data quality* — the largest feature of the release — absent from the summary and
       highlights entirely. Prefer a `changelog.d/<branch>.md` fragment per feature branch that the
       gate concatenates, so notes cannot lag code.
-- [ ] **Correct `CLAUDE.md`'s claim that CI runs only on `main` pushes.** It runs on pushes and PRs
+- [x] **Correct `CLAUDE.md`'s claim that CI runs only on `main` pushes.** It runs on pushes and PRs
       to `main` **and** `release/**`. Believing otherwise implies you must merge to `main` to get CI,
       inverting the intended order and re-creating the v0.16.0 failure mode.
 
@@ -853,7 +853,7 @@ defects**, they were the gate measuring the wrong thing, hiding things, or being
 - [ ] **Pause Dependabot during a release window.** Pushing `main` rebased both open PRs and
       re-triggered four CI/CodeQL runs that competed with the release-critical jobs for Windows
       runners.
-- [ ] **Document the `ha-soak` command ordering.** `fault-run` requires `fault-plan` first and
+- [x] **Document the `ha-soak` command ordering.** `fault-run` requires `fault-plan` first and
       `validate` requires `evidence` first; the checklist lists only "`fault-run` then `validate`",
       so both fail on a first attempt.
 
