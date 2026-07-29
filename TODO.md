@@ -139,6 +139,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       `eng.variables`, and `eng.views`.
 - [x] Implement local diagnostics virtual tables for `eng.version`, `eng.safe_zones`, and
       `eng.profile`.
+- [x] Implement `eng.connection_config` for redacted active connection configuration.
 - [x] Implement `eng.tags` as a globally enumerable virtual table over lineage tag metadata.
 - [x] Remove `SHOW TAGS FOR SCRIPT`, `SHOW TAGS FOR TABLE <name>`, and `SHOW TAG VALUE`
       after replacing them with `SELECT ... FROM eng.tags`.

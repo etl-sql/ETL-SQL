@@ -273,6 +273,34 @@ SELECT statement, rows_processed, duration_ms FROM eng.profile;";
             Assert.Contains("rows_processed", eval.LastResult!.ColumnNames);
         }
 
+        [Fact]
+        public async Task EngConnectionConfig_ReturnsConnectionOptions()
+        {
+            var csvPath = Path.Combine(Path.GetTempPath(), $"conn_config_{Guid.NewGuid():N}.csv");
+            await File.WriteAllTextAsync(csvPath, "x\n1");
+
+            try
+            {
+                var script = $@"
+CREATE CONNECTION cfg_conn AS FLATFILE('{csvPath}');
+SELECT connection_name, option, value
+FROM eng.connection_config
+WHERE connection_name = 'cfg_conn';";
+                var eval = NewEval();
+                await eval.Evaluate(TestHelpers.Parse(script));
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Contains("connection_name", eval.LastResult!.ColumnNames);
+                Assert.Contains("option", eval.LastResult!.ColumnNames);
+                Assert.Contains("value", eval.LastResult!.ColumnNames);
+                Assert.All(eval.LastResult!.Rows, row => Assert.Equal("cfg_conn", row["connection_name"]?.ToString()));
+            }
+            finally
+            {
+                if (File.Exists(csvPath)) File.Delete(csvPath);
+            }
+        }
+
         // ── SHOW JOB HISTORY ───────────────────────────────────────────────────
 
         [Fact]

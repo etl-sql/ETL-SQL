@@ -441,6 +441,66 @@ public sealed class ProfileDataSource : IDataSource
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+public sealed class ConnectionConfigDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private static readonly string[] Columns = ["connection_name", "option", "value"];
+
+    public ConnectionConfigDataSource(IExecutionContext context)
+    {
+        _context = context;
+    }
+
+    public string Path => "eng.connection_config";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        foreach (var connection in _context.Connections.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var option in connection.Value.GetConfig().OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["connection_name"] = connection.Key,
+                    ["option"] = option.Key,
+                    ["value"] = option.Value
+                });
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        if (rows.Count > 0)
+            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.connection_config is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 internal static class EngineCatalogTableBuilder
 {
     public static async Task<DataTable> BuildAsync(IEnumerable<string> columns, IEnumerable<Row> rows)

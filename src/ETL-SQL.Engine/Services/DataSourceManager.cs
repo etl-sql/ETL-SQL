@@ -172,6 +172,10 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             return new ProfileDataSource(_evaluator);
         }
+        else if (IsEngineVirtualTable(table, "connection_config"))
+        {
+            return new ConnectionConfigDataSource(_evaluator);
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);

@@ -1051,6 +1051,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `eng.connections` | Diagnostics | Queryable virtual table for active session connections |
+| `eng.connection_config` | Diagnostics | Queryable virtual table for redacted active connection configuration |
 | `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
 | `eng.variables` | Diagnostics | Queryable virtual table for session variables with sensitive values masked |
 | `eng.views` | Diagnostics | Queryable virtual table for session view definitions |
