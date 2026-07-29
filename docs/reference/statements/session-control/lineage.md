@@ -160,6 +160,14 @@ Those tags are intentionally not type-checked by the built-in catalog. The depre
 `@sensitivity` alias is recognized for compatibility, but linting warns to use
 `@classification` instead.
 
+Explicit metadata records use DML-style syntax:
+
+```sql
+INSERT TAG FOR TABLE #orders COLUMN customer_id (pii = 'true', owner = 'FinanceOps');
+UPDATE TAG FOR TABLE #orders COLUMN customer_id (owner = 'Privacy Review');
+DELETE TAG FOR TABLE #orders COLUMN customer_id (owner);
+```
+
 ### Tag Syntax
 
 Tags go in SQL block comments on the column expression they annotate, using semicolons to separate multiple tags:

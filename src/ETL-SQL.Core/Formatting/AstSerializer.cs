@@ -176,6 +176,7 @@ public static class AstSerializer
         CreateButtonStatement s => FormatCreateButton(s),
         CreateStyleStatement s => FormatCreateStyle(s),
         CreateTagStatement s => FormatCreateTag(s),
+        DeleteTagStatement s => FormatDeleteTag(s),
         CreateLineageStatement s => FormatCreateLineageImport(s),
         LineageStatement s => FormatLineage(s),
         TransformStatement s => FormatTransform(s),
@@ -774,6 +775,12 @@ public static class AstSerializer
         var column = s.ColumnName != null ? $" COLUMN {FormatMetadataNameExpression(s.ColumnName)}" : "";
         var tags = string.Join(", ", s.Tags.Select(t => $"{t.Key} = {t.Value.ToSql()}"));
         return $"INSERT TAG FOR TABLE {FormatMetadataNameExpression(s.TableName)}{column} ({tags});";
+    }
+
+    private static string FormatDeleteTag(DeleteTagStatement s)
+    {
+        var column = s.ColumnName != null ? $" COLUMN {FormatMetadataNameExpression(s.ColumnName)}" : "";
+        return $"DELETE TAG FOR TABLE {FormatMetadataNameExpression(s.TableName)}{column} ({string.Join(", ", s.TagNames)});";
     }
 
     private static string FormatCreateLineageImport(CreateLineageStatement s) =>

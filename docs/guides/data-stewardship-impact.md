@@ -46,6 +46,12 @@ INSERT TAG FOR TABLE #orders_curated COLUMN customer_id (
   pii = 'true',
   classification = 'restricted'
 );
+
+UPDATE TAG FOR TABLE #orders_curated COLUMN customer_id (
+  steward = 'Privacy Review'
+);
+
+DELETE TAG FOR TABLE #orders_curated COLUMN customer_id (steward);
 ```
 
 ## Finding Metadata Gaps

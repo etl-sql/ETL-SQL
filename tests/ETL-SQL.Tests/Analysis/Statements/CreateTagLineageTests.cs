@@ -52,6 +52,28 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
+        public void ParseUpdateTag_TableAndColumn_WithMultipleTags()
+        {
+            var stmt = TestHelpers.Parse("UPDATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Updated', owner = 'Finance');")
+                .Statements.OfType<CreateTagStatement>().Single();
+
+            Assert.NotNull(stmt.ColumnName);
+            Assert.Equal(2, stmt.Tags.Count);
+            Assert.Equal("INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Updated', owner = 'Finance');", stmt.ToSql());
+        }
+
+        [Fact]
+        public void ParseDeleteTag_TableAndColumn_WithMultipleTags()
+        {
+            var stmt = TestHelpers.Parse("DELETE TAG FOR TABLE MyTable COLUMN Amount (d, owner);")
+                .Statements.OfType<DeleteTagStatement>().Single();
+
+            Assert.NotNull(stmt.ColumnName);
+            Assert.Equal(["d", "owner"], stmt.TagNames);
+            Assert.Equal("DELETE TAG FOR TABLE MyTable COLUMN Amount (d, owner);", stmt.ToSql());
+        }
+
+        [Fact]
         public void ParseTag_LegacyTableSyntax_WithMultipleTags()
         {
             var stmt = TestHelpers.Parse(@"
@@ -136,6 +158,50 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
             Assert.Equal("Sales amount", meta["d"]);
             Assert.Equal("Finance", meta["owner"]);
+        }
+
+        [Fact]
+        public async Task UpdateTag_OverwritesExistingMetadata()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval, @"
+                INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');
+                UPDATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Net sales amount');");
+
+            var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
+            Assert.Equal("Net sales amount", meta["d"]);
+            Assert.Equal("Finance", meta["owner"]);
+        }
+
+        [Fact]
+        public async Task DeleteTag_RemovesSelectedMetadata()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval, @"
+                INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');
+                DELETE TAG FOR TABLE MyTable COLUMN Amount (owner);");
+
+            var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
+            Assert.Equal("Sales amount", meta["d"]);
+            Assert.False(meta.ContainsKey("owner"));
+        }
+
+        [Fact]
+        public async Task DeleteTag_InLoop_RemovesRuntimeResolvedMetadata()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval, @"
+                CREATE TABLE #meta (tbl VARCHAR(20), col VARCHAR(20));
+                INSERT INTO #meta VALUES ('T', 'Amount');
+                INSERT TAG FOR TABLE T COLUMN Amount (owner = 'Finance', d = 'Sales amount');
+                FOR @r IN (SELECT tbl, col FROM #meta)
+                BEGIN
+                    DELETE TAG FOR TABLE @r.tbl COLUMN @r.col (owner);
+                END");
+
+            var meta = eval.LineageTracker.GetColumnMetadata("T", "Amount");
+            Assert.Equal("Sales amount", meta["d"]);
+            Assert.False(meta.ContainsKey("owner"));
         }
 
         [Fact]

@@ -852,6 +852,9 @@ public class DataParser : ParserComponent
 
     public Statement ParseDelete(Token startToken)
     {
+        if (Match(TokenType.TAG))
+            return ParseDeleteTag(startToken);
+
         if (Match(TokenType.FILE))
         {
             bool ifExists = false;
@@ -976,6 +979,12 @@ public class DataParser : ParserComponent
 
     public Statement ParseUpdate(Token startToken)
     {
+        if (_parser.Current.Type == TokenType.TAG)
+        {
+            Advance();
+            return ParseUpdateTag(startToken);
+        }
+
         var targetTable = ParseTableReference(false);
         Consume(TokenType.SET, "Expected 'SET' in UPDATE statement");
 
@@ -1482,6 +1491,46 @@ public class DataParser : ParserComponent
 
         var tags = ParseTagAssignments(startToken, "INSERT TAG");
         return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    /// <summary>UPDATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...)</summary>
+    private Statement ParseUpdateTag(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after UPDATE TAG");
+        Consume(TokenType.TABLE, "Expected TABLE after UPDATE TAG FOR");
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+        Expression? columnExpr = null;
+        if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
+
+        var tags = ParseTagAssignments(startToken, "UPDATE TAG");
+        return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    /// <summary>DELETE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key, ...)</summary>
+    private Statement ParseDeleteTag(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after DELETE TAG");
+        Consume(TokenType.TABLE, "Expected TABLE after DELETE TAG FOR");
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+        Expression? columnExpr = null;
+        if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
+
+        Consume(TokenType.LPAREN, "Expected '(' to begin the tag list in DELETE TAG");
+        var tagNames = new List<string>();
+        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+        {
+            tagNames.Add(Advance().Value);
+            if (!Match(TokenType.COMMA)) break;
+        }
+        Consume(TokenType.RPAREN, "Expected ')' to close DELETE TAG");
+        Consume(TokenType.SEMICOLON, "Expected ';' at the end of DELETE TAG");
+
+        if (tagNames.Count == 0)
+            throw new SyntaxException("DELETE TAG requires at least one tag name.", startToken.Line, startToken.Column);
+
+        return new DeleteTagStatement(tableExpr, columnExpr, tagNames) { Line = startToken.Line, Column = startToken.Column };
     }
 
     private Dictionary<string, Expression> ParseTagAssignments(Token startToken, string statementName)

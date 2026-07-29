@@ -2633,6 +2633,24 @@ public sealed record CreateTagStatement : Statement
 }
 
 /// <summary>
+/// DELETE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key, ...) removes explicit
+/// table-/column-level metadata from the lineage tracker.
+/// </summary>
+public sealed record DeleteTagStatement : Statement
+{
+    public Expression TableName { get; }
+    public Expression? ColumnName { get; }
+    public IReadOnlyList<string> TagNames { get; }
+
+    public DeleteTagStatement(Expression tableName, Expression? columnName, IReadOnlyList<string> tagNames)
+    {
+        TableName = tableName;
+        ColumnName = columnName;
+        TagNames = tagNames;
+    }
+}
+
+/// <summary>
 /// CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; — imports lineage from an OpenLineage
 /// JSON document (file path or inline JSON string), mirroring SHOW LINEAGE EXPORT AS OPENLINEAGE.
 /// </summary>

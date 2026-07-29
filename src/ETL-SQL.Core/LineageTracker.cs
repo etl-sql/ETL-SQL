@@ -213,6 +213,33 @@ public class LineageTracker : ILineageTracker
         }
     }
 
+    public void RemoveTags(string table, string? column, IReadOnlyCollection<string> tagNames)
+    {
+        if (string.IsNullOrEmpty(table) || tagNames == null || tagNames.Count == 0) return;
+
+        lock (_lock)
+        {
+            if (string.IsNullOrEmpty(column))
+            {
+                if (_latestTableMetadata.TryGetValue(table, out var tm))
+                {
+                    foreach (var tagName in tagNames) tm.Remove(tagName);
+                }
+            }
+            else if (_latestColumnMetadata.TryGetValue(table, out var cols)
+                     && cols.TryGetValue(column, out var cm))
+            {
+                foreach (var tagName in tagNames) cm.Remove(tagName);
+            }
+
+            AddEntry(new LineageEntry(table, "TABLE_TAG_DELETE")
+            {
+                TargetColumn = column,
+                Metadata = tagNames.ToDictionary(tagName => tagName, _ => "", StringComparer.OrdinalIgnoreCase)
+            });
+        }
+    }
+
     public IEnumerable<LineageEntry> GetLineage(string tableName)
     {
         lock (_lock)
