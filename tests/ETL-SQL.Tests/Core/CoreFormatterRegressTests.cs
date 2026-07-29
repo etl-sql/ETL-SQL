@@ -8,13 +8,13 @@ namespace ETL_SQL.Tests.Core
         [Fact]
         public void TestNewCommandsFormatting()
         {
-            string sql = "DECLARE @v INT; SET @v = 1; PRINT @v; FILE_SEND 'local', MYREMOTE, 'remote'; SHOW LINEAGE FOR MyTable;";
+            string sql = "DECLARE @v INT; SET @v = 1; PRINT @v; SEND FILE 'local' TO 'remote' AT MYREMOTE; SHOW LINEAGE FOR MyTable;";
             string formatted = SqlFormatter.Format(sql);
 
             Assert.Contains("DECLARE", formatted);
             Assert.Contains("SET", formatted);
             Assert.Contains("PRINT", formatted);
-            Assert.Contains("FILE_SEND", formatted);
+            Assert.Contains("SEND FILE", formatted);
             Assert.Contains("LINEAGE", formatted);
 
             // Should have multiple lines now

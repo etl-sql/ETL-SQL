@@ -115,7 +115,7 @@ namespace ETL_SQL.Tests.Hardening
             {
                 var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
-                await ev.Evaluate(TestHelpers.Parse($"DELETE_DIRECTORY('{inner.Replace("\\", "/")}');"));
+                await ev.Evaluate(TestHelpers.Parse($"DELETE DIRECTORY '{inner.Replace("\\", "/")}';"));
 
                 Assert.False(Directory.Exists(inner));
             }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
@@ -21,6 +22,23 @@ namespace ETL_SQL.Tests.Statements.Statements
             var parser = new Parser(lexer.Tokenize());
             var script = parser.Parse();
             await evaluator.Evaluate(script);
+        }
+
+        [Theory]
+        [InlineData("COPY_FILE('a', 'b');", "COPY FILE")]
+        [InlineData("MOVE_FILE('a', 'b');", "MOVE FILE")]
+        [InlineData("DELETE_FILE('a');", "DELETE FILE")]
+        [InlineData("CREATE_DIRECTORY('a');", "CREATE DIRECTORY")]
+        [InlineData("SEND_FILE('a', conn, 'b');", "SEND FILE")]
+        [InlineData("RECEIVE_FILE(conn, 'a', 'b');", "RECEIVE FILE")]
+        [InlineData("FILE_SEND 'a', conn, 'b';", "SEND FILE")]
+        [InlineData("FILE_RECEIVE conn, 'a', 'b';", "RECEIVE FILE")]
+        public void RetiredFileAndEmailAliases_AreRejected(string sql, string replacement)
+        {
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+            var diagnostic = Assert.Single(script.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Contains("retired", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(replacement, diagnostic.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -182,7 +200,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
-        public async Task TestUnderscoreFunctionOverwrite()
+        public async Task TestSqlStyleCopyFileOverwriteOff()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string src = "fs_test_func_src.txt";
@@ -192,10 +210,9 @@ namespace ETL_SQL.Tests.Statements.Statements
 
             try
             {
-                // Traditional syntax with 3rd param (OFF)
                 await Assert.ThrowsAsync<ExecutionException>(async () =>
                 {
-                    await ExecuteAsync($"COPY_FILE('{src}', '{dst}', OFF);", evaluator);
+                    await ExecuteAsync($"COPY FILE '{src}' TO '{dst}' WITH(OVERWRITE=OFF);", evaluator);
                 });
             }
             finally

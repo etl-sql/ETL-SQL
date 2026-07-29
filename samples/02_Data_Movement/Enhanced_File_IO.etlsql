@@ -37,5 +37,5 @@ AT my_smtp_server;
 
 -- 4. Comparison with Shorthand
 -- Both are equivalent.
--- Shorthand: COPY_FILE('src', 'dest', OVERWRITE=ON);
+-- Canonical: COPY FILE 'src' TO 'dest' WITH (OVERWRITE = ON);
 -- Verbose:   COPY FILE 'src' TO 'dest' WITH(OVERWRITE=ON);

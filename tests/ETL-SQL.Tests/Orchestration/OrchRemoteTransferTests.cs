@@ -179,7 +179,7 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
-        public async Task Test_FunctionStyle_FileTransfer()
+        public async Task Test_SqlStyle_FileTransferOverwrite()
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
@@ -189,13 +189,13 @@ namespace ETL_SQL.Tests.Orchestration
             string localFile = Path.Combine(Path.GetTempPath(), "func_upload.txt");
             File.WriteAllText(localFile, "Func Content");
 
-            // 1. SEND_FILE(local, conn, remote, over)
-            await RunScriptAsync(evaluator, $"SEND_FILE('{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'func_remote.txt', ON);");
+            // 1. SEND FILE
+            await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'func_remote.txt' AT MYREMOTE WITH(OVERWRITE=ON);");
             Assert.Equal("Func Content", mockFs.RemoteFiles["func_remote.txt"]);
 
-            // 2. SEND_FILE Overwrite OFF
+            // 2. SEND FILE Overwrite OFF
             await Assert.ThrowsAsync<Exception>(async () =>
-                await RunScriptAsync(evaluator, $"SEND_FILE('{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'func_remote.txt', OFF);"));
+                await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'func_remote.txt' AT MYREMOTE WITH(OVERWRITE=OFF);"));
 
             // Cleanup
             if (File.Exists(localFile)) File.Delete(localFile);

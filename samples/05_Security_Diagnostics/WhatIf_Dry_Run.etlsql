@@ -16,7 +16,7 @@ VALUES (99, 'DryRunUser', 'dryrun@example.com');
 DELETE FROM local_db.Orders WHERE OrderID = 1;
 
 -- This FILE_OPERATION will be logged but NOT executed
-COMPRESS_FILE 'testdata/sample.csv' TO 'samples/output/sample.csv.zip';
+COMPRESS FILE 'testdata/sample.csv' TO 'samples/output/sample.csv.zip';
 
 PRINT('--- DRY RUN END ---');
 

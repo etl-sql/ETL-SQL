@@ -268,8 +268,7 @@ public class StatementParser
 
         if (_parser.Match(TokenType.SEND_EMAIL))
         {
-            if (_parser.Current.Type == TokenType.LPAREN) return ExtensionParser.ParseSendEmail(false);
-            return ExtensionParser.ParseSendEmail(true);
+            throw new SyntaxException("SEND_EMAIL has been retired. Use SEND EMAIL TO ... FROM ... SUBJECT ... BODY ... AT <connection>.", _parser.Previous.Line, _parser.Previous.Column);
         }
 
         if (_parser.Match(TokenType.SEND))
@@ -295,8 +294,16 @@ public class StatementParser
             }
         }
 
-        if (type == TokenType.FILE_SEND || type == TokenType.SEND_FILE) { _parser.Advance(); return ExtensionParser.ParseFileTransfer(FileTransferType.Send, false); }
-        if (type == TokenType.FILE_RECEIVE || type == TokenType.RECEIVE_FILE) { _parser.Advance(); return ExtensionParser.ParseFileTransfer(FileTransferType.Receive, false); }
+        if (type == TokenType.FILE_SEND || type == TokenType.SEND_FILE)
+        {
+            var token = _parser.Advance();
+            throw new SyntaxException($"{token.Value} has been retired. Use SEND FILE <local> TO <remote> AT <connection>.", token.Line, token.Column);
+        }
+        if (type == TokenType.FILE_RECEIVE || type == TokenType.RECEIVE_FILE)
+        {
+            var token = _parser.Advance();
+            throw new SyntaxException($"{token.Value} has been retired. Use RECEIVE FILE FROM <remote> TO <local> AT <connection>.", token.Line, token.Column);
+        }
 
         if (_parser.Match(TokenType.KILL)) return DataParser.ParseKillJob(_parser.Previous);
 
@@ -314,7 +321,8 @@ public class StatementParser
             type == TokenType.RENAME_FILE || type == TokenType.DELETE_FILE ||
             type == TokenType.COMPRESS_FILE || type == TokenType.DECOMPRESS_FILE || type == TokenType.ENCRYPT_FILE || type == TokenType.DECRYPT_FILE)
         {
-            return ExtensionParser.ParseFileOperation(_parser.Advance());
+            var token = _parser.Advance();
+            throw new SyntaxException($"{token.Value} has been retired. Use {FormatFileReplacement(token.Type)}.", token.Line, token.Column);
         }
 
         if (type == TokenType.CREATE_DIRECTORY || type == TokenType.DELETE_DIRECTORY ||
@@ -322,7 +330,8 @@ public class StatementParser
             type == TokenType.COPY_DIRECTORY || type == TokenType.DELETE_DIRECTORY_CONTENTS ||
             type == TokenType.COMPRESS_DIRECTORY || type == TokenType.ENCRYPT_DIRECTORY || type == TokenType.DECRYPT_DIRECTORY)
         {
-            return ExtensionParser.ParseDirectoryOperation(_parser.Advance());
+            var token = _parser.Advance();
+            throw new SyntaxException($"{token.Value} has been retired. Use {FormatDirectoryReplacement(token.Type)}.", token.Line, token.Column);
         }
 
 
@@ -414,6 +423,41 @@ public class StatementParser
                type == TokenType.COMPRESS_FILE || type == TokenType.DECOMPRESS_FILE ||
                type == TokenType.COMPRESS_DIRECTORY || type == TokenType.DECOMPRESS_DIRECTORY ||
                type == TokenType.ENABLE || type == TokenType.DISABLE || type == TokenType.TRIGGER;
+    }
+
+    private static string FormatFileReplacement(TokenType type)
+    {
+        var op = type switch
+        {
+            TokenType.COPY_FILE => "COPY",
+            TokenType.MOVE_FILE => "MOVE",
+            TokenType.RENAME_FILE => "RENAME",
+            TokenType.DELETE_FILE => "DELETE",
+            TokenType.COMPRESS_FILE => "COMPRESS",
+            TokenType.DECOMPRESS_FILE => "DECOMPRESS",
+            TokenType.ENCRYPT_FILE => "ENCRYPT",
+            TokenType.DECRYPT_FILE => "DECRYPT",
+            _ => type.ToString().Replace("_FILE", "")
+        };
+        return $"{op} FILE ...";
+    }
+
+    private static string FormatDirectoryReplacement(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.CREATE_DIRECTORY => "CREATE DIRECTORY ...",
+            TokenType.DELETE_DIRECTORY => "DELETE DIRECTORY ...",
+            TokenType.RENAME_DIRECTORY => "RENAME DIRECTORY ...",
+            TokenType.MOVE_DIRECTORY => "MOVE DIRECTORY ...",
+            TokenType.COPY_DIRECTORY => "COPY DIRECTORY ...",
+            TokenType.DELETE_DIRECTORY_CONTENTS => "DELETE DIRECTORY_CONTENTS ...",
+            TokenType.COMPRESS_DIRECTORY => "COMPRESS DIRECTORY ...",
+            TokenType.DECOMPRESS_DIRECTORY => "DECOMPRESS DIRECTORY ...",
+            TokenType.ENCRYPT_DIRECTORY => "ENCRYPT DIRECTORY ...",
+            TokenType.DECRYPT_DIRECTORY => "DECRYPT DIRECTORY ...",
+            _ => type.ToString().Replace("_", " ") + " ..."
+        };
     }
 
     public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();

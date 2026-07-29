@@ -41,12 +41,16 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > SELECT TOP 10 * FROM pg_conn.customers;
 > ```
 
-**Q: What's the difference between `SEND EMAIL` and `SEND_EMAIL`?**
-> They do the same thing. ETL-SQL supports two syntax styles for most operations:
-> - **SQL style** (preferred): `SEND EMAIL TO '...' FROM '...' SUBJECT '...' BODY '...' AT conn;`
-> - **Function style**: `SEND_EMAIL(conn, 'to', 'from', 'subject', 'body');`
->
-> SQL style is preferred in new scripts — it's more readable and closer to natural language.  Function style is available to those who feel more comfortable with this style.
+**Q: What's the correct way to send email from a script?**
+> Use the canonical SQL-style statement:
+> ```sql
+> SEND EMAIL TO 'user@example.com'
+> FROM 'etl@example.com'
+> SUBJECT 'Pipeline complete'
+> BODY 'The nightly run finished.'
+> AT smtp_conn;
+> ```
+> Legacy `SEND_EMAIL(...)` syntax has been retired.
 
 **Q: Can I use `WAIT UNTIL (SELECT ...)` to poll until a condition is true?**
 > Yes — `WAIT UNTIL condition` evaluates the expression repeatedly at a 200ms interval and continues execution as soon as the result is truthy (non-zero, non-empty, or `true`):

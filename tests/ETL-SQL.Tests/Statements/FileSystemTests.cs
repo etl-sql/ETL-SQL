@@ -107,10 +107,7 @@ namespace ETL_SQL.Tests.Statements
 
             try
             {
-                // Note: The parser for directory operations uses a different path than basic statements in some cases,
-                // but ParseStatement handles them. We need to make sure we use the right syntax.
-                // Syntax from StatementParser: CREATE_DIRECTORY(path, extra), etc.
-                await evaluator.Evaluate(new Lexer($"COPY_DIRECTORY('{src}', '{dest}');").TokenizeToScript());
+                await evaluator.Evaluate(new Lexer($"COPY DIRECTORY '{src}' TO '{dest}';").TokenizeToScript());
                 Assert.True(File.Exists(Path.Combine(dest, "test.txt")));
             }
             finally
@@ -133,7 +130,7 @@ namespace ETL_SQL.Tests.Statements
 
             try
             {
-                await evaluator.Evaluate(new Lexer($"DELETE_DIRECTORY_CONTENTS('{dir}');").TokenizeToScript());
+                await evaluator.Evaluate(new Lexer($"DELETE DIRECTORY_CONTENTS '{dir}' WITH(RECURSIVE=ON);").TokenizeToScript());
                 Assert.True(Directory.Exists(dir));
                 Assert.Empty(Directory.GetFiles(dir));
                 Assert.Empty(Directory.GetDirectories(dir));
@@ -157,14 +154,14 @@ namespace ETL_SQL.Tests.Statements
             var evaluator = GetEvaluator();
             try
             {
-                await evaluator.Evaluate(new Lexer($"COPY_FILE('{src}', '{dest}');").TokenizeToScript());
-                Assert.True(File.Exists(dest), "COPY_FILE failed");
+                await evaluator.Evaluate(new Lexer($"COPY FILE '{src}' TO '{dest}';").TokenizeToScript());
+                Assert.True(File.Exists(dest), "COPY FILE failed");
 
-                await evaluator.Evaluate(new Lexer($"DELETE_FILE('{src}');").TokenizeToScript());
-                Assert.False(File.Exists(src), "DELETE_FILE failed");
+                await evaluator.Evaluate(new Lexer($"DELETE FILE '{src}';").TokenizeToScript());
+                Assert.False(File.Exists(src), "DELETE FILE failed");
 
-                await evaluator.Evaluate(new Lexer($"RENAME_FILE('{dest}', 'file_renamed.txt');").TokenizeToScript());
-                Assert.True(File.Exists("file_renamed.txt"), "RENAME_FILE failed");
+                await evaluator.Evaluate(new Lexer($"RENAME FILE '{dest}' TO 'file_renamed.txt';").TokenizeToScript());
+                Assert.True(File.Exists("file_renamed.txt"), "RENAME FILE failed");
             }
             finally
             {
@@ -185,14 +182,14 @@ namespace ETL_SQL.Tests.Statements
             var evaluator = GetEvaluator();
             try
             {
-                await evaluator.Evaluate(new Lexer($"CREATE_DIRECTORY('{dir}');").TokenizeToScript());
-                Assert.True(Directory.Exists(dir), "CREATE_DIRECTORY failed");
+                await evaluator.Evaluate(new Lexer($"CREATE DIRECTORY '{dir}';").TokenizeToScript());
+                Assert.True(Directory.Exists(dir), "CREATE DIRECTORY failed");
 
-                await evaluator.Evaluate(new Lexer($"RENAME_DIRECTORY('{dir}', '{renamedDir}');").TokenizeToScript());
-                Assert.True(Directory.Exists(renamedDir), "RENAME_DIRECTORY failed");
+                await evaluator.Evaluate(new Lexer($"RENAME DIRECTORY '{dir}' TO '{renamedDir}';").TokenizeToScript());
+                Assert.True(Directory.Exists(renamedDir), "RENAME DIRECTORY failed");
 
-                await evaluator.Evaluate(new Lexer($"DELETE_DIRECTORY('{renamedDir}');").TokenizeToScript());
-                Assert.False(Directory.Exists(renamedDir), "DELETE_DIRECTORY failed");
+                await evaluator.Evaluate(new Lexer($"DELETE DIRECTORY '{renamedDir}';").TokenizeToScript());
+                Assert.False(Directory.Exists(renamedDir), "DELETE DIRECTORY failed");
             }
             finally
             {

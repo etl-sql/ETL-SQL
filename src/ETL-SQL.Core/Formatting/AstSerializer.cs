@@ -616,26 +616,12 @@ public static class AstSerializer
 
     private static string FormatEmail(EmailStatement s)
     {
-        if (s.IsSqlStyle)
-        {
-            var sql = $"SEND EMAIL TO {s.To.ToSql()}\nFROM {s.From.ToSql()}\nSUBJECT {s.Subject.ToSql()}\nBODY {s.Body.ToSql()}";
-            if (s.Cc != null && s.Cc.Count > 0) sql += "\nCC " + string.Join(", ", s.Cc.Select(e => e.ToSql()));
-            if (s.Bcc != null && s.Bcc.Count > 0) sql += "\nBCC " + string.Join(", ", s.Bcc.Select(e => e.ToSql()));
-            if (s.Attachments != null && s.Attachments.Count > 0) sql += "\nATTACH " + string.Join(", ", s.Attachments.Select(e => e.ToSql()));
-            if (s.ConnectionName != null) sql += $"\nAT {s.ConnectionName.ToSql()}";
-            return sql + ";";
-        }
-        else
-        {
-            var args = new List<string> { s.ConnectionName?.ToSql() ?? "NULL", s.To.ToSql(), s.From.ToSql(), s.Subject.ToSql(), s.Body.ToSql() };
-            if (s.Cc != null || s.Bcc != null || s.Attachments != null)
-            {
-                args.Add(s.Cc != null ? "[" + string.Join(", ", s.Cc.Select(e => e.ToSql())) + "]" : "NULL");
-                args.Add(s.Bcc != null ? "[" + string.Join(", ", s.Bcc.Select(e => e.ToSql())) + "]" : "NULL");
-                args.Add(s.Attachments != null ? "[" + string.Join(", ", s.Attachments.Select(e => e.ToSql())) + "]" : "NULL");
-            }
-            return $"SEND_EMAIL({string.Join(", ", args)});";
-        }
+        var sql = $"SEND EMAIL TO {s.To.ToSql()}\nFROM {s.From.ToSql()}\nSUBJECT {s.Subject.ToSql()}\nBODY {s.Body.ToSql()}";
+        if (s.Cc != null && s.Cc.Count > 0) sql += "\nCC " + string.Join(", ", s.Cc.Select(e => e.ToSql()));
+        if (s.Bcc != null && s.Bcc.Count > 0) sql += "\nBCC " + string.Join(", ", s.Bcc.Select(e => e.ToSql()));
+        if (s.Attachments != null && s.Attachments.Count > 0) sql += "\nATTACH " + string.Join(", ", s.Attachments.Select(e => e.ToSql()));
+        if (s.ConnectionName != null) sql += $"\nAT {s.ConnectionName.ToSql()}";
+        return sql + ";";
     }
 
     private static string FormatFileOperation(FileOperationStatement s)
@@ -655,7 +641,9 @@ public static class AstSerializer
 
     private static string FormatDirectoryOperation(DirectoryOperationStatement s)
     {
-        var op = s.Type.ToString().ToUpper() + " DIRECTORY" + (s.Type == DirectoryOpType.DeleteContents ? "_CONTENTS" : "");
+        var op = s.Type == DirectoryOpType.DeleteContents
+            ? "DELETE DIRECTORY_CONTENTS"
+            : s.Type.ToString().ToUpper() + " DIRECTORY";
         var extra = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
@@ -669,24 +657,12 @@ public static class AstSerializer
 
     private static string FormatFileTransfer(FileTransferStatement s)
     {
-        if (s.IsSqlStyle)
-        {
-            var op = s.Type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE";
-            var fromTo = s.Type == FileTransferType.Send
-                ? $"{s.LocalPath.ToSql()} TO {s.RemotePath.ToSql()}"
-                : $"FROM {s.RemotePath.ToSql()} TO {s.LocalPath.ToSql()}";
-            var opts = s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "";
-            return $"{op} {fromTo} AT {s.ConnectionName}{opts};";
-        }
-        else
-        {
-            var op = s.Type == FileTransferType.Send ? "SEND_FILE" : "RECEIVE_FILE";
-            var args = s.Type == FileTransferType.Send
-                ? new List<string> { s.LocalPath.ToSql(), s.ConnectionName, s.RemotePath.ToSql() }
-                : new List<string> { s.ConnectionName, s.RemotePath.ToSql(), s.LocalPath.ToSql() };
-            if (s.Overwrite != null) args.Add(s.Overwrite.ToSql());
-            return $"{op}({string.Join(", ", args)});";
-        }
+        var op = s.Type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE";
+        var fromTo = s.Type == FileTransferType.Send
+            ? $"{s.LocalPath.ToSql()} TO {s.RemotePath.ToSql()}"
+            : $"FROM {s.RemotePath.ToSql()} TO {s.LocalPath.ToSql()}";
+        var opts = s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "";
+        return $"{op} {fromTo} AT {s.ConnectionName}{opts};";
     }
 
     /// <summary>Single-quoted SQL string literal, doubling any embedded quote.</summary>

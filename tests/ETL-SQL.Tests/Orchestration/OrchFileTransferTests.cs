@@ -133,8 +133,8 @@ namespace ETL_SQL.Tests.Orchestration
             string downloadFile = Path.Combine(Path.GetTempPath(), "test_download.txt");
             File.WriteAllText(localFile, "Hello Remote World");
 
-            // 1. FILE_SEND
-            string sqlSend = $"FILE_SEND '{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'remote/test.txt'";
+            // 1. SEND FILE
+            string sqlSend = $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote/test.txt' AT MYREMOTE";
             var lexerSend = new Lexer(sqlSend);
             var parserSend = new Parser(lexerSend.Tokenize());
             var scriptSend = parserSend.Parse();
@@ -154,8 +154,8 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Single(results);
             Assert.Contains(results[0].Rows, r => r["Name"].ToString() == "remote/test.txt");
 
-            // 3. FILE_RECEIVE
-            string sqlReceive = $"FILE_RECEIVE MYREMOTE, 'remote/test.txt', '{downloadFile.Replace("\\", "\\\\")}'";
+            // 3. RECEIVE FILE
+            string sqlReceive = $"RECEIVE FILE FROM 'remote/test.txt' TO '{downloadFile.Replace("\\", "\\\\")}' AT MYREMOTE";
             var lexerReceive = new Lexer(sqlReceive);
             var parserReceive = new Parser(lexerReceive.Tokenize());
             var scriptReceive = parserReceive.Parse();

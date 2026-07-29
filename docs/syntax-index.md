@@ -1427,7 +1427,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `RAISEERROR` | Control Flow | Canonical language token |
 | `RAISERROR` | Control Flow | Canonical language token |
 | `RETURN` | Control Flow | Canonical language token |
-| `SEND_EMAIL` | Control Flow | Canonical language token |
 | `THEN` | Control Flow | Canonical language token |
 | `THROW` | Control Flow | Canonical language token |
 | `TRY` | Control Flow | Canonical language token |
@@ -1519,32 +1518,14 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | Token | Family | Notes |
 | :--- | :--- | :--- |
 | `COMPRESS` | File & Directory Operations | Canonical language token |
-| `COMPRESS_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `COMPRESS_FILE` | File & Directory Operations | Canonical language token |
 | `COPY` | File & Directory Operations | Canonical language token |
-| `COPY_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `COPY_FILE` | File & Directory Operations | Canonical language token |
-| `CREATE_DIRECTORY` | File & Directory Operations | Canonical language token |
 | `DECOMPRESS` | File & Directory Operations | Canonical language token |
-| `DECOMPRESS_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `DECOMPRESS_FILE` | File & Directory Operations | Canonical language token |
-| `DECRYPT_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `DECRYPT_FILE` | File & Directory Operations | Canonical language token |
 | `DELETE` | File & Directory Operations | Canonical language token |
-| `DELETE_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `DELETE_DIRECTORY_CONTENTS` | File & Directory Operations | Canonical language token |
-| `DELETE_FILE` | File & Directory Operations | Canonical language token |
-| `ENCRYPT_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `ENCRYPT_FILE` | File & Directory Operations | Canonical language token |
 | `FILES` | File & Directory Operations | Canonical language token |
 | `FILES` | File & Directory Operations | Canonical language token |
 | `MOVE` | File & Directory Operations | Canonical language token |
-| `MOVE_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `MOVE_FILE` | File & Directory Operations | Canonical language token |
 | `PATH` | File & Directory Operations | Canonical language token |
 | `RENAME` | File & Directory Operations | Canonical language token |
-| `RENAME_DIRECTORY` | File & Directory Operations | Canonical language token |
-| `RENAME_FILE` | File & Directory Operations | Canonical language token |
 | `ROOT` | File & Directory Operations | Canonical language token |
 
 ### 19.8 Data Formatting & File Connector Options Keywords
@@ -1809,8 +1790,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `EXPLAIN` | XML, JSON & Query Modifiers | Canonical language token |
 | `EXPLICIT` | XML, JSON & Query Modifiers | Canonical language token |
 | `FETCH` | XML, JSON & Query Modifiers | Canonical language token |
-| `FILE_RECEIVE` | XML, JSON & Query Modifiers | Canonical language token |
-| `FILE_SEND` | XML, JSON & Query Modifiers | Canonical language token |
 | `FOLLOWING` | XML, JSON & Query Modifiers | Canonical language token |
 | `GENERATE` | XML, JSON & Query Modifiers | Canonical language token |
 | `GROUPS` | XML, JSON & Query Modifiers | Canonical language token |
@@ -1825,11 +1804,9 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `PRECEDING` | XML, JSON & Query Modifiers | Canonical language token |
 | `RANGE` | XML, JSON & Query Modifiers | Canonical language token |
 | `RAW` | XML, JSON & Query Modifiers | Canonical language token |
-| `RECEIVE_FILE` | XML, JSON & Query Modifiers | Canonical language token |
 | `RECURSIVE` | XML, JSON & Query Modifiers | Canonical language token |
 | `ROWS` | XML, JSON & Query Modifiers | Canonical language token |
 | `SEMI` | XML, JSON & Query Modifiers | Canonical language token |
-| `SEND_FILE` | XML, JSON & Query Modifiers | Canonical language token |
 | `TIES` | XML, JSON & Query Modifiers | Canonical language token |
 | `TIME` | XML, JSON & Query Modifiers | Canonical language token |
 | `UNBOUNDED` | XML, JSON & Query Modifiers | Canonical language token |
@@ -2018,7 +1995,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `DATETIMEFROMPARTS` | Function | Canonical built-in function |
 | `DATETIMEOFFSETSFROMPARTS` | Function | Canonical built-in function |
 | `DECODE` | Function | Canonical built-in function |
-| `DECOMPRESS_FILE` | Function | Canonical built-in function |
 | `DEGREES` | Function | Canonical built-in function |
 | `DENSE_RANK` | Function | Canonical built-in function |
 | `DIFFERENCE` | Function | Canonical built-in function |

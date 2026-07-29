@@ -280,7 +280,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         }
                         else
                         {
-                            throw new ExecutionException($"Source for COMPRESS_FILE does not exist: {source}");
+                            throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
                         }
                     }
                     break;
@@ -298,7 +298,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         }
                         else
                         {
-                            throw new ExecutionException($"Source for DECOMPRESS_FILE does not exist: {source}");
+                            throw new ExecutionException($"Source for DECOMPRESS FILE does not exist: {source}");
                         }
                     }
                     break;
@@ -324,7 +324,7 @@ public class FileOperationStatementHandler : IStatementHandler
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("ENCRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
                             CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                         }
                     }
@@ -353,7 +353,7 @@ public class FileOperationStatementHandler : IStatementHandler
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("DECRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
                             CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                         }
                     }

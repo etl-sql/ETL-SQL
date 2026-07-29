@@ -22,8 +22,8 @@ BEGIN TRY
 
     PRINT 'Transmitting to Vendor...';
     -- Simulate SFTP by dropping into a local mock folder
-    CREATE_DIRECTORY('samples/output/vendor_sftp/');
-    MOVE_FILE('samples/output/daily_finances.csv.enc', 'samples/output/vendor_sftp/daily_finances.csv.enc');
+    CREATE DIRECTORY 'samples/output/vendor_sftp/';
+    MOVE FILE 'samples/output/daily_finances.csv.enc' TO 'samples/output/vendor_sftp/daily_finances.csv.enc';
 
     PRINT 'Transmission successful.';
 END TRY

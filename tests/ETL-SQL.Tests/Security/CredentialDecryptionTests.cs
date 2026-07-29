@@ -126,14 +126,14 @@ namespace ETL_SQL.Tests.Security
                 string encryptedPwd = ETL_SQL.Common.CryptoUtils.Encrypt("file-pwd", "file-pwd");
                 await Execute(eval, $@"
                     DECLARE @pwd SENSITIVE = '{encryptedPwd}';
-                    ENCRYPT_FILE '{src.Replace("\\", "\\\\")}' TO '{enc.Replace("\\", "\\\\")}' PASSWORD @pwd;
+                    ENCRYPT FILE '{src.Replace("\\", "\\\\")}' TO '{enc.Replace("\\", "\\\\")}' PASSWORD @pwd;
                 ");
 
                 Assert.True(System.IO.File.Exists(enc), "Encrypted file not created");
 
                 await Execute(eval, $@"
                     DECLARE @pwd2 SENSITIVE = '{encryptedPwd}';
-                    DECRYPT_FILE '{enc.Replace("\\", "\\\\")}' TO '{dec.Replace("\\", "\\\\")}' PASSWORD @pwd2;
+                    DECRYPT FILE '{enc.Replace("\\", "\\\\")}' TO '{dec.Replace("\\", "\\\\")}' PASSWORD @pwd2;
                 ");
 
                 Assert.Equal("hello-secret", System.IO.File.ReadAllText(dec));

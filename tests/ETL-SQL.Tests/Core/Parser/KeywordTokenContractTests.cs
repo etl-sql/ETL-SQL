@@ -48,8 +48,6 @@ namespace ETL_SQL.Tests.Core.Parsing
         /// </summary>
         private static readonly Dictionary<string, string> IntentionalAliases = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["FILE_SEND"] = "SEND_FILE",
-            ["FILE_RECEIVE"] = "RECEIVE_FILE",
             ["TAB"] = "NAV_TAB",
         };
 

@@ -50,10 +50,10 @@ namespace ETL_SQL.Tests.Connectors
             await eval.Evaluate(new Lexer($"CREATE CONNECTION MyDir AS DIRECTORY('{dir}');").TokenizeToScript());
             await eval.Evaluate(new Lexer($"CREATE CONNECTION MyFile AS FLATFILE('{file}');").TokenizeToScript());
 
-            await eval.Evaluate(new Lexer("CREATE_DIRECTORY(MyDir + '/subdir');").TokenizeToScript());
+            await eval.Evaluate(new Lexer("CREATE DIRECTORY MyDir + '/subdir';").TokenizeToScript());
             Assert.True(Directory.Exists(Path.Combine(dir, "subdir")), "Path resolution for DIRECTORY connection failed");
 
-            await eval.Evaluate(new Lexer("COPY_FILE(MyFile, MyDir + '/test_copy.csv');").TokenizeToScript());
+            await eval.Evaluate(new Lexer("COPY FILE MyFile TO MyDir + '/test_copy.csv';").TokenizeToScript());
             Assert.True(File.Exists(Path.Combine(dir, "test_copy.csv")), "Path resolution for FILE connection failed");
 
             Directory.Delete(dir, true);
@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Connectors
                 DECLARE @files LIST = ['{dir.Replace("\\", "/")}/f1', '{dir.Replace("\\", "/")}/f2'];
                 FOREACH @f IN @files
                 BEGIN
-                    CREATE_DIRECTORY(@f);
+                    CREATE DIRECTORY @f;
                 END
             ";
             await eval.Evaluate(new Lexer(script).TokenizeToScript());
@@ -99,14 +99,14 @@ namespace ETL_SQL.Tests.Connectors
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
-            await eval.Evaluate(new Lexer($"COMPRESS_FILE('{src}', '{zip}');").TokenizeToScript());
-            Assert.True(File.Exists(zip), "COMPRESS_FILE failed to create zip");
+            await eval.Evaluate(new Lexer($"COMPRESS FILE '{src}' TO '{zip}';").TokenizeToScript());
+            Assert.True(File.Exists(zip), "COMPRESS FILE failed to create zip");
 
-            await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}', 'TestPass1', ON);").TokenizeToScript());
-            Assert.True(File.Exists(enc), "ENCRYPT_FILE failed to create enc");
+            await eval.Evaluate(new Lexer($"ENCRYPT FILE '{src}' TO '{enc}' PASSWORD 'TestPass1' WITH(OVERWRITE=ON);").TokenizeToScript());
+            Assert.True(File.Exists(enc), "ENCRYPT FILE failed to create enc");
 
-            await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}', 'TestPass1', ON);").TokenizeToScript());
-            Assert.True(File.Exists(dec), "DECRYPT_FILE failed to create dec");
+            await eval.Evaluate(new Lexer($"DECRYPT FILE '{enc}' TO '{dec}' PASSWORD 'TestPass1' WITH(OVERWRITE=ON);").TokenizeToScript());
+            Assert.True(File.Exists(dec), "DECRYPT FILE failed to create dec");
 
             string content = await File.ReadAllTextAsync(dec);
             Assert.Equal("secret info", content);

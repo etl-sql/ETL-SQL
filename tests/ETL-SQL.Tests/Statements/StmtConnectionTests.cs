@@ -112,21 +112,23 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
-        public async Task TestRenamedCommandsParsing()
+        public async Task TestCanonicalSendCommandsParsing()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
-            // Test parsing of the new names
             await Execute("CREATE CONNECTION smtp AS SMTP('localhost');", evaluator);
 
-            // This verifies the PARSER accepts SEND_EMAIL
             // We expect an execution failure because localhost:25 isn't open, but Parser should succeed.
-            try { await Execute("SEND_EMAIL TO 'test@test.com' SUBJECT 'Hi' BODY 'Hello' AT smtp;", evaluator); }
+            try { await Execute("SEND EMAIL TO 'test@test.com' SUBJECT 'Hi' BODY 'Hello' AT smtp;", evaluator); }
             catch (Exception ex) when (ex.Message.Contains("Unexpected token")) { throw; }
             catch { /* Ignore connection/execution errors */ }
 
-            // Testing SEND_FILE / RECEIVE_FILE parsing
-            try { await Execute("SEND_FILE 'local.txt', smtp, 'remote.txt';", evaluator); }
+            // Testing SEND FILE / RECEIVE FILE parsing
+            try { await Execute("SEND FILE 'local.txt' TO 'remote.txt' AT smtp;", evaluator); }
+            catch (Exception ex) when (ex.Message.Contains("Unexpected token")) { throw; }
+            catch { /* Ignore connection/execution errors */ }
+
+            try { await Execute("RECEIVE FILE FROM 'remote.txt' TO 'local.txt' AT smtp;", evaluator); }
             catch (Exception ex) when (ex.Message.Contains("Unexpected token")) { throw; }
             catch { /* Ignore connection/execution errors */ }
         }

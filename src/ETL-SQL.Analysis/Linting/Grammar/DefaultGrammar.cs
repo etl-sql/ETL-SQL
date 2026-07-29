@@ -1157,11 +1157,11 @@ public static class DefaultGrammar
 
         // 3. SEND EMAIL / FILE
         var sendNode = new StateNode("SEND");
-        var sendEmail = new StateNode("SEND_EMAIL");
-        var emailSubject = new StateNode("SEND_EMAIL_SUBJECT");
+        var sendEmail = new StateNode("SEND EMAIL");
+        var emailSubject = new StateNode("SEND EMAIL SUBJECT");
 
-        var sendFile = new StateNode("SEND_FILE");
-        var sendFilePath = new StateNode("SEND_FILE_PATH");
+        var sendFile = new StateNode("SEND FILE");
+        var sendFilePath = new StateNode("SEND FILE PATH");
 
         tree.RegisterStartNode("SEND", sendNode);
 
@@ -1187,14 +1187,16 @@ public static class DefaultGrammar
         ));
         sendFilePath.AddTransitionTo("TO", toNode, SuggestionType.Keyword);
 
-        // 3.5 RECEIVE FILE 'path' TO 'destination'
+        // 3.5 RECEIVE FILE FROM 'path' TO 'destination'
         var receiveNode = new StateNode("RECEIVE");
-        var receiveFile = new StateNode("RECEIVE_FILE");
-        var receiveFilePath = new StateNode("RECEIVE_FILE_PATH");
+        var receiveFile = new StateNode("RECEIVE FILE");
+        var receiveFrom = new StateNode("RECEIVE FILE FROM");
+        var receiveFilePath = new StateNode("RECEIVE FILE PATH");
 
         tree.RegisterStartNode("RECEIVE", receiveNode);
         receiveNode.AddTransitionTo("FILE", receiveFile, SuggestionType.Keyword);
-        receiveFile.AddWildcardTransition(receiveFilePath, "<file_path>");
+        receiveFile.AddTransitionTo("FROM", receiveFrom, SuggestionType.Keyword);
+        receiveFrom.AddWildcardTransition(receiveFilePath, "<file_path>");
         receiveFilePath.AddTransition(new StateTransition(
             t => !t.Value.Equals("TO", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
             receiveFilePath,

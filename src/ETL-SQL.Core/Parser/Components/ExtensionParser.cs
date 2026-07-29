@@ -21,6 +21,9 @@ public class ExtensionParser : ParserComponent
 
         if (isSqlStyle)
         {
+            if (_parser.Current.Type == TokenType.LPAREN)
+                throw new SyntaxException("Function-style SEND EMAIL has been retired. Use SEND EMAIL TO ... FROM ... SUBJECT ... BODY ... AT <connection>.", startToken.Line, startToken.Column);
+
             while (true)
             {
                 if (Match(TokenType.TO)) { to = ParseExpression(); }
@@ -132,6 +135,14 @@ public class ExtensionParser : ParserComponent
 
         if (isSqlStyle)
         {
+            if (_parser.Current.Type == TokenType.LPAREN)
+            {
+                var replacement = type == FileTransferType.Send
+                    ? "SEND FILE <local> TO <remote> AT <connection>"
+                    : "RECEIVE FILE FROM <remote> TO <local> AT <connection>";
+                throw new SyntaxException($"Function-style {(type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE")} has been retired. Use {replacement}.", startToken.Line, startToken.Column);
+            }
+
             while (true)
             {
                 if (Match(TokenType.FROM))
@@ -219,6 +230,8 @@ public class ExtensionParser : ParserComponent
         Expression? dateSuffix = null, suffixSeparator = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
+        if (isFunctionStyle)
+            throw new SyntaxException($"Function-style {startToken.Value} has been retired. Use {startToken.Value} FILE ...", startToken.Line, startToken.Column);
         bool destinationIsDirectory = false;
 
         bool ifExists = false;
@@ -322,6 +335,8 @@ public class ExtensionParser : ParserComponent
         string? connectionName = null;
         bool ifExists = false;
         bool isFunctionStyle = Match(TokenType.LPAREN);
+        if (isFunctionStyle)
+            throw new SyntaxException($"Function-style {startToken.Value} has been retired. Use {startToken.Value} DIRECTORY ...", startToken.Line, startToken.Column);
 
         if (isFunctionStyle)
         {

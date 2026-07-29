@@ -127,7 +127,7 @@ public static class SqlFormatter
         "WHEN MATCHED THEN UPDATE", "WHEN MATCHED THEN DELETE",
         "WHEN NOT MATCHED THEN INSERT", "WHEN NOT MATCHED BY SOURCE THEN UPDATE",
         "WHEN NOT MATCHED BY SOURCE THEN DELETE",
-        "BULK INSERT", "LINEAGE", "SEND_EMAIL", "SEND_FILE", "RECEIVE_FILE", "DOCKER", "USE", "EXPLAIN"
+        "BULK INSERT", "LINEAGE", "SEND EMAIL", "SEND FILE", "RECEIVE FILE", "DOCKER", "USE", "EXPLAIN"
     };
 
     private static readonly string[] MultiWordKeywords = ClauseKeywords.Where(k => k.Contains(" ")).OrderByDescending(k => k.Length).ToArray();

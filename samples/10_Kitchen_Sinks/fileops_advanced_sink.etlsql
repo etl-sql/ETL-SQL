@@ -1,6 +1,6 @@
 ﻿-- ADVANCED FILE OPERATIONS Kitchen Sink
 -- Covers: MOVE FILE, RENAME FILE, COMPRESS FILE, ENCRYPT FILE, DECRYPT FILE,
---         function-style file ops (COPY_FILE, MOVE_FILE, etc.),
+--         canonical COPY/MOVE/RENAME/DELETE FILE statements,
 --         DELETE DIRECTORY_CONTENTS, COMPRESS DIRECTORY, RENAME DIRECTORY,
 --         FILE_LIST, REMOTE_FILE_LIST (SFTP skipped — no live conn)
 SET WHAT_IF OFF;
@@ -54,29 +54,29 @@ IF FILE_EXISTS(@enc) PRINT 'ENCRYPT FILE: Pass';
 DECRYPT FILE @enc TO @dec PASSWORD 'test_pass123' WITH (OVERWRITE = ON);
 IF FILE_EXISTS(@dec) PRINT 'DECRYPT FILE: Pass';
 
--- 6. Function-style file ops
-PRINT 'Testing function-style file ops...';
-COPY_FILE(@src, @base + 'fn_copy.txt');
-IF FILE_EXISTS(@base + 'fn_copy.txt') PRINT 'COPY_FILE(): Pass';
+-- 6. Additional canonical file ops
+PRINT 'Testing canonical file ops...';
+COPY FILE @src TO @base + 'fn_copy.txt' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@base + 'fn_copy.txt') PRINT 'COPY FILE: Pass';
 
-MOVE_FILE(@base + 'fn_copy.txt', @base + 'fn_moved.txt');
-IF FILE_EXISTS(@base + 'fn_moved.txt') PRINT 'MOVE_FILE(): Pass';
+MOVE FILE @base + 'fn_copy.txt' TO @base + 'fn_moved.txt' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@base + 'fn_moved.txt') PRINT 'MOVE FILE: Pass';
 
-RENAME_FILE(@base + 'fn_moved.txt', @base + 'fn_renamed.txt');
-IF FILE_EXISTS(@base + 'fn_renamed.txt') PRINT 'RENAME_FILE(): Pass';
+RENAME FILE @base + 'fn_moved.txt' TO @base + 'fn_renamed.txt';
+IF FILE_EXISTS(@base + 'fn_renamed.txt') PRINT 'RENAME FILE: Pass';
 
-DELETE_FILE(@base + 'fn_renamed.txt');
-PRINT 'DELETE_FILE(): done';
+DELETE FILE @base + 'fn_renamed.txt';
+PRINT 'DELETE FILE: done';
 
--- Compress / Encrypt function style
-COMPRESS_FILE(@src, @base + 'fn_compressed.gz');
-IF FILE_EXISTS(@base + 'fn_compressed.gz') PRINT 'COMPRESS_FILE(): Pass';
+-- Compress / Encrypt statement style
+COMPRESS FILE @src TO @base + 'fn_compressed.gz' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@base + 'fn_compressed.gz') PRINT 'COMPRESS FILE: Pass';
 
-ENCRYPT_FILE(@src, @base + 'fn_enc.enc', 'funcpass');
-IF FILE_EXISTS(@base + 'fn_enc.enc') PRINT 'ENCRYPT_FILE(): Pass';
+ENCRYPT FILE @src TO @base + 'fn_enc.enc' PASSWORD 'funcpass' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@base + 'fn_enc.enc') PRINT 'ENCRYPT FILE: Pass';
 
-DECRYPT_FILE(@base + 'fn_enc.enc', @base + 'fn_dec.txt', 'funcpass');
-IF FILE_EXISTS(@base + 'fn_dec.txt') PRINT 'DECRYPT_FILE(): Pass';
+DECRYPT FILE @base + 'fn_enc.enc' TO @base + 'fn_dec.txt' PASSWORD 'funcpass' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@base + 'fn_dec.txt') PRINT 'DECRYPT FILE: Pass';
 
 -- 7. FILE_LIST as table
 PRINT 'Testing FILE_LIST...';

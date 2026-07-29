@@ -148,7 +148,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 #### P2 — Duplicate surface syntax
 
-- [ ] Retire function-style aliases for canonical file/email operations:
+- [x] Retire function-style aliases for canonical file/email operations:
       `SEND_EMAIL(...)`, `SEND_FILE(...)`, `RECEIVE_FILE(...)`, `FILE_SEND`, `FILE_RECEIVE`,
       `COPY_FILE(...)`, `MOVE_FILE(...)`, `DELETE_FILE(...)`, `CREATE_DIRECTORY(...)`, and sibling
       underscore forms.

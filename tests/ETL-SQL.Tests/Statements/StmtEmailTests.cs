@@ -94,23 +94,13 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
-        public async Task Test_FunctionStyle_SendEmail()
+        public async Task Test_SendEmailAlias_IsRejected()
         {
-            var services = DependencyInjectionSetup.BuildServiceProvider();
-            var evaluator = services.GetRequiredService<Evaluator>();
-            var mockSmtp = new MockSmtpDataSource();
-            evaluator.Connections["MYSMTP"] = mockSmtp;
-
             string script = "SEND_EMAIL(MYSMTP, 'to@test.com', 'from@test.com', 'Subj', 'Body');";
 
-            await RunScriptAsync(evaluator, script);
-
-            Assert.Single(mockSmtp.SentEmails);
-            var email = mockSmtp.SentEmails[0];
-            Assert.Equal("to@test.com", email["To"]);
-            Assert.Equal("from@test.com", email["From"]);
-            Assert.Equal("Subj", email["Subject"]);
-            Assert.Equal("Body", email["Body"]);
+            var ex = await Assert.ThrowsAsync<Exception>(async () =>
+                await RunScriptAsync(DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>(), script));
+            Assert.Contains("SEND EMAIL", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

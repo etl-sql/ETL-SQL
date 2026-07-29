@@ -681,7 +681,7 @@ namespace ETL_SQL.Tests.Coverage
             var escaped = dir.Replace("\\", "\\\\");
             try
             {
-                await Run($"CREATE_DIRECTORY('{escaped}');");
+                await Run($"CREATE DIRECTORY '{escaped}';");
                 Assert.True(Directory.Exists(dir));
             }
             finally { if (Directory.Exists(dir)) Directory.Delete(dir); }
