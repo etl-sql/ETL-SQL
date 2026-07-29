@@ -25,7 +25,8 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
     {
         var stmt = (CreateThemeStatement)statement;
 
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.ThemeDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.ThemeDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
             throw new ExecutionException($"Theme '{stmt.Name}' already exists. Use CREATE OR ALTER THEME.", null, stmt.Line, stmt.Column);
 
         context.ReportContext.ThemeDefinitions[stmt.Name] = stmt;
@@ -40,7 +41,7 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
         }
 
         _logger.Debug("Theme '{ThemeName}' registered.", stmt.Name);
-        context.Log($"Theme '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+        context.Log($"Theme '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");
         return Task.CompletedTask;
     }
 

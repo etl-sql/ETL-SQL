@@ -61,7 +61,8 @@ public class CreatePageStatementHandler(ILogger logger) : IStatementHandler
         }
 
         // Phase 3: Register / overwrite page definition
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.PageDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.PageDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
         {
             throw new ExecutionException($"Page '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP PAGE first.", null, stmt.Line, stmt.Column);
         }
@@ -70,7 +71,7 @@ public class CreatePageStatementHandler(ILogger logger) : IStatementHandler
 
 
         _logger.Debug("Page '{PageName}' registered with {SlotCount} visual slot(s).", stmt.Name, stmt.SlotMap.Count);
-        context.Log($"Page '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+        context.Log($"Page '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");
 
         return Task.CompletedTask;
     }

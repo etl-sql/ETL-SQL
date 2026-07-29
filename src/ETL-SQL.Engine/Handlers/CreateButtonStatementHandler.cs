@@ -18,7 +18,8 @@ public class CreateButtonStatementHandler(ILogger logger) : IStatementHandler
     {
         var stmt = (CreateButtonStatement)statement;
 
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.ButtonDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.ButtonDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
         {
             throw new ExecutionException($"Button '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP BUTTON first.", null, stmt.Line, stmt.Column);
         }
@@ -26,7 +27,7 @@ public class CreateButtonStatementHandler(ILogger logger) : IStatementHandler
         context.ReportContext.ButtonDefinitions[stmt.Name] = stmt;
 
         _logger.Debug("Button '{ButtonName}' ({ButtonType}) registered.", stmt.Name, stmt.ButtonType);
-        context.Log($"Button '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+        context.Log($"Button '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");
 
         return Task.CompletedTask;
     }

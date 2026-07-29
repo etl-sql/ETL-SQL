@@ -45,14 +45,14 @@ public class CreateConnectionStatementHandler(
         if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !isInteractive)
             throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists. Use ALTER CONNECTION to modify it.");
 
-        // In Interactive Mode, force CreateOrAlter behavior if it already exists
+        // In Interactive Mode, force upsert behavior if it already exists
         var effectiveMode = (isInteractive && alreadyExists) ? ObjectCreationMode.CreateOrAlter : stmt.Mode;
 
         string? connectionType = stmt.ConnectionType;
         string? target = null;
         Dictionary<string, string>? options = null;
 
-        if (effectiveMode == ObjectCreationMode.CreateOrAlter && alreadyExists)
+        if (IsUpsertMode(effectiveMode) && alreadyExists)
         {
             // CREATE OR ALTER with existing connection — patches and preserves options
             if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
@@ -268,4 +268,7 @@ public class CreateConnectionStatementHandler(
             return envValue ?? match.Value;
         });
     }
+
+    private static bool IsUpsertMode(ObjectCreationMode mode) =>
+        mode is ObjectCreationMode.CreateOrAlter or ObjectCreationMode.CreateOrReplace;
 }

@@ -16,14 +16,15 @@ public class CreateContainerStatementHandler(ILogger logger) : IStatementHandler
     public Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (CreateContainerStatement)statement;
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.ContainerDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.ContainerDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
         {
             throw new Core.Common.Exceptions.ExecutionException($"Container '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP CONTAINER first.", null, stmt.Line, stmt.Column);
         }
 
         context.ReportContext.ContainerDefinitions[stmt.Name] = stmt;
         _logger.Debug("Container '{ContainerName}' registered.", stmt.Name);
-        context.Log($"Container '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "registered")}.");
+        context.Log($"Container '{stmt.Name}' {(alreadyExists ? "updated" : "registered")}.");
         return Task.CompletedTask;
     }
 }

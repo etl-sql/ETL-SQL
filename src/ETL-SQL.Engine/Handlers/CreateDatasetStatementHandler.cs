@@ -120,7 +120,7 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
         new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
 
         context.Log(
-            $"Dataset '{stmt.TempTableName}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+            $"Dataset '{stmt.TempTableName}' {(IsUpsertMode(stmt.Mode) ? "updated" : "created")}.");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,6 +131,9 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
         ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
         _ => "CREATE"
     };
+
+    private static bool IsUpsertMode(ObjectCreationMode mode) =>
+        mode is ObjectCreationMode.CreateOrAlter or ObjectCreationMode.CreateOrReplace;
 
     private static bool IsFreshEnough(DatasetMetadata? existing, string? ttlOverride)
     {

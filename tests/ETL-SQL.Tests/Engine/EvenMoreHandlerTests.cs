@@ -248,6 +248,19 @@ namespace ETL_SQL.Tests.Engine
                 "CREATE OR ALTER TEMPLATE t1 AS (TYPE = 'bar');");
         }
 
+        [Theory]
+        [InlineData("CREATE VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id));CREATE OR REPLACE VISUAL V AS CARD (SOURCE = (SELECT 2 AS id), MAPPINGS (VALUE = id));")]
+        [InlineData("CREATE STYLE S (COLOR = 'red');CREATE OR REPLACE STYLE S (COLOR = 'blue');")]
+        [InlineData("CREATE BUTTON B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));CREATE OR REPLACE BUTTON B AS (TITLE = 'Reset', ACTIONS (ON_CLICK = APPLY_PARAMETERS));")]
+        [InlineData("CREATE VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id));CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));CREATE OR REPLACE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));")]
+        [InlineData("CREATE VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id));CREATE CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));CREATE OR REPLACE CONTAINER C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));")]
+        [InlineData("CREATE VISUAL V AS TABLE (SOURCE = (SELECT 1 AS id));CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));CREATE NAVIGATION N AS TAB (PAGES (P));CREATE OR REPLACE NAVIGATION N AS TAB (PAGES (P));")]
+        [InlineData("CREATE DATASET &D AS (SELECT 1 AS id);CREATE OR REPLACE DATASET &D AS (SELECT 2 AS id);")]
+        public async Task CreateOrReplace_ReportObjects_UpdatesExistingDefinitions(string sql)
+        {
+            await Run(sql);
+        }
+
         // ── DROP REPORT OBJECTS ───────────────────────────────────────────────
 
         [Fact]

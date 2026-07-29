@@ -87,6 +87,21 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public async Task TestCreateOrReplaceConnection_PatchesLikeCreateOrAlter()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var context = (IExecutionContext)evaluator;
+
+            await Execute("CREATE CONNECTION corep_existing AS MOCKDB(FIRST = 'one');", evaluator);
+            await Execute("CREATE OR REPLACE CONNECTION corep_existing AS MOCKDB(SECOND = 'two');", evaluator);
+
+            var options = context.Connections["corep_existing"].Options;
+            Assert.NotNull(options);
+            Assert.Equal("one", options!["FIRST"]);
+            Assert.Equal("two", options["SECOND"]);
+        }
+
+        [Fact]
         public async Task TestCreateConnection_ThrowsWhenAlreadyExists()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

@@ -17,7 +17,8 @@ public class CreateStyleStatementHandler(ILogger logger) : IStatementHandler
     {
         var stmt = (CreateStyleStatement)statement;
 
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.StyleDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.StyleDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
         {
             throw new Core.Common.Exceptions.ExecutionException($"Style '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP STYLE first.", null, stmt.Line, stmt.Column);
         }
@@ -25,7 +26,7 @@ public class CreateStyleStatementHandler(ILogger logger) : IStatementHandler
         context.ReportContext.StyleDefinitions[stmt.Name] = stmt;
 
         _logger.Debug("Registered style '{StyleName}' with {Count} properties.", stmt.Name, stmt.Styles.Count);
-        context.Log($"Style '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "registered")}.");
+        context.Log($"Style '{stmt.Name}' {(alreadyExists ? "updated" : "registered")}.");
         return Task.CompletedTask;
     }
 }

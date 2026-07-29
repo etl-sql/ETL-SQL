@@ -24,7 +24,8 @@ public class CreateTemplateStatementHandler(ILogger logger) : IStatementHandler
         var stmt = (CreateTemplateStatement)statement;
 
         // 1. Register in memory
-        if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.TemplateDefinitions.ContainsKey(stmt.Name))
+        var alreadyExists = context.ReportContext.TemplateDefinitions.ContainsKey(stmt.Name);
+        if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
         {
             throw new ExecutionException($"Template '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP TEMPLATE first.", null, stmt.Line, stmt.Column);
         }
@@ -43,7 +44,7 @@ public class CreateTemplateStatementHandler(ILogger logger) : IStatementHandler
         }
 
         _logger.Debug("Template '{TemplateName}' registered and persisted.", stmt.Name);
-        context.Log($"Template '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+        context.Log($"Template '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");
 
         return Task.CompletedTask;
     }
