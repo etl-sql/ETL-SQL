@@ -28,6 +28,8 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("DROP VIEW IF EXISTS v;")]
         [InlineData("DROP INDEX IF EXISTS ix;")]
         [InlineData("DROP JOB IF EXISTS j;")]
+        [InlineData("DROP SCHEDULE IF EXISTS s;")]
+        [InlineData("DROP NOTIFICATION IF EXISTS n;")]
         [InlineData("DROP SETS IF EXISTS !s;")]
         [InlineData("DROP VISUAL IF EXISTS vis;")]
         [InlineData("DROP PAGE IF EXISTS pg;")]
@@ -37,12 +39,30 @@ namespace ETL_SQL.Tests.Core.Parsing
         [InlineData("DROP DATASET IF EXISTS ds;")]
         [InlineData("DROP TEMPLATE IF EXISTS tpl;")]
         [InlineData("DROP THEME IF EXISTS thm;")]
+        [InlineData("DROP ALERT IF EXISTS a;")]
         public void CanonicalForm_PlacesIfExists_BeforeTheName(string sql)
         {
             var script = Parse(sql);
 
             Assert.Single(script.Statements);
             Assert.Empty(script.Diagnostics);
+        }
+
+        /// <summary>Portal operational objects do not support <c>DROP IF EXISTS</c>, except ALERT.</summary>
+        [Theory]
+        [InlineData("DROP USER IF EXISTS 'alice';")]
+        [InlineData("DROP GROUP IF EXISTS 'Analysts';")]
+        [InlineData("DROP FOLDER IF EXISTS '/Finance';")]
+        [InlineData("DROP REPORT IF EXISTS 'Daily Sales';")]
+        [InlineData("DROP DATASET IF EXISTS 'Sales' IN FOLDER '/Finance';")]
+        [InlineData("DROP SUBSCRIPTION IF EXISTS 42;")]
+        [InlineData("DROP SAVED VIEW IF EXISTS 'Default' FOR REPORT 'Daily Sales';")]
+        public void PortalObjectsWithoutDropIfExists_RejectTheExistenceModifier(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.Empty(script.Statements);
         }
 
         /// <summary>

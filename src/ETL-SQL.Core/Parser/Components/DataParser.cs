@@ -652,6 +652,12 @@ public class DataParser : ParserComponent
             if (_parser.Current.Type == TokenType.STRING_LITERAL)
                 return _parent.PortalParser.ParseDropDataset(startToken);
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+            if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                throw new SyntaxException(
+                    "DROP DATASET IF EXISTS is only supported for local/report dataset names. " +
+                    "Portal datasets use DROP DATASET 'name' IN FOLDER '/path'.",
+                    _parser.Current.Line,
+                    _parser.Current.Column);
             var name = ConsumeIdentifier("Expected dataset name").Value;
             RejectTrailingIfExists("DATASET", name);
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
