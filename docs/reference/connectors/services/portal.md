@@ -38,7 +38,7 @@ EXECUTE portal BEGIN
     DROP FOLDER '/Finance/Reports' CASCADE;
 
     -- Report lifecycle
-    PUBLISH REPORT 'Monthly Sales' FROM SCRIPT 'reports/monthly_sales.rsql' IN FOLDER '/Finance/Reports';
+    PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly_sales.rptsql' IN FOLDER '/Finance/Reports';
     REFRESH REPORT 'Monthly Sales';
     REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';
 

@@ -4,9 +4,10 @@ Publish, update, validate, refresh, and remove reports in the portal inside an `
 ## Syntax
 ```sql
 EXECUTE portal BEGIN
-  PUBLISH REPORT 'C:\Reports\sales.rptsql' TO FOLDER 'Finance';
-  PUBLISH REPORT 'C:\Reports\sales.rptsql' TO FOLDER 'Finance' WITH (NAME = 'Sales Dashboard', REPLACE = ON);
-  ALTER REPORT 'Sales Dashboard' SET (NAME = 'Q4 Sales', FOLDER = 'Finance/Archive');
+  PUBLISH REPORT 'Sales Dashboard' FROM 'C:\Reports\sales.rptsql' IN FOLDER '/Finance';
+  PUBLISH REPORT 'Sales Dashboard' FROM 'C:\Reports\sales.rptsql' IN FOLDER '/Finance'
+    WITH (DESCRIPTION = 'Certified sales dashboard');
+  ALTER REPORT 'Sales Dashboard' SET DESCRIPTION = 'Q4 certified sales';
   DROP REPORT 'Sales Dashboard';
   REFRESH REPORT 'Sales Dashboard';
   VALIDATE REPORT SCRIPT 'C:\Reports\sales.rptsql' INTO #validation;
@@ -19,13 +20,13 @@ END;
 ```sql
 -- Publish a new report to a folder
 EXECUTE portal BEGIN
-  PUBLISH REPORT 'C:\Reports\sales.rptsql' TO FOLDER 'Finance';
+  PUBLISH REPORT 'Sales Dashboard' FROM 'C:\Reports\sales.rptsql' IN FOLDER '/Finance';
 END;
 
--- Publish with an explicit display name, overwriting any existing report with that name
+-- Publish with a description
 EXECUTE portal BEGIN
-  PUBLISH REPORT 'C:\Reports\sales.rptsql' TO FOLDER 'Finance'
-    WITH (NAME = 'Sales Dashboard', REPLACE = ON);
+  PUBLISH REPORT 'Sales Dashboard' FROM 'C:\Reports\sales.rptsql' IN FOLDER '/Finance'
+    WITH (DESCRIPTION = 'Certified sales dashboard');
 END;
 
 -- Validate a script for errors before deploying
@@ -34,19 +35,21 @@ EXECUTE portal BEGIN
 END;
 SELECT severity, message, line_number FROM #validation ORDER BY line_number;
 
--- Rename a report and move it to an archive folder
+-- Move a report to an archive folder and update its description
 EXECUTE portal BEGIN
-  ALTER REPORT 'Sales Dashboard' SET (NAME = 'Q4 Sales', FOLDER = 'Finance/Archive');
+  ALTER REPORT 'Sales Dashboard'
+    SET FOLDER = '/Finance/Archive',
+        DESCRIPTION = 'Q4 certified sales';
 END;
 
 -- Trigger an immediate data refresh on a deployed report
 EXECUTE portal BEGIN
-  REFRESH REPORT 'Q4 Sales';
+  REFRESH REPORT 'Sales Dashboard';
 END;
 
 -- Mark a report as a personal favorite
 EXECUTE portal BEGIN
-  FAVORITE REPORT 'Q4 Sales';
+  FAVORITE REPORT 'Sales Dashboard';
 END;
 
 -- Remove a report from the portal
@@ -57,8 +60,9 @@ END;
 
 ## Notes
 - `PUBLISH REPORT` compiles and deploys a `.rptsql` file to the portal. The file path must be accessible from the machine running the ETL-SQL engine, not the portal server.
-- The display name defaults to the filename stem when `NAME` is not specified.
-- `REPLACE = ON` overwrites an existing report with the same name in the target folder. Without it, publishing fails if a report with that name already exists.
+- The report catalog name is the quoted identity immediately after `PUBLISH REPORT`.
+- `WITH (DESCRIPTION = '...')` stores portal-facing report metadata during publish.
+- `ALTER REPORT` can update `FOLDER` and `DESCRIPTION` for an existing report.
 - `VALIDATE REPORT SCRIPT` checks the script for parse errors and lint warnings without deploying. The `INTO` clause is required and captures diagnostic rows with columns: `severity`, `code`, `message`, and `line_number`.
 - `REFRESH REPORT` triggers an immediate data refresh cycle for all datasets declared in the report, bypassing the scheduled refresh interval.
 - `FAVORITE` and `UNFAVORITE` apply to the currently authenticated portal user's personal favorites list.

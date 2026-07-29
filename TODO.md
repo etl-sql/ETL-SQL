@@ -103,6 +103,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Clean up dataset identity documentation so local/report examples use `&name`, Portal
       administration examples use quoted catalog names with `IN FOLDER`, and retired
       `PUBLISH DATASET FROM ... AS &name` wording is removed.
+- [x] Clean up Portal report publish documentation so examples use
+      `PUBLISH REPORT 'name' FROM 'file.rptsql' IN FOLDER '/path'` instead of retired
+      source-first `TO FOLDER` / `FROM SCRIPT` forms.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.
