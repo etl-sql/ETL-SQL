@@ -448,6 +448,7 @@ namespace ETL_SQL.Orchestrator.Service
                     entries.Add(ToConnectionCatalogEntry(alias, status, definition));
                 }
 
+                EmitConnectionAudit("SHARED_CONNECTION_EXPORT", null, $"Count={entries.Count}");
                 return Results.Ok(entries);
             }).WithName("exportAdminConnections");
 
@@ -477,7 +478,14 @@ namespace ETL_SQL.Orchestrator.Service
                             entry.SensitiveFields);
                         var rawCredential = SharedConnectionValidator.FindRawCredential(definition.Options, definition.Target);
                         if (rawCredential is not null)
+                        {
+                            EmitConnectionAudit(
+                                "SHARED_CONNECTION_IMPORT_DENIED",
+                                entry.Alias,
+                                $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference.",
+                                allowed: false);
                             return Results.BadRequest(new { Error = $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference, not a raw credential value." });
+                        }
 
                         await writable.StoreAsync(definition, ct);
                         if (entry.Status.Equals("disabled", StringComparison.OrdinalIgnoreCase))
@@ -492,6 +500,7 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = ex.Message });
                 }
 
+                EmitConnectionAudit("SHARED_CONNECTION_IMPORT", null, $"Created={created}; Updated={updated}");
                 return Results.Ok(new { Created = created, Updated = updated });
             }).WithName("importAdminConnections");
 
@@ -529,11 +538,23 @@ namespace ETL_SQL.Orchestrator.Service
                     request?.SensitiveFields);
                 var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
                 if (rawCredential is not null)
+                {
+                    EmitConnectionAudit(
+                        "SHARED_CONNECTION_WRITE_DENIED",
+                        entry.Alias,
+                        $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference.",
+                        allowed: false);
                     return Results.BadRequest(new { Error = $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference, not a raw credential value." });
+                }
 
                 try
                 {
+                    var existed = await writable.GetStatusAsync(entry.Alias, ct) != SecretLifecycleStatus.NotFound;
                     await writable.StoreAsync(entry, ct);
+                    EmitConnectionAudit(
+                        existed ? "SHARED_CONNECTION_UPDATE" : "SHARED_CONNECTION_CREATE",
+                        entry.Alias,
+                        $"ConnectorType={entry.ConnectorType}");
                     return Results.NoContent();
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -551,7 +572,9 @@ namespace ETL_SQL.Orchestrator.Service
 
                 try
                 {
-                    await writable.EnableAsync(Uri.UnescapeDataString(alias), ct);
+                    var decodedAlias = Uri.UnescapeDataString(alias);
+                    await writable.EnableAsync(decodedAlias, ct);
+                    EmitConnectionAudit("SHARED_CONNECTION_ENABLE", decodedAlias, "Status=active");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -569,7 +592,9 @@ namespace ETL_SQL.Orchestrator.Service
 
                 try
                 {
-                    await writable.DisableAsync(Uri.UnescapeDataString(alias), ct);
+                    var decodedAlias = Uri.UnescapeDataString(alias);
+                    await writable.DisableAsync(decodedAlias, ct);
+                    EmitConnectionAudit("SHARED_CONNECTION_DISABLE", decodedAlias, "Status=disabled");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -591,7 +616,10 @@ namespace ETL_SQL.Orchestrator.Service
                 if (status == SecretLifecycleStatus.NotFound)
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
                 if (status == SecretLifecycleStatus.Disabled)
+                {
+                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=disabled", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "disabled" });
+                }
 
                 SharedConnectionDefinition entry;
                 try
@@ -600,6 +628,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
                 {
+                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
                 }
 
@@ -616,6 +645,10 @@ namespace ETL_SQL.Orchestrator.Service
                     var report = await diagnostics.DiagnoseAsync(
                         decodedAlias, entry.ConnectorType, target, options, security, snapshot, timeoutSeconds, ct);
 
+                    EmitConnectionAudit(
+                        "SHARED_CONNECTION_TEST",
+                        decodedAlias,
+                        report.Succeeded ? "Outcome=ok" : "Outcome=failed");
                     return Results.Ok(new
                     {
                         Alias = decodedAlias,
@@ -631,6 +664,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
                 {
+                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
                 }
             }).WithName("testAdminConnection");
@@ -664,6 +698,7 @@ namespace ETL_SQL.Orchestrator.Service
                     }
                 }
 
+                EmitConnectionAudit("SHARED_CONNECTION_IMPACT", decodedAlias, $"ConsumerCount={consumers.Count}");
                 return Results.Ok(new ImpactReportResponse(reference, consumers.Count, consumers));
             }).WithName("impactAdminConnection");
 
@@ -676,7 +711,9 @@ namespace ETL_SQL.Orchestrator.Service
 
                 try
                 {
-                    await writable.DeleteAsync(Uri.UnescapeDataString(alias), ct);
+                    var decodedAlias = Uri.UnescapeDataString(alias);
+                    await writable.DeleteAsync(decodedAlias, ct);
+                    EmitConnectionAudit("SHARED_CONNECTION_DELETE", decodedAlias, "Status=deleted");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -1016,6 +1053,30 @@ namespace ETL_SQL.Orchestrator.Service
             context.Request.Headers.TryGetValue("X-ETL-SQL-Actor", out var actor);
             var value = actor.ToString();
             return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        private static void EmitConnectionAudit(
+            string action,
+            string? alias,
+            string reason,
+            bool allowed = true)
+        {
+            var actor = "orchestrator-api";
+            var target = string.IsNullOrWhiteSpace(alias)
+                ? "SHARED_CONNECTION:*"
+                : $"SHARED_CONNECTION:{alias}";
+
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                allowed ? SecurityEventSeverity.Information : SecurityEventSeverity.Error,
+                allowed ? SecurityEventType.CatalogMutation : SecurityEventType.OperationDenied,
+                actor,
+                actor,
+                target,
+                allowed ? SecurityEventDecision.Allowed : SecurityEventDecision.Denied,
+                $"{action}: {reason}") with
+            {
+                HostName = Environment.MachineName
+            });
         }
 
         private static async Task<string> BuildPrometheusMetricsAsync(

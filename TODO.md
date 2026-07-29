@@ -54,7 +54,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Align shared connection impact analysis across Portal and Orchestrator admin APIs.
 - [x] Honor `WHAT_IF` for Portal and Orchestrator shared-connection `CREATE`/`ALTER`/`DROP`
       admin-block mutations.
-- [ ] Align shared connection fail-closed audit vocabulary and authorization/redaction behavior
+- [x] Emit shared connection security-audit events from Orchestrator admin APIs with
+      Portal-aligned `SHARED_CONNECTION_*` vocabulary and redacted targets/reasons.
+- [ ] Align remaining shared connection fail-closed authorization/redaction behavior
       across local engine execution and `EXECUTE <admin_conn> BEGIN ... END`.
 - [ ] Add end-to-end managed-connection coverage for SMTP and WEBHOOK in both Portal and
       Orchestrator: notification delivery, disabled entries, missing secrets, unauthorized callers,

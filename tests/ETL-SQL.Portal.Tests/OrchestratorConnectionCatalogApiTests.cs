@@ -36,6 +36,8 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
     public async Task Lifecycle_SetVerifyDisableEnableDelete_UsesLocalCatalog()
     {
         var client = _factory.CreateClient();
+        var securityEvents = new RecordingSecurityEventSink();
+        using var securityEventScope = new SecurityEventSinkScope(securityEvents);
 
         var raw = await SendAsync(client, HttpMethod.Put, "/api/admin/connections/raw_smtp", new
         {
@@ -152,6 +154,22 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         var reimportedDisabledBody = await reimportedDisabled.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Equal("SECRET:smtp_password",
             reimportedDisabledBody!["options"]!["PASSWORD"]!.GetValue<string>());
+
+        AssertConnectionEvent(securityEvents, SecurityEventType.OperationDenied, "SHARED_CONNECTION_WRITE_DENIED", "SHARED_CONNECTION:raw_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_CREATE", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_CREATE", "SHARED_CONNECTION:mock_conn");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_TEST", "SHARED_CONNECTION:mock_conn");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_IMPACT", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_DISABLE", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.OperationDenied, "SHARED_CONNECTION_TEST_DENIED", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_EXPORT", "SHARED_CONNECTION:*");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_ENABLE", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_DELETE", "SHARED_CONNECTION:notify_smtp");
+        AssertConnectionEvent(securityEvents, SecurityEventType.CatalogMutation, "SHARED_CONNECTION_IMPORT", "SHARED_CONNECTION:*");
+        Assert.DoesNotContain(securityEvents.Events, e =>
+            e.Reason.Contains("SECRET:smtp_password", StringComparison.OrdinalIgnoreCase)
+            || e.Reason.Contains("plain-text", StringComparison.OrdinalIgnoreCase)
+            || e.SanitizedTarget.Contains("SECRET:", StringComparison.OrdinalIgnoreCase));
     }
 
     private static Task<HttpResponseMessage> SendAsync(
@@ -165,5 +183,37 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         if (body is not null)
             request.Content = JsonContent.Create(body);
         return client.SendAsync(request);
+    }
+
+    private static void AssertConnectionEvent(
+        RecordingSecurityEventSink sink,
+        SecurityEventType type,
+        string action,
+        string target)
+    {
+        Assert.Contains(sink.Events, e =>
+            e.Type == type
+            && e.SanitizedTarget == target
+            && e.Reason.Contains(action, StringComparison.Ordinal));
+    }
+
+    private sealed class SecurityEventSinkScope : IDisposable
+    {
+        private readonly ISecurityEventSink _previous;
+
+        public SecurityEventSinkScope(ISecurityEventSink sink)
+        {
+            _previous = SecurityEventRuntime.Sink;
+            SecurityEventRuntime.Sink = sink;
+        }
+
+        public void Dispose() => SecurityEventRuntime.Sink = _previous;
+    }
+
+    private sealed class RecordingSecurityEventSink : ISecurityEventSink
+    {
+        public List<SecurityEvent> Events { get; } = [];
+
+        public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
     }
 }
