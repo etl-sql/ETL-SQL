@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Parser;
@@ -509,6 +510,63 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = ex.Message });
                 }
             }).WithName("disableAdminConnection");
+
+            app.MapPost("/api/admin/connections/{alias}/test", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, ConnectionDiagnosticEngine diagnostics,
+                ISecretProvider secrets, ETL_SQL.Services.SecurityService security, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var decodedAlias = Uri.UnescapeDataString(alias);
+                var status = await writable.GetStatusAsync(decodedAlias, ct);
+                if (status == SecretLifecycleStatus.NotFound)
+                    return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
+                if (status == SecretLifecycleStatus.Disabled)
+                    return Results.Conflict(new { Alias = decodedAlias, Status = "disabled" });
+
+                SharedConnectionDefinition entry;
+                try
+                {
+                    entry = await writable.ResolveAsync(decodedAlias, null, ct);
+                }
+                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+                {
+                    return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
+                }
+
+                try
+                {
+                    var target = await ResolveSecretReferenceAsync(entry.Target, secrets, ct);
+                    var options = await ResolveSecretReferencesAsync(entry.Options, secrets, ct);
+                    var snapshot = ExecutionPolicySnapshot.Capture(
+                        EnterprisePolicyRuntime.Current,
+                        Environment.UserName,
+                        ScriptExecutionMode.Batch,
+                        "orchestrator-connection-test");
+                    var timeoutSeconds = cfg.GetValue<int?>("Engine:Diagnostics:ProbeTimeoutSeconds") ?? 5;
+                    var report = await diagnostics.DiagnoseAsync(
+                        decodedAlias, entry.ConnectorType, target, options, security, snapshot, timeoutSeconds, ct);
+
+                    return Results.Ok(new
+                    {
+                        Alias = decodedAlias,
+                        Succeeded = report.Succeeded,
+                        Steps = report.Steps.Select(s => new
+                        {
+                            s.Layer,
+                            Status = s.Status.ToString().ToLowerInvariant(),
+                            s.Detail,
+                            s.Remedy
+                        })
+                    });
+                }
+                catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+                {
+                    return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
+                }
+            }).WithName("testAdminConnection");
 
             app.MapDelete("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
@@ -1119,6 +1177,28 @@ namespace ETL_SQL.Orchestrator.Service
             string? ErrorMessage = null,
             IReadOnlyList<string>? AttachmentPaths = null
         );
+
+        private static async Task<Dictionary<string, string>> ResolveSecretReferencesAsync(
+            IReadOnlyDictionary<string, string> values,
+            ISecretProvider secrets,
+            CancellationToken ct)
+        {
+            var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, value) in values)
+                resolved[key] = await ResolveSecretReferenceAsync(value, secrets, ct) ?? string.Empty;
+            return resolved;
+        }
+
+        private static async Task<string?> ResolveSecretReferenceAsync(
+            string? value,
+            ISecretProvider secrets,
+            CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase))
+                return value;
+            var name = value["SECRET:".Length..].Trim();
+            return (await secrets.ResolveAsync(name, ct)).Value;
+        }
 
         private sealed record SetConnectionCatalogEntryRequest(
             string ConnectorType,

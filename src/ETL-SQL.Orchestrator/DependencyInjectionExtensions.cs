@@ -26,6 +26,7 @@ using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -172,6 +173,7 @@ namespace ETL_SQL.Orchestrator
                 configuration["Connectors:AzureBlob:Container"] ?? "test"));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddSingleton<ConnectionDiagnosticEngine>();
 
             // 3. Engine & Execution
             services.AddTransient<ExecutionSession>();

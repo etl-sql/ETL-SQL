@@ -144,6 +144,8 @@ namespace ETL_SQL.Connectors.Portal
 
                 // Governed connection catalog — every connector type, not just SMTP.
                 case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
+                case AlterConnectionStatement s: await AlterSharedConnectionAsync(s, context); break;
+                case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
                 case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
 
@@ -414,6 +416,79 @@ namespace ETL_SQL.Connectors.Portal
                 $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
                 new { ConnectorType = stmt.ConnectionType, Target = target, Options = options },
                 $"Shared connection '{stmt.ConnectionName}' registered ({stmt.ConnectionType}).");
+        }
+
+        private async Task AlterSharedConnectionAsync(AlterConnectionStatement stmt, IExecutionContext context)
+        {
+            var existing = await SendJsonAsync(
+                HttpMethod.Get,
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
+                null);
+
+            var connectorType = stmt.ConnectionType ?? TryGetString(existing, "connectorType");
+            if (string.IsNullOrWhiteSpace(connectorType))
+                throw new ExecutionException(
+                    $"ALTER CONNECTION {stmt.ConnectionName} requires an implementation type because the catalog entry has no active definition.");
+
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (existing.TryGetProperty("options", out var existingOptions)
+                && existingOptions.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var option in existingOptions.EnumerateObject())
+                    options[option.Name] = option.Value.ValueKind == JsonValueKind.String
+                        ? option.Value.GetString() ?? string.Empty
+                        : option.Value.GetRawText();
+            }
+
+            foreach (var option in stmt.Options ?? [])
+            {
+                var value = (await context.EvaluateValue(option.Value, new Row()))?.ToString();
+                if (value is not null) options[option.Key] = value;
+            }
+
+            var target = stmt.TargetExpression is null
+                ? TryGetString(existing, "target")
+                : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
+
+            var sensitiveFields = existing.TryGetProperty("sensitiveFields", out var sensitive)
+                && sensitive.ValueKind == JsonValueKind.Array
+                ? sensitive.EnumerateArray().Select(v => v.GetString()).Where(v => v is not null).ToList()
+                : null;
+
+            await CallAsync(
+                HttpMethod.Put,
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
+                new { ConnectorType = connectorType, Target = target, Options = options, SensitiveFields = sensitiveFields },
+                $"Shared connection '{stmt.ConnectionName}' altered.");
+        }
+
+        private async Task TestSharedConnectionAsync(TestConnectionStatement stmt, IExecutionContext context)
+        {
+            var result = await SendJsonAsync(
+                HttpMethod.Post,
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}/test",
+                null);
+
+            var table = new DataTable();
+            table.AddColumn("Layer");
+            table.AddColumn("Status");
+            table.AddColumn("Detail");
+            table.AddColumn("Remedy");
+
+            if (result.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var step in steps.EnumerateArray())
+                {
+                    var row = new Row();
+                    row["Layer"] = TryGetString(step, "layer");
+                    row["Status"] = TryGetString(step, "status")?.ToUpperInvariant();
+                    row["Detail"] = TryGetString(step, "detail");
+                    row["Remedy"] = TryGetString(step, "remedy") ?? string.Empty;
+                    await table.AddRowAsync(row);
+                }
+            }
+
+            await PublishTableResultAsync(table, stmt.IntoTable, context);
         }
 
         private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
@@ -1653,6 +1728,11 @@ namespace ETL_SQL.Connectors.Portal
         private async Task PublishJsonResultAsync(JsonElement json, string? intoTable, IExecutionContext context)
         {
             var table = await JsonToTableAsync(json);
+            await PublishTableResultAsync(table, intoTable, context);
+        }
+
+        private static async Task PublishTableResultAsync(DataTable table, string? intoTable, IExecutionContext context)
+        {
             context.LastResultSets.Clear();
             context.LastResultSets.Add(table);
             context.LastResult = table;

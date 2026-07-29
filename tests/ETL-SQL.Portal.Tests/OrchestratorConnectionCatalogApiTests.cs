@@ -70,12 +70,26 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         Assert.Equal("smtp.example.test", definition.Options["HOST"]);
         Assert.Equal("SECRET:smtp_password", definition.Options["PASSWORD"]);
 
+        var mockSet = await SendAsync(client, HttpMethod.Put, "/api/admin/connections/mock_conn", new
+        {
+            connectorType = "MOCKDB",
+            options = new Dictionary<string, string>()
+        });
+        Assert.Equal(HttpStatusCode.NoContent, mockSet.StatusCode);
+        var test = await SendAsync(client, HttpMethod.Post, "/api/admin/connections/mock_conn/test", null);
+        Assert.Equal(HttpStatusCode.OK, test.StatusCode);
+        var testBody = await test.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("mock_conn", testBody!["alias"]!.GetValue<string>());
+        Assert.NotEmpty(testBody["steps"]!.AsArray());
+
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_smtp/disable", null)).StatusCode);
         var disabled = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/notify_smtp", null);
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         var disabledBody = await disabled.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Equal("disabled", disabledBody!["status"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_smtp/test", null)).StatusCode);
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("notify_smtp"));
 
         Assert.Equal(HttpStatusCode.NoContent,
@@ -84,6 +98,8 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
 
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/notify_smtp", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/mock_conn", null)).StatusCode);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => provider.ResolveAsync("notify_smtp"));
     }
 

@@ -113,6 +113,8 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case ValidateBundleStatement s: await ValidateBundleAsync(s, context); break;
                 case ExportScriptStatement s: await ExportScriptAsync(s, context); break;
                 case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
+                case AlterConnectionStatement s: await AlterSharedConnectionAsync(s, context); break;
+                case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
                 case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
                 case ShowPublishedBundlesStatement s: await FetchPublishedBundlesAsync(s, context); break;
@@ -238,6 +240,81 @@ namespace ETL_SQL.Connectors.Orchestrator
             _logger.WriteLine(
                 $"Shared connection '{stmt.ConnectionName}' registered in Orchestrator ({stmt.ConnectionType}).",
                 ConsoleColor.Green);
+        }
+
+        private async Task AlterSharedConnectionAsync(AlterConnectionStatement stmt, IExecutionContext context)
+        {
+            var existing = await GetJsonAsync<ConnectionCatalogEntryDto>(
+                $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}")
+                ?? throw new ExecutionException($"Shared connection '{stmt.ConnectionName}' was not found in Orchestrator.");
+
+            var options = new Dictionary<string, string>(
+                existing.Options ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var option in stmt.Options ?? [])
+            {
+                var value = (await context.EvaluateValue(option.Value, new Row()))?.ToString();
+                if (value is not null) options[option.Key] = value;
+            }
+
+            var connectorType = stmt.ConnectionType ?? existing.ConnectorType;
+            if (string.IsNullOrWhiteSpace(connectorType))
+                throw new ExecutionException(
+                    $"ALTER CONNECTION {stmt.ConnectionName} requires an implementation type because the catalog entry has no active definition.");
+
+            var target = stmt.TargetExpression is null
+                ? existing.Target
+                : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
+
+            var request = new
+            {
+                ConnectorType = connectorType,
+                Target = target,
+                Options = options,
+                SensitiveFields = existing.SensitiveFields
+            };
+            var content = new StringContent(JsonSerializer.Serialize(request, _json), Encoding.UTF8, "application/json");
+            var resp = await SendHttpAsync(() =>
+                _http.PutAsync($"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}", content));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+
+            _logger.WriteLine($"Shared connection '{stmt.ConnectionName}' altered in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task TestSharedConnectionAsync(TestConnectionStatement stmt, IExecutionContext context)
+        {
+            var resp = await SendHttpAsync(() =>
+                _http.PostAsync($"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}/test", null));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+
+            var response = await resp.Content.ReadFromJsonAsync<ConnectionTestResponseDto>(_json)
+                ?? throw new ExecutionException($"TEST CONNECTION '{stmt.ConnectionName}' returned no response.");
+
+            var table = new DataTable();
+            table.AddColumn("Layer");
+            table.AddColumn("Status");
+            table.AddColumn("Detail");
+            table.AddColumn("Remedy");
+
+            foreach (var step in response.Steps ?? [])
+            {
+                var row = new Row();
+                row["Layer"] = step.Layer;
+                row["Status"] = step.Status?.ToUpperInvariant();
+                row["Detail"] = step.Detail;
+                row["Remedy"] = step.Remedy ?? string.Empty;
+                await table.AddRowAsync(row);
+            }
+
+            await WriteResultAsync(table, stmt.IntoTable, context);
         }
 
         private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
@@ -881,5 +958,16 @@ namespace ETL_SQL.Connectors.Orchestrator
             Dictionary<string, string>? Options,
             string Status,
             string[]? SensitiveFields);
+
+        private sealed record ConnectionTestResponseDto(
+            string Alias,
+            bool Succeeded,
+            ConnectionDiagnosticStepDto[]? Steps);
+
+        private sealed record ConnectionDiagnosticStepDto(
+            string Layer,
+            string? Status,
+            string Detail,
+            string? Remedy);
     }
 }
