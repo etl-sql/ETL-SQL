@@ -414,9 +414,9 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var status = await writable.GetStatusAsync(alias, ct);
                     SharedConnectionDefinition? definition = null;
-                    if (status == SecretLifecycleStatus.Active)
+                    if (status != SecretLifecycleStatus.NotFound)
                     {
-                        try { definition = await writable.ResolveAsync(alias, null, ct); }
+                        try { definition = await writable.GetDefinitionAsync(alias, ct); }
                         catch { }
                     }
 
@@ -439,9 +439,9 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var status = await writable.GetStatusAsync(alias, ct);
                     SharedConnectionDefinition? definition = null;
-                    if (status == SecretLifecycleStatus.Active)
+                    if (status != SecretLifecycleStatus.NotFound)
                     {
-                        try { definition = await writable.ResolveAsync(alias, null, ct); }
+                        try { definition = await writable.GetDefinitionAsync(alias, ct); }
                         catch { }
                     }
 
@@ -507,9 +507,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (status == SecretLifecycleStatus.NotFound)
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
 
-                SharedConnectionDefinition? definition = null;
-                if (status == SecretLifecycleStatus.Active)
-                    definition = await writable.ResolveAsync(decodedAlias, null, ct);
+                var definition = await writable.GetDefinitionAsync(decodedAlias, ct);
 
                 return Results.Ok(ToConnectionCatalogEntry(decodedAlias, status, definition));
             }).WithName("getAdminConnection");

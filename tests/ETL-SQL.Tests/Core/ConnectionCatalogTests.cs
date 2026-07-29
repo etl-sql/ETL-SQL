@@ -52,6 +52,11 @@ public class ConnectionCatalogTests
         Assert.Equal(SecretLifecycleStatus.Disabled, await provider.GetStatusAsync("warehouse"));
         var disabledError = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("warehouse"));
         Assert.Contains("disabled", disabledError.Message);
+        var disabledDefinition = await provider.GetDefinitionAsync("warehouse");
+        Assert.True(disabledDefinition.Disabled);
+        Assert.Equal("POSTGRES", disabledDefinition.ConnectorType);
+        Assert.Equal("pg01", disabledDefinition.Options["HOST"]);
+        Assert.Equal(SecretLifecycleStatus.Disabled, await provider.GetStatusAsync("warehouse"));
 
         await provider.StoreAsync(definition);
         Assert.Equal(SecretLifecycleStatus.Active, await provider.GetStatusAsync("warehouse"));

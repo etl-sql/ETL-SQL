@@ -43,10 +43,17 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 #### P0 — Managed connections
 
-- [ ] Close the remaining managed-connection parity gaps across Engine, Portal, and Orchestrator:
-      impact analysis, disabled-entry-preserving configuration export/import, fail-closed audit
-      vocabulary, and authorization/redaction behavior must use one catalog contract across local
-      engine execution and `EXECUTE <admin_conn> BEGIN ... END`.
+- [x] Dispatch `CREATE/ALTER/TEST/SHOW/DROP CONNECTION` inside Portal and Orchestrator admin
+      blocks through the governed shared connection catalog contract.
+- [x] Add Orchestrator shared-connection REST endpoints for list/detail/set/enable/disable/delete,
+      active-entry test diagnostics, and active-entry metadata export/import.
+- [x] Support `SHOW CONNECTION CONFIG` inside Portal and Orchestrator admin blocks with redacted
+      catalog values.
+- [x] Preserve disabled-entry definitions in shared connection export/import across Local, Portal,
+      and Orchestrator catalogs.
+- [ ] Align shared connection impact analysis, fail-closed audit vocabulary, and
+      authorization/redaction behavior across local engine execution and
+      `EXECUTE <admin_conn> BEGIN ... END`.
 - [ ] Add end-to-end managed-connection coverage for SMTP and WEBHOOK in both Portal and
       Orchestrator: notification delivery, disabled entries, missing secrets, unauthorized callers,
       `WHAT_IF`, configuration export/import, and fail-closed audit behavior.

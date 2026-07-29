@@ -91,9 +91,19 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         var disabledBody = await disabled.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Equal("disabled", disabledBody!["status"]!.GetValue<string>());
+        Assert.Equal("SMTP", disabledBody["connectorType"]!.GetValue<string>());
+        Assert.Equal("SECRET:smtp_password",
+            disabledBody["options"]!["PASSWORD"]!.GetValue<string>());
         Assert.Equal(HttpStatusCode.Conflict,
             (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_smtp/test", null)).StatusCode);
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("notify_smtp"));
+
+        var disabledExport = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/export", null);
+        Assert.Equal(HttpStatusCode.OK, disabledExport.StatusCode);
+        var disabledExported = await disabledExport.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var disabledEntry = Assert.Single(disabledExported!, e => e!["alias"]!.GetValue<string>() == "notify_smtp");
+        Assert.Equal("disabled", disabledEntry!["status"]!.GetValue<string>());
+        Assert.Equal("SECRET:smtp_password", disabledEntry["options"]!["PASSWORD"]!.GetValue<string>());
 
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_smtp/enable", null)).StatusCode);
@@ -113,6 +123,17 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
         var import = await SendAsync(client, HttpMethod.Post, "/api/admin/connections/import", exported);
         Assert.Equal(HttpStatusCode.OK, import.StatusCode);
         Assert.Equal("SECRET:smtp_password", (await provider.ResolveAsync("notify_smtp")).Options["PASSWORD"]);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/notify_smtp", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/import", disabledExported)).StatusCode);
+        Assert.Equal(SecretLifecycleStatus.Disabled,
+            await ((IWritableConnectionCatalogProvider)provider).GetStatusAsync("notify_smtp"));
+        var reimportedDisabled = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/notify_smtp", null);
+        var reimportedDisabledBody = await reimportedDisabled.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("SECRET:smtp_password",
+            reimportedDisabledBody!["options"]!["PASSWORD"]!.GetValue<string>());
     }
 
     private static Task<HttpResponseMessage> SendAsync(

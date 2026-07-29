@@ -34,6 +34,7 @@ public interface IConnectionCatalogProvider
 public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
 {
     Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default);
+    Task<SharedConnectionDefinition> GetDefinitionAsync(string alias, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default);
     Task<SecretLifecycleStatus> GetStatusAsync(string alias, CancellationToken cancellationToken = default);
     Task DisableAsync(string alias, CancellationToken cancellationToken = default);
@@ -100,6 +101,27 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         var disabledPath = GetDisabledPath(definition.Alias);
         if (File.Exists(disabledPath))
             File.Delete(disabledPath);
+    }
+
+    public async Task<SharedConnectionDefinition> GetDefinitionAsync(
+        string alias,
+        CancellationToken cancellationToken = default)
+    {
+        var path = GetEntryPath(alias);
+        var disabled = false;
+        if (!File.Exists(path))
+        {
+            path = GetDisabledPath(alias);
+            disabled = true;
+        }
+
+        if (!File.Exists(path))
+            throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
+
+        var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
+        return new SharedConnectionDefinition(
+            alias, payload.ConnectorType, payload.Target, payload.Options, disabled, payload.SensitiveFields);
     }
 
     public Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default)
