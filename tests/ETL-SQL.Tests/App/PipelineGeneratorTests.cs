@@ -228,8 +228,8 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("SELECT * INTO #valid_data FROM #cleaned_data", code);
             Assert.Contains("SELECT * INTO outbound_dest FROM #valid_data;", code);
 
-            // Assert Final Tag statement
-            Assert.Contains("TAG #cleaned_data WITH (", code);
+            // Assert final metadata tag statement.
+            Assert.Contains("INSERT TAG FOR TABLE #cleaned_data (", code);
             Assert.Contains("pipeline_source = 'single_schema.json'", code);
 
             var script = new Parser(new Lexer(code).Tokenize(), code).Parse();

@@ -175,6 +175,8 @@ public static class AstSerializer
         CreateNavigationStatement s => FormatCreateNavigation(s),
         CreateButtonStatement s => FormatCreateButton(s),
         CreateStyleStatement s => FormatCreateStyle(s),
+        CreateTagStatement s => FormatCreateTag(s),
+        CreateLineageStatement s => FormatCreateLineageImport(s),
         LineageStatement s => FormatLineage(s),
         TransformStatement s => FormatTransform(s),
         LintStatement s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
@@ -766,6 +768,21 @@ public static class AstSerializer
         if (s.IntoTable != null) sql += $" INTO {s.IntoTable}";
         return sql + ";";
     }
+
+    private static string FormatCreateTag(CreateTagStatement s)
+    {
+        var column = s.ColumnName != null ? $" COLUMN {FormatMetadataNameExpression(s.ColumnName)}" : "";
+        var tags = string.Join(", ", s.Tags.Select(t => $"{t.Key} = {t.Value.ToSql()}"));
+        return $"INSERT TAG FOR TABLE {FormatMetadataNameExpression(s.TableName)}{column} ({tags});";
+    }
+
+    private static string FormatCreateLineageImport(CreateLineageStatement s) =>
+        $"INSERT LINEAGE FOR TABLE {FormatMetadataNameExpression(s.TableName)} FROM {s.Source.ToSql()};";
+
+    private static string FormatMetadataNameExpression(Expression expression) =>
+        expression is LiteralExpression { Type: TokenType.STRING_LITERAL, Value: string value }
+            ? value
+            : expression.ToSql();
 
     private static string FormatTransform(TransformStatement s)
     {

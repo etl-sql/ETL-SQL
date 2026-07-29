@@ -149,7 +149,7 @@ pairs on the same column.
 
 ### Governed Stewardship Catalog
 
-The standard tag catalog is typed and shared by linting, runtime `CREATE TAG` validation, editor
+The standard tag catalog is typed and shared by linting, runtime `INSERT TAG` validation, editor
 metadata hints, and durable lineage catalog queries. Standard tag values are checked case
 insensitively. `@classification` accepts `public`, `internal`, `confidential`, or `restricted`;
 `@quality` accepts `gold`, `silver`, or `bronze`; boolean tags accept `true` or `false`; and

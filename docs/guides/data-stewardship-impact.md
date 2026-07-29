@@ -32,17 +32,17 @@ FROM sales.Orders
 WHERE order_date >= RELDATE('D-30');
 ```
 
-Use `CREATE TAG` when metadata is attached to a specific table or column rather than the whole script.
+Use `INSERT TAG` when metadata is attached to a specific table or column rather than the whole script.
 
 ```sql
-CREATE TAG FOR TABLE #orders_curated (
+INSERT TAG FOR TABLE #orders_curated (
   owner = 'FinanceOps',
   steward = 'Maria Chen',
   classification = 'restricted',
   quality = 'gold'
 );
 
-CREATE TAG FOR TABLE #orders_curated COLUMN customer_id (
+INSERT TAG FOR TABLE #orders_curated COLUMN customer_id (
   pii = 'true',
   classification = 'restricted'
 );

@@ -9,7 +9,7 @@ namespace ETL_SQL.Engine.Lineage
     /// <summary>
     /// Reverse of <see cref="OpenLineageExporter"/>: parses OpenLineage RunEvent JSON (a .jsonl file
     /// may contain one RunEvent per line) back into <see cref="LineageEntry"/> rows so previously
-    /// exported lineage can be re-imported via CREATE LINEAGE ... FROM.
+    /// exported lineage can be re-imported via INSERT LINEAGE ... FROM.
     ///
     /// Round-trip notes (inherent to the OpenLineage shape we emit):
     /// - One entry is produced per (output table, column) with paired source table/column lists,

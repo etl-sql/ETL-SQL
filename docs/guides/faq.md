@@ -223,9 +223,9 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 **Q: How does ETL-SQL track data lineage and tagging?**
 > Data lineage tracking is natively built into the engine's query processor:
 > * **Pipeline Lineage:** The engine automatically tracks source-to-target dependencies. When a query pulls data from `db_conn.Orders` into `#staging` and then merges it into `warehouse.Sales`, the engine builds a dependency graph.
-> * **Metadata Tagging:** You can tag columns or tables with metadata using the `TAG` statement:
+> * **Metadata Tagging:** You can tag columns or tables with metadata using `INSERT TAG`:
 >   ```sql
->   TAG #staging.Email WITH (Sensitive = 'PII', Retention = '7 Years');
+>   INSERT TAG FOR TABLE #staging COLUMN Email (Sensitive = 'PII', Retention = '7 Years');
 >   ```
 > Lineage tags automatically flow downstream through `SELECT INTO` and `JOIN` operations.
 >

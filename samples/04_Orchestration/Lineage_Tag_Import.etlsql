@@ -1,12 +1,12 @@
 -- Lineage_Tag_Import.etlsql
 -- Importing lineage and tags that were curated elsewhere, instead of re-deriving them:
---   * CREATE TAG          — seed table/column metadata from your own catalog (loop-friendly)
---   * CREATE LINEAGE FROM — re-import a previously exported OpenLineage document
+--   * INSERT TAG          — seed table/column metadata from your own catalog (loop-friendly)
+--   * INSERT LINEAGE FROM — re-import a previously exported OpenLineage document
 -- Imports are a starting point: any lineage the script produces afterwards accrues on top
 -- (last-writer-wins).
 
 -- ───────────────────────────────────────────────────────────────────────────
--- 1. CREATE TAG — project a custom / in-house metadata catalog into the engine.
+-- 1. INSERT TAG — project a custom / in-house metadata catalog into the engine.
 --    Pretend these rows live in your own data-catalog tables. Loop over them and
 --    seed tags BEFORE the transforms run, so derived columns inherit them.
 -- ───────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ INSERT INTO #column_docs VALUES
 
 FOR @r IN (SELECT tbl, col, descr, owner FROM #column_docs)
 BEGIN
-    CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr, owner = @r.owner);
+    INSERT TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr, owner = @r.owner);
 END
 
 -- ───────────────────────────────────────────────────────────────────────────
@@ -33,13 +33,13 @@ PRINT 'Inherited tags on the derived #daily.Revenue column:';
 SHOW TAGS FOR TABLE #daily COLUMN Revenue;
 
 -- ───────────────────────────────────────────────────────────────────────────
--- 3. CREATE LINEAGE ... FROM — re-import a previously exported OpenLineage doc.
+-- 3. INSERT LINEAGE ... FROM — re-import a previously exported OpenLineage doc.
 --    Export the current lineage, then import it back. In a real pipeline the file
 --    would come from a prior run or an upstream system.
 -- ───────────────────────────────────────────────────────────────────────────
 SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'output/daily_lineage.json';
 
-CREATE LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
+INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
 
 PRINT 'Lineage for #daily after import:';
 SHOW LINEAGE FOR #daily TO 'output/daily_lineage_report.md';

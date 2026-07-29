@@ -542,7 +542,7 @@ namespace ETL_SQL.App
 
             // 8. Output generation & lineage logging
             sb.Indent(1).AppendLine("-- 8. PIPELINE INHERITED DATA GOVERNANCE");
-            sb.Indent(1).AppendLine("TAG #cleaned_data WITH (");
+            sb.Indent(1).AppendLine("INSERT TAG FOR TABLE #cleaned_data (");
             sb.Indent(2).AppendLine($"pipeline_source = '{specFileName}',");
             sb.Indent(2).AppendLine($"owner = '{owner}',");
             sb.Indent(2).AppendLine($"classification = '{classification}'");

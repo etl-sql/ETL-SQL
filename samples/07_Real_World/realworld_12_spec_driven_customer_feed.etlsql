@@ -65,7 +65,7 @@ BEGIN TRY
     );
 
     -- 7. Pipeline-level lineage tag.
-    TAG #cleaned_data WITH (
+    INSERT TAG FOR TABLE #cleaned_data (
         pipeline_source = 'realworld_12_spec_driven_customer_feed.json',
         owner = 'Customer Data Team',
         classification = 'confidential'

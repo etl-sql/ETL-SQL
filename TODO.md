@@ -114,6 +114,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       `PUBLISH DATASET &name FROM 'file.parquet'`. Remove `PUBLISH DATASET FROM ... AS &name`.
 - [x] Use `AS` consistently for typed objects and definition/property-bag report objects, including
       forms such as `CREATE STYLE name AS (...)`.
+- [x] Add canonical `INSERT TAG` and `INSERT LINEAGE` forms that reuse existing metadata
+      seeding/import execution and round-trip through `ToSql()`.
 - [ ] Treat tags and lineage as metadata records, not unnamed DDL objects: add canonical
       `INSERT/UPDATE/DELETE TAG` and `INSERT/DELETE LINEAGE` forms, retire `CREATE TAG`,
       `CREATE LINEAGE`, and bare `TAG ... WITH (...)`, and preserve immutable auto-captured lineage.

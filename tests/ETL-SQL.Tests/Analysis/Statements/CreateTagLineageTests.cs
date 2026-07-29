@@ -39,6 +39,19 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
+        public void ParseInsertTag_TableAndColumn_WithMultipleTags()
+        {
+            var stmt = TestHelpers.Parse("INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');")
+                .Statements.OfType<CreateTagStatement>().Single();
+
+            Assert.NotNull(stmt.ColumnName);
+            Assert.Equal(2, stmt.Tags.Count);
+            Assert.True(stmt.Tags.ContainsKey("d"));
+            Assert.True(stmt.Tags.ContainsKey("owner"));
+            Assert.Equal("INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');", stmt.ToSql());
+        }
+
+        [Fact]
         public void ParseTag_LegacyTableSyntax_WithMultipleTags()
         {
             var stmt = TestHelpers.Parse(@"
@@ -86,6 +99,17 @@ namespace ETL_SQL.Tests.Analysis.Statements
 
             Assert.NotNull(stmt.Source);
             Assert.NotNull(stmt.TableName);
+            Assert.Equal("INSERT LINEAGE FOR TABLE #final FROM 'lineage.json';", stmt.ToSql());
+        }
+
+        [Fact]
+        public void ParseInsertLineage_FromStringLiteral()
+        {
+            var stmt = TestHelpers.Parse("INSERT LINEAGE FOR TABLE #final FROM 'lineage.json';")
+                .Statements.OfType<CreateLineageStatement>().Single();
+
+            Assert.NotNull(stmt.Source);
+            Assert.NotNull(stmt.TableName);
         }
 
         // ── CREATE TAG: seeding + inheritance ───────────────────────────────
@@ -96,6 +120,18 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var eval = NewEval();
             await TestHelpers.Execute(eval,
                 "CREATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');");
+
+            var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
+            Assert.Equal("Sales amount", meta["d"]);
+            Assert.Equal("Finance", meta["owner"]);
+        }
+
+        [Fact]
+        public async Task InsertTag_SeedsColumnMetadata()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval,
+                "INSERT TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');");
 
             var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
             Assert.Equal("Sales amount", meta["d"]);
@@ -225,6 +261,31 @@ namespace ETL_SQL.Tests.Analysis.Statements
 
                 var consumer = NewEval();
                 await TestHelpers.Execute(consumer, $"CREATE LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';");
+
+                Assert.Contains(consumer.LineageTracker.GetFullLineage(), e => e.TargetTable == "#dst");
+            }
+            finally
+            {
+                File.Delete(tmp);
+            }
+        }
+
+        [Fact]
+        public async Task InsertLineage_FromExportedFile_RestoresLineage()
+        {
+            var tmp = Path.GetTempFileName();
+            try
+            {
+                var producer = NewEval();
+                await TestHelpers.Execute(producer, $@"
+                    CREATE TABLE #src (id INT, name VARCHAR(50));
+                    INSERT INTO #src VALUES (1, 'Alice');
+                    CREATE TABLE #dst (id INT, name VARCHAR(50));
+                    INSERT INTO #dst SELECT id, name FROM #src;
+                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
+
+                var consumer = NewEval();
+                await TestHelpers.Execute(consumer, $"INSERT LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';");
 
                 Assert.Contains(consumer.LineageTracker.GetFullLineage(), e => e.TargetTable == "#dst");
             }

@@ -904,7 +904,7 @@ INSERT INTO #column_docs VALUES
 -- Loop the catalog and seed tags BEFORE the transform, so derived columns inherit them.
 FOR @r IN (SELECT tbl, col, descr, owner FROM #column_docs)
 BEGIN
-    CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr, owner = @r.owner);
+    INSERT TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr, owner = @r.owner);
 END
 
 -- 2. A normal transform. Tags seeded above ride along onto #daily.Revenue.
@@ -917,7 +917,7 @@ SHOW TAGS FOR TABLE #daily COLUMN Revenue;
 -- 3. Round-trip lineage through an OpenLineage document. In production the file
 --    would come from a prior run or an upstream system rather than this export.
 SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'output/daily_lineage.json';
-CREATE LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
+INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
 SHOW LINEAGE FOR #daily TO 'output/daily_lineage_report.md';
 ```
 
@@ -1054,7 +1054,7 @@ etl-sql gen-script `
 
 The generated template includes:
 * `EXPECT SCHEMA #staging (...)` from the JSON contract.
-* `TAG #cleaned_data WITH (...)` lineage metadata.
+* `INSERT TAG FOR TABLE #cleaned_data (...)` lineage metadata.
 * `#spec_validation_issues` counts for regex and allowed-value failures.
 * `#rejected_data` and `#valid_data` when `source.reject_policy` is `quarantine`.
 

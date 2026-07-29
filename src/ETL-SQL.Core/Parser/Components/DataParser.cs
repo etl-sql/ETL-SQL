@@ -897,6 +897,17 @@ public class DataParser : ParserComponent
 
     public Statement ParseInsert(Token startToken)
     {
+        if (_parser.Current.Type == TokenType.TAG)
+        {
+            Advance();
+            return ParseInsertTag(startToken);
+        }
+        if (_parser.Current.Type == TokenType.LINEAGE)
+        {
+            Advance();
+            return ParseInsertLineage(startToken);
+        }
+
         bool isReplace = startToken.Type == TokenType.REPLACE;
         if (startToken.Type == TokenType.INSERT)
         {
@@ -1459,6 +1470,20 @@ public class DataParser : ParserComponent
         return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
     }
 
+    /// <summary>INSERT TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...)</summary>
+    private Statement ParseInsertTag(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after INSERT TAG");
+        Consume(TokenType.TABLE, "Expected TABLE after INSERT TAG FOR");
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+        Expression? columnExpr = null;
+        if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
+
+        var tags = ParseTagAssignments(startToken, "INSERT TAG");
+        return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+    }
+
     private Dictionary<string, Expression> ParseTagAssignments(Token startToken, string statementName)
     {
         Consume(TokenType.LPAREN, $"Expected '(' to begin the tag list in {statementName}");
@@ -1488,6 +1513,18 @@ public class DataParser : ParserComponent
         Consume(TokenType.FROM, "Expected FROM after the table name in CREATE LINEAGE");
         var source = ParseExpression();
         Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE LINEAGE");
+        return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    /// <summary>INSERT LINEAGE FOR TABLE &lt;table&gt; FROM &lt;openlineage-json file or string&gt;</summary>
+    private Statement ParseInsertLineage(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after INSERT LINEAGE");
+        Consume(TokenType.TABLE, "Expected TABLE after INSERT LINEAGE FOR");
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+        Consume(TokenType.FROM, "Expected FROM after the table name in INSERT LINEAGE");
+        var source = ParseExpression();
+        Consume(TokenType.SEMICOLON, "Expected ';' at the end of INSERT LINEAGE");
         return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
     }
 
