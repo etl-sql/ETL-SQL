@@ -1269,20 +1269,7 @@ public static class DefaultGrammar
         ));
         exportDest.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
 
-        // 5. TAG targetTable [COLUMN targetCol] WITH (...)
-        var tagNode = new StateNode("TAG");
-        var tagTable = new StateNode("TAG_TABLE");
-        var tagColumn = new StateNode("TAG_COLUMN");
-        var tagColName = new StateNode("TAG_COL_NAME");
-
-        tree.RegisterStartNode("TAG", tagNode);
-        tagNode.AddWildcardTransition(tagTable, "<table_name>");
-        tagTable.AddTransitionTo("COLUMN", tagColumn, SuggestionType.Keyword);
-        tagColumn.AddWildcardTransition(tagColName, "<column_name>");
-        tagColName.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
-        tagTable.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
-
-        // 6. SET LINEAGE
+        // 5. SET LINEAGE
         var setNode = new StateNode("SET");
         var setLineage = new StateNode("SET_LINEAGE");
         var setEquals = new StateNode("SET_EQUALS");

@@ -40,7 +40,11 @@ public class StatementParser
     {
         _dispatchMap[TokenType.WITH] = ParseStatementWithCte;
         _dispatchMap[TokenType.CREATE] = () => { var t = _parser.Previous; return DataParser.ParseCreate(t); };
-        _dispatchMap[TokenType.TAG] = () => { var t = _parser.Previous; return DataParser.ParseTag(t); };
+        _dispatchMap[TokenType.TAG] = () =>
+        {
+            var t = _parser.Previous;
+            throw new SyntaxException("TAG ... WITH has been retired. Use INSERT TAG FOR TABLE <table> [COLUMN <column>] (...).", t.Line, t.Column);
+        };
         _dispatchMap[TokenType.ALTER] = () => { var t = _parser.Previous; return DataParser.ParseAlter(t); };
         _dispatchMap[TokenType.EXPLAIN] = () => { var t = _parser.Previous; return SystemParser.ParseExplain(t); };
         _dispatchMap[TokenType.DROP] = () => { var t = _parser.Previous; return DataParser.ParseDrop(t); };

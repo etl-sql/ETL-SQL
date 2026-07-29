@@ -51,7 +51,7 @@ Already available:
 Shipped in v0.17.0:
 
 - A governed tag catalog defines type, allowed values, aliases, required scopes, and deprecation metadata.
-- Lint and `CREATE TAG` runtime validation use the standard catalog while preserving `org_`, `x_`, and
+- Lint and `INSERT/UPDATE TAG` runtime validation use the standard catalog while preserving `org_`, `x_`, and
   `custom_` organization tags.
 - `SHOW LINEAGE HISTORY FOR MISSING TAGS` queries missing owner/steward/contact/classification/quality metadata.
 - Administrator and script-first usage is documented in the platform and lineage references.

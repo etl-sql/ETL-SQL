@@ -148,7 +148,7 @@ public class LineageTracker : ILineageTracker
     /// Explicitly upserts table- or column-level tags (last-writer-wins) and records a
     /// TABLE_TAGS audit entry so the tags round-trip through SHOW LINEAGE / OpenLineage export.
     /// Unlike <see cref="Record"/>, this writes the inheritance dictionaries directly and so is
-    /// safe to call repeatedly from the same source line (e.g. a CREATE TAG inside a FOR loop),
+    /// safe to call repeatedly from the same source line (e.g. INSERT TAG inside a FOR loop),
     /// where Record's location-based dedup would otherwise skip re-seeding the dictionaries.
     /// </summary>
     public void ApplyTags(string table, string? column, IReadOnlyDictionary<string, string> tags)

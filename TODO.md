@@ -120,7 +120,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       including runtime removal from inherited table/column metadata.
 - [x] Add canonical `DELETE LINEAGE` for imported lineage records while preserving immutable
       auto-captured lineage.
-- [ ] Treat tags and lineage as metadata records, not unnamed DDL objects: add canonical
+- [x] Treat tags and lineage as metadata records, not unnamed DDL objects: add canonical
       `INSERT/UPDATE/DELETE TAG` and `INSERT/DELETE LINEAGE` forms, retire `CREATE TAG`,
       `CREATE LINEAGE`, and bare `TAG ... WITH (...)`, and preserve immutable auto-captured lineage.
 - [ ] Reserve compound object kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` only for

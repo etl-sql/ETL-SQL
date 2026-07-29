@@ -7,7 +7,7 @@ namespace ETL_SQL.Engine.Handlers;
 /// Handles the CREATE TABLE statement, delegating the operation to the target data source.
 /// After table creation, seeds the LineageTracker with any inline <c>/* @tag: value */</c>
 /// metadata declared on column definitions so that tags are visible to SHOW TAGS,
-/// SHOW LINEAGE, and LINEAGE_TAG() without requiring a separate TAG or CREATE TAG statement.
+/// SHOW LINEAGE, and LINEAGE_TAG() without requiring a separate INSERT TAG statement.
 /// </summary>
 public class CreateTableStatementHandler(ILogger logger) : IStatementHandler
 {
@@ -26,7 +26,7 @@ public class CreateTableStatementHandler(ILogger logger) : IStatementHandler
         }
 
         // Seed the LineageTracker with any inline column-level tags declared in the
-        // CREATE TABLE definition. This mirrors what CREATE TAG and TAG ... WITH() do,
+        // CREATE TABLE definition. This mirrors what INSERT TAG does,
         // so tags such as /*@d: ...*/ /*@pii: true*/ are immediately queryable.
         foreach (var col in stmt.Columns)
         {

@@ -15,7 +15,7 @@ using Xunit;
 namespace ETL_SQL.Tests.Analysis.Statements
 {
     /// <summary>
-    /// Covers CREATE TAG (explicit tag seeding + inheritance) and CREATE LINEAGE ... FROM
+    /// Covers canonical tag metadata mutation and lineage import/delete statements
     /// (OpenLineage import), including the last-writer-wins semantics and the loop/same-line
     /// re-tagging case that motivated LineageTracker.ApplyTags.
     /// </summary>
@@ -27,15 +27,12 @@ namespace ETL_SQL.Tests.Analysis.Statements
         // ── Parser ──────────────────────────────────────────────────────────
 
         [Fact]
-        public void ParseCreateTag_TableAndColumn_WithMultipleTags()
+        public void ParseCreateTag_RetiredSyntax_ReportsReplacement()
         {
-            var stmt = TestHelpers.Parse("CREATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');")
-                .Statements.OfType<CreateTagStatement>().Single();
+            var script = TestHelpers.Parse("CREATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');");
 
-            Assert.NotNull(stmt.ColumnName);
-            Assert.Equal(2, stmt.Tags.Count);
-            Assert.True(stmt.Tags.ContainsKey("d"));
-            Assert.True(stmt.Tags.ContainsKey("owner"));
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("CREATE TAG has been retired"));
+            Assert.Empty(script.Statements.OfType<CreateTagStatement>());
         }
 
         [Fact]
@@ -74,29 +71,24 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public void ParseTag_LegacyTableSyntax_WithMultipleTags()
+        public void ParseTag_RetiredSyntax_ReportsReplacement()
         {
-            var stmt = TestHelpers.Parse(@"
+            var script = TestHelpers.Parse(@"
                 TAG #raw WITH (
                     source_system = 'SourceDB',
                     classification = 'confidential',
                     owner = 'finance_team',
                     load_pattern = 'incremental'
-                );")
-                .Statements.OfType<CreateTagStatement>().Single();
+                );");
 
-            Assert.Null(stmt.ColumnName);
-            Assert.Equal(4, stmt.Tags.Count);
-            Assert.True(stmt.Tags.ContainsKey("source_system"));
-            Assert.True(stmt.Tags.ContainsKey("classification"));
-            Assert.True(stmt.Tags.ContainsKey("owner"));
-            Assert.True(stmt.Tags.ContainsKey("load_pattern"));
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("TAG ... WITH has been retired"));
+            Assert.Empty(script.Statements.OfType<CreateTagStatement>());
         }
 
         [Fact]
-        public void ParseCreateTag_VariableNames_ParseAsExpressions()
+        public void ParseInsertTag_VariableNames_ParseAsExpressions()
         {
-            var stmt = TestHelpers.Parse("CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr);")
+            var stmt = TestHelpers.Parse("INSERT TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr);")
                 .Statements.OfType<CreateTagStatement>().Single();
 
             Assert.IsType<MemberAccessExpression>(stmt.TableName);
@@ -105,23 +97,21 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public void ParseCreateTag_NoTags_ReportsDiagnostic()
+        public void ParseInsertTag_NoTags_ReportsDiagnostic()
         {
             // The parser collects syntax errors as diagnostics rather than throwing.
-            var script = TestHelpers.Parse("CREATE TAG FOR TABLE MyTable ();");
+            var script = TestHelpers.Parse("INSERT TAG FOR TABLE MyTable ();");
             Assert.NotEmpty(script.Diagnostics);
             Assert.Empty(script.Statements.OfType<CreateTagStatement>());
         }
 
         [Fact]
-        public void ParseCreateLineage_FromStringLiteral()
+        public void ParseCreateLineage_RetiredSyntax_ReportsReplacement()
         {
-            var stmt = TestHelpers.Parse("CREATE LINEAGE FOR TABLE #final FROM 'lineage.json';")
-                .Statements.OfType<CreateLineageStatement>().Single();
+            var script = TestHelpers.Parse("CREATE LINEAGE FOR TABLE #final FROM 'lineage.json';");
 
-            Assert.NotNull(stmt.Source);
-            Assert.NotNull(stmt.TableName);
-            Assert.Equal("INSERT LINEAGE FOR TABLE #final FROM 'lineage.json';", stmt.ToSql());
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("CREATE LINEAGE has been retired"));
+            Assert.Empty(script.Statements.OfType<CreateLineageStatement>());
         }
 
         [Fact]
@@ -145,19 +135,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.Equal("DELETE LINEAGE FOR TABLE #final;", stmt.ToSql());
         }
 
-        // ── CREATE TAG: seeding + inheritance ───────────────────────────────
-
-        [Fact]
-        public async Task CreateTag_SeedsColumnMetadata()
-        {
-            var eval = NewEval();
-            await TestHelpers.Execute(eval,
-                "CREATE TAG FOR TABLE MyTable COLUMN Amount (d = 'Sales amount', owner = 'Finance');");
-
-            var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
-            Assert.Equal("Sales amount", meta["d"]);
-            Assert.Equal("Finance", meta["owner"]);
-        }
+        // ── TAG metadata: seeding + inheritance ─────────────────────────────
 
         [Fact]
         public async Task InsertTag_SeedsColumnMetadata()
@@ -216,11 +194,11 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task Tag_SeedsTableMetadata()
+        public async Task InsertTag_SeedsTableMetadata()
         {
             var eval = NewEval();
             await TestHelpers.Execute(eval, @"
-                TAG #raw WITH (
+                INSERT TAG FOR TABLE #raw (
                     source_system = 'SourceDB',
                     classification = 'confidential',
                     owner = 'finance_team',
@@ -235,13 +213,13 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task CreateTag_BeforeSelectInto_InheritsDescriptionOntoDerivedColumn()
+        public async Task InsertTag_BeforeSelectInto_InheritsDescriptionOntoDerivedColumn()
         {
             var eval = NewEval();
             await TestHelpers.Execute(eval, @"
                 CREATE TABLE #orders (Amount INT);
                 INSERT INTO #orders VALUES (100);
-                CREATE TAG FOR TABLE #orders COLUMN Amount (d = 'Sales amount');
+                INSERT TAG FOR TABLE #orders COLUMN Amount (d = 'Sales amount');
                 SELECT Amount AS total INTO #summary FROM #orders;");
 
             var meta = eval.LineageTracker.GetColumnMetadata("#summary", "total");
@@ -249,37 +227,37 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task CreateTag_LastWriterWins()
+        public async Task InsertTag_LastWriterWins()
         {
             var eval = NewEval();
             await TestHelpers.Execute(eval, @"
-                CREATE TAG FOR TABLE T (owner = 'alice');
-                CREATE TAG FOR TABLE T (owner = 'bob');");
+                INSERT TAG FOR TABLE T (owner = 'alice');
+                INSERT TAG FOR TABLE T (owner = 'bob');");
 
             Assert.Equal("bob", eval.LineageTracker.GetTableMetadata("T")["owner"]);
         }
 
         [Fact]
-        public async Task CreateTag_InvalidStandardValue_Throws()
+        public async Task InsertTag_InvalidStandardValue_Throws()
         {
             var eval = NewEval();
             var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
-                TestHelpers.Execute(eval, "CREATE TAG FOR TABLE T (classification = 'secret');"));
+                TestHelpers.Execute(eval, "INSERT TAG FOR TABLE T (classification = 'secret');"));
 
             Assert.Contains("@classification", ex.Message);
         }
 
         [Fact]
-        public async Task CreateTag_CustomOrganizationTag_IsAllowed()
+        public async Task InsertTag_CustomOrganizationTag_IsAllowed()
         {
             var eval = NewEval();
-            await TestHelpers.Execute(eval, "CREATE TAG FOR TABLE T (org_retention_policy = 'finance-local');");
+            await TestHelpers.Execute(eval, "INSERT TAG FOR TABLE T (org_retention_policy = 'finance-local');");
 
             Assert.Equal("finance-local", eval.LineageTracker.GetTableMetadata("T")["org_retention_policy"]);
         }
 
         [Fact]
-        public async Task CreateTag_InLoop_SameLine_LastRowWins()
+        public async Task InsertTag_InLoop_SameLine_LastRowWins()
         {
             // Guards the ApplyTags fix: routed through Record, the second iteration's location-keyed
             // dedup would early-return and leave the inheritance dictionary at the first value.
@@ -290,13 +268,13 @@ namespace ETL_SQL.Tests.Analysis.Statements
                 INSERT INTO #meta VALUES ('T', 'second');
                 FOR @r IN (SELECT tbl, val FROM #meta)
                 BEGIN
-                    CREATE TAG FOR TABLE @r.tbl (note = @r.val);
+                    INSERT TAG FOR TABLE @r.tbl (note = @r.val);
                 END");
 
             Assert.Equal("second", eval.LineageTracker.GetTableMetadata("T")["note"]);
         }
 
-        // ── CREATE LINEAGE: OpenLineage import ──────────────────────────────
+        // ── LINEAGE import/delete: OpenLineage import ───────────────────────
 
         [Fact]
         public void OpenLineageImporter_RoundTripsColumnEdgesAndTags()
@@ -320,31 +298,6 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var imported = new LineageTracker(NullLogger.Instance);
             imported.LoadState(entries);
             Assert.Equal("false", imported.GetTableMetadata("#result")["pii"]);
-        }
-
-        [Fact]
-        public async Task CreateLineage_FromExportedFile_RestoresLineage()
-        {
-            var tmp = Path.GetTempFileName();
-            try
-            {
-                var producer = NewEval();
-                await TestHelpers.Execute(producer, $@"
-                    CREATE TABLE #src (id INT, name VARCHAR(50));
-                    INSERT INTO #src VALUES (1, 'Alice');
-                    CREATE TABLE #dst (id INT, name VARCHAR(50));
-                    INSERT INTO #dst SELECT id, name FROM #src;
-                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmp.Replace("\\", "\\\\")}';");
-
-                var consumer = NewEval();
-                await TestHelpers.Execute(consumer, $"CREATE LINEAGE FOR TABLE #dst FROM '{tmp.Replace("\\", "\\\\")}';");
-
-                Assert.Contains(consumer.LineageTracker.GetFullLineage(), e => e.TargetTable == "#dst");
-            }
-            finally
-            {
-                File.Delete(tmp);
-            }
         }
 
         [Fact]
@@ -410,11 +363,11 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task CreateLineage_MissingFile_ThrowsExecutionException()
+        public async Task InsertLineage_MissingFile_ThrowsExecutionException()
         {
             var eval = NewEval();
             await Assert.ThrowsAnyAsync<System.Exception>(() =>
-                TestHelpers.Execute(eval, "CREATE LINEAGE FOR TABLE #x FROM 'does-not-exist-12345.json';"));
+                TestHelpers.Execute(eval, "INSERT LINEAGE FOR TABLE #x FROM 'does-not-exist-12345.json';"));
         }
     }
 }

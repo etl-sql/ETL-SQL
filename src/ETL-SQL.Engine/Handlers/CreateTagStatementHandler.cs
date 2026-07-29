@@ -9,10 +9,10 @@ using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
-/// Handles CREATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...). Evaluates the
+/// Handles INSERT/UPDATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...). Evaluates the
 /// table/column names and tag values at runtime (so they may be variables, e.g. @r.tbl inside a
 /// FOR loop) and seeds the lineage tracker's metadata so the tags inherit onto derived columns
-/// in any subsequent SELECT ... INTO. Last-writer-wins: a later CREATE TAG or inherited value
+/// in any subsequent SELECT ... INTO. Last-writer-wins: a later tag statement or inherited value
 /// overrides an earlier one for the same table/column key.
 /// </summary>
 public class CreateTagStatementHandler : IStatementHandler
@@ -26,7 +26,7 @@ public class CreateTagStatementHandler : IStatementHandler
 
         var table = Stringify(await context.EvaluateValue(stmt.TableName, row));
         if (string.IsNullOrWhiteSpace(table))
-            throw new ExecutionException("CREATE TAG: the target table name evaluated to null or empty.");
+            throw new ExecutionException("INSERT TAG: the target table name evaluated to null or empty.");
 
         string? column = stmt.ColumnName == null
             ? null
@@ -41,7 +41,7 @@ public class CreateTagStatementHandler : IStatementHandler
             {
                 var validation = StewardshipTagCatalog.Validate(kv.Key, val);
                 if (!validation.IsValid)
-                    throw new ExecutionException($"CREATE TAG: {validation.Message}");
+                    throw new ExecutionException($"INSERT TAG: {validation.Message}");
                 tags[validation.CanonicalName] = val;
             }
         }

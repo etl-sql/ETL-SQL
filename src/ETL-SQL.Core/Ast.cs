@@ -2614,7 +2614,7 @@ public sealed record CreateSetsStatement : Statement
 }
 
 /// <summary>
-/// CREATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...) — explicitly seeds
+/// INSERT/UPDATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...) explicitly seeds
 /// table-/column-level metadata (tags) into the lineage tracker. Table/column names are
 /// expressions so they may be variables (e.g. @r.tbl in a FOR loop) or static identifiers.
 /// </summary>
@@ -2651,7 +2651,7 @@ public sealed record DeleteTagStatement : Statement
 }
 
 /// <summary>
-/// CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; — imports lineage from an OpenLineage
+/// INSERT LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; imports lineage from an OpenLineage
 /// JSON document (file path or inline JSON string), mirroring SHOW LINEAGE EXPORT AS OPENLINEAGE.
 /// </summary>
 public sealed record CreateLineageStatement : Statement

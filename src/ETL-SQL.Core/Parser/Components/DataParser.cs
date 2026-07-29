@@ -288,14 +288,14 @@ public class DataParser : ParserComponent
         {
             RejectUnsupportedCreateMode(mode, "TAG");
             RejectUnsupportedCreateIfNotExists("TAG");
-            return ParseCreateTag(startToken);
+            throw new SyntaxException("CREATE TAG has been retired. Use INSERT TAG FOR TABLE <table> [COLUMN <column>] (...).", startToken.Line, startToken.Column);
         }
 
         if (Match(TokenType.LINEAGE))
         {
             RejectUnsupportedCreateMode(mode, "LINEAGE");
             RejectUnsupportedCreateIfNotExists("LINEAGE");
-            return ParseCreateLineage(startToken);
+            throw new SyntaxException("CREATE LINEAGE has been retired. Use INSERT LINEAGE FOR TABLE <table> FROM <source>.", startToken.Line, startToken.Column);
         }
 
         // Report-SQL
@@ -488,19 +488,6 @@ public class DataParser : ParserComponent
         if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseAlterAlert(startToken);
 
         throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
-    }
-
-    /// <summary>TAG &lt;table&gt; [COLUMN &lt;col&gt;] WITH (key = expr, ...)</summary>
-    public Statement ParseTag(Token startToken)
-    {
-        var tableExpr = ParseLineageNameExpression(tableLevel: true);
-
-        Expression? columnExpr = null;
-        if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
-
-        Consume(TokenType.WITH, "Expected WITH after TAG target");
-        var tags = ParseTagAssignments(startToken, "TAG");
-        return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
     }
 
     /// <summary>ALTER JOB &lt;name&gt; SET TARGET = '…' | SET (job options).</summary>
@@ -1467,20 +1454,6 @@ public class DataParser : ParserComponent
         return new LiteralExpression(idTok.Value, TokenType.STRING_LITERAL) { Line = idTok.Line, Column = idTok.Column };
     }
 
-    /// <summary>CREATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...)</summary>
-    private Statement ParseCreateTag(Token startToken)
-    {
-        Consume(TokenType.FOR, "Expected FOR after CREATE TAG");
-        Consume(TokenType.TABLE, "Expected TABLE after CREATE TAG FOR");
-        var tableExpr = ParseLineageNameExpression(tableLevel: true);
-
-        Expression? columnExpr = null;
-        if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
-
-        var tags = ParseTagAssignments(startToken, "CREATE TAG");
-        return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
-    }
-
     /// <summary>INSERT TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...)</summary>
     private Statement ParseInsertTag(Token startToken)
     {
@@ -1563,18 +1536,6 @@ public class DataParser : ParserComponent
             throw new SyntaxException($"{statementName} requires at least one 'key = value' assignment.", startToken.Line, startToken.Column);
 
         return tags;
-    }
-
-    /// <summary>CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;openlineage-json file or string&gt;</summary>
-    private Statement ParseCreateLineage(Token startToken)
-    {
-        Consume(TokenType.FOR, "Expected FOR after CREATE LINEAGE");
-        Consume(TokenType.TABLE, "Expected TABLE after CREATE LINEAGE FOR");
-        var tableExpr = ParseLineageNameExpression(tableLevel: true);
-        Consume(TokenType.FROM, "Expected FROM after the table name in CREATE LINEAGE");
-        var source = ParseExpression();
-        Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE LINEAGE");
-        return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
     }
 
     /// <summary>INSERT LINEAGE FOR TABLE &lt;table&gt; FROM &lt;openlineage-json file or string&gt;</summary>
