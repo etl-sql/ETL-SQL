@@ -34,9 +34,12 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
             throw new ExecutionException("A SHARED: reference requires a catalog alias, e.g. 'SHARED:my_sql_server'.");
 
         if (catalogProvider == null)
+        {
+            EmitUseDenied(alias, identity, providerName: null, "CatalogProviderMissing");
             throw new ExecutionException(
                 $"Connection catalog entry '{alias}' was referenced, but no connection catalog provider is configured " +
                 "(Governance:ConnectionCatalog:Provider).");
+        }
 
         SharedConnectionDefinition definition;
         try
@@ -45,23 +48,30 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         }
         catch (KeyNotFoundException)
         {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "AliasNotFound");
             throw new ExecutionException($"Connection catalog entry '{alias}' was not found in provider '{catalogProvider.ProviderName}'.");
         }
         catch (UnauthorizedAccessException ex)
         {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "Unauthorized");
             throw new ExecutionException(ex.Message);
         }
         catch (InvalidOperationException ex)
         {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "Unavailable");
             throw new ExecutionException($"Connection catalog entry '{alias}' cannot be used: {ex.Message}");
         }
 
         if (definition.Disabled)
+        {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "Disabled");
             throw new ExecutionException($"Connection catalog entry '{alias}' is disabled.");
+        }
 
         if (declaredConnectorType != null
             && !definition.ConnectorType.Equals(declaredConnectorType, StringComparison.OrdinalIgnoreCase))
         {
+            EmitUseDenied(alias, identity, catalogProvider.ProviderName, "ConnectorTypeMismatch");
             throw new ExecutionException(
                 $"Connection catalog entry '{alias}' is a {definition.ConnectorType} connection, but the script declares " +
                 $"{declaredConnectorType}. Match the declared connector type to the catalog entry.");
@@ -78,9 +88,12 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
                 // The catalog owns credentials; a script overriding them would redirect a shared
                 // connection's identity without the administrator's knowledge.
                 if (IsCatalogOwnedSensitiveField(definition, key) && definition.Options.ContainsKey(key))
+                {
+                    EmitUseDenied(alias, identity, catalogProvider.ProviderName, $"CatalogOwnedSensitiveOverride; Option={key}");
                     throw new ExecutionException(
                         $"Option '{key}' is a sensitive field managed by connection catalog entry '{alias}' and cannot " +
                         "be overridden in the script.");
+                }
 
                 merged[key] = value;
             }
@@ -92,4 +105,30 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
     private static bool IsCatalogOwnedSensitiveField(SharedConnectionDefinition definition, string key) =>
         SecretResolvableFields.IsResolvable(key, definition.ConnectorType)
         || (definition.SensitiveFields?.Contains(key, StringComparer.OrdinalIgnoreCase) ?? false);
+
+    private static void EmitUseDenied(
+        string alias,
+        ExecutionIdentity? identity,
+        string? providerName,
+        string reason)
+    {
+        var actor = string.IsNullOrWhiteSpace(identity?.RealUser)
+            ? "unknown"
+            : identity.RealUser;
+        var effective = string.IsNullOrWhiteSpace(identity?.EffectiveUser)
+            ? actor
+            : identity.EffectiveUser;
+
+        SecurityEventRuntime.Emit(SecurityEventContract.Create(
+            SecurityEventSeverity.Error,
+            SecurityEventType.OperationDenied,
+            actor,
+            effective,
+            $"SHARED_CONNECTION:{alias}",
+            SecurityEventDecision.Denied,
+            $"SHARED_CONNECTION_USE_DENIED: Provider={providerName ?? "(none)"}; Reason={reason}") with
+        {
+            HostName = Environment.MachineName
+        });
+    }
 }

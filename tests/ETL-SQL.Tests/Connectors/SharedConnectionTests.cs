@@ -111,6 +111,8 @@ public class SharedConnectionTests
     public async Task SharedReference_UnknownAliasDisabledEntryAndNoProvider_FailClearly()
     {
         var context = ConnectionTestDoubles.Context();
+        var sink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(sink);
 
         var unknown = await Assert.ThrowsAsync<ExecutionException>(
             () => Handler(new CapturingConnector(), Catalog()).Execute(SharedCreate("a", "SHARED:missing"), context));
@@ -126,6 +128,35 @@ public class SharedConnectionTests
         var noProvider = await Assert.ThrowsAsync<ExecutionException>(
             () => Handler(new CapturingConnector(), catalog: null).Execute(SharedCreate("c", "SHARED:x"), context));
         Assert.Contains("Governance:ConnectionCatalog:Provider", noProvider.Message);
+
+        AssertDenied(sink, "missing", "AliasNotFound");
+        AssertDenied(sink, "old", "Disabled");
+        AssertDenied(sink, "x", "CatalogProviderMissing");
+    }
+
+    [Fact]
+    public async Task SharedReference_UnauthorizedProvider_EmitsUseDeniedWithoutSecrets()
+    {
+        var connector = new CapturingConnector();
+        var sink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(sink);
+
+        var statement = new CreateConnectionStatement(
+            "m", "CAPTURE",
+            new LiteralExpression("SHARED:restricted", TokenType.STRING_LITERAL),
+            new Dictionary<string, Expression>
+            {
+                ["PASSWORD"] = new LiteralExpression("do-not-log", TokenType.STRING_LITERAL)
+            });
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(
+            () => Handler(connector, new DenyingCatalogProvider()).Execute(statement, ConnectionTestDoubles.Context()));
+
+        Assert.Contains("not authorized", ex.Message, StringComparison.OrdinalIgnoreCase);
+        AssertDenied(sink, "restricted", "Unauthorized");
+        Assert.DoesNotContain(sink.Events, e =>
+            e.Reason.Contains("do-not-log", StringComparison.OrdinalIgnoreCase)
+            || e.SanitizedTarget.Contains("do-not-log", StringComparison.OrdinalIgnoreCase));
     }
 
     private static CreateConnectionStatement SharedCreate(string name, string target) =>
@@ -146,6 +177,16 @@ public class SharedConnectionTests
     private static FakeCatalogProvider Catalog(params SharedConnectionDefinition[] definitions) =>
         new(definitions);
 
+    private static void AssertDenied(RecordingSecurityEventSink sink, string alias, string reason)
+    {
+        Assert.Contains(sink.Events, e =>
+            e.Type == SecurityEventType.OperationDenied
+            && e.Decision == SecurityEventDecision.Denied
+            && e.SanitizedTarget == $"SHARED_CONNECTION:{alias}"
+            && e.Reason.Contains("SHARED_CONNECTION_USE_DENIED", StringComparison.Ordinal)
+            && e.Reason.Contains(reason, StringComparison.Ordinal));
+    }
+
     private sealed class FakeCatalogProvider(SharedConnectionDefinition[] definitions) : IConnectionCatalogProvider
     {
         private readonly Dictionary<string, SharedConnectionDefinition> _entries =
@@ -162,5 +203,24 @@ public class SharedConnectionTests
                 throw new KeyNotFoundException(alias);
             return Task.FromResult(definition);
         }
+    }
+
+    private sealed class DenyingCatalogProvider : IConnectionCatalogProvider
+    {
+        public string ProviderName => "DenyingCatalog";
+
+        public Task<SharedConnectionDefinition> ResolveAsync(
+            string alias,
+            ExecutionIdentity? identity = null,
+            CancellationToken cancellationToken = default) =>
+            throw new UnauthorizedAccessException(
+                $"Identity '{identity?.EffectiveUser ?? "(none)"}' is not authorized to use shared connection '{alias}'.");
+    }
+
+    private sealed class RecordingSecurityEventSink : ISecurityEventSink
+    {
+        public List<SecurityEvent> Events { get; } = [];
+
+        public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
     }
 }

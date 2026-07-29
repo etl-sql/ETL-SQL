@@ -5,6 +5,7 @@ using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Portal;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 
@@ -234,8 +235,68 @@ public class OrchestratorDataSourceConnectionCatalogTests
         Assert.Equal("SMTP", context.LastResult.Rows[0]["ConnectorType"]);
     }
 
+    [Fact]
+    public async Task PortalConnectionAdminErrors_RedactSecretReferencesAndCredentialFields()
+    {
+        var handler = new RecordingHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/auth/login")
+                return JsonResponse("""{"token":"token","refreshToken":"refresh","expiresAt":"2099-01-01T00:00:00Z"}""");
+
+            return new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(
+                    """{"error":"bad","PASSWORD":"plain-text","reference":"SECRET:smtp_password"}""")
+            };
+        });
+        await using var source = new PortalDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://portal.test/") },
+            "admin",
+            "password",
+            NullLogger.Instance);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            source.ExecuteAdminStatementAsync(CreateSmtpStatement(), new LiteralEvalContext()));
+
+        Assert.DoesNotContain("plain-text", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET:smtp_password", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("********", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OrchestratorConnectionAdminErrors_RedactSecretReferencesAndCredentialFields()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(
+                """{"error":"bad","PASSWORD":"plain-text","reference":"SECRET:smtp_password"}""")
+        });
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key",
+            NullLogger.Instance);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            source.ExecuteAdminStatementAsync(CreateSmtpStatement(), new LiteralEvalContext()));
+
+        Assert.DoesNotContain("plain-text", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET:smtp_password", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("********", ex.Message, StringComparison.Ordinal);
+    }
+
     private static LiteralExpression Literal(string value) =>
         new(value, TokenType.STRING_LITERAL);
+
+    private static CreateConnectionStatement CreateSmtpStatement() =>
+        new(
+            "notify_smtp",
+            "SMTP",
+            target: null,
+            new Dictionary<string, Expression>
+            {
+                ["HOST"] = Literal("smtp.example.test"),
+                ["PASSWORD"] = Literal("SECRET:smtp_password")
+            });
 
     private static async Task ExerciseWhatIfConnectionMutationsAsync(
         IPortalAdminConnection source)

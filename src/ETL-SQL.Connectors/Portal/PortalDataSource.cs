@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
@@ -1935,9 +1936,8 @@ namespace ETL_SQL.Connectors.Portal
 
         private static string SanitizeBody(string body)
         {
-            // Trim large bodies to avoid flooding the log
-            if (body.Length > 500) body = body[..500] + "…";
-            return body;
+            var redacted = SecretRedactor.Redact(body) ?? string.Empty;
+            return redacted.Length > 500 ? redacted[..500] + "..." : redacted;
         }
 
         private static object? TryGet(JsonElement el, string prop)

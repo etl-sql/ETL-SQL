@@ -56,7 +56,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       admin-block mutations.
 - [x] Emit shared connection security-audit events from Orchestrator admin APIs with
       Portal-aligned `SHARED_CONNECTION_*` vocabulary and redacted targets/reasons.
-- [ ] Align remaining shared connection fail-closed authorization/redaction behavior
+- [x] Align remaining shared connection fail-closed authorization/redaction behavior
       across local engine execution and `EXECUTE <admin_conn> BEGIN ... END`.
 - [ ] Add end-to-end managed-connection coverage for SMTP and WEBHOOK in both Portal and
       Orchestrator: notification delivery, disabled entries, missing secrets, unauthorized callers,

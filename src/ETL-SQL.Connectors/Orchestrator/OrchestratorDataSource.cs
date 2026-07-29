@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
@@ -243,7 +244,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             _logger.WriteLine(
@@ -294,7 +295,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             _logger.WriteLine($"Shared connection '{stmt.ConnectionName}' altered in Orchestrator.", ConsoleColor.Green);
@@ -307,7 +308,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             var response = await resp.Content.ReadFromJsonAsync<ConnectionTestResponseDto>(_json)
@@ -358,7 +359,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
 
             _logger.WriteLine($"Shared connection '{stmt.ConnectionName}' deleted from Orchestrator.", ConsoleColor.Green);
@@ -864,7 +865,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             return await resp.Content.ReadFromJsonAsync<T>(_json);
         }
@@ -984,6 +985,12 @@ namespace ETL_SQL.Connectors.Orchestrator
             try { return await send(); }
             catch (HttpRequestException ex)
             { throw new ExecutionException($"Orchestrator connection error: {ex.Message}", ex); }
+        }
+
+        private static string SanitizeBody(string body)
+        {
+            var redacted = SecretRedactor.Redact(body) ?? string.Empty;
+            return redacted.Length > 500 ? redacted[..500] + "..." : redacted;
         }
 
         private sealed record PublishBundleApiRequest(BundlePublishRequest Bundle, string? Password = null);
