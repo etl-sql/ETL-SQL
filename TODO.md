@@ -68,7 +68,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       connectors.
 - [x] Cover Portal managed WEBHOOK admin endpoints rejecting non-admin callers beyond generic
       admin endpoint checks.
-- [ ] Add remaining Portal managed WEBHOOK notification delivery coverage.
+- [x] Cover Portal managed WEBHOOK named-notification delivery routing through the Orchestrator
+      dispatcher proxy.
 - [ ] Add remaining managed SMTP/WEBHOOK delivery coverage that exercises Portal-to-Orchestrator
       notification dispatch end to end rather than only catalog lifecycle and generated scripts.
 

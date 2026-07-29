@@ -260,8 +260,10 @@ public sealed class SubscriptionDeliveryLedgerTests
         Assert.DoesNotContain("row-recipient@test.local", runner.LastScript, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task NamedNotificationDelivery_ExportsThenDispatchesViaOrchestrator()
+    [Theory]
+    [InlineData("smtp")]
+    [InlineData("webhook")]
+    public async Task NamedNotificationDelivery_ExportsThenDispatchesViaOrchestrator(string connectorKind)
     {
         using var factory = new PortalWebFactory();
         using var scope = factory.Services.CreateScope();
@@ -272,7 +274,7 @@ public sealed class SubscriptionDeliveryLedgerTests
             smtpAlias: $"row_smtp_{Guid.NewGuid():N}",
             recipients: "row-recipient@test.local");
 
-        var notificationAlias = $"notify_smtp_{h.Suffix}";
+        var notificationAlias = $"notify_{connectorKind}_{h.Suffix}";
         var storeFactory = scope.ServiceProvider.GetRequiredService<IOrchestratorStoreFactory>();
         var dbLocator = scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>();
         var store = storeFactory.Create(dbLocator.Resolve());
@@ -321,6 +323,7 @@ public sealed class SubscriptionDeliveryLedgerTests
         Assert.Contains("\"sourceKind\":\"SUBSCRIPTION\"", handler.LastBody);
         Assert.Contains("\"recipientOverride\":\"notify-recipient@test.local\"", handler.LastBody);
         Assert.Contains("\"attachmentPaths\"", handler.LastBody);
+        Assert.Contains(Uri.EscapeDataString(SubscriptionOrchestration.NotificationName(h.SubscriptionId)), handler.LastUri);
         Assert.DoesNotContain("row-recipient@test.local", handler.LastBody, StringComparison.OrdinalIgnoreCase);
     }
 
