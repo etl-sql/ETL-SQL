@@ -194,6 +194,41 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    public async Task WebhookAdminEndpoints_RejectNonAdminCallers()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, adminToken, "/api/admin/connections/notify_webhook", new
+            {
+                connectorType = "WEBHOOK",
+                options = new Dictionary<string, string>
+                {
+                    ["URL"] = "SECRET:webhook_url",
+                    ["FORMAT"] = "generic"
+                }
+            })).StatusCode);
+
+        var publisher = await CreateReadyUserAsync(client, adminToken, "webhook_pub", "Publisher");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, publisher.AccessToken, "/api/admin/connections/notify_webhook", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, publisher.AccessToken, "/api/admin/connections/notify_webhook/verify", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, publisher.AccessToken, "/api/admin/connections/notify_webhook/test", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, publisher.AccessToken, "/api/admin/connections/export", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, publisher.AccessToken, "/api/admin/connections/import", Array.Empty<object>())).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, publisher.AccessToken, "/api/admin/connections/notify_webhook/disable", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Delete, publisher.AccessToken, "/api/admin/connections/notify_webhook", null)).StatusCode);
+    }
+
+    [Fact]
     public async Task UseAcls_RestrictExpansionToAdminsOwnersAndGrantedGroups()
     {
         using var factory = new CatalogFactory();

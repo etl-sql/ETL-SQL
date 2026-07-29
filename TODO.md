@@ -66,8 +66,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       verify/test failures, disabled entries, configuration export/import, and audit behavior.
 - [x] Cover WEBHOOK `WHAT_IF` admin-block connection mutations for both Portal and Orchestrator
       connectors.
-- [ ] Add remaining Portal managed WEBHOOK notification delivery coverage and unauthorized-caller
-      negative coverage beyond generic admin endpoint checks.
+- [x] Cover Portal managed WEBHOOK admin endpoints rejecting non-admin callers beyond generic
+      admin endpoint checks.
+- [ ] Add remaining Portal managed WEBHOOK notification delivery coverage.
 - [ ] Add remaining managed SMTP/WEBHOOK delivery coverage that exercises Portal-to-Orchestrator
       notification dispatch end to end rather than only catalog lifecycle and generated scripts.
 
