@@ -26,6 +26,9 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
             (await client.PutAsJsonAsync("/api/admin/connections/x", new { connectorType = "MSSQL" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.DeleteAsync("/api/admin/connections/x")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/connections/export")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/admin/connections/import", Array.Empty<object>())).StatusCode);
     }
 
     [Fact]
@@ -96,11 +99,20 @@ public class OrchestratorConnectionCatalogApiTests : IDisposable
             (await SendAsync(client, HttpMethod.Post, "/api/admin/connections/notify_smtp/enable", null)).StatusCode);
         Assert.Equal("SECRET:smtp_password", (await provider.ResolveAsync("notify_smtp")).Options["PASSWORD"]);
 
+        var export = await SendAsync(client, HttpMethod.Get, "/api/admin/connections/export", null);
+        Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+        var exported = await export.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Contains(exported!, e => e!["alias"]!.GetValue<string>() == "notify_smtp");
+
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/notify_smtp", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Delete, "/api/admin/connections/mock_conn", null)).StatusCode);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => provider.ResolveAsync("notify_smtp"));
+
+        var import = await SendAsync(client, HttpMethod.Post, "/api/admin/connections/import", exported);
+        Assert.Equal(HttpStatusCode.OK, import.StatusCode);
+        Assert.Equal("SECRET:smtp_password", (await provider.ResolveAsync("notify_smtp")).Options["PASSWORD"]);
     }
 
     private static Task<HttpResponseMessage> SendAsync(

@@ -426,6 +426,75 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(entries);
             }).WithName("listAdminConnections");
 
+            app.MapGet("/api/admin/connections/export", async (HttpContext ctx, IServiceProvider services,
+                IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var aliases = await writable.ListAsync(ct);
+                var entries = new List<ConnectionCatalogEntryResponse>();
+                foreach (var alias in aliases)
+                {
+                    var status = await writable.GetStatusAsync(alias, ct);
+                    SharedConnectionDefinition? definition = null;
+                    if (status == SecretLifecycleStatus.Active)
+                    {
+                        try { definition = await writable.ResolveAsync(alias, null, ct); }
+                        catch { }
+                    }
+
+                    entries.Add(ToConnectionCatalogEntry(alias, status, definition));
+                }
+
+                return Results.Ok(entries);
+            }).WithName("exportAdminConnections");
+
+            app.MapPost("/api/admin/connections/import", async (HttpContext ctx,
+                List<ConnectionCatalogEntryResponse>? entries, IServiceProvider services, IConfiguration cfg,
+                CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+                if (entries is null || entries.Count == 0)
+                    return Results.BadRequest(new { Error = "No entries to import." });
+
+                var created = 0;
+                var updated = 0;
+                try
+                {
+                    foreach (var entry in entries)
+                    {
+                        var statusBefore = await writable.GetStatusAsync(entry.Alias, ct);
+                        var definition = new SharedConnectionDefinition(
+                            entry.Alias,
+                            entry.ConnectorType,
+                            entry.Target,
+                            new Dictionary<string, string>(entry.Options ?? [], StringComparer.OrdinalIgnoreCase),
+                            Disabled: false,
+                            entry.SensitiveFields);
+                        var rawCredential = SharedConnectionValidator.FindRawCredential(definition.Options, definition.Target);
+                        if (rawCredential is not null)
+                            return Results.BadRequest(new { Error = $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference, not a raw credential value." });
+
+                        await writable.StoreAsync(definition, ct);
+                        if (entry.Status.Equals("disabled", StringComparison.OrdinalIgnoreCase))
+                            await writable.DisableAsync(entry.Alias, ct);
+
+                        if (statusBefore == SecretLifecycleStatus.NotFound) created++;
+                        else updated++;
+                    }
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    return Results.BadRequest(new { Error = ex.Message });
+                }
+
+                return Results.Ok(new { Created = created, Updated = updated });
+            }).WithName("importAdminConnections");
+
             app.MapGet("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
