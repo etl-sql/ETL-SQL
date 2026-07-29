@@ -261,9 +261,7 @@ public class StatementParser
         if (type == TokenType.UNPIVOT) return _parser.ParseDuckUnpivotStatement();
         if (type == TokenType.DESCRIBE)
         {
-            // DESCRIBE <table> — DuckDB-style alias for SHOW COLUMNS FOR <table>.
-            _parser.Advance();
-            return new ShowColumnsStatement(_parser.ParseTableReference());
+            throw new SyntaxException("DESCRIBE has been retired. Use SELECT * FROM eng.columns WHERE table_name = '<table>'.", _parser.Current.Line, _parser.Current.Column);
         }
 
         if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ExtensionParser.ParseExecute();

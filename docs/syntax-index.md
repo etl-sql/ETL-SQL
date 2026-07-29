@@ -1049,8 +1049,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW BUNDLE FILES`   | Orch     | Lists files in a bundle version |
 | `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
-| `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
-| `DESCRIBE <table>` | Diagnostics | Alias for `SHOW COLUMNS FOR <table>` |
+| `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
 | `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
 | `eng.tags` | Lineage | Queryable virtual table for lineage tags |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
@@ -1860,7 +1859,6 @@ See [Getting Started](guides/getting-started.md) and [Administration](administra
 | `CONVERT` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
-| `DESCRIBE` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
 | `DISCONNECT` | General | Canonical language token |
 | `ENABLE` | General | Canonical language token |

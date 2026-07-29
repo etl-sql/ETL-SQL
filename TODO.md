@@ -153,11 +153,12 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Retire `FOR EACH`; `FOREACH` is the only loop spelling.
 - [x] Retire `WAITFOR (<condition>)`; `WAIT UNTIL <condition>` is the condition-polling form.
       Keep `WAITFOR DELAY` and `WAITFOR TIME`.
-- [ ] Retire `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE`; use
+- [x] Retire `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE`; use
       `SELECT * FROM eng.columns WHERE table_name = ...`.
 - [ ] Ensure generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs,
       and diagnostics emit only canonical forms. Any temporary alias must produce a deprecation
       diagnostic with the exact replacement and removal release.
+- [ ] Lint Warning for SELECT * turned off by default but can be enabled in appsettings.json.  For these
 
 #### P2 — Round-trip guarantees
 

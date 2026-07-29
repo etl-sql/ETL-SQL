@@ -517,8 +517,7 @@ public class SystemParser : ParserComponent
         }
         else if (Match(TokenType.COLUMNS) || Match(TokenType.SCHEMA) || MatchIdentifier("SCHEMA"))
         {
-            Consume(TokenType.FOR, "Expected FOR after SHOW COLUMNS or SHOW SCHEMA");
-            stmt = new ShowColumnsStatement(ParseTableReference());
+            throw new SyntaxException("SHOW COLUMNS and SHOW SCHEMA have been retired. Use SELECT * FROM eng.columns WHERE table_name = '<table>'.", startToken.Line, startToken.Column);
         }
         else if (Match(TokenType.VARIABLES) || (_parser.Current.Type == TokenType.LOCAL && _parser.Peek.Type == TokenType.VARIABLES))
         {
@@ -747,7 +746,6 @@ public class SystemParser : ParserComponent
                 ShowJobsStatement j => j with { IntoTable = tempTable },
                 ShowTablesStatement sts => sts with { IntoTable = tempTable },
                 ShowViewsStatement sv => sv with { IntoTable = tempTable },
-                ShowColumnsStatement scols => scols with { IntoTable = tempTable },
                 ShowVersionStatement svs => svs with { IntoTable = tempTable },
                 ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
                 ShowSessionsStatement sess => sess with { IntoTable = tempTable },

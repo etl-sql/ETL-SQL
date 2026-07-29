@@ -507,14 +507,14 @@ namespace ETL_SQL.Tests.Engine
             await Run("DROP PROCEDURE IF EXISTS nonexistent_proc_xyz;");
         }
 
-        // ── SHOW COLUMNS ──────────────────────────────────────────────────────
+        // ── eng.columns ───────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowColumns_AfterCreateTable_ReturnsColumns()
+        public async Task EngColumns_AfterCreateTable_ReturnsColumns()
         {
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, Name VARCHAR);" +
-                "SHOW COLUMNS FOR #t;");
+                "SELECT * FROM eng.columns WHERE table_name = '#t';");
             Assert.NotNull(eval.LastResult);
         }
 

@@ -74,50 +74,48 @@ SHOW TABLES ON mycsv;";
             Assert.NotNull(eval.LastResult);
         }
 
-        // ── SHOW COLUMNS ───────────────────────────────────────────────────────
+        // ── eng.columns ────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowColumns_ForTempTable_ReturnsColumnNames()
+        public async Task EngColumns_ForTempTable_ReturnsColumnNames()
         {
-            // Syntax: SHOW COLUMNS FOR <table>
             var script = @"
 CREATE TABLE #employees (id INT, name VARCHAR(100), salary DECIMAL);
-SHOW COLUMNS FOR #employees;";
+SELECT * FROM eng.columns WHERE table_name = '#employees';";
             var eval = NewEval();
             await eval.Evaluate(TestHelpers.Parse(script));
 
             Assert.NotNull(eval.LastResult);
-            var colNames = eval.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+            var colNames = eval.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).ToList();
             Assert.Contains("id", colNames);
             Assert.Contains("name", colNames);
             Assert.Contains("salary", colNames);
         }
 
         [Fact]
-        public async Task ShowSchema_ForTempTable_ReturnsColumnsAndMetadata()
+        public async Task EngColumns_ForTempTable_ReturnsColumnsAndMetadata()
         {
-            // Syntax: SHOW SCHEMA FOR <table>
             var script = @"
 CREATE TABLE #products (id INT, name VARCHAR(100), price DECIMAL);
-SHOW SCHEMA FOR #products;";
+SELECT * FROM eng.columns WHERE table_name = '#products';";
             var eval = NewEval();
             await eval.Evaluate(TestHelpers.Parse(script));
 
             Assert.NotNull(eval.LastResult);
             var cols = eval.LastResult!.ColumnNames.ToArray();
-            Assert.Contains("ColumnName", cols);
-            Assert.Contains("DataType", cols);
-            Assert.Contains("IsNullable", cols);
-            Assert.Contains("Tags", cols);
+            Assert.Contains("column_name", cols);
+            Assert.Contains("data_type", cols);
+            Assert.Contains("is_nullable", cols);
+            Assert.Contains("tags", cols);
 
-            var colNames = eval.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+            var colNames = eval.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).ToList();
             Assert.Contains("id", colNames);
             Assert.Contains("name", colNames);
             Assert.Contains("price", colNames);
         }
 
         [Fact]
-        public async Task ShowSchema_ForFlatFileConnection_ReturnsHeaderColumns()
+        public async Task EngColumns_ForFlatFileConnection_ReturnsHeaderColumns()
         {
             var csvPath = Path.Combine(Path.GetTempPath(), $"show_schema_file_{Guid.NewGuid():N}.csv");
             await File.WriteAllTextAsync(csvPath, "id,name,last_modified\n1,Alice,2026-07-22");
@@ -126,12 +124,12 @@ SHOW SCHEMA FOR #products;";
             {
                 var script = $@"
 CREATE CONNECTION mycsv AS FLATFILE('{csvPath}');
-SHOW SCHEMA FOR mycsv.customer;";
+SELECT * FROM eng.columns WHERE table_name LIKE 'mycsv.%';";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
 
                 Assert.NotNull(eval.LastResult);
-                var colNames = eval.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+                var colNames = eval.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).ToList();
                 Assert.Contains("id", colNames);
                 Assert.Contains("name", colNames);
                 Assert.Contains("last_modified", colNames);
@@ -143,18 +141,28 @@ SHOW SCHEMA FOR mycsv.customer;";
         }
 
         [Fact]
-        public async Task ShowColumns_ReturnsExpectedSchema()
+        public async Task EngColumns_ReturnsExpectedSchema()
         {
             var script = @"
 CREATE TABLE #t (a INT);
-SHOW COLUMNS FOR #t;";
+SELECT * FROM eng.columns WHERE table_name = '#t';";
             var eval = NewEval();
             await eval.Evaluate(TestHelpers.Parse(script));
 
             Assert.NotNull(eval.LastResult);
             var cols = eval.LastResult!.ColumnNames.ToArray();
-            Assert.Contains("ColumnName", cols);
-            Assert.Contains("DataType", cols);
+            Assert.Contains("column_name", cols);
+            Assert.Contains("data_type", cols);
+        }
+
+        [Theory]
+        [InlineData("SHOW COLUMNS FOR #t;")]
+        [InlineData("SHOW SCHEMA FOR #t;")]
+        [InlineData("DESCRIBE #t;")]
+        public void RetiredColumnInspectionSyntax_IsRejected(string sql)
+        {
+            var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.SyntaxException>(() => TestHelpers.Parse(sql));
+            Assert.Contains("eng.columns", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── SHOW CONNECTIONS ───────────────────────────────────────────────────

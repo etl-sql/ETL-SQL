@@ -185,7 +185,6 @@ public static class AstSerializer
         ShowConnectionsStatement s => "SHOW CONNECTIONS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowConnectionConfigStatement s => $"SHOW CONNECTION {s.ConnectionName} CONFIG" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowTablesStatement s => (s.ConnectionName != null ? $"SHOW TABLES ON {s.ConnectionName}" : "SHOW TABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
-        ShowColumnsStatement s => $"SHOW COLUMNS FOR {s.Table.ToSql()}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowVariablesStatement s => (s.IsLocalOnly ? "SHOW LOCAL VARIABLES" : "SHOW VARIABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "") + ";",
         // ── Misc statements ──
         RunScriptStatement s => FormatRunScript(s),

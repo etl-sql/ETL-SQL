@@ -43,14 +43,14 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
-        public async Task Describe_ListsColumnsLikeShowColumns()
+        public async Task EngColumns_ListsColumns()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #d (id INT, name NVARCHAR(50));"));
-            await ev.Evaluate(Parse("DESCRIBE #d;"));
+            await ev.Evaluate(Parse("SELECT * FROM eng.columns WHERE table_name = '#d';"));
 
             Assert.NotNull(ev.LastResult);
-            var colNames = ev.LastResult!.Rows.Select(r => r["ColumnName"]?.ToString()).ToList();
+            var colNames = ev.LastResult!.Rows.Select(r => r["column_name"]?.ToString()).ToList();
             Assert.Contains("id", colNames);
             Assert.Contains("name", colNames);
         }

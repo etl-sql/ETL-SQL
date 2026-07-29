@@ -2546,13 +2546,6 @@ public sealed record ShowViewsStatement : Statement
     public string? IntoTable { get; init; }
 }
 
-public sealed record ShowColumnsStatement : Statement
-{
-    public TableReference Table { get; }
-    public string? IntoTable { get; set; }
-    public ShowColumnsStatement(TableReference table) { Table = table; }
-}
-
 public sealed record LintStatement : Statement
 {
     public string? ScriptPath { get; }

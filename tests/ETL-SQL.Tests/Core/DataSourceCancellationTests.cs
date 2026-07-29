@@ -291,6 +291,7 @@ public class DataSourceCancellationTests
             typeof(PortalDataSource),
             typeof(LineageDataSource),
             typeof(LineageTagsDataSource),
+            typeof(ColumnsDataSource),
             typeof(VariableDataSource)
         })
         {

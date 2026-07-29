@@ -551,7 +551,7 @@ namespace ETL_SQL.Tests.Coverage
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT);" +
                 "ALTER TABLE #t ADD label VARCHAR;" +
-                "SHOW COLUMNS FOR #t;");
+                "SELECT * FROM eng.columns WHERE table_name = '#t';");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -561,7 +561,7 @@ namespace ETL_SQL.Tests.Coverage
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, Name VARCHAR);" +
                 "ALTER TABLE #t DROP COLUMN Name;" +
-                "SHOW COLUMNS FOR #t;");
+                "SELECT * FROM eng.columns WHERE table_name = '#t';");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -571,7 +571,7 @@ namespace ETL_SQL.Tests.Coverage
             var eval = await RunAndGet(
                 "CREATE TABLE #t (Id INT, OldName VARCHAR);" +
                 "ALTER TABLE #t RENAME COLUMN OldName TO NewName;" +
-                "SHOW COLUMNS FOR #t;");
+                "SELECT * FROM eng.columns WHERE table_name = '#t';");
             Assert.NotNull(eval.LastResult);
         }
 

@@ -140,6 +140,10 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             return new LineageTagsDataSource(_evaluator.LineageTracker, "eng.tags");
         }
+        else if (IsEngineVirtualTable(table, "columns"))
+        {
+            return new ColumnsDataSource(connections, _evaluator.LineageTracker);
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);

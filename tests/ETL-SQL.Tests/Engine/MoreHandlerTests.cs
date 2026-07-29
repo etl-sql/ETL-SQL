@@ -496,15 +496,15 @@ namespace ETL_SQL.Tests.Engine
             await Run("SET WEEK_START_DAY = 'MONDAY';");
         }
 
-        // ── SHOW COLUMNS ──────────────────────────────────────────────────────
+        // ── eng.columns ───────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowColumns_AfterCreate_ReturnsColumns()
+        public async Task EngColumns_AfterCreate_ReturnsColumns()
         {
             var eval = Eval();
             await eval.Evaluate(Parse(@"
                 SELECT 1 AS Id, 'Alice' AS Name INTO #Emp;
-                SHOW COLUMNS FOR #Emp;
+                SELECT * FROM eng.columns WHERE table_name = '#Emp';
             "));
             Assert.NotNull(eval.LastResult);
         }
