@@ -179,3 +179,32 @@ jobs:
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
           if-no-files-found: error
           retention-days: 30
+
+  docker-integration-tests:
+    name: Docker Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify .NET
+        run: dotnet --info
+
+      - name: Verify Docker
+        run: docker info
+
+      - name: Restore dependencies
+        run: dotnet restore ETL-SQL.slnx
+
+      - name: Build
+        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+
+      - name: Run Docker Integration Tests
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild

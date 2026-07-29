@@ -233,7 +233,7 @@ public class SubscriptionDeliveryService(
         }
 
         var useOrchestratorNotification = !string.IsNullOrWhiteSpace(notificationName)
-            && orchestrator is not null;
+            && orchestrator is not null && orchestrator.IsConfigured;
 
         IReadOnlyDictionary<string, string>? smtp = null;
         if (!useOrchestratorNotification && !string.IsNullOrEmpty(smtpAlias))

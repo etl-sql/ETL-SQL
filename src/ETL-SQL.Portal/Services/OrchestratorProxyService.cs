@@ -14,6 +14,8 @@ public class OrchestratorProxyService(
     OrchestratorSettingsService settings,
     ILogger<OrchestratorProxyService> logger)
 {
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(settings.ApiUrl);
+
     public async Task<bool> IsOnlineAsync()
     {
         try
