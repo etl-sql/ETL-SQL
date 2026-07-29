@@ -234,6 +234,45 @@ SELECT view_name, query FROM eng.views WHERE view_name = 'ActiveValues';";
             Assert.Contains("SELECT", row["query"]?.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public async Task EngVersion_ReturnsEngineVersion()
+        {
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse("SELECT component, version FROM eng.version;"));
+
+            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal("ETL-SQL Engine", row["component"]);
+            Assert.False(string.IsNullOrWhiteSpace(row["version"]?.ToString()));
+        }
+
+        [Fact]
+        public async Task EngSafeZones_ReturnsConfiguredZones()
+        {
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse("SELECT path, resolution FROM eng.safe_zones;"));
+
+            Assert.NotNull(eval.LastResult);
+            Assert.Contains("path", eval.LastResult!.ColumnNames);
+            Assert.Contains("resolution", eval.LastResult!.ColumnNames);
+        }
+
+        [Fact]
+        public async Task EngProfile_ReturnsCapturedMetrics()
+        {
+            var script = @"
+SET PROFILE ON;
+SELECT 1 AS Id;
+SELECT statement, rows_processed, duration_ms FROM eng.profile;";
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse(script));
+
+            Assert.NotNull(eval.LastResult);
+            Assert.True(eval.LastResult!.Rows.Count >= 1);
+            Assert.Contains("statement", eval.LastResult!.ColumnNames);
+            Assert.Contains("rows_processed", eval.LastResult!.ColumnNames);
+        }
+
         // ── SHOW JOB HISTORY ───────────────────────────────────────────────────
 
         [Fact]

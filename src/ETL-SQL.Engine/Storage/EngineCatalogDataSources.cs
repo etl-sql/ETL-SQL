@@ -4,9 +4,12 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Storage;
 
@@ -254,6 +257,188 @@ public sealed class VariablesDataSource : IDataSource
         if (value is IEnumerable<object>) return "LIST";
         return value.GetType().Name.ToUpperInvariant();
     }
+}
+
+public sealed class VersionDataSource : IDataSource
+{
+    private static readonly string[] Columns = ["component", "version", "metadata"];
+
+    public string Path => "eng.version";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns,
+        [
+            new Row
+            {
+                ["component"] = "ETL-SQL Engine",
+                ["version"] = LanguageMetadata.EngineVersion,
+                ["metadata"] = ".NET 10.0; Charles Clemens (c) 2026"
+            }
+        ]);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.version is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class SafeZonesDataSource : IDataSource
+{
+    private readonly SecurityService _securityService;
+    private static readonly string[] Columns = ["path", "is_system_path", "resolution"];
+
+    public SafeZonesDataSource(SecurityService securityService)
+    {
+        _securityService = securityService;
+    }
+
+    public string Path => "eng.safe_zones";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        foreach (var zone in _securityService.ApprovedSafeZones.OrderBy(z => z, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rows.Add(new Row
+            {
+                ["path"] = zone,
+                ["is_system_path"] = _securityService.IsSystemPath(zone),
+                ["resolution"] = "Authorized"
+            });
+
+            if (rows.Count >= batchSize)
+            {
+                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                rows = [];
+            }
+        }
+
+        if (rows.Count > 0)
+            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.safe_zones is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class ProfileDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private static readonly string[] Columns =
+    [
+        "timestamp", "statement", "rows_processed", "index_used", "duration_ms", "memory_kb",
+        "spilled_bytes", "subquery_hits", "subquery_misses", "subquery_spilled_bytes", "partitions",
+        "queue_wait_ms", "lock_wait_ms", "plan_decisions", "plan_accepted", "plan_fallbacks",
+        "plan_rejected", "plan_degraded", "plan_fallback_summary"
+    ];
+
+    public ProfileDataSource(IExecutionContext context)
+    {
+        _context = context;
+    }
+
+    public string Path => "eng.profile";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+        ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(
+        int batchSize,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var planDecisions = _context.Telemetry.PlanDecisions;
+        var planDecisionCount = planDecisions.Count;
+        var planAccepted = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Accepted);
+        var planFallbacks = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+        var planRejected = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
+        var planDegraded = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
+        var planFallbackSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions);
+
+        var rows = new List<Row>();
+        foreach (var metric in _context.Telemetry.ProfileMetrics)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rows.Add(new Row
+            {
+                ["timestamp"] = metric.Timestamp,
+                ["statement"] = metric.Sql,
+                ["rows_processed"] = metric.RowsProcessed,
+                ["index_used"] = metric.IndexName ?? "--",
+                ["duration_ms"] = metric.DurationMs,
+                ["memory_kb"] = metric.MemoryDeltaBytes / 1024.0,
+                ["spilled_bytes"] = metric.SpilledBytes,
+                ["subquery_hits"] = metric.SubqueryCacheHits,
+                ["subquery_misses"] = metric.SubqueryCacheMisses,
+                ["subquery_spilled_bytes"] = metric.SubquerySpilledBytes,
+                ["partitions"] = metric.PartitionsCount,
+                ["queue_wait_ms"] = metric.QueueWaitMs,
+                ["lock_wait_ms"] = metric.LockWaitMs,
+                ["plan_decisions"] = planDecisionCount,
+                ["plan_accepted"] = planAccepted,
+                ["plan_fallbacks"] = planFallbacks,
+                ["plan_rejected"] = planRejected,
+                ["plan_degraded"] = planDegraded,
+                ["plan_fallback_summary"] = planFallbackSummary
+            });
+
+            if (rows.Count >= batchSize)
+            {
+                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                rows = [];
+            }
+        }
+
+        if (rows.Count > 0)
+            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        WriteBatches(batches, append, CancellationToken.None);
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("eng.profile is read-only.");
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
 internal static class EngineCatalogTableBuilder

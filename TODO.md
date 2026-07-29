@@ -137,6 +137,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       functions such as `eng.catalog_search()`.
 - [x] Implement local inspection virtual tables for `eng.connections`, `eng.tables`,
       `eng.variables`, and `eng.views`.
+- [x] Implement local diagnostics virtual tables for `eng.version`, `eng.safe_zones`, and
+      `eng.profile`.
 - [x] Implement `eng.tags` as a globally enumerable virtual table over lineage tag metadata.
 - [x] Remove `SHOW TAGS FOR SCRIPT`, `SHOW TAGS FOR TABLE <name>`, and `SHOW TAG VALUE`
       after replacing them with `SELECT ... FROM eng.tags`.

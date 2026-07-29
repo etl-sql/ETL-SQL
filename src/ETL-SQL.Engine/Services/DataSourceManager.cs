@@ -160,6 +160,18 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             return new VariablesDataSource(_evaluator);
         }
+        else if (IsEngineVirtualTable(table, "version"))
+        {
+            return new VersionDataSource();
+        }
+        else if (IsEngineVirtualTable(table, "safe_zones"))
+        {
+            return new SafeZonesDataSource(_evaluator.SecurityService);
+        }
+        else if (IsEngineVirtualTable(table, "profile"))
+        {
+            return new ProfileDataSource(_evaluator);
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);

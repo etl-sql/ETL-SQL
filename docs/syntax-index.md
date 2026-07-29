@@ -1054,6 +1054,9 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
 | `eng.variables` | Diagnostics | Queryable virtual table for session variables with sensitive values masked |
 | `eng.views` | Diagnostics | Queryable virtual table for session view definitions |
+| `eng.version` | Diagnostics | Queryable virtual table for engine version metadata |
+| `eng.safe_zones` | Diagnostics | Queryable virtual table for configured file-system safe zones |
+| `eng.profile` | Diagnostics | Queryable virtual table for captured profiling metrics |
 | `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
 | `eng.tags` | Lineage | Queryable virtual table for lineage tags |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
