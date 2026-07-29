@@ -1,11 +1,15 @@
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ETL_SQL.Portal.Tests;
@@ -327,6 +331,107 @@ public sealed class SubscriptionDeliveryLedgerTests
         Assert.DoesNotContain("row-recipient@test.local", handler.LastBody, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("SMTP")]
+    [InlineData("WEBHOOK")]
+    public async Task NamedNotificationDelivery_ReachesOrchestratorDispatcherAndBuildsDeliveryScript(
+        string connectorType)
+    {
+        using var portalFactory = new PortalWebFactory();
+        using var portalScope = portalFactory.Services.CreateScope();
+        var runner = ConfigurableRunner.Succeeds();
+        var h = await SeedAsync(
+            portalScope,
+            runner,
+            recipients: "row-recipient@test.local");
+        var subscription = await h.Db.Subscriptions.SingleAsync(s => s.Id == h.SubscriptionId);
+        subscription.Format = SubscriptionFormat.Link;
+        await h.Db.SaveChangesAsync();
+
+        var orchestratorExecutor = new RecordingScriptExecutor();
+        using var orchestratorFactory = new RecordingOrchestratorWebFactory(orchestratorExecutor);
+        using var orchestratorClient = orchestratorFactory.CreateClient();
+
+        var notificationName = SubscriptionOrchestration.NotificationName(h.SubscriptionId);
+        var connectionAlias = $"notify_{connectorType.ToLowerInvariant()}_{h.Suffix}";
+        var portalStoreFactory = portalScope.ServiceProvider.GetRequiredService<IOrchestratorStoreFactory>();
+        var portalDbLocator = portalScope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>();
+        var portalStore = portalStoreFactory.Create(portalDbLocator.Resolve());
+        await portalStore.InitializeAsync();
+        await ((IJobCatalogStore)portalStore).SaveNotificationAsync(new NotificationDefinition(
+            notificationName,
+            connectionAlias,
+            Recipient: "notify-recipient@test.local"));
+
+        var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.InitializeAsync();
+        var catalog = (IJobCatalogStore)store;
+        await catalog.SaveNotificationAsync(new NotificationDefinition(
+            notificationName,
+            connectionAlias,
+            Recipient: "notify-recipient@test.local"));
+
+        var connectionCatalog = (IWritableConnectionCatalogProvider)orchestratorFactory.Services
+            .GetRequiredService<IConnectionCatalogProvider>();
+        await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
+            connectionAlias,
+            connectorType,
+            null,
+            connectorType.Equals("SMTP", StringComparison.OrdinalIgnoreCase)
+                ? new Dictionary<string, string>
+                {
+                    ["HOST"] = "smtp.example.invalid",
+                    ["PASSWORD"] = "SECRET:smtp_password"
+                }
+                : new Dictionary<string, string>
+                {
+                    ["URL"] = "SECRET:webhook_url",
+                    ["FORMAT"] = "generic"
+                },
+            Disabled: false));
+
+        var config = portalScope.ServiceProvider.GetRequiredService<PortalConfig>();
+        config.Orchestrator.ApiUrl = orchestratorClient.BaseAddress!.ToString();
+        config.Orchestrator.ApiKey = "test-orch-key-12345";
+        var proxy = new OrchestratorProxyService(
+            orchestratorClient,
+            new OrchestratorSettingsService(
+                config,
+                new OrchestratorApiKeyProtector(
+                    DataProtectionProvider.Create(Path.Combine(portalFactory.TempDir, "orchestrator-keys")))),
+            NullLogger<OrchestratorProxyService>.Instance);
+
+        var service = new SubscriptionDeliveryService(
+            h.Db,
+            config,
+            new PortalConnectionCatalogService(h.Db),
+            new FolderPermissionService(h.Db),
+            new AuditService(h.Db, new HttpContextAccessor()),
+            runner,
+            NullLogger<SubscriptionDeliveryService>.Instance,
+            portalDbLocator,
+            portalStoreFactory,
+            proxy);
+
+        var result = await service.DeliverAsync(h.SubscriptionId, $"trigger-cross-host-{connectorType}");
+
+        var ledgerDetail = (await h.Db.SubscriptionDeliveries
+            .Where(d => d.SubscriptionId == h.SubscriptionId)
+            .OrderByDescending(d => d.Id)
+            .FirstOrDefaultAsync())?.Detail;
+        Assert.True(
+            result.Outcome == SubscriptionDeliveryOutcome.Delivered,
+            $"Expected delivered but got {result.Outcome}: {result.Reason}; ledger: {ledgerDetail}");
+        Assert.Equal(0, runner.CallCount);
+        Assert.Single(orchestratorExecutor.Scripts);
+        var deliveryScript = orchestratorExecutor.Scripts[0];
+        Assert.Contains($"CREATE CONNECTION __job_notification_sink AS {connectorType}('SHARED:{connectionAlias}')", deliveryScript);
+        Assert.Contains("notify-recipient@test.local", deliveryScript);
+        Assert.DoesNotContain("row-recipient@test.local", deliveryScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET:smtp_password", deliveryScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET:webhook_url", deliveryScript, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task DeniedDelivery_IsIsolated_FromAHealthyDelivery()
     {
@@ -461,6 +566,36 @@ public sealed class SubscriptionDeliveryLedgerTests
                 ? ""
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
+    }
+
+    private sealed class RecordingOrchestratorWebFactory(RecordingScriptExecutor executor) : OrchestratorWebFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IScriptExecutor>();
+                services.AddSingleton<IScriptExecutor>(executor);
+            });
+        }
+    }
+
+    private sealed class RecordingScriptExecutor : IScriptExecutor
+    {
+        public List<string> Scripts { get; } = [];
+
+        public Task<ScriptExecutionResult> ExecuteTextAsync(
+            string scriptText,
+            string? sessionId = null,
+            CancellationToken cancellationToken = default,
+            string? jobName = null,
+            long queueWaitMs = 0,
+            ExecutionIdentity? executionIdentity = null)
+        {
+            Scripts.Add(scriptText);
+            return Task.FromResult(new ScriptExecutionResult(true, 1, null));
         }
     }
 }
