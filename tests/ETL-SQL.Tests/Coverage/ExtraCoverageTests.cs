@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -677,6 +678,27 @@ namespace ETL_SQL.Tests.Coverage
             var script = Parse("SELECT * FROM #t;");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.NotNull(results);
+            Assert.DoesNotContain(results, r => r.RuleName == "AvoidSelectStar");
+        }
+
+        [Fact]
+        public async Task LinterFactory_CreateWithAllRules_WithConfig_CanEnableAvoidSelectStar()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [LinterFactory.AvoidSelectStarEnabledKey] = "true"
+                })
+                .Build();
+            var sp = new ServiceCollection()
+                .AddSingleton<IConfiguration>(config)
+                .BuildServiceProvider();
+
+            var linter = LinterFactory.CreateWithAllRules(sp);
+            var script = Parse("SELECT * FROM #t;");
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Contains(results, r => r.RuleName == "AvoidSelectStar");
         }
 
         [Fact]

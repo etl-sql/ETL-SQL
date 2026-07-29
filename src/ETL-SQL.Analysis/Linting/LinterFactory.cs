@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Analysis.Linting;
@@ -11,6 +12,8 @@ namespace ETL_SQL.Analysis.Linting;
 /// </summary>
 public static class LinterFactory
 {
+    public const string AvoidSelectStarEnabledKey = "Linting:AvoidSelectStar:Enabled";
+
     private static readonly Type[] RuleTypes = typeof(ILintRule).Assembly.GetTypes()
         .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
         .ToArray();
@@ -23,12 +26,14 @@ public static class LinterFactory
     public static Linter CreateWithAllRules(IServiceProvider? serviceProvider = null)
     {
         var linter = new Linter();
+        var includeAvoidSelectStar = IsAvoidSelectStarEnabled(serviceProvider);
 
         if (serviceProvider != null)
         {
             var registeredRules = serviceProvider.GetServices<ILintRule>();
             foreach (var rule in registeredRules)
             {
+                if (!includeAvoidSelectStar && rule is Rules.AvoidSelectStarRule) continue;
                 linter.AddRule(rule);
             }
         }
@@ -36,6 +41,8 @@ public static class LinterFactory
         // Also load any rules NOT registered in DI but present in the assembly
         foreach (var type in RuleTypes)
         {
+            if (!includeAvoidSelectStar && type == typeof(Rules.AvoidSelectStarRule)) continue;
+
             // Skip if already added via DI
             if (linter.HasRuleOfType(type)) continue;
 
@@ -43,5 +50,13 @@ public static class LinterFactory
                 linter.AddRule(rule);
         }
         return linter;
+    }
+
+    private static bool IsAvoidSelectStarEnabled(IServiceProvider? serviceProvider)
+    {
+        if (serviceProvider?.GetService<IConfiguration>() is not { } configuration)
+            return false;
+
+        return bool.TryParse(configuration[AvoidSelectStarEnabledKey], out var enabled) && enabled;
     }
 }

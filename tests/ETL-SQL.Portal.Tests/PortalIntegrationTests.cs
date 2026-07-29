@@ -121,7 +121,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    public async Task DesignerAnalyze_ReturnsRealLinterDiagnostics()
+    public async Task DesignerAnalyze_DoesNotReturnSelectStarWarningByDefault()
     {
         var token = await GetAdminTokenAsync();
 
@@ -130,10 +130,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
         var diagnostics = body!["diagnostics"]!.AsArray();
-        var selectStar = diagnostics
-            .Select(d => d!.AsObject())
-            .Single(d => d["code"]!.GetValue<string>() == "AvoidSelectStar");
-        Assert.Equal("ETL-SQL Linter", selectStar["source"]!.GetValue<string>());
+        Assert.DoesNotContain(diagnostics.Select(d => d!.AsObject()),
+            d => d.TryGetPropertyValue("code", out var code) &&
+                 code?.GetValue<string>() == "AvoidSelectStar");
     }
 
     [Fact]

@@ -143,6 +143,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to
       `EXPORT LINEAGE AS OPENLINEAGE TO '...'` because it writes a file rather than returning rows.
 - [x] Reserve `eng` as the engine catalog schema name and reject `CREATE CONNECTION eng AS ...`.
+- [x] Lint Warning for SELECT * turned off by default but can be enabled in appsettings.json.  For these eng
+      tables it gets really annoying really fast.
 
 #### P2 — Duplicate surface syntax
 
@@ -158,7 +160,6 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [ ] Ensure generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs,
       and diagnostics emit only canonical forms. Any temporary alias must produce a deprecation
       diagnostic with the exact replacement and removal release.
-- [ ] Lint Warning for SELECT * turned off by default but can be enabled in appsettings.json.  For these
 
 #### P2 — Round-trip guarantees
 
@@ -264,4 +265,3 @@ Remaining work:
 
 Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
 measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.
-

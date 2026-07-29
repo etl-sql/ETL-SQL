@@ -60,7 +60,7 @@ public class LintStatementHandler : IStatementHandler
         var parser = new ETL_SQL.Core.Parser.Parser(tokens, sql);
         var script = parser.Parse();
 
-        var linter = LinterFactory.CreateWithAllRules();
+        var linter = LinterFactory.CreateWithAllRules(context.ServiceProvider);
 
         var results = await linter.AnalyzeAsync(script, new DefaultLintContext { DocumentUri = lintDocumentUri ?? string.Empty });
 

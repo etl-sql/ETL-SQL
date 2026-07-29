@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -32,8 +33,8 @@ namespace ETL_SQL.Tests.Analysis.Analysis
                 Directory.Delete(_tempDir, recursive: true);
         }
 
-        private static Evaluator NewEval() =>
-            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        private static Evaluator NewEval(Dictionary<string, string?>? configOverrides = null) =>
+            DependencyInjectionSetup.BuildServiceProvider(configOverrides).GetRequiredService<Evaluator>();
 
         private string WriteScript(string name, string content)
         {
@@ -95,7 +96,7 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         }
 
         [Fact]
-        public async Task Lint_ScriptWithSelectStar_ReturnsWarning()
+        public async Task Lint_ScriptWithSelectStar_DoesNotReturnWarningByDefault()
         {
             var path = WriteScript("star.sql", "SELECT * FROM MyTable;");
 
@@ -103,9 +104,25 @@ namespace ETL_SQL.Tests.Analysis.Analysis
             await eval.Evaluate(TestHelpers.Parse($"LINT '{path}';"));
 
             Assert.NotNull(eval.LastResult);
-            Assert.True(eval.LastResult!.Rows.Count > 0, "Expected at least one lint finding");
 
             var starFinding = eval.LastResult.Rows
+                .FirstOrDefault(r => r["Rule"]?.ToString() == "AvoidSelectStar");
+            Assert.Null(starFinding);
+        }
+
+        [Fact]
+        public async Task Lint_ScriptWithSelectStar_ReturnsWarningWhenEnabled()
+        {
+            var path = WriteScript("star-enabled.sql", "SELECT * FROM MyTable;");
+
+            var eval = NewEval(new Dictionary<string, string?>
+            {
+                [LinterFactory.AvoidSelectStarEnabledKey] = "true"
+            });
+            await eval.Evaluate(TestHelpers.Parse($"LINT '{path}';"));
+
+            Assert.NotNull(eval.LastResult);
+            var starFinding = eval.LastResult!.Rows
                 .FirstOrDefault(r => r["Rule"]?.ToString() == "AvoidSelectStar");
             Assert.NotNull(starFinding);
         }
@@ -120,8 +137,8 @@ namespace ETL_SQL.Tests.Analysis.Analysis
             await eval.Evaluate(TestHelpers.Parse($"LINT '{path}';"));
 
             Assert.NotNull(eval.LastResult);
-            Assert.True(eval.LastResult!.Rows.Count >= 3,
-                $"Expected at least 3 findings, got {eval.LastResult.Rows.Count}");
+            Assert.True(eval.LastResult!.Rows.Count >= 2,
+                $"Expected at least 2 findings, got {eval.LastResult.Rows.Count}");
         }
 
         // ── Error paths ────────────────────────────────────────────────────────

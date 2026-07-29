@@ -124,7 +124,7 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
-    public async Task Analysis_UsesSharedLinterDiagnostics()
+    public async Task Analysis_DoesNotReturnSelectStarWarningByDefault()
     {
         using var temp = new TempWorkspace();
         await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
@@ -141,7 +141,7 @@ public sealed class WorkstationEditorTests
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<AnalyzeResponse>();
         Assert.NotNull(result);
-        Assert.Contains(result!.Diagnostics, d => d.Code == "AvoidSelectStar");
+        Assert.DoesNotContain(result!.Diagnostics, d => d.Code == "AvoidSelectStar");
     }
 
     [Fact]

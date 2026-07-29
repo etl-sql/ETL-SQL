@@ -234,7 +234,7 @@ public class DesignerControllerTests
     }
 
     [Fact]
-    public async Task Analyze_ReturnsLintDiagnostics()
+    public async Task Analyze_DoesNotReturnSelectStarWarningByDefault()
     {
         var controller = new DesignerController();
 
@@ -242,9 +242,8 @@ public class DesignerControllerTests
             await controller.Analyze(new AnalyzeDesignerRequest("SELECT * FROM #stage;")));
         var response = Assert.IsType<AnalyzeDesignerResponse>(result.Value);
 
-        Assert.Contains(response.Diagnostics, d =>
-            string.Equals(d.Code, "AvoidSelectStar", StringComparison.OrdinalIgnoreCase) &&
-            d.Source == "ETL-SQL Linter");
+        Assert.DoesNotContain(response.Diagnostics, d =>
+            string.Equals(d.Code, "AvoidSelectStar", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -78,7 +78,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 // 3. Lint
-                var lintResults = await LinterFactory.CreateWithAllRules()
+                var lintResults = await LinterFactory.CreateWithAllRules(_serviceProvider)
                     .AnalyzeAsync(script, new DefaultLintContext());
                 result.LintResults.AddRange(lintResults);
 
