@@ -144,6 +144,22 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             return new ColumnsDataSource(connections, _evaluator.LineageTracker);
         }
+        else if (IsEngineVirtualTable(table, "connections"))
+        {
+            return new ConnectionsDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "tables"))
+        {
+            return new TablesDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "views"))
+        {
+            return new ViewsDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "variables"))
+        {
+            return new VariablesDataSource(_evaluator);
+        }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {
             return new LineageDataSource(_evaluator.LineageTracker);

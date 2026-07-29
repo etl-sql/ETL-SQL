@@ -45,6 +45,7 @@ public class Lexer
         dict["CUBE"] = TokenType.CUBE;
         dict["GROUPING"] = TokenType.GROUPING;
         dict["FILE"] = TokenType.FILE;  // Reserved table name — not a keyword, but must lex as FILE for deprecation detection
+        dict["DESCRIBE"] = TokenType.DESCRIBE;
         dict["SEND_EMAIL"] = TokenType.SEND_EMAIL;
         dict["SEND_FILE"] = TokenType.SEND_FILE;
         dict["RECEIVE_FILE"] = TokenType.RECEIVE_FILE;

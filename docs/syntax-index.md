@@ -1050,6 +1050,10 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `eng.columns` | Diagnostics | Queryable virtual table for session and connection column metadata |
+| `eng.connections` | Diagnostics | Queryable virtual table for active session connections |
+| `eng.tables` | Diagnostics | Queryable virtual table for session and connection table metadata |
+| `eng.variables` | Diagnostics | Queryable virtual table for session variables with sensitive values masked |
+| `eng.views` | Diagnostics | Queryable virtual table for session view definitions |
 | `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
 | `eng.tags` | Lineage | Queryable virtual table for lineage tags |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |

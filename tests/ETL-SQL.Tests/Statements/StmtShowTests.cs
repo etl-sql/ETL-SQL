@@ -16,31 +16,18 @@ using Xunit;
 namespace ETL_SQL.Tests.Statements.Statements
 {
     /// <summary>
-    /// CQ-T2: Coverage for SHOW TABLES, SHOW COLUMNS, SHOW CONNECTIONS, SHOW JOB HISTORY handlers.
+    /// CQ-T2: Coverage for inspection virtual tables and remaining SHOW JOB HISTORY handlers.
     /// </summary>
     public class ShowStatementTests
     {
         private static Evaluator NewEval() =>
             DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
-        // ── SHOW TABLES ────────────────────────────────────────────────────────
+        // ── eng.tables ────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowTables_WithNoConnections_ReturnsExpectedColumns()
+        public async Task EngTables_WithFlatFile_ListsTables()
         {
-            var eval = NewEval();
-            await eval.Evaluate(TestHelpers.Parse("SHOW TABLES;"));
-
-            Assert.NotNull(eval.LastResult);
-            var cols = eval.LastResult!.ColumnNames.ToArray();
-            Assert.Contains("TableName", cols);
-            Assert.Contains("Type", cols);
-        }
-
-        [Fact]
-        public async Task ShowTables_WithFlatFile_ListsTables()
-        {
-            // Use a CSV file so SHOW TABLES has a real source to query
             var csvPath = Path.Combine(Path.GetTempPath(), $"show_tables_test_{Guid.NewGuid():N}.csv");
             await File.WriteAllTextAsync(csvPath, "id,name\n1,Alice\n2,Bob");
 
@@ -48,14 +35,14 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 var script = $@"
 CREATE CONNECTION mycsv AS FLATFILE('{csvPath}');
-SHOW TABLES ON mycsv;";
+SELECT table_name, connection_name FROM eng.tables WHERE connection_name = 'mycsv';";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
 
                 Assert.NotNull(eval.LastResult);
-                // FlatFile returns the file name as the single table
                 Assert.True(eval.LastResult!.Rows.Count >= 1,
-                    "SHOW TABLES for a flat file connection should return at least one entry");
+                    "eng.tables for a flat file connection should return at least one entry");
+                Assert.All(eval.LastResult!.Rows, row => Assert.Equal("mycsv", row["connection_name"]?.ToString()));
             }
             finally
             {
@@ -64,11 +51,10 @@ SHOW TABLES ON mycsv;";
         }
 
         [Fact]
-        public async Task ShowTables_IntoTable_CompletesWithoutError()
+        public async Task EngTables_IntoTable_CompletesWithoutError()
         {
             var eval = NewEval();
-            // SHOW TABLES INTO #result — may produce 0 rows if no connections, but should not throw
-            await eval.Evaluate(TestHelpers.Parse("SHOW TABLES INTO #result;"));
+            await eval.Evaluate(TestHelpers.Parse("SELECT * INTO #result FROM eng.tables;"));
             // Can now select from #result
             await eval.Evaluate(TestHelpers.Parse("SELECT * FROM #result;"));
             Assert.NotNull(eval.LastResult);
@@ -161,25 +147,15 @@ SELECT * FROM eng.columns WHERE table_name = '#t';";
         [InlineData("DESCRIBE #t;")]
         public void RetiredColumnInspectionSyntax_IsRejected(string sql)
         {
-            var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.SyntaxException>(() => TestHelpers.Parse(sql));
-            Assert.Contains("eng.columns", ex.Message, StringComparison.OrdinalIgnoreCase);
+            var script = TestHelpers.Parse(sql);
+            var diagnostic = Assert.Single(script.Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+            Assert.Contains("eng.columns", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // ── SHOW CONNECTIONS ───────────────────────────────────────────────────
+        // ── eng.connections ───────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowConnections_WithNoConnections_ReturnsExpectedColumns()
-        {
-            var eval = NewEval();
-            await eval.Evaluate(TestHelpers.Parse("SHOW CONNECTIONS;"));
-
-            Assert.NotNull(eval.LastResult);
-            Assert.Equal(new[] { "Name", "Type", "Details" },
-                eval.LastResult!.ColumnNames.ToArray());
-        }
-
-        [Fact]
-        public async Task ShowConnections_AfterCreateConnection_ReturnsConnectionRow()
+        public async Task EngConnections_AfterCreateConnection_ReturnsConnectionRow()
         {
             var csvPath = Path.Combine(Path.GetTempPath(), $"showconn_{Guid.NewGuid():N}.csv");
             await File.WriteAllTextAsync(csvPath, "x,y\n1,2");
@@ -188,12 +164,12 @@ SELECT * FROM eng.columns WHERE table_name = '#t';";
             {
                 var script = $@"
 CREATE CONNECTION myconn AS FLATFILE('{csvPath}');
-SHOW CONNECTIONS;";
+SELECT connection_name, connector_type FROM eng.connections WHERE connection_name = 'myconn';";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
 
                 Assert.NotNull(eval.LastResult);
-                var connNames = eval.LastResult!.Rows.Select(r => r["Name"]?.ToString()).ToList();
+                var connNames = eval.LastResult!.Rows.Select(r => r["connection_name"]?.ToString()).ToList();
                 Assert.Contains("myconn", connNames);
             }
             finally
@@ -203,7 +179,7 @@ SHOW CONNECTIONS;";
         }
 
         [Fact]
-        public async Task ShowConnections_IntoTable_PopulatesDestination()
+        public async Task EngConnections_IntoTable_PopulatesDestination()
         {
             var csvPath = Path.Combine(Path.GetTempPath(), $"showconn2_{Guid.NewGuid():N}.csv");
             await File.WriteAllTextAsync(csvPath, "x\n1");
@@ -212,7 +188,7 @@ SHOW CONNECTIONS;";
             {
                 var script = $@"
 CREATE CONNECTION c1 AS FLATFILE('{csvPath}');
-SHOW CONNECTIONS INTO #conn_list;
+SELECT * INTO #conn_list FROM eng.connections;
 SELECT * FROM #conn_list;";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
@@ -224,6 +200,38 @@ SELECT * FROM #conn_list;";
             {
                 if (File.Exists(csvPath)) File.Delete(csvPath);
             }
+        }
+
+        [Fact]
+        public async Task EngVariables_MasksSensitiveValues()
+        {
+            var script = @"
+DECLARE @plain INT = 42;
+DECLARE @secret SECRET = 'topsecret';
+SELECT variable_name, value, is_sensitive FROM eng.variables WHERE variable_name IN ('@plain', '@secret') ORDER BY variable_name;";
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse(script));
+
+            Assert.NotNull(eval.LastResult);
+            var rows = eval.LastResult!.Rows.ToDictionary(r => r["variable_name"]?.ToString() ?? "");
+            Assert.Equal("42", rows["@plain"]["value"]?.ToString());
+            Assert.Equal("*******", rows["@secret"]["value"]);
+            Assert.Equal(true, rows["@secret"]["is_sensitive"]);
+        }
+
+        [Fact]
+        public async Task EngViews_ReturnsSessionViewDefinitions()
+        {
+            var script = @"
+CREATE VIEW ActiveValues AS SELECT 1 AS Id;
+SELECT view_name, query FROM eng.views WHERE view_name = 'ActiveValues';";
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse(script));
+
+            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal("ActiveValues", row["view_name"]);
+            Assert.Contains("SELECT", row["query"]?.ToString(), StringComparison.OrdinalIgnoreCase);
         }
 
         // ── SHOW JOB HISTORY ───────────────────────────────────────────────────
