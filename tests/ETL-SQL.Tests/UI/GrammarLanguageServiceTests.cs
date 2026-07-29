@@ -59,49 +59,61 @@ public class GrammarLanguageServiceTests
     [Fact]
     public async Task LifecycleSuggestions_AfterCreateOrAlter_OnlyIncludeSupportedKinds()
     {
-        var service = new GrammarLanguageService(new MockMetadataManager());
-        var suggestions = await service.GetSuggestionsAsync(new SuggestionContext
-        {
-            Prefix = "",
-            ScriptBefore = "CREATE OR ALTER ",
-            FullScript = "CREATE OR ALTER ",
-            DocumentUri = "test://doc"
-        });
-
-        var texts = suggestions.Select(s => s.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        Assert.Contains("CONNECTION", texts);
-        Assert.Contains("VIEW", texts);
-        Assert.Contains("VISUAL", texts);
-        Assert.Contains("ALERT", texts);
-        Assert.DoesNotContain("TABLE", texts);
-        Assert.DoesNotContain("INDEX", texts);
-        Assert.DoesNotContain("DIRECTORY", texts);
-        Assert.DoesNotContain("USER", texts);
+        await AssertLifecycleSuggestionsAsync(
+            "CREATE OR ALTER ",
+            supported:
+            [
+                "CONNECTION", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
+                "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION",
+                "TEMPLATE", "THEME", "ALERT"
+            ],
+            unsupported:
+            [
+                "TABLE", "INDEX", "UNIQUE", "DIRECTORY", "SSH_KEY_PAIR", "PGP_KEY_PAIR",
+                "SETS", "TAG", "LINEAGE", "USER", "GROUP", "FOLDER", "REFRESH",
+                "SUBSCRIPTION", "SHARE", "EMBED", "SAVED", "REPORT"
+            ]);
     }
 
     [Fact]
     public async Task LifecycleSuggestions_AfterCreateOrReplace_OnlyIncludeSupportedKinds()
     {
+        await AssertLifecycleSuggestionsAsync(
+            "CREATE OR REPLACE ",
+            supported:
+            [
+                "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE",
+                "NOTIFICATION", "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE",
+                "NAVIGATION", "TEMPLATE", "THEME", "ALERT"
+            ],
+            unsupported:
+            [
+                "INDEX", "UNIQUE", "DIRECTORY", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "SETS",
+                "TAG", "LINEAGE", "USER", "GROUP", "FOLDER", "REFRESH", "SUBSCRIPTION",
+                "SHARE", "EMBED", "SAVED", "REPORT"
+            ]);
+    }
+
+    private static async Task AssertLifecycleSuggestionsAsync(
+        string scriptBefore,
+        string[] supported,
+        string[] unsupported)
+    {
         var service = new GrammarLanguageService(new MockMetadataManager());
         var suggestions = await service.GetSuggestionsAsync(new SuggestionContext
         {
             Prefix = "",
-            ScriptBefore = "CREATE OR REPLACE ",
-            FullScript = "CREATE OR REPLACE ",
+            ScriptBefore = scriptBefore,
+            FullScript = scriptBefore,
             DocumentUri = "test://doc"
         });
 
         var texts = suggestions.Select(s => s.Text).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Assert.Contains("CONNECTION", texts);
-        Assert.Contains("TABLE", texts);
-        Assert.Contains("VIEW", texts);
-        Assert.Contains("DATASET", texts);
-        Assert.DoesNotContain("INDEX", texts);
-        Assert.DoesNotContain("DIRECTORY", texts);
-        Assert.DoesNotContain("USER", texts);
-        Assert.DoesNotContain("SUBSCRIPTION", texts);
+        foreach (var keyword in supported)
+            Assert.Contains(keyword, texts);
+        foreach (var keyword in unsupported)
+            Assert.DoesNotContain(keyword, texts);
     }
 
     private class MockMetadataManager : IMetadataManager
