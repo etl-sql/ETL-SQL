@@ -13,6 +13,66 @@ namespace ETL_SQL.Tests.Connectors;
 public class OrchestratorDataSourceConnectionCatalogTests
 {
     [Fact]
+    public async Task WhatIf_SkipsPortalAndOrchestratorConnectionMutations()
+    {
+        var portalRequests = new List<HttpRequestMessage>();
+        var portalHandler = new RecordingHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/auth/login")
+                return JsonResponse("""{"token":"token","refreshToken":"refresh","expiresAt":"2099-01-01T00:00:00Z"}""");
+
+            portalRequests.Add(CloneRequest(request));
+            return request.Method == HttpMethod.Get
+                ? JsonResponse("""
+                  {
+                    "alias": "notify_smtp",
+                    "connectorType": "SMTP",
+                    "target": null,
+                    "options": { "HOST": "smtp.example.test" },
+                    "status": "active"
+                  }
+                  """)
+                : new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        await using (var portal = new PortalDataSource(
+            new HttpClient(portalHandler) { BaseAddress = new Uri("http://portal.test/") },
+            "admin",
+            "password",
+            NullLogger.Instance))
+        {
+            await ExerciseWhatIfConnectionMutationsAsync(portal);
+        }
+
+        Assert.DoesNotContain(portalRequests, r => r.Method is { } m && (m == HttpMethod.Put || m == HttpMethod.Delete));
+
+        var orchestratorRequests = new List<HttpRequestMessage>();
+        var orchestratorHandler = new RecordingHandler(request =>
+        {
+            orchestratorRequests.Add(CloneRequest(request));
+            return request.Method == HttpMethod.Get
+                ? JsonResponse("""
+                  {
+                    "alias": "notify_smtp",
+                    "connectorType": "SMTP",
+                    "target": null,
+                    "options": { "HOST": "smtp.example.test" },
+                    "status": "active"
+                  }
+                  """)
+                : new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        await using (var orchestrator = new OrchestratorDataSource(
+            new HttpClient(orchestratorHandler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key",
+            NullLogger.Instance))
+        {
+            await ExerciseWhatIfConnectionMutationsAsync(orchestrator);
+        }
+
+        Assert.DoesNotContain(orchestratorRequests, r => r.Method is { } m && (m == HttpMethod.Put || m == HttpMethod.Delete));
+    }
+
+    [Fact]
     public async Task PortalExecuteAdminStatement_DispatchesAlterAndTestConnectionLifecycle()
     {
         var requests = new List<HttpRequestMessage>();
@@ -176,6 +236,23 @@ public class OrchestratorDataSourceConnectionCatalogTests
 
     private static LiteralExpression Literal(string value) =>
         new(value, TokenType.STRING_LITERAL);
+
+    private static async Task ExerciseWhatIfConnectionMutationsAsync(
+        IPortalAdminConnection source)
+    {
+        var context = new LiteralEvalContext { IsWhatIf = true };
+        await source.ExecuteAdminStatementAsync(new CreateConnectionStatement(
+            "notify_smtp",
+            "SMTP",
+            target: null,
+            new Dictionary<string, Expression> { ["HOST"] = Literal("smtp.example.test") }), context);
+        await source.ExecuteAdminStatementAsync(new AlterConnectionStatement(
+            "notify_smtp",
+            type: null,
+            target: null,
+            new Dictionary<string, Expression> { ["USER"] = Literal("etl") }), context);
+        await source.ExecuteAdminStatementAsync(new DropConnectionStatement("notify_smtp", ifExists: true), context);
+    }
 
     private static HttpResponseMessage JsonResponse(string json) =>
         new(HttpStatusCode.OK)

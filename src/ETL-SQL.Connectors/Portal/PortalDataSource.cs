@@ -146,7 +146,7 @@ namespace ETL_SQL.Connectors.Portal
                 case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
                 case AlterConnectionStatement s: await AlterSharedConnectionAsync(s, context); break;
                 case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
-                case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
+                case DropConnectionStatement s: await DropSharedConnectionAsync(s, context); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
                 case ShowConnectionConfigStatement s: await ShowSharedConnectionConfigAsync(s, context); break;
 
@@ -412,6 +412,14 @@ namespace ETL_SQL.Connectors.Portal
                 ? null
                 : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
 
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine(
+                    $"WHAT IF: would register shared connection '{stmt.ConnectionName}' ({stmt.ConnectionType}).",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
             await CallAsync(
                 HttpMethod.Put,
                 $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
@@ -456,6 +464,12 @@ namespace ETL_SQL.Connectors.Portal
                 ? sensitive.EnumerateArray().Select(v => v.GetString()).Where(v => v is not null).ToList()
                 : null;
 
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: would alter shared connection '{stmt.ConnectionName}'.", ConsoleColor.Yellow);
+                return;
+            }
+
             await CallAsync(
                 HttpMethod.Put,
                 $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}",
@@ -492,7 +506,7 @@ namespace ETL_SQL.Connectors.Portal
             await PublishTableResultAsync(table, stmt.IntoTable, context);
         }
 
-        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
+        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt, IExecutionContext context)
         {
             var url = $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}";
 
@@ -506,6 +520,12 @@ namespace ETL_SQL.Connectors.Portal
                         ConsoleColor.DarkGray);
                     return;
                 }
+            }
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: would delete shared connection '{stmt.ConnectionName}'.", ConsoleColor.Yellow);
+                return;
             }
 
             await CallAsync(HttpMethod.Delete, url, null,

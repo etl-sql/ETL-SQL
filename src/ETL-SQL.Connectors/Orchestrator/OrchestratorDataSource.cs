@@ -115,7 +115,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
                 case AlterConnectionStatement s: await AlterSharedConnectionAsync(s, context); break;
                 case TestConnectionStatement s: await TestSharedConnectionAsync(s, context); break;
-                case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
+                case DropConnectionStatement s: await DropSharedConnectionAsync(s, context); break;
                 case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
                 case ShowConnectionConfigStatement s: await ShowSharedConnectionConfigAsync(s, context); break;
                 case ShowPublishedBundlesStatement s: await FetchPublishedBundlesAsync(s, context); break;
@@ -228,6 +228,14 @@ namespace ETL_SQL.Connectors.Orchestrator
                 ? null
                 : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
 
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine(
+                    $"WHAT IF: would register shared connection '{stmt.ConnectionName}' in Orchestrator ({stmt.ConnectionType}).",
+                    ConsoleColor.Yellow);
+                return;
+            }
+
             var request = new { ConnectorType = stmt.ConnectionType, Target = target, Options = options };
             var content = new StringContent(JsonSerializer.Serialize(request, _json), Encoding.UTF8, "application/json");
             var resp = await SendHttpAsync(() =>
@@ -266,6 +274,12 @@ namespace ETL_SQL.Connectors.Orchestrator
             var target = stmt.TargetExpression is null
                 ? existing.Target
                 : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: would alter shared connection '{stmt.ConnectionName}' in Orchestrator.", ConsoleColor.Yellow);
+                return;
+            }
 
             var request = new
             {
@@ -318,7 +332,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             await WriteResultAsync(table, stmt.IntoTable, context);
         }
 
-        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
+        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt, IExecutionContext context)
         {
             var url = $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}";
 
@@ -332,6 +346,12 @@ namespace ETL_SQL.Connectors.Orchestrator
                         ConsoleColor.DarkGray);
                     return;
                 }
+            }
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: would delete shared connection '{stmt.ConnectionName}' from Orchestrator.", ConsoleColor.Yellow);
+                return;
             }
 
             var resp = await SendHttpAsync(() => _http.DeleteAsync(url));
