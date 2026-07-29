@@ -112,6 +112,9 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case PublishBundleStatement s: await PublishBundleAsync(s, context); break;
                 case ValidateBundleStatement s: await ValidateBundleAsync(s, context); break;
                 case ExportScriptStatement s: await ExportScriptAsync(s, context); break;
+                case CreateConnectionStatement s: await CreateSharedConnectionAsync(s, context); break;
+                case DropConnectionStatement s: await DropSharedConnectionAsync(s); break;
+                case ShowConnectionsStatement s: await ShowSharedConnectionsAsync(s, context); break;
                 case ShowPublishedBundlesStatement s: await FetchPublishedBundlesAsync(s, context); break;
                 case ShowBundleVersionsStatement s: await FetchBundleVersionsAsync(s, context); break;
                 case ShowBundleFilesStatement s: await FetchBundleFilesAsync(s, context); break;
@@ -202,6 +205,93 @@ namespace ETL_SQL.Connectors.Orchestrator
                 throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
             }
             _logger.WriteLine($"Job '{stmt.JobName}' created in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task CreateSharedConnectionAsync(CreateConnectionStatement stmt, IExecutionContext context)
+        {
+            if (string.IsNullOrWhiteSpace(stmt.ConnectionType))
+                throw new ExecutionException(
+                    $"CREATE CONNECTION {stmt.ConnectionName} on an Orchestrator requires an implementation type: " +
+                    $"CREATE CONNECTION {stmt.ConnectionName} AS <connector>(...).");
+
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var option in stmt.Options ?? [])
+            {
+                var value = (await context.EvaluateValue(option.Value, new Row()))?.ToString();
+                if (value is not null) options[option.Key] = value;
+            }
+
+            var target = stmt.TargetExpression is null
+                ? null
+                : (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString();
+
+            var request = new { ConnectorType = stmt.ConnectionType, Target = target, Options = options };
+            var content = new StringContent(JsonSerializer.Serialize(request, _json), Encoding.UTF8, "application/json");
+            var resp = await SendHttpAsync(() =>
+                _http.PutAsync($"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}", content));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+
+            _logger.WriteLine(
+                $"Shared connection '{stmt.ConnectionName}' registered in Orchestrator ({stmt.ConnectionType}).",
+                ConsoleColor.Green);
+        }
+
+        private async Task DropSharedConnectionAsync(DropConnectionStatement stmt)
+        {
+            var url = $"api/admin/connections/{Uri.EscapeDataString(stmt.ConnectionName)}";
+
+            if (stmt.IfExists)
+            {
+                using var probe = await SendHttpAsync(() => _http.GetAsync(url));
+                if (probe.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.WriteLine(
+                        $"Shared connection '{stmt.ConnectionName}' does not exist in Orchestrator — skipped.",
+                        ConsoleColor.DarkGray);
+                    return;
+                }
+            }
+
+            var resp = await SendHttpAsync(() => _http.DeleteAsync(url));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+
+            _logger.WriteLine($"Shared connection '{stmt.ConnectionName}' deleted from Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task ShowSharedConnectionsAsync(ShowConnectionsStatement stmt, IExecutionContext context)
+        {
+            var entries = await GetJsonAsync<ConnectionCatalogEntryDto[]>("api/admin/connections") ?? [];
+            var table = new DataTable();
+            table.AddColumn("Alias");
+            table.AddColumn("ConnectorType");
+            table.AddColumn("Target");
+            table.AddColumn("Options");
+            table.AddColumn("Status");
+            table.AddColumn("SensitiveFields");
+
+            foreach (var entry in entries)
+            {
+                var row = new Row();
+                row["Alias"] = entry.Alias;
+                row["ConnectorType"] = entry.ConnectorType;
+                row["Target"] = entry.Target;
+                row["Options"] = JsonSerializer.Serialize(entry.Options ?? [], _json);
+                row["Status"] = entry.Status;
+                row["SensitiveFields"] = entry.SensitiveFields is null
+                    ? null
+                    : string.Join(", ", entry.SensitiveFields);
+                await table.AddRowAsync(row);
+            }
+
+            await WriteResultAsync(table, stmt.IntoTable, context);
         }
 
         private async Task FetchJobsAsync(ShowJobsStatement stmt, IExecutionContext context)
@@ -783,5 +873,13 @@ namespace ETL_SQL.Connectors.Orchestrator
             DateTime RunAt,
             string? JobName,
             string? ScriptPath);
+
+        private sealed record ConnectionCatalogEntryDto(
+            string Alias,
+            string ConnectorType,
+            string? Target,
+            Dictionary<string, string>? Options,
+            string Status,
+            string[]? SensitiveFields);
     }
 }

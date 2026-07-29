@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Handlers;
@@ -398,6 +399,134 @@ namespace ETL_SQL.Orchestrator.Service
                         ? StatusCodes.Status202Accepted
                         : StatusCodes.Status502BadGateway);
             }).WithName("dispatchNotification");
+
+            app.MapGet("/api/admin/connections", async (HttpContext ctx, IServiceProvider services,
+                IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var aliases = await writable.ListAsync(ct);
+                var entries = new List<ConnectionCatalogEntryResponse>();
+                foreach (var alias in aliases)
+                {
+                    var status = await writable.GetStatusAsync(alias, ct);
+                    SharedConnectionDefinition? definition = null;
+                    if (status == SecretLifecycleStatus.Active)
+                    {
+                        try { definition = await writable.ResolveAsync(alias, null, ct); }
+                        catch { }
+                    }
+
+                    entries.Add(ToConnectionCatalogEntry(alias, status, definition));
+                }
+
+                return Results.Ok(entries);
+            }).WithName("listAdminConnections");
+
+            app.MapGet("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var decodedAlias = Uri.UnescapeDataString(alias);
+                var status = await writable.GetStatusAsync(decodedAlias, ct);
+                if (status == SecretLifecycleStatus.NotFound)
+                    return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
+
+                SharedConnectionDefinition? definition = null;
+                if (status == SecretLifecycleStatus.Active)
+                    definition = await writable.ResolveAsync(decodedAlias, null, ct);
+
+                return Results.Ok(ToConnectionCatalogEntry(decodedAlias, status, definition));
+            }).WithName("getAdminConnection");
+
+            app.MapPut("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
+                SetConnectionCatalogEntryRequest request, IServiceProvider services, IConfiguration cfg,
+                CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                var entry = new SharedConnectionDefinition(
+                    Uri.UnescapeDataString(alias),
+                    request?.ConnectorType ?? "",
+                    request?.Target,
+                    new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
+                    Disabled: false,
+                    request?.SensitiveFields);
+                var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
+                if (rawCredential is not null)
+                    return Results.BadRequest(new { Error = $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference, not a raw credential value." });
+
+                try
+                {
+                    await writable.StoreAsync(entry, ct);
+                    return Results.NoContent();
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    return Results.BadRequest(new { Error = ex.Message });
+                }
+            }).WithName("setAdminConnection");
+
+            app.MapPost("/api/admin/connections/{alias}/enable", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                try
+                {
+                    await writable.EnableAsync(Uri.UnescapeDataString(alias), ct);
+                    return Results.NoContent();
+                }
+                catch (KeyNotFoundException ex)
+                {
+                    return Results.NotFound(new { Error = ex.Message });
+                }
+            }).WithName("enableAdminConnection");
+
+            app.MapPost("/api/admin/connections/{alias}/disable", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                try
+                {
+                    await writable.DisableAsync(Uri.UnescapeDataString(alias), ct);
+                    return Results.NoContent();
+                }
+                catch (KeyNotFoundException ex)
+                {
+                    return Results.NotFound(new { Error = ex.Message });
+                }
+            }).WithName("disableAdminConnection");
+
+            app.MapDelete("/api/admin/connections/{alias}", async (HttpContext ctx, string alias,
+                IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
+                    return Results.NotFound(new { Error = "No writable connection catalog is configured." });
+
+                try
+                {
+                    await writable.DeleteAsync(Uri.UnescapeDataString(alias), ct);
+                    return Results.NoContent();
+                }
+                catch (KeyNotFoundException ex)
+                {
+                    return Results.NotFound(new { Error = ex.Message });
+                }
+            }).WithName("deleteAdminConnection");
 
             app.MapGet("/api/lineage/history/table/{name}", async (HttpContext ctx, string name,
                 ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
@@ -990,6 +1119,39 @@ namespace ETL_SQL.Orchestrator.Service
             string? ErrorMessage = null,
             IReadOnlyList<string>? AttachmentPaths = null
         );
+
+        private sealed record SetConnectionCatalogEntryRequest(
+            string ConnectorType,
+            string? Target,
+            Dictionary<string, string>? Options,
+            List<string>? SensitiveFields = null
+        );
+
+        private sealed record ConnectionCatalogEntryResponse(
+            string Alias,
+            string ConnectorType,
+            string? Target,
+            Dictionary<string, string> Options,
+            string Status,
+            IReadOnlyCollection<string>? SensitiveFields = null
+        );
+
+        private static ConnectionCatalogEntryResponse ToConnectionCatalogEntry(
+            string alias,
+            SecretLifecycleStatus status,
+            SharedConnectionDefinition? definition)
+        {
+            var options = definition?.Options is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase);
+            return new ConnectionCatalogEntryResponse(
+                alias,
+                definition?.ConnectorType ?? "",
+                definition?.Target,
+                options,
+                status.ToString().ToLowerInvariant(),
+                definition?.SensitiveFields);
+        }
 
         private static long? ReadExpectedVersion(HttpContext context)
         {

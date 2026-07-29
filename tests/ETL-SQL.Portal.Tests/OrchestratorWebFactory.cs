@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
@@ -49,6 +50,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
                 ["Orchestrator:ApiKey"] = "test-orch-key-12345",
                 ["Logging:AppLog:Directory"] = Path.Combine(TempDir, "logs"),
                 ["Jobs:UseProcessSpawning"] = "false", // Run jobs in-process during tests
+                ["Governance:ConnectionCatalog:Provider"] = "Local",
+                ["Governance:ConnectionCatalog:LocalRoot"] = Path.Combine(TempDir, "connections"),
             });
         });
 
@@ -59,6 +62,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<IHostMetricsStore>();
             services.RemoveAll<IBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
+            services.RemoveAll<IConnectionCatalogProvider>();
 
             var testStore = new SQLiteJobHistoryStore(orchDbPath);
             services.AddSingleton(testStore);
@@ -66,6 +70,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.AddSingleton<IHostMetricsStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
+            services.AddSingleton<IConnectionCatalogProvider>(
+                new LocalConnectionCatalogProvider(Path.Combine(TempDir, "connections")));
         });
     }
 
