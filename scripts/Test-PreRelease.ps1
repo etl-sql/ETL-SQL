@@ -554,6 +554,25 @@ if ($Explain) {
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
+# Preflight git signing configuration check
+try {
+    $gpgFormat = (& git config --get gpg.format 2>$null) -join ""
+    if ($gpgFormat.Trim() -eq "ssh") {
+        $allowedSigners = (& git config --get gpg.ssh.allowedSignersFile 2>$null) -join ""
+        if ([string]::IsNullOrWhiteSpace($allowedSigners)) {
+            Write-Host ""
+            Write-Host "=========================================================================" -ForegroundColor Yellow
+            Write-Host "WARNING: Git config 'gpg.format' is set to 'ssh', but 'gpg.ssh.allowedSignersFile' is not set." -ForegroundColor Yellow
+            Write-Host "Without allowedSignersFile, Git cannot verify SSH-signed commits, which may lead to false-negative verification failures." -ForegroundColor Yellow
+            Write-Host "To fix this, configure your allowed signers file, e.g.:" -ForegroundColor Yellow
+            Write-Host "  git config --global gpg.ssh.allowedSignersFile ~/.ssh/allowed_signers" -ForegroundColor Yellow
+            Write-Host "=========================================================================" -ForegroundColor Yellow
+            Write-Host ""
+        }
+    }
+}
+catch { }
+
 $startedAt = Get-Date
 $fingerprint = Get-SourceFingerprint
 $previousState = Read-State
