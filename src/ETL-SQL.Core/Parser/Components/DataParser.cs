@@ -197,31 +197,56 @@ public class DataParser : ParserComponent
                  : orReplace ? ObjectCreationMode.CreateOrReplace
                  : ObjectCreationMode.Create;
 
-        if (Match(TokenType.CONNECTION)) return ParseCreateConnection(startToken, mode);
+        if (Match(TokenType.CONNECTION))
+        {
+            RejectUnsupportedCreateIfNotExists("CONNECTION");
+            return ParseCreateConnection(startToken, mode);
+        }
         if (Match(TokenType.TABLE))
         {
             RejectUnsupportedCreateMode(mode, "TABLE", ObjectCreationMode.CreateOrReplace);
             var ct = (CreateTableStatement)ParseCreateTable(startToken);
             return orReplace ? ct with { OrReplace = true } : ct;
         }
-        if (Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, mode);
-        if (Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, mode);
-        if (Match(TokenType.VIEW)) return ParseCreateView(startToken, mode);
+        if (Match(TokenType.PROCEDURE))
+        {
+            RejectUnsupportedCreateIfNotExists("PROCEDURE");
+            return ParseCreateProcedure(startToken, mode);
+        }
+        if (Match(TokenType.FUNCTION))
+        {
+            RejectUnsupportedCreateIfNotExists("FUNCTION");
+            return ParseCreateFunction(startToken, mode);
+        }
+        if (Match(TokenType.VIEW))
+        {
+            RejectUnsupportedCreateIfNotExists("VIEW");
+            return ParseCreateView(startToken, mode);
+        }
         if (Match(TokenType.JOB))
+        {
+            RejectUnsupportedCreateIfNotExists("JOB");
             return ParseCreateJob(startToken, mode);
+        }
 
         // Scheduler catalog. Both creation modes are supported: an exported configuration script
         // must converge when replayed, which is the whole reason these objects keep a stable name.
-        if (Match(TokenType.SCHEDULE)) return _parent.CatalogParser.ParseCreateSchedule(startToken, mode);
+        if (Match(TokenType.SCHEDULE))
+        {
+            RejectUnsupportedCreateIfNotExists("SCHEDULE");
+            return _parent.CatalogParser.ParseCreateSchedule(startToken, mode);
+        }
         if (_parent.CatalogParser.IsNotificationKeyword())
         {
             Advance();
+            RejectUnsupportedCreateIfNotExists("NOTIFICATION");
             return _parent.CatalogParser.ParseCreateNotification(startToken, mode);
         }
 
         if (Match(TokenType.DIRECTORY))
         {
             RejectUnsupportedCreateMode(mode, "DIRECTORY");
+            RejectUnsupportedCreateIfNotExists("DIRECTORY");
             var path = ParseExpression();
             Expression? overwrite = null;
             if (Match(TokenType.WITH)) overwrite = ParseWithOverwrite();
@@ -241,83 +266,143 @@ public class DataParser : ParserComponent
         if (Match(TokenType.SSH_KEY_PAIR))
         {
             RejectUnsupportedCreateMode(mode, "SSH_KEY_PAIR");
+            RejectUnsupportedCreateIfNotExists("SSH_KEY_PAIR");
             return ParseCreateSshKeyPair(startToken);
         }
 
         if (Match(TokenType.PGP_KEY_PAIR))
         {
             RejectUnsupportedCreateMode(mode, "PGP_KEY_PAIR");
+            RejectUnsupportedCreateIfNotExists("PGP_KEY_PAIR");
             return ParseCreatePgpKeyPair(startToken);
         }
 
         if (Match(TokenType.SETS))
         {
             RejectUnsupportedCreateMode(mode, "SETS");
+            RejectUnsupportedCreateIfNotExists("SETS");
             return ParseCreateSets(startToken);
         }
 
         if (Match(TokenType.TAG))
         {
             RejectUnsupportedCreateMode(mode, "TAG");
+            RejectUnsupportedCreateIfNotExists("TAG");
             return ParseCreateTag(startToken);
         }
 
         if (Match(TokenType.LINEAGE))
         {
             RejectUnsupportedCreateMode(mode, "LINEAGE");
+            RejectUnsupportedCreateIfNotExists("LINEAGE");
             return ParseCreateLineage(startToken);
         }
 
         // Report-SQL
-        if (Match(TokenType.VISUAL)) return _parent.ReportParser.ParseCreateVisual(startToken, mode);
-        if (Match(TokenType.PAGE)) return _parent.ReportParser.ParseCreatePage(startToken, mode);
-        if (Match(TokenType.DATASET)) return _parent.ReportParser.ParseCreateDataset(startToken, mode);
-        if (Match(TokenType.CONTAINER)) return _parent.ReportParser.ParseCreateContainer(startToken, mode);
-        if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseCreateNavigation(startToken, mode);
-        if (Match(TokenType.STYLE)) return _parent.ReportParser.ParseCreateStyle(startToken, mode);
-        if (Match(TokenType.BUTTON)) return _parent.ReportParser.ParseCreateButton(startToken, mode);
-        if (Match(TokenType.TEMPLATE)) return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
-        if (Match(TokenType.THEME)) return _parent.ReportParser.ParseCreateTheme(startToken, mode);
+        if (Match(TokenType.VISUAL))
+        {
+            RejectUnsupportedCreateIfNotExists("VISUAL");
+            return _parent.ReportParser.ParseCreateVisual(startToken, mode);
+        }
+        if (Match(TokenType.PAGE))
+        {
+            RejectUnsupportedCreateIfNotExists("PAGE");
+            return _parent.ReportParser.ParseCreatePage(startToken, mode);
+        }
+        if (Match(TokenType.DATASET))
+        {
+            RejectUnsupportedCreateIfNotExists("DATASET");
+            return _parent.ReportParser.ParseCreateDataset(startToken, mode);
+        }
+        if (Match(TokenType.CONTAINER))
+        {
+            RejectUnsupportedCreateIfNotExists("CONTAINER");
+            return _parent.ReportParser.ParseCreateContainer(startToken, mode);
+        }
+        if (Match(TokenType.NAVIGATION))
+        {
+            RejectUnsupportedCreateIfNotExists("NAVIGATION");
+            return _parent.ReportParser.ParseCreateNavigation(startToken, mode);
+        }
+        if (Match(TokenType.STYLE))
+        {
+            RejectUnsupportedCreateIfNotExists("STYLE");
+            return _parent.ReportParser.ParseCreateStyle(startToken, mode);
+        }
+        if (Match(TokenType.BUTTON))
+        {
+            RejectUnsupportedCreateIfNotExists("BUTTON");
+            return _parent.ReportParser.ParseCreateButton(startToken, mode);
+        }
+        if (Match(TokenType.TEMPLATE))
+        {
+            RejectUnsupportedCreateIfNotExists("TEMPLATE");
+            return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
+        }
+        if (Match(TokenType.THEME))
+        {
+            RejectUnsupportedCreateIfNotExists("THEME");
+            return _parent.ReportParser.ParseCreateTheme(startToken, mode);
+        }
 
         // Portal admin
         if (Match(TokenType.USER))
         {
             RejectUnsupportedCreateMode(mode, "USER");
+            RejectUnsupportedCreateIfNotExists("USER");
             return _parent.PortalParser.ParseCreateUser(startToken);
         }
         if (Match(TokenType.GROUP))
         {
             RejectUnsupportedCreateMode(mode, "GROUP");
+            RejectUnsupportedCreateIfNotExists("GROUP");
             return _parent.PortalParser.ParseCreateGroup(startToken);
         }
         if (Match(TokenType.FOLDER))
         {
             RejectUnsupportedCreateMode(mode, "FOLDER");
+            RejectUnsupportedCreateIfNotExists("FOLDER");
             return _parent.PortalParser.ParseCreateFolder(startToken);
         }
-        if (Match(TokenType.REFRESH)) return _parent.PortalParser.ParseCreateRefreshJob(startToken);
+        if (Match(TokenType.REFRESH))
+        {
+            RejectUnsupportedCreateIfNotExists("REFRESH");
+            return _parent.PortalParser.ParseCreateRefreshJob(startToken);
+        }
         if (Match(TokenType.SUBSCRIPTION))
         {
             RejectUnsupportedCreateMode(mode, "SUBSCRIPTION");
+            RejectUnsupportedCreateIfNotExists("SUBSCRIPTION");
             return _parent.PortalParser.ParseCreateSubscription(startToken);
         }
         if (Match(TokenType.SHARE))
         {
             RejectUnsupportedCreateMode(mode, "SHARE LINK");
+            RejectUnsupportedCreateIfNotExists("SHARE LINK");
             return _parent.PortalParser.ParseCreateShareLink(startToken);
         }
         if (Match(TokenType.EMBED))
         {
             RejectUnsupportedCreateMode(mode, "EMBED TOKEN");
+            RejectUnsupportedCreateIfNotExists("EMBED TOKEN");
             return _parent.PortalParser.ParseCreateEmbedToken(startToken);
         }
         if (Match(TokenType.SAVED))
         {
             RejectUnsupportedCreateMode(mode, "SAVED VIEW");
+            RejectUnsupportedCreateIfNotExists("SAVED VIEW");
             return _parent.PortalParser.ParseCreateSavedView(startToken);
         }
-        if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken, mode);
-        if (Match(TokenType.SMTP)) return _parent.PortalParser.ParseCreateSmtpConnection(startToken);
+        if (Match(TokenType.ALERT))
+        {
+            RejectUnsupportedCreateIfNotExists("ALERT");
+            return _parent.PortalParser.ParseCreateAlert(startToken, mode);
+        }
+        if (Match(TokenType.SMTP))
+        {
+            RejectUnsupportedCreateIfNotExists("SMTP");
+            return _parent.PortalParser.ParseCreateSmtpConnection(startToken);
+        }
 
         throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
     }
@@ -341,6 +426,17 @@ public class DataParser : ParserComponent
         };
         throw new SyntaxException(
             $"CREATE OR {modifier} is not supported for {objectKind}.",
+            _parser.Current.Line,
+            _parser.Current.Column);
+    }
+
+    private void RejectUnsupportedCreateIfNotExists(string objectKind)
+    {
+        if (_parser.Current.Type != TokenType.IF || _parser.Peek.Type != TokenType.NOT)
+            return;
+
+        throw new SyntaxException(
+            $"CREATE IF NOT EXISTS is not supported for {objectKind}.",
             _parser.Current.Line,
             _parser.Current.Column);
     }
@@ -1555,6 +1651,7 @@ public class DataParser : ParserComponent
     private Statement ParseCreateIndex(Token startToken, bool isUnique)
     {
         Consume(TokenType.INDEX, "Expected INDEX");
+        RejectUnsupportedCreateIfNotExists("INDEX");
         var indexName = ConsumeIdentifier("Expected index name").Value;
         Consume(TokenType.ON, "Expected 'ON' after index name");
         var targetTable = ParseTableReference(false);

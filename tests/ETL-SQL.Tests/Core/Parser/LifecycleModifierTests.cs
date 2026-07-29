@@ -89,6 +89,45 @@ namespace ETL_SQL.Tests.Core.Parsing
         }
 
         [Theory]
+        [InlineData("CREATE CONNECTION IF NOT EXISTS c AS MOCKDB();")]
+        [InlineData("CREATE PROCEDURE IF NOT EXISTS p() AS PRINT('ok');")]
+        [InlineData("CREATE FUNCTION IF NOT EXISTS f() RETURNS INT AS RETURN 1;")]
+        [InlineData("CREATE VIEW IF NOT EXISTS v AS SELECT 1 AS id;")]
+        [InlineData("CREATE JOB IF NOT EXISTS J FOR SCRIPT 'jobs/j.etlsql';")]
+        [InlineData("CREATE SCHEDULE IF NOT EXISTS T ON '0 2 * * *';")]
+        [InlineData("CREATE NOTIFICATION IF NOT EXISTS Ops USING mail TO 'ops@example.com';")]
+        [InlineData("CREATE DIRECTORY IF NOT EXISTS 'out';")]
+        [InlineData("CREATE INDEX IF NOT EXISTS ix ON #t (id);")]
+        [InlineData("CREATE UNIQUE INDEX IF NOT EXISTS ix ON #t (id);")]
+        [InlineData("CREATE SETS IF NOT EXISTS !regions BEGIN @r = 'North' END;")]
+        [InlineData("CREATE TAG IF NOT EXISTS FOR TABLE #t WITH (owner = 'Ops');")]
+        [InlineData("CREATE LINEAGE IF NOT EXISTS FOR TABLE #t FROM 'lineage.json';")]
+        [InlineData("CREATE VISUAL IF NOT EXISTS V AS TABLE (SOURCE = (SELECT 1 AS id), MAPPINGS (id));")]
+        [InlineData("CREATE PAGE IF NOT EXISTS P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = V));")]
+        [InlineData("CREATE DATASET IF NOT EXISTS &sales AS (SELECT 1 AS id);")]
+        [InlineData("CREATE STYLE IF NOT EXISTS S (COLOR = 'red');")]
+        [InlineData("CREATE CONTAINER IF NOT EXISTS C AS BOX (LAYOUT (STRUCTURE = 'A', MAP ('A' = V)));")]
+        [InlineData("CREATE NAVIGATION IF NOT EXISTS N AS TAB (PAGES (P));")]
+        [InlineData("CREATE BUTTON IF NOT EXISTS B AS (TITLE = 'Run', ACTIONS (ON_CLICK = APPLY_PARAMETERS));")]
+        [InlineData("CREATE TEMPLATE IF NOT EXISTS T AS (TYPE = 'table');")]
+        [InlineData("CREATE THEME IF NOT EXISTS Dark AS (BACKGROUND = '#000');")]
+        [InlineData("CREATE USER IF NOT EXISTS 'alice' WITH (EMAIL='alice@example.com', PASSWORD='x');")]
+        [InlineData("CREATE GROUP IF NOT EXISTS 'Analysts';")]
+        [InlineData("CREATE FOLDER IF NOT EXISTS '/Finance';")]
+        [InlineData("CREATE SUBSCRIPTION IF NOT EXISTS FOR REPORT 'Daily Sales' TO 'ops@example.com' SCHEDULE 'Daily';")]
+        [InlineData("CREATE SHARE LINK IF NOT EXISTS FOR REPORT 'Daily Sales';")]
+        [InlineData("CREATE EMBED TOKEN IF NOT EXISTS FOR REPORT 'Daily Sales';")]
+        [InlineData("CREATE SAVED VIEW IF NOT EXISTS 'Default' FOR REPORT 'Daily Sales' PARAMETERS ();")]
+        [InlineData("CREATE ALERT IF NOT EXISTS A FOR REPORT 'Daily Sales' WHEN VISUAL Failures > 0;")]
+        public void UnsupportedCreateIfNotExistsObjectKinds_AreRejected(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.Empty(script.Statements);
+        }
+
+        [Theory]
         [InlineData("CREATE OR REPLACE CONNECTION c AS MOCKDB();", "CREATE OR REPLACE CONNECTION")]
         [InlineData("CREATE OR REPLACE PROCEDURE p() AS PRINT('ok');", "CREATE OR REPLACE PROCEDURE")]
         [InlineData("CREATE OR REPLACE FUNCTION f() RETURNS INT AS RETURN 1;", "CREATE OR REPLACE FUNCTION")]
