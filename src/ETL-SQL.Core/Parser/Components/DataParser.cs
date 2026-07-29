@@ -465,6 +465,8 @@ public class DataParser : ParserComponent
         {
             if (_parser.Current.Type == TokenType.STRING_LITERAL)
                 return _parent.PortalParser.ParseAlterDataset(startToken);
+            if (_parser.Current.Type == TokenType.IDENTIFIER && !_parser.Current.Value.StartsWith("&", StringComparison.Ordinal))
+                throw new SyntaxException("ALTER DATASET names must use the &dataset form for local/report datasets; quoted names are Portal dataset identities.", _parser.Current.Line, _parser.Current.Column);
             return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Dataset);
         }
         if (Match(TokenType.TEMPLATE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);

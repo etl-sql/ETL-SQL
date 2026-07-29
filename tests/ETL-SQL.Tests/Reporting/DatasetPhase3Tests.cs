@@ -127,6 +127,40 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Empty(script.Statements);
         }
 
+        // ── Parser — ALTER DATASET ───────────────────────────────────────────────
+
+        [Fact]
+        public void AlterDataset_QuotedPortalIdentity_ParsesPortalStatement()
+        {
+            var script = Parse("ALTER DATASET 'Sales' IN FOLDER '/Finance' SET ACCESS = PUBLIC;");
+
+            var stmt = Assert.IsType<AlterPortalDatasetStatement>(Assert.Single(script.Statements));
+            Assert.Equal("Sales", stmt.DatasetName);
+            Assert.Equal("/Finance", stmt.FolderPath);
+        }
+
+        [Fact]
+        public void AlterDataset_BareLocalIdentity_ReportsAmpersandSyntaxError()
+        {
+            var script = Parse("ALTER DATASET sales (TITLE = 'x');");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(script.Statements);
+        }
+
+        [Fact]
+        public void AlterDataset_AmpersandLocalIdentity_ReportsUnsupportedAlter()
+        {
+            var script = Parse("ALTER DATASET &sales (TITLE = 'x');");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("ALTER is not supported for DATASET", System.StringComparison.Ordinal));
+            Assert.Empty(script.Statements);
+        }
+
         // ── UseDatasetRedundantRule ───────────────────────────────────────────────
 
         [Fact]

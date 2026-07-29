@@ -98,6 +98,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Make `PUBLISH DATASET` use canonical identity-first order:
       `PUBLISH DATASET &name FROM 'file.parquet'`, reject retired `FROM ... AS &name`, and
       update publish examples/tests.
+- [x] Enforce `&name` for local/report `ALTER DATASET` attempts while keeping quoted Portal
+      dataset metadata alters routed to Portal parsing.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.
