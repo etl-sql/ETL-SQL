@@ -528,41 +528,17 @@ public class SystemParser : ParserComponent
         }
         else if (Match(TokenType.SCRIPT))
         {
-            // SHOW SCRIPT TAGS [INTO #temp]
             if (Match(TokenType.TAGS) || Match(TokenType.TAG))
-                stmt = new ShowScriptTagsStatement();
-            else
-                throw new SyntaxException("Expected TAGS after SHOW SCRIPT", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("SHOW SCRIPT TAGS has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
+            throw new SyntaxException("Expected a supported SHOW SCRIPT subcommand", _parser.Current.Line, _parser.Current.Column);
         }
         else if (Match(TokenType.TAGS))
         {
-            // SHOW TAGS FOR SCRIPT | SHOW TAGS FOR TABLE <name> [COLUMN <col>]
-            Consume(TokenType.FOR, "Expected FOR after SHOW TAGS");
-            if (Match(TokenType.SCRIPT))
-            {
-                stmt = new ShowScriptTagsStatement();
-            }
-            else
-            {
-                Consume(TokenType.TABLE, "Expected TABLE after FOR");
-                var tableName = ConsumeIdentifier("Expected table name").Value;
-                string? columnName = null;
-                if (Match(TokenType.COLUMN)) columnName = ConsumeIdentifier("Expected column name").Value;
-                stmt = new ShowTagsStatement(tableName, columnName);
-            }
+            throw new SyntaxException("SHOW TAGS has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
         }
         else if (Match(TokenType.TAG))
         {
-            Consume(TokenType.VALUE, "Expected VALUE after SHOW TAG");
-            Consume(TokenType.FOR, "Expected FOR after SHOW TAG VALUE");
-            Consume(TokenType.TABLE, "Expected TABLE after FOR");
-            var tableName = ConsumeIdentifier("Expected table name").Value;
-            string? columnName = null;
-            if (Match(TokenType.COLUMN)) columnName = ConsumeIdentifier("Expected column name").Value;
-            Consume(TokenType.WITH, "Expected WITH after table/column");
-            Consume(TokenType.TAG, "Expected TAG after WITH");
-            var tagName = ConsumeIdentifier("Expected tag name").Value;
-            stmt = new ShowTagValueStatement(tableName, tagName, columnName);
+            throw new SyntaxException("SHOW TAG VALUE has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
         }
         else if (Match(TokenType.LINEAGE))
         {
@@ -768,13 +744,10 @@ public class SystemParser : ParserComponent
                 ShowVariablesStatement v => v with { IntoTable = tempTable },
                 ShowConnectionsStatement c => c with { IntoTable = tempTable },
                 ShowConnectionConfigStatement cc => cc with { IntoTable = tempTable },
-                ShowScriptTagsStatement st => st with { IntoTable = tempTable },
                 ShowJobsStatement j => j with { IntoTable = tempTable },
                 ShowTablesStatement sts => sts with { IntoTable = tempTable },
                 ShowViewsStatement sv => sv with { IntoTable = tempTable },
                 ShowColumnsStatement scols => scols with { IntoTable = tempTable },
-                ShowTagsStatement stag => stag with { IntoTable = tempTable },
-                ShowTagValueStatement stv => stv with { IntoTable = tempTable },
                 ShowVersionStatement svs => svs with { IntoTable = tempTable },
                 ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
                 ShowSessionsStatement sess => sess with { IntoTable = tempTable },

@@ -187,9 +187,6 @@ public static class AstSerializer
         ShowTablesStatement s => (s.ConnectionName != null ? $"SHOW TABLES ON {s.ConnectionName}" : "SHOW TABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowColumnsStatement s => $"SHOW COLUMNS FOR {s.Table.ToSql()}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowVariablesStatement s => (s.IsLocalOnly ? "SHOW LOCAL VARIABLES" : "SHOW VARIABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "") + ";",
-        ShowTagsStatement s => $"SHOW TAGS FOR TABLE {s.TableName}" + (s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
-        ShowTagValueStatement s => $"SHOW TAG VALUE FOR TABLE {s.TableName}" + (s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "") + $" WITH TAG {s.TagName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
-
         // ── Misc statements ──
         RunScriptStatement s => FormatRunScript(s),
         WaitForStatement s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",

@@ -46,6 +46,30 @@ namespace ETL_SQL.Engine.Storage
             cancellationToken.ThrowIfCancellationRequested();
             var rows = new List<Row>();
 
+            foreach (var kv in _tracker.GlobalMetadata)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = new Row();
+                row["TargetTable"] = null;
+                row["TargetColumn"] = null;
+                row["Operation"] = "SCRIPT_TAGS";
+                row["TagName"] = kv.Key;
+                row["TagValue"] = kv.Value;
+                row["Scope"] = "script";
+                row["Line"] = null;
+                row["SourceFile"] = null;
+                rows.Add(row);
+
+                if (rows.Count >= batchSize)
+                {
+                    var dt = new DataTable();
+                    dt.SetColumns(_columns);
+                    foreach (var r in rows) await dt.AddRowAsync(r);
+                    yield return dt;
+                    rows = new List<Row>();
+                }
+            }
+
             foreach (var entry in _tracker.GetFullLineage())
             {
                 cancellationToken.ThrowIfCancellationRequested();

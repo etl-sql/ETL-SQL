@@ -912,7 +912,9 @@ CREATE TABLE Orders (OrderId INT, Amount INT, OrderDate DATETIME);
 INSERT INTO Orders VALUES (1, 100, '2024-01-01'), (2, 250, '2024-01-02');
 
 SELECT Amount AS Revenue, OrderDate INTO #daily FROM Orders;
-SHOW TAGS FOR TABLE #daily COLUMN Revenue;
+SELECT TagName, TagValue
+FROM eng.tags
+WHERE TargetTable = '#daily' AND TargetColumn = 'Revenue';
 
 -- 3. Round-trip lineage through an OpenLineage document. In production the file
 --    would come from a prior run or an upstream system rather than this export.

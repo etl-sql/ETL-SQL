@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -18,7 +19,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
         [Fact]
-        public async Task ShowTags_ForTable_ReturnsTableTags()
+        public async Task EngTags_ForTable_ReturnsTableTags()
         {
             var eval = NewEval();
 
@@ -27,7 +28,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             // Simulate a table creation or tag application
             eval.LineageTracker.Record("MyTable", new List<string>(), "CREATE", null, null, metadata);
 
-            var script = TestHelpers.Parse("SHOW TAGS FOR TABLE MyTable;");
+            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'MyTable' AND Scope = 'table';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -39,14 +40,14 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task ShowTags_ForColumn_ReturnsColumnTags()
+        public async Task EngTags_ForColumn_ReturnsColumnTags()
         {
             var eval = NewEval();
 
             var metadata = new Dictionary<string, string> { { "d", "User ID" } };
             eval.LineageTracker.Record("MyTable", new List<string>(), "CREATE", "UserId", null, metadata);
 
-            var script = TestHelpers.Parse("SHOW TAGS FOR TABLE MyTable COLUMN UserId;");
+            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'MyTable' AND TargetColumn = 'UserId';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -56,14 +57,14 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task ShowTagValue_ForTable_ReturnsSpecificValue()
+        public async Task EngTags_ForTable_ReturnsSpecificValue()
         {
             var eval = NewEval();
 
             var metadata = new Dictionary<string, string> { { "owner", "admin" }, { "sensitivity", "high" } };
             eval.LineageTracker.Record("TargetTable", new List<string>(), "UPDATE", null, null, metadata);
 
-            var script = TestHelpers.Parse("SHOW TAG VALUE FOR TABLE TargetTable WITH TAG owner;");
+            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'TargetTable' AND TagName = 'owner';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -73,14 +74,14 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task ShowTagValue_ForColumn_ReturnsSpecificValue()
+        public async Task EngTags_ForColumn_ReturnsSpecificValue()
         {
             var eval = NewEval();
 
             var metadata = new Dictionary<string, string> { { "d", "Email Address" }, { "pii", "true" } };
             eval.LineageTracker.Record("Users", new List<string>(), "INSERT", "Email", null, metadata);
 
-            var script = TestHelpers.Parse("SHOW TAG VALUE FOR TABLE Users COLUMN Email WITH TAG pii;");
+            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'Users' AND TargetColumn = 'Email' AND TagName = 'pii';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -90,7 +91,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task ShowTags_IntoTempTable_PopulatesDestination()
+        public async Task EngTags_IntoTempTable_PopulatesDestination()
         {
             var eval = NewEval();
 
@@ -98,7 +99,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             eval.LineageTracker.Record("TempSource", new List<string>(), "CREATE", null, null, metadata);
 
             var script = TestHelpers.Parse(@"
-                SHOW TAGS FOR TABLE TempSource INTO #MyTags;
+                SELECT TagName, TagValue INTO #MyTags FROM eng.tags WHERE TargetTable = 'TempSource';
                 SELECT * FROM #MyTags;
             ");
             await eval.Evaluate(script);
@@ -108,24 +109,29 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.Equal("author", eval.LastResult.Rows[0]["TagName"]?.ToString());
         }
 
-        // ── SHOW SCRIPT TAGS / -- @tag support ───────────────────────────────
+        // ── Retired SHOW tag forms / -- @tag support ─────────────────────────
 
-        [Fact]
-        public void ParseShowScriptTags_AlternativeSyntax_ParsesCorrectly()
+        [Theory]
+        [InlineData("SHOW TAGS FOR TABLE MyTable;")]
+        [InlineData("SHOW TAG VALUE FOR TABLE Users COLUMN Email WITH TAG pii;")]
+        [InlineData("SHOW SCRIPT TAGS;")]
+        [InlineData("SHOW SCRIPT TAG;")]
+        public void RetiredShowTagForms_ReportEngTagsReplacement(string sql)
         {
-            // Both "SHOW SCRIPT TAGS" and "SHOW SCRIPT TAG" should parse
-            var stmtPlural = TestHelpers.Parse("SHOW SCRIPT TAGS;").Statements.OfType<ShowScriptTagsStatement>().FirstOrDefault();
-            var stmtSingular = TestHelpers.Parse("SHOW SCRIPT TAG;").Statements.OfType<ShowScriptTagsStatement>().FirstOrDefault();
-            Assert.NotNull(stmtPlural);
-            Assert.NotNull(stmtSingular);
+            var script = TestHelpers.Parse(sql);
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+            Assert.Contains("eng.tags", diagnostic.Message, System.StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(script.Statements);
         }
 
         [Fact]
-        public async Task ShowScriptTags_AlternativeSyntax_ReturnsScriptMetadata()
+        public async Task EngTags_ReturnsScriptMetadata()
         {
             var eval = NewEval();
             // Script-header tags (block comment) feed into GlobalMetadata via script.Metadata
-            var script = TestHelpers.Parse("/* @owner: DataEngineering; @version: 2.1; */\nSHOW SCRIPT TAGS;");
+            var script = TestHelpers.Parse("/* @owner: DataEngineering; @version: 2.1; */\nSELECT TagName, TagValue FROM eng.tags WHERE Scope = 'script';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -135,11 +141,11 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
-        public async Task ShowScriptTags_IntoTemp_AlternativeSyntax_Works()
+        public async Task EngTags_ScriptMetadataIntoTemp_Works()
         {
             var eval = NewEval();
             // Use -- @tag header syntax (new Lexer support) to populate script metadata
-            var script = TestHelpers.Parse("-- @pipeline: DailySales\nSHOW SCRIPT TAGS INTO #tags;\nSELECT * FROM #tags;");
+            var script = TestHelpers.Parse("-- @pipeline: DailySales\nSELECT TagName, TagValue INTO #tags FROM eng.tags WHERE Scope = 'script';\nSELECT * FROM #tags;");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
@@ -184,7 +190,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
                     Id INT NOT NULL PRIMARY KEY /*@d: The unique ID; @owner: sales*/,
                     Name VARCHAR(100)           /*@pii: true*/
                 );
-                SHOW TAGS FOR TABLE #tagged_table COLUMN Id;
+                SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#tagged_table' AND TargetColumn = 'Id';
             ");
             await eval.Evaluate(script);
 
@@ -195,7 +201,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.Contains("owner", idTags.Keys);
             Assert.Equal("sales", idTags["owner"]);
 
-            var showNameTags = TestHelpers.Parse("SHOW TAGS FOR TABLE #tagged_table COLUMN Name;");
+            var showNameTags = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#tagged_table' AND TargetColumn = 'Name';");
             await eval.Evaluate(showNameTags);
             Assert.NotNull(eval.LastResult);
             var nameTags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);

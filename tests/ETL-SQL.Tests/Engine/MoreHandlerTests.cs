@@ -594,14 +594,16 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(eval.LastResult);
         }
 
-        // ── SHOW SCRIPT TAGS ──────────────────────────────────────────────────
+        // ── eng.tags script metadata ──────────────────────────────────────────
 
         [Fact]
-        public async Task ShowScriptTags_ProducesResult()
+        public async Task EngTagsScriptScope_ProducesResult()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("SHOW SCRIPT TAGS;"));
+            await eval.Evaluate(Parse("/* @owner: Platform */ SELECT TagName, TagValue FROM eng.tags WHERE Scope = 'script';"));
             Assert.NotNull(eval.LastResult);
+            Assert.Contains(eval.LastResult!.Rows, r =>
+                r["TagName"]?.ToString() == "owner" && r["TagValue"]?.ToString() == "Platform");
         }
 
         // ── USE PASSWORD ──────────────────────────────────────────────────────

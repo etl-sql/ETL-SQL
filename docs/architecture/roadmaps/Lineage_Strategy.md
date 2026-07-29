@@ -34,7 +34,7 @@ Closing these gaps turns ETL-SQL lineage from a developer convenience into an en
 - **`SELECT * FROM LINEAGE`** virtual table — lineage is queryable as data.
 - **ASCII tree + Mermaid diagram** output, with Markdown export.
 - **SQLite session persistence** — lineage survives session reloads.
-- **`SHOW TAGS`**, `GET_TAGS()`, `GET_TAG_VALUE()` for programmatic access.
+- **`eng.tags`**, `GET_TAGS()`, `GET_TAG_VALUE()` for programmatic access.
 - **Thread-safe, deduplicated** recording with position-based dedup keys.
 
 ### Known Gaps

@@ -1,6 +1,6 @@
 -- DIAGNOSTICS & SSH KEY Kitchen Sink
 -- Covers: SET PROFILING / SHOW PROFILE, EXPLAIN, LINT, SHOW VARIABLES,
---         SHOW VERSION, CREATE SSH_KEY_PAIR, SHOW TAGS, SHOW LINEAGE,
+--         SHOW VERSION, CREATE SSH_KEY_PAIR, eng.tags, SHOW LINEAGE,
 --         GET_TAGS, GET_TAG_VALUE, script metadata header tags
 /* 
    @author: Kitchen Sink Test
@@ -53,17 +53,17 @@ SHOW VARIABLES INTO #vars;
 SELECT * FROM #vars;
 SHOW LOCAL VARIABLES;
 
--- 6. Lineage Tagging & SHOW TAGS
+-- 6. Lineage Tagging & eng.tags
 PRINT 'Testing Lineage Tags...';
 SELECT
     1  AS UserId    /* @d: Internal user ID; @PII: true; */,
     'A' AS UserName /* @d: Display name; @owner: SecurityTeam; */
 INTO #Tagged;
 
--- Tag introspection statements
-SHOW TAGS FOR TABLE #Tagged;
-SHOW TAGS FOR TABLE #Tagged COLUMN UserId;
-SHOW TAG VALUE FOR TABLE #Tagged COLUMN UserId WITH TAG 'd';
+-- Tag introspection queries
+SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#Tagged';
+SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId';
+SELECT TagValue FROM eng.tags WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId' AND TagName = 'd';
 
 -- GET_TAGS / GET_TAG_VALUE as expressions
 DECLARE @tags = GET_TAGS('#Tagged', 'UserId');

@@ -136,8 +136,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       governance, data quality, jobs/orchestration, Portal catalog, and parameterized table-valued
       functions such as `eng.catalog_search()`.
 - [x] Implement `eng.tags` as a globally enumerable virtual table over lineage tag metadata.
-- [ ] Remove `SHOW TAGS FOR SCRIPT` and `SHOW TAGS FOR TABLE <name>` after consumers move to
-      `SELECT ... FROM eng.tags`.
+- [x] Remove `SHOW TAGS FOR SCRIPT`, `SHOW TAGS FOR TABLE <name>`, and `SHOW TAG VALUE`
+      after replacing them with `SELECT ... FROM eng.tags`.
 - [ ] Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
       and effective permissions as `eng.*` virtual tables with `WHERE` filters.
 - [ ] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to

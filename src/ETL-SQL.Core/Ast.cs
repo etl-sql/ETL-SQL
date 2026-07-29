@@ -2124,16 +2124,6 @@ public sealed record ShowVariablesStatement : Statement
     }
 }
 
-public sealed record ShowScriptTagsStatement : Statement
-{
-    public string? IntoTable { get; init; }
-
-    public ShowScriptTagsStatement(string? intoTable = null)
-    {
-        IntoTable = intoTable;
-    }
-}
-
 public sealed record ShowSafeZonesStatement : Statement
 {
     public string? IntoTable { get; init; }
@@ -2561,23 +2551,6 @@ public sealed record ShowColumnsStatement : Statement
     public TableReference Table { get; }
     public string? IntoTable { get; set; }
     public ShowColumnsStatement(TableReference table) { Table = table; }
-}
-
-public sealed record ShowTagsStatement : Statement
-{
-    public string TableName { get; }
-    public string? ColumnName { get; }
-    public string? IntoTable { get; set; }
-    public ShowTagsStatement(string tableName, string? columnName = null) { TableName = tableName; ColumnName = columnName; }
-}
-
-public sealed record ShowTagValueStatement : Statement
-{
-    public string TableName { get; }
-    public string? ColumnName { get; }
-    public string TagName { get; }
-    public string? IntoTable { get; set; }
-    public ShowTagValueStatement(string tableName, string tagName, string? columnName = null) { TableName = tableName; TagName = tagName; ColumnName = columnName; }
 }
 
 public sealed record LintStatement : Statement

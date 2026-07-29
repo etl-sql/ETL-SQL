@@ -317,19 +317,6 @@ SELECT HAS_TAG('#orders', 'email', 'pii') AS is_pii;  -- returns 1 or 0
 SELECT HAS_TAG('#orders', 'amount', 'unit', 'USD') AS is_usd;
 ```
 
-## SHOW TAGS
-
-`SHOW TAGS` is a legacy row-returning command. Prefer `SELECT ... FROM eng.tags` for new scripts.
-
-```sql
--- List all tag events in the session
-SHOW TAGS;
-
--- Capture to a temp table
-SHOW TAGS INTO #all_tags;
-SELECT * FROM #all_tags WHERE tag_name = 'pii' AND tag_value = 'true';
-```
-
 ## Cross-Run Lineage Catalog
 
 `SHOW LINEAGE` is scoped to the current session. The catalog stores lineage across all orchestrated runs so you can answer stewardship questions that span many executions.

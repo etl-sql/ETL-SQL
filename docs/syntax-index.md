@@ -130,7 +130,6 @@ Statements are the top-level actions in an ETL-SQL script.
 | `SHOW SHARE LINKS FOR REPORT` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SHARE LINKS FOR REPORT](reference/show-commands/show-share-links.md) |
 | `SHOW SUBSCRIPTIONS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW SUBSCRIPTIONS](reference/show-commands/show-subscriptions.md) |
 | `SHOW TABLES` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW TABLES](reference/show-commands/show-tables.md) |
-| `SHOW TAGS` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW TAGS](reference/show-commands/show-tags.md) |
 | `SHOW VERSION` | Diagnostics / Portal | [Statement Reference](reference/statements/README.md) | [SHOW VERSION](reference/show-commands/show-version.md) |
 | `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
@@ -1053,7 +1052,6 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `DESCRIBE <table>` | Diagnostics | Alias for `SHOW COLUMNS FOR <table>` |
 | `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
 | `eng.tags` | Lineage | Queryable virtual table for lineage tags |
-| `SHOW TAGS` | Lineage | Legacy tag-listing command; prefer `SELECT ... FROM eng.tags` |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |
 | `SHOW LOCKS` | Diagnostics | Lists active database/job throttle slots and concurrency queue details |
