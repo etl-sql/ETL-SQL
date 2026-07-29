@@ -22,7 +22,7 @@ ETL-SQL combines **script-first pipeline reproducibility** with **WYSIWYG visual
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                      Report-SQL Script Artifact (.rptsql)                  │
-│  CREATE DATASET #sales AS (...)                                             │
+│  CREATE DATASET &sales AS (...)                                             │
 │  CREATE VISUAL RevenueChart AS BAR MAPPINGS (...)                           │
 │  CREATE CONTAINER MainTabs AS TABS STRUCTURE = 'A / B'                      │
 └─────────────────────────────────────────────────────────────────────────────┘

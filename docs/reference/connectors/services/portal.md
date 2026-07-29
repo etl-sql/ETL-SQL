@@ -44,7 +44,7 @@ EXECUTE portal BEGIN
 
     -- Dataset management
     REFRESH DATASET 'sales_ds' IN FOLDER '/Finance';
-    ALTER DATASET 'sales_ds' IN FOLDER '/Finance' WITH SCHEDULE='0 2 * * *';
+    ALTER DATASET 'sales_ds' IN FOLDER '/Finance' SET (ACCESS = PUBLIC, TTL = '02:00:00');
 
     -- Governed connections (SMTP is an ordinary connector; credentials are SECRET: references)
     CREATE CONNECTION corporate AS SMTP(

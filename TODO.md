@@ -100,6 +100,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       update publish examples/tests.
 - [x] Enforce `&name` for local/report `ALTER DATASET` attempts while keeping quoted Portal
       dataset metadata alters routed to Portal parsing.
+- [x] Clean up dataset identity documentation so local/report examples use `&name`, Portal
+      administration examples use quoted catalog names with `IN FOLDER`, and retired
+      `PUBLISH DATASET FROM ... AS &name` wording is removed.
 - [ ] Enforce `&name` for local/report datasets across `CREATE`, `ALTER`, `DROP`, `USE`, `REFRESH`,
       `EXPORT`, and `PUBLISH`; keep quoted catalog identity only where Portal dataset commands
       require it.

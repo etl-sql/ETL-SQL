@@ -45,7 +45,7 @@ Never use it for real data.
    Both imported datasets must load without resupplying a transport credential.
 
 The published names are globally unique. Delete prior copies before rerunning
-the entire transfer script, or change the two `AS &name` values.
+the entire transfer script, or change the two published `&name` values.
 
 ## Security Checks
 
