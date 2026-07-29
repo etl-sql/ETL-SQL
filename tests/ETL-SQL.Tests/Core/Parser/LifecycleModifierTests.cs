@@ -72,6 +72,23 @@ namespace ETL_SQL.Tests.Core.Parsing
         }
 
         [Theory]
+        [InlineData("ALTER INDEX ix ON #t (id);")]
+        [InlineData("ALTER SETS !regions BEGIN @r = 'North' END;")]
+        [InlineData("ALTER TAG FOR TABLE #t WITH (owner = 'Ops');")]
+        [InlineData("ALTER LINEAGE FOR TABLE #t FROM 'lineage.json';")]
+        [InlineData("ALTER GROUP 'Analysts' SET DESCRIPTION = 'Ops';")]
+        [InlineData("ALTER SHARE LINK FOR REPORT 'Daily Sales';")]
+        [InlineData("ALTER EMBED TOKEN FOR REPORT 'Daily Sales';")]
+        [InlineData("ALTER SAVED VIEW 'Default' FOR REPORT 'Daily Sales' PARAMETERS ();")]
+        public void UnsupportedAlterObjectKinds_AreRejected(string sql)
+        {
+            var script = Parse(sql);
+
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.Empty(script.Statements);
+        }
+
+        [Theory]
         [InlineData("CREATE OR REPLACE CONNECTION c AS MOCKDB();", "CREATE OR REPLACE CONNECTION")]
         [InlineData("CREATE OR REPLACE PROCEDURE p() AS PRINT('ok');", "CREATE OR REPLACE PROCEDURE")]
         [InlineData("CREATE OR REPLACE FUNCTION f() RETURNS INT AS RETURN 1;", "CREATE OR REPLACE FUNCTION")]

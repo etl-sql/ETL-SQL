@@ -83,6 +83,8 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       suggestions match the documented supported-kind matrix instead of spot checks.
 - [x] Cover `DROP IF EXISTS` support and rejection across local/report/catalog/Portal objects,
       including rejecting quoted Portal dataset identities in the local dataset drop path.
+- [x] Cover unsupported `ALTER` object kinds from the lifecycle matrix so they cannot parse
+      into silently unsupported statement shapes.
 - [ ] Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
       formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
 - [ ] Add negative tests for every unsupported object/mode pair in the lifecycle capability matrix.
