@@ -35,6 +35,11 @@ mid-release would mean debugging the measuring instrument and the product at the
 them at the end also means they are exercised for the first time on the *next* release rather than
 destabilising this one.
 
+### TUI bugs
+- [x] TUI suggestions are sluggish, it has a difficult time keeping up with what I'm typing.
+- [x] TUI lint messages are sluggish, they are coming in up to a minute after I have already typed out the statement and moved on.
+- [x] TUI is still showing the lint warning Avoid using SELECT *, this should be optional now and defaults to being off.
+
 ### Language — Canonical Syntax and Lifecycle Consistency
 
 **Goal.** Keep ETL-SQL predictable: object kind comes before identity, implementation type or
@@ -87,7 +92,7 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       into silently unsupported statement shapes.
 - [x] Cover unsupported `CREATE IF NOT EXISTS` object kinds and reject the form before `IF`
       can be misread as an object identity.
-- [ ] Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
+- [x] Make `CREATE OR ALTER` and `CREATE OR REPLACE` semantics identical across parser, AST,
       formatter, engine handlers, Portal authorization, persistence, linting, completion, and docs.
 - [x] Add negative tests for every unsupported object/mode pair in the lifecycle capability matrix.
 
@@ -130,9 +135,9 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 
 #### P1 — Inspection via `eng.*`
 
-- [ ] Retire row-returning `SHOW` commands in favor of `SELECT ... FROM [connection.]eng.<table>`
+- [x] Retire row-returning `SHOW` commands in favor of `SELECT ... FROM [connection.]eng.<table>`
       with normal `WHERE`, `JOIN`, `ORDER BY`, and `INTO` support.
-- [ ] Implement and document the full `eng.*` virtual table catalog: session state, lineage,
+- [x] Implement and document the full `eng.*` virtual table catalog: session state, lineage,
       governance, data quality, jobs/orchestration, Portal catalog, and parameterized table-valued
       functions such as `eng.catalog_search()`.
 - [x] Implement local inspection virtual tables for `eng.connections`, `eng.tables`,
@@ -148,13 +153,14 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
 - [x] Implement `eng.tags` as a globally enumerable virtual table over lineage tag metadata.
 - [x] Remove `SHOW TAGS FOR SCRIPT`, `SHOW TAGS FOR TABLE <name>`, and `SHOW TAG VALUE`
       after replacing them with `SELECT ... FROM eng.tags`.
-- [ ] Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
-      and effective permissions as `eng.*` virtual tables with `WHERE` filters.
+- [x] Reconcile connection config, report history/dependencies, bundle versions/files, refresh jobs,
+      and effective permissions as `eng.*` virtual tables with `WHERE filters`.
 - [x] Rename `SHOW LINEAGE EXPORT AS OPENLINEAGE TO '...'` to
       `EXPORT LINEAGE AS OPENLINEAGE TO '...'` because it writes a file rather than returning rows.
 - [x] Reserve `eng` as the engine catalog schema name and reject `CREATE CONNECTION eng AS ...`.
 - [x] Lint Warning for SELECT * turned off by default but can be enabled in appsettings.json.  For these eng
       tables it gets really annoying really fast.
+- [x] Code suggest is not suggesting the new eng tables.  When I type eng.  I would expect to see all the tables we have now.
 
 #### P2 — Duplicate surface syntax
 

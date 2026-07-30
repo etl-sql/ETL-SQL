@@ -153,6 +153,9 @@ namespace ETL_SQL.TUI.UI
         /// <summary>True while a debounced live-analysis pass is pending — wakes the input loop so new gutter markers paint.</summary>
         public volatile bool LiveAnalysisPending = false;
 
+        /// <summary>True while a debounced autocomplete pass is pending — wakes the input loop to repaint suggestions.</summary>
+        public volatile bool AutocompletePending = false;
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;

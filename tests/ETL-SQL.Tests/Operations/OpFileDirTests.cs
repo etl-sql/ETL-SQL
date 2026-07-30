@@ -115,8 +115,8 @@ namespace ETL_SQL.Tests.Operations
 
             string script = $"COMPRESS_DIRECTORY('{subDirEsc}', '{zipPathEsc}');";
 
-            await RunScriptAsync(script);
-            Assert.True(File.Exists(zipPath));
+            var ex = await Assert.ThrowsAsync<Exception>(() => RunScriptAsync(script));
+            Assert.Contains("COMPRESS_DIRECTORY has been retired", ex.Message);
         }
 
         [Fact]

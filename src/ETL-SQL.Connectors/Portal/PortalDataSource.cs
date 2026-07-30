@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -31,6 +32,7 @@ namespace ETL_SQL.Connectors.Portal
         private readonly string _password;
         private readonly ILogger _logger;
         private readonly HttpClient _http;
+        private readonly string? _tableName;
         private string? _token;
         private DateTime _tokenExpiry = DateTime.MinValue;
 
@@ -51,12 +53,26 @@ namespace ETL_SQL.Connectors.Portal
             _password = password;
             _logger = logger;
             _http = PolicyBoundHttp.CreateClient(baseAddress: new Uri(_baseUrl + "/"));
+            _tableName = null;
             Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["HOST"] = baseUrl,
                 ["USER"] = username,
                 ["PASSWORD"] = "********"
             };
+        }
+
+        private PortalDataSource(PortalDataSource other, string tableName)
+        {
+            _baseUrl = other._baseUrl;
+            _username = other._username;
+            _password = other._password;
+            _logger = other._logger;
+            _http = other._http;
+            _token = other._token;
+            _tokenExpiry = other._tokenExpiry;
+            _tableName = tableName;
+            Options = other.Options;
         }
 
         /// <summary>
@@ -71,6 +87,7 @@ namespace ETL_SQL.Connectors.Portal
             _username = username;
             _password = password;
             _logger = logger;
+            _tableName = null;
             Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["HOST"] = _baseUrl,
@@ -80,12 +97,191 @@ namespace ETL_SQL.Connectors.Portal
         }
 
         // ── IDataSource (stub — portal connections don't support read/write) ───────
-
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ReadBatches(batchSize, CancellationToken.None);
 
-        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
-            throw new NotSupportedException("PORTAL connections do not support SELECT.");
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(_tableName))
+                throw new NotSupportedException("PORTAL connections do not support SELECT without a target eng.* table.");
+
+            await EnsureAuthenticatedAsync();
+
+            string cleanName = _tableName.Trim();
+            string? functionArg = null;
+
+            int lp = cleanName.IndexOf('(');
+            if (lp >= 0 && cleanName.EndsWith(")"))
+            {
+                var argStr = cleanName.Substring(lp + 1, cleanName.Length - lp - 2).Trim();
+                if ((argStr.StartsWith('\'') && argStr.EndsWith('\'')) || (argStr.StartsWith('"') && argStr.EndsWith('"')))
+                {
+                    argStr = argStr.Substring(1, argStr.Length - 2);
+                }
+                functionArg = argStr;
+                cleanName = cleanName.Substring(0, lp).Trim();
+            }
+
+            if (cleanName.StartsWith("eng.", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanName = cleanName.Substring(4);
+            }
+
+            string[] funcArgs = functionArg != null
+                ? functionArg.Split(',').Select(s => s.Trim().Trim('\'', '"')).ToArray()
+                : Array.Empty<string>();
+
+            string url;
+
+            if (cleanName.Equals("users", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/admin/users";
+            }
+            else if (cleanName.Equals("connections", StringComparison.OrdinalIgnoreCase) || cleanName.Equals("connection_config", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/admin/connections";
+            }
+            else if (cleanName.Equals("sessions", StringComparison.OrdinalIgnoreCase) || cleanName.Equals("active_sessions", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/admin/sessions";
+            }
+            else if (cleanName.Equals("reports", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/admin/reports";
+            }
+            else if (cleanName.Equals("recent_reports", StringComparison.OrdinalIgnoreCase))
+            {
+                var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 20;
+                url = $"api/catalog/recent?limit={limit}";
+            }
+            else if (cleanName.Equals("favorites", StringComparison.OrdinalIgnoreCase))
+            {
+                var limit = 50;
+                if (funcArgs.Length > 0)
+                {
+                    var userVal = funcArgs[0];
+                    if (int.TryParse(userVal, out var l))
+                    {
+                        limit = l;
+                        url = $"api/catalog/favorites?limit={limit}";
+                    }
+                    else
+                    {
+                        var userId = await LookupUserIdAsync(userVal);
+                        url = $"api/admin/users/{userId}/favorites?limit={limit}";
+                    }
+                }
+                else
+                {
+                    url = $"api/catalog/favorites?limit={limit}";
+                }
+            }
+            else if (cleanName.Equals("usage_metrics", StringComparison.OrdinalIgnoreCase))
+            {
+                var days = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var d) ? d : 30;
+                url = $"api/admin/metrics/usage?days={days}";
+            }
+            else if (cleanName.Equals("operational_metrics", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/admin/metrics/operational";
+            }
+            else if (cleanName.Equals("audit", StringComparison.OrdinalIgnoreCase))
+            {
+                var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 50;
+                url = $"api/admin/audit?pageSize={limit}";
+                if (funcArgs.Length > 1)
+                    url += $"&action={Uri.EscapeDataString(funcArgs[1])}";
+            }
+            else if (cleanName.Equals("catalog_search", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("catalog_search requires a query argument.");
+                var limit = funcArgs.Length > 1 && int.TryParse(funcArgs[1], out var l) ? l : 50;
+                url = $"api/catalog/search?q={Uri.EscapeDataString(funcArgs[0])}&limit={limit}";
+            }
+            else if (cleanName.Equals("report_history", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("report_history requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/history";
+            }
+            else if (cleanName.Equals("report_dependencies", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("report_dependencies requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/dependencies";
+            }
+            else if (cleanName.Equals("share_links", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("share_links requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/share-links";
+            }
+            else if (cleanName.Equals("embed_tokens", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("embed_tokens requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/embed-tokens";
+            }
+            else if (cleanName.Equals("saved_views", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("saved_views requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/saved-views";
+            }
+            else if (cleanName.Equals("alerts", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("alerts requires a report name argument.");
+                var reportId = await LookupReportIdAsync(funcArgs[0]);
+                url = $"api/reports/{reportId}/alerts";
+            }
+            else if (cleanName.Equals("effective_permissions", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("effective_permissions requires a target argument.");
+                string typePart = funcArgs.Length >= 2 ? funcArgs[0].ToUpperInvariant() : "REPORT";
+                string valPart = funcArgs.Length >= 2 ? funcArgs[1] : funcArgs[0];
+                int idPart = typePart switch
+                {
+                    "USER" => await LookupUserIdAsync(valPart),
+                    "FOLDER" => await LookupFolderIdAsync(valPart),
+                    _ => await LookupReportIdAsync(valPart)
+                };
+                url = $"api/admin/permissions/effective/{typePart.ToLowerInvariant()}/{idPart}";
+            }
+            else if (cleanName.Equals("protected_data", StringComparison.OrdinalIgnoreCase))
+            {
+                var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 100;
+                url = $"api/catalog/protected-data?limit={limit}";
+            }
+            else if (cleanName.Equals("protected_data_suggestions", StringComparison.OrdinalIgnoreCase))
+            {
+                var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 100;
+                url = $"api/catalog/protected-data/suggestions?limit={limit}";
+            }
+            else
+            {
+                throw new NotSupportedException($"Portal table or function '{cleanName}' is not supported.");
+            }
+
+            var json = await SendJsonAsync(HttpMethod.Get, url, null);
+
+            if (json.ValueKind == JsonValueKind.Object
+                && json.TryGetProperty("items", out var items)
+                && items.ValueKind == JsonValueKind.Array)
+            {
+                json = items;
+            }
+
+            var table = await JsonToTableAsync(json);
+            yield return table;
+        }
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
             WriteBatches(batches, append, CancellationToken.None);
@@ -96,7 +292,7 @@ namespace ETL_SQL.Connectors.Portal
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
-        public IDataSource WithTable(string tableName) => this;
+        public IDataSource WithTable(string tableName) => new PortalDataSource(this, tableName);
         public ValueTask DisposeAsync() { _http.Dispose(); return ValueTask.CompletedTask; }
 
         // ── Authentication ────────────────────────────────────────────────────────

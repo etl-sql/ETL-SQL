@@ -101,7 +101,7 @@ namespace ETL_SQL.Tests.Analysis
 
                 await ev.Evaluate(Parse("SELECT X /* @d: To export; @sensitive: true; */ INTO #Exported FROM #Export /* @owner: chuck; */;"));
 
-                await ev.Evaluate(Parse($"SHOW LINEAGE FOR #Exported TO '{path}';"));
+                await ev.Evaluate(Parse($"LINEAGE(#Exported) TO '{path}';"));
 
                 Assert.True(File.Exists(path));
                 string content = File.ReadAllText(path);

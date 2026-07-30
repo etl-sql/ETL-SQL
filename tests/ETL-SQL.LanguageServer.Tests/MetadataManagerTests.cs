@@ -346,5 +346,33 @@ namespace ETL_SQL.LanguageServer.Tests
                 }
             }
         }
+
+        [Fact]
+        public async Task VirtualConnection_Eng_ReturnsCorrectMetadata()
+        {
+            // Act & Assert 1: GetConnections includes "eng"
+            var conns = _manager.GetConnections();
+            Assert.Contains(conns, c => c.Name.Equals("eng", StringComparison.OrdinalIgnoreCase) && c.Type.Equals("ENG", StringComparison.OrdinalIgnoreCase));
+
+            // Act & Assert 2: GetConnectionType for "eng" returns "ENG"
+            Assert.Equal("ENG", _manager.GetConnectionType("eng"));
+
+            // Act & Assert 3: GetTablesAsync for "eng" returns virtual tables
+            var tables = (await _manager.GetTablesAsync("eng")).ToList();
+            Assert.Contains("connections", tables);
+            Assert.Contains("tables", tables);
+            Assert.Contains("columns", tables);
+            Assert.Contains("tags", tables);
+
+            // Act & Assert 4: GetViewsAsync for "eng" is empty
+            var views = await _manager.GetViewsAsync("eng");
+            Assert.Empty(views);
+
+            // Act & Assert 5: GetColumnsAsync for eng.connections
+            var cols = (await _manager.GetColumnsAsync("eng", "connections")).ToList();
+            Assert.Contains("connection_name", cols);
+            Assert.Contains("connector_type", cols);
+            Assert.Contains("details", cols);
+        }
     }
 }

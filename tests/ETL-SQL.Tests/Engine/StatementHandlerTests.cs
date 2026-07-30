@@ -187,13 +187,13 @@ namespace ETL_SQL.Tests.Engine
             await Run("HELP SNIPPETS nonexistent;");
         }
 
-        // ── SHOW VERSION ──────────────────────────────────────────────────────
+        // ── eng.version ───────────────────────────────────────────────────────
 
         [Fact]
         public async Task ShowVersion_ProducesVersionResult()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("SHOW VERSION;"));
+            await eval.Evaluate(Parse("SELECT * FROM eng.version;"));
             Assert.NotNull(eval.LastResult);
         }
 
@@ -201,7 +201,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowVersion_IntoTable_WritesToTempTable()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("SHOW VERSION INTO #V; SELECT * FROM #V;"));
+            await eval.Evaluate(Parse("SELECT * INTO #V FROM eng.version; SELECT * FROM #V;"));
             Assert.NotNull(eval.LastResult);
         }
 
@@ -410,20 +410,18 @@ namespace ETL_SQL.Tests.Engine
             await Run("PRINT 'A', 'B', 'C';");
         }
 
-        // ── SHOW SAFE ZONES ───────────────────────────────────────────────────
+        // ── eng.safe_zones / eng.sessions ──────────────────────────────────────
 
         [Fact]
         public async Task ShowSafeZones_ProducesResult()
         {
-            await Run("SHOW SAFE ZONES;");
+            await Run("SELECT * FROM eng.safe_zones;");
         }
-
-        // ── SHOW SESSIONS ─────────────────────────────────────────────────────
 
         [Fact]
         public async Task ShowSessions_ProducesResult()
         {
-            await Run("SHOW SESSIONS;");
+            await Run("SELECT * FROM eng.sessions;");
         }
 
         // ── THROW ─────────────────────────────────────────────────────────────
@@ -493,13 +491,13 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(0m, eval.LastResult?.Rows[0]["N"]);
         }
 
-        // ── SHOW VARIABLES ────────────────────────────────────────────────────
+        // ── eng.variables ─────────────────────────────────────────────────────
 
         [Fact]
         public async Task ShowVariables_ReturnsVariableList()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("DECLARE @x INT = 42; SHOW VARIABLES;"));
+            await eval.Evaluate(Parse("DECLARE @x INT = 42; SELECT * FROM eng.variables;"));
             Assert.NotNull(eval.LastResult);
         }
 

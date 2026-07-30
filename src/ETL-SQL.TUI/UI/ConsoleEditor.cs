@@ -39,6 +39,8 @@ namespace ETL_SQL.TUI.UI
         private readonly ILanguageService _languageService;
         private readonly Core.Functions.IFunctionRegistry? _functionRegistry;
         private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
+        private readonly IServiceProvider? _serviceProvider;
+        private readonly Linter _linter;
         private readonly PortalClient _portal = new();
         private readonly Dictionary<string, IDataSource> _connections;
         // Swapped (not mutated) so a background analysis can replace the set atomically while the
@@ -129,7 +131,8 @@ namespace ETL_SQL.TUI.UI
             Evaluator evaluator,
             ILanguageService languageService,
             Core.Functions.IFunctionRegistry? functionRegistry = null,
-            Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
+            Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null,
+            IServiceProvider? serviceProvider = null)
         {
             _filePath = filePath;
             _connections = connections;
@@ -148,6 +151,8 @@ namespace ETL_SQL.TUI.UI
             _helpRegistry = helpRegistry;
             _functionRegistry = functionRegistry;
             _languageService = languageService;
+            _serviceProvider = serviceProvider;
+            _linter = LinterFactory.CreateWithAllRules(_serviceProvider ?? Program.ServiceProvider);
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
             _tabs.Add(new TabState { FilePath = filePath });
@@ -169,7 +174,8 @@ namespace ETL_SQL.TUI.UI
                 Program.ServiceProvider.GetRequiredService<Evaluator>(),
                 Program.ServiceProvider.GetRequiredService<ILanguageService>(),
                 Program.ServiceProvider.GetService<Core.Functions.IFunctionRegistry>(),
-                Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>())
+                Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>(),
+                Program.ServiceProvider)
         {
         }
 
@@ -849,7 +855,7 @@ namespace ETL_SQL.TUI.UI
                             return null; // Trigger repaint on resize
                         }
                         await Task.Delay(50);
-                        if (_renderer.ExecutionRunning || _renderer.LiveAnalysisPending)
+                        if (_renderer.ExecutionRunning || _renderer.LiveAnalysisPending || _renderer.AutocompletePending)
                         {
                             count++;
                             if (count >= 2) return null; // Repaint status updates every 100ms
@@ -961,14 +967,14 @@ namespace ETL_SQL.TUI.UI
         private async Task<ConsoleKeyInfo?> ReadInputWindows()
         {
             IntPtr hStdin = GetStdHandle(STD_INPUT_HANDLE);
-            bool initialTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
+            bool initialTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending || _renderer.AutocompletePending;
 
             while (true)
             {
                 // While a script runs or a live-analysis pass is pending, wake periodically (even
                 // with no input) so the loop repaints execution/message/diagnostic updates;
                 // otherwise block until input arrives.
-                bool currentTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
+                bool currentTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending || _renderer.AutocompletePending;
                 if (currentTickState != initialTickState)
                 {
                     return null; // State changed (e.g. execution finished), repaint immediately
@@ -1595,15 +1601,7 @@ namespace ETL_SQL.TUI.UI
                 Metadata = new ConsoleMetadataProvider(_metadata),
                 DocumentUri = _filePath
             };
-            var linter = new Linter();
-            foreach (var type in typeof(ILintRule).Assembly.GetTypes()
-                .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
-            {
-                if (Activator.CreateInstance(type) is ILintRule rule)
-                    linter.AddRule(rule);
-            }
-
-            var lintResults = await linter.AnalyzeAsync(script, lintContext);
+            var lintResults = await _linter.AnalyzeAsync(script, lintContext);
             ct.ThrowIfCancellationRequested();
 
             foreach (var res in lintResults)

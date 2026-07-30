@@ -555,9 +555,14 @@ public sealed class JobsDataSource : IDataSource
 public sealed class JobHistoryDataSource : IDataSource
 {
     private readonly IJobHistoryStore? _store;
+    private readonly string? _jobNameFilter;
     private static readonly string[] Columns = ["id", "job_name", "start_time", "end_time", "status", "rows_processed", "peak_ram_mb", "cpu_time_s", "error_message"];
 
-    public JobHistoryDataSource(IJobHistoryStore? store) => _store = store;
+    public JobHistoryDataSource(IJobHistoryStore? store, string? jobNameFilter = null)
+    {
+        _store = store;
+        _jobNameFilter = jobNameFilter;
+    }
 
     public string Path => "eng.job_history";
     public Dictionary<string, string>? Options => null;
@@ -570,7 +575,7 @@ public sealed class JobHistoryDataSource : IDataSource
         var rows = new List<Row>();
         if (_store != null)
         {
-            foreach (var entry in await _store.GetHistoryAsync(null, Math.Max(batchSize, 1000)))
+            foreach (var entry in await _store.GetHistoryAsync(_jobNameFilter, Math.Max(batchSize, 1000)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 rows.Add(new Row
@@ -766,9 +771,16 @@ public sealed class BundlesDataSource : IDataSource
 public sealed class BundleFilesDataSource : IDataSource
 {
     private readonly IBundleStore? _store;
+    private readonly string? _filterBundle;
+    private readonly int? _filterVersion;
     private static readonly string[] Columns = ["bundle_name", "version", "virtual_path", "content_hash", "size_bytes", "content_type"];
 
-    public BundleFilesDataSource(IBundleStore? store) => _store = store;
+    public BundleFilesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    {
+        _store = store;
+        _filterBundle = filterBundle;
+        _filterVersion = filterVersion;
+    }
 
     public string Path => "eng.bundle_files";
     public Dictionary<string, string>? Options => null;
@@ -781,25 +793,76 @@ public sealed class BundleFilesDataSource : IDataSource
         var rows = new List<Row>();
         if (_store != null)
         {
-            foreach (var bundle in await _store.GetBundlesAsync())
-            foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-            foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+            if (_filterBundle != null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                rows.Add(new Row
+                if (_filterVersion.HasValue)
                 {
-                    ["bundle_name"] = file.BundleName,
-                    ["version"] = file.Version,
-                    ["virtual_path"] = file.VirtualPath,
-                    ["content_hash"] = file.ContentHash,
-                    ["size_bytes"] = file.SizeBytes,
-                    ["content_type"] = file.ContentType
-                });
+                    foreach (var file in await _store.GetFilesAsync(_filterBundle, _filterVersion.Value))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        rows.Add(new Row
+                        {
+                            ["bundle_name"] = file.BundleName,
+                            ["version"] = file.Version,
+                            ["virtual_path"] = file.VirtualPath,
+                            ["content_hash"] = file.ContentHash,
+                            ["size_bytes"] = file.SizeBytes,
+                            ["content_type"] = file.ContentType
+                        });
 
-                if (rows.Count >= batchSize)
+                        if (rows.Count >= batchSize)
+                        {
+                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                            rows = [];
+                        }
+                    }
+                }
+                else
                 {
-                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
-                    rows = [];
+                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
+                    foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        rows.Add(new Row
+                        {
+                            ["bundle_name"] = file.BundleName,
+                            ["version"] = file.Version,
+                            ["virtual_path"] = file.VirtualPath,
+                            ["content_hash"] = file.ContentHash,
+                            ["size_bytes"] = file.SizeBytes,
+                            ["content_type"] = file.ContentType
+                        });
+
+                        if (rows.Count >= batchSize)
+                        {
+                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                            rows = [];
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (var bundle in await _store.GetBundlesAsync())
+                foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+                foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    rows.Add(new Row
+                    {
+                        ["bundle_name"] = file.BundleName,
+                        ["version"] = file.Version,
+                        ["virtual_path"] = file.VirtualPath,
+                        ["content_hash"] = file.ContentHash,
+                        ["size_bytes"] = file.SizeBytes,
+                        ["content_type"] = file.ContentType
+                    });
+
+                    if (rows.Count >= batchSize)
+                    {
+                        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                        rows = [];
+                    }
                 }
             }
         }
@@ -819,9 +882,16 @@ public sealed class BundleFilesDataSource : IDataSource
 public sealed class BundleDependenciesDataSource : IDataSource
 {
     private readonly IBundleStore? _store;
+    private readonly string? _filterBundle;
+    private readonly int? _filterVersion;
     private static readonly string[] Columns = ["bundle_name", "version", "from_path", "to_path"];
 
-    public BundleDependenciesDataSource(IBundleStore? store) => _store = store;
+    public BundleDependenciesDataSource(IBundleStore? store, string? filterBundle = null, int? filterVersion = null)
+    {
+        _store = store;
+        _filterBundle = filterBundle;
+        _filterVersion = filterVersion;
+    }
 
     public string Path => "eng.bundle_dependencies";
     public Dictionary<string, string>? Options => null;
@@ -834,18 +904,269 @@ public sealed class BundleDependenciesDataSource : IDataSource
         var rows = new List<Row>();
         if (_store != null)
         {
-            foreach (var bundle in await _store.GetBundlesAsync())
-            foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-            foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+            if (_filterBundle != null)
+            {
+                if (_filterVersion.HasValue)
+                {
+                    foreach (var dependency in await _store.GetDependenciesAsync(_filterBundle, _filterVersion.Value))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        rows.Add(new Row
+                        {
+                            ["bundle_name"] = dependency.BundleName,
+                            ["version"] = dependency.Version,
+                            ["from_path"] = dependency.FromPath,
+                            ["to_path"] = dependency.ToPath
+                        });
+
+                        if (rows.Count >= batchSize)
+                        {
+                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                            rows = [];
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var version in await _store.GetVersionsAsync(_filterBundle))
+                    foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        rows.Add(new Row
+                        {
+                            ["bundle_name"] = dependency.BundleName,
+                            ["version"] = dependency.Version,
+                            ["from_path"] = dependency.FromPath,
+                            ["to_path"] = dependency.ToPath
+                        });
+
+                        if (rows.Count >= batchSize)
+                        {
+                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                            rows = [];
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (var bundle in await _store.GetBundlesAsync())
+                foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+                foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    rows.Add(new Row
+                    {
+                        ["bundle_name"] = dependency.BundleName,
+                        ["version"] = dependency.Version,
+                        ["from_path"] = dependency.FromPath,
+                        ["to_path"] = dependency.ToPath
+                    });
+
+                    if (rows.Count >= batchSize)
+                    {
+                        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                        rows = [];
+                    }
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.bundle_dependencies is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class LocksDataSource : IDataSource
+{
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _configuration;
+    private static readonly string[] Columns = ["Id", "ProcessId", "JobName", "AcquiredAt", "MachineName"];
+
+    public LocksDataSource(Microsoft.Extensions.Configuration.IConfiguration? configuration) => _configuration = configuration;
+
+    public string Path => "eng.locks";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var dbPath = _configuration?["Orchestrator:DatabasePath"] ?? GetDefaultDbPath();
+        var connectionString = $"Data Source={dbPath}";
+
+        using var conn = new Microsoft.Data.Sqlite.SqliteConnection(connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS ThrottleSlots (
+                    Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ProcessId   INTEGER NOT NULL,
+                    JobName     TEXT    NOT NULL,
+                    AcquiredAt  TEXT    NOT NULL,
+                    MachineName TEXT    DEFAULT ''
+                );";
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+            try
+            {
+                cmd.CommandText = "ALTER TABLE ThrottleSlots ADD COLUMN MachineName TEXT DEFAULT '';";
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 1)
+            {
+                // Column already exists, ignore
+            }
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT Id, ProcessId, JobName, AcquiredAt, MachineName FROM ThrottleSlots ORDER BY AcquiredAt DESC;";
+            using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                rows.Add(new Row
+                var row = new Row();
+                row["Id"] = reader.GetInt64(0);
+                row["ProcessId"] = reader.GetInt32(1);
+                row["JobName"] = reader.GetString(2);
+                row["AcquiredAt"] = reader.GetString(3);
+                row["MachineName"] = reader.IsDBNull(4) ? "" : reader.GetString(4);
+                rows.Add(row);
+
+                if (rows.Count >= batchSize)
                 {
-                    ["bundle_name"] = dependency.BundleName,
-                    ["version"] = dependency.Version,
-                    ["from_path"] = dependency.FromPath,
-                    ["to_path"] = dependency.ToPath
-                });
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    private static string GetDefaultDbPath()
+    {
+        var dir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ETL-SQL");
+        System.IO.Directory.CreateDirectory(dir);
+        return System.IO.Path.Combine(dir, "etlsql.db");
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.locks is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class SessionsDataSource : IDataSource
+{
+    private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
+    private static readonly string[] Columns = ["SessionId", "Created", "LastModified", "Size_MB", "TempTables", "Variables", "LastScript", "User", "Machine"];
+
+    public SessionsDataSource(ETL_SQL.Core.Execution.ISessionStateManager sessionManager) => _sessionManager = sessionManager;
+
+    public string Path => "eng.sessions";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var sessions = _sessionManager.GetSessions().OrderByDescending(s => s.LastModifiedAt);
+
+        foreach (var sess in sessions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var row = new Row();
+            row["SessionId"] = sess.SessionId;
+            row["Created"] = sess.CreatedAt;
+            row["LastModified"] = sess.LastModifiedAt;
+            row["Size_MB"] = sess.SizeMB.HasValue ? (decimal)sess.SizeMB.Value : null;
+            row["TempTables"] = (decimal)sess.TempTableCount;
+            row["Variables"] = (decimal)sess.VariableCount;
+            row["LastScript"] = sess.LastScriptSource ?? "";
+            row["User"] = sess.OwnerUser ?? "";
+            row["Machine"] = sess.OwnerMachine ?? "";
+            rows.Add(row);
+
+            if (rows.Count >= batchSize)
+            {
+                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                rows = [];
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.sessions is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class LineageHistoryDataSource : IDataSource
+{
+    private readonly ILineageCatalogStore? _catalog;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    private static readonly string[] Columns = ["Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "Operation", "Tags", "SourceFile", "Line"];
+
+    public LineageHistoryDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public string Path => "eng.lineage_history";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_catalog != null)
+        {
+            int defaultLimit = 1000;
+            if (_config != null && int.TryParse(_config["Engine:DefaultHistoryLimit"], out var val))
+                defaultLimit = val;
+            var entries = await _catalog.GetRecentLineageAsync(defaultLimit);
+            foreach (var e in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = new Row();
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["Operation"] = e.Operation;
+                row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = (decimal)e.Line;
+                rows.Add(row);
 
                 if (rows.Count >= batchSize)
                 {
@@ -859,7 +1180,297 @@ public sealed class BundleDependenciesDataSource : IDataSource
     }
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
-    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.bundle_dependencies is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.lineage_history is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class MissingTagsDataSource : IDataSource
+{
+    private readonly ILineageCatalogStore? _catalog;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    private static readonly string[] Columns = ["TargetTable", "TargetColumn", "MissingTags", "PresentTags", "RunAt", "JobName", "ScriptPath"];
+
+    public MissingTagsDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public string Path => "eng.missing_tags";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_catalog != null)
+        {
+            int defaultLimit = 1000;
+            if (_config != null && int.TryParse(_config["Engine:DefaultHistoryLimit"], out var val))
+                defaultLimit = val;
+            var entries = await _catalog.GetMissingMetadataAsync(
+                StewardshipTagCatalog.RequiredStewardshipTags.ToArray(),
+                defaultLimit);
+            foreach (var e in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = new Row();
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["MissingTags"] = string.Join(", ", e.MissingTags.Select(t => "@" + t));
+                row["PresentTags"] = System.Text.Json.JsonSerializer.Serialize(e.PresentTags);
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["ScriptPath"] = e.ScriptPath;
+                rows.Add(row);
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.missing_tags is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class ProtectedDataDataSource : IDataSource
+{
+    private readonly ILineageCatalogStore? _catalog;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    private static readonly string[] Columns = [
+        "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "Operation",
+        "ProtectionTags", "ProtectionReason", "Owner", "Steward", "Contact", "Domain",
+        "Classification", "Quality", "Tags", "SourceFile", "Line"
+    ];
+
+    public ProtectedDataDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public string Path => "eng.protected_data";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_catalog != null)
+        {
+            int defaultLimit = 1000;
+            if (_config != null && int.TryParse(_config["Engine:DefaultHistoryLimit"], out var val))
+                defaultLimit = val;
+            var scanLimit = Math.Max(defaultLimit * 20, 1000);
+            var recent = await _catalog.GetRecentLineageAsync(scanLimit);
+            var entries = LineageProtectedData.FromHistory(recent).Take(defaultLimit);
+            foreach (var e in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = new Row();
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["Operation"] = e.Operation;
+                row["ProtectionTags"] = string.Join(", ", e.ProtectionTags);
+                row["ProtectionReason"] = e.ProtectionReason;
+                row["Owner"] = e.Owner;
+                row["Steward"] = e.Steward;
+                row["Contact"] = e.Contact;
+                row["Domain"] = e.Domain;
+                row["Classification"] = e.Classification;
+                row["Quality"] = e.Quality;
+                row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = (decimal)e.Line;
+                rows.Add(row);
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.protected_data is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class ProtectedDataSuggestionsDataSource : IDataSource
+{
+    private readonly ILineageCatalogStore? _catalog;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    private static readonly string[] Columns = [
+        "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "SourceColumns",
+        "SuggestedTag", "SuggestedValue", "Confidence", "EvidenceKind", "Evidence", "Reason",
+        "ExistingTags", "SourceFile", "Line"
+    ];
+
+    public ProtectedDataSuggestionsDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public string Path => "eng.protected_data_suggestions";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        if (_catalog != null)
+        {
+            int defaultLimit = 1000;
+            if (_config != null && int.TryParse(_config["Engine:DefaultHistoryLimit"], out var val))
+                defaultLimit = val;
+            var scanLimit = Math.Max(defaultLimit * 20, 1000);
+            var recent = await _catalog.GetRecentLineageAsync(scanLimit);
+            var entries = LineageProtectedData.SuggestFromHistory(recent).Take(defaultLimit);
+            foreach (var e in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = new Row();
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["SourceColumns"] = string.Join(", ", e.SourceColumns);
+                row["SuggestedTag"] = e.SuggestedTag;
+                row["SuggestedValue"] = e.SuggestedValue;
+                row["Confidence"] = e.Confidence.ToString();
+                row["EvidenceKind"] = e.EvidenceKind;
+                row["Evidence"] = e.Evidence;
+                row["Reason"] = e.Reason;
+                row["ExistingTags"] = System.Text.Json.JsonSerializer.Serialize(e.ExistingTags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = (decimal)e.Line;
+                rows.Add(row);
+
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.protected_data_suggestions is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class DataQualityRulesDataSource : IDataSource
+{
+    private readonly Evaluator _evaluator;
+    private static readonly string[] Columns = [
+        "TargetTable", "TargetColumn", "RuleTag", "Rule", "Action", "SourceFile", "Line"
+    ];
+
+    public DataQualityRulesDataSource(Evaluator evaluator) => _evaluator = evaluator;
+
+    public string Path => "eng.data_quality_rules";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var entries = _evaluator.LineageTracker.GetFullLineage()
+            .Where(e => ETL_SQL.Core.Quality.ColumnRuleParser.HasRuleTags(e.Metadata))
+            .OrderBy(e => e.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.TargetColumn ?? "", StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            IReadOnlyList<ETL_SQL.Core.Quality.ColumnRuleBinding> bindings;
+            try
+            {
+                bindings = ETL_SQL.Core.Quality.ColumnRuleParser.ParseBindings(entry.Metadata);
+            }
+            catch (ETL_SQL.Core.Quality.ColumnRuleParseException)
+            {
+                continue;
+            }
+
+            foreach (var binding in bindings)
+            {
+                foreach (var rule in binding.Rules)
+                {
+                    var key = $"{entry.TargetTable}|{entry.TargetColumn}|{binding.ExpectKey}|{rule.Text}";
+                    if (!seen.Add(key)) continue;
+
+                    var row = new Row();
+                    row["TargetTable"] = entry.TargetTable;
+                    row["TargetColumn"] = entry.TargetColumn;
+                    row["RuleTag"] = "@" + binding.ExpectKey;
+                    row["Rule"] = rule.Text;
+                    row["Action"] = binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)");
+                    row["SourceFile"] = entry.SourceFile;
+                    row["Line"] = (decimal)entry.Line;
+                    rows.Add(row);
+
+                    if (rows.Count >= batchSize)
+                    {
+                        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                        rows = [];
+                    }
+                }
+            }
+        }
+
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.data_quality_rules is read-only.");
     public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
     public object? Snapshot() => null;
     public void Restore(object? snapshot) { }

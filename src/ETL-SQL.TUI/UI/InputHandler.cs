@@ -625,7 +625,7 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.PageUp: _buffer.CursorLine = Math.Max(0, _buffer.CursorLine - 10); _buffer.CursorColumn = Math.Min(_buffer.CursorColumn, _buffer.Lines[_buffer.CursorLine].Length); break;
                 case ConsoleKey.PageDown: _buffer.CursorLine = Math.Min(_buffer.Lines.Count - 1, _buffer.CursorLine + 10); _buffer.CursorColumn = Math.Min(_buffer.CursorColumn, _buffer.Lines[_buffer.CursorLine].Length); break;
                 case ConsoleKey.Enter: _editor.MarkDirty(); _editor.SaveUndoState(); _buffer.NewLine(); _renderer.AutocompleteVisible = false; break;
-                case ConsoleKey.Backspace: _editor.MarkDirty(); _editor.SaveUndoState(); _buffer.Backspace(); await _autocomplete.UpdateAsync(); break;
+                case ConsoleKey.Backspace: _editor.MarkDirty(); _editor.SaveUndoState(); _buffer.Backspace(); _autocomplete.TriggerUpdate(); break;
                 case ConsoleKey.Delete: _editor.MarkDirty(); _editor.SaveUndoState(); _buffer.Delete(); break;
                 case ConsoleKey.Tab:
                 default:
@@ -634,7 +634,7 @@ namespace ETL_SQL.TUI.UI
                         _editor.MarkDirty();
                         if (_buffer.SelectionStartLine.HasValue) _buffer.DeleteSelection();
                         _buffer.InsertChar(key.KeyChar);
-                        await _autocomplete.UpdateAsync();
+                        _autocomplete.TriggerUpdate();
                     }
                     break;
             }

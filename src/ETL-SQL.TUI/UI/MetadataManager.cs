@@ -16,15 +16,29 @@ namespace ETL_SQL.TUI.UI
         private readonly IExecutionContext _context;
         private readonly Dictionary<string, IDataSource> _connections;
 
+        private readonly Dictionary<string, List<string>> _tablesCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<(string, string), List<string>> _columnsCache = new();
+        private readonly Dictionary<string, List<string>> _viewsCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<(string, string), List<ColumnMetadata>> _columnDetailsCache = new();
+
         public MetadataManager(IExecutionContext context, Dictionary<string, IDataSource> connections)
         {
             _context = context;
             _connections = connections;
         }
 
+        public void ClearCache()
+        {
+            _tablesCache.Clear();
+            _columnsCache.Clear();
+            _viewsCache.Clear();
+            _columnDetailsCache.Clear();
+        }
+
 
         public void RefreshConnections(string script, bool force = false)
         {
+            if (force) ClearCache();
             if (!force && script == _lastScript) return;
             _lastScript = script;
 
@@ -33,6 +47,7 @@ namespace ETL_SQL.TUI.UI
                 script.Contains("CREATE TABLE #", StringComparison.OrdinalIgnoreCase))
             {
                 _connections.Clear();
+                ClearCache();
             }
 
             // Captures name, type, and paren content for AS TYPE(...) syntax. The body is matched
@@ -74,23 +89,106 @@ namespace ETL_SQL.TUI.UI
         }
         public async Task<IEnumerable<string>> GetTablesAsync(string connectionName)
         {
+            if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return ETL_SQL.Core.EngineCatalog.Tables;
+            if (_tablesCache.TryGetValue(connectionName, out var cached)) return cached;
+
             if (!_connections.TryGetValue(connectionName, out var ds)) return Enumerable.Empty<string>();
-            if (ds is IDatabaseSource db) return await db.GetTablesAsync();
-            return new[] { connectionName }; // For file sources, the connection name acts as the table name
+            IEnumerable<string> tables;
+            if (ds is IDatabaseSource db) tables = await db.GetTablesAsync();
+            else tables = new[] { connectionName };
+
+            var list = tables.ToList();
+            _tablesCache[connectionName] = list;
+            return list;
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName)
         {
+            if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ETL_SQL.Core.EngineCatalog.TableColumns.TryGetValue(tableName, out var cols))
+                    return cols.Select(c => c.Name);
+                return Enumerable.Empty<string>();
+            }
+            var key = (connectionName.ToLowerInvariant(), tableName.ToLowerInvariant());
+            if (_columnsCache.TryGetValue(key, out var cached)) return cached;
+
             if (!_connections.TryGetValue(connectionName, out var ds)) return Enumerable.Empty<string>();
-            if (ds is IDatabaseSource db) return await db.GetColumnsAsync(tableName);
-            return await ds.GetColumnsAsync();
+            IEnumerable<string> columns;
+            if (ds is IDatabaseSource db) columns = await db.GetColumnsAsync(tableName);
+            else columns = await ds.GetColumnsAsync();
+
+            var list = columns.ToList();
+            _columnsCache[key] = list;
+            return list;
+        }
+
+        public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName)
+        {
+            if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase))
+            {
+                if (ETL_SQL.Core.EngineCatalog.TableColumns.TryGetValue(tableName, out var cols)) return cols;
+                return Enumerable.Empty<ColumnMetadata>();
+            }
+            var key = (connectionName.ToLowerInvariant(), tableName.ToLowerInvariant());
+            if (_columnDetailsCache.TryGetValue(key, out var cached)) return cached;
+
+            if (!_connections.TryGetValue(connectionName, out var source)) return Enumerable.Empty<ColumnMetadata>();
+
+            List<ColumnMetadata> resultList = new List<ColumnMetadata>();
+            var catalogProvider = source.GetCatalogProvider();
+            if (catalogProvider != null)
+            {
+                try
+                {
+                    string schema = "";
+                    string tName = tableName;
+                    if (tableName.Contains("."))
+                    {
+                        var parts = tableName.Split('.');
+                        schema = parts[0];
+                        tName = parts[1];
+                    }
+                    var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
+                    if (catCols != null && catCols.Count > 0)
+                    {
+                        resultList = catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList();
+                    }
+                }
+                catch { }
+            }
+
+            if (resultList.Count == 0)
+            {
+                if (source is IDatabaseSource db)
+                {
+                    var cols = (await db.GetColumnsAsync(tableName)).ToList();
+                    if (cols.Any()) resultList = cols.Select(c => new ColumnMetadata(c, "ANY")).ToList();
+                }
+                if (resultList.Count == 0)
+                {
+                    var defaultCols = await source.GetColumnsAsync();
+                    resultList = defaultCols.Select(c => new ColumnMetadata(c, "ANY")).ToList();
+                }
+            }
+
+            _columnDetailsCache[key] = resultList;
+            return resultList;
         }
 
         public async Task<IEnumerable<string>> GetViewsAsync(string connectionName)
         {
+            if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return Enumerable.Empty<string>();
+            if (_viewsCache.TryGetValue(connectionName, out var cached)) return cached;
+
             if (!_connections.TryGetValue(connectionName, out var ds)) return Enumerable.Empty<string>();
-            if (ds is IDatabaseSource db) return await db.GetViewsAsync();
-            return Enumerable.Empty<string>();
+            IEnumerable<string> views;
+            if (ds is IDatabaseSource db) views = await db.GetViewsAsync();
+            else views = Enumerable.Empty<string>();
+
+            var list = views.ToList();
+            _viewsCache[connectionName] = list;
+            return list;
         }
 
         /// <summary>

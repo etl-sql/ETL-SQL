@@ -431,543 +431,137 @@ public class SystemParser : ParserComponent
 
     public Statement ParseShow(Token startToken)
     {
-        Statement? stmt = null;
-
         if (Match(TokenType.PROFILE) || Match(TokenType.PROFILING))
-            stmt = new ShowProfileStatement();
-        else if (Match(TokenType.JOB))
-        {
-            if (Match(TokenType.HISTORY))
-            {
-                string? jobName = null;
-                if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
-                    jobName = Advance().Value;
-                stmt = new ShowJobHistoryStatement(jobName);
-            }
-            else if (MatchIdentifier("STATE"))
-            {
-                string? jobName = null;
-                if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
-                    jobName = Advance().Value;
-                stmt = new ShowJobStateStatement(jobName);
-            }
-            else
-                throw new SyntaxException("Expected HISTORY or STATE after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
-        }
-        else if (Match(TokenType.JOBS)) stmt = new ShowJobsStatement();
-        else if (MatchIdentifier("HOST"))
-        {
-            ConsumeIdentifierValue("METRICS", "Expected METRICS after SHOW HOST");
-            string? nodeId = null;
-            if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
-                nodeId = Advance().Value;
-            stmt = new ShowHostMetricsStatement(nodeId);
-        }
-        else if (MatchIdentifier("PUBLISHED"))
-        {
-            ConsumeIdentifierValue("BUNDLES", "Expected BUNDLES after SHOW PUBLISHED");
-            stmt = new ShowPublishedBundlesStatement();
-        }
-        else if (MatchIdentifier("BUNDLES"))
-        {
-            stmt = new ShowPublishedBundlesStatement { IsAlias = true };
-        }
-        else if (MatchIdentifier("BUNDLE"))
-        {
-            if (MatchIdentifier("VERSIONS"))
-            {
-                var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE VERSIONS").Value;
-                stmt = new ShowBundleVersionsStatement(bundleName);
-            }
-            else if (Match(TokenType.FILES) || MatchIdentifier("FILES"))
-            {
-                var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE FILES").Value;
-                Consume(TokenType.VERSION, "Expected VERSION after bundle name");
-                var version = int.Parse(Consume(TokenType.NUMBER, "Expected bundle version number").Value);
-                stmt = new ShowBundleFilesStatement(bundleName, version);
-            }
-            else if (MatchIdentifier("DEPENDENCIES"))
-            {
-                var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE DEPENDENCIES").Value;
-                Consume(TokenType.VERSION, "Expected VERSION after bundle name");
-                var version = int.Parse(Consume(TokenType.NUMBER, "Expected bundle version number").Value);
-                stmt = new ShowBundleDependenciesStatement(bundleName, version);
-            }
-            else
-            {
-                throw new SyntaxException("Expected VERSIONS, FILES, or DEPENDENCIES after SHOW BUNDLE", _parser.Current.Line, _parser.Current.Column);
-            }
-        }
-        else if (Match(TokenType.CONNECTIONS)) stmt = new ShowConnectionsStatement();
-        else if (Match(TokenType.CONNECTION))
-        {
-            var connName = ConsumeIdentifier("Expected connection name after SHOW CONNECTION").Value;
-            Consume(TokenType.CONFIG, "Expected CONFIG after connection name");
-            stmt = new ShowConnectionConfigStatement(connName);
-        }
-        else if (Match(TokenType.TABLES))
-        {
-            string? connName = null;
-            if (Match(TokenType.ON)) connName = ConsumeIdentifier("Expected connection name after ON").Value;
-            stmt = new ShowTablesStatement(connName);
-        }
-        else if (Match(TokenType.VIEW) || MatchIdentifier("VIEWS"))
-        {
-            stmt = new ShowViewsStatement();
-        }
-        else if (Match(TokenType.COLUMNS) || Match(TokenType.SCHEMA) || MatchIdentifier("SCHEMA"))
-        {
+            throw new SyntaxException("SHOW PROFILE has been retired. Use SELECT * FROM eng.profile.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.JOB))
+            throw new SyntaxException("SHOW JOB, SHOW JOB HISTORY, and SHOW JOB STATE have been retired. Use SELECT * FROM eng.jobs, eng.job_history, or eng.job_state.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.JOBS))
+            throw new SyntaxException("SHOW JOBS has been retired. Use SELECT * FROM eng.jobs.", startToken.Line, startToken.Column);
+
+        if (MatchIdentifier("HOST"))
+            throw new SyntaxException("SHOW HOST METRICS has been retired. Use SELECT * FROM eng.host_metrics.", startToken.Line, startToken.Column);
+
+        if (MatchIdentifier("PUBLISHED") || MatchIdentifier("BUNDLES") || MatchIdentifier("BUNDLE"))
+            throw new SyntaxException("SHOW BUNDLE commands have been retired. Use SELECT * FROM eng.bundles, eng.bundle_files, or eng.bundle_dependencies.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.CONNECTIONS) || Match(TokenType.CONNECTION))
+            throw new SyntaxException("SHOW CONNECTIONS and SHOW CONNECTION CONFIG have been retired. Use SELECT * FROM eng.connections or eng.connection_config.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.TABLES))
+            throw new SyntaxException("SHOW TABLES has been retired. Use SELECT * FROM eng.tables.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.VIEW) || MatchIdentifier("VIEWS"))
+            throw new SyntaxException("SHOW VIEWS has been retired. Use SELECT * FROM eng.views.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.COLUMNS) || Match(TokenType.SCHEMA) || MatchIdentifier("SCHEMA"))
             throw new SyntaxException("SHOW COLUMNS and SHOW SCHEMA have been retired. Use SELECT * FROM eng.columns WHERE table_name = '<table>'.", startToken.Line, startToken.Column);
-        }
-        else if (Match(TokenType.VARIABLES) || (_parser.Current.Type == TokenType.LOCAL && _parser.Peek.Type == TokenType.VARIABLES))
-        {
-            bool localOnly = false;
-            if (Match(TokenType.LOCAL)) { localOnly = true; Consume(TokenType.VARIABLES, "Expected VARIABLES after SHOW LOCAL"); }
-            stmt = new ShowVariablesStatement(localOnly);
-        }
-        else if (Match(TokenType.SCRIPT))
+
+        if (Match(TokenType.VARIABLES) || (_parser.Current.Type == TokenType.LOCAL && _parser.Peek.Type == TokenType.VARIABLES))
+            throw new SyntaxException("SHOW VARIABLES has been retired. Use SELECT * FROM eng.variables.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.SCRIPT))
         {
             if (Match(TokenType.TAGS) || Match(TokenType.TAG))
                 throw new SyntaxException("SHOW SCRIPT TAGS has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
             throw new SyntaxException("Expected a supported SHOW SCRIPT subcommand", _parser.Current.Line, _parser.Current.Column);
         }
-        else if (Match(TokenType.TAGS))
-        {
+
+        if (Match(TokenType.TAGS))
             throw new SyntaxException("SHOW TAGS has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
-        }
-        else if (Match(TokenType.TAG))
-        {
+
+        if (Match(TokenType.TAG))
             throw new SyntaxException("SHOW TAG VALUE has been retired. Use SELECT ... FROM eng.tags.", startToken.Line, startToken.Column);
-        }
-        else if (Match(TokenType.LINEAGE))
+
+        if (Match(TokenType.LINEAGE))
         {
-            stmt = ParseShowLineage(startToken);
+            bool isExport = false;
+            string targetTableToken = "";
+            int offset = 0;
+            while (_parser.LookAhead(offset).Type != TokenType.SEMICOLON && _parser.LookAhead(offset).Type != TokenType.EOF)
+            {
+                var tok = _parser.LookAhead(offset);
+                if (tok.Type == TokenType.EXPORT || tok.Type == TokenType.TO)
+                {
+                    isExport = true;
+                }
+                if (tok.Type == TokenType.FOR)
+                {
+                    targetTableToken = _parser.LookAhead(offset + 1).Value;
+                }
+                offset++;
+            }
+
+            if (isExport)
+            {
+                var replacement = string.IsNullOrEmpty(targetTableToken)
+                    ? "EXPORT LINEAGE AS OPENLINEAGE"
+                    : "EXPORT LINEAGE FOR <target>";
+                throw new SyntaxException($"SHOW LINEAGE ... EXPORT has been retired because it writes a file. Use {replacement}.", startToken.Line, startToken.Column);
+            }
+
+            throw new SyntaxException("SHOW LINEAGE has been retired. Use SELECT * FROM eng.lineage or eng.lineage_history.", startToken.Line, startToken.Column);
         }
-        else if (MatchIdentifier("PROTECTED"))
-        {
-            stmt = ParseShowProtectedData(startToken);
-        }
-        else if (MatchIdentifier("DATA") && MatchIdentifier("QUALITY"))
-        {
-            stmt = ParseShowDataQualityRules(startToken);
-        }
-        else if (Match(TokenType.VERSION)) stmt = new ShowVersionStatement();
-        else if (Match(TokenType.SAFE))
+
+        if (MatchIdentifier("PROTECTED"))
+            throw new SyntaxException("SHOW PROTECTED DATA has been retired. Use SELECT * FROM eng.protected_data or eng.protected_data_suggestions.", startToken.Line, startToken.Column);
+
+        if (MatchIdentifier("DATA") && MatchIdentifier("QUALITY"))
+            throw new SyntaxException("SHOW DATA QUALITY RULES has been retired. Use SELECT * FROM eng.data_quality_rules.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.VERSION))
+            throw new SyntaxException("SHOW VERSION has been retired. Use SELECT * FROM eng.version.", startToken.Line, startToken.Column);
+
+        if (Match(TokenType.SAFE))
         {
             Consume(TokenType.ZONES, "Expected ZONES after SHOW SAFE");
-            stmt = new ShowSafeZonesStatement();
-        }
-        else if (Match(TokenType.SESSIONS)) stmt = new ShowSessionsStatement();
-        else if (MatchIdentifier("LOCKS")) stmt = new ShowLocksStatement();
-        // Portal admin SHOW commands
-        else if (Match(TokenType.USER) || MatchIdentifier("USERS"))
-            stmt = new ShowPortalUsersStatement();
-        else if (Match(TokenType.REPORT))
-        {
-            if (Match(TokenType.HISTORY))
-            {
-                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT HISTORY").Value;
-                stmt = new ShowPortalReportHistoryStatement(reportName);
-            }
-            else if (MatchIdentifier("DEPENDENCIES"))
-            {
-                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT DEPENDENCIES").Value;
-                stmt = new ShowPortalReportDependenciesStatement(reportName);
-            }
-            else
-            {
-                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT").Value;
-                stmt = new ShowPortalReportStatement(reportName);
-            }
-        }
-        else if (MatchIdentifier("REPORTS"))
-        {
-            string? folder = null;
-            if (Match(TokenType.IN))
-            {
-                Consume(TokenType.FOLDER, "Expected FOLDER");
-                folder = _parser.Current.Type == TokenType.STRING_LITERAL
-                    ? Advance().Value
-                    : ConsumeIdentifier("Expected folder path").Value;
-            }
-            stmt = new ShowPortalReportsStatement(folder);
-        }
-        else if (Match(TokenType.FAVORITE) || MatchIdentifier("FAVORITES"))
-        {
-            string? username = null;
-            if (Match(TokenType.FOR))
-            {
-                Consume(TokenType.USER, "Expected USER after SHOW FAVORITES FOR");
-                username = Consume(TokenType.STRING_LITERAL, "Expected username string literal").Value;
-            }
-            stmt = new ShowPortalFavoritesStatement(username, ParseOptionalLimit());
-        }
-        else if (Match(TokenType.SHARE))
-        {
-            if (!Match(TokenType.LINK) && !MatchIdentifier("LINKS"))
-                throw new SyntaxException("Expected LINK or LINKS after SHOW SHARE", _parser.Current.Line, _parser.Current.Column);
-            Consume(TokenType.FOR, "Expected FOR after SHOW SHARE LINK");
-            Consume(TokenType.REPORT, "Expected REPORT");
-            var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
-            stmt = new ShowPortalShareLinksStatement(reportName);
-        }
-        else if (Match(TokenType.EMBED))
-        {
-            if (!Match(TokenType.TOKEN) && !Match(TokenType.TOKENS) && !MatchIdentifier("TOKENS"))
-                throw new SyntaxException("Expected TOKEN or TOKENS after SHOW EMBED", _parser.Current.Line, _parser.Current.Column);
-            Consume(TokenType.FOR, "Expected FOR after SHOW EMBED TOKENS");
-            Consume(TokenType.REPORT, "Expected REPORT");
-            var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
-            stmt = new ShowPortalEmbedTokensStatement(reportName);
-        }
-        else if (Match(TokenType.SAVED))
-        {
-            if (!Match(TokenType.VIEW) && !MatchIdentifier("VIEWS"))
-                throw new SyntaxException("Expected VIEW or VIEWS after SHOW SAVED", _parser.Current.Line, _parser.Current.Column);
-            Consume(TokenType.FOR, "Expected FOR after SHOW SAVED VIEWS");
-            Consume(TokenType.REPORT, "Expected REPORT");
-            var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
-            stmt = new ShowPortalSavedViewsStatement(reportName);
-        }
-        else if (Match(TokenType.ALERT) || MatchIdentifier("ALERTS"))
-        {
-            Consume(TokenType.FOR, "Expected FOR after SHOW ALERTS");
-            Consume(TokenType.REPORT, "Expected REPORT");
-            var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
-            stmt = new ShowPortalAlertsStatement(reportName);
-        }
-        else if (Match(TokenType.SMTP))
-        {
-            if (Match(TokenType.CONNECTION) || Match(TokenType.CONNECTIONS))
-                throw new SyntaxException("SHOW SMTP CONNECTIONS is retired. Use SHOW CONNECTIONS or SELECT from eng.connections and filter connector_type = 'SMTP'.", startToken.Line, startToken.Column);
-            throw new SyntaxException("Expected CONNECTIONS after SHOW SMTP", _parser.Current.Line, _parser.Current.Column);
-        }
-        else if (MatchIdentifier("RECENT"))
-        {
-            ConsumeIdentifierValue("REPORTS", "Expected REPORTS after SHOW RECENT");
-            stmt = new ShowPortalRecentReportsStatement(ParseOptionalLimit());
-        }
-        else if (Match(TokenType.CATALOG))
-        {
-            Consume(TokenType.SEARCH, "Expected SEARCH after SHOW CATALOG");
-            var query = Consume(TokenType.STRING_LITERAL, "Expected catalog search string literal").Value;
-            stmt = new SearchPortalCatalogStatement(query, ParseOptionalLimit());
-        }
-        else if (Match(TokenType.EFFECTIVE))
-        {
-            Consume(TokenType.PERMISSIONS, "Expected PERMISSIONS after SHOW EFFECTIVE");
-            Consume(TokenType.FOR, "Expected FOR after SHOW EFFECTIVE PERMISSIONS");
-            string targetType;
-            if (Match(TokenType.USER))
-                targetType = "USER";
-            else if (Match(TokenType.REPORT))
-                targetType = "REPORT";
-            else if (Match(TokenType.FOLDER))
-                targetType = "FOLDER";
-            else
-                throw new SyntaxException("Expected USER, REPORT, or FOLDER after SHOW EFFECTIVE PERMISSIONS FOR", _parser.Current.Line, _parser.Current.Column);
-
-            var target = Consume(TokenType.STRING_LITERAL, "Expected target string literal").Value;
-            stmt = new ShowEffectivePortalPermissionsStatement(targetType, target);
-        }
-        else if (Match(TokenType.PORTAL))
-        {
-            if (Match(TokenType.USAGE))
-            {
-                Match(TokenType.METRICS);
-                stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
-            }
-            else if (MatchIdentifier("AUDIT"))
-            {
-                string? action = null;
-                if (MatchIdentifier("ACTION"))
-                    action = Consume(TokenType.STRING_LITERAL, "Expected action string literal after SHOW PORTAL AUDIT ACTION").Value;
-                stmt = new ShowPortalAuditStatement(action, ParseOptionalLimit());
-            }
-            else if (MatchIdentifier("OPERATIONAL"))
-            {
-                Match(TokenType.METRICS);
-                stmt = new ShowPortalOperationalMetricsStatement();
-            }
-            else
-                throw new SyntaxException("Expected USAGE, AUDIT, or OPERATIONAL after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
-        }
-        else if (Match(TokenType.USAGE))
-        {
-            Match(TokenType.METRICS);
-            stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
-        }
-        else if (Match(TokenType.ACTIVE))
-        {
-            if (Match(TokenType.SESSIONS) || MatchIdentifier("SESSIONS"))
-                stmt = new ShowActivePortalSessionsStatement();
-            else
-                throw new ETL_SQL.Core.Common.Exceptions.SyntaxException("Expected SESSIONS after SHOW ACTIVE", _parser.Current.Line, _parser.Current.Column);
-        }
-        // DATASETS is a keyword token, so MatchIdentifier alone never matches it — SHOW DATASETS
-        // must accept the keyword form as well as the identifier form.
-        else if (Match(TokenType.DATASET) || Match(TokenType.DATASETS) || MatchIdentifier("DATASETS"))
-            stmt = new ShowDatasetsStatement();
-
-        if (stmt == null)
-            throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, LINEAGE HISTORY, or DATASETS after SHOW", _parser.Current.Line, _parser.Current.Column);
-
-        if ((stmt is ShowJobsStatement || stmt is ShowJobHistoryStatement || stmt is ShowPublishedBundlesStatement ||
-             stmt is ShowBundleVersionsStatement || stmt is ShowBundleFilesStatement || stmt is ShowBundleDependenciesStatement) && Match(TokenType.AT))
-        {
-            var atConn = ConsumeIdentifier("Expected connection name after AT").Value;
-            stmt = stmt switch
-            {
-                ShowJobsStatement j => j with { At = atConn },
-                ShowJobHistoryStatement h => h with { At = atConn },
-                ShowPublishedBundlesStatement b => b with { At = atConn },
-                ShowBundleVersionsStatement v => v with { At = atConn },
-                ShowBundleFilesStatement f => f with { At = atConn },
-                ShowBundleDependenciesStatement d => d with { At = atConn },
-                _ => stmt
-            };
+            throw new SyntaxException("SHOW SAFE ZONES has been retired. Use SELECT * FROM eng.safe_zones.", startToken.Line, startToken.Column);
         }
 
-        if (Match(TokenType.INTO))
-        {
-            var tempTable = ConsumeIdentifier("Expected temporary table name after INTO").Value;
-            if (!tempTable.StartsWith("#"))
-                throw new SyntaxException("SHOW ... INTO target must be a temporary table starting with '#'", _parser.Current.Line, _parser.Current.Column);
+        if (Match(TokenType.SESSIONS))
+            throw new SyntaxException("SHOW SESSIONS has been retired. Use SELECT * FROM eng.sessions.", startToken.Line, startToken.Column);
 
-            stmt = stmt switch
-            {
-                ShowProfileStatement sps => sps with { IntoTable = tempTable },
-                ShowJobHistoryStatement sjh => sjh with { IntoTable = tempTable },
-                ShowHostMetricsStatement shm => shm with { IntoTable = tempTable },
-                ShowJobStateStatement sjs => sjs with { IntoTable = tempTable },
-                ShowVariablesStatement v => v with { IntoTable = tempTable },
-                ShowConnectionsStatement c => c with { IntoTable = tempTable },
-                ShowConnectionConfigStatement cc => cc with { IntoTable = tempTable },
-                ShowJobsStatement j => j with { IntoTable = tempTable },
-                ShowTablesStatement sts => sts with { IntoTable = tempTable },
-                ShowViewsStatement sv => sv with { IntoTable = tempTable },
-                ShowVersionStatement svs => svs with { IntoTable = tempTable },
-                ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
-                ShowSessionsStatement sess => sess with { IntoTable = tempTable },
-                ShowLocksStatement sls => sls with { IntoTable = tempTable },
-                ShowDatasetsStatement sds => sds with { IntoTable = tempTable },
-                ShowPublishedBundlesStatement spb => spb with { IntoTable = tempTable },
-                ShowBundleVersionsStatement sbv => sbv with { IntoTable = tempTable },
-                ShowBundleFilesStatement sbf => sbf with { IntoTable = tempTable },
-                ShowBundleDependenciesStatement sbd => sbd with { IntoTable = tempTable },
-                ShowPortalReportsStatement sprs => sprs with { IntoTable = tempTable },
-                ShowPortalReportStatement spr => spr with { IntoTable = tempTable },
-                ShowPortalReportHistoryStatement sprh => sprh with { IntoTable = tempTable },
-                ShowPortalReportDependenciesStatement sprd => sprd with { IntoTable = tempTable },
-                ShowPortalShareLinksStatement spsl => spsl with { IntoTable = tempTable },
-                ShowPortalEmbedTokensStatement spet => spet with { IntoTable = tempTable },
-                ShowPortalSavedViewsStatement spsv => spsv with { IntoTable = tempTable },
-                ShowPortalAlertsStatement spa => spa with { IntoTable = tempTable },
-                ShowPortalFavoritesStatement spf => spf with { IntoTable = tempTable },
-                ShowPortalRecentReportsStatement sprr => sprr with { IntoTable = tempTable },
-                SearchPortalCatalogStatement spc => spc with { IntoTable = tempTable },
-                ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
-                ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
-                ShowPortalOperationalMetricsStatement spom => spom with { IntoTable = tempTable },
-                ShowPortalAuditStatement spaudit => spaudit with { IntoTable = tempTable },
-                ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
-                LineageStatement lin => lin with { IntoTable = tempTable },
-                ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
-                ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },
-                ShowLineageHistoryForMissingTagsStatement slhm => slhm with { IntoTable = tempTable },
-                ShowLineageHistoryForJobStatement slhj => slhj with { IntoTable = tempTable },
-                ShowProtectedDataStatement spd => spd with { IntoTable = tempTable },
-                _ => stmt
-            };
-        }
+        if (MatchIdentifier("LOCKS"))
+            throw new SyntaxException("SHOW LOCKS has been retired. Use SELECT * FROM eng.locks.", startToken.Line, startToken.Column);
 
-        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return stmt with { Line = startToken.Line, Column = startToken.Column };
-    }
+        if (Match(TokenType.USER) || MatchIdentifier("USERS"))
+            throw new SyntaxException("SHOW PORTAL USERS has been retired. Use SELECT * FROM <conn>.eng.users.", startToken.Line, startToken.Column);
 
-    private int? ParseOptionalLimit()
-    {
-        if (!Match(TokenType.LIMIT))
-            return null;
+        if (Match(TokenType.REPORT) || MatchIdentifier("REPORTS") || MatchIdentifier("RECENT"))
+            throw new SyntaxException("SHOW REPORT commands have been retired. Use SELECT * FROM <conn>.eng.reports, eng.report_history, eng.report_dependencies, or eng.recent_reports.", startToken.Line, startToken.Column);
 
-        return ParsePositiveInt("Expected positive integer after LIMIT");
-    }
+        if (Match(TokenType.FAVORITE) || MatchIdentifier("FAVORITES"))
+            throw new SyntaxException("SHOW PORTAL FAVORITES has been retired. Use SELECT * FROM <conn>.eng.favorites.", startToken.Line, startToken.Column);
 
-    private int? ParseOptionalDays()
-    {
-        if (!Match(TokenType.FOR))
-            return null;
+        if (Match(TokenType.SHARE))
+            throw new SyntaxException("SHOW PORTAL SHARE LINKS has been retired. Use SELECT * FROM <conn>.eng.share_links.", startToken.Line, startToken.Column);
 
-        int days = ParsePositiveInt("Expected positive integer after FOR");
-        if (Match(TokenType.DAY))
-            return days;
-        if (_parser.Current.Type == TokenType.IDENTIFIER &&
-            _parser.Current.Value.Equals("DAYS", StringComparison.OrdinalIgnoreCase))
-        {
-            Advance();
-            return days;
-        }
+        if (Match(TokenType.EMBED))
+            throw new SyntaxException("SHOW PORTAL EMBED TOKENS has been retired. Use SELECT * FROM <conn>.eng.embed_tokens.", startToken.Line, startToken.Column);
 
-        throw new SyntaxException("Expected DAY or DAYS after usage metrics range", _parser.Current.Line, _parser.Current.Column);
-    }
+        if (Match(TokenType.SAVED))
+            throw new SyntaxException("SHOW PORTAL SAVED VIEWS has been retired. Use SELECT * FROM <conn>.eng.saved_views.", startToken.Line, startToken.Column);
 
-    private int ParsePositiveInt(string message)
-    {
-        var tok = Consume(TokenType.NUMBER, message);
-        if (!int.TryParse(tok.Value, out int value) || value <= 0)
-            throw new SyntaxException(message, tok.Line, tok.Column);
-        return value;
-    }
+        if (Match(TokenType.ALERT) || MatchIdentifier("ALERTS"))
+            throw new SyntaxException("SHOW PORTAL ALERTS has been retired. Use SELECT * FROM <conn>.eng.alerts.", startToken.Line, startToken.Column);
 
-    private void ConsumeIdentifierValue(string value, string message)
-    {
-        var tok = _parser.Current;
-        if (tok.Value.Equals(value, StringComparison.OrdinalIgnoreCase))
-        {
-            Advance();
-            return;
-        }
+        if (Match(TokenType.SMTP))
+            throw new SyntaxException("SHOW SMTP CONNECTIONS has been retired. Use SELECT * FROM eng.connections or eng.connection_config.", startToken.Line, startToken.Column);
 
-        throw new SyntaxException(message, tok.Line, tok.Column);
-    }
+        if (Match(TokenType.CATALOG))
+            throw new SyntaxException("SHOW CATALOG SEARCH has been retired. Use SELECT * FROM <conn>.eng.catalog_search('query').", startToken.Line, startToken.Column);
 
-    private Statement ParseShowLineage(Token startToken)
-    {
-        if (Match(TokenType.HISTORY))
-            return ParseShowLineageHistory(startToken);
+        if (Match(TokenType.EFFECTIVE))
+            throw new SyntaxException("SHOW EFFECTIVE PERMISSIONS has been retired. Use SELECT * FROM <conn>.eng.effective_permissions.", startToken.Line, startToken.Column);
 
-        return ParseShowLineageCore(startToken);
-    }
+        if (Match(TokenType.PORTAL) || Match(TokenType.USAGE) || Match(TokenType.ACTIVE))
+            throw new SyntaxException("SHOW PORTAL, SHOW USAGE, and SHOW ACTIVE commands have been retired. Use SELECT * FROM <conn>.eng.usage_metrics, eng.operational_metrics, eng.audit, or eng.active_sessions.", startToken.Line, startToken.Column);
 
-    private Statement ParseShowLineageHistory(Token startToken)
-    {
-        Consume(TokenType.FOR, "Expected FOR after SHOW LINEAGE HISTORY");
-        if (Match(TokenType.TABLE))
-        {
-            var tableName = ConsumeIdentifier("Expected table name after SHOW LINEAGE HISTORY FOR TABLE").Value;
-            string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
-            var limit = ParseOptionalLimit();
-            return new ShowLineageHistoryForTableStatement { TableName = tableName, At = at, Limit = limit };
-        }
-        if (Match(TokenType.TAG))
-        {
-            var tagKey = ConsumeIdentifier("Expected tag key after SHOW LINEAGE HISTORY FOR TAG").Value;
-            string? tagValue = null;
-            if (Match(TokenType.EQUALS))
-                tagValue = Consume(TokenType.STRING_LITERAL, "Expected string value after =").Value;
-            string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
-            var limit = ParseOptionalLimit();
-            return new ShowLineageHistoryForTagStatement { TagKey = tagKey, TagValue = tagValue, At = at, Limit = limit };
-        }
-        if (Match(TokenType.JOB))
-        {
-            var jobName = ConsumeIdentifier("Expected job name after SHOW LINEAGE HISTORY FOR JOB").Value;
-            string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
-            var limit = ParseOptionalLimit();
-            return new ShowLineageHistoryForJobStatement { JobName = jobName, At = at, Limit = limit };
-        }
-        if (_parser.Current.Value.Equals("MISSING", StringComparison.OrdinalIgnoreCase))
-        {
-            Advance();
-            if (!Match(TokenType.TAGS))
-                ConsumeIdentifierValue("TAGS", "Expected TAGS after SHOW LINEAGE HISTORY FOR MISSING");
-            string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
-            var limit = ParseOptionalLimit();
-            return new ShowLineageHistoryForMissingTagsStatement { At = at, Limit = limit };
-        }
-        throw new SyntaxException("Expected TABLE, TAG, JOB, or MISSING TAGS after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
-    }
+        if (Match(TokenType.DATASET) || Match(TokenType.DATASETS) || MatchIdentifier("DATASETS"))
+            throw new SyntaxException("SHOW DATASETS has been retired. Use SELECT * FROM eng.tables.", startToken.Line, startToken.Column);
 
-    private Statement ParseShowProtectedData(Token startToken)
-    {
-        ConsumeIdentifierValue("DATA", "Expected DATA after SHOW PROTECTED");
-        var suggestions = MatchIdentifier("SUGGESTIONS");
-        string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
-        var limit = ParseOptionalLimit();
-        return new ShowProtectedDataStatement { At = at, Limit = limit, Suggestions = suggestions };
-    }
-
-    private LineageStatement ParseShowLineageCore(Token startToken)
-    {
-        TableReference? targetTable = null;
-        string? columnName = null;
-        string? exportPath = null;
-
-        if (Match(TokenType.FOR))
-        {
-            if (Match(TokenType.REPORT))
-            {
-                var reportName = ConsumeIdentifier("Expected report name after SHOW LINEAGE FOR REPORT").Value;
-                targetTable = new TableReference("report:" + reportName);
-            }
-            else if (Match(TokenType.DATASET))
-            {
-                var datasetName = ConsumeIdentifier("Expected dataset name after SHOW LINEAGE FOR DATASET").Value;
-                targetTable = new TableReference(datasetName.StartsWith("&") ? "dataset:" + datasetName[1..] : "dataset:" + datasetName);
-            }
-            else
-            {
-                if (Match(TokenType.TABLE)) { }
-                targetTable = _parser.ParseTableReference(allowAlias: false);
-                if (Match(TokenType.COLUMN))
-                    columnName = ConsumeIdentifier("Expected column name after COLUMN").Value;
-            }
-        }
-
-        if (_parser.Current.Type == TokenType.EXPORT)
-        {
-            var replacement = targetTable == null
-                ? "EXPORT LINEAGE AS OPENLINEAGE TO '...'"
-                : "EXPORT LINEAGE FOR <target> AS OPENLINEAGE TO '...'";
-            throw new SyntaxException($"SHOW LINEAGE ... EXPORT has been retired because it writes a file. Use {replacement}.", _parser.Current.Line, _parser.Current.Column);
-        }
-        else if (Match(TokenType.TO))
-        {
-            exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
-        }
-
-        return new LineageStatement(targetTable, columnName, exportPath)
-        {
-            Line = startToken.Line,
-            Column = startToken.Column
-        };
-    }
-
-    /// <summary>
-    /// Parses <c>SHOW DATA QUALITY RULES [FOR [TABLE] &lt;table&gt;] [COLUMN &lt;col&gt;] [INTO #t]</c>.
-    /// </summary>
-    private Statement ParseShowDataQualityRules(Token startToken)
-    {
-        if (!MatchIdentifier("RULES"))
-            throw new SyntaxException("Expected RULES after SHOW DATA QUALITY",
-                _parser.Current.Line, _parser.Current.Column);
-
-        TableReference? targetTable = null;
-        string? columnName = null;
-        string? intoTable = null;
-
-        if (Match(TokenType.FOR))
-        {
-            if (Match(TokenType.TABLE)) { }
-            targetTable = _parser.ParseTableReference(allowAlias: false);
-        }
-
-        if (Match(TokenType.COLUMN))
-            columnName = ConsumeIdentifier("Expected column name after COLUMN").Value;
-
-        if (Match(TokenType.INTO))
-        {
-            intoTable = ConsumeIdentifier("Expected temporary table name after INTO").Value;
-            if (!intoTable.StartsWith("#"))
-                throw new SyntaxException("SHOW DATA QUALITY RULES INTO requires a #temp table name",
-                    _parser.Previous.Line, _parser.Previous.Column);
-        }
-
-        return new ShowDataQualityRulesStatement(targetTable, columnName, intoTable)
-        {
-            Line = startToken.Line,
-            Column = startToken.Column
-        };
+        throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, LINEAGE HISTORY, or DATASETS after SHOW", startToken.Line, startToken.Column);
     }
 
     public Statement ParseExplain(Token startToken)

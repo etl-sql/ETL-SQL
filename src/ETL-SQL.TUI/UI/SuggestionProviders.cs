@@ -106,14 +106,17 @@ namespace ETL_SQL.TUI.UI
     public class TuiMetadataManager : IMetadataManager
     {
         private readonly IDictionary<string, IDataSource> _connections;
+        private readonly MetadataManager? _tuiMetadataManager;
 
-        public TuiMetadataManager(IDictionary<string, IDataSource> connections)
+        public TuiMetadataManager(IDictionary<string, IDataSource> connections, MetadataManager? tuiMetadataManager = null)
         {
             _connections = connections;
+            _tuiMetadataManager = tuiMetadataManager;
         }
 
         public async Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null)
         {
+            if (_tuiMetadataManager != null) return await _tuiMetadataManager.GetTablesAsync(connectionName);
             if (_connections.TryGetValue(connectionName, out var source))
                 return await source.GetTablesAsync();
             return Enumerable.Empty<string>();
@@ -121,12 +124,14 @@ namespace ETL_SQL.TUI.UI
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null)
         {
+            if (_tuiMetadataManager != null) return await _tuiMetadataManager.GetColumnsAsync(connectionName, tableName);
             var cols = await GetColumnDetailsAsync(connectionName, tableName, uri);
             return cols.Select(c => c.Name);
         }
 
         public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null)
         {
+            if (_tuiMetadataManager != null) return await _tuiMetadataManager.GetColumnDetailsAsync(connectionName, tableName);
             if (_connections.TryGetValue(connectionName, out var source))
             {
                 var catalogProvider = source.GetCatalogProvider();
@@ -164,6 +169,7 @@ namespace ETL_SQL.TUI.UI
 
         public async Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null)
         {
+            if (_tuiMetadataManager != null) return await _tuiMetadataManager.GetViewsAsync(connectionName);
             if (_connections.TryGetValue(connectionName, out var source) && source is IDatabaseSource db)
                 return await db.GetViewsAsync();
             return Enumerable.Empty<string>();
@@ -171,12 +177,20 @@ namespace ETL_SQL.TUI.UI
 
         public List<ConnectionInfo> GetConnections(string? uri = null)
         {
-            return _connections.Select(kvp => new ConnectionInfo(
+            var result = _connections.Select(kvp => new ConnectionInfo(
                 kvp.Key, TypeOf(kvp.Value), "", false)).ToList();
+            if (!result.Any(c => c.Name.Equals("eng", StringComparison.OrdinalIgnoreCase)))
+            {
+                result.Add(new ConnectionInfo("eng", "ENG", "", false));
+            }
+            return result;
         }
 
         public string? GetConnectionType(string connectionName, string? uri = null)
-            => _connections.TryGetValue(connectionName, out var ds) ? TypeOf(ds) : null;
+        {
+            if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return "ENG";
+            return _connections.TryGetValue(connectionName, out var ds) ? TypeOf(ds) : null;
+        }
 
         // Dialect for database sources (SQLSERVER, POSTGRES, …); flat-file sources report FLATFILE.
         private static string TypeOf(IDataSource ds) =>
@@ -206,15 +220,17 @@ namespace ETL_SQL.TUI.UI
     public class SuggestionEngine
     {
         private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
+        private readonly MetadataManager? _tuiMetadataManager;
 
-        public SuggestionEngine(Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
+        public SuggestionEngine(Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null, MetadataManager? tuiMetadataManager = null)
         {
             _helpRegistry = helpRegistry;
+            _tuiMetadataManager = tuiMetadataManager;
         }
 
         public async Task<List<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
         {
-            var metadata = new TuiMetadataManager(context.Connections);
+            var metadata = new TuiMetadataManager(context.Connections, _tuiMetadataManager);
             var bridge = new LanguageServiceBridgeProvider(metadata, _helpRegistry);
 
             var results = await bridge.GetSuggestionsAsync(context);

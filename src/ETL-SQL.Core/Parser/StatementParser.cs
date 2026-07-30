@@ -98,6 +98,7 @@ public class StatementParser
         _dispatchMap[TokenType.BULK] = () => { var t = _parser.Previous; return DataParser.ParseBulkInsert(t); };
         _dispatchMap[TokenType.LINT] = () => { var t = _parser.Previous; return ExtensionParser.ParseLint(t); };
         _dispatchMap[TokenType.REQUIRE] = () => { var t = _parser.Previous; return SystemParser.ParseRequireVersion(t); };
+        _dispatchMap[TokenType.LINEAGE] = () => { var t = _parser.Previous; return ExtensionParser.ParseLineage(t); };
         _dispatchMap[TokenType.START] = () => ExtensionParser.ParseDockerVerb(DockerAction.Start);
         _dispatchMap[TokenType.STOP] = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
         _dispatchMap[TokenType.PAUSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);

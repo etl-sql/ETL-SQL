@@ -274,6 +274,10 @@ public class MetadataManager : IMetadataManager
                 }
             }
         }
+        if (!result.Any(c => c.Name.Equals("eng", StringComparison.OrdinalIgnoreCase)))
+        {
+            result.Add(new ConnectionInfo("eng", "ENG", string.Empty, false));
+        }
         return result.Select(RedactConnection).ToList();
     }
 
@@ -434,11 +438,13 @@ public class MetadataManager : IMetadataManager
 
     public string? GetConnectionType(string connectionName, string? uri = null)
     {
+        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return "ENG";
         return GetConnection(connectionName, uri)?.Type;
     }
 
     public async Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null)
     {
+        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return EngineCatalog.Tables;
         try
         {
             var conn = GetConnection(connectionName, uri);
@@ -517,6 +523,7 @@ public class MetadataManager : IMetadataManager
 
     public async Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null)
     {
+        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return Enumerable.Empty<string>();
         try
         {
             var conn = GetConnection(connectionName, uri);
@@ -641,6 +648,11 @@ public class MetadataManager : IMetadataManager
 
     public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null)
     {
+        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase))
+        {
+            if (EngineCatalog.TableColumns.TryGetValue(tableName, out var cols)) return cols;
+            return Enumerable.Empty<ColumnMetadata>();
+        }
         try
         {
             var normalizedUri = NormalizeUri(uri);

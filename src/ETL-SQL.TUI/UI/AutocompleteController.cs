@@ -39,11 +39,47 @@ namespace ETL_SQL.TUI.UI
             _helpRegistry = helpRegistry;
         }
 
+        private System.Threading.CancellationTokenSource? _updateCts;
+        private int _updateGen;
+
+        /// <summary>Triggers a debounced, non-blocking autocomplete update on a background task.</summary>
+        public void TriggerUpdate()
+        {
+            _updateCts?.Cancel();
+            _updateCts = new System.Threading.CancellationTokenSource();
+            var ct = _updateCts.Token;
+            int gen = ++_updateGen;
+
+            _renderer.AutocompletePending = true;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(50, ct);
+                    await UpdateAsync(ct);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"Autocomplete update error: {ex.Message}");
+                }
+                finally
+                {
+                    if (gen == _updateGen)
+                    {
+                        _renderer.AutocompletePending = false;
+                    }
+                }
+            }, ct);
+        }
+
         /// <summary>Updates the suggestion list based on the current cursor position and prefix.</summary>
-        public async Task UpdateAsync()
+        public async Task UpdateAsync(System.Threading.CancellationToken ct = default)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             _metadata.RefreshConnections(_buffer.GetText());
+            ct.ThrowIfCancellationRequested();
             var line = _buffer.Lines[_buffer.CursorLine].Substring(0, _buffer.CursorColumn);
             var lastWordMatch = Regex.Match(line, @"[\$\w.#@./\\\""']*$");
             var lastWord = lastWordMatch.Value.Trim('\'', '\"');
@@ -54,7 +90,8 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            var suggestions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _logger, _helpRegistry);
+            var suggestions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _metadata, _logger, _helpRegistry);
+            ct.ThrowIfCancellationRequested();
 
             if (lastWord.StartsWith('$') && line.TrimStart() == lastWord)
             {
@@ -301,7 +338,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // If no special expansion, just show regular suggestions
-            await UpdateAsync();
+            await UpdateAsync(System.Threading.CancellationToken.None);
         }
     }
 }

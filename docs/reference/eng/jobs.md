@@ -17,7 +17,7 @@ ORDER BY name;
 | `name` | Scheduled job name. |
 | `schedule` | Human-readable schedule expression. |
 | `last_run` | UTC timestamp of the previous run, when available. |
-| `next_run` | UTC timestamp of the next planned run, when available. |
+| `next_run` | UTC timestamp of the next scheduled run, when available. |
 | `script` | Script path or script identifier run by the job. |
 | `enabled` | `1` when enabled; `0` when disabled. |
 

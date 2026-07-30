@@ -53,7 +53,8 @@ namespace ETL_SQL.TUI
                 sp.GetRequiredService<ETL_SQL.Engine.Evaluator>(),
                 sp.GetRequiredService<ETL_SQL.Core.Services.ILanguageService>(),
                 sp.GetService<ETL_SQL.Core.Functions.IFunctionRegistry>(),
-                sp.GetService<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>());
+                sp.GetService<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>(),
+                sp);
         }
 
         public static IServiceProvider BuildServiceProvider()

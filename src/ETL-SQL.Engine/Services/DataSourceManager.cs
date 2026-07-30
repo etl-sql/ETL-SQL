@@ -22,7 +22,8 @@ public class DataSourceManager(
     ExpressionEvaluator expressionEvaluator,
     IJobHistoryStore? jobHistoryStore = null,
     IHostMetricsStore? hostMetricsStore = null,
-    IBundleStore? bundleStore = null)
+    IBundleStore? bundleStore = null,
+    ETL_SQL.Core.Execution.ISessionStateManager? sessionStateManager = null)
 {
     private readonly ILogger _logger = logger;
     private readonly Evaluator _evaluator = evaluator;
@@ -30,6 +31,7 @@ public class DataSourceManager(
     private readonly IJobHistoryStore? _jobHistoryStore = jobHistoryStore;
     private readonly IHostMetricsStore? _hostMetricsStore = hostMetricsStore;
     private readonly IBundleStore? _bundleStore = bundleStore;
+    private readonly ETL_SQL.Core.Execution.ISessionStateManager? _sessionStateManager = sessionStateManager;
     private readonly Stack<string> _viewResolutionStack = new();
 
     /// <summary>
@@ -102,6 +104,61 @@ public class DataSourceManager(
         }
         else if (table.FunctionCall != null)
         {
+            bool isLocalEng = (table.ConnectionName != null && table.ConnectionName.Equals("eng", StringComparison.OrdinalIgnoreCase) && table.SchemaName == null)
+                || (table.SchemaName != null && table.SchemaName.Equals("eng", StringComparison.OrdinalIgnoreCase) && table.ConnectionName == null);
+
+            if (isLocalEng)
+            {
+                var funcName = table.TableName;
+                var evalArgs = new List<string>();
+                foreach (var arg in table.FunctionCall.Arguments)
+                {
+                    var val = await _expressionEvaluator.EvaluateInternal(arg, new Row());
+                    evalArgs.Add(val?.ToString() ?? "null");
+                }
+
+                if (funcName.Equals("job_history", StringComparison.OrdinalIgnoreCase))
+                {
+                    var filterJob = evalArgs.Count > 0 ? evalArgs[0] : null;
+                    return new JobHistoryDataSource(_jobHistoryStore, filterJob);
+                }
+                if (funcName.Equals("bundle_files", StringComparison.OrdinalIgnoreCase))
+                {
+                    var filterBundle = evalArgs.Count > 0 ? evalArgs[0] : null;
+                    int? filterVersion = null;
+                    if (evalArgs.Count > 1 && int.TryParse(evalArgs[1], out var v)) filterVersion = v;
+                    return new BundleFilesDataSource(_bundleStore, filterBundle, filterVersion);
+                }
+                if (funcName.Equals("bundle_dependencies", StringComparison.OrdinalIgnoreCase))
+                {
+                    var filterBundle = evalArgs.Count > 0 ? evalArgs[0] : null;
+                    int? filterVersion = null;
+                    if (evalArgs.Count > 1 && int.TryParse(evalArgs[1], out var v)) filterVersion = v;
+                    return new BundleDependenciesDataSource(_bundleStore, filterBundle, filterVersion);
+                }
+            }
+
+            bool isGlobalBuiltin = table.FunctionCall.FunctionName.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase)
+                || table.FunctionCall.FunctionName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase);
+
+            if (!isGlobalBuiltin && (table.ConnectionName != null || table.SchemaName != null))
+            {
+                var connName = table.ConnectionName ?? table.SchemaName;
+                if (connName != null && connections.TryGetValue(connName, out var connSource))
+                {
+                    var schemaPart = table.ConnectionName != null && table.SchemaName != null ? $"{table.SchemaName}." : "";
+                    var evalArgs = new List<string>();
+                    foreach (var arg in table.FunctionCall.Arguments)
+                    {
+                        var val = await _expressionEvaluator.EvaluateInternal(arg, new Row());
+                        evalArgs.Add(val?.ToString() ?? "null");
+                    }
+                    var args = string.Join(", ", evalArgs);
+                    var target = $"{schemaPart}{table.TableName}({args})";
+                    return connSource.WithTable(target);
+                }
+            }
+
             if (table.FunctionCall.FunctionName.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
             {
                 string? targetTbl = table.FunctionCall.Arguments.Count > 0 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[0], new Row()))?.ToString() : null;
@@ -164,6 +221,11 @@ public class DataSourceManager(
         else if (IsEngineVirtualTable(table, "views"))
         {
             return new ViewsDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "sessions"))
+        {
+            if (_sessionStateManager == null) throw new ExecutionException("Session state manager is not available.");
+            return new SessionsDataSource(_sessionStateManager);
         }
         else if (IsEngineVirtualTable(table, "variables"))
         {
@@ -271,7 +333,11 @@ public class DataSourceManager(
 
         if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source, _evaluator.CancellationToken);
 
-        if (table.ConnectionName != null) return source.WithTable(table.TableName);
+        if (table.ConnectionName != null)
+        {
+            var targetTableName = table.SchemaName != null ? $"{table.SchemaName}.{table.TableName}" : table.TableName;
+            return source.WithTable(targetTableName);
+        }
         return source;
     }
 

@@ -9,9 +9,12 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
+using ETL_SQL.Common;
+using ETL_SQL.Orchestrator;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -20,8 +23,34 @@ namespace ETL_SQL.Tests.Statements.Statements
     /// </summary>
     public class ShowStatementTests
     {
-        private static Evaluator NewEval() =>
-            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        private static Evaluator NewEval(IJobHistoryStore? mockStore = null)
+        {
+            var services = new ServiceCollection();
+            
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true)
+                .AddEnvironmentVariables();
+            var configuration = builder.Build();
+
+            services.AddSingleton<IConfiguration>(configuration);
+            var loggerService = new LoggerService();
+            services.AddSingleton<LoggerService>(loggerService);
+            services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
+            services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
+            services.AddLogging();
+            
+            services.AddEtlSqlEngine(configuration);
+            
+            if (mockStore != null)
+            {
+                var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IJobHistoryStore));
+                if (descriptor != null) services.Remove(descriptor);
+                services.AddSingleton<IJobHistoryStore>(mockStore);
+            }
+            
+            return services.BuildServiceProvider().GetRequiredService<Evaluator>();
+        }
 
         // ── eng.tables ────────────────────────────────────────────────────────
 
@@ -318,10 +347,10 @@ WHERE connection_name = 'cfg_conn';";
             Assert.Contains(expectedColumn, eval.LastResult!.ColumnNames);
         }
 
-        // ── SHOW JOB HISTORY ───────────────────────────────────────────────────
+        // ── eng.job_history ─────────────────────────────────────────────────────
 
         [Fact]
-        public async Task ShowJobHistory_WithMockStore_ReturnsHistoryRows()
+        public async Task EngJobHistory_WithMockStore_ReturnsHistoryRows()
         {
             var entries = new List<JobHistoryEntry>
             {
@@ -330,70 +359,59 @@ WHERE connection_name = 'cfg_conn';";
             };
 
             var mockStore = new Mock<IJobHistoryStore>();
-            // The stmt will have JobName="Job1" parsed from: SHOW JOB HISTORY 'Job1'
             mockStore.Setup(s => s.GetHistoryAsync("Job1", It.IsAny<int>())).ReturnsAsync(entries);
 
-            var handler = new ShowJobHistoryStatementHandler(mockStore.Object);
-
-            // Correct syntax: no FOR keyword
-            var stmt = (ShowJobHistoryStatement)TestHelpers.Parse("SHOW JOB HISTORY 'Job1';").Statements[0];
-
-            var eval = NewEval();
-            await handler.Execute(stmt, eval);
+            var eval = NewEval(mockStore.Object);
+            await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.job_history('Job1');"));
 
             Assert.NotNull(eval.LastResult);
             Assert.Equal(2, eval.LastResult!.Rows.Count);
-            Assert.Equal("SUCCESS", eval.LastResult.Rows[0]["Status"]?.ToString());
-            Assert.Equal("RUNNING", eval.LastResult.Rows[1]["Status"]?.ToString());
+            Assert.Equal("SUCCESS", eval.LastResult.Rows[0]["status"]?.ToString());
+            Assert.Equal("RUNNING", eval.LastResult.Rows[1]["status"]?.ToString());
         }
 
         [Fact]
-        public async Task ShowJobHistory_EmptyStore_ReturnsNoRows()
+        public async Task EngJobHistory_EmptyStore_ReturnsNoRows()
         {
             var mockStore = new Mock<IJobHistoryStore>();
             mockStore.Setup(s => s.GetHistoryAsync(null, It.IsAny<int>()))
                      .ReturnsAsync(Array.Empty<JobHistoryEntry>());
 
-            var handler = new ShowJobHistoryStatementHandler(mockStore.Object);
-            var stmt = (ShowJobHistoryStatement)TestHelpers.Parse("SHOW JOB HISTORY;").Statements[0];
-
-            var eval = NewEval();
-            await handler.Execute(stmt, eval);
+            var eval = NewEval(mockStore.Object);
+            await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.job_history;"));
 
             Assert.NotNull(eval.LastResult);
             Assert.Empty(eval.LastResult!.Rows);
         }
 
         [Fact]
-        public async Task ShowJobHistory_ColumnsAreCorrect()
+        public async Task EngJobHistory_ColumnsAreCorrect()
         {
             var mockStore = new Mock<IJobHistoryStore>();
             mockStore.Setup(s => s.GetHistoryAsync(null, It.IsAny<int>()))
                      .ReturnsAsync(Array.Empty<JobHistoryEntry>());
 
-            var handler = new ShowJobHistoryStatementHandler(mockStore.Object);
-            var stmt = (ShowJobHistoryStatement)TestHelpers.Parse("SHOW JOB HISTORY;").Statements[0];
+            var eval = NewEval(mockStore.Object);
+            await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.job_history;"));
 
-            var eval = NewEval();
-            await handler.Execute(stmt, eval);
-
-            var expectedCols = new[] { "Id", "JobName", "StartTime", "EndTime", "Status", "RowsProcessed", "PeakRAM_MB", "CPUTime_s", "ErrorMessage" };
+            var expectedCols = new[] { "id", "job_name", "start_time", "end_time", "status", "rows_processed", "peak_ram_mb", "cpu_time_s", "error_message" };
             Assert.Equal(expectedCols, eval.LastResult!.ColumnNames.ToArray());
         }
 
         [Fact]
-        public void ShowJobHistory_JobNameParsedCorrectly()
+        public void EngJobHistory_ParameterizedQuery_ParsesCorrectly()
         {
-            // Verify the parser picks up the job name correctly
-            var stmt = (ShowJobHistoryStatement)TestHelpers.Parse("SHOW JOB HISTORY 'MyJob';").Statements[0];
-            Assert.Equal("MyJob", stmt.JobName);
+            var script = TestHelpers.Parse("SELECT * FROM eng.job_history('MyJob');");
+            Assert.Single(script.Statements);
+            Assert.Empty(script.Diagnostics);
         }
 
         [Fact]
-        public void ShowJobHistory_WithoutJobName_ParsesAsNull()
+        public void EngJobHistory_NonParameterizedQuery_ParsesCorrectly()
         {
-            var stmt = (ShowJobHistoryStatement)TestHelpers.Parse("SHOW JOB HISTORY;").Statements[0];
-            Assert.Null(stmt.JobName);
+            var script = TestHelpers.Parse("SELECT * FROM eng.job_history;");
+            Assert.Single(script.Statements);
+            Assert.Empty(script.Diagnostics);
         }
     }
 }

@@ -245,4 +245,44 @@ public sealed class ScriptedPortalImportTests
         Assert.Equal(2000m, storedAlert.Threshold);
         Assert.True(storedAlert.IsActive);
     }
+
+    [Fact]
+    public async Task QueryPortalVirtualTables_ReturnsData()
+    {
+        using var factory = new PortalWebFactory();
+        var connector = await ConnectAsAdminAsync(factory);
+        var context = new LiteralEvalContext();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Ensure a user exists
+        var createStmt = new CreatePortalUserStatement($"user_{suffix}", $"user_{suffix}@test.local",
+            Secret("Imported@12345!"), "Publisher", null, null, null);
+        await connector.ExecuteAdminStatementAsync(createStmt, context);
+
+        // 1. Query eng.users
+        var usersSource = connector.WithTable("eng.users");
+        var userBatches = new List<DataTable>();
+        await foreach (var batch in usersSource.ReadBatches())
+        {
+            userBatches.Add(batch);
+        }
+        Assert.Single(userBatches);
+        var usersTable = userBatches[0];
+        Assert.Contains("username", usersTable.ColumnNames);
+        Assert.Contains("email", usersTable.ColumnNames);
+        var userRow = usersTable.Rows.FirstOrDefault(r => r["username"]?.ToString() == $"user_{suffix}");
+        Assert.NotNull(userRow);
+        Assert.Equal($"user_{suffix}@test.local", userRow["email"]);
+
+        // 2. Query eng.sessions / eng.active_sessions
+        var sessionsSource = connector.WithTable("eng.active_sessions");
+        var sessionBatches = new List<DataTable>();
+        await foreach (var batch in sessionsSource.ReadBatches())
+        {
+            sessionBatches.Add(batch);
+        }
+        Assert.Single(sessionBatches);
+        var sessionsTable = sessionBatches[0];
+        Assert.Contains("username", sessionsTable.ColumnNames);
+    }
 }

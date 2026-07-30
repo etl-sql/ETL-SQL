@@ -646,8 +646,17 @@ public static class DefaultGrammar
         var insertTable = new StateNode("INSERT_TABLE");
         var insertValues = new StateNode("INSERT_VALUES");
 
+        var metadataMutateNode = new StateNode("METADATA_MUTATE");
+        metadataMutateNode.AddTransition(new StateTransition(
+            t => t.Type != TokenType.SEMICOLON,
+            metadataMutateNode,
+            "<metadata_token>"
+        ));
+
         tree.RegisterStartNode("INSERT", insertNode);
         insertNode.AddTransitionTo("INTO", insertInto, SuggestionType.Keyword);
+        insertNode.AddTransitionTo("TAG", metadataMutateNode, SuggestionType.Keyword);
+        insertNode.AddTransitionTo("LINEAGE", metadataMutateNode, SuggestionType.Keyword);
         insertInto.AddWildcardTransition(insertTable, "<target_table>");
         insertTable.AddTransition(new StateTransition(
             t => !t.Value.Equals("VALUES", StringComparison.OrdinalIgnoreCase) && !t.Value.Equals("SELECT", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
@@ -669,6 +678,7 @@ public static class DefaultGrammar
         var updateSet = new StateNode("UPDATE_SET");
 
         tree.RegisterStartNode("UPDATE", updateNode);
+        updateNode.AddTransitionTo("TAG", metadataMutateNode, SuggestionType.Keyword);
         updateNode.AddWildcardTransition(updateTable, "<target_table>");
         updateTable.AddTransition(new StateTransition(
             t => !t.Value.Equals("SET", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
@@ -689,6 +699,8 @@ public static class DefaultGrammar
         var deleteTable = new StateNode("DELETE_TABLE");
 
         tree.RegisterStartNode("DELETE", deleteNode);
+        deleteNode.AddTransitionTo("TAG", metadataMutateNode, SuggestionType.Keyword);
+        deleteNode.AddTransitionTo("LINEAGE", metadataMutateNode, SuggestionType.Keyword);
         deleteNode.AddTransitionTo("FROM", fromNode, SuggestionType.Keyword); // DELETE FROM table
         deleteNode.AddWildcardTransition(deleteTable, "<target_table>");     // DELETE target WHERE ...
         deleteTable.AddTransition(new StateTransition(
@@ -1197,6 +1209,7 @@ public static class DefaultGrammar
         receiveNode.AddTransitionTo("FILE", receiveFile, SuggestionType.Keyword);
         receiveFile.AddTransitionTo("FROM", receiveFrom, SuggestionType.Keyword);
         receiveFrom.AddWildcardTransition(receiveFilePath, "<file_path>");
+        receiveFile.AddWildcardTransition(receiveFilePath, "<file_path>");
         receiveFilePath.AddTransition(new StateTransition(
             t => !t.Value.Equals("TO", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
             receiveFilePath,
@@ -1219,6 +1232,15 @@ public static class DefaultGrammar
         var reportSource = new StateNode("EXPORT_REPORT_SOURCE");
         var reportFormatKeyword = new StateNode("EXPORT_REPORT_FORMAT_KW");
         var reportFormatVal = new StateNode("EXPORT_REPORT_FORMAT_VAL");
+
+        var exportLineage = new StateNode("EXPORT_LINEAGE");
+        var exportLineageFor = new StateNode("EXPORT_LINEAGE_FOR");
+        var exportLineageForType = new StateNode("EXPORT_LINEAGE_FOR_TYPE");
+        var exportLineageForName = new StateNode("EXPORT_LINEAGE_FOR_NAME");
+        var exportLineageColumn = new StateNode("EXPORT_LINEAGE_COLUMN");
+        var exportLineageColName = new StateNode("EXPORT_LINEAGE_COL_NAME");
+        var exportLineageAs = new StateNode("EXPORT_LINEAGE_AS");
+        var exportLineageFormat = new StateNode("EXPORT_LINEAGE_FORMAT");
 
         var exportTo = new StateNode("EXPORT_TO");
         var exportDest = new StateNode("EXPORT_DEST");
@@ -1261,6 +1283,27 @@ public static class DefaultGrammar
         reportSource.AddTransitionTo("FORMAT", reportFormatKeyword, SuggestionType.Keyword);
         reportFormatKeyword.AddWildcardTransition(reportFormatVal, "<format>");
         reportFormatVal.AddTransitionTo("TO", exportTo, SuggestionType.Keyword);
+
+        // LINEAGE path
+        exportNode.AddTransitionTo("LINEAGE", exportLineage, SuggestionType.Keyword);
+        exportLineage.AddTransitionTo("FOR", exportLineageFor, SuggestionType.Keyword);
+        exportLineageFor.AddTransitionTo("REPORT", exportLineageForType, SuggestionType.Keyword);
+        exportLineageFor.AddTransitionTo("DATASET", exportLineageForType, SuggestionType.Keyword);
+        exportLineageFor.AddTransitionTo("TABLE", exportLineageForType, SuggestionType.Keyword);
+        exportLineageFor.AddWildcardTransition(exportLineageForName, "<table_name>");
+
+        exportLineageForType.AddWildcardTransition(exportLineageForName, "<name>");
+
+        exportLineageForName.AddTransitionTo("COLUMN", exportLineageColumn, SuggestionType.Keyword);
+        exportLineageForName.AddTransitionTo("AS", exportLineageAs, SuggestionType.Keyword);
+
+        exportLineageColumn.AddWildcardTransition(exportLineageColName, "<column_name>");
+        exportLineageColName.AddTransitionTo("AS", exportLineageAs, SuggestionType.Keyword);
+
+        exportLineage.AddTransitionTo("AS", exportLineageAs, SuggestionType.Keyword);
+
+        exportLineageAs.AddWildcardTransition(exportLineageFormat, "<format>");
+        exportLineageFormat.AddTransitionTo("TO", exportTo, SuggestionType.Keyword);
 
         // Common TO -> destination
         exportTo.AddWildcardTransition(exportDest, "<destination_path>");
