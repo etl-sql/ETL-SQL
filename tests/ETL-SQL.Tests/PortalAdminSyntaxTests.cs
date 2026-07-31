@@ -169,7 +169,7 @@ namespace ETL_SQL.Tests
 
             var diagnostic = Assert.Single(script.Diagnostics);
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-            Assert.Contains("SHOW CONNECTIONS", diagnostic.Message, StringComparison.Ordinal);
+            Assert.Contains("eng.connections", diagnostic.Message, StringComparison.Ordinal);
             Assert.Empty(script.Statements);
         }
 
@@ -213,54 +213,21 @@ namespace ETL_SQL.Tests
             Assert.Equal("chuck", unfavorite.Username);
         }
 
-        [Fact]
-        public void PortalShowCommands_ParseHistoryDependenciesAndFavorites()
+        [Theory]
+        [InlineData("SHOW REPORT HISTORY 'Monthly Sales' INTO #history;")]
+        [InlineData("SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #deps;")]
+        [InlineData("SHOW FAVORITES FOR USER 'chuck' LIMIT 25 INTO #favorites;")]
+        [InlineData("SHOW RECENT REPORTS LIMIT 10 INTO #recent;")]
+        [InlineData("SHOW CATALOG SEARCH 'sales' LIMIT 20 INTO #catalog;")]
+        [InlineData("SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #perms;")]
+        [InlineData("SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;")]
+        [InlineData("SHOW PORTAL OPERATIONAL METRICS INTO #ops;")]
+        public void PortalShowCommands_RetiredCommands_ReturnsDiagnostics(string sql)
         {
-            var historyScript = TestHelpers.Parse("SHOW REPORT HISTORY 'Monthly Sales' INTO #history;");
-            var history = Assert.IsType<ShowPortalReportHistoryStatement>(Assert.Single(historyScript.Statements));
-            Assert.Equal("Monthly Sales", history.ReportName);
-            Assert.Equal("#history", history.IntoTable);
-
-            var dependenciesScript = TestHelpers.Parse("SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #deps;");
-            var dependencies = Assert.IsType<ShowPortalReportDependenciesStatement>(Assert.Single(dependenciesScript.Statements));
-            Assert.Equal("Monthly Sales", dependencies.ReportName);
-            Assert.Equal("#deps", dependencies.IntoTable);
-
-            var favoritesScript = TestHelpers.Parse("SHOW FAVORITES FOR USER 'chuck' LIMIT 25 INTO #favorites;");
-            var favorites = Assert.IsType<ShowPortalFavoritesStatement>(Assert.Single(favoritesScript.Statements));
-            Assert.Equal("chuck", favorites.Username);
-            Assert.Equal(25, favorites.Limit);
-            Assert.Equal("#favorites", favorites.IntoTable);
-        }
-
-        [Fact]
-        public void PortalShowCommands_ParseCatalogPermissionsAndUsage()
-        {
-            var recentScript = TestHelpers.Parse("SHOW RECENT REPORTS LIMIT 10 INTO #recent;");
-            var recent = Assert.IsType<ShowPortalRecentReportsStatement>(Assert.Single(recentScript.Statements));
-            Assert.Equal(10, recent.Limit);
-            Assert.Equal("#recent", recent.IntoTable);
-
-            var searchScript = TestHelpers.Parse("SHOW CATALOG SEARCH 'sales' LIMIT 20 INTO #catalog;");
-            var search = Assert.IsType<SearchPortalCatalogStatement>(Assert.Single(searchScript.Statements));
-            Assert.Equal("sales", search.Query);
-            Assert.Equal(20, search.Limit);
-            Assert.Equal("#catalog", search.IntoTable);
-
-            var permissionsScript = TestHelpers.Parse("SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #perms;");
-            var permissions = Assert.IsType<ShowEffectivePortalPermissionsStatement>(Assert.Single(permissionsScript.Statements));
-            Assert.Equal("REPORT", permissions.TargetType);
-            Assert.Equal("Monthly Sales", permissions.Target);
-            Assert.Equal("#perms", permissions.IntoTable);
-
-            var usageScript = TestHelpers.Parse("SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;");
-            var usage = Assert.IsType<ShowPortalUsageMetricsStatement>(Assert.Single(usageScript.Statements));
-            Assert.Equal(30, usage.Days);
-            Assert.Equal("#usage", usage.IntoTable);
-
-            var operationalScript = TestHelpers.Parse("SHOW PORTAL OPERATIONAL METRICS INTO #ops;");
-            var operational = Assert.IsType<ShowPortalOperationalMetricsStatement>(Assert.Single(operationalScript.Statements));
-            Assert.Equal("#ops", operational.IntoTable);
+            var script = TestHelpers.Parse(sql);
+            Assert.Empty(script.Statements);
+            var diag = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diag.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -284,11 +251,6 @@ namespace ETL_SQL.Tests
             Assert.Equal("2026-12-31T23:59:59Z", create.ExpiresAt);
             Assert.Equal("#share", create.IntoTable);
 
-            var showScript = TestHelpers.Parse("SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;");
-            var show = Assert.IsType<ShowPortalShareLinksStatement>(Assert.Single(showScript.Statements));
-            Assert.Equal("Monthly Sales", show.ReportName);
-            Assert.Equal("#shares", show.IntoTable);
-
             var revokeScript = TestHelpers.Parse("REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';");
             var revoke = Assert.IsType<RevokePortalShareLinkStatement>(Assert.Single(revokeScript.Statements));
             Assert.Equal("External Review", revoke.Name);
@@ -300,17 +262,11 @@ namespace ETL_SQL.Tests
             "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;",
             "CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;")]
         [InlineData(
-            "SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;",
-            "SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;")]
-        [InlineData(
             "REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';",
             "REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';")]
         [InlineData(
             "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;",
             "CREATE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;")]
-        [InlineData(
-            "SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;",
-            "SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;")]
         [InlineData(
             "REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';",
             "REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';")]
@@ -416,18 +372,6 @@ namespace ETL_SQL.Tests
         [Fact]
         public void PortalEmbedTokensSavedViewsAndAlerts_ParseShowDropAndRevoke()
         {
-            var showEmbedScript = TestHelpers.Parse("SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;");
-            var showEmbed = Assert.IsType<ShowPortalEmbedTokensStatement>(Assert.Single(showEmbedScript.Statements));
-            Assert.Equal("#embed", showEmbed.IntoTable);
-
-            var showViewsScript = TestHelpers.Parse("SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;");
-            var showViews = Assert.IsType<ShowPortalSavedViewsStatement>(Assert.Single(showViewsScript.Statements));
-            Assert.Equal("#views", showViews.IntoTable);
-
-            var showAlertsScript = TestHelpers.Parse("SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;");
-            var showAlerts = Assert.IsType<ShowPortalAlertsStatement>(Assert.Single(showAlertsScript.Statements));
-            Assert.Equal("#alerts", showAlerts.IntoTable);
-
             var revokeEmbedScript = TestHelpers.Parse("REVOKE EMBED TOKEN 'Intranet' FOR REPORT 'Monthly Sales';");
             var revokeEmbed = Assert.IsType<RevokePortalEmbedTokenStatement>(Assert.Single(revokeEmbedScript.Statements));
             Assert.Equal("Intranet", revokeEmbed.Name);

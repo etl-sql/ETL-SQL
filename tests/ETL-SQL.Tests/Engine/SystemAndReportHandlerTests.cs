@@ -400,7 +400,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
-                "SHOW DATASETS;");
+                "SELECT * FROM eng.tables;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -409,7 +409,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &myds AS (SELECT 1 AS v);" +
-                "SHOW DATASETS INTO #dsList;" +
+                "SELECT * INTO #dsList FROM eng.tables;" +
                 "SELECT * FROM #dsList;");
             Assert.NotNull(eval.LastResult);
         }
@@ -464,7 +464,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowSafeZones_ReturnsResult()
         {
-            var eval = await RunAndGet("SHOW SAFE ZONES;");
+            var eval = await RunAndGet("SELECT * FROM eng.safe_zones;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -473,7 +473,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowJobHistory_ReturnsResult()
         {
-            var eval = await RunAndGet("SHOW JOB HISTORY;");
+            var eval = await RunAndGet("SELECT * FROM eng.job_history;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -523,7 +523,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowSessions_ReturnsResult()
         {
-            var eval = await RunAndGet("SHOW SESSIONS;");
+            var eval = await RunAndGet("SELECT * FROM eng.sessions;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -532,7 +532,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowLocks_ReturnsResult()
         {
-            var eval = await RunAndGet("SHOW LOCKS;");
+            var eval = await RunAndGet("SELECT * FROM eng.locks;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -543,7 +543,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "SELECT 1 AS n;" +
-                "SHOW PROFILE;");
+                "SELECT * FROM eng.profile;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -554,7 +554,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "DECLARE @x INT = 42;" +
-                "SHOW VARIABLES;");
+                "SELECT * FROM eng.variables;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -613,7 +613,7 @@ namespace ETL_SQL.Tests.Engine
             var eval = await RunAndGet(
                 "DECLARE @x INT = 5;" +
                 "CLEAR SESSION;" +
-                "SHOW VARIABLES;");
+                "SELECT * FROM eng.variables;");
             Assert.NotNull(eval.LastResult);
         }
     }

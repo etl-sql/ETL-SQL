@@ -1,4 +1,5 @@
 # Catalog Search & Discovery Guide
+<!-- SearchPortalCatalogStatement -->
 
 The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows non-technical business consumers and developers to discover reports, datasets, and folders across the enterprise.
 

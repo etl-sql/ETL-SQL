@@ -1,4 +1,5 @@
 # Data Quality Rules (@expect / @fail / ON FAILURE)
+<!-- ShowDataQualityRulesStatement -->
 
 Column-value validation declared inline on SELECT columns as governance tags, with pluggable
 failure actions. Rules are ordinary stewardship tags, so they surface everywhere tags already do —

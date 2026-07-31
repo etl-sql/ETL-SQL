@@ -1,4 +1,5 @@
 # EXPORT
+<!-- ExportPortalConfigurationStatement -->
 
 Creates portable copies of datasets, scripts, or reports, or exports the Portal configuration.
 

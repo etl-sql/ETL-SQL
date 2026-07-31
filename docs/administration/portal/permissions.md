@@ -1,4 +1,8 @@
 # Groups and Folder Permissions
+<!-- GrantPortalPermissionStatement -->
+<!-- RevokePortalPermissionStatement -->
+<!-- GrantPortalDatasetPermissionStatement -->
+<!-- RevokePortalDatasetPermissionStatement -->
 
 ## 5. Groups & Folder Permissions
 

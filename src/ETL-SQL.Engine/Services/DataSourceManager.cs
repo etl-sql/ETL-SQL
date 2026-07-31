@@ -23,7 +23,9 @@ public class DataSourceManager(
     IJobHistoryStore? jobHistoryStore = null,
     IHostMetricsStore? hostMetricsStore = null,
     IBundleStore? bundleStore = null,
-    ETL_SQL.Core.Execution.ISessionStateManager? sessionStateManager = null)
+    ETL_SQL.Core.Execution.ISessionStateManager? sessionStateManager = null,
+    Microsoft.Extensions.Configuration.IConfiguration? configuration = null,
+    ILineageCatalogStore? lineageCatalogStore = null)
 {
     private readonly ILogger _logger = logger;
     private readonly Evaluator _evaluator = evaluator;
@@ -32,6 +34,8 @@ public class DataSourceManager(
     private readonly IHostMetricsStore? _hostMetricsStore = hostMetricsStore;
     private readonly IBundleStore? _bundleStore = bundleStore;
     private readonly ETL_SQL.Core.Execution.ISessionStateManager? _sessionStateManager = sessionStateManager;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _configuration = configuration;
+    private readonly ILineageCatalogStore? _lineageCatalogStore = lineageCatalogStore;
     private readonly Stack<string> _viewResolutionStack = new();
 
     /// <summary>
@@ -227,6 +231,10 @@ public class DataSourceManager(
             if (_sessionStateManager == null) throw new ExecutionException("Session state manager is not available.");
             return new SessionsDataSource(_sessionStateManager);
         }
+        else if (IsEngineVirtualTable(table, "locks"))
+        {
+            return new LocksDataSource(_configuration);
+        }
         else if (IsEngineVirtualTable(table, "variables"))
         {
             return new VariablesDataSource(_evaluator);
@@ -274,6 +282,30 @@ public class DataSourceManager(
         else if (IsEngineVirtualTable(table, "bundle_dependencies"))
         {
             return new BundleDependenciesDataSource(_bundleStore);
+        }
+        else if (IsEngineVirtualTable(table, "lineage"))
+        {
+            return new LineageDataSource(_evaluator.LineageTracker);
+        }
+        else if (IsEngineVirtualTable(table, "data_quality_rules"))
+        {
+            return new DataQualityRulesDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "lineage_history"))
+        {
+            return new LineageHistoryDataSource(_lineageCatalogStore, _configuration);
+        }
+        else if (IsEngineVirtualTable(table, "missing_tags"))
+        {
+            return new MissingTagsDataSource(_lineageCatalogStore, _configuration);
+        }
+        else if (IsEngineVirtualTable(table, "protected_data"))
+        {
+            return new ProtectedDataDataSource(_lineageCatalogStore, _configuration);
+        }
+        else if (IsEngineVirtualTable(table, "protected_data_suggestions"))
+        {
+            return new ProtectedDataSuggestionsDataSource(_lineageCatalogStore, _configuration);
         }
         else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
         {

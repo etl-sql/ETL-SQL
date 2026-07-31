@@ -1,4 +1,5 @@
 # DROP
+<!-- DropCatalogObjectStatement -->
 Removes a table, connection, index, or named set from the current session.
 
 ## Variants

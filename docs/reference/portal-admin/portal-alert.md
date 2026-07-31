@@ -1,4 +1,10 @@
 # Portal Report Alerts
+<!-- CreatePortalAlertStatement -->
+<!-- AlterPortalAlertNotificationStatement -->
+<!-- AlterPortalAlertStatement -->
+<!-- DropPortalAlertStatement -->
+<!-- SetPortalAlertEnabledStatement -->
+<!-- ShowPortalAlertsStatement -->
 Create portal alert definitions through a `PORTAL` connection.
 
 ## Syntax

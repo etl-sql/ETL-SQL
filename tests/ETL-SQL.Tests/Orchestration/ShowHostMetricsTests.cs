@@ -29,9 +29,9 @@ namespace ETL_SQL.Tests.Orchestration
                 HostCpuPercent: null, StateDiskFreeBytes: 1_073_741_824, SpillDiskFreeBytes: 2_147_483_648));
 
             await TestHelpers.Execute(eval, $@"
-SHOW HOST METRICS '{node}' INTO #hm;
+SELECT * INTO #hm FROM eng.host_metrics WHERE node_id = '{node}';
 DECLARE @count = (SELECT COUNT(*) FROM #hm);
-DECLARE @stateFreeMb = (SELECT StateDiskFreeMB FROM #hm);");
+DECLARE @stateFreeMb = (SELECT state_disk_free_mb FROM #hm);");
 
             Assert.Equal(1, Convert.ToInt32(eval.GetVariable("@count")));
             // 1 GiB = 1024 MiB, reported in MB for readability.

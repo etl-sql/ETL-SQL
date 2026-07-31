@@ -920,7 +920,7 @@ WHERE TargetTable = '#daily' AND TargetColumn = 'Revenue';
 --    would come from a prior run or an upstream system rather than this export.
 EXPORT LINEAGE AS OPENLINEAGE TO 'output/daily_lineage.json';
 INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
-SHOW LINEAGE FOR #daily TO 'output/daily_lineage_report.md';
+EXPORT LINEAGE FOR #daily AS OPENLINEAGE TO 'output/daily_lineage_report.json';
 ```
 
 > Imports are a starting point, not a freeze: any lineage the script produces afterwards accrues on top (last-writer-wins). See [Reference/Lineage.md](../reference/statements/session-control/lineage.md) for the tag/lineage import grammar.

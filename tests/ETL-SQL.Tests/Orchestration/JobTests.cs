@@ -145,11 +145,11 @@ namespace ETL_SQL.Tests.Orchestration
             await store.InitializeAsync();
 
             await evaluator.Evaluate(new Parser(new Lexer("CREATE JOB Job1 FOR SCRIPT 'jobs/job1.etlsql';").Tokenize()).Parse());
-            await evaluator.Evaluate(new Parser(new Lexer("SHOW JOBS;").Tokenize()).Parse());
+            await evaluator.Evaluate(new Parser(new Lexer("SELECT * FROM eng.jobs;").Tokenize()).Parse());
 
             var result = evaluator.LastResult;
             Assert.NotNull(result);
-            Assert.Contains(result.Rows, r => r["Name"].ToString() == "Job1");
+            Assert.Contains(result.Rows, r => r["name"].ToString() == "Job1");
         }
     }
 }

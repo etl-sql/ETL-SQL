@@ -1,4 +1,5 @@
 # SET
+<!-- SetThresholdStatement -->
 Assigns a value to a session variable or changes an engine execution option. All options are session-scoped and reset when the session ends.
 
 ## Syntax

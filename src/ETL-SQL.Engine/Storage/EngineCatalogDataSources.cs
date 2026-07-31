@@ -207,19 +207,31 @@ public sealed class VariablesDataSource : IDataSource
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var rows = new List<Row>();
-        foreach (var variable in _context.VarContext.Variables.OrderBy(v => v.Key, StringComparer.OrdinalIgnoreCase))
+        var varNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in _context.VarContext.Variables.Keys) varNames.Add(name);
+        foreach (var name in _context.VarContext.CurrentVariables.Keys) varNames.Add(name);
+
+        foreach (var name in varNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _context.VarContext.VariableMetadata.TryGetValue(variable.Key, out var metadata);
+            var val = _context.VarContext.GetVariable(name);
+
+            VariableMetadata? metadata = null;
+            if (_context.VarContext.CurrentMetadata.TryGetValue(name, out var m)) metadata = m;
+            else _context.VarContext.VariableMetadata.TryGetValue(name, out metadata);
+
             var isSensitive = metadata?.IsSensitive == true || metadata?.IsSecret == true;
-            var value = isSensitive && !_context.ShowPassword ? "*******" : variable.Value;
+            var value = isSensitive && !_context.ShowPassword ? "*******" : val;
+
+            var isLocal = _context.VarContext.CurrentVariables != _context.VarContext.Variables && _context.VarContext.CurrentVariables.ContainsKey(name);
+            var scope = isLocal ? "Local" : "Global";
 
             rows.Add(new Row
             {
-                ["variable_name"] = variable.Key,
+                ["variable_name"] = name,
                 ["value"] = value,
                 ["data_type"] = GetDataTypeName(value),
-                ["scope"] = "Global",
+                ["scope"] = scope,
                 ["is_sensitive"] = isSensitive
             });
 

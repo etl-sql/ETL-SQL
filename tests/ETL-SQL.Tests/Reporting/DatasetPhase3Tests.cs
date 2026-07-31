@@ -54,31 +54,16 @@ namespace ETL_SQL.Tests.Reporting
 
         // ── Parser — SHOW DATASETS ────────────────────────────────────────────────
 
-        [Fact]
-        public void ShowDatasets_Singular_ParsesStatement()
+        [Theory]
+        [InlineData("SHOW DATASET;")]
+        [InlineData("SHOW DATASETS;")]
+        [InlineData("SHOW DATASETS INTO #result;")]
+        public void ShowDatasets_RetiredCommands_ReturnsDiagnostics(string sql)
         {
-            var script = Parse("SHOW DATASET;");
-            var stmt = Assert.Single(script.Statements);
-            var show = Assert.IsType<ShowDatasetsStatement>(stmt);
-            Assert.Null(show.IntoTable);
-        }
-
-        [Fact]
-        public void ShowDatasets_Plural_ParsesStatement()
-        {
-            // DATASETS is parsed as IDENTIFIER, MatchIdentifier("DATASETS") handles it
-            var script = Parse("SHOW DATASETS;");
-            var stmt = Assert.Single(script.Statements);
-            Assert.IsType<ShowDatasetsStatement>(stmt);
-        }
-
-        [Fact]
-        public void ShowDatasets_IntoTemp_ParsesIntoTable()
-        {
-            var script = Parse("SHOW DATASETS INTO #result;");
-            var stmt = Assert.Single(script.Statements);
-            var show = Assert.IsType<ShowDatasetsStatement>(stmt);
-            Assert.Equal("#result", show.IntoTable);
+            var script = Parse(sql);
+            Assert.Empty(script.Statements);
+            var diag = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diag.Message, System.StringComparison.OrdinalIgnoreCase);
         }
 
         // ── Parser — REFRESH DATASET ──────────────────────────────────────────────

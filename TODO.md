@@ -173,23 +173,23 @@ uses `EXECUTE <admin_conn> BEGIN ... END` rather than one-off target clauses.
       Keep `WAITFOR DELAY` and `WAITFOR TIME`.
 - [x] Retire `SHOW COLUMNS FOR`, `SHOW SCHEMA FOR`, and `DESCRIBE`; use
       `SELECT * FROM eng.columns WHERE table_name = ...`.
-- [ ] Ensure generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs,
+- [x] Ensure generated scripts, samples, snippets, formatter output, autocomplete, hover help, docs,
       and diagnostics emit only canonical forms. Any temporary alias must produce a deprecation
       diagnostic with the exact replacement and removal release.
 
 #### P2 — Round-trip guarantees
 
-- [ ] Give every executable statement a real `ToSql()` serialization. Report-SQL and Portal
+- [x] Give every executable statement a real `ToSql()` serialization. Report-SQL and Portal
       statements must never fall through to `UNKNOWN STATEMENT`.
-- [ ] Add generated statement-surface inventory from parser/AST metadata and fail CI when a
+- [x] Add generated statement-surface inventory from parser/AST metadata and fail CI when a
       creatable object lacks lifecycle, formatter, grammar completion, help, snippet where
       applicable, or reference-page coverage.
-- [ ] Add table-driven parser -> formatter -> parser tests for every canonical form and explicit
+- [x] Add table-driven parser -> formatter -> parser tests for every canonical form and explicit
       rejection tests for every retired form.
-- [ ] Replace permissive documentation-snippet validation with production-parser validation that
+- [x] Replace permissive documentation-snippet validation with production-parser validation that
       asserts `script.Diagnostics` is empty, then parse every copy-pasteable documentation and
       sample block in its correct execution context.
-- [ ] Update `docs/syntax-index.md`, statement references, connector references, administration
+- [x] Update `docs/syntax-index.md`, statement references, connector references, administration
       guides, architecture contracts, help resources, snippets, migration guide, samples,
       configuration export, LSP grammar, and release notes as one atomic language cleanup.
 

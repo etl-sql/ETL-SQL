@@ -377,6 +377,29 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Empty(result);
         }
 
+        [Theory]
+        [InlineData("SHOW LINEAGE HISTORY FOR TABLE Orders;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TABLE Orders LIMIT 10;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TAG pii;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TAG pii = 'true';")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TAG pii = 'true' LIMIT 25;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 25 INTO #missing;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TABLE Orders INTO #result;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #h;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;")]
+        [InlineData("SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100 INTO #r;")]
+        [InlineData("SHOW PROTECTED DATA LIMIT 25 INTO #protected;")]
+        [InlineData("SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;")]
+        [InlineData("SHOW PROTECTED DATA SUGGESTIONS AT ProdPortal LIMIT 100 INTO #suggestions;")]
+        public void Parser_RetiredShowCommands_ReturnsDiagnostics(string sql)
+        {
+            var script = ParseScript(sql);
+            Assert.Empty(script.Statements);
+            var diag = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diag.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         // ── Idempotent initialisation ─────────────────────────────────────────
 
         [Fact]
@@ -386,167 +409,15 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.InitializeAsync();
         }
 
-        // ── Parser round-trip: both new statements parse without error ─────────
 
-        [Fact]
-        public void Parser_ShowLineageHistoryForTable_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders", hist.TableName);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTable_WithLimit_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders LIMIT 10;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders", hist.TableName);
-            Assert.Equal(10, hist.Limit);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTag_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii", hist.TagKey);
-            Assert.Null(hist.TagValue);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTag_WithValue_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true';");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii", hist.TagKey);
-            Assert.Equal("true", hist.TagValue);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTag_WithValueAndLimit_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true' LIMIT 25;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii", hist.TagKey);
-            Assert.Equal("true", hist.TagValue);
-            Assert.Equal(25, hist.Limit);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForMissingTags_WithAtLimitAndInto_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 25 INTO #missing;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForMissingTagsStatement>(stmt);
-            Assert.Equal("ProdOrch", hist.At);
-            Assert.Equal(25, hist.Limit);
-            Assert.Equal("#missing", hist.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTable_WithInto_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders INTO #result;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders", hist.TableName);
-            Assert.Equal("#result", hist.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTable_WithAt_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders", hist.TableName);
-            Assert.Equal("ProdOrch", hist.At);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTable_WithAtAndLimitAndInto_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #h;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders", hist.TableName);
-            Assert.Equal("ProdOrch", hist.At);
-            Assert.Equal(50, hist.Limit);
-            Assert.Equal("#h", hist.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTag_WithAt_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii", hist.TagKey);
-            Assert.Equal("true", hist.TagValue);
-            Assert.Equal("ProdOrch", hist.At);
-        }
-
-        [Fact]
-        public void Parser_ShowLineageHistoryForTag_WithAtAndInto_Parses()
-        {
-            var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100 INTO #r;");
-            var stmt = Assert.Single(script.Statements);
-            var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("classification", hist.TagKey);
-            Assert.Equal("restricted", hist.TagValue);
-            Assert.Equal("ProdOrch", hist.At);
-            Assert.Equal(100, hist.Limit);
-            Assert.Equal("#r", hist.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowProtectedData_WithLimitAndInto_Parses()
-        {
-            var script = ParseScript("SHOW PROTECTED DATA LIMIT 25 INTO #protected;");
-            var stmt = Assert.Single(script.Statements);
-            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
-            Assert.Equal(25, protectedData.Limit);
-            Assert.Equal("#protected", protectedData.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowProtectedData_WithAtLimitAndInto_Parses()
-        {
-            var script = ParseScript("SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;");
-            var stmt = Assert.Single(script.Statements);
-            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
-            Assert.Equal("ProdPortal", protectedData.At);
-            Assert.Equal(100, protectedData.Limit);
-            Assert.Equal("#protected", protectedData.IntoTable);
-        }
-
-        [Fact]
-        public void Parser_ShowProtectedDataSuggestions_WithAtLimitAndInto_Parses()
-        {
-            var script = ParseScript("SHOW PROTECTED DATA SUGGESTIONS AT ProdPortal LIMIT 100 INTO #suggestions;");
-            var stmt = Assert.Single(script.Statements);
-            var protectedData = Assert.IsType<ShowProtectedDataStatement>(stmt);
-            Assert.True(protectedData.Suggestions);
-            Assert.Equal("ProdPortal", protectedData.At);
-            Assert.Equal(100, protectedData.Limit);
-            Assert.Equal("#suggestions", protectedData.IntoTable);
-        }
 
         [Fact]
         public void Parser_ShowPortalAudit_WithActionLimitAndInto_Parses()
         {
             var script = ParseScript("SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 50 INTO #audit;");
-            var stmt = Assert.Single(script.Statements);
-            var audit = Assert.IsType<ShowPortalAuditStatement>(stmt);
-            Assert.Equal("STEWARD_LINEAGE_IMPACT", audit.Action);
-            Assert.Equal(50, audit.Limit);
-            Assert.Equal("#audit", audit.IntoTable);
+            Assert.Empty(script.Statements);
+            var diag = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diag.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

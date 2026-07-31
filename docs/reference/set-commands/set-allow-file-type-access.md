@@ -1,4 +1,5 @@
 # SET ALLOW_FILE_TYPE_ACCESS
+<!-- SetSecurityOverrideStatement -->
 Controls whether file extensions outside the global whitelist are permitted, or adds a specific extension to the session whitelist.
 
 ## Syntax

@@ -518,7 +518,7 @@ namespace ETL_SQL.Tests.Engine
             await eval.Evaluate(Parse(@"
                 SELECT 1 AS Id INTO #A;
                 SELECT 2 AS Id INTO #B;
-                SHOW TABLES;
+                SELECT * FROM eng.tables;
             "));
             Assert.NotNull(eval.LastResult);
         }
@@ -529,7 +529,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowProfile_ProducesResult()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("SELECT 1 AS N INTO #T; SHOW PROFILE;"));
+            await eval.Evaluate(Parse("SELECT 1 AS N INTO #T; SELECT * FROM eng.profile;"));
             Assert.NotNull(eval.LastResult);
         }
 
@@ -560,14 +560,19 @@ namespace ETL_SQL.Tests.Engine
                 Message: "Columnar aggregate path accepted.",
                 Attributes: new Dictionary<string, string>()));
 
-            await eval.Evaluate(Parse("SHOW PROFILE;"));
+            var dataSource = new ETL_SQL.Engine.Storage.ProfileDataSource(eval);
+            DataTable? table = null;
+            await foreach (var batch in dataSource.ReadBatches())
+            {
+                table = batch;
+            }
 
-            Assert.NotNull(eval.LastResult);
-            var row = Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal(2, Convert.ToInt32(row["PlanDecisions"]));
-            Assert.Equal(1, Convert.ToInt32(row["PlanAccepted"]));
-            Assert.Equal(1, Convert.ToInt32(row["PlanFallbacks"]));
-            Assert.Equal("ColumnarProjection:UnsupportedExpression=1", row["PlanFallbackSummary"]);
+            Assert.NotNull(table);
+            var row = Assert.Single(table.Rows);
+            Assert.Equal(2, Convert.ToInt32(row["plan_decisions"]));
+            Assert.Equal(1, Convert.ToInt32(row["plan_accepted"]));
+            Assert.Equal(1, Convert.ToInt32(row["plan_fallbacks"]));
+            Assert.Equal("ColumnarProjection:UnsupportedExpression=1", row["plan_fallback_summary"]);
         }
 
         // ── SET PROFILING ─────────────────────────────────────────────────────
@@ -590,7 +595,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowJobHistory_ProducesResult()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("SHOW JOB HISTORY;"));
+            await eval.Evaluate(Parse("SELECT * FROM eng.job_history;"));
             Assert.NotNull(eval.LastResult);
         }
 

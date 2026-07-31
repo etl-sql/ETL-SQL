@@ -1,9 +1,9 @@
 ---
 trigger: $tag_table
-label: TAG table WITH governance metadata
+label: INSERT TAG FOR TABLE …
 description: Table-level stewardship tags for lineage, catalog search, and governance policy
 ---
-TAG «#table» WITH (
+INSERT TAG FOR TABLE «TableName» (
   owner = '«team_or_person»',
   steward = '«data_steward»',
   contact = '«owner@example.com»',

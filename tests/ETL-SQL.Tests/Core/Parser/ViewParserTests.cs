@@ -40,16 +40,22 @@ CREATE OR ALTER VIEW ActiveCustomers AS SELECT id, name FROM #customers;
         }
 
         [Fact]
-        public void DropViewAndShowViews_Parse()
+        public void DropView_Parse()
         {
-            var script = Parse("DROP VIEW IF EXISTS ActiveCustomers; SHOW VIEWS INTO #views;");
+            var script = Parse("DROP VIEW IF EXISTS ActiveCustomers;");
 
             var drop = Assert.IsType<DropViewStatement>(script.Statements[0]);
-            var show = Assert.IsType<ShowViewsStatement>(script.Statements[1]);
 
             Assert.True(drop.IfExists);
             Assert.Equal("ActiveCustomers", drop.ViewName);
-            Assert.Equal("#views", show.IntoTable);
+        }
+
+        [Fact]
+        public void ShowViews_Retired_ReturnsDiagnostics()
+        {
+            var script = Parse("SHOW VIEWS INTO #views;");
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.Contains("SHOW VIEWS has been retired", script.Diagnostics[0].Message);
         }
     }
 }

@@ -41,7 +41,7 @@ public class DeprecatedConnectionSyntaxRule : ILintRule
                 RuleName = Name,
                 Code = FileConnectorDiagnosticCode,
                 Severity = LintSeverity.Warning,
-                Message = "Connection type 'FILE' is deprecated and will be removed after the compatibility window. Use 'FLATFILE' instead.",
+                Message = "Connection type 'FILE' is deprecated and will be removed in v0.19.0. Use 'FLATFILE' instead.",
                 LineNumber = stmt.Line,
                 ColumnNumber = stmt.Column
             });

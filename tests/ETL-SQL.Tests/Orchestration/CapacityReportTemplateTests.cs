@@ -41,22 +41,22 @@ namespace ETL_SQL.Tests.Orchestration
             await jobStore.LogJobEndAsync(s, "SUCCESS");
 
             await TestHelpers.Execute(eval, $@"
-SHOW HOST METRICS '{node}' INTO #hm;
-SELECT NodeId, MIN(StateDiskFreeMB) AS MinStateFreeMB, MIN(SpillDiskFreeMB) AS MinSpillFreeMB,
-       MAX(MemoryLoadPercent) AS PeakMemPct, MAX(ProcessCpuPercent) AS PeakCpuPct
-INTO #hostsum FROM #hm GROUP BY NodeId;
+SELECT * INTO #hm FROM eng.host_metrics WHERE node_id = '{node}';
+SELECT node_id, MIN(state_disk_free_mb) AS min_state_free_mb, MIN(spill_disk_free_mb) AS min_spill_free_mb,
+       MAX(memory_load_percent) AS peak_mem_pct, MAX(process_cpu_percent) AS peak_cpu_pct
+INTO #hostsum FROM #hm GROUP BY node_id;
 -- The template's exact host-line body expression.
 DECLARE @hostLines = (
     SELECT STRING_AGG(
-        CONCAT(NodeId, ': state ', CAST(MinStateFreeMB AS INT), ' MB free, spill ',
-               CAST(MinSpillFreeMB AS INT), ' MB free, peak mem ', CAST(PeakMemPct AS INT),
-               '%, peak cpu ', CAST(PeakCpuPct AS INT), '%'),
+        CONCAT(node_id, ': state ', CAST(min_state_free_mb AS INT), ' MB free, spill ',
+               CAST(min_spill_free_mb AS INT), ' MB free, peak mem ', CAST(peak_mem_pct AS INT),
+               '%, peak cpu ', CAST(peak_cpu_pct AS INT), '%'),
         CHAR(10))
     FROM #hostsum);
 
-SHOW JOB HISTORY '{job}' INTO #jh;
+SELECT * INTO #jh FROM eng.job_history WHERE job_name = '{job}';
 DECLARE @runs = (SELECT COUNT(*) FROM #jh);
-DECLARE @failures = (SELECT COUNT(*) FROM #jh WHERE Status NOT IN ('SUCCESS', 'RUNNING'));");
+DECLARE @failures = (SELECT COUNT(*) FROM #jh WHERE status NOT IN ('SUCCESS', 'RUNNING'));");
 
             Assert.Contains($"{node}: state 500 MB free", eval.GetVariable("@hostLines")?.ToString() ?? "");
             Assert.Contains("peak mem 70%", eval.GetVariable("@hostLines")?.ToString() ?? "");

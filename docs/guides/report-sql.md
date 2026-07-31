@@ -1,4 +1,7 @@
 # Report-SQL Scripting Guide
+<!-- CreateTemplateStatement -->
+<!-- CreateThemeStatement -->
+<!-- SetTemplatePathStatement -->
 
 Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, `CREATE NAVIGATION`, `CREATE BUTTON`, and `CREATE STYLE` — plus a CLI build tool and live browser hosts for serving reports.
 

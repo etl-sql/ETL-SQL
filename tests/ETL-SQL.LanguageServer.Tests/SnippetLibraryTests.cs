@@ -78,7 +78,7 @@ public class SnippetLibraryTests
     [InlineData("$tag_report")]
     [InlineData("$tag_table")]
     [InlineData("$tag_column")]
-    [InlineData("$create_tag")]
+    [InlineData("$insert_tag")]
     public void Load_ExpectedTriggerExists(string trigger)
     {
         var snippets = SnippetLibrary.Instance.GetAll();

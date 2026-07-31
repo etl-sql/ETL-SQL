@@ -1,4 +1,5 @@
 # CONFIG
+<!-- ShowConnectionConfigStatement -->
 
 CONFIG is a keyword used exclusively with the SHOW CONNECTION command to inspect the configuration options and parameters of a data source connection.
 

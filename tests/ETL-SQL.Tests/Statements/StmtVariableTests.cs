@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Statements
             var sql = @"
                 DECLARE @count INT = 42;
                 DECLARE @name STRING = 'Chuck';
-                SHOW VARIABLES;
+                SELECT * FROM eng.variables;
             ";
 
             await eval.Evaluate(Parse(sql));
@@ -44,14 +44,14 @@ namespace ETL_SQL.Tests.Statements
             Assert.NotNull(results);
             Assert.True(results.Rows.Count >= 2);
 
-            var countRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@count");
+            var countRow = results.Rows.FirstOrDefault(r => r["variable_name"].ToString() == "@count");
             Assert.NotNull(countRow);
-            Assert.Equal(42m, Convert.ToDecimal(countRow["Value"]));
-            Assert.Equal("Global", countRow["Scope"]);
+            Assert.Equal(42m, Convert.ToDecimal(countRow["value"]));
+            Assert.Equal("Global", countRow["scope"]);
 
-            var nameRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@name");
+            var nameRow = results.Rows.FirstOrDefault(r => r["variable_name"].ToString() == "@name");
             Assert.NotNull(nameRow);
-            Assert.Equal("Chuck", nameRow["Value"]);
+            Assert.Equal("Chuck", nameRow["value"]);
         }
 
         [Fact]
@@ -62,16 +62,16 @@ namespace ETL_SQL.Tests.Statements
 
             var sql = @"
                 DECLARE @secret STRING = 'my-password' PASSWORD;
-                SHOW VARIABLES;
+                SELECT * FROM eng.variables;
             ";
 
             await eval.Evaluate(Parse(sql));
 
             var results = eval.LastResult;
-            var secretRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@secret");
+            var secretRow = results.Rows.FirstOrDefault(r => r["variable_name"].ToString() == "@secret");
             Assert.NotNull(secretRow);
-            Assert.Equal("*******", secretRow["Value"]);
-            Assert.Equal(true, secretRow["IsSensitive"]);
+            Assert.Equal("*******", secretRow["value"]);
+            Assert.Equal(true, secretRow["is_sensitive"]);
         }
 
         [Fact]
@@ -82,15 +82,15 @@ namespace ETL_SQL.Tests.Statements
 
             var sql = @"
                 DECLARE @secret STRING = 'my-password' PASSWORD;
-                SHOW VARIABLES;
+                SELECT * FROM eng.variables;
             ";
 
             await eval.Evaluate(Parse(sql));
 
             var results = eval.LastResult;
-            var secretRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@secret");
+            var secretRow = results.Rows.FirstOrDefault(r => r["variable_name"].ToString() == "@secret");
             Assert.NotNull(secretRow);
-            Assert.Equal("my-password", secretRow["Value"]);
+            Assert.Equal("my-password", secretRow["value"]);
         }
 
         [Fact]
@@ -99,8 +99,8 @@ namespace ETL_SQL.Tests.Statements
             var eval = await GetEvaluator();
             var sql = @"
                 DECLARE @v INT = 1;
-                SHOW VARIABLES INTO #myVars;
-                SELECT * FROM #myVars WHERE Name = '@v';
+                SELECT * INTO #myVars FROM eng.variables;
+                SELECT * FROM #myVars WHERE variable_name = '@v';
             ";
 
             await eval.Evaluate(Parse(sql));
@@ -108,7 +108,7 @@ namespace ETL_SQL.Tests.Statements
             var results = eval.LastResult;
             Assert.NotNull(results);
             Assert.Single(results.Rows);
-            Assert.Equal(1m, Convert.ToDecimal(results.Rows[0]["Value"]));
+            Assert.Equal(1m, Convert.ToDecimal(results.Rows[0]["value"]));
         }
 
         [Fact]
@@ -122,7 +122,7 @@ namespace ETL_SQL.Tests.Statements
                 AS
                 BEGIN
                     DECLARE @inner STRING = 'inside';
-                    SHOW LOCAL VARIABLES;
+                    SELECT * FROM eng.variables WHERE scope = 'Local';
                 END;
 
                 EXECUTE TestScope;
@@ -133,8 +133,8 @@ namespace ETL_SQL.Tests.Statements
             var results = eval.LastResult;
             Assert.NotNull(results);
             // Should only contain @inner because Procedures push a new scope
-            Assert.Contains(results.Rows, r => r["Name"].ToString() == "@inner");
-            Assert.DoesNotContain(results.Rows, r => r["Name"].ToString() == "@outer");
+            Assert.Contains(results.Rows, r => r["variable_name"].ToString() == "@inner");
+            Assert.DoesNotContain(results.Rows, r => r["variable_name"].ToString() == "@outer");
         }
 
         [Fact]

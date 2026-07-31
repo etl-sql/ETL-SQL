@@ -437,7 +437,7 @@ namespace ETL_SQL.Tests.Engine
                 ON FAILURE QUARANTINE TO #q
                 ON FAILURE WARN;");
 
-            await Run(eval, "SHOW DATA QUALITY RULES;");
+            await Run(eval, "SELECT * FROM eng.data_quality_rules;");
             var rows = eval.LastResult!.Rows;
 
             // One row per individual rule, not per tag: 'NOT NULL, >= 0' reads as two protections.
@@ -466,11 +466,11 @@ namespace ETL_SQL.Tests.Engine
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
-            await Run(eval, "SHOW DATA QUALITY RULES FOR #clean COLUMN Id;");
+            await Run(eval, "SELECT * FROM eng.data_quality_rules WHERE TargetTable = '#clean' AND TargetColumn = 'Id';");
             var single = Assert.Single(eval.LastResult!.Rows);
             Assert.Equal("Id", single["TargetColumn"]);
 
-            await Run(eval, "SHOW DATA QUALITY RULES INTO #rules;");
+            await Run(eval, "SELECT * INTO #rules FROM eng.data_quality_rules;");
             var captured = await ReadRows(eval, "#rules");
             Assert.Equal(2, captured.Count);
             Assert.All(captured, r => Assert.Equal("#clean", r["TargetTable"]));
@@ -480,7 +480,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowDataQualityRules_WithNoRulesRecorded_ReturnsEmptyRatherThanFailing()
         {
             var eval = NewEvaluator();
-            await Run(eval, "SHOW DATA QUALITY RULES;");
+            await Run(eval, "SELECT * FROM eng.data_quality_rules;");
             Assert.Empty(eval.LastResult!.Rows);
         }
 

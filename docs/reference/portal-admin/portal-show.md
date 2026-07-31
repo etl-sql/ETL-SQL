@@ -1,4 +1,18 @@
 # Portal Show Commands
+<!-- ShowPortalUsersStatement -->
+<!-- ShowPortalReportsStatement -->
+<!-- ShowPortalReportStatement -->
+<!-- ShowPortalReportHistoryStatement -->
+<!-- ShowPortalReportDependenciesStatement -->
+<!-- ShowPortalSavedViewsStatement -->
+<!-- ShowPortalFavoritesStatement -->
+<!-- ShowPortalRecentReportsStatement -->
+<!-- ShowEffectivePortalPermissionsStatement -->
+<!-- ShowPortalUsageMetricsStatement -->
+<!-- ShowPortalOperationalMetricsStatement -->
+<!-- ShowPortalAuditStatement -->
+<!-- ShowActivePortalSessionsStatement -->
+<!-- ValidatePortalReportStatement -->
 Query portal state, user information, report metadata, and usage metrics inside an `EXECUTE portal` block.
 
 ## Syntax

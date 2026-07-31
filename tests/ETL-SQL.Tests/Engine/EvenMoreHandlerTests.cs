@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -43,14 +43,14 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowJobs_NoJobsRegistered_ReturnsEmptyTable()
         {
-            var eval = await RunAndGet("SHOW JOBS;");
+            var eval = await RunAndGet("SELECT * FROM eng.jobs;");
             Assert.NotNull(eval.LastResult);
         }
 
         [Fact]
         public async Task ShowJobs_IntoTempTable_PopulatesTable()
         {
-            var eval = await RunAndGet("SHOW JOBS INTO #jobs; SELECT * FROM #jobs;");
+            var eval = await RunAndGet("SELECT * INTO #jobs FROM eng.jobs; SELECT * FROM #jobs;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -59,14 +59,14 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ShowDatasets_NoDatasets_ReturnsEmptyTable()
         {
-            var eval = await RunAndGet("SHOW DATASETS;");
+            var eval = await RunAndGet("SELECT * FROM eng.tables;");
             Assert.NotNull(eval.LastResult);
         }
 
         [Fact]
         public async Task ShowDatasets_IntoTempTable_PopulatesTable()
         {
-            var eval = await RunAndGet("SHOW DATASETS INTO #ds; SELECT * FROM #ds;");
+            var eval = await RunAndGet("SELECT * INTO #ds FROM eng.tables; SELECT * FROM #ds;");
             Assert.NotNull(eval.LastResult);
         }
 
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.Engine
                 var path = tmpCsv.Replace("\\", "\\\\");
                 var eval = await RunAndGet(
                     $"CREATE CONNECTION fc AS FLATFILE('{path}');" +
-                    $"SHOW CONNECTION fc CONFIG;");
+                    $"SELECT * FROM eng.connection_config WHERE connection_name = 'fc';");
                 Assert.NotNull(eval.LastResult);
             }
             finally { if (File.Exists(tmpCsv)) File.Delete(tmpCsv); }
@@ -98,7 +98,7 @@ namespace ETL_SQL.Tests.Engine
                 var path = tmpCsv.Replace("\\", "\\\\");
                 var eval = await RunAndGet(
                     $"CREATE CONNECTION fc2 AS FLATFILE('{path}');" +
-                    $"SHOW CONNECTION fc2 CONFIG INTO #cfg;" +
+                    $"SELECT * INTO #cfg FROM eng.connection_config WHERE connection_name = 'fc2';" +
                     $"SELECT * FROM #cfg;");
                 Assert.NotNull(eval.LastResult);
             }
@@ -106,10 +106,11 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task ShowConnectionConfig_MissingConnection_Throws()
+        public async Task ShowConnectionConfig_MissingConnection_ReturnsEmpty()
         {
-            await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("SHOW CONNECTION nonexistent_conn_xyz CONFIG;"));
+            var eval = await RunAndGet("SELECT * FROM eng.connection_config WHERE connection_name = 'nonexistent_conn_xyz';");
+            Assert.NotNull(eval.LastResult);
+            Assert.Empty(eval.LastResult.Rows);
         }
 
         // ── PARALLEL FOR ──────────────────────────────────────────────────────

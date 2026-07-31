@@ -39,7 +39,9 @@ public class EvaluatorComponentRegistry
             serviceProvider?.GetService<IJobHistoryStore>(),
             serviceProvider?.GetService<IHostMetricsStore>(),
             serviceProvider?.GetService<IBundleStore>(),
-            serviceProvider?.GetService<ETL_SQL.Core.Execution.ISessionStateManager>());
+            serviceProvider?.GetService<ETL_SQL.Core.Execution.ISessionStateManager>(),
+            serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>(),
+            serviceProvider?.GetService<ILineageCatalogStore>());
         SchemaManager = new SchemaManager(logger, evaluator, variableScopeManager);
         ProcedureExecutor = new ProcedureExecutor(variableScopeManager, evaluator);
         ReportContext = reportContext ?? new ReportRegistry();

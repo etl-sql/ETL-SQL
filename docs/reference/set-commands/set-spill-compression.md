@@ -1,4 +1,5 @@
 # SET SPILL_COMPRESSION
+<!-- SetSpillOptionStatement -->
 Controls whether data buffers spilled to disk are compressed.
 
 ## Syntax

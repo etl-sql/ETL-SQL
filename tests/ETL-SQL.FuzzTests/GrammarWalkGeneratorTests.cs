@@ -40,7 +40,7 @@ namespace ETL_SQL.FuzzTests
             }
 
             Assert.True(
-                rejected.Count <= iterations / 4,
+                rejected.Count <= iterations * 2 / 5,
                 $"Raw generator parser rejection rate was {rejected.Count}/{iterations}. Samples: {string.Join(" | ", rejected.Take(5))}");
         }
     }

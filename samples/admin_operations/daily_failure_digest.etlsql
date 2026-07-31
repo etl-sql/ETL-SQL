@@ -32,13 +32,13 @@ DECLARE @sender    STRING = 'etl-alerts@example.com';
 --    non-successful runs. 'RUNNING' rows are in-flight jobs (excluded); jobs the
 --    orchestrator abandoned in a crash surface as 'INTERRUPTED' and ARE included.
 --    Widen the window (e.g. DATEADD(HOUR, -25, ...)) to overlap the schedule.
-SHOW JOB HISTORY INTO #jobhist;
+SELECT * INTO #jobhist FROM eng.job_history;
 
-SELECT JobName, StartTime, EndTime, Status, ErrorMessage
+SELECT job_name, start_time, end_time, status, error_message
 INTO #failures
 FROM #jobhist
-WHERE Status NOT IN ('SUCCESS', 'RUNNING')
-  AND StartTime >= DATEADD(DAY, -1, GETDATE());
+WHERE status NOT IN ('SUCCESS', 'RUNNING')
+  AND start_time >= DATEADD(DAY, -1, GETDATE());
 
 DECLARE @failCount INT = (SELECT COUNT(*) FROM #failures);
 PRINT CONCAT('Job failures in the last 24h: ', @failCount);
@@ -46,9 +46,9 @@ PRINT CONCAT('Job failures in the last 24h: ', @failCount);
 -- 3. Only email when something actually failed.
 IF @failCount > 0
 BEGIN
-    -- One line per failed job: "JobName [STATUS]: error message".
+    -- One line per failed job: "job_name [STATUS]: error message".
     DECLARE @detail STRING = (
-        SELECT STRING_AGG(CONCAT(JobName, ' [', Status, ']: ', ISNULL(ErrorMessage, '(no message)')), CHAR(10))
+        SELECT STRING_AGG(CONCAT(job_name, ' [', status, ']: ', ISNULL(error_message, '(no message)')), CHAR(10))
         FROM #failures
     );
 
@@ -59,7 +59,7 @@ BEGIN
         BODY CONCAT(
             'The following scheduled jobs did not complete successfully in the last 24 hours:', CHAR(10), CHAR(10),
             @detail, CHAR(10), CHAR(10),
-            'Review them in the orchestrator (SHOW JOB HISTORY) or the Portal.')
+            'Review them in the orchestrator (SELECT * FROM eng.job_history) or the Portal.')
         AT Mailer;
 
     PRINT 'Failure digest sent.';

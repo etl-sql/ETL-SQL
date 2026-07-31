@@ -24,29 +24,29 @@ DECLARE @recipient STRING = 'ops-team@example.com';
 DECLARE @sender    STRING = 'etl-alerts@example.com';
 
 -- 1. Host utilization: aggregate the time series to the worst point per node.
-SHOW HOST METRICS INTO #hm;
+SELECT * INTO #hm FROM eng.host_metrics;
 
-SELECT NodeId,
-       MIN(StateDiskFreeMB) AS MinStateFreeMB,
-       MIN(SpillDiskFreeMB) AS MinSpillFreeMB,
-       MAX(MemoryLoadPercent) AS PeakMemPct,
-       MAX(ProcessCpuPercent) AS PeakCpuPct
+SELECT node_id,
+       MIN(state_disk_free_mb) AS min_state_free_mb,
+       MIN(spill_disk_free_mb) AS min_spill_free_mb,
+       MAX(memory_load_percent) AS peak_mem_pct,
+       MAX(process_cpu_percent) AS peak_cpu_pct
 INTO #hostsum
 FROM #hm
-GROUP BY NodeId;
+GROUP BY node_id;
 
 DECLARE @hostLines STRING = (
     SELECT STRING_AGG(
-        CONCAT(NodeId, ': state ', CAST(MinStateFreeMB AS INT), ' MB free, spill ',
-               CAST(MinSpillFreeMB AS INT), ' MB free, peak mem ', CAST(PeakMemPct AS INT),
-               '%, peak cpu ', CAST(PeakCpuPct AS INT), '%'),
+        CONCAT(node_id, ': state ', CAST(min_state_free_mb AS INT), ' MB free, spill ',
+               CAST(min_spill_free_mb AS INT), ' MB free, peak mem ', CAST(peak_mem_pct AS INT),
+               '%, peak cpu ', CAST(peak_cpu_pct AS INT), '%'),
         CHAR(10))
     FROM #hostsum);
 
 -- 2. Job activity over the same window.
-SHOW JOB HISTORY INTO #jh;
+SELECT * INTO #jh FROM eng.job_history;
 DECLARE @runs     INT = (SELECT COUNT(*) FROM #jh);
-DECLARE @failures INT = (SELECT COUNT(*) FROM #jh WHERE Status NOT IN ('SUCCESS', 'RUNNING'));
+DECLARE @failures INT = (SELECT COUNT(*) FROM #jh WHERE status NOT IN ('SUCCESS', 'RUNNING'));
 
 -- 3. Email the summary.
 SEND EMAIL

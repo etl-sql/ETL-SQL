@@ -34,9 +34,9 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Filtered to one job: only its keys, readable from a completely different context.
             await TestHelpers.Execute(eval, $@"
-SHOW JOB STATE '{jobA}' INTO #st;
+SELECT * INTO #st FROM eng.job_state WHERE job_name = '{jobA}';
 DECLARE @count INT = (SELECT COUNT(*) FROM #st);
-DECLARE @status STRING = (SELECT StateValue FROM #st WHERE StateKey = 'last_backup_status');");
+DECLARE @status STRING = (SELECT state_value FROM #st WHERE state_key = 'last_backup_status');");
 
             Assert.Equal(2, Convert.ToInt32(eval.GetVariable("@count")));
             Assert.Equal("SUCCESS", eval.GetVariable("@status")?.ToString());

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
@@ -108,15 +108,15 @@ namespace ETL_SQL.Tests.Statements.Statements
             var script = TestHelpers.Parse(@"
                 CREATE CONNECTION m AS MOCKDB();
                 SELECT * FROM m.Users;
-                SHOW PROFILE;
+                SELECT * FROM eng.profile;
             ");
 
             await eval.Evaluate(script);
 
-            // Should have 2 result sets: SELECT result + SHOW PROFILE result
+            // Should have 2 result sets: SELECT result + SELECT FROM eng.profile result
             Assert.Equal(2, eval.LastResultSets.Count);
             var profileResult = eval.LastResultSets[1];
-            Assert.Contains("Statement", profileResult.ColumnNames);
+            Assert.Contains("statement", profileResult.ColumnNames);
             Assert.True(profileResult.Rows.Count > 0);
         }
     }

@@ -69,6 +69,7 @@ public static class AstSerializer
         ForeachStatement s => $"FOREACH {s.VariableName} IN {s.ListExpression.ToSql()} BEGIN ... END",
         IfStatement s => FormatIf(s),
         ParallelStatement s => "PARALLEL " + (s.ConcurrencyLimit > 0 ? $"({s.ConcurrencyLimit}) " : "") + s.Body.ToSql(),
+        ParallelForStatement s => $"PARALLEL FOR {s.VariableName} = {s.StartValue.ToSql()} TO {s.EndValue.ToSql()}{(s.StepValue != null ? $" STEP {s.StepValue.ToSql()}" : "")}{(s.ConcurrencyLimit > 0 ? $" CONCURRENCY {s.ConcurrencyLimit}" : "")} BEGIN ... END",
 
         // ── Transactions ──
         BeginTransactionStatement s => s.Name != null ? $"BEGIN TRANSACTION {s.Name};" : "BEGIN TRANSACTION;",
@@ -110,6 +111,7 @@ public static class AstSerializer
         EnableJobStatement s => $"ENABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         DisableJobStatement s => $"DISABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
         TriggerJobStatement s => $"TRIGGER JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
+        KillJobStatement s => $"KILL JOB {s.JobIdExpr.ToSql()};",
 
         // ── Scheduler catalog ──
         // These must round-trip: ConfigurationExportService emits them and the export has to replay
@@ -169,6 +171,58 @@ public static class AstSerializer
             $"SHOW EMBED TOKENS FOR REPORT {Quote(s.ReportName)}"
             + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "")
             + ";",
+        CreatePortalUserStatement s => $"CREATE USER {s.Username} ROLE {s.Role} EMAIL {s.Email};",
+        AlterPortalUserStatement s => $"ALTER USER {s.Username} ...;",
+        DropPortalUserStatement s => $"DROP USER {s.Username}{(s.Cascade ? " CASCADE" : "")};",
+        CreatePortalGroupStatement s => $"CREATE GROUP {s.Name};",
+        DropPortalGroupStatement s => $"DROP GROUP {s.Name}{(s.Cascade ? " CASCADE" : "")};",
+        AddUserToPortalGroupStatement s => $"ADD USER {s.Username} TO GROUP {s.GroupName};",
+        CreatePortalFolderStatement s => $"CREATE FOLDER '{s.Path}';",
+        AlterPortalFolderStatement s => $"ALTER FOLDER '{s.Path}' ...;",
+        DropPortalFolderStatement s => $"DROP FOLDER '{s.Path}'{(s.Cascade ? " CASCADE" : "")};",
+        GrantPortalPermissionStatement s => $"GRANT {s.Permission.ToString().ToUpper()} ON FOLDER '{s.FolderPath}' TO GROUP {s.GroupName};",
+        RevokePortalPermissionStatement s => $"REVOKE {s.Permission.ToString().ToUpper()} ON FOLDER '{s.FolderPath}' FROM GROUP {s.GroupName};",
+        AlterPortalDatasetStatement s => $"ALTER DATASET {s.DatasetName} ...;",
+        RefreshPortalDatasetStatement s => $"REFRESH DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}';",
+        DropPortalDatasetStatement s => $"DROP DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}';",
+        GrantPortalDatasetPermissionStatement s => $"GRANT {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' TO GROUP {s.GroupName};",
+        RevokePortalDatasetPermissionStatement s => $"REVOKE {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' FROM GROUP {s.GroupName};",
+        PublishPortalReportStatement s => $"PUBLISH REPORT {s.ReportName} FROM '{s.ScriptPath}' TO FOLDER '{s.FolderPath}';",
+        AlterPortalReportStatement s => $"ALTER REPORT {s.ReportName} ...;",
+        DropPortalReportStatement s => $"DROP REPORT {s.ReportName}{(s.Cascade ? " CASCADE" : "")};",
+        FavoritePortalReportStatement s => $"FAVORITE REPORT {s.ReportName}" + (s.Username != null ? $" FOR {s.Username}" : "") + ";",
+        UnfavoritePortalReportStatement s => $"UNFAVORITE REPORT {s.ReportName}" + (s.Username != null ? $" FOR {s.Username}" : "") + ";",
+        CreatePortalSavedViewStatement s => $"CREATE SAVED VIEW {s.Name} FOR REPORT {s.ReportName} ...;",
+        DropPortalSavedViewStatement s => $"DROP SAVED VIEW {s.Name} FOR REPORT {s.ReportName};",
+        CreatePortalRefreshJobStatement s => $"CREATE REFRESH JOB FOR REPORT {s.ReportName} ON '{s.Schedule}' USING {s.OrchestratorAlias};",
+        RefreshPortalReportStatement s => $"REFRESH REPORT {s.ReportName};",
+        DropPortalRefreshJobStatement s => $"DROP REFRESH JOB FOR REPORT {s.ReportName};",
+        DropPortalSnapshotStatement s => $"DROP SNAPSHOT FOR REPORT {s.ReportName};",
+        RebuildPortalSnapshotStatement s => $"REBUILD SNAPSHOT FOR REPORT {s.ReportName};",
+        CreatePortalSubscriptionStatement s => $"CREATE SUBSCRIPTION FOR REPORT {s.ReportPath} TO {s.Recipient} ...;",
+        AlterPortalSubscriptionStatement s => $"ALTER SUBSCRIPTION {s.SubscriptionId} SET ...;",
+        DropPortalSubscriptionStatement s => $"DROP SUBSCRIPTION {s.SubscriptionId};",
+        DisconnectPortalUserStatement s => $"DISCONNECT USER {s.Username};",
+        RevokePortalTokensStatement s => $"REVOKE TOKENS FOR USER {s.Username};",
+        RestartPortalStatement _ => "RESTART PORTAL;",
+        ExportPortalConfigurationStatement s => $"EXPORT PORTAL CONFIGURATION TO '{s.TargetPath}';",
+        ShutdownPortalStatement _ => "SHUTDOWN PORTAL;",
+        ShowPortalUsersStatement _ => "SHOW PORTAL USAGE USERS;",
+        ShowPortalReportsStatement s => $"SHOW PORTAL REPORTS" + (s.FolderPath != null ? $" ON FOLDER '{s.FolderPath}'" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalReportStatement s => $"SHOW PORTAL REPORT {s.ReportName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalReportHistoryStatement s => $"SHOW PORTAL REPORT HISTORY FOR {s.ReportName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalReportDependenciesStatement s => $"SHOW PORTAL REPORT DEPENDENCIES FOR {s.ReportName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalSavedViewsStatement s => $"SHOW PORTAL SAVED VIEWS FOR {s.ReportName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalAlertsStatement s => $"SHOW PORTAL ALERTS FOR {s.ReportName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalFavoritesStatement s => $"SHOW PORTAL FAVORITES" + (s.Username != null ? $" FOR {s.Username}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalRecentReportsStatement s => $"SHOW PORTAL RECENT REPORTS" + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        SearchPortalCatalogStatement s => $"SEARCH PORTAL CATALOG FOR '{s.Query}'" + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowEffectivePortalPermissionsStatement s => $"SHOW EFFECTIVE PORTAL PERMISSIONS FOR {s.TargetType} {s.Target}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalUsageMetricsStatement s => $"SHOW PORTAL USAGE METRICS" + (s.Days != null ? $" FOR {s.Days} DAYS" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalOperationalMetricsStatement s => $"SHOW PORTAL OPERATIONAL METRICS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowPortalAuditStatement s => "SHOW PORTAL AUDIT" + (s.Action != null ? $" FOR ACTION {s.Action}" : "") + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowActivePortalSessionsStatement s => "SHOW ACTIVE PORTAL SESSIONS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ValidatePortalReportStatement s => $"VALIDATE REPORT SCRIPT '{s.ScriptPath}'" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowJobHistoryStatement s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowJobsStatement s => "SHOW JOBS" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
@@ -186,6 +240,19 @@ public static class AstSerializer
         ShowConnectionConfigStatement s => $"SHOW CONNECTION {s.ConnectionName} CONFIG" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowTablesStatement s => (s.ConnectionName != null ? $"SHOW TABLES ON {s.ConnectionName}" : "SHOW TABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         ShowVariablesStatement s => (s.IsLocalOnly ? "SHOW LOCAL VARIABLES" : "SHOW VARIABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "") + ";",
+        ShowSessionsStatement s => "SHOW SESSIONS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowLocksStatement s => "SHOW LOCKS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowSafeZonesStatement s => "SHOW SAFE ZONES" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowDataQualityRulesStatement s => "SHOW DATA QUALITY RULES" + (s.TargetTable != null ? $" FOR TABLE {s.TargetTable.ToSql()}" : "") + (s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowLineageHistoryForTableStatement s => $"SHOW LINEAGE HISTORY FOR TABLE {s.TableName}" + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowLineageHistoryForTagStatement s => $"SHOW LINEAGE HISTORY FOR TAG {s.TagKey}" + (s.TagValue != null ? $" = '{s.TagValue}'" : "") + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowLineageHistoryForMissingTagsStatement s => "SHOW LINEAGE HISTORY FOR MISSING TAGS" + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowLineageHistoryForJobStatement s => $"SHOW LINEAGE HISTORY FOR JOB {s.JobName}" + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowProtectedDataStatement s => "SHOW PROTECTED DATA" + (s.Suggestions ? " SUGGESTIONS" : "") + (s.Limit != null ? $" LIMIT {s.Limit}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowHostMetricsStatement s => "SHOW HOST METRICS" + (s.NodeId != null ? $" FOR '{s.NodeId}'" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowJobStateStatement s => "SHOW JOB STATE" + (s.JobName != null ? $" '{s.JobName}'" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        ShowViewsStatement s => "SHOW VIEWS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        TestConnectionStatement s => $"TEST CONNECTION {s.ConnectionName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
         // ── Misc statements ──
         RunScriptStatement s => FormatRunScript(s),
         WaitForStatement s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",
@@ -204,12 +271,26 @@ public static class AstSerializer
         LineageStatement s => FormatLineage(s),
         TransformStatement s => FormatTransform(s),
         LintStatement s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
+        GoStatement s => "GO" + (s.Count > 1 ? $" {s.Count}" : "") + ";",
+        GenerateJwtSecretStatement _ => "GENERATE JWT_SECRET;",
+        RequireVersionStatement s => $"REQUIRE VERSION {s.Operator} '{s.Version}';",
+        GenerateStatement s => $"GENERATE {s.RowCount.ToSql()} ROWS INTO {s.Target.ToSql()} ({string.Join(", ", s.Rules.Select(r => $"{r.ColumnName} = {r.Rule}"))})" + (s.Options != null && s.Options.Count > 0 ? " WITH (" + string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {kv.Value.ToSql()}")) + ")" : "") + ";",
+        GenerateCalendarStatement s => $"GENERATE CALENDAR FROM {s.StartDate.ToSql()} TO {s.EndDate.ToSql()} INTO {s.Target.ToSql()};",
+        CompareDatasetsStatement s => $"COMPARE DATASETS {s.SourceTable.ToSql()} WITH {s.BaselineTable.ToSql()} KEY ({string.Join(", ", s.KeyColumns)})" + (s.ExcludeColumns != null && s.ExcludeColumns.Count > 0 ? $" EXCLUDE ({string.Join(", ", s.ExcludeColumns)})" : "") + $" INTO {s.TargetTable.ToSql()};",
         HelpStatement s => $"HELP {(s.Topic != null ? s.Topic + (s.SubTopic != null ? " " + s.SubTopic : "") : "")}",
         DropReportObjectStatement s => $"DROP {s.ObjectType.ToString().ToUpper()} {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
         AlterReportObjectStatement s => $"ALTER {s.ObjectType.ToString().ToUpper()} {s.Name} ...", // Summarized
         CreateTemplateStatement s => FormatCreateTemplate(s),
         CreateThemeStatement s => FormatCreateTheme(s),
         SetTemplatePathStatement s => s.ToSql(),
+        AssertStatement s => $"ASSERT {s.Condition.ToSql()}{(s.Message != null ? $", {s.Message.ToSql()}" : "")};",
+        AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})" + (s.FailureNotification != null ? $" ON FAILURE NOTIFY {s.FailureNotification}" : "") + (s.ThrowOnCritical ? " ON CRITICAL_FAILURE THROW" : "") + ";",
+        SetReportMetadataStatement s => $"SET REPORT {s.Key} = '{s.Value.Replace("'", "''")}';",
+        UseDatasetStatement s => $"USE DATASET {s.DatasetName};",
+        ShowDatasetsStatement s => "SHOW DATASETS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+        RefreshDatasetStatement s => $"REFRESH DATASET {s.DatasetName};",
+        ExportDatasetStatement s => $"EXPORT DATASET {s.DatasetName} TO '{s.TargetPath}';",
+        PublishDatasetStatement s => $"PUBLISH DATASET {s.DatasetName} FROM '{s.SourcePath}'" + (s.TargetFolder != null ? $" INTO '{s.TargetFolder}'" : "") + ";",
 
         // ── SETS ──
         CreateSetsStatement s => FormatCreateSets(s),
@@ -223,6 +304,11 @@ public static class AstSerializer
         SetNoSaveSensitiveStatement s => $"SET NO_SAVE_SENSITIVE {(s.Enabled ? "ON" : "OFF")};",
         SetNoSaveConnectionStatement s => $"SET NO_SAVE_CONNECTION {(s.Enabled ? "ON" : "OFF")};",
         SetConnectionEncryptionStatement s => $"SET CONNECTION_ENCRYPTION {(s.Enabled ? "ON" : "OFF")};",
+        SetWeekStartDayStatement s => $"SET WEEK_START_DAY = '{s.DayName}';",
+        SetScriptHashPolicyStatement s => $"SET SCRIPT_HASH_POLICY = '{s.Policy}';",
+        SetPersistStatement s => $"SET PERSIST = {(s.Enabled ? "ON" : "OFF")};",
+        SetSpillOptionStatement s => s.ToSql(),
+        SetSecurityOverrideStatement s => FormatSecurityOverride(s),
 
         // ── Profiling / what-if ──
         SetProfilingStatement s => $"SET PROFILING {(s.Enabled ? "ON" : "OFF")}",
@@ -1430,5 +1516,23 @@ public static class AstSerializer
             sb.Append($" AS '{m.DisplayName.Replace("'", "''")}'");
 
         return sb.ToString();
+    }
+
+    private static string FormatSecurityOverride(SetSecurityOverrideStatement s)
+    {
+        var name = s.Override switch
+        {
+            SecurityOverride.FileTypeAccess => "ALLOW_FILE_TYPE_ACCESS",
+            SecurityOverride.FileTypeExtension => $"ALLOW_FILE_TYPE_ACCESS = {s.Value?.ToSql()}",
+            SecurityOverride.LargeFileCount => "ALLOW_GREATER_THAN_100_FILE",
+            SecurityOverride.DeepRecursion => "ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS",
+            SecurityOverride.LargeStringResults => "ALLOW_LARGE_STRING_RESULTS",
+            _ => "ALLOW_FILE_TYPE_ACCESS"
+        };
+        if (s.Override == SecurityOverride.FileTypeExtension)
+        {
+            return $"SET {name};";
+        }
+        return $"SET {name} {(s.Enabled ? "ON" : "OFF")};";
     }
 }

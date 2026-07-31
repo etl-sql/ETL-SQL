@@ -1,4 +1,5 @@
 # eng.safe_zones
+<!-- ShowSafeZonesStatement -->
 
 `eng.safe_zones` lists configured file-system safe zones used by the engine security boundary.
 

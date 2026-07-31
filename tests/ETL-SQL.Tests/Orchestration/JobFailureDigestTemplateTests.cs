@@ -38,16 +38,16 @@ namespace ETL_SQL.Tests.Orchestration
 
             // The template's core: capture history into a temp table, filter to recent non-success runs.
             await TestHelpers.Execute(eval, $@"
-SHOW JOB HISTORY INTO #jobhist;
-SELECT JobName, Status, ErrorMessage
+SELECT * INTO #jobhist FROM eng.job_history;
+SELECT job_name, status, error_message
 INTO #failures
 FROM #jobhist
-WHERE Status NOT IN ('SUCCESS', 'RUNNING')
-  AND StartTime >= DATEADD(DAY, -1, GETDATE())
-  AND JobName LIKE 'digest_{suffix}_%';
+WHERE status NOT IN ('SUCCESS', 'RUNNING')
+  AND start_time >= DATEADD(DAY, -1, GETDATE())
+  AND job_name LIKE 'digest_{suffix}_%';
 DECLARE @failCount = (SELECT COUNT(*) FROM #failures);
 DECLARE @detail = (
-    SELECT STRING_AGG(CONCAT(JobName, ' [', Status, ']: ', ISNULL(ErrorMessage, '(no message)')), CHAR(10))
+    SELECT STRING_AGG(CONCAT(job_name, ' [', status, ']: ', ISNULL(error_message, '(no message)')), CHAR(10))
     FROM #failures);");
 
             Assert.Equal(1, Convert.ToInt32(eval.GetVariable("@failCount")));

@@ -266,35 +266,24 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
-        public void ParseBundlePublishValidateExportAndShowStatements()
+        public void ParseBundlePublishValidateExportStatements()
         {
             var source = @"
 PUBLISH BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql' WITH (PASSWORD = '1234', ENCRYPT = MACHINE);
 VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
-EXPORT SCRIPT 'orch://finance-load@1/main.etlsql' TO 'C:\Recovered\finance';
-SHOW PUBLISHED BUNDLES;
-SHOW BUNDLE VERSIONS 'finance-load';
-SHOW BUNDLE FILES 'finance-load' VERSION 1;
-SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;";
+EXPORT SCRIPT 'orch://finance-load@1/main.etlsql' TO 'C:\Recovered\finance';";
             var script = new Parser(new Lexer(source).Tokenize()).Parse();
 
             Assert.Empty(script.Diagnostics);
+            Assert.Equal(3, script.Statements.Count);
             Assert.IsType<PublishBundleStatement>(script.Statements[0]);
             Assert.IsType<ValidateBundleStatement>(script.Statements[1]);
             Assert.IsType<ExportScriptStatement>(script.Statements[2]);
-            Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[3]);
-            Assert.IsType<ShowBundleVersionsStatement>(script.Statements[4]);
-            Assert.IsType<ShowBundleFilesStatement>(script.Statements[5]);
-            Assert.IsType<ShowBundleDependenciesStatement>(script.Statements[6]);
 
             // Assert round-trip SQL serialization
             Assert.Equal("PUBLISH BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql' WITH (PASSWORD = '1234', ENCRYPT = MACHINE);", script.Statements[0].ToSql());
             Assert.Equal("VALIDATE BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql';", script.Statements[1].ToSql());
             Assert.Equal("EXPORT SCRIPT 'orch://finance-load@1/main.etlsql' TO 'C:\\Recovered\\finance';", script.Statements[2].ToSql());
-            Assert.Equal("SHOW PUBLISHED BUNDLES;", script.Statements[3].ToSql());
-            Assert.Equal("SHOW BUNDLE VERSIONS 'finance-load';", script.Statements[4].ToSql());
-            Assert.Equal("SHOW BUNDLE FILES 'finance-load' VERSION 1;", script.Statements[5].ToSql());
-            Assert.Equal("SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;", script.Statements[6].ToSql());
 
             // Validate PASSWORD = PROMPT
             var promptSrc = "PUBLISH BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql' WITH (PASSWORD = PROMPT);";
@@ -331,7 +320,7 @@ END CATCH;";
         }
 
         [Fact]
-        public void ParseShowBundlesAliasStatement()
+        public void ParseShowBundlesAliasStatement_Retired_ReturnsDiagnostics()
         {
             var source = @"
 SHOW BUNDLES;
@@ -340,32 +329,8 @@ SHOW BUNDLES INTO #my_temp;
 SHOW BUNDLES AT my_conn INTO #my_temp;";
             var script = new Parser(new Lexer(source).Tokenize()).Parse();
 
-            Assert.Empty(script.Diagnostics);
-            Assert.Equal(4, script.Statements.Count);
-
-            var s1 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[0]);
-            Assert.True(s1.IsAlias);
-            Assert.Null(s1.At);
-            Assert.Null(s1.IntoTable);
-            Assert.Equal("SHOW BUNDLES;", s1.ToSql());
-
-            var s2 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[1]);
-            Assert.True(s2.IsAlias);
-            Assert.Equal("my_conn", s2.At);
-            Assert.Null(s2.IntoTable);
-            Assert.Equal("SHOW BUNDLES AT my_conn;", s2.ToSql());
-
-            var s3 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[2]);
-            Assert.True(s3.IsAlias);
-            Assert.Null(s3.At);
-            Assert.Equal("#my_temp", s3.IntoTable);
-            Assert.Equal("SHOW BUNDLES INTO #my_temp;", s3.ToSql());
-
-            var s4 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[3]);
-            Assert.True(s4.IsAlias);
-            Assert.Equal("my_conn", s4.At);
-            Assert.Equal("#my_temp", s4.IntoTable);
-            Assert.Equal("SHOW BUNDLES AT my_conn INTO #my_temp;", s4.ToSql());
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.All(script.Diagnostics, d => Assert.Contains("SHOW BUNDLE commands have been retired", d.Message));
         }
 
         [Fact]
@@ -377,7 +342,7 @@ SHOW BUNDLES AT my_conn INTO #my_temp;";
         }
 
         [Fact]
-        public void TestParseShowLineageForms()
+        public void TestParseShowLineageForms_Retired_ReturnsDiagnostics()
         {
             var script = Parse(@"
 SHOW LINEAGE;
@@ -386,22 +351,8 @@ SHOW LINEAGE FOR DATASET &CustomerMart;
 SHOW LINEAGE FOR #Target COLUMN Revenue INTO #lineage;
 ");
 
-            Assert.Equal(4, script.Statements.Count);
-            Assert.All(script.Statements, stmt => Assert.IsType<LineageStatement>(stmt));
-
-            var all = (LineageStatement)script.Statements[0];
-            Assert.Null(all.TargetTable);
-
-            var report = (LineageStatement)script.Statements[1];
-            Assert.Equal("report:SalesDashboard", report.TargetTable?.TableName);
-
-            var dataset = (LineageStatement)script.Statements[2];
-            Assert.Equal("dataset:CustomerMart", dataset.TargetTable?.TableName);
-
-            var table = (LineageStatement)script.Statements[3];
-            Assert.Equal("#Target", table.TargetTable?.TableName);
-            Assert.Equal("Revenue", table.ColumnName);
-            Assert.Equal("#lineage", table.IntoTable);
+            Assert.NotEmpty(script.Diagnostics);
+            Assert.All(script.Diagnostics, d => Assert.Contains("SHOW LINEAGE has been retired", d.Message));
         }
 
         [Fact]

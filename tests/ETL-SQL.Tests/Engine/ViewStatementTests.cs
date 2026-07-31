@@ -59,12 +59,12 @@ SELECT id FROM LargeOrders ORDER BY id;
         {
             var eval = await Run(@"
 CREATE VIEW LargeOrders AS SELECT id FROM #orders;
-SHOW VIEWS INTO #views;
-SELECT Name FROM #views;
+SELECT * INTO #views FROM eng.views;
+SELECT view_name FROM #views;
 ");
 
             Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("LargeOrders", eval.LastResult.Rows[0]["Name"]);
+            Assert.Equal("LargeOrders", eval.LastResult.Rows[0]["view_name"]);
         }
 
         [Fact]

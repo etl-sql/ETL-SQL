@@ -1,4 +1,6 @@
 # CREATE JOB / Job Scheduling
+<!-- SetCatalogObjectEnabledStatement -->
+<!-- AlterJobAttachmentStatement -->
 
 Registers a script or report job with the Orchestrator. Jobs, cron schedules, and notification
 destinations are independent catalog objects; link them explicitly with `ALTER JOB`.

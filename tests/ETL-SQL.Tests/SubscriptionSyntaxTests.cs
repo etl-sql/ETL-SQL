@@ -232,8 +232,9 @@ namespace ETL_SQL.Tests
         public void ShowActiveSessions_WithInto_ParsesTarget()
         {
             var script = TestHelpers.Parse("SHOW ACTIVE SESSIONS INTO #sessions;");
-            var stmt = Assert.IsType<ShowActivePortalSessionsStatement>(Assert.Single(script.Statements));
-            Assert.Equal("#sessions", stmt.IntoTable);
+            Assert.Empty(script.Statements);
+            var diag = Assert.Single(script.Diagnostics);
+            Assert.Contains("retired", diag.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────

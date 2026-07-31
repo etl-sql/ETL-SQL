@@ -16,7 +16,7 @@ public class ScriptCompatibilityCorpusTests
         yield return new object[]
         {
             "version-gate",
-            "REQUIRE VERSION >= '0.1.0'; SHOW VERSION;"
+            "REQUIRE VERSION >= '0.1.0'; SELECT * FROM eng.version;"
         };
         yield return new object[]
         {

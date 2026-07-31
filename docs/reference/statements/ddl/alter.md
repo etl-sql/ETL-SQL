@@ -1,4 +1,5 @@
 # ALTER
+<!-- AlterCatalogObjectStatement -->
 Modifies an existing object.
 
 ## Syntax

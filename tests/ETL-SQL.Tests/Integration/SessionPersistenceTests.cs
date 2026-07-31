@@ -136,7 +136,7 @@ namespace ETL_SQL.Tests.Integration.Integration
 
             // 6th run: Lineage check (id) - Now persisted!
             AnsiConsole.MarkupLine("  - Step 6: Verify lineage for #emp.id");
-            var (eval6, code6) = await RunSessionStep("SHOW LINEAGE FOR #emp;");
+            var (eval6, code6) = await RunSessionStep("SELECT * FROM eng.lineage;");
             Assert.Equal(0, code6);
             var lineageId = eval6.LineageTracker.GetLineage("#emp").ToList();
             Assert.NotEmpty(lineageId);
@@ -144,7 +144,7 @@ namespace ETL_SQL.Tests.Integration.Integration
 
             // 7th run: Lineage check (name)
             AnsiConsole.MarkupLine("  - Step 7: Verify column lineage for #emp.name");
-            var (eval7, code7) = await RunSessionStep("SHOW LINEAGE FOR #emp;");
+            var (eval7, code7) = await RunSessionStep("SELECT * FROM eng.lineage;");
             Assert.Equal(0, code7);
 
             // 8th run: Another SELECT from #emp
@@ -222,7 +222,7 @@ namespace ETL_SQL.Tests.Integration.Integration
 
             // 17th run: Lineage check again
             AnsiConsole.MarkupLine("  - Step 17: Re-verify updated lineage");
-            var (eval17, code17) = await RunSessionStep("SHOW LINEAGE FOR #emp;");
+            var (eval17, code17) = await RunSessionStep("SELECT * FROM eng.lineage;");
             Assert.Equal(0, code17);
 
             // 18th run: Final cleanup

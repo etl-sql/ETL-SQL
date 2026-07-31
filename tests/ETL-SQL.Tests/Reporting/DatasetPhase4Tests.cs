@@ -257,7 +257,9 @@ namespace ETL_SQL.Tests.Reporting
             eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "UserId=7";
 
-            await eval.Evaluate(Parse("SHOW DATASETS;"));
+            var script = new Script();
+            script.Statements.Add(new ShowDatasetsStatement());
+            await eval.Evaluate(script);
 
             Assert.Equal("UserId=7", registry.LastListAllPermissions);
         }

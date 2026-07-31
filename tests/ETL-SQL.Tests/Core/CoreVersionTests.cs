@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Core.Core
         public async Task ShowVersion_ReturnsCorrectVersionTable()
         {
             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
-            var parser = new Parser(new Lexer("SHOW VERSION;").Tokenize());
+            var parser = new Parser(new Lexer("SELECT * FROM eng.version;").Tokenize());
             var script = parser.Parse();
 
             await evaluator.Evaluate(script);
@@ -33,8 +33,8 @@ namespace ETL_SQL.Tests.Core.Core
             var result = evaluator.LastResult;
             Assert.NotNull(result);
             Assert.Single(result.Rows);
-            Assert.Equal("ETL-SQL Engine", result.Rows[0]["Component"]);
-            Assert.Equal(LanguageMetadata.EngineVersion, result.Rows[0]["Version"]);
+            Assert.Equal("ETL-SQL Engine", result.Rows[0]["component"]);
+            Assert.Equal(LanguageMetadata.EngineVersion, result.Rows[0]["version"]);
         }
 
         [Fact]
