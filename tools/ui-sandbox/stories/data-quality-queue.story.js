@@ -185,6 +185,11 @@ function mockApi(trendKey) {
     replayQuarantine: async () => ({ jobId: 'job-1', replayStatement: 'REPLAY QUARANTINE quarantine_users;' }),
     updateQuarantineDisposition: async () => ({ jobId: 'job-2', dispositionStatement: 'UPDATE ...' }),
     qualityTrend: async () => trends[trendKey],
+    jobStatus: async jobId => ({
+      jobId, status: 'Completed', createdAt: '2026-08-02T14:30:00Z',
+      startedAt: '2026-08-02T14:30:01Z', completedAt: '2026-08-02T14:30:03Z',
+      rowsProcessed: 17, peakMemoryBytes: 4096, cpuTimeSeconds: 0.2
+    }),
   };
 }
 
@@ -202,6 +207,7 @@ export default {
     { id: 'view-only', label: 'Queue (targets Portal cannot read)' },
     { id: 'trend', label: 'Quality trend (degrading)' },
     { id: 'trend-empty', label: 'Quality trend (no runs)' },
+    { id: 'job-status', label: 'Tracked replay completion' },
   ],
   async mount(stage, fixtureId, ctx) {
     stage.classList.add('portal-page');
@@ -213,7 +219,12 @@ export default {
     queue.show();
     await settle();
 
-    if (fixtureId === 'trend' || fixtureId === 'trend-empty') {
+    if (fixtureId === 'job-status') {
+      host.querySelector('[data-replay-target="quarantine_users"]')?.click();
+      await settle();
+      await settle();
+      ctx.stat('Replay submission connected to Completed execution status');
+    } else if (fixtureId === 'trend' || fixtureId === 'trend-empty') {
       // Open the trend panel for the first manifest so the fixture lands on it directly.
       host.querySelector('[data-trend-job]')?.click();
       ctx.stat(trendKey === 'empty' ? 'trend panel — empty state' : 'trend panel — degrading quality');

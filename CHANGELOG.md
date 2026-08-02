@@ -88,6 +88,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Connected Portal quarantine replay and disposition submissions to durable execution status.
+  Submitted job IDs persist for the browser session, poll through Pending/Running to a terminal
+  Completed/Failed/Cancelled result, show sanitized failure evidence, and refresh affected rows or
+  queue state only after terminal completion.
+
 - Added first-class `#governance/stewardship` and administrator-only `#governance/audit` routes.
   Governance navigation and internal mode changes now preserve the selected durable evidence view;
   direct non-admin Audit navigation is safely redirected to Stewardship.

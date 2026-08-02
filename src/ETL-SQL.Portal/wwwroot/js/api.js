@@ -245,7 +245,8 @@ export const dataQualityApi = {
     qualityTrend({ jobName, limit = 30 } = {}) {
         const params = new URLSearchParams({ jobName, limit: String(limit) });
         return apiJson(`/api/data-quality/trend?${params.toString()}`);
-    }
+    },
+    jobStatus: (jobId) => contracted('jobStatus', apiJson(`/api/jobs/${encodeURIComponent(jobId)}`))
 };
 
 // ── Datasets ───────────────────────────────────────────────────────────────────

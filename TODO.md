@@ -208,7 +208,7 @@ documentation reconciliation, then release certification.
   - [ ] Prove environment switching establishes separate sessions and never merges catalogs,
         datasets, connections, secrets, or authoring history.
 - [x] Complete Stewardship and Audit routes using durable evidence.
-- [ ] Connect disposition/replay submissions to terminal job status.
+- [x] Connect disposition/replay submissions to terminal job status.
 - [ ] Add data-quality rule visibility and structured failure trends.
 - [ ] Use one sanitized Markdown renderer for Docs and connector Help.
 - [ ] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.

@@ -1409,6 +1409,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .dq-status-ready { background: var(--portal-success-soft); color: var(--portal-success); }
 .dq-status-blocked { background: var(--portal-danger-soft); color: var(--portal-danger); }
+.dq-job-panel { padding: 0; overflow: hidden; }
+.dq-job-panel > .dq-rows-header { padding: 14px 16px; border-bottom: 1px solid var(--portal-border-soft); }
+.dq-job-list { display: grid; }
+.dq-job-row { display: grid; grid-template-columns: auto minmax(220px, 1fr) minmax(180px, .7fr); align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--portal-border-soft); }
+.dq-job-row:last-child { border-bottom: 0; }
+.dq-job-row > div { display: grid; gap: 3px; min-width: 0; }
+.dq-job-row > div:last-child { text-align: right; }
+.dq-job-row small, .dq-job-row time { color: var(--portal-muted); font-size: .8rem; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
   .dq-toolbar { grid-template-columns: 1fr; }
@@ -1417,4 +1425,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .dq-row-side code { text-align: left; }
   .dq-row-actions { justify-content: flex-start; }
   .dq-rows-header { flex-direction: column; }
+  .dq-job-row { grid-template-columns: auto 1fr; }
+  .dq-job-row > div:last-child { grid-column: 2; text-align: left; }
 }

@@ -153,6 +153,12 @@ If execution fails after rows are claimed, they remain `replaying` and are not a
 retried. Review the target for partial side effects, then explicitly return them to `released` for
 retry or mark them `replayed`. The Portal queue exposes both recovery choices.
 
+The Portal does not treat HTTP `202 Accepted` as completion. Every replay and row-disposition
+submission is retained in the browser session and followed through the durable execution ledger
+until it reaches `Completed`, `Failed`, or `Cancelled`. The submitted-work panel shows the job ID,
+current state, timestamps, and sanitized terminal error. Queue or row evidence refreshes after the
+terminal result, so a successful submission cannot be mistaken for a successful mutation.
+
 Retention is scoped by `__dq_capture_scope`, a stable job or script identity. On a shared capture
 target, one writer's retention window cannot prune another writer's rows. Only terminal
 dispositions (`warned`, `replayed`, or `discarded`) age out.

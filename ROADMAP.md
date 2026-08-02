@@ -37,6 +37,9 @@ implementation tasks and verification state are retained in `TODO.md` and their 
 - [x] **Durable Stewardship and Audit routes:** first-class Governance navigation and stable hash
   routes now open the existing lineage, protected-data, stewardship, impact, audit-log, and outbox
   evidence; Audit is administrator-only and no longer masquerades as an ordinary Lineage tab.
+- [x] **Terminal quarantine-work tracking:** replay and disposition submissions retain their job
+  identity across refreshes, follow the durable execution ledger through terminal status, expose
+  sanitized failure evidence, and refresh affected queue/row state only after completion.
 
 ## Future Candidate Phases
 

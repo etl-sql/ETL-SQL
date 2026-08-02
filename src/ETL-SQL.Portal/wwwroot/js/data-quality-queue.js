@@ -208,7 +208,30 @@ function renderRowsPanel(state) {
   </section>`;
 }
 
+const TERMINAL_JOB_STATUSES = new Set(['Completed', 'Failed', 'Cancelled']);
+const TRACKED_JOBS_KEY = 'etlsql_dq_tracked_jobs';
+
+function renderTrackedJobs(jobs) {
+  if (!jobs.length) return '';
+  return `<section class="dq-rows-panel dq-job-panel" aria-live="polite">
+    <header class="dq-rows-header"><div><h3>Submitted work</h3><p>Replay and disposition jobs remain here until their durable execution reaches a terminal state.</p></div></header>
+    <div class="dq-job-list">${jobs.map(job => {
+      const terminal = TERMINAL_JOB_STATUSES.has(job.status);
+      const failed = job.status === 'Failed' || job.status === 'Cancelled';
+      return `<article class="dq-job-row">
+        <span class="dq-status ${terminal && !failed ? 'dq-status-ready' : failed ? 'dq-status-blocked' : ''}">${esc(job.status)}</span>
+        <div><strong>${esc(job.kind)}</strong><small>${esc(job.target)} · <code>${esc(job.jobId)}</code></small></div>
+        <div><time>${esc(formatDate(job.completedAt || job.startedAt || job.createdAt))}</time>${job.error || job.trackingError ? `<small class="dq-row-warning">${esc(job.error || job.trackingError)}</small>` : ''}</div>
+      </article>`;
+    }).join('')}</div>
+  </section>`;
+}
+
 export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
+  let storage = null;
+  try { storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch { }
+  const pollTimers = new Map();
+  let disposed = false;
   const state = {
     q: '',
     replayable: '',
@@ -229,8 +252,61 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     trendJob: null,
     trend: null,
     trendLoading: false,
-    trendError: null
+    trendError: null,
+    trackedJobs: []
   };
+
+  function persistTrackedJobs() {
+    try { storage?.setItem(TRACKED_JOBS_KEY, JSON.stringify(state.trackedJobs.slice(0, 20))); } catch { }
+  }
+
+  function restoreTrackedJobs() {
+    try {
+      const parsed = JSON.parse(storage?.getItem(TRACKED_JOBS_KEY) || '[]');
+      state.trackedJobs = Array.isArray(parsed) ? parsed.filter(job => job?.jobId).slice(0, 20) : [];
+    } catch { state.trackedJobs = []; }
+    state.trackedJobs.filter(job => !TERMINAL_JOB_STATUSES.has(job.status)).forEach(job => pollJob(job.jobId));
+  }
+
+  function schedulePoll(jobId) {
+    if (disposed || pollTimers.has(jobId)) return;
+    pollTimers.set(jobId, setTimeout(() => {
+      pollTimers.delete(jobId);
+      pollJob(jobId);
+    }, 1000));
+  }
+
+  async function pollJob(jobId) {
+    if (disposed) return;
+    const tracked = state.trackedJobs.find(job => job.jobId === jobId);
+    if (!tracked || TERMINAL_JOB_STATUSES.has(tracked.status)) return;
+    try {
+      const result = await dataQualityApi.jobStatus(jobId);
+      if (disposed) return;
+      Object.assign(tracked, result, { trackingError: null });
+      persistTrackedJobs();
+      render();
+      if (TERMINAL_JOB_STATUSES.has(tracked.status)) {
+        state.message = `${tracked.kind} job ${jobId} ${tracked.status.toLowerCase()} for ${tracked.target}.`;
+        if (tracked.kind === 'Disposition' && state.selectedItem) await loadRows(state.selectedItem);
+        else await load();
+      } else {
+        schedulePoll(jobId);
+      }
+    } catch (err) {
+      tracked.trackingError = err.message || 'Status temporarily unavailable.';
+      render();
+      schedulePoll(jobId);
+    }
+  }
+
+  function trackJob(jobId, kind, target) {
+    state.trackedJobs = state.trackedJobs.filter(job => job.jobId !== jobId);
+    state.trackedJobs.unshift({ jobId, kind, target, status: 'Submitted', createdAt: new Date().toISOString() });
+    persistTrackedJobs();
+    render();
+    pollJob(jobId);
+  }
 
   async function loadTrend(jobName) {
     state.trendJob = jobName;
@@ -296,7 +372,8 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     render();
     try {
       const result = await dataQualityApi.replayQuarantine(item.quarantineTarget, item.jobName);
-      state.message = `Replay job ${result.jobId} submitted for ${item.quarantineTarget}.`;
+      state.message = `Replay job ${result.jobId} submitted; tracking durable execution status.`;
+      trackJob(result.jobId, 'Replay', item.quarantineTarget);
     } catch (err) {
       state.error = err.message || 'Unable to submit quarantine replay.';
     } finally {
@@ -323,8 +400,8 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
         changes,
         note: state.notes[id] || null
       });
-      state.message = `Disposition job ${result.jobId} submitted for ${id}.`;
-      await loadRows(item);
+      state.message = `Disposition job ${result.jobId} submitted; the row will refresh after terminal status.`;
+      trackJob(result.jobId, 'Disposition', `${item.quarantineTarget} · row ${id}`);
     } catch (err) {
       state.error = err.message || 'Unable to submit quarantine disposition.';
     } finally {
@@ -369,6 +446,7 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
           <h2>No quarantine manifests</h2>
           <p>No data-quality quarantine replay manifests match the current filters.</p>
         </div>`}
+      ${renderTrackedJobs(state.trackedJobs)}
       ${renderTrendPanel(state)}
       ${renderRowsPanel(state)}
     </section>`;
@@ -454,7 +532,7 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
   }
 
   return {
-    show() { load(); },
-    dispose() { host.innerHTML = ''; }
+    show() { disposed = false; restoreTrackedJobs(); load(); },
+    dispose() { disposed = true; pollTimers.forEach(timer => clearTimeout(timer)); pollTimers.clear(); host.innerHTML = ''; }
   };
 }
