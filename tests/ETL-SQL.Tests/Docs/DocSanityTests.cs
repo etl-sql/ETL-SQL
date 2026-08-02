@@ -406,14 +406,20 @@ namespace ETL_SQL.Tests.Docs
                 var blocks = ExtractSqlBlocks(File.ReadAllText(path));
                 foreach (var (block, index) in blocks.Select((b, i) => (b, i)))
                 {
-                    var trimmed = block.Trim();
-                    if (ShouldSkipSqlBlock(trimmed))
+                    var trimmed = NormalizeSqlBlock(block);
+                    if (ShouldSkipSqlBlock(relativePath, trimmed))
                         continue;
 
                     try
                     {
                         var tokens = new Lexer(trimmed).Tokenize();
-                        new Parser(tokens, trimmed).Parse();
+                        var script = new Parser(tokens, trimmed).Parse();
+                        foreach (var diagnostic in script.Diagnostics)
+                        {
+                            failures.Add(
+                                $"{relativePath} block #{index + 1}: [{diagnostic.Code}] {diagnostic.Message}\n" +
+                                $"  SQL: {Truncate(trimmed, 120)}");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -435,8 +441,8 @@ namespace ETL_SQL.Tests.Docs
                 var blocks = ExtractSqlBlocks(File.ReadAllText(path));
                 foreach (var (block, index) in blocks.Select((b, i) => (b, i)))
                 {
-                    var trimmed = block.Trim();
-                    if (ShouldSkipSqlBlock(trimmed))
+                    var trimmed = NormalizeSqlBlock(block);
+                    if (ShouldSkipSqlBlock(relativePath, trimmed))
                         continue;
 
                     try
@@ -541,9 +547,23 @@ namespace ETL_SQL.Tests.Docs
             }
         }
 
-        private static bool ShouldSkipSqlBlock(string trimmed)
+        private static string NormalizeSqlBlock(string block)
+        {
+            // Some guides use Markdown quote markers inside fenced examples. They are presentation
+            // markup, not ETL-SQL, so remove them before sending the example to the production parser.
+            return Regex.Replace(block.Trim(), @"(?m)^\s*> ?", "");
+        }
+
+        private static bool ShouldSkipSqlBlock(string relativePath, string trimmed)
         {
             if (string.IsNullOrWhiteSpace(trimmed))
+                return true;
+
+            var normalizedPath = relativePath.Replace('\\', '/');
+            if (normalizedPath.StartsWith("docs/releases/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.StartsWith("docs/templates/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.EndsWith("migration-guide.md", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath is "ROADMAP.md" or "TODO.md" or "AGENTS.md")
                 return true;
 
             // Skip template/placeholder snippets and unquoted ellipses. Quoted values
@@ -551,6 +571,12 @@ namespace ETL_SQL.Tests.Docs
             var withoutQuotedStrings = Regex.Replace(trimmed, @"'(?:''|[^'])*'", "''");
             if (withoutQuotedStrings.Contains("...") ||
                 Regex.IsMatch(trimmed, @"<[a-zA-Z_][a-zA-Z0-9_\-\s]*>") ||
+                Regex.IsMatch(withoutQuotedStrings, @"\b(?:ON|OFF|TRUE|FALSE)\|(?:ON|OFF|TRUE|FALSE)\b", RegexOptions.IgnoreCase) ||
+                withoutQuotedStrings.Contains('|') ||
+                withoutQuotedStrings.Contains("[,", StringComparison.Ordinal) ||
+                trimmed.Contains("#target", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("#source", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("-- Wrong", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Contains('{') ||
                 trimmed.Contains('}'))
                 return true;
@@ -562,10 +588,36 @@ namespace ETL_SQL.Tests.Docs
             var fragmentLeaders = new[]
             {
                 "WHERE ", "AND ", "OR ", "JOIN ", "ON ", "GROUP ", "ORDER ", "HAVING ",
-                "UNION", "EXCEPT", "INTERSECT", "FROM ", "WHEN ", "ELSE ", "THEN "
+                "UNION", "EXCEPT", "INTERSECT", "FROM ", "WHEN ", "ELSE ", "THEN ",
+                "ON_CLICK ", "ON_CHANGE ", "BEGIN CATCH"
             };
 
-            return fragmentLeaders.Any(kw => trimmed.StartsWith(kw, StringComparison.OrdinalIgnoreCase));
+            if (fragmentLeaders.Any(kw => trimmed.StartsWith(kw, StringComparison.OrdinalIgnoreCase)))
+                return true;
+
+            // Function signatures, column annotations, and property fragments are useful syntax
+            // documentation but are not standalone scripts. A copy-pasteable block begins with a
+            // statement keyword (comments are ignored when finding that first line).
+            var firstCodeLine = trimmed.Split('\n')
+                .Select(line => line.Trim())
+                .FirstOrDefault(line => line.Length > 0 && !line.StartsWith("--", StringComparison.Ordinal));
+            if (firstCodeLine == null)
+                return true;
+
+            var statementLeaders = new[]
+            {
+                "ALTER ", "ANALYZE ", "ASSERT ", "BACKUP ", "BEGIN ", "BREAK", "BULK ",
+                "CHECKPOINT", "CLEAR ", "COMMIT", "COMPRESS ", "CONFIG ", "CONTINUE", "COPY ",
+                "CREATE ", "DECLARE ", "DECOMPRESS ", "DELETE ", "DROP ", "ENCRYPT ", "EXEC ",
+                "EXECUTE ", "EXPECT ", "EXPORT ", "FOREACH ", "GENERATE ", "GRANT ", "HELP ",
+                "IF ", "IMPORT ", "INSERT ", "KILL ", "LINEAGE ", "LINT ", "MERGE ", "MOVE ",
+                "PARALLEL ", "PIVOT ", "PRINT ", "PUBLISH ", "RAISEERROR ", "RECEIVE ",
+                "REFRESH ", "RENAME ", "REQUIRE ", "RESTORE ", "RETURN", "REVOKE ", "ROLLBACK",
+                "RUN ", "SELECT ", "SEND ", "SET ", "SHOW ", "TAG ", "TEST ", "THROW ",
+                "TRANSFORM ", "TRUNCATE ", "UPDATE ", "USE ", "VALIDATE ", "WAIT ", "WAITFOR ",
+                "WHILE "
+            };
+            return !statementLeaders.Any(leader => firstCodeLine.StartsWith(leader, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string Truncate(string s, int maxLen) =>

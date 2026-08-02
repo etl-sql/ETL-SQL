@@ -3,7 +3,7 @@ Enables or disables dry-run mode. When enabled, side-effecting operations (INSER
 
 ## Syntax
 ```text
-SET WHAT_IF = ON|OFF;
+SET WHAT_IF ON|OFF;
 ```
 
 ## Parameters
@@ -13,10 +13,10 @@ SET WHAT_IF = ON|OFF;
 ## Example
 ```sql
 -- Preview what a destructive script would do
-SET WHAT_IF = ON;
+SET WHAT_IF ON;
 DELETE FROM prod.OldOrders WHERE order_date < '2020-01-01';
 -- outputs: [WHAT_IF] Would delete 14,832 rows from prod.OldOrders
-SET WHAT_IF = OFF;
+SET WHAT_IF OFF;
 
 -- Run for real after validating the output
 DELETE FROM prod.OldOrders WHERE order_date < '2020-01-01';

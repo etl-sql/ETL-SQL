@@ -74,9 +74,8 @@ SET PROFILING ON;
 SELECT * INTO #staging FROM src.Orders WHERE status = 'Open';
 MERGE INTO dest.dbo.Orders AS T USING #staging AS S ON T.Id = S.Id ...;
 
-SHOW PROFILE INTO #perf;
+SELECT * INTO #perf FROM eng.profile;
 SELECT * FROM #perf ORDER BY DurationMs DESC;
 ```
 
 ---
-

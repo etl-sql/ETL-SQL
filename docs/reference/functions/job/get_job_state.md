@@ -24,7 +24,7 @@ Returns the saved state value as `STRING`, or `NULL` when the key has not been s
 
 - If running as a scheduled orchestrator job, state is retrieved from the orchestrator store.
 - If running from the CLI, state falls back to a local JSON `.etlstate` file next to the script.
-- To inspect saved state across jobs (all keys, any job) use `SHOW JOB STATE ['<job>'] [INTO #t]`.
+- To inspect saved state across jobs, query `eng.job_state` and filter by `job_name` when needed.
 - Used in conjunction with `SET_JOB_STATE` for incremental watermarking.
 
 ## Examples

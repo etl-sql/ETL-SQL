@@ -12,8 +12,8 @@ CREATE CONNECTION portal AS PORTAL (
 );
 
 EXECUTE portal BEGIN
-    SHOW USERS;
-    SHOW REPORTS;
+    SELECT * FROM eng.users;
+    SELECT * FROM eng.reports;
 END;
 ```
 
@@ -95,15 +95,15 @@ Import behavior:
 
 ```sql
 EXECUTE portal BEGIN
-    SHOW REPORT 'Daily Sales' INTO #report;
-    SHOW REPORT HISTORY 'Daily Sales' INTO #history;
-    SHOW REPORT DEPENDENCIES 'Daily Sales' INTO #deps;
+    SELECT * INTO #report FROM eng.reports WHERE name = 'Daily Sales';
+    SELECT * INTO #history FROM eng.report_history('Daily Sales');
+    SELECT * INTO #deps FROM eng.report_dependencies('Daily Sales');
     VALIDATE REPORT SCRIPT 'C:\Reports\daily_sales.rptsql' INTO #validation;
 
     FAVORITE REPORT 'Daily Sales';
     FAVORITE REPORT 'Daily Sales' FOR USER 'alice';
-    SHOW FAVORITES LIMIT 25 INTO #favorites;
-    SHOW FAVORITES FOR USER 'alice' LIMIT 25;
+    SELECT * INTO #favorites FROM eng.favorites(25);
+    SELECT * FROM eng.favorites('alice');
     UNFAVORITE REPORT 'Daily Sales' FOR USER 'alice';
 END;
 ```
@@ -115,23 +115,23 @@ Name lookups are case-insensitive. If multiple reports share the same name, the 
 ```sql
 EXECUTE portal BEGIN
     CREATE SHARE LINK 'External Review' FOR REPORT 'Daily Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;
-    SHOW SHARE LINKS FOR REPORT 'Daily Sales';
+    SELECT * FROM eng.share_links('Daily Sales');
     REVOKE SHARE LINK 'External Review' FOR REPORT 'Daily Sales';
 
     CREATE EMBED TOKEN 'Finance Wallboard' FOR REPORT 'Daily Sales' INTO #embed;
-    SHOW EMBED TOKENS FOR REPORT 'Daily Sales';
+    SELECT * FROM eng.embed_tokens('Daily Sales');
     REVOKE EMBED TOKEN 'Finance Wallboard' FOR REPORT 'Daily Sales';
 
     CREATE SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales'
         PARAMETERS (@region = 'EMEA', @start = 'D-1');
-    SHOW SAVED VIEWS FOR REPORT 'Daily Sales';
+    SELECT * FROM eng.saved_views('Daily Sales');
     DROP SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales';
 
     CREATE ALERT HighFailures FOR REPORT 'Ops'
         WHEN VISUAL FailureCard > 10
         WITH (DESCRIPTION = 'Failure card threshold');
     ALTER ALERT HighFailures ADD NOTIFICATION orchestrator.OpsEmail;
-    SHOW ALERTS FOR REPORT 'Ops';
+    SELECT * FROM eng.alerts('Ops');
     DROP ALERT IF EXISTS HighFailures;
 END;
 ```
@@ -140,20 +140,20 @@ END;
 
 ```sql
 EXECUTE portal BEGIN
-    SHOW RECENT REPORTS LIMIT 20 INTO #recent;
-    SHOW CATALOG SEARCH 'finance' LIMIT 50 INTO #catalog;
-    SHOW EFFECTIVE PERMISSIONS FOR USER 'alice' INTO #perms;
-    SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Daily Sales';
-    SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance';
-    SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #metrics;
-    SHOW ACTIVE SESSIONS INTO #sessions;
+    SELECT * INTO #recent FROM eng.recent_reports(20);
+    SELECT * INTO #catalog FROM eng.catalog_search('finance', 50);
+    SELECT * INTO #perms FROM eng.effective_permissions('USER', 'alice');
+    SELECT * FROM eng.effective_permissions('REPORT', 'Daily Sales');
+    SELECT * FROM eng.effective_permissions('FOLDER', '/Finance');
+    SELECT * INTO #metrics FROM eng.usage_metrics(30);
+    SELECT * INTO #sessions FROM eng.active_sessions;
 
     DISCONNECT USER 'alice';
     REVOKE TOKENS FOR USER 'alice';
 END;
 ```
 
-`SHOW ACTIVE SESSIONS` reports unrevoked, unexpired refresh tokens. `DISCONNECT USER` and
+`eng.active_sessions` reports unrevoked, unexpired refresh tokens. `DISCONNECT USER` and
 `REVOKE TOKENS` revoke refresh tokens and rotate the user's security stamp, so already-issued access
 tokens are rejected on their next request.
 

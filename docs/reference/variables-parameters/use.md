@@ -12,9 +12,6 @@ USE PASSWORD PROMPT;
 Activates a named environment set (defined with CREATE SETS or loaded from a .sets file). Variables in the set become available as `!SetName` references.
 ```sql
 USE SETS !Production;
-
--- After activation, reference members in queries
-SELECT * FROM #orders WHERE Region IN !Regions;
 ```
 
 ## Notes

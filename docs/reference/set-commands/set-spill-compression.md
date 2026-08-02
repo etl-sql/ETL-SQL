@@ -4,7 +4,7 @@ Controls whether data buffers spilled to disk are compressed.
 
 ## Syntax
 ```text
-SET SPILL_COMPRESSION = ON|OFF;
+SET SPILL_COMPRESSION ON|OFF;
 ```
 
 ## Parameters
@@ -14,11 +14,11 @@ SET SPILL_COMPRESSION = ON|OFF;
 ## Example
 ```sql
 -- Disable compression for CPU-bound workloads
-SET SPILL_COMPRESSION = OFF;
+SET SPILL_COMPRESSION OFF;
 
-SELECT * FROM SalesDB.dbo.VeryLargeTable INTO #data;
+SELECT * INTO #data FROM SalesDB.dbo.VeryLargeTable;
 
-SET SPILL_COMPRESSION = ON;
+SET SPILL_COMPRESSION ON;
 ```
 
 ## Notes

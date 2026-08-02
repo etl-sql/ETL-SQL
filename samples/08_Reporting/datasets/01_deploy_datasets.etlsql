@@ -21,4 +21,4 @@ AS (
     SELECT 2002 AS sale_id, 'Forecast' AS region, 750.00 AS amount
 );
 
-SHOW DATASETS;
+SELECT * FROM eng.tables;

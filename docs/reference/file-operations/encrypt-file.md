@@ -25,7 +25,7 @@ USE PASSWORD = 'my-passphrase';
 CREATE CONNECTION ProdDB AS MSSQL (
   SERVER   = 'sql-prod',
   DATABASE = 'Sales',
-  PASSWORD = ENC:U2FsdGVkX1+abc123==
+  PASSWORD = 'ENC:U2FsdGVkX1+abc123=='
 );
 ```
 

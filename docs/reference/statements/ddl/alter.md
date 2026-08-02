@@ -5,13 +5,13 @@ Modifies an existing object.
 ## Syntax
 ```sql
 -- Add a column
-ALTER TABLE #staging ADD COLUMN region STRING;
+ALTER TABLE #staging ADD region STRING;
 
 -- Add a column with a default value
-ALTER TABLE #staging ADD COLUMN loaded_at DATE = TODAY();
+ALTER TABLE #staging ADD loaded_at DATE DEFAULT TODAY();
 
 -- Drop a column
-ALTER TABLE #staging DROP COLUMN region;
+ALTER TABLE #staging DROP region;
 
 -- Replace a session-scoped query view definition
 ALTER VIEW ActiveOrders AS
@@ -22,7 +22,7 @@ WHERE status = 'Active';
 
 ## Notes
 - Supported `ALTER` forms vary by object kind. See the [Lifecycle Capability Matrix](../lifecycle-matrix.md).
-- Only `ADD COLUMN` and `DROP COLUMN` are supported.
+- Only `ADD` and `DROP` column actions are supported.
 - Adding a column with no default fills existing rows with NULL.
 - Dropping a column permanently removes it and all its data from the in-memory table.
 - Column names are case-insensitive.

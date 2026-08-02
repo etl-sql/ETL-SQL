@@ -29,7 +29,7 @@ SET @maxId = (SELECT MAX(id) FROM #staging);
 - Variable names are case-insensitive: `@Region` and `@region` refer to the same variable.
 - Use `DECLARE @var <type>` for explicit typing; `SET` with an implicit declare infers the type from the expression.
 - To mark a variable as secret, use `SET @var = SECRET '<value>'`.
-- See also: `DECLARE`, `SHOW VARIABLES`.
+- See also: `DECLARE`, `eng.variables`.
 
 ## References
 - [SET Commands](README.md)

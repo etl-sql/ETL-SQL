@@ -25,6 +25,7 @@ CREATE CONNECTION mailer AS SMTP('smtp.gmail.com', PORT=587, USERNAME='alerts@ex
 
 SEND EMAIL
     TO 'ops@example.com'
+    FROM 'alerts@example.com'
     SUBJECT 'Nightly Load Complete'
     BODY 'All records processed.'
     AT mailer;

@@ -17,7 +17,7 @@ ALTER SUBSCRIPTION <id> SET
   SMTP = 'smtp_alias' | ENABLE | DISABLE | PARAMETERS (...);
 
 DROP SUBSCRIPTION <id>;
-SHOW SUBSCRIPTIONS [FOR REPORT '/Folder/ReportName'] [INTO #subscriptions];
+SELECT * [INTO #subscriptions] FROM eng.subscriptions [WHERE reportPath = '/Folder/ReportName'];
 ```
 
 ## Example

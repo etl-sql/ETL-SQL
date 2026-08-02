@@ -12,15 +12,15 @@ All statements inside the block start at the same time. PARALLEL waits for all o
 ```sql
 -- Load three sources at the same time
 PARALLEL BEGIN
-  SELECT * FROM SalesDB.dbo.Orders    INTO #orders;
-  SELECT * FROM HRDB.dbo.Employees    INTO #employees;
-  SELECT * FROM CRMDB.dbo.Customers   INTO #customers;
+  SELECT * INTO #orders FROM SalesDB.dbo.Orders;
+  SELECT * INTO #employees FROM HRDB.dbo.Employees;
+  SELECT * INTO #customers FROM CRMDB.dbo.Customers;
 END;
 
 -- Two independent aggregations concurrently
 PARALLEL BEGIN
-  SELECT region, SUM(amount) AS total FROM #orders GROUP BY region INTO #by_region;
-  SELECT month,  SUM(amount) AS total FROM #orders GROUP BY month  INTO #by_month;
+  SELECT region, SUM(amount) AS total INTO #by_region FROM #orders GROUP BY region;
+  SELECT month, SUM(amount) AS total INTO #by_month FROM #orders GROUP BY month;
 END;
 ```
 

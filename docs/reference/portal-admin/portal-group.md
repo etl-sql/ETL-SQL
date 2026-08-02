@@ -39,7 +39,7 @@ END;
 - A user can belong to multiple groups; their effective permissions are the union of all group and individual grants.
 - Dropping a group removes all its memberships but does not delete the member users or their individual permission grants.
 - There is no `REMOVE USER FROM GROUP` command; to remove a membership, drop and recreate the group, or manage memberships via the portal admin UI.
-- Use `SHOW EFFECTIVE PERMISSIONS FOR USER` to inspect the resolved permissions for a user across all their groups.
+- Use `eng.effective_permissions('USER', name)` to inspect the resolved permissions for a user across all their groups.
 - See: PORTAL_PERMISSIONS, PORTAL_USER, PORTAL_SHOW
 
 References:

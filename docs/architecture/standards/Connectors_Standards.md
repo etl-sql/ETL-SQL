@@ -93,7 +93,7 @@ The inner exception must NOT be chained. Inner exceptions may contain server pat
 
 ### Rule 6: Sensitive Option Values Must Be Masked in All Metadata Output
 
-`GetSupportedOptions()` declares option keys — including sensitive keys like `PASSWORD`, `API_KEY`, `TOKEN`. When values for these keys are returned in any display context (`SHOW CONNECTION`, `GetOptionValues()`, IDE hover), the value must be replaced with `***`.
+`GetSupportedOptions()` declares option keys — including sensitive keys like `PASSWORD`, `API_KEY`, `TOKEN`. When values for these keys are returned in any display context (`eng.connection_config`, `GetOptionValues()`, IDE hover), the value must be replaced with `***`.
 
 The masking rule applies to any option key that contains: `PASS`, `KEY`, `TOKEN`, `SECRET`, `CREDENTIAL`, `AUTH`.
 
@@ -112,7 +112,7 @@ public Dictionary<string, string[]> GetOptionValues() => new()
 };
 ```
 
-**Violation indicator:** Any credential value visible in SHOW CONNECTION output or IDE autocomplete suggestions.
+**Violation indicator:** Any credential value visible in `eng.connection_config` output or IDE autocomplete suggestions.
 
 ### Rule 7: `IDataSource` Must Support O(1) Memory Processing
 
@@ -267,7 +267,7 @@ For ADO.NET-based connectors, set `cmd.CommandTimeout = _commandTimeout;` on eve
 { "TIMEOUT_SECONDS", Array.Empty<string>() }
 ```
 
-Users must be able to discover that this option exists via `SHOW CONNECTION HELP <name>`.
+Users must be able to discover that this option exists via `HELP CONNECTION <type>`.
 
 ### DW-4: `ITransactionalDataSource` Is Optional — Be Explicit
 

@@ -1,7 +1,7 @@
 ﻿-- VARIABLES & ENGINE CONFIG Kitchen Sink
 -- Covers: DECLARE types, SET, USE PASSWORD, REQUIRE VERSION, CLEAR SESSION,
 --         EXPECT SCHEMA, ASSERT, CREATE SETS/USE SETS, INPUT/OUTPUT variables,
---         ALTER/DROP CONNECTION, SHOW CONNECTIONS/VARIABLES/VERSION, SET WHAT_IF,
+--         ALTER/DROP CONNECTION, eng.connections/variables/version, SET WHAT_IF,
 --         SHOW WHAT_IF, dot notation member access, MINMAX type
 SET WHAT_IF OFF;
 
@@ -69,12 +69,12 @@ ALTER CONNECTION tmp_conn AS MOCKDB();
 DROP CONNECTION tmp_conn;
 DROP CONNECTION IF EXISTS tmp_conn;
 
--- 8. SHOW CONNECTIONS / VARIABLES / VERSION
+-- 8. eng.connections / eng.variables / eng.version
 PRINT 'Testing SHOW statements...';
-SHOW CONNECTIONS;
-SHOW VARIABLES;
+SELECT * FROM eng.connections;
+SELECT * FROM eng.variables;
 SHOW LOCAL VARIABLES;
-SHOW VERSION;
+SELECT * FROM eng.version;
 
 -- 9. ASSERT
 PRINT 'Testing ASSERT...';

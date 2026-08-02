@@ -75,7 +75,7 @@ Use `TYPE:FIELD` to scope a designation to one connector type:
 { "Governance": { "Secrets": { "SensitiveConnectionFields": "SFTP:HOST, S3:BUCKET" } } }
 ```
 
-Designated fields become `SECRET:`-resolvable and are masked in `SHOW CONNECTION`, diagnostics, and
+Designated fields become `SECRET:`-resolvable and are masked in `eng.connection_config`, diagnostics, and
 connection-string rendering — without being treated as secrets in every deployment: unlike credential
 fields they may still hold plain values (in scripts or catalog entries), so designating `HOST` does not
 force every hostname into the secret store. Shared connection entries can also classify fields per

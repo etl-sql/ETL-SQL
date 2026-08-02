@@ -50,11 +50,11 @@ EXECUTE portal BEGIN
     CREATE CONNECTION corporate AS SMTP(
         HOST = 'smtp.corp.example', USERNAME = 'mailer',
         PASSWORD = 'SECRET:corporate_smtp_password', DEFAULT_FROM = 'reports@corp.example');
-    SHOW CONNECTIONS;   -- filter for SMTP aliases in eng.connections when needed
+    SELECT * FROM eng.connections;   -- filter for SMTP aliases when needed
 
     -- Discovery
-    SHOW USERS;
-    SHOW REPORTS IN FOLDER '/Finance/Reports';
+    SELECT * FROM eng.users;
+    SELECT * FROM eng.reports WHERE folder = '/Finance/Reports';
 END;
 
 EXECUTE orch BEGIN

@@ -2,25 +2,26 @@
 
 Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE operations in a script. Records how each output column was derived, including which source tables and columns it came from, what transformation was applied, and any governance tags attached along the way.
 
-## Viewing Lineage
+## Querying Lineage
 
 ```sql
--- Show lineage for all tables in the session
-SHOW LINEAGE;
+-- Query lineage for all tables in the session
+SELECT * FROM eng.lineage;
 
--- Show lineage for a specific table
-SHOW LINEAGE FOR #target_table;
+-- Query lineage for a specific table
+SELECT * FROM eng.lineage WHERE TargetTable = '#target_table';
 
--- Show lineage for a specific column
-SHOW LINEAGE FOR #target_table COLUMN revenue;
+-- Query lineage for a specific column
+SELECT * FROM eng.lineage
+WHERE TargetTable = '#target_table' AND TargetColumn = 'revenue';
 
 -- Store lineage rows in a temp table
-SHOW LINEAGE INTO #lineage;
+SELECT * INTO #lineage FROM eng.lineage;
 ```
 
 ## Exporting Lineage
 
-`SHOW LINEAGE` returns rows or renders lineage for inspection. Use `EXPORT LINEAGE` for file-writing
+`eng.lineage` returns rows for inspection. Use `EXPORT LINEAGE` for file-writing
 OpenLineage exports:
 
 ```sql
@@ -28,7 +29,7 @@ OpenLineage exports:
 EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.jsonl';
 
 -- Export lineage for a specific target
-EXPORT LINEAGE FOR TABLE #target_table AS OPENLINEAGE TO 'exports/target.openlineage.jsonl';
+EXPORT LINEAGE FOR #target_table AS OPENLINEAGE TO 'exports/target.openlineage.jsonl';
 ```
 
 ### Report Nodes
@@ -43,24 +44,24 @@ EXPORT LINEAGE FOR TABLE #target_table AS OPENLINEAGE TO 'exports/target.openlin
 
 This enables end-to-end tracing across nodes such as `CRM.dbo.Orders`, `#orders`, `dataset:&daily_sales`, and `report:SalesChart`.
 
-## Querying the LINEAGE Virtual Table
+## Querying the `eng.lineage` Virtual Table
 
-The `LINEAGE` virtual table exposes every recorded lineage event as rows:
+The `eng.lineage` virtual table exposes every recorded lineage event as rows:
 
 ```sql
-SELECT * FROM LINEAGE;
+SELECT * FROM eng.lineage;
 
 -- Filter to a specific target
-SELECT * FROM LINEAGE WHERE TargetTable = '#summary';
+SELECT * FROM eng.lineage WHERE TargetTable = '#summary';
 
 -- Find all PII-carrying columns across the session
 SELECT TargetTable, TargetColumn, Metadata
-FROM LINEAGE
+FROM eng.lineage
 WHERE JSON_VALUE(Metadata, '$.pii') = 'true';
 
 -- Find all aggregations applied
 SELECT TargetTable, TargetColumn, TransformationKind, FunctionsApplied
-FROM LINEAGE
+FROM eng.lineage
 WHERE TransformationKind = 'Aggregation';
 ```
 
@@ -236,17 +237,17 @@ INTO #customer_summary
 FROM #orders_raw
 GROUP BY customer_id;
 
--- View the lineage graph
-SHOW LINEAGE FOR #customer_summary;
+-- View the lineage rows
+SELECT * FROM eng.lineage WHERE TargetTable = '#customer_summary';
 
 -- Query which columns carry PII
 SELECT TargetTable, TargetColumn
-FROM LINEAGE
+FROM eng.lineage
 WHERE JSON_VALUE(Metadata, '$.pii') = 'true';
 
 -- Find what transformations were applied
 SELECT TargetColumn, TransformationKind, FunctionsApplied
-FROM LINEAGE
+FROM eng.lineage
 WHERE TargetTable = '#customer_summary'
   AND TransformationKind <> 'PassThrough';
 ```
@@ -260,10 +261,10 @@ per target table or column that is missing one or more required stewardship tags
 
 ```sql
 -- Query the local lineage catalog
-SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing_stewardship;
+SELECT * INTO #missing_stewardship FROM eng.missing_tags LIMIT 100;
 
 -- Query a remote Orchestrator/Portal administration connection
-SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 100 INTO #missing_stewardship;
+SELECT * INTO #remote_missing FROM prod_orch.eng.missing_tags LIMIT 100;
 ```
 
 The result includes `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`, `RunAt`,
@@ -271,7 +272,7 @@ The result includes `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`,
 
 ## `eng.tags` Virtual Table
 
-`eng.tags` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of the `LINEAGE` table. `LINEAGE_TAGS` remains available as a legacy alias while the `eng.*` catalog is adopted.
+`eng.tags` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of `eng.lineage`.
 
 ```sql
 -- Find all PII columns in the session
@@ -290,7 +291,7 @@ ORDER BY classification;
 -- Find columns without an owner tag
 SELECT DISTINCT l.TargetTable, l.TargetColumn
 INTO #unowned
-FROM LINEAGE l
+FROM eng.lineage l
 WHERE l.TargetColumn IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM eng.tags t
@@ -315,13 +316,13 @@ WHERE l.TargetColumn IS NOT NULL
 
 ## HAS_TAG() Function
 
-`HAS_TAG(table, column, tag_name [, expected_value])` is a predicate that returns 1 if the tag exists, optionally matching a specific value, and 0 otherwise. It is useful in WHERE clauses against the LINEAGE table.
+`HAS_TAG(table, column, tag_name [, expected_value])` is a predicate that returns 1 if the tag exists, optionally matching a specific value, and 0 otherwise. It is useful in `WHERE` clauses against `eng.lineage`.
 
 ```sql
 -- Filter lineage to PII-tagged columns
 SELECT TargetTable, TargetColumn, TransformationKind
 INTO #pii_transforms
-FROM LINEAGE
+FROM eng.lineage
 WHERE HAS_TAG(TargetTable, TargetColumn, 'pii', 'true') = 1
   AND TransformationKind <> 'PassThrough';
 
@@ -332,67 +333,70 @@ SELECT HAS_TAG('#orders', 'amount', 'unit', 'USD') AS is_usd;
 
 ## Cross-Run Lineage Catalog
 
-`SHOW LINEAGE` is scoped to the current session. The catalog stores lineage across all orchestrated runs so you can answer stewardship questions that span many executions.
+`eng.lineage` is scoped to the current session. The catalog stores lineage across orchestrated runs so you can answer stewardship questions that span many executions.
 
-### SHOW LINEAGE HISTORY FOR TABLE
+### History for a table
 
 ```sql
 -- Local catalog
-SHOW LINEAGE HISTORY FOR TABLE Orders;
-SHOW LINEAGE HISTORY FOR TABLE Orders LIMIT 50;
-SHOW LINEAGE HISTORY FOR TABLE Orders INTO #history;
+SELECT * FROM eng.lineage_history WHERE TargetTable = 'Orders';
+SELECT * FROM eng.lineage_history WHERE TargetTable = 'Orders' LIMIT 50;
+SELECT * INTO #history FROM eng.lineage_history WHERE TargetTable = 'Orders';
 
 -- Remote Orchestrator
-SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;
-SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #history;
+SELECT * FROM ProdOrch.eng.lineage_history WHERE TargetTable = 'Orders';
+SELECT * INTO #remote_history FROM ProdOrch.eng.lineage_history
+WHERE TargetTable = 'Orders' LIMIT 50;
 ```
 
 Returns all lineage entries that targeted the named table, most recent run first. Columns: `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`.
 
-### SHOW LINEAGE HISTORY FOR TAG
+### History for a tag
 
 ```sql
 -- Local catalog
-SHOW LINEAGE HISTORY FOR TAG pii;
-SHOW LINEAGE HISTORY FOR TAG pii = 'true';
-SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' LIMIT 100 INTO #restricted;
+SELECT * FROM eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') IS NOT NULL;
+SELECT * FROM eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') = 'true';
+SELECT * INTO #restricted FROM eng.lineage_history
+WHERE JSON_VALUE(Tags, '$.classification') = 'restricted' LIMIT 100;
 
 -- Remote Orchestrator
-SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;
-SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100 INTO #restricted;
+SELECT * FROM ProdOrch.eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') = 'true';
+SELECT * INTO #remote_restricted FROM ProdOrch.eng.lineage_history
+WHERE JSON_VALUE(Tags, '$.classification') = 'restricted' LIMIT 100;
 ```
 
 Returns all entries whose `Tags` JSON contains the given key, optionally filtered to a specific value.
 
-### SHOW LINEAGE HISTORY FOR MISSING TAGS
+### Missing stewardship tags
 
 ```sql
 -- Local catalog
-SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing;
+SELECT * INTO #missing FROM eng.missing_tags LIMIT 100;
 
 -- Remote Orchestrator
-SHOW LINEAGE HISTORY FOR MISSING TAGS AT ProdOrch LIMIT 100 INTO #missing;
+SELECT * INTO #remote_missing FROM ProdOrch.eng.missing_tags LIMIT 100;
 ```
 
 Returns the newest catalog targets missing one or more required stewardship tags:
 `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`.
 
-### SHOW PROTECTED DATA
+### Protected data
 
 ```sql
 -- Local catalog
-SHOW PROTECTED DATA LIMIT 100 INTO #protected;
-SHOW PROTECTED DATA SUGGESTIONS LIMIT 100 INTO #protected_review;
+SELECT * INTO #protected FROM eng.protected_data LIMIT 100;
+SELECT * INTO #protected_review FROM eng.protected_data_suggestions LIMIT 100;
 
 -- Remote Orchestrator or Portal
-SHOW PROTECTED DATA AT ProdOrch LIMIT 100 INTO #protected;
-SHOW PROTECTED DATA AT ProdPortal LIMIT 100 INTO #protected;
-SHOW PROTECTED DATA SUGGESTIONS AT ProdPortal LIMIT 100 INTO #protected_review;
+SELECT * INTO #orch_protected FROM ProdOrch.eng.protected_data LIMIT 100;
+SELECT * INTO #portal_protected FROM ProdPortal.eng.protected_data LIMIT 100;
+SELECT * INTO #portal_review FROM ProdPortal.eng.protected_data_suggestions LIMIT 100;
 ```
 
 Returns protected lineage entries from the local or remote lineage catalog. A row is protected when it has a truthy `@pii`, `@phi`, `@pci`, or `@sensitive` tag, or `@classification` is `confidential` or `restricted`. Result columns include `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `ProtectionTags`, `Owner`, `Steward`, `Contact`, `Domain`, `Classification`, `Quality`, `Tags`, `SourceFile`, and `Line`.
 
-Use `SHOW PROTECTED DATA SUGGESTIONS` for non-authoritative review findings. Suggestions come from target/source column names, catalog metadata such as `@format` or `@semantic_type`, and supported sampled-value callers. The command never writes or changes tags. Result columns include `SuggestedTag`, `SuggestedValue`, `Confidence`, `EvidenceKind`, `Evidence`, `Reason`, and `ExistingTags` so a steward can decide whether to add tags in source-controlled scripts.
+Use `eng.protected_data_suggestions` for non-authoritative review findings. Suggestions come from target/source column names, catalog metadata such as `@format` or `@semantic_type`, and supported sampled-value callers. The table never writes or changes tags. Result columns include `SuggestedTag`, `SuggestedValue`, `Confidence`, `EvidenceKind`, `Evidence`, `Reason`, and `ExistingTags` so a steward can decide whether to add tags in source-controlled scripts.
 
 References:
 - [Specialized Operations](../../../administration/platform/README.md)

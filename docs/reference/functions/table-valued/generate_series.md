@@ -36,9 +36,9 @@ FROM GENERATE_SERIES(0, 364);
 ```
 
 ```sql
-SELECT r.value AS row, c.value AS col
-FROM GENERATE_SERIES(1, 5) AS r
-CROSS JOIN GENERATE_SERIES(1, 5) AS c;
+SELECT r.value AS row_num, c.value AS col_num
+FROM GENERATE_SERIES(1, 5) r
+CROSS JOIN GENERATE_SERIES(1, 5) c;
 ```
 
 ## References

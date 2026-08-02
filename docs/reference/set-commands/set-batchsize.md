@@ -13,7 +13,7 @@ SET BATCHSIZE = <n>;
 ```sql
 -- Increase batch size for a large remote fetch
 SET BATCHSIZE = 50000;
-SELECT * FROM SalesDB.dbo.Orders INTO #orders;
+SELECT * INTO #orders FROM SalesDB.dbo.Orders;
 
 -- Reset to default
 SET BATCHSIZE = 10000;

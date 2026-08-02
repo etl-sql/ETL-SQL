@@ -1,12 +1,12 @@
 # CONFIG
 <!-- ShowConnectionConfigStatement -->
 
-CONFIG is a keyword used exclusively with the SHOW CONNECTION command to inspect the configuration options and parameters of a data source connection.
+`eng.connection_config` exposes the redacted configuration options and parameters of active data source connections.
 
 ## Syntax
 
 ```sql
-SHOW CONNECTION <connection_name> CONFIG [INTO #temp_table];
+SELECT * [INTO #temp_table] FROM eng.connection_config WHERE connection_name = '<connection_name>';
 ```
 
 ## Description
@@ -22,12 +22,12 @@ Retrieves a list of all configured options and values for the specified connecti
 
 ```sql
 -- Inspect the configuration of the SalesDB connection
-SHOW CONNECTION SalesDB CONFIG;
+SELECT * FROM eng.connection_config WHERE connection_name = 'SalesDB';
 ```
 
 ```sql
 -- Save configuration to a temp table to query it programmatically
-SHOW CONNECTION WebAPI CONFIG INTO #api_config;
+SELECT * INTO #api_config FROM eng.connection_config WHERE connection_name = 'WebAPI';
 SELECT Value FROM #api_config WHERE Option = 'URL';
 ```
 

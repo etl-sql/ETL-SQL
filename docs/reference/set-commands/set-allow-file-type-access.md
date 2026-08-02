@@ -19,7 +19,7 @@ SET ALLOW_FILE_TYPE_ACCESS = '<.ext>';
 SET ALLOW_FILE_TYPE_ACCESS = '.dat';
 
 CREATE CONNECTION src AS FLATFILE(PATH='C:\data\export.dat');
-SELECT * FROM src.[export.dat] INTO #data;
+SELECT * INTO #data FROM src.[export.dat];
 
 -- Or open all extensions (less secure)
 SET ALLOW_FILE_TYPE_ACCESS = ON;

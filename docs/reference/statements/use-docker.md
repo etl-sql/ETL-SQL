@@ -33,11 +33,9 @@ CREATE CONNECTION stage_db AS MSSQL(@conn);
 | `STOP DOCKER <alias>` | Stop the container (state preserved) |
 | `PAUSE DOCKER <alias>` | Suspend CPU (faster resume than stop/start) |
 | `CLOSE DOCKER <alias>` | Destroy container and all its state |
-| `CLOSE_DOCKER` | Destroy **all** containers in the session |
+| `CLOSE DOCKER` | Destroy **all** containers in the session |
 
-Function-style aliases: `START_DOCKER`, `STOP_DOCKER`, `CLOSE_DOCKER`.
-
-> Containers are **not** automatically closed when a script ends. Always include an explicit `CLOSE_DOCKER` or wrap in `TRY...CATCH`.
+> Containers are **not** automatically closed when a script ends. Always include an explicit `CLOSE DOCKER` or wrap in `TRY...CATCH`.
 
 ### 18.4 Multiple Containers
 ```sql
@@ -50,11 +48,10 @@ CREATE CONNECTION target_db AS POSTGRES(dst.CONNECTION_STRING);
 SELECT * INTO #tmp FROM source_db.dbo.Customers;
 INSERT INTO target_db.public.customers SELECT * FROM #tmp;
 
-CLOSE_DOCKER;
+CLOSE DOCKER;
 ```
 
 ## References
 
 - [Statement Reference](README.md)
 - [Syntax Index](../../syntax-index.md)
-

@@ -10,7 +10,7 @@ INSERT INTO dbo.RunLog (run_at, engine_version)
 VALUES (GETDATE(), @@VERSION);
 ```
 
-Use SHOW VERSION for a compact one-line version string. @@VERSION includes the full build metadata.
+Query `eng.version` for structured component/version rows. `@@VERSION` includes the full build metadata.
 
 References:
 - [Standard Library](../../guides/getting-started.md)

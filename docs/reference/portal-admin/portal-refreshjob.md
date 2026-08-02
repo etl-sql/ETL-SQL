@@ -41,7 +41,7 @@ EXECUTE orch_admin BEGIN
 END;
 
 -- Check refresh job execution history
-SHOW JOB HISTORY AT orch_admin INTO #history;
+SELECT * INTO #history FROM orch_admin.eng.job_history;
 SELECT job_name, started_at, completed_at, status, error FROM #history
 WHERE job_name LIKE 'Finance%'
 ORDER BY started_at DESC;
@@ -53,7 +53,7 @@ ORDER BY started_at DESC;
 - `SCHEDULE` uses standard 5-field cron syntax: `minute hour day-of-month month day-of-week`.
 - The Orchestrator service must be running and reachable at the time the job fires. If the service is unavailable, the scheduled run is skipped and logged.
 - A report can have multiple scheduled jobs by attaching multiple schedules or creating multiple jobs that target the same report.
-- Use `SHOW JOB HISTORY` against the Orchestrator connection to monitor execution status, run durations, and errors.
+- Query `eng.job_history` through the Orchestrator connection to monitor execution status, run durations, and errors.
 - See: PORTAL_DATASET, PORTAL_REPORT, PORTAL_SHOW
 
 References:

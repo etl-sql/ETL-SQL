@@ -20,9 +20,9 @@ REQUIRE >= '2.4.0';
 
 DECLARE @start RELDATE INPUT = 'M-1';
 
-SELECT * FROM MyDB.dbo.Orders
-WHERE OrderDate >= @start
-INTO #orders;
+SELECT * INTO #orders
+FROM MyDB.dbo.Orders
+WHERE OrderDate >= @start;
 ```
 
 ## Notes

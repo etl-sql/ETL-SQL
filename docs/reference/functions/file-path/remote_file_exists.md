@@ -30,7 +30,7 @@ SELECT REMOTE_FILE_EXISTS(MyFtp, 'uploads/data.csv') AS upload_exists;
 ```sql
 IF REMOTE_FILE_EXISTS(SftpDrop, 'incoming/customers.csv') = 1
 BEGIN
-    RECEIVE FILE 'incoming/customers.csv' FROM SftpDrop TO 'landing/customers.csv';
+    RECEIVE FILE FROM 'incoming/customers.csv' TO 'landing/customers.csv' AT SftpDrop;
 END;
 ```
 

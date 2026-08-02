@@ -50,6 +50,11 @@ namespace ETL_SQL.Tests.Docs
                 new Regex(@"\bDECLARE\s+@\w+\s+AS\s+[A-Za-z]", RegexOptions.IgnoreCase),
                 "DECLARE does not take 'AS' before the type.",
                 "DECLARE @x <TYPE> [INPUT] = <value>"),
+
+            new("retired-row-show",
+                new Regex(@"\bSHOW\s+(?:PROFILE|PROFILING|JOBS?|HOST\s+METRICS|PUBLISHED\s+BUNDLES|BUNDLES?|CONNECTIONS?|TABLES|VIEWS?|COLUMNS|SCHEMA|VARIABLES|SCRIPT\s+TAGS|TAGS?|LINEAGE|PROTECTED\s+DATA|DATA\s+QUALITY|VERSION|SAFE\s+ZONES|SESSIONS|LOCKS|USERS?|REPORTS?|RECENT\s+REPORTS|FAVORITES|SHARE\s+LINKS|EMBED\s+TOKENS|SAVED\s+VIEWS|ALERTS|CATALOG\s+SEARCH|EFFECTIVE\s+PERMISSIONS|PORTAL|ACTIVE\s+SESSIONS|DATASETS|SUBSCRIPTIONS)\b"),
+                "Row-returning SHOW commands are retired.",
+                "SELECT ... FROM [connection.]eng.<table-or-function>"),
         };
 
         [Fact]
@@ -85,11 +90,23 @@ namespace ETL_SQL.Tests.Docs
         {
             var docs = Path.Combine(RepoRoot, "docs");
             var roadmaps = Path.Combine(docs, "architecture", "roadmaps") + Path.DirectorySeparatorChar;
+            var decisions = Path.Combine(docs, "architecture", "decisions") + Path.DirectorySeparatorChar;
+            var releases = Path.Combine(docs, "releases") + Path.DirectorySeparatorChar;
 
             var files = new List<string>();
             if (Directory.Exists(docs))
                 files.AddRange(Directory.GetFiles(docs, "*.md", SearchOption.AllDirectories)
-                    .Where(f => !f.StartsWith(roadmaps, StringComparison.OrdinalIgnoreCase)));
+                    .Where(f => !f.StartsWith(roadmaps, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => !f.StartsWith(decisions, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => !f.StartsWith(releases, StringComparison.OrdinalIgnoreCase))
+                    .Where(f => !Path.GetFileName(f).Equals("migration-guide.md", StringComparison.OrdinalIgnoreCase)));
+
+            var samples = Path.Combine(RepoRoot, "samples");
+            if (Directory.Exists(samples))
+                files.AddRange(Directory.GetFiles(samples, "*.*", SearchOption.AllDirectories)
+                    .Where(f => f.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase)
+                             || f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)));
             return files.Distinct().OrderBy(f => f, StringComparer.Ordinal);
         }
     }

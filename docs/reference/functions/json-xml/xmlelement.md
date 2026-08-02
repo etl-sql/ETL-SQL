@@ -30,11 +30,11 @@ Returns `NULL` when `name` is `NULL`.
 ## Examples
 
 ```sql
-SELECT XMLELEMENT('Emp', XMLATTRIBUTES('true' AS active), 'Jane') AS employee_xml;
+SELECT XMLELEMENT('Emp', 'Jane') AS employee_xml;
 ```
 
 ```sql
-SELECT XMLELEMENT('Customer', XMLATTRIBUTES(customer_id AS id), customer_name) AS customer_xml
+SELECT XMLELEMENT('Customer', customer_name) AS customer_xml
 FROM #customers;
 ```
 

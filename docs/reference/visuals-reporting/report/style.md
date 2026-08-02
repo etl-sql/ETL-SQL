@@ -10,7 +10,7 @@ CREATE STYLE <name> AS (
   BACKGROUND = '#rrggbb',
   FONT       = 'font-name',
   FONT_SIZE  = n,
-  COLORS     = ('#color1', '#color2', ...),
+  COLORS     = '#color1, #color2, ...',
   BORDER     = 'css-border-value',
   ALLOW_MAXIMIZE = ON | OFF
 );
@@ -28,7 +28,7 @@ CREATE STYLE Corporate AS (
   BACKGROUND = '#f8f9fa',
   FONT       = 'Segoe UI',
   FONT_SIZE  = 13,
-  COLORS     = ('#0070c0', '#00b050', '#ff0000', '#ffc000')
+  COLORS     = '#0070c0, #00b050, #ff0000, #ffc000'
 );
 
 CREATE VISUAL RevChart AS BAR (

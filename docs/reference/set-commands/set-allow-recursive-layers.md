@@ -14,7 +14,7 @@ SET ALLOW_RECURSIVE_LAYERS = <n>;
 -- Allow deeper recursion for a deeply nested directory scan
 SET ALLOW_RECURSIVE_LAYERS = 10;
 
-SELECT * FROM dir_conn.[*] INTO #all_files;
+SELECT * INTO #all_files FROM dir_conn.[*];
 ```
 
 ## Notes

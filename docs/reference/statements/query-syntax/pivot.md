@@ -42,20 +42,9 @@ UNPIVOT #sales ON q1, q2, q3 INTO NAME quarter VALUE amount;
 - Omitting `GROUP BY` groups by every column not consumed by `ON` or the aggregates.
 - `IN (...)` applies to a single `ON` column; omit it for dynamic discovery (and for multiple `ON` columns).
 
-## Dynamic PIVOT (values discovered at runtime)
-```sql
--- Collect distinct values first, then pivot
-SELECT DISTINCT Month INTO #months FROM #sales;
-
-PIVOT #sales
-  AGGREGATE SUM(Amount)
-  FOR Month IN (SELECT Month FROM #months)
-  INTO #pivoted;
-```
-
 ## Notes
 - Static PIVOT column values must be quoted string literals.
-- Dynamic PIVOT uses a subquery to discover pivot values at runtime; results flow into a new #temp table via `INTO`.
+- The statement form discovers values dynamically when `IN (...)` is omitted.
 - NULL cells in a PIVOT result indicate no matching rows; wrap with `COALESCE(..., 0)` if needed.
 - UNPIVOT excludes NULL values by default.
 - See: SELECT, GROUP BY, WITH

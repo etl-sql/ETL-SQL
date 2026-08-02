@@ -20,7 +20,7 @@ See the [SET Commands index](README.md) for the full list of options with links 
 
 ### Execution Mode
 - **WHAT_IF = ON|OFF** — dry-run mode; plan and log without executing DML (default OFF).
-- **PROFILING = ON|OFF** — collect per-statement timing; view with `SHOW PROFILE` (default OFF).
+- **PROFILING = ON|OFF** — collect per-statement timing; view through `eng.profile` (default OFF).
 - **WITH_PROMPT = ON|OFF** — prompt for confirmation before applying SET operations (default OFF).
 
 ### Display & Secret Handling
@@ -66,15 +66,15 @@ SET @region = 'North';
 SET @cutoff = DATEADD(DAY, -30, GETDATE());
 
 -- Dry-run mode
-SET WHAT_IF = ON;
+SET WHAT_IF ON;
 DELETE FROM prod.OldOrders WHERE order_date < '2020-01-01';
-SET WHAT_IF = OFF;
+SET WHAT_IF OFF;
 
 -- Profile a slow query
-SET PROFILING = ON;
+SET PROFILE ON;
 SELECT region, SUM(amount) FROM prod.Sales GROUP BY region;
-SHOW PROFILE INTO #timing;
-SET PROFILING = OFF;
+SELECT * INTO #timing FROM eng.profile;
+SET PROFILE OFF;
 SELECT * FROM #timing ORDER BY duration_ms DESC;
 
 -- Raise spill threshold before a known large join

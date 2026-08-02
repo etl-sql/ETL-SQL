@@ -34,7 +34,7 @@ END;
 
 -- Inspect dataset cache health
 EXECUTE portal BEGIN
-  SHOW PORTAL USAGE METRICS INTO #metrics;
+  SELECT * INTO #metrics FROM eng.usage_metrics(30);
 END;
 SELECT dataset_name, hit_rate, last_refreshed, ttl FROM #metrics;
 ```

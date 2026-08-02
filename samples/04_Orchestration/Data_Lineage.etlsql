@@ -33,7 +33,7 @@ FROM #SalesAudit;
 PRINT 'Final Audit Lineage for UserId:';
 SELECT * FROM LINEAGE('#FinalAudit', 'UserId');
 
--- 5. Export lineage to a report
-SHOW LINEAGE FOR #FinalAudit TO 'output/LineageReport.md';
+-- 5. Export lineage using the canonical OpenLineage format
+EXPORT LINEAGE FOR #FinalAudit AS OPENLINEAGE TO 'output/LineageReport.jsonl';
 
-PRINT 'Lineage tracking complete. Check samples/04_Orchestration/output/LineageReport.md for the graph.';
+PRINT 'Lineage tracking complete. Check samples/04_Orchestration/output/LineageReport.jsonl.';

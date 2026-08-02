@@ -5,7 +5,7 @@ Generates XML attributes from name-value expressions. `XMLATTRIBUTES` is used in
 ## Syntax
 
 ```sql
-XMLATTRIBUTES(value1 AS name1, value2 AS name2, ...)
+XMLATTRIBUTES(name1, value1, name2, value2, ...)
 ```
 
 ## Parameters
@@ -29,11 +29,11 @@ Returns an XML attribute expression for use inside XML construction functions.
 ## Examples
 
 ```sql
-SELECT XMLELEMENT('Customer', XMLATTRIBUTES('123' AS id), 'John Doe') AS customer_xml;
+SELECT XMLATTRIBUTES('id', '123', 'status', 'active') AS customer_attributes;
 ```
 
 ```sql
-SELECT XMLELEMENT('Order', XMLATTRIBUTES(order_id AS id, status AS state), total) AS order_xml
+SELECT XMLATTRIBUTES('id', order_id, 'state', status) AS order_attributes
 FROM #orders;
 ```
 

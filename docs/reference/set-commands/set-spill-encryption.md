@@ -3,7 +3,7 @@ Controls whether data buffers spilled to local disk during heavy queries are enc
 
 ## Syntax
 ```text
-SET SPILL_ENCRYPTION = ON|OFF;
+SET SPILL_ENCRYPTION ON|OFF;
 ```
 
 ## Parameters
@@ -13,11 +13,11 @@ SET SPILL_ENCRYPTION = ON|OFF;
 ## Example
 ```sql
 -- Disable spill encryption for a benchmarking session (non-sensitive data)
-SET SPILL_ENCRYPTION = OFF;
+SET SPILL_ENCRYPTION OFF;
 
-SELECT * FROM SalesDB.dbo.LargeTable INTO #data;
+SELECT * INTO #data FROM SalesDB.dbo.LargeTable;
 
-SET SPILL_ENCRYPTION = ON;
+SET SPILL_ENCRYPTION ON;
 ```
 
 ## Notes

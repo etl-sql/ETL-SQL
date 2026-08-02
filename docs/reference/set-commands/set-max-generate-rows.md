@@ -14,10 +14,10 @@ SET MAX_GENERATE_ROWS = <n>;
 -- Allow GENERATE to produce more rows for load testing
 SET MAX_GENERATE_ROWS = 5000000;
 
-GENERATE 2000000 ROWS INTO #test_data (
-    id INT IDENTITY,
-    name VARCHAR(50) = RANDOM_NAME(),
-    amount DECIMAL(10,2) = RANDOM_DECIMAL(0, 10000)
+GENERATE 2000000 ROWS INTO #test_data AS (
+    id = 'SEQUENCE(1,1)',
+    name = 'RANDOM(12)',
+    amount = 'RANDOM_DECIMAL(0,10000)'
 );
 ```
 

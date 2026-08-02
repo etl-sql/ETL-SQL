@@ -82,8 +82,8 @@ Spill format is Arrow IPC by default (binary, columnar). JSON spill is available
 ### 3.1 Encryption and compression
 
 ```sql
-SET SPILL_ENCRYPTION = ON;   -- AES-256-GCM, key derived from session key
-SET SPILL_COMPRESSION = ON;  -- GZip, applied before encryption
+SET SPILL_ENCRYPTION ON;   -- AES-256-GCM, key derived from session key
+SET SPILL_COMPRESSION ON;  -- GZip, applied before encryption
 ```
 
 Both are `OFF` by default. Enabling compression typically reduces spill file size by 60–80% for text-heavy workloads at a small CPU cost.
@@ -115,17 +115,17 @@ Run with `--perf` to see a summary table after execution:
 Enable profiling to track spill per statement:
 
 ```sql
-SET PROFILING = ON;
+SET PROFILE ON;
 
 SELECT a.*, b.Revenue
 INTO #Result
 FROM #Orders a
 JOIN #Transactions b ON a.ID = b.OrderID;
 
-SHOW PROFILE;
+SELECT * FROM eng.profile;
 ```
 
-`SHOW PROFILE` output includes `SpilledBytes` per statement row.
+`eng.profile` includes `SpilledBytes` per statement row.
 
 ### 4.3 Verbose/JSON mode
 

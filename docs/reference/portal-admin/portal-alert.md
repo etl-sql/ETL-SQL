@@ -21,7 +21,7 @@ ALTER ALERT AlertName SET (DESCRIPTION = 'Updated description');
 ENABLE ALERT AlertName;
 DISABLE ALERT AlertName;
 
-SHOW ALERTS FOR REPORT '/Folder/ReportName' [INTO #alerts];
+SELECT * [INTO #alerts] FROM eng.alerts('/Folder/ReportName');
 DROP ALERT [IF EXISTS] AlertName;
 ```
 

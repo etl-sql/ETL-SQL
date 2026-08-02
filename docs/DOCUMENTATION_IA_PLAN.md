@@ -88,7 +88,7 @@ Hub: `administration/portal/README.md` → overview + links.
 Hub: `administration/orchestration/README.md` → overview + links.
 - CLI Command Reference (§2: run, ui edit, ui repl, encrypt, session clear, generate,
   gen-script, extract-spec, exit codes) → **generated `reference/cli/**`**.
-- Job scheduling (`CREATE JOB`, retry, `SHOW JOBS`/`JOB HISTORY`/`HOST METRICS`,
+- Job scheduling (`CREATE JOB`, retry, `eng.jobs`/`eng.job_history`/`eng.host_metrics`,
   `DROP JOB`, cancel, paging) → these are language statements → `reference/orchestrator-jobs/*`
   (already an embedded category) — one page per statement, keyword-named.
 - Live files vs published bundles, publishing, bundle inspection → `reference/orchestrator-jobs/bundles.md`.

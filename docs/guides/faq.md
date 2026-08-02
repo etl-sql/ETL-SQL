@@ -16,7 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.17.0**.
+> Query `eng.version` for structured version info within a script session. The current release baseline is **v0.17.0**.
 
 **Q: Where do I start?**
 > Read [Getting Started](getting-started.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](../cookbooks/etl-recipes.md) for production-ready examples.
@@ -262,7 +262,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > SET PROFILING OFF;
 >
 > -- View the 10 slowest statements
-> SHOW PROFILE INTO #perf;
+> SELECT * INTO #perf FROM eng.profile;
 > SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 > ```
 
@@ -337,7 +337,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > Dynamic SQL is also parameterized — pass a `List` as a second argument for safe parameterized queries against remote databases:
 > ```sql
 > DECLARE @params LIST = ('Active', 2026);
-> EXEC 'SELECT * FROM dbo.Orders WHERE Status = @p0 AND Year = @p1' ON prod_db WITH PARAMS(@params);
+> EXEC ('SELECT * FROM dbo.Orders WHERE Status = @p0 AND Year = @p1') AT prod_db WITH (@params);
 > ```
 
 ---

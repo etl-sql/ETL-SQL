@@ -115,7 +115,7 @@ public interface IConnector
     IReadOnlyList<string> Aliases { get; }
 
     /// <summary>
-    /// Returns the remote engine version string. Used by SHOW CONNECTION.
+    /// Returns the remote engine version string for connector diagnostics.
     /// Must not throw — return a safe default string on failure.
     /// </summary>
     Task<string> GetVersionAsync(IExecutionContext context, string connectionString);
@@ -156,7 +156,7 @@ public interface IConnector
     Dictionary<string, string[]> GetOptionValues();
 
     /// <summary>
-    /// One-paragraph plain-text help string. Displayed by SHOW CONNECTION HELP.
+    /// One-paragraph plain-text help string. Displayed by HELP CONNECTION.
     /// Must include: authentication patterns, required options, optional options.
     /// </summary>
     string GetHelp();
@@ -192,7 +192,7 @@ public interface IConnector
 
     /// <summary>
     /// Builds a provider-specific connection string from a property dictionary.
-    /// Used by SHOW CONNECTION to reconstruct connection details.
+    /// Used by eng.connection_config to reconstruct redacted connection details.
     /// Default returns empty string; override if the connector uses standard DSNs.
     /// </summary>
     string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
@@ -313,7 +313,7 @@ public interface IDataSource : IAsyncDisposable
     /// <summary>The WITH (...) options used to create this data source.</summary>
     Dictionary<string, string>? Options { get; }
 
-    /// <summary>The connector type token (e.g., "MSSQL", "FLATFILE"). Used in SHOW CONNECTION.</summary>
+    /// <summary>The connector type token (e.g., "MSSQL", "FLATFILE"). Used in eng.connections.</summary>
     string ConnectorType { get; }
 }
 ```
@@ -349,7 +349,7 @@ public interface IDatabaseSource : IDataSource
     /// <summary>Dialect name token (e.g., "MSSQL", "POSTGRES"). Used by the optimizer.</summary>
     string Dialect { get; }
 
-    /// <summary>View names in the remote database (for SHOW VIEWS and autocomplete).</summary>
+    /// <summary>View names in the remote database (for eng.views and autocomplete).</summary>
     Task<IEnumerable<string>> GetViewsAsync();
 
     /// <summary>Column names for a specific remote table.</summary>
@@ -472,18 +472,16 @@ Script:  CREATE CONNECTION sales AS MSSQL('Server=srv;Database=db', ENCRYPT = ON
 3. ExecutionTree node status → Complete
 ```
 
-### 3.2 `SHOW CONNECTION` walkthrough
+### 3.2 `eng.connections` walkthrough
 
 ```
-Script:  SHOW CONNECTION sales;
+Script:  SELECT * FROM eng.connections WHERE connection_name = 'sales';
 
-1. ShowConnectionHandler resolves evaluator.Connections["sales"] → IDataSource ds
-2. Calls connector.GetVersionAsync(ds.Path) → versionString
-3. Calls ds.GetColumnsAsync() and ds.GetTablesAsync() → schema info
-4. Builds a result set with connection metadata:
-   - Connector type, version, tables, supported options
-   - WITH options: all values shown; sensitive option values masked as "***"
-5. sink.WriteResultSet(resultSet)
+1. DataSourceManager recognizes the reserved `eng` schema.
+2. ConnectionsDataSource enumerates evaluator.Connections.
+3. The normal SELECT pipeline applies the `connection_name` predicate.
+4. ConnectionConfigDataSource provides option rows separately and masks sensitive values.
+5. The normal result sink renders or captures the result set.
 ```
 
 ### 3.3 `DROP CONNECTION` walkthrough
@@ -605,7 +603,7 @@ Before constructing the `ExecutionException` message the connector must apply th
 
 ### 5.3 Credential masking in metadata
 
-`GetSupportedOptions()` and `GetOptionValues()` list all available `WITH` clause keys including sensitive ones. When the connector returns option values for `SHOW CONNECTION` or IDE display, sensitive keys must be masked:
+`GetSupportedOptions()` and `GetOptionValues()` list all available option keys including sensitive ones. When the connector returns option values for `eng.connection_config` or IDE display, sensitive keys must be masked:
 
 ```csharp
 // CORRECT
@@ -616,7 +614,7 @@ public Dictionary<string, string[]> GetSupportedOptions() => new()
     ["PASSWORD"] = Array.Empty<string>(),  // Key declared so linter knows it exists
 };
 
-// In SHOW CONNECTION output:
+// In eng.connection_config output:
 // PASSWORD = ***   ← masked; never the actual value
 ```
 
@@ -735,7 +733,7 @@ services.AddSingleton<IConnector, SnowflakeConnector>();
 
 **Fix:** Never log or include the connection string. Log the connector type and the host/database name only. Use the masking rules from §5.3 for all `WITH` option values.
 
-### 9.5 `SHOW CONNECTION` does not show table or column information
+### 9.5 `eng.connections` does not show table or column information
 
 **Check 1:** Did `GetTablesAsync()` / `GetColumnsAsync()` on `IConnector` throw? These methods must not propagate exceptions — return empty enumerables on failure and log the reason via `ILogger`.
 

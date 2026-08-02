@@ -14,7 +14,7 @@ SET TEMP_TABLE_SPILL_THRESHOLD = <n>;
 -- Allow larger in-memory temp tables before spilling
 SET TEMP_TABLE_SPILL_THRESHOLD = 5000000;
 
-SELECT * FROM SalesDB.dbo.AllTransactions INTO #all_txns;
+SELECT * INTO #all_txns FROM SalesDB.dbo.AllTransactions;
 ```
 
 ## Notes

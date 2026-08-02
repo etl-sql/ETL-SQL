@@ -74,8 +74,8 @@ END;
 ALTER JOB CleanupJob SET TARGET = 'scripts/cleanup-v2.etlsql';
 ALTER JOB CleanupJob SET (MAX_RETRIES = 5, DISPLAY_NAME = 'Cleanup — production');
 
-SHOW JOBS;
-SHOW JOB HISTORY CleanupJob;
+SELECT * FROM eng.jobs;
+SELECT * FROM eng.job_history WHERE JobName = 'CleanupJob';
 
 DROP JOB IF EXISTS CleanupJob;
 KILL JOB 1023;

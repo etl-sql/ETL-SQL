@@ -15,7 +15,7 @@ Actions:
 ```sql
 DECLARE @selected_regions LIST = ('All');
 
-SELECT DISTINCT region FROM #sales INTO #region_opts;
+SELECT DISTINCT region INTO #region_opts FROM #sales;
 
 CREATE VISUAL RegionFilter AS MULTISELECT (
   SOURCE   = #region_opts,

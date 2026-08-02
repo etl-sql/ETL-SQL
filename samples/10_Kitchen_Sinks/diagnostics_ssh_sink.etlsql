@@ -1,6 +1,6 @@
 -- DIAGNOSTICS & SSH KEY Kitchen Sink
--- Covers: SET PROFILING / SHOW PROFILE, EXPLAIN, LINT, SHOW VARIABLES,
---         SHOW VERSION, CREATE SSH_KEY_PAIR, eng.tags, SHOW LINEAGE,
+-- Covers: SET PROFILING / eng.profile, EXPLAIN, LINT, eng.variables,
+--         eng.version, CREATE SSH_KEY_PAIR, eng.tags, eng.lineage,
 --         GET_TAGS, GET_TAG_VALUE, script metadata header tags
 /* 
    @author: Kitchen Sink Test
@@ -9,13 +9,13 @@
 */
 SET WHAT_IF OFF;
 
--- 1. SHOW VERSION
-PRINT 'Testing SHOW VERSION...';
-SHOW VERSION;
-SHOW VERSION INTO #ver;
+-- 1. eng.version
+PRINT 'Testing eng.version...';
+SELECT * FROM eng.version;
+SELECT * INTO #ver FROM eng.version;
 SELECT * FROM #ver;
 
--- 2. SET PROFILING / SHOW PROFILE
+-- 2. SET PROFILING / eng.profile
 PRINT 'Testing SET PROFILING...';
 SET PROFILING ON;
 
@@ -25,8 +25,8 @@ SELECT * FROM #Profile_Test ORDER BY Amount DESC;
 
 SET PROFILING OFF;
 
-SHOW PROFILE;
-SHOW PROFILE INTO #prof_results;
+SELECT * FROM eng.profile;
+SELECT * INTO #prof_results FROM eng.profile;
 SELECT * FROM #prof_results ORDER BY DurationMs DESC;
 
 -- 3. EXPLAIN
@@ -44,12 +44,12 @@ BEGIN CATCH
     PRINT 'LINT errored: ' + ERROR_MESSAGE();
 END CATCH
 
--- 5. SHOW VARIABLES
-PRINT 'Testing SHOW VARIABLES...';
+-- 5. eng.variables
+PRINT 'Testing eng.variables...';
 DECLARE @diag_var1 INT = 999;
 DECLARE @diag_var2 STRING = 'test';
-SHOW VARIABLES;
-SHOW VARIABLES INTO #vars;
+SELECT * FROM eng.variables;
+SELECT * INTO #vars FROM eng.variables;
 SELECT * FROM #vars;
 SHOW LOCAL VARIABLES;
 
@@ -71,14 +71,15 @@ DECLARE @desc = GET_TAG_VALUE('#Tagged', 'UserId', 'd');
 PRINT 'Tags on UserId:', @tags;
 PRINT 'Description of UserId:', @desc;
 
--- 7. SHOW LINEAGE
-PRINT 'Testing SHOW LINEAGE...';
+-- 7. Query and export lineage
+PRINT 'Testing eng.lineage...';
 
 -- Console / messages view
-SHOW LINEAGE FOR #Tagged;
+SELECT * FROM eng.lineage WHERE TargetTable = '#Tagged';
 
 -- Column-specific trace
-SHOW LINEAGE FOR #Tagged COLUMN UserId;
+SELECT * FROM eng.lineage
+WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId';
 
 -- Queryable source
 SELECT Operation, TargetTable, SourceTables
@@ -86,9 +87,9 @@ INTO #lin_check
 FROM LINEAGE(#Tagged);
 SELECT * FROM #lin_check;
 
--- Export to markdown (write to temp file)
+-- Export the target lineage as OpenLineage JSON Lines
 BEGIN TRY
-    SHOW LINEAGE FOR #Tagged TO 'samples/output/lineage_output.md';
+    EXPORT LINEAGE FOR #Tagged AS OPENLINEAGE TO 'samples/output/lineage_output.jsonl';
     PRINT 'Lineage exported to file.';
 END TRY
 BEGIN CATCH

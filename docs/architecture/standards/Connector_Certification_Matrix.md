@@ -205,7 +205,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 - Build the images before running the platform smoke tests:
   - `docker build -f src/ETL-SQL.Portal/Dockerfile -t etl-sql-portal-test:latest .`
   - `docker build -f src/ETL-SQL.Orchestrator.Service/Dockerfile -t etl-sql-orchestrator-service-test:latest .`
-- Portal smoke coverage verifies connector authentication against a real containerized portal and executes `SHOW PORTAL USERS`.
+- Portal smoke coverage verifies connector authentication against a real containerized portal and queries `eng.users`.
 - Orchestrator smoke coverage verifies API-key authentication against a real containerized orchestrator and executes create/list scheduled-job operations through the connector.
 
 ---

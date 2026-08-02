@@ -22,13 +22,23 @@ ORDER BY connection_name;
 | [`eng.job_history`](job-history.md) | Orchestrator job execution history. |
 | [`eng.job_state`](job-state.md) | Saved Orchestrator job state key/value records. |
 | [`eng.jobs`](jobs.md) | Scheduled Orchestrator jobs. |
+| [`eng.lineage`](lineage.md) | Current-session table and column lineage events. |
+| [`eng.lineage_history`](lineage-history.md) | Durable lineage events across orchestrated runs. |
+| [`eng.locks`](locks.md) | Active concurrency and job-throttle locks. |
+| [`eng.missing_tags`](missing-tags.md) | Durable lineage targets missing stewardship metadata. |
 | [`eng.profile`](profile.md) | Captured execution profiling metrics. |
+| [`eng.protected_data`](protected-data.md) | Durable protected-data lineage inventory. |
+| [`eng.protected_data_suggestions`](protected-data-suggestions.md) | Reviewable protected-data classifier findings. |
 | [`eng.safe_zones`](safe-zones.md) | Configured file-system safe zones. |
+| [`eng.sessions`](sessions.md) | Persisted engine sessions. |
 | [`eng.tables`](tables.md) | Table names exposed by active connections. |
 | [`eng.tags`](tags.md) | Lineage metadata tags. |
+| [`eng.data_quality_rules`](data-quality-rules.md) | Current-session `@expect`/`@fail` rules. |
 | [`eng.variables`](variables.md) | Session variables with sensitive values masked. |
 | [`eng.version`](version.md) | Engine version metadata. |
 | [`eng.views`](views.md) | Session view definitions. |
+
+Portal connections additionally expose the permission-aware tables and table-valued functions in the [Portal `eng.*` catalog](portal-catalog.md).
 
 ## References
 

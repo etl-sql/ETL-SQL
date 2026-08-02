@@ -18,7 +18,7 @@ FOREACH @r IN @regions BEGIN
 END;
 
 -- Iterate a temp table
-SELECT name, amount FROM #orders INTO #order_list;
+SELECT name, amount INTO #order_list FROM #orders;
 FOREACH @o IN #order_list BEGIN
   PRINT @o.name + ': ' + @o.amount;
 END;

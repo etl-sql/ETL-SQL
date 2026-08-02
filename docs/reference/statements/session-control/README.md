@@ -8,7 +8,7 @@
 | [ASSERT JOB](assert-job.md) | Asserts on the **run's own metrics** — how many rows it processed, what fraction was quarantined, |
 | [ASSERT](assert.md) | Validates a condition at runtime and halts execution with an error if it is false. Used for data quality checks and script contracts. |
 | [CLEAR SESSION](clear.md) | Cleans up session state: temp files, recovery manifests, encrypted session data, and disk-spill artifacts. |
-| [CONFIG](config.md) | CONFIG is a keyword used exclusively with the SHOW CONNECTION command to inspect the configuration options and parameters of a data source connection. |
+| [CONFIG](config.md) | Query redacted active connection configuration through `eng.connection_config`. |
 | [EXPLAIN](explain.md) | Shows the execution plan for a SELECT or DML statement without running it. |
 | [GENERATE](generate.md) | Creates synthetic or mock data rows and loads them into a #temp table. Useful for testing, seeding, and load simulation. |
 | [HELP](help.md) | Displays documentation for a keyword, function, connector, or option directly in the REPL or output pane. |

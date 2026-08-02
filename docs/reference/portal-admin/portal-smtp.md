@@ -59,7 +59,7 @@ END;
 
 -- List configured connections, then filter for SMTP aliases
 EXECUTE portal BEGIN
-  SHOW CONNECTIONS INTO #connections;
+  SELECT * INTO #connections FROM eng.connections;
 END;
 SELECT * FROM #connections WHERE connector_type = 'SMTP';
 
@@ -75,7 +75,7 @@ END;
 - `PASSWORD` must be a `SECRET:name` reference. A literal value is refused by the catalog rather than stored — the credential lives in the secret store, and the connection entry only points at it.
 - The alias is an identifier and is the name subscriptions and alerts use in their `AT <alias>` clause.
 - Entries inherit the catalog's governance: per-connection use ACLs, ownership, an audit trail, and a usage ledger.
-- `SHOW SMTP CONNECTIONS` is retired. Use `SHOW CONNECTIONS` or select from `eng.connections` and filter for SMTP aliases.
+- Query `eng.connections` and filter for SMTP aliases.
 - See: PORTAL_SUBSCRIPTION, PORTAL_ALERT, PORTAL_SHOW
 
 ### Migrating from `CREATE SMTP CONNECTION`

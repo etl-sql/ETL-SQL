@@ -42,7 +42,7 @@ END;
 
 -- List all users with their roles and status
 EXECUTE portal BEGIN
-  SHOW USERS INTO #users;
+  SELECT * INTO #users FROM eng.users;
 END;
 SELECT * FROM #users;
 ```
@@ -56,7 +56,7 @@ SELECT * FROM #users;
 - `DISCONNECT USER` revokes all active refresh sessions immediately but does not invalidate authentication tokens.
 - `REVOKE TOKENS FOR USER` invalidates all authentication tokens, forcing the user to re-authenticate on their next request.
 - To fully lock out a user, call both `DISCONNECT USER` and `REVOKE TOKENS FOR USER` before disabling or dropping the account.
-- `SHOW USERS` returns all accounts with their username, email, role, and active status.
+- `eng.users` returns all accounts with their username, email, role, and active status.
 - See: PORTAL_PERMISSIONS, PORTAL_GROUP, PORTAL_SHOW
 
 References:

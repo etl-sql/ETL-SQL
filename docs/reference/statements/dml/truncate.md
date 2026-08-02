@@ -11,7 +11,7 @@ TRUNCATE TABLE <target>;
 ```sql
 -- Clear a staging table before reloading
 TRUNCATE TABLE #staging;
-SELECT * FROM dbo.Source INTO #staging;
+SELECT * INTO #staging FROM dbo.Source;
 
 -- Clear a remote table on a connection
 TRUNCATE TABLE SalesDB.dbo.Staging;

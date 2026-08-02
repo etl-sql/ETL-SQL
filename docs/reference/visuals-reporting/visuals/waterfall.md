@@ -12,18 +12,21 @@ Options:
 - **SHOW_VALUES = ON|OFF** - display values on bars (default ON)
 
 ```sql
-SELECT 'Opening'     AS item,  50000 AS amount, 1 AS is_total UNION ALL
+SELECT 'Opening' AS item, 50000 AS amount, 1 AS is_total INTO #bridge UNION ALL
 SELECT 'Revenue',             120000,            0             UNION ALL
 SELECT 'COGS',                -45000,            0             UNION ALL
 SELECT 'OpEx',                -30000,            0             UNION ALL
-SELECT 'Net Profit',           95000,            1
-INTO #bridge;
+SELECT 'Net Profit',           95000,            1;
 
 CREATE VISUAL ProfitBridge AS WATERFALL (
   SOURCE   = #bridge,
   MAPPINGS (NAME = item, VALUE = amount, TOTAL = is_total),
   OPTIONS  (
-    COLORS      = ('#27ae60', '#e74c3c', '#2980b9'),
+    COLORS (
+      positive = '#27ae60',
+      negative = '#e74c3c',
+      total = '#2980b9'
+    ),
     SHOW_VALUES = ON,
     TITLE       = 'Q1 Profit Bridge'
   )

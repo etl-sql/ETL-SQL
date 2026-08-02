@@ -76,41 +76,39 @@ Auto-export to an OpenLineage endpoint (e.g., Marquez) can be configured by sett
 
 ```sql
 -- Full lineage for every table touched in this run
-SHOW LINEAGE;
+SELECT * FROM eng.lineage;
 
 -- All operations that produced #CustomerSummary
-SHOW LINEAGE FOR TABLE #CustomerSummary;
+SELECT * FROM eng.lineage WHERE TargetTable = '#CustomerSummary';
 
 -- Column-level trace: how was the Revenue column derived?
-SHOW LINEAGE FOR TABLE #CustomerSummary COLUMN Revenue;
+SELECT * FROM eng.lineage
+WHERE TargetTable = '#CustomerSummary' AND TargetColumn = 'Revenue';
 
 -- Report and dataset targets
-SHOW LINEAGE FOR REPORT SalesDashboard;
-SHOW LINEAGE FOR DATASET &CustomerDS;
+SELECT * FROM eng.lineage WHERE TargetTable = 'report:SalesDashboard';
+SELECT * FROM eng.lineage WHERE TargetTable = 'dataset:&CustomerDS';
 ```
 
-`SHOW LINEAGE` prints a visual dependency graph and a timestamped audit table to the console. It can also be redirected:
+`eng.lineage` is a normal virtual table, so it supports filtering, joins, ordering, and `INTO`:
 
 ```sql
 -- Capture lineage into a temp table for further analysis
-SHOW LINEAGE FOR TABLE #CustomerSummary INTO #LineageResult;
+SELECT * INTO #LineageResult
+FROM eng.lineage
+WHERE TargetTable = '#CustomerSummary';
 SELECT * FROM #LineageResult WHERE Operation = 'SELECT';
 ```
 
-The columns returned in `INTO` mode match the `LineageEntry` model:
+The columns returned match the `LineageEntry` model:
 `Timestamp`, `Operation`, `TargetTable`, `TargetColumn`, `SourceTables`, `SourceColumns`, `Description`, `Metadata`, `DerivedFromDescriptions`, `SourceFile`, `Line`, `Column`, `TransformationKind`, `TransformationExpression`, `FunctionsApplied`.
 
 ### 3.2 Exporting from a script
 
 ```sql
--- Export a Mermaid graph + audit log to a Markdown file
-SHOW LINEAGE FOR TABLE #Orders EXPORT TO 'reports/orders_lineage.md';
-
 -- Export in OpenLineage JSON format
-EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.json';
+EXPORT LINEAGE FOR #Orders AS OPENLINEAGE TO 'exports/orders.openlineage.jsonl';
 ```
-
-The Mermaid export wraps the graph in a fenced ` ```mermaid ` block and appends a full audit log table, ready for GitHub rendering or import into Notion/Confluence.
 
 ---
 
@@ -122,32 +120,34 @@ While in-session lineage covers the current run, the `ILineageCatalogStore` pers
 
 ```sql
 -- All runs that ever wrote to or read from DW.FactSales
-SHOW LINEAGE HISTORY FOR TABLE FactSales;
+SELECT * FROM eng.lineage_history WHERE TargetTable = 'FactSales';
 
 -- Runs tagged @owner = 'finance'
-SHOW LINEAGE HISTORY FOR TAG owner = 'finance';
+SELECT * FROM eng.lineage_history WHERE JSON_VALUE(Tags, '$.owner') = 'finance';
 
 -- All lineage recorded by job DailyLoad
-SHOW LINEAGE HISTORY FOR JOB DailyLoad;
+SELECT * FROM eng.lineage_history WHERE JobName = 'DailyLoad';
 
 -- Limit results
-SHOW LINEAGE HISTORY FOR TABLE FactSales LIMIT 50;
+SELECT * FROM eng.lineage_history WHERE TargetTable = 'FactSales' LIMIT 50;
 
 -- Capture into a temp table
-SHOW LINEAGE HISTORY FOR TAG owner INTO #OwnerHistory;
+SELECT * INTO #OwnerHistory
+FROM eng.lineage_history
+WHERE JSON_VALUE(Tags, '$.owner') IS NOT NULL;
 ```
 
 Catalog query results return these columns: `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`.
 
 ### 4.2 Remote catalog queries
 
-When the Orchestrator is deployed as a service, catalog queries can be routed to it from a client script using `AT`:
+When the Orchestrator is deployed as a service, qualify the `eng` schema with its connection:
 
 ```sql
-SHOW LINEAGE HISTORY FOR TABLE FactSales AT OrchestratorConn;
+SELECT * FROM OrchestratorConn.eng.lineage_history WHERE TargetTable = 'FactSales';
 ```
 
-`OrchestratorConn` must be a registered portal admin connection. The `AT` clause is available on all three `SHOW LINEAGE HISTORY FOR` variants.
+`OrchestratorConn` must be a registered Orchestrator administration connection.
 
 ---
 
@@ -175,7 +175,7 @@ Orchestrator state store
 └── LineageHistory    (cross-run lineage entries)
 ```
 
-After each Orchestrator job run, the evaluator's full lineage is flushed via `ILineageCatalogStore.SaveLineageAsync()`. The `JobName` column in `LineageHistory` is populated from the Orchestrator job name, enabling `SHOW LINEAGE HISTORY FOR JOB` queries.
+After each Orchestrator job run, the evaluator's full lineage is flushed via `ILineageCatalogStore.SaveLineageAsync()`. The `JobName` column in `LineageHistory` is populated from the Orchestrator job name, enabling filtered `eng.lineage_history` queries.
 
 ---
 
@@ -212,16 +212,14 @@ Script execution
       ▼
   LineageTracker (in-memory, per-run)
       │
-      ├─► SHOW LINEAGE ──────────────► Console / INTO #table
-      │
-      ├─► EXPORT TO '*.md' ──────────► Mermaid + audit log file
+      ├─► eng.lineage ───────────────► SELECT / INTO #table
       │
       ├─► EXPORT LINEAGE ────────────► OpenLineage .json/.jsonl file
       │
       └─► ILineageCatalogStore ──────► Orchestrator state store
                                              (SQLite or PostgreSQL LineageHistory)
                │                             │
-               └──────────────────────────────►  SHOW LINEAGE HISTORY
-                                              │  (cross-run, by table/tag/job)
-                                              └►  AT OrchestratorConn (remote)
+               └──────────────────────────────►  eng.lineage_history
+                                              │  (cross-run, normal filters)
+                                              └►  OrchestratorConn.eng.* (remote)
 ```

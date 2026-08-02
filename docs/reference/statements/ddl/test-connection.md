@@ -36,7 +36,7 @@ Result: all attempted checks passed.
 - File-based / local connectors (CSV, Parquet, SQLite) report the network layers as not applicable.
 - The TCP layer needs a port: it is taken from the connector, then a `PORT` option, then a well-known default. If none is known, the TCP check is skipped with guidance to add `PORT`.
 - The connect timeout is governed by `Engine:Diagnostics:ProbeTimeoutSeconds` (default 5).
-- See: CREATE CONNECTION, SHOW CONNECTION, ALTER CONNECTION
+- See: CREATE CONNECTION, `eng.connections`, ALTER CONNECTION
 
 References:
 - [Statements](../README.md)

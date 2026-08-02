@@ -7,7 +7,7 @@ PRINT '@@ROWCOUNT: ' + @@ROWCOUNT;
 
 -- 2. Introspection
 PRINT 'Testing SHOW...';
-SHOW CONNECTIONS;
+SELECT * FROM eng.connections;
 
 -- 3. EXEC vs EXECUTE
 PRINT 'Testing EXEC vs EXECUTE Aliasing...';

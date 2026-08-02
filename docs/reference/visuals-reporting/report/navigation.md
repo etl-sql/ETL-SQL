@@ -7,7 +7,7 @@ Creates a menu or tab strip that links multiple report pages, providing user nav
 ```sql
 CREATE NAVIGATION <name> AS TAB | BUTTON | LINK (
   ORIENTATION = HORIZONTAL | VERTICAL,
-  PAGES       = (<page1>, <page2>, ...)
+  PAGES       (<page1>, <page2>, ...)
 );
 ```
 
@@ -32,7 +32,8 @@ CREATE PAGE Trends AS DASHBOARD (
 
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  PAGES       = (Overview, Detail, Trends)
+  DEFAULT     = Overview,
+  PAGES       (Overview, Detail, Trends)
 );
 ```
 

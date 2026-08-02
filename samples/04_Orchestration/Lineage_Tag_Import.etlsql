@@ -44,6 +44,6 @@ EXPORT LINEAGE AS OPENLINEAGE TO 'output/daily_lineage.json';
 INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
 
 PRINT 'Lineage for #daily after import:';
-SHOW LINEAGE FOR #daily TO 'output/daily_lineage_report.md';
+SELECT * FROM eng.lineage WHERE TargetTable = '#daily';
 
-PRINT 'Done. See samples/04_Orchestration/output/ for the exported artifacts.';
+PRINT 'Done. See samples/04_Orchestration/output/ for the OpenLineage export.';

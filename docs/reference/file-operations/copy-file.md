@@ -1,5 +1,5 @@
 # COPY
-Copies a file or directory from one location to another, including across connections (local, SFTP, S3).
+Copies a local file or directory from one sandboxed location to another.
 
 ## COPY FILE Syntax
 ```text
@@ -12,9 +12,6 @@ COPY FILE 'source/report.csv' TO DIRECTORY 'archive' WITH (DATE_SUFFIX = 'yyyyMM
 ```sql
 -- Copy to an explicit destination file
 COPY FILE 'source/report.csv' TO 'archive/report.csv';
-
--- Cross-connection copy (local to SFTP)
-COPY FILE 'output/report.csv' TO SftpConn:'uploads/report.csv';
 
 -- With options
 COPY FILE 'source/data.csv' TO 'backup/data.csv' WITH (
@@ -34,8 +31,7 @@ WITH (
 ```sql
 COPY DIRECTORY 'output/' TO 'archive/2024/';
 
--- Cross-connection directory copy
-COPY DIRECTORY 'reports/' TO S3Conn:'bucket/reports/' WITH (
+COPY DIRECTORY 'reports/' TO 'archive/reports/' WITH (
   OVERWRITE = ON,
   RECURSE   = ON
 );
@@ -50,7 +46,7 @@ COPY DIRECTORY 'reports/' TO S3Conn:'bucket/reports/' WITH (
 | RECURSE | ON \| OFF | ON |
 
 ## Notes
-- Source and destination can use different connection types (e.g., local to SFTP, SFTP to S3).
+- `COPY` is a local sandboxed file operation. Use `SEND FILE` or `RECEIVE FILE` for connector transfers.
 - `TO DIRECTORY` derives the destination file name from the source file name. With `DATE_SUFFIX = 'yyyyMMdd'`, `vendor.csv` becomes `vendor_20260722.csv` on July 22, 2026.
 - `DATE_SUFFIX` is appended before the file extension and is most useful for archive copies after a send/export step.
 - Paths are resolved via `ResolvePath()` — relative paths are anchored to the script's location.

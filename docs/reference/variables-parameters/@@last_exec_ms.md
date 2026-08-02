@@ -14,7 +14,7 @@ IF @@LAST_EXEC_MS > 5000 BEGIN
 END;
 ```
 
-For aggregate timing across multiple statements, use SET PROFILING = ON and SHOW PROFILE.
+For aggregate timing across multiple statements, use `SET PROFILE ON` and query `eng.profile`.
 
 References:
 - [Standard Library](../../guides/getting-started.md)

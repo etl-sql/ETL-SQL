@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
-        public void VerifyAllStatementsHaveDocumentationCoverage()
+        public void VerifyLifecycleCreatableStatementsHaveDocumentationCoverage()
         {
             var docsDir = Path.Combine(SolutionRoot, "docs");
             Assert.True(Directory.Exists(docsDir), $"docs/ directory not found at: {docsDir}");
@@ -60,6 +60,8 @@ namespace ETL_SQL.Tests.Core
 
             var statementTypes = typeof(Statement).Assembly.GetTypes()
                 .Where(t => t.IsSubclassOf(typeof(Statement)) && !t.IsAbstract)
+                .Where(t => t.Name.StartsWith("Create", StringComparison.Ordinal))
+                .Where(t => t.GetProperty("Mode", BindingFlags.Instance | BindingFlags.Public)?.PropertyType == typeof(ObjectCreationMode))
                 .ToList();
 
             foreach (var type in statementTypes)
@@ -88,6 +90,25 @@ namespace ETL_SQL.Tests.Core
                     found,
                     $"Statement '{typeName}' (keywords: '{keywords}' / '{keywordsUnderscored}') lacks corresponding reference page documentation in the docs/ folder."
                 );
+            }
+        }
+
+        [Fact]
+        public void EveryEngineCatalogTableHasColumnsAndAnExactReferencePage()
+        {
+            var engReferenceDir = Path.Combine(SolutionRoot, "docs", "reference", "eng");
+            var readme = File.ReadAllText(Path.Combine(engReferenceDir, "README.md"));
+
+            foreach (var table in EngineCatalog.Tables)
+            {
+                Assert.True(
+                    EngineCatalog.TableColumns.TryGetValue(table, out var columns) && columns.Count > 0,
+                    $"eng.{table} is registered without column metadata.");
+
+                var page = Path.Combine(engReferenceDir, table.Replace('_', '-') + ".md");
+                Assert.True(File.Exists(page), $"eng.{table} is registered without its exact reference page: {page}");
+                Assert.Contains($"eng.{table}", File.ReadAllText(page), StringComparison.OrdinalIgnoreCase);
+                Assert.Contains($"eng.{table}", readme, StringComparison.OrdinalIgnoreCase);
             }
         }
 

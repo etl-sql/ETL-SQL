@@ -41,7 +41,7 @@ EXECUTE portal BEGIN
         DEFAULT_FROM = 'reports@corp.example',
         USE_SSL      = TRUE
     );
-    SHOW CONNECTIONS;                      -- filter for SMTP aliases in eng.connections when needed
+    SELECT * FROM eng.connections;         -- filter for SMTP aliases when needed
     DROP CONNECTION IF EXISTS corporate;
 END;
 ```
@@ -146,7 +146,7 @@ FOR REPORT '/Reports/Sales/Daily'
 DELIVER TO 'john@example.com'
 SCHEDULE '0 6 * * *'
 FORMAT PDF
-AT corporate-smtp
+AT corporate_smtp
 PARAMETERS (
     @start  = 'D-1',
     @end    = 'D',
@@ -159,7 +159,7 @@ FOR REPORT '/Reports/Executive/MonthlySummary'
 DELIVER TO GROUP 'Executives'
 SCHEDULE '0 7 1 * *'
 FORMAT PDF
-AT corporate-smtp
+AT corporate_smtp
 PARAMETERS (
     @period_start = 'M-1',
     @period_end   = 'ME-1'
@@ -171,7 +171,7 @@ FOR REPORT '/Reports/Finance/Quarterly'
 DELIVER TO 'cfo@example.com'
 SCHEDULE '0 8 * * 1'
 FORMAT PDF
-AT corporate-smtp
+AT corporate_smtp
 PARAMETERS (
     @start = '2026-01-01',
     @end   = '2026-03-31'

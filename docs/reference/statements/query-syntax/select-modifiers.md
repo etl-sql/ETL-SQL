@@ -6,7 +6,7 @@ Adjust a `*` projection inline. Modifiers apply in this order: `EXCLUDE`, then `
 
 ```sql
 -- Drop columns from the wildcard
-SELECT * EXCLUDE (password, internal_notes) FROM users;
+SELECT * EXCLUDE (internal_code, internal_notes) FROM users;
 
 -- Keep every column but substitute an expression for one of them
 SELECT * REPLACE (UPPER(name) AS name) FROM users;
@@ -15,7 +15,7 @@ SELECT * REPLACE (UPPER(name) AS name) FROM users;
 SELECT * RENAME (id AS user_id) FROM users;
 
 -- Combined
-SELECT * EXCLUDE (secret) RENAME (id AS user_id) FROM users;
+SELECT * EXCLUDE (internal_code) RENAME (id AS user_id) FROM users;
 ```
 
 ## ORDER BY ALL

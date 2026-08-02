@@ -26,8 +26,8 @@ CREATE CONNECTION <name> AS MOCKDB();
 | `Flags` / `DimFlags` | `FlagKey`, `FlagValue`, `FlagName`, `YesNo`, `YesNoChar`, `ActiveInactive`, `EnabledDisabled`, `PassFail`, `SuccessFailure`, `IncludeExclude`, `OnOff` |
 
 All tables are pre-seeded with sample rows. Schema exploration returns declared column types, including
-integer width, decimal precision, date/time, `DATETIMEOFFSET`, and `UNIQUEIDENTIFIER` columns, so `SHOW
-SCHEMA` and editor explorers are useful without a real database. `INSERT`, `UPDATE`, and `DELETE`
+integer width, decimal precision, date/time, `DATETIMEOFFSET`, and `UNIQUEIDENTIFIER` columns, so
+`eng.columns` and editor explorers are useful without a real database. `INSERT`, `UPDATE`, and `DELETE`
 operations are accepted but **do not persist** between sessions.
 
 ## Example

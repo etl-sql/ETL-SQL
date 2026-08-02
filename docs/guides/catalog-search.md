@@ -38,11 +38,11 @@ The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows
 ```
 
 ### 2. ETL-SQL Engine Command
-`SHOW CATALOG SEARCH '<query>' [INTO #table];`
+`SELECT * [INTO #table] FROM portal.eng.catalog_search('<query>');`
 
 ```sql
 EXECUTE portal BEGIN
-    SHOW CATALOG SEARCH 'quarterly sales' INTO #results;
+    SELECT * INTO #results FROM eng.catalog_search('quarterly sales');
     SELECT Name, Path, Owner FROM #results WHERE Certification IS NOT NULL;
 END;
 ```

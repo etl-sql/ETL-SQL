@@ -14,7 +14,7 @@ SET EXTERNAL_SORT_CHUNK_SIZE = <n>;
 -- Use larger chunks for a massive sort
 SET EXTERNAL_SORT_CHUNK_SIZE = 100000;
 
-SELECT * FROM #logs ORDER BY timestamp INTO #sorted_logs;
+SELECT * INTO #sorted_logs FROM #logs ORDER BY timestamp;
 ```
 
 ## Notes

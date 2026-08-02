@@ -19,8 +19,7 @@ Options:
 - **LAST_ROW** — stop loading after this row number
 
 ```sql
-BULK INSERT dbo.StagedOrders FROM 'C:\data\orders_2024.csv'
-  AT SalesDB
+BULK INSERT SalesDB.dbo.StagedOrders FROM 'C:\data\orders_2024.csv'
   WITH (
     BATCH_SIZE     = 5000,
     MAX_ERRORS     = 10,

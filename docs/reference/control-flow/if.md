@@ -22,9 +22,9 @@ END;
 
 -- Branch on variable
 IF @mode = 'full' BEGIN
-  SELECT * FROM dbo.FullSnapshot INTO #data;
+  SELECT * INTO #data FROM dbo.FullSnapshot;
 END ELSE BEGIN
-  SELECT * FROM dbo.DeltaView WHERE changed_at > @last_run INTO #data;
+  SELECT * INTO #data FROM dbo.DeltaView WHERE changed_at > @last_run;
 END;
 
 -- Nested condition with EXISTS

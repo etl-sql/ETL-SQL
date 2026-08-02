@@ -6,8 +6,6 @@ Runs static analysis on an ETL-SQL script and reports rule violations without ex
 -- Lint an external script file
 LINT 'path/to/script.etlsql';
 
--- Lint the current script (TUI and LSP use this automatically)
-LINT this;
 ```
 
 ## Rule code prefixes
@@ -28,7 +26,7 @@ LOG-1  Line 55: Output table #results has no traceable source. Add a lineage com
 
 ## Notes
 - Lint runs automatically in the TUI editor (side panel) and VS Code extension (via LSP diagnostics) as you type.
-- `LINT 'file'` exits with a non-zero code when any SEC- or PERF- violations are found, making it suitable for CI gates.
+- `LINT 'file'` exits with a non-zero code when configured error-level violations are found, making it suitable for CI gates.
 - Rule severity can be configured per-rule in the `Lint` section of `appsettings.json`.
 - See: ASSERT, TRY
 

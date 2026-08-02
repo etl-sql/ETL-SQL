@@ -40,7 +40,7 @@ END;
 
 -- Inspect effective permissions for a user
 EXECUTE portal BEGIN
-  SHOW EFFECTIVE PERMISSIONS FOR USER 'jsmith' INTO #perms;
+  SELECT * INTO #perms FROM eng.effective_permissions('USER', 'jsmith');
 END;
 SELECT * FROM #perms;
 ```
@@ -53,7 +53,7 @@ SELECT * FROM #perms;
 - Permissions are inherited by all sub-folders; a grant on `Finance` also applies to `Finance/Archive`.
 - A user's effective permission is the highest access level granted through any combination of user and group grants.
 - `REVOKE` removes a specific grant; if the user retains access through a group membership, they will still have access.
-- Use `SHOW EFFECTIVE PERMISSIONS FOR USER` to resolve the combined permissions from all user and group grants before making changes.
+- Use `eng.effective_permissions('USER', name)` to resolve the combined permissions from all user and group grants before making changes.
 - Folder admin (ADMIN access) does not grant portal-level admin rights — only the ADMIN role on the user account confers full portal control.
 - See: PORTAL_USER, PORTAL_GROUP, PORTAL_FOLDER, PORTAL_SHOW
 

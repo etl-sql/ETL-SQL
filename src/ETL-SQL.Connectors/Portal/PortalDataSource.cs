@@ -149,6 +149,10 @@ namespace ETL_SQL.Connectors.Portal
             {
                 url = "api/admin/reports";
             }
+            else if (cleanName.Equals("subscriptions", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "api/subscriptions";
+            }
             else if (cleanName.Equals("recent_reports", StringComparison.OrdinalIgnoreCase))
             {
                 var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 20;

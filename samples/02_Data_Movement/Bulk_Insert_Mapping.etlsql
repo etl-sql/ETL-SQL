@@ -14,4 +14,4 @@ WITH (FORMAT = 'CSV');
 SELECT * FROM #Target;
 
 -- Check lineage
-SHOW LINEAGE FOR #Target;
+SELECT * FROM eng.lineage WHERE TargetTable = '#Target';

@@ -1,9 +1,9 @@
 # SET PROFILING
-Enables or disables per-statement timing collection. View results with `SHOW PROFILE`.
+Enables or disables per-statement timing collection. View results through `eng.profile`.
 
 ## Syntax
 ```text
-SET PROFILING = ON|OFF;
+SET PROFILE ON|OFF;
 ```
 
 ## Parameters
@@ -13,11 +13,11 @@ SET PROFILING = ON|OFF;
 ## Example
 ```sql
 -- Profile a slow query sequence
-SET PROFILING = ON;
-SELECT region, SUM(amount) FROM prod.Sales GROUP BY region INTO #summary;
+SET PROFILE ON;
+SELECT region, SUM(amount) INTO #summary FROM prod.Sales GROUP BY region;
 SELECT * FROM #summary WHERE amount > 100000;
-SHOW PROFILE INTO #timing;
-SET PROFILING = OFF;
+SELECT * INTO #timing FROM eng.profile;
+SET PROFILE OFF;
 
 SELECT statement, duration_ms, rows_affected FROM #timing ORDER BY duration_ms DESC;
 ```
@@ -25,7 +25,7 @@ SELECT statement, duration_ms, rows_affected FROM #timing ORDER BY duration_ms D
 ## Notes
 - Only statements executed while profiling is ON are included in the profile.
 - Each row shows the statement text, duration in milliseconds, and rows affected.
-- Results are captured with `SHOW PROFILE [INTO #table]`.
+- Results are queried from `eng.profile` with ordinary `SELECT` and optional `INTO`.
 - Default: OFF.
 
 ## References

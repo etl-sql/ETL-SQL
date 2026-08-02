@@ -23,7 +23,11 @@ CREATE VISUAL SLAGauge AS GAUGE (
   MAPPINGS (VALUE = score, MIN = min_val, MAX = max_val, GOAL = target),
   OPTIONS  (
     GAUGE_STYLE = 'arc',
-    COLORS = ('0%:#e74c3c', '50%:#f39c12', '75%:#27ae60'),
+    COLORS (
+      low = '#e74c3c',
+      medium = '#f39c12',
+      high = '#27ae60'
+    ),
     TITLE  = 'SLA Compliance %'
   )
 );

@@ -5,7 +5,7 @@ Constructs an XML forest (a sequence of XML elements) from the provided argument
 ## Syntax
 
 ```sql
-XMLFOREST(value1 AS name1, value2 AS name2, ...)
+XMLFOREST(name1, value1, name2, value2, ...)
 ```
 
 ## Parameters
@@ -24,11 +24,11 @@ Returns `NULL` when all inputs are `NULL`.
 ## Examples
 
 ```sql
-SELECT XMLFOREST('John' AS FirstName, 'Doe' AS LastName) AS name_xml;
+SELECT XMLFOREST('FirstName', 'John', 'LastName', 'Doe') AS name_xml;
 ```
 
 ```sql
-SELECT XMLFOREST(customer_id AS Id, customer_name AS Name) AS customer_xml
+SELECT XMLFOREST('Id', customer_id, 'Name', customer_name) AS customer_xml
 FROM #customers;
 ```
 

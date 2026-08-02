@@ -55,7 +55,7 @@ SELECT id, name, region
 FROM #customers
 WHERE active = 1;
 
-SHOW VIEWS INTO #views;
+SELECT * INTO #views FROM eng.views;
 DROP VIEW IF EXISTS ActiveCustomers;
 ```
 
@@ -69,4 +69,3 @@ Rules:
 
 - [Statement Reference](README.md)
 - [Syntax Index](../../syntax-index.md)
-

@@ -117,6 +117,7 @@ BEGIN CATCH
     PRINT 'Critical task failed: ' + ERROR_MESSAGE();
     SEND EMAIL
         TO 'admin@company.com'
+        FROM 'etl@company.com'
         SUBJECT 'Pipeline Error'
         BODY ERROR_MESSAGE()
         AT mailer;

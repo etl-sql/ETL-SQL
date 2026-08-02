@@ -1,27 +1,30 @@
 # SET WITH_PROMPT
-Controls whether SET operations marked with `WITH_PROMPT` prompt for confirmation before applying.
+Marks a named variable set so activating it prompts for confirmation.
 
 ## Syntax
 ```text
-SET WITH_PROMPT = ON|OFF;
+CREATE SETS !name BEGIN
+  @variable = value;
+  SET WITH_PROMPT ON;
+END;
 ```
 
 ## Parameters
-- **ON** — Activating a SET marked with `WITH_PROMPT` prompts the user for confirmation before applying.
-- **OFF** — SET operations apply without prompting (default).
+- **ON** — Activating the enclosing named set prompts before applying it.
 
 ## Example
 ```sql
--- Enable confirmation prompts for safety in production
-SET WITH_PROMPT = ON;
+CREATE SETS !Production BEGIN
+  @environment = 'PRODUCTION';
+  SET WITH_PROMPT ON;
+END;
 
--- The following SET will now prompt before applying
-SET @environment = 'PRODUCTION';
+USE SETS !Production;
 ```
 
 ## Notes
 - Useful in production environment sets to prevent accidental activation of destructive configurations.
-- Default: OFF.
+- `SET WITH_PROMPT` is valid only inside `CREATE SETS`; it is not a session-level setting.
 
 ## References
 - [SET Commands](README.md)

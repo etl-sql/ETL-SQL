@@ -91,7 +91,7 @@ node and at the Orchestrator. Alert when the probe fails or stops responding. Th
 Portal/Orchestrator process: a job *inside* the orchestrator cannot report that its own host is down,
 so an internal check alone has a blind spot exactly when it matters most.
 
-**Job-failure alerting.** Job outcomes are recorded in job history (queryable with `SHOW JOB HISTORY`,
+**Job-failure alerting.** Job outcomes are recorded in job history (queryable through `eng.job_history`,
 or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns:
 
 - **Per-job immediate email** — the job author adds a failure branch that sends `SEND EMAIL` on error.
@@ -108,7 +108,7 @@ or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns
   failure. The OS scheduler runs the backup, then runs this script with the exit code:
   `etl-sql run backup_and_report.etlsql --var backup_exit_code=$LASTEXITCODE --var backup_target=nightly`.
   It never runs a backup itself. Inspect the markers from any session with
-  `SHOW JOB STATE '<job>' [INTO #t]` — the cross-job read surface over everything `SET_JOB_STATE` saved.
+  `eng.job_state` — the cross-job read surface over everything `SET_JOB_STATE` saved.
 - **Portal operational digest** — the Portal can email administrators a scheduled digest of its own
   operational metrics (active/queued executions, 24h execution and delivery failure rates, storage
   usage, and migration status), with threshold alerts. Enable it under `Portal:OperationalDigest`
@@ -122,7 +122,7 @@ or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns
 this server," the orchestrator now also captures **host** metrics — memory load, whole-host and per-process
 CPU %, and free disk on the state and spill volumes — sampled every node heartbeat into a `HostMetrics`
 time series (retained per `Orchestrator:HostMetricsRetentionDays`, rolled up daily for long-term trend).
-Read the recent window with `SHOW HOST METRICS [nodeId] [INTO #t]`, and use
+Read the recent window through `eng.host_metrics`, and use
 `samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. The
 native Portal capacity report adds retained-history summaries for max/p95 host CPU and memory,
 scheduled-job failure rate, and p95 execution duration, peak memory, and CPU time. It also adds
@@ -190,4 +190,3 @@ etl-sql doctor --profile full --strict --json
 - See the [Production Readiness Checklist](../portal/production-readiness.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
 
 ---
-

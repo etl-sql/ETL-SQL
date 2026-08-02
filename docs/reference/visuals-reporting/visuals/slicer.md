@@ -19,7 +19,7 @@ Actions:
 DECLARE @region VARCHAR = 'All';
 
 -- Populate the option list
-SELECT DISTINCT region FROM #sales INTO #region_list;
+SELECT DISTINCT region INTO #region_list FROM #sales;
 
 CREATE VISUAL RegionSlicer AS SLICER (
   SOURCE   = #region_list,

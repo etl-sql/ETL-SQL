@@ -5,7 +5,7 @@
 ### The scheduler isn't firing my job
 
 1. Check that the executable is running (`ETL-SQL ui repl` or as a service). The scheduler only runs while the process is live.
-2. Query `SHOW JOBS;` — verify `IsEnabled = 1` and `NextRun` is in the past.
+2. Query `eng.jobs` — verify `IsEnabled = 1` and `NextRun` is in the past.
 3. Check `logs/` for scheduler error entries at the `Error` level.
 4. If using process spawning (`UseProcessSpawning = true`), verify `ExecutablePath` points to a valid executable.
 
@@ -38,9 +38,8 @@ ETL-SQL session clear <session-id>
 ### Performance is slower than expected
 
 1. Use `--perf` to identify which phase (Lex/Parse/Execute) takes the most time.
-2. Use `SET PROFILING ON` + `SHOW PROFILE` inside the script to find slow statements.
+2. Use `SET PROFILING ON` plus `eng.profile` inside the script to find slow statements.
 3. Reduce `--batch-size` if you are hitting memory pressure (large rows); increase it for small rows with fast I/O.
 4. For cross-database `INSERT INTO ... SELECT FROM` pipelines, ensure the source connection implements SQL pushdown (`IDatabaseSource` with `SupportsSqlPushdown = true`) to avoid row-by-row transfer.
 
 ---
-

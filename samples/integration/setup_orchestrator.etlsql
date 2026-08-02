@@ -8,8 +8,8 @@
 -- 1. Create connection to the Orchestrator Service
 DROP CONNECTION IF EXISTS orch;
 CREATE CONNECTION orch AS ORCHESTRATOR(HOST='localhost', PORT=5001, API_KEY='ENC:AXllqv7L+qj6c3UFQlHUjypkqRtvA6ufSt6XIX9G2yYGfwAtrw8GNJlpnYkDGL90J3mtIpVtZNMeTQBuK4I108w=');
-SHOW JOBS AT orch;
-SHOW JOB HISTORY AT orch;
+SELECT * FROM orch.eng.jobs;
+SELECT * FROM orch.eng.job_history;
 
 
 EXECUTE orch

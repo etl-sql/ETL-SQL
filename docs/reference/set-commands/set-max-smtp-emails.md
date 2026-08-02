@@ -17,6 +17,7 @@ SET MAX_SMTP_EMAILS_PER_SCRIPT = 500;
 FOREACH @row IN #recipients
 BEGIN
     SEND EMAIL TO @row.email
+        FROM 'reports@example.com'
         SUBJECT 'Monthly Report'
         BODY 'Your report is ready.'
         AT smtp_conn;

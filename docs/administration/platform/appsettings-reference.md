@@ -48,8 +48,8 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 | `Security:MaxSmtpEmailsPerScript` | integer | `100` | `SET MAX_SMTP_EMAILS_PER_SCRIPT = n` | Anti-spam limit capping emails sent in a single script run. |
 | `Security:RegexMatchTimeoutMs` | integer | `1000` | `SET REGEX_MATCH_TIMEOUT = n` | Capping execution duration for regex evaluations to prevent DOS. |
 | `Security:MaxInternalOperations` | integer | `100000` | — | Limit on internal loop execution steps to block infinite loops. |
-| `Security:SpillEncryptionEnabled` | boolean | `true` | `SET SPILL_ENCRYPTION = ON\|OFF` | When true, buffers spilled to local disk during heavy queries are encrypted at rest. |
-| `Security:SpillCompressionEnabled` | boolean | `true` | `SET SPILL_COMPRESSION = ON\|OFF` | When true, spilled buffers are compressed to save disk space. |
+| `Security:SpillEncryptionEnabled` | boolean | `true` | `SET SPILL_ENCRYPTION ON\|OFF` | When true, buffers spilled to local disk during heavy queries are encrypted at rest. |
+| `Security:SpillCompressionEnabled` | boolean | `true` | `SET SPILL_COMPRESSION ON\|OFF` | When true, spilled buffers are compressed to save disk space. |
 | `Security:SpillFormat` | string | `Arrow` | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | Serialization format for data spills. |
 
 ---

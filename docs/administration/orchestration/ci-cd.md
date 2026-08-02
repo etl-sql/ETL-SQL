@@ -155,7 +155,7 @@ crontab -r
 
 | Approach | Platform | Best for |
 |----------|----------|----------|
-| `CREATE JOB` (in-engine) | Both | Multiple inter-dependent recurring jobs, jobs that need ETL-SQL context, history tracking via `SHOW JOB HISTORY` |
+| `CREATE JOB` (in-engine) | Both | Multiple inter-dependent recurring jobs, jobs that need ETL-SQL context, history tracking via `eng.job_history` |
 | Windows Task Scheduler / `schtasks` | Windows | Single one-off scripts, OS-managed scheduling, no need to keep the engine running 24/7 |
 | Linux crontab | Linux/macOS | Single scripts on a fixed schedule, minimal infrastructure, containerized environments |
 | Windows Service (§9.1) + `CREATE JOB` | Windows | Production servers running `CREATE JOB` continuously with automatic restart |
@@ -166,4 +166,3 @@ crontab -r
 
 
 ---
-

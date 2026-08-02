@@ -64,7 +64,9 @@ running the script.
 Administrators can query missing stewardship metadata directly from scripts. This is the preferred CI/CD and release-gate pattern because it does not require manual Portal review.
 
 ```sql
-SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 100 INTO #missing_stewardship;
+SELECT * INTO #missing_stewardship
+FROM eng.missing_tags
+LIMIT 100;
 
 SELECT
   target_table,
@@ -78,7 +80,9 @@ FROM #missing_stewardship;
 For centralized review against a production Orchestrator or Portal catalog:
 
 ```sql
-SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_orch LIMIT 500 INTO #missing_stewardship;
+SELECT * INTO #missing_stewardship
+FROM prod_orch.eng.missing_tags
+LIMIT 500;
 ```
 
 Treat missing `owner`, `steward`, `contact`, `classification`, or `quality` on published outputs as a release issue unless the asset is intentionally temporary.
@@ -98,10 +102,12 @@ Private datasets can carry protected classifications, but they still need comple
 
 ## Finding Protected Data
 
-Use `SHOW PROTECTED DATA` as the first audit step when you need to find where PII, PHI, PCI, sensitive, confidential, or restricted data appears in extracts and reports.
+Query `eng.protected_data` as the first audit step when you need to find where PII, PHI, PCI, sensitive, confidential, or restricted data appears in extracts and reports.
 
 ```sql
-SHOW PROTECTED DATA AT prod_portal LIMIT 500 INTO #protected_data;
+SELECT * INTO #protected_data
+FROM prod_portal.eng.protected_data
+LIMIT 500;
 
 SELECT
   target_table,
@@ -119,7 +125,9 @@ The command reads the lineage catalog and includes rows tagged with truthy `@pii
 Use classifier suggestions when you are looking for likely protected data that has not been tagged yet:
 
 ```sql
-SHOW PROTECTED DATA SUGGESTIONS AT prod_portal LIMIT 500 INTO #protected_review;
+SELECT * INTO #protected_review
+FROM prod_portal.eng.protected_data_suggestions
+LIMIT 500;
 
 SELECT
   target_table,
@@ -135,7 +143,7 @@ FROM #protected_review;
 
 Suggestions are review findings only. They are derived from column names, source-column names, catalog metadata hints, and supported sampled-value callers, and they never set `@pii`, `@phi`, `@pci`, `@sensitive`, or `@classification` automatically.
 
-The packaged starter report at `samples/08_Reporting/protected_data_audit.rptsql` builds a dashboard from `SHOW PROTECTED DATA`, `SHOW LINEAGE HISTORY FOR MISSING TAGS`, and optional Portal steward-impact audit events.
+The packaged starter report at `samples/08_Reporting/protected_data_audit.rptsql` builds a dashboard from `eng.protected_data`, `eng.missing_tags`, and optional Portal steward-impact audit events.
 
 ## Portal Stewardship Review
 
@@ -204,7 +212,7 @@ Portal administrators can query recent steward-impact audit events from script:
 
 ```sql
 EXECUTE prod_portal BEGIN
-  SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+  SELECT * INTO #steward_events FROM eng.audit(100, 'STEWARD_LINEAGE_IMPACT');
 END;
 ```
 

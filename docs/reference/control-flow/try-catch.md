@@ -15,7 +15,7 @@ Inside the CATCH block:
 ```sql
 -- Basic error handling
 BEGIN TRY
-  SELECT * FROM dbo.MightNotExist INTO #data;
+  SELECT * INTO #data FROM dbo.MightNotExist;
   PRINT 'Loaded ' + @@ROWCOUNT + ' rows.';
 END TRY
 BEGIN CATCH

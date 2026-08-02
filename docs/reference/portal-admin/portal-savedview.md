@@ -6,7 +6,7 @@ Create and manage named parameter snapshots for portal reports inside an `EXECUT
 EXECUTE portal BEGIN
   CREATE SAVED VIEW 'ViewName' FOR REPORT 'ReportName'
     WITH (PARAMETERS = '@param1=value1,@param2=value2');
-  SHOW SAVED VIEWS FOR REPORT 'ReportName';
+  SELECT * FROM eng.saved_views('ReportName');
   DROP SAVED VIEW 'ViewName' FOR REPORT 'ReportName';
 END;
 ```
@@ -27,7 +27,7 @@ END;
 
 -- List all saved views for a report
 EXECUTE portal BEGIN
-  SHOW SAVED VIEWS FOR REPORT 'Sales Dashboard' INTO #views;
+  SELECT * INTO #views FROM eng.saved_views('Sales Dashboard');
 END;
 SELECT view_name, parameters, created_by, created_at FROM #views;
 

@@ -6,15 +6,14 @@ DELETE removes rows from a target table. Without WHERE, all rows are removed; pr
 
 ```sql
 DELETE FROM <target> [WHERE <condition>];
-DELETE TOP n FROM <target> [WHERE <condition>];
 ```
 
 ```sql
 -- Remove specific rows
 DELETE FROM #staging WHERE status = 'failed';
 
--- Remove top N oldest rows
-DELETE TOP 1000 FROM dbo.EventLog
+-- Remove old rows
+DELETE FROM dbo.EventLog
   WHERE created_at < DATEADD(DAY, -90, GETDATE());
 
 -- Conditional delete inside a loop

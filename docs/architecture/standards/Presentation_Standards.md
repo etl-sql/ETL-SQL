@@ -160,7 +160,7 @@ Every new `IOutputSink.Write` call site in the engine must have a corresponding 
 
 ### Rule T2: Every Result Set Source Must Have a Layer 2 Test
 
-Every statement type that produces a result set (SELECT, SHOW PROFILE, SHOW LINEAGE, etc.)
+Every statement or virtual table that produces a result set (`SELECT`, `eng.profile`, `eng.lineage`, etc.)
 must have a test that asserts `ScriptOutput.ResultSets` contains the expected data. Tests
 assert column names and representative row values — not just that rows exist.
 
@@ -255,7 +255,7 @@ strings (with credentials) do not.
 ### Rule S4: Profile and Lineage Data Is User-Intentional
 
 `ScriptOutput.Profile` and `ScriptOutput.Lineage` are produced only when the user
-explicitly requests them (`SET PROFILE ON; SHOW PROFILE;` or `LINEAGE` statements).
+explicitly requests them (`SET PROFILING ON; SELECT * FROM eng.profile;` or `eng.lineage` queries).
 These may contain table names, column names, and execution details. They are treated
 as intentional user output and are not subject to the same suppression rules as
 system-internal data. They are, however, subject to Rule S1 (no connection strings,

@@ -5,7 +5,7 @@ CREATE SCHEDULE EveryMinute ON '*/1 * * * *' AT TIME ZONE 'UTC';
 CREATE JOB CleanupTask FOR SCRIPT 'samples/cleanup.etlsql';
 ALTER JOB CleanupTask ADD SCHEDULE EveryMinute;
 
-SHOW JOBS;
+SELECT * FROM eng.jobs;
 
 -- Cleanup
 DROP JOB CleanupTask;
@@ -13,10 +13,10 @@ DROP SCHEDULE EveryMinute;
 
 -- 2. View current jobs and their status
 -- Note: This requires the scheduler service to be running
-SHOW JOBS;
+SELECT * FROM eng.jobs;
 
 -- 3. View job execution history
-SHOW JOB HISTORY;
+SELECT * FROM eng.job_history;
 
 -- 4. View history for a specific job
-SHOW JOB HISTORY 'CleanupTask';
+SELECT * FROM eng.job_history WHERE JobName = 'CleanupTask';

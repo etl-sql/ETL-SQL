@@ -17,7 +17,7 @@ Types:
 - **PATH** — file system path (validated and resolved via ResolvePath)
 - **MINMAX** — numeric range pair (low, high)
 - **SENSITIVE** — string masked in logs
-- **SECRET** — like SENSITIVE; also suppressed from SHOW VARIABLES output
+- **SECRET** — like SENSITIVE; also suppressed from `eng.variables` output
 - **ENCRYPTED** — value stored encrypted at rest
 
 Modifiers:

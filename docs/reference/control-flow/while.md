@@ -12,7 +12,7 @@ DECLARE @success  BOOL = FALSE;
 
 WHILE @attempts < 3 AND @success = FALSE BEGIN
   BEGIN TRY
-    SELECT * FROM dbo.Volatile INTO #data;
+    SELECT * INTO #data FROM dbo.Volatile;
     SET @success = TRUE;
   END TRY
   BEGIN CATCH
@@ -21,9 +21,8 @@ WHILE @attempts < 3 AND @success = FALSE BEGIN
   END CATCH;
 END;
 
--- Batch delete to avoid long-running transactions
-WHILE EXISTS (SELECT 1 FROM dbo.Archived WHERE age > 730) BEGIN
-  DELETE TOP 1000 FROM dbo.Archived WHERE age > 730;
+-- Poll until another process marks the work complete
+WHILE NOT EXISTS (SELECT 1 FROM #status WHERE state = 'complete') BEGIN
   WAITFOR DELAY '00:00:01';
 END;
 ```

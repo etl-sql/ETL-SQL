@@ -28,7 +28,7 @@ Never use it for real data.
 ## Execution
 
 1. As `dataset-owner`, deploy and run `01_deploy_datasets.etlsql` from Producer.
-   `SHOW DATASETS` must list `&sales_public` and `&sales_private`.
+   `eng.tables` must list `&sales_public` and `&sales_private`.
 2. Deploy `02_report_public_consumer.etlsql` to Consumers and run it as
    `dataset-viewer`. It must return the three public rows even though the
    consumer is in another folder.

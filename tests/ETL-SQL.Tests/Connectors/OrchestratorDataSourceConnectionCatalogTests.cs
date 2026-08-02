@@ -14,6 +14,34 @@ namespace ETL_SQL.Tests.Connectors;
 public class OrchestratorDataSourceConnectionCatalogTests
 {
     [Fact]
+    public async Task PortalEngSubscriptions_ReadsSubscriptionCatalogEndpoint()
+    {
+        var requests = new List<string>();
+        var handler = new RecordingHandler(request =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/api/auth/login")
+                return JsonResponse("""{"token":"token","refreshToken":"refresh","expiresAt":"2099-01-01T00:00:00Z"}""");
+
+            requests.Add(request.RequestUri?.AbsolutePath ?? string.Empty);
+            return JsonResponse("""[{"id":7,"name":"Daily Sales","isActive":true}]""");
+        });
+        await using var portal = new PortalDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://portal.test/") },
+            "admin",
+            "password",
+            NullLogger.Instance);
+
+        DataTable? result = null;
+        await foreach (var batch in portal.WithTable("eng.subscriptions").ReadBatches())
+            result = batch;
+
+        Assert.Equal(new[] { "/api/subscriptions" }, requests);
+        Assert.NotNull(result);
+        Assert.Single(result!.Rows);
+        Assert.Equal("Daily Sales", result.Rows[0]["name"]);
+    }
+
+    [Fact]
     public async Task WhatIf_SkipsPortalAndOrchestratorConnectionMutations()
     {
         var portalRequests = new List<HttpRequestMessage>();

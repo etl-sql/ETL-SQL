@@ -188,7 +188,7 @@ Core samples introduce language features and small workflows. Some read or write
 ### 21. [Job_Scheduling.etlsql](../../samples/04_Orchestration/Job_Scheduling.etlsql)
 **Purpose**: Background jobs and scheduling.
 - Demonstrates creating scheduled tasks via `CREATE JOB`.
-- Shows how to monitor job status using `SHOW JOBS`.
+- Shows how to monitor job status using `eng.jobs`.
 
 ### 22. [Avro_Read_Write.etlsql](../../samples/02_Data_Movement/Avro_Read_Write.etlsql) / [Parquet_Read_Write.etlsql](../../samples/02_Data_Movement/Parquet_Read_Write.etlsql)
 **Purpose**: Modern columnar data formats.

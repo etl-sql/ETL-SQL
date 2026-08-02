@@ -45,8 +45,8 @@ GROUP  BY account_id
 HAVING total > 100000
 QUALIFY ROW_NUMBER() OVER (PARTITION BY region ORDER BY total DESC) = 1;
 
--- Copy into ETL-SQL variable table
-COPY INTO #top_accounts FROM sf.ORDERS WHERE status = 'CLOSED';
+-- Stage rows in an engine temp table
+SELECT * INTO #top_accounts FROM sf.ORDERS WHERE status = 'CLOSED';
 ```
 
 ## Supported Snowflake-specific SQL

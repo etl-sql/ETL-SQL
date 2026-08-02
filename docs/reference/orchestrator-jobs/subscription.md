@@ -14,7 +14,7 @@ ALTER SUBSCRIPTION <id> SET
 
 DROP SUBSCRIPTION <id>;
 
-SHOW SUBSCRIPTIONS [FOR REPORT '<path>'] [INTO #temp];
+SELECT * [INTO #temp] FROM portal.eng.subscriptions [WHERE reportPath = '<path>'];
 
 Remote PORTAL execution currently supports PDF and CSV delivery. `FORMAT BOTH`
 is parsed by the language but remote portal creation rejects it until the portal

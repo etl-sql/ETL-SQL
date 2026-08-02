@@ -39,8 +39,8 @@ CREATE JOB KitchenSinkJob FOR SCRIPT 'sub_script.etlsql';
 ALTER JOB KitchenSinkJob ADD SCHEDULE KitchenSinkEveryFiveMinutes;
 
 PRINT 'Job Created. Verifying Listing...';
-SHOW JOBS;
-SHOW JOB HISTORY;
+SELECT * FROM eng.jobs;
+SELECT * FROM eng.job_history;
 
 -- 5. Cleanup
 PRINT 'Cleaning up...';

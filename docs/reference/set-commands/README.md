@@ -21,9 +21,9 @@
 | [SET MAX_STRING_RESULT_SIZE](set-max-string-result-size.md) | Sets the maximum length in bytes allowed for string results. |
 | [SET NO_SAVE_CONNECTION](set-no-save-connection.md) | Controls whether `CREATE CONNECTION` targets and quoted option values are replaced with placeholders on save. Use for source-controlled templates w... |
 | [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITI... |
-| [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results with `SHOW PROFILE`. |
+| [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results through `eng.profile`. |
 | [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Sets the execution duration cap in milliseconds for regex evaluations to prevent denial-of-service from catastrophic backtracking. |
-| [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `SHOW VARIABLES` output. This is a display-only setting and does not affect sa... |
+| [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether sensitive variable values are unmasked in `eng.variables`. This is display-only. |
 | [SET SPILL_COMPRESSION](set-spill-compression.md) | Controls whether data buffers spilled to disk are compressed. |
 | [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest. |
 | [SET TEMP_TABLE_SPILL_THRESHOLD](set-temp-table-spill-threshold.md) | Sets the row count before a `#temp` table spills its data to disk. |

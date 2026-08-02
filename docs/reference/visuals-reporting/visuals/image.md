@@ -19,8 +19,8 @@ CREATE VISUAL Logo AS IMAGE (
 
 Dynamic image from data:
 ```sql
-SELECT product_id, image_url FROM #products WHERE featured = 1
-INTO #hero;
+SELECT product_id, image_url INTO #hero
+FROM #products WHERE featured = 1;
 
 CREATE VISUAL ProductHero AS IMAGE (
   SOURCE   = #hero,

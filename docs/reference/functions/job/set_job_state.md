@@ -34,7 +34,7 @@ If **key** is `NULL`, no state value is written and the result is `NULL`.
 - If running from the CLI, state falls back to a local JSON `.etlstate` file next to the script.
 - Read values back with `GET_JOB_STATE(key)` in the same script on a later run, or from a
   different monitoring script running under the same job/script context.
-- To inspect saved state across jobs (all keys, any job) use `SHOW JOB STATE ['<job>'] [INTO #t]`.
+- To inspect saved state across jobs, query `eng.job_state` and filter by `job_name` when needed.
 - Used in conjunction with `GET_JOB_STATE` for incremental watermarking.
 
 ## Examples

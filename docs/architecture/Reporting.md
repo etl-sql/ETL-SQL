@@ -93,7 +93,7 @@ Report-SQL files use the same lexer and parser as standard ETL-SQL scripts. Repo
 | `REFRESH DATASET` | `ParseRefreshDataset()` | `RefreshDatasetStatement` |
 | `EXPORT DATASET` | `ParseExportDataset()` | `ExportDatasetStatement` |
 | `PUBLISH DATASET` | `ParsePublishDataset()` | `PublishDatasetStatement` |
-| `SHOW DATASETS` | `ParseShowDatasets()` | `ShowDatasetsStatement` |
+| `eng.tables` | Normal `SELECT` parsing | Engine/Portal catalog data source |
 | `CREATE CONTAINER` | `ParseCreateContainer()` | `CreateContainerStatement` |
 | `CREATE NAVIGATION` | `ParseCreateNavigation()` | `CreateNavigationStatement` |
 | `CREATE STYLE` | `ParseCreateStyle()` | `CreateStyleStatement` |
@@ -287,7 +287,7 @@ Value — the string value
 
 - `USE DATASET` resolves by globally unique name. It loads the managed cache only after centralized
   registry authorization and serves the last complete snapshot with a warning when TTL is stale.
-- `SHOW DATASETS` returns only datasets visible to the caller.
+- Portal dataset catalog queries return only datasets visible to the caller.
 - `REFRESH DATASET` requires Refresh or higher permission, reruns the stored source, and preserves the
   prior cache if materialization or registry update fails.
 - `EXPORT DATASET` requires read permission and creates a failure-atomic portable copy encrypted with a

@@ -4,7 +4,7 @@ Creates synthetic or mock data rows and loads them into a #temp table. Useful fo
 ## Syntax
 ```sql
 GENERATE <n> ROWS INTO #table AS (
-  <column> <type> <generator> [, ...]
+  <column> = '<generator>' [, ...]
 );
 ```
 
@@ -22,12 +22,11 @@ GENERATE <n> ROWS INTO #table AS (
 ## Example
 ```sql
 GENERATE 10000 ROWS INTO #mock AS (
-  id          INT     SEQUENCE,
-  name        STRING  RANDOM(12),
-  region      STRING  CHOICE('North', 'South', 'East', 'West'),
-  sale_amount DECIMAL RANDOM(10.00, 9999.99),
-  sale_date   DATE    RANDOM_DATE('2024-01-01', '2024-12-31'),
-  active      BOOL    VALUE(1)
+  id = 'SEQUENCE(1,1)',
+  name = 'RANDOM(12)',
+  region = 'RANDOM(North,South,East,West)',
+  sale_amount = 'RANDOM_DECIMAL(10.00,9999.99)',
+  active = 'RANDOM(0,1)'
 );
 ```
 

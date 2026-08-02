@@ -57,10 +57,10 @@ TO 'C:\Recovered\finance-load';
 ### 3.0.4 Bundle Inspection
 
 ```sql
-SHOW PUBLISHED BUNDLES;
-SHOW BUNDLE VERSIONS 'finance-load';
-SHOW BUNDLE FILES 'finance-load' VERSION 3;
-SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 3;
+SELECT * FROM eng.bundles;
+SELECT * FROM eng.bundles WHERE bundle_name = 'finance-load';
+SELECT * FROM eng.bundle_files WHERE bundle_name = 'finance-load' AND version = 3;
+SELECT * FROM eng.bundle_dependencies WHERE bundle_name = 'finance-load' AND version = 3;
 VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
 ```
 
@@ -116,33 +116,33 @@ The scheduler employs an exponential backoff strategy. The delay doubles with ea
 **Session Persistence:**
 Retries automatically preserve the `SessionId` from the first attempt. This ensures that any persisted state (connections, variables, `#temp` tables) remains available to the retried script if the environment is configured for session persistence.
 
-### 3.3 `SHOW JOBS` — List Registered Jobs
+### 3.3 `eng.jobs` — List Registered Jobs
 
 Displays all registered jobs with their schedule, last run time, and next scheduled run.
 
 ```sql
-SHOW JOBS;
+SELECT * FROM eng.jobs;
 
 -- Or capture into a temp table for further processing
-SHOW JOBS INTO #job_list;
+SELECT * INTO #job_list FROM eng.jobs;
 SELECT * FROM #job_list WHERE IsEnabled = 1;
 ```
 
 **Result columns:** `Name`, `Interval`, `Unit`, `AtTime`, `LastRun`, `NextRun`, `IsEnabled`
 
-### 3.4 `SHOW JOB HISTORY` — View Execution History
+### 3.4 `eng.job_history` — View Execution History
 
 Returns the execution log for all jobs or a specific job.
 
 ```sql
 -- All job history (last 100 entries)
-SHOW JOB HISTORY;
+SELECT * FROM eng.job_history;
 
 -- History for a specific job
-SHOW JOB HISTORY NightlyArchive;
+SELECT * FROM eng.job_history WHERE JobName = 'NightlyArchive';
 
 -- Capture for analysis
-SHOW JOB HISTORY INTO #history;
+SELECT * INTO #history FROM eng.job_history;
 SELECT
     JobName,
     StartTime,
@@ -176,20 +176,20 @@ also what `ASSERT JOB … WITHIN … OF HISTORICAL` reads to build its baseline 
 restarted or the job was killed; reconciled from a stale `RUNNING` row). A failure digest should treat
 everything except `SUCCESS` and `RUNNING` as a problem.
 
-### 3.5 `SHOW HOST METRICS` — Host Utilization (Capacity Planning)
+### 3.5 `eng.host_metrics` — Host Utilization (Capacity Planning)
 
 Returns the host-utilization time series — per node, the last 24 hours of memory-load %, CPU %, and
 free disk on the state and spill volumes. This is the signal for *"am I outgrowing this server"*,
-distinct from the per-job cost in `SHOW JOB HISTORY`. Samples are recorded on the node heartbeat and
+distinct from the per-job cost in `eng.job_history`. Samples are recorded on the node heartbeat and
 pruned per `Orchestrator:HostMetricsRetentionDays` (default 14).
 
 ```sql
 -- All nodes, or filter to one node id
-SHOW HOST METRICS;
-SHOW HOST METRICS 'app-server-01:1234:ab...';
+SELECT * FROM eng.host_metrics;
+SELECT * FROM eng.host_metrics WHERE NodeId = 'app-server-01:1234:abcdef';
 
 -- Capacity check: lowest free disk and peak memory per node in the last 24h
-SHOW HOST METRICS INTO #hm;
+SELECT * INTO #hm FROM eng.host_metrics;
 SELECT NodeId,
        MIN(StateDiskFreeMB) AS MinStateFreeMB,
        MIN(SpillDiskFreeMB) AS MinSpillFreeMB,

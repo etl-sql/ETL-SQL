@@ -45,10 +45,10 @@ At every execution (snapshot build), the portal computes a fresh hash of the fil
 
 > **Note:** the hash is advisory — execution is not blocked by a mismatch in the Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
 
-Use `SHOW REPORT HISTORY 'Report Name'` or `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
+Use `SELECT * FROM eng.report_history('Report Name')` or `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
 
 ```sql
-SHOW REPORT HISTORY 'Monthly Sales' INTO #report_history;
+SELECT * INTO #report_history FROM eng.report_history('Monthly Sales');
 ```
 
 ### 6.2 Updating a Report
@@ -264,7 +264,7 @@ Operator procedure:
    exists, allow reconciliation to remove the stale row, then republish or rerun the producing report.
 4. Move suspected unmanaged files outside `DatasetRootPath` before startup if they need investigation.
 5. Start the portal and inspect `DatasetStorageMaintenance` log entries for each removed row or file.
-6. Run `SHOW DATASETS` and exercise representative reads after reconciliation.
+6. Query `eng.tables` and exercise representative reads after reconciliation.
 
 ### 6.6 Effective Permissions
 
@@ -279,21 +279,21 @@ Admins can inspect resolved portal access without mentally joining users, groups
 Reports inherit folder permissions. If a user belongs to multiple groups, the highest permission wins (`Read < Execute < Manage`) and the response lists the group or groups that supplied that winning level.
 
 ```sql
-SHOW EFFECTIVE PERMISSIONS FOR USER 'john.doe' INTO #effective;
-SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #effective;
-SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance' INTO #effective;
+SELECT * INTO #user_effective FROM eng.effective_permissions('USER', 'john.doe');
+SELECT * INTO #report_effective FROM eng.effective_permissions('REPORT', 'Monthly Sales');
+SELECT * INTO #folder_effective FROM eng.effective_permissions('FOLDER', '/Finance');
 ```
 
 ### 6.7 Usage Metrics
 
-Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS` or `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
+Admins can inspect operational usage with `SELECT * FROM eng.usage_metrics(30)` or `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
 
 ```sql
-SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
+SELECT * INTO #usage FROM eng.usage_metrics(30);
 ```
 
 For live operational health (as opposed to longer-term usage), use
-`SHOW PORTAL OPERATIONAL METRICS INTO #ops` or `GET /api/admin/metrics/operational`. The response
+`SELECT * INTO #ops FROM eng.operational_metrics` or `GET /api/admin/metrics/operational`. The response
 is a point-in-time snapshot for a multi-user deployment: `activeExecutions` and
 `queuedExecutions` (queue depth), the configured `executionCap`/`perUserExecutionCap`, recent
 execution and subscription-delivery counts and failure counts over the last 24 hours (the failure
@@ -312,7 +312,7 @@ probes.
 For a single report execution, poll `GET /api/jobs/{jobId}` with the job id returned by a refresh or
 execute request. The job response includes `rowsProcessed`, `peakMemoryBytes`, and `cpuTimeSeconds`
 when the execution path can measure them. Use this endpoint for per-job troubleshooting; use
-`SHOW PORTAL OPERATIONAL METRICS` or `GET /api/admin/metrics/operational` for aggregate
+`eng.operational_metrics` or `GET /api/admin/metrics/operational` for aggregate
 administrator load monitoring. The current portal UI does not surface all of these fields yet, so
 the documented script and REST endpoints are the discovery path.
 
@@ -356,32 +356,32 @@ rows use the same value when a controller does not pass a more specific operatio
 
 ### 6.8 Report Dependencies
 
-Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
+Use `SELECT * FROM eng.report_dependencies('Report Name')` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
 
 ```sql
-SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
+SELECT * INTO #dependencies FROM eng.report_dependencies('Monthly Sales');
 ```
 
-Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through engine lineage commands such as `SHOW LINEAGE`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
+Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through `eng.lineage`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
 
 ### 6.9 Catalog Search
 
-Use `SHOW CATALOG SEARCH '<term>'` or `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
+Use `SELECT * FROM eng.catalog_search('<term>')` or `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
 The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, report metadata, and status fields such as `snapshotBuiltAt`, `lastViewedAt`, `lastRefreshStatus`, `lastRefreshError`, and `lastRefreshDurationMs` where applicable.
 
-Use `SHOW RECENT REPORTS LIMIT 20` or `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
+Use `SELECT * FROM eng.recent_reports(20)` or `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
 
-Use `FAVORITE REPORT`, `UNFAVORITE REPORT`, `SHOW FAVORITES`, or the REST endpoints to manage and list favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
+Use `FAVORITE REPORT`, `UNFAVORITE REPORT`, `eng.favorites`, or the REST endpoints to manage and list favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
 
 ```sql
-SHOW CATALOG SEARCH 'sales' LIMIT 25 INTO #catalog;
-SHOW RECENT REPORTS LIMIT 20 INTO #recent;
+SELECT * INTO #catalog FROM eng.catalog_search('sales', 25);
+SELECT * INTO #recent FROM eng.recent_reports(20);
 
 FAVORITE REPORT 'Monthly Sales';
 FAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
 UNFAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
-SHOW FAVORITES FOR USER 'john.doe' LIMIT 50 INTO #favorites;
+SELECT * INTO #favorites FROM eng.favorites('john.doe');
 ```
 
 ### 6.10 Share Links
@@ -396,7 +396,7 @@ account disablement explicitly revokes all capabilities created by that user. Su
 are audited without recording the token. Administrators can inventory all capabilities through
 `GET /api/admin/anonymous-report-access`; the inventory intentionally excludes the bearer token itself.
 
-Use `CREATE SHARE LINK '<name>' FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK '<name>' FOR REPORT` for script-first administration, or the backing REST endpoints:
+Use `CREATE SHARE LINK '<name>' FOR REPORT`, `eng.share_links('<report>')`, and `REVOKE SHARE LINK '<name>' FOR REPORT` for script-first administration, or the backing REST endpoints:
 
 | Endpoint | Purpose |
 | :--- | :--- |
@@ -412,7 +412,7 @@ CREATE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales'
     EXPIRES '2026-12-31T23:59:59Z'
     INTO #share;
 
-SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
+SELECT * INTO #shares FROM eng.share_links('Monthly Sales');
 REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';
 ```
 
@@ -425,7 +425,7 @@ CREATE EMBED TOKEN 'Finance Intranet' FOR REPORT 'Monthly Sales'
     EXPIRES '2026-12-31T23:59:59Z'
     INTO #embed;
 
-SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
+SELECT * INTO #embed_tokens FROM eng.embed_tokens('Monthly Sales');
 REVOKE EMBED TOKEN 'Finance Intranet' FOR REPORT 'Monthly Sales';
 ```
 
@@ -439,7 +439,7 @@ CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales'
     PARAMETERS (@region = 'West', @year = '2026')
     INTO #view;
 
-SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;
+SELECT * INTO #views FROM eng.saved_views('Monthly Sales');
 DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 ```
 
@@ -462,7 +462,7 @@ CREATE OR REPLACE ALERT RevenueFloor FOR REPORT 'Monthly Sales'
 ALTER ALERT RevenueFloor ADD NOTIFICATION orchestrator.OpsEmail;
 DISABLE ALERT RevenueFloor;
 
-SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
+SELECT * INTO #alerts FROM eng.alerts('Monthly Sales');
 DROP ALERT IF EXISTS RevenueFloor;
 ```
 

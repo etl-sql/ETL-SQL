@@ -2,7 +2,7 @@
 Number of scalar subquery results retrieved from the session cache rather than being re-evaluated. Indicates effective subquery memoization.
 
 ```sql
-SET PROFILING = ON;
+SET PROFILE ON;
 
 SELECT
     order_id,

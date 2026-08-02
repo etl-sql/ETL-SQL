@@ -15,10 +15,10 @@ SET MAX_PARALLEL_DEGREE = <n>;
 SET MAX_PARALLEL_DEGREE = 4;
 
 PARALLEL BEGIN
-    SELECT * FROM src1.dbo.Table1 INTO #t1;
-    SELECT * FROM src2.dbo.Table2 INTO #t2;
-    SELECT * FROM src3.dbo.Table3 INTO #t3;
-    SELECT * FROM src4.dbo.Table4 INTO #t4;
+    SELECT * INTO #t1 FROM src1.dbo.Table1;
+    SELECT * INTO #t2 FROM src2.dbo.Table2;
+    SELECT * INTO #t3 FROM src3.dbo.Table3;
+    SELECT * INTO #t4 FROM src4.dbo.Table4;
 END;
 ```
 

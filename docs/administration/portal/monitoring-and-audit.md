@@ -84,8 +84,8 @@ Portal administration scripts can query the same audit rows:
 
 ```sql
 EXECUTE prod_portal BEGIN
-  SHOW PORTAL AUDIT LIMIT 100 INTO #audit;
-  SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+  SELECT * INTO #audit FROM eng.audit(100);
+  SELECT * INTO #steward_events FROM eng.audit(100, 'STEWARD_LINEAGE_IMPACT');
 END;
 ```
 

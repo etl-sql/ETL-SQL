@@ -5,17 +5,17 @@ Validates a condition at runtime and halts execution with an error if it is fals
 ```sql
 ASSERT <condition>;
 
-ASSERT <condition> 'Custom failure message';
+ASSERT <condition>, 'Custom failure message';
 ```
 
 ## Examples
 ```sql
 -- Halt if no rows were loaded
-ASSERT (SELECT COUNT(*) FROM #orders) > 0
+ASSERT (SELECT COUNT(*) FROM #orders) > 0,
   'No orders found for the reporting period.';
 
 -- Validate a variable
-ASSERT @batchSize BETWEEN 1 AND 10000
+ASSERT @batchSize BETWEEN 1 AND 10000,
   'Batch size must be between 1 and 10000.';
 
 -- Check referential integrity
@@ -23,7 +23,7 @@ ASSERT (
   SELECT COUNT(*) FROM #orders o
   LEFT JOIN #customers c ON o.CustomerId = c.Id
   WHERE c.Id IS NULL
-) = 0 'Orphaned orders detected; missing customer records.';
+) = 0, 'Orphaned orders detected; missing customer records.';
 ```
 
 ## Notes

@@ -1,5 +1,5 @@
 # SET SHOW_SECRETS
-Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `SHOW VARIABLES` output. This is a display-only setting and does not affect save behavior.
+Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `eng.variables` output. This is a display-only setting and does not affect save behavior.
 
 ## Syntax
 ```text
@@ -17,18 +17,18 @@ SET SHOW_PASSWORD = ON|OFF;
 
 ## Example
 ```sql
-SET @apiKey = SECRET 'sk-12345';
+DECLARE @apiKey SECRET = 'sk-12345';
 
 -- Values are masked by default
-SHOW VARIABLES;
+SELECT * FROM eng.variables;
 -- apiKey = ********
 
 -- Unmask for debugging
-SET SHOW_SECRETS = ON;
-SHOW VARIABLES;
+SET SHOW_SECRETS ON;
+SELECT * FROM eng.variables;
 -- apiKey = sk-12345
 
-SET SHOW_SECRETS = OFF;
+SET SHOW_SECRETS OFF;
 ```
 
 ## Notes

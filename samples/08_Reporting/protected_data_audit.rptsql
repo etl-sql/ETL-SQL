@@ -4,16 +4,16 @@ SET REPORT DESCRIPTION = 'Script-first inventory of protected lineage, classifie
 DECLARE @stale_before DATETIME = '2026-06-22' INPUT;
 
 -- Local catalog mode. For centralized review, replace these two statements with:
--- SHOW PROTECTED DATA AT prod_portal LIMIT 500 INTO #protected_data;
--- SHOW PROTECTED DATA SUGGESTIONS AT prod_portal LIMIT 500 INTO #protected_suggestions;
--- SHOW LINEAGE HISTORY FOR MISSING TAGS AT prod_portal LIMIT 500 INTO #missing_metadata;
-SHOW PROTECTED DATA LIMIT 500 INTO #protected_data;
-SHOW PROTECTED DATA SUGGESTIONS LIMIT 500 INTO #protected_suggestions;
-SHOW LINEAGE HISTORY FOR MISSING TAGS LIMIT 500 INTO #missing_metadata;
+-- SELECT * INTO #protected_data FROM prod_portal.eng.protected_data LIMIT 500;
+-- SELECT * INTO #protected_suggestions FROM prod_portal.eng.protected_data_suggestions LIMIT 500;
+-- SELECT * INTO #missing_metadata FROM prod_portal.eng.missing_tags LIMIT 500;
+SELECT * INTO #protected_data FROM eng.protected_data LIMIT 500;
+SELECT * INTO #protected_suggestions FROM eng.protected_data_suggestions LIMIT 500;
+SELECT * INTO #missing_metadata FROM eng.missing_tags LIMIT 500;
 
 -- Optional Portal audit mode. Uncomment when a PORTAL connection named prod_portal is available:
 -- EXECUTE prod_portal BEGIN
---   SHOW PORTAL AUDIT ACTION 'STEWARD_LINEAGE_IMPACT' LIMIT 100 INTO #steward_events;
+--   SELECT * INTO #steward_events FROM prod_portal.eng.audit(100, 'STEWARD_LINEAGE_IMPACT');
 -- END;
 CREATE TABLE #steward_events (
   Id INT,

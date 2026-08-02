@@ -14,7 +14,7 @@ EXPECT SCHEMA <source> FROM '<spec_path>' [ON DRIFT WARN];
 ## Examples
 ```sql
 -- Validate a temp table before processing
-SELECT * FROM ExternalFeed.dbo.RawOrders INTO #orders;
+SELECT * INTO #orders FROM ExternalFeed.dbo.RawOrders;
 
 EXPECT SCHEMA #orders (
   order_id   INT         NOT NULL,
@@ -29,12 +29,6 @@ EXPECT SCHEMA #orders FROM 'testdata/Specs/customer_spec.json';
 -- Warn on drift instead of throwing an error
 EXPECT SCHEMA #orders FROM 'testdata/Specs/customer_spec.json' ON DRIFT WARN;
 
--- Validate a remote connector table (schema check only; no data is loaded)
-EXPECT SCHEMA MyConn.dbo.Products (
-  product_id INT     NOT NULL,
-  sku        VARCHAR NOT NULL,
-  price      DECIMAL
-);
 ```
 
 ## Notes

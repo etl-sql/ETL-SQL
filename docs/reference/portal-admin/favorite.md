@@ -7,8 +7,8 @@ EXECUTE portal BEGIN
   FAVORITE REPORT 'Daily Sales' FOR USER 'alice';
   UNFAVORITE REPORT 'Daily Sales';
   UNFAVORITE REPORT 'Daily Sales' FOR USER 'alice';
-  SHOW FAVORITES LIMIT 50 INTO #favorites;
-  SHOW FAVORITES FOR USER 'alice' LIMIT 50;
+  SELECT * INTO #favorites FROM eng.favorites(50);
+  SELECT * FROM eng.favorites('alice');
 END;
 ```
 

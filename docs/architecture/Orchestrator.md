@@ -2,7 +2,7 @@
 
 **Applies to ETL-SQL 0.17.0**
 
-This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in the `SHOW JOB HISTORY` table.
+This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in `eng.job_history`.
 
 ---
 
@@ -444,7 +444,7 @@ This guards against out-of-band modifications to the `Script` column in `etlsql.
 
 ### 6.4 Engine integration
 
-`CREATE JOB` and `DROP JOB` statements in `ETL-SQL.Engine` call `IJobHistoryStore` directly through the `IExecutionContext`. `SHOW JOBS` and `SHOW JOB HISTORY` read from the same store. This means the engine language layer and the Orchestrator share the same SQLite database and the same `IJobHistoryStore` abstraction — there is no separate API or message bus between them.
+`CREATE JOB` and `DROP JOB` statements in `ETL-SQL.Engine` call `IJobHistoryStore` directly through the `IExecutionContext`. `eng.jobs` and `eng.job_history` read from the same store. This means the engine language layer and the Orchestrator share the same SQLite database and the same `IJobHistoryStore` abstraction — there is no separate API or message bus between them.
 
 ---
 

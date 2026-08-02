@@ -40,11 +40,9 @@ Badges are populated automatically from metadata directives placed at the top of
 ```sql
 SET REPORT TITLE = 'Q3 Regional Sales Summary';
 SET REPORT DESCRIPTION = 'Interactive Data Insight';
-SET REPORT OWNER = 'Finance Analytics Team';
-SET REPORT STEWARD = 'Jane Doe';
-SET REPORT CERTIFICATION = 'Certified Gold';
-SET REPORT TAGS = 'sales, quarterly, executive';
 ```
+
+Ownership, stewardship, certification, and catalog tags are managed as Portal catalog metadata after publication.
 
 ## References
 - [Report-SQL Guide](report-sql.md)

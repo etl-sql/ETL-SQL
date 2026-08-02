@@ -54,7 +54,7 @@ SELECT
 FROM #regional_summary
 ORDER BY Revenue DESC;
 
-SHOW PROFILE;
+SELECT * FROM eng.profile;
 SET PROFILING OFF;
 ```
 
@@ -73,7 +73,7 @@ This one script shows the core workflow used throughout the rest of the manual:
 | Validate | `ASSERT ...` | Bad input stops the pipeline before load or delivery. |
 | Transform | `GROUP BY Region` against `#orders` | Engine-side tables let ETL-SQL apply its own functions and rules. |
 | Deliver | Final `SELECT` | The last query is the result a caller, job, or report can consume. |
-| Diagnose | `SHOW PROFILE` | Profiling exposes statement timing while you develop. |
+| Diagnose | `eng.profile` | Profiling exposes statement timing while you develop. |
 
 After this works, change only one thing at a time: swap `MOCKDB` for a real connector, add a `WHERE` filter, write the summary to a file, or turn the final query into a report visual.
 

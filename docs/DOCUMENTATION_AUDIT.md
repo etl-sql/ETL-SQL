@@ -44,7 +44,7 @@ Completed in the first cleanup pass:
 - User-facing docs already cover the biggest v0.17.0 surfaces: catalog search and business
   discovery, report badges/freshness, access requests, report-builder ergonomics, protected-data
   stewardship, SFTP host-key verification, date-suffix file operations, and file-based
-  `SHOW SCHEMA`.
+  `eng.columns`.
 - The top-level `ROADMAP.md` is correctly empty now that all intentionally scheduled v0.17.0
   feature work has shipped or moved to release verification.
 - `docs/architecture/Portal.md` now reflects report-level ACLs and the effective report permission

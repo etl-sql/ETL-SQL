@@ -17,7 +17,7 @@ WHEN NOT MATCHED THEN
 The source can be a #temp table, a subquery, or a connection table.
 
 ```sql
-SELECT id, name, amount FROM dbo.Incoming INTO #new_data;
+SELECT id, name, amount INTO #new_data FROM dbo.Incoming;
 
 MERGE INTO dbo.Orders AS tgt
 USING #new_data AS src ON tgt.id = src.id

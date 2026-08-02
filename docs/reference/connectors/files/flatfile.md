@@ -55,16 +55,16 @@ asserted against the accepted temp-table shape.
 
 ```sql
 -- Pipe-delimited with explicit encoding
-CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=PIPE, ENCODING=UTF8);
+CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER='PIPE', ENCODING='UTF8');
 
 -- Encrypted and GZip-compressed
-CREATE CONNECTION secure_file AS FLATFILE('C:\Data\payroll.csv.gz', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.gz', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
 
 -- European locale with semicolon delimiter and custom date format
-CREATE CONNECTION eu_data AS FLATFILE('C:\Data\german_sales.csv', DELIMITER=SEMICOLON, CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');
+CREATE CONNECTION eu_data AS FLATFILE(PATH='C:\Data\german_sales.csv', DELIMITER='SEMICOLON', CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');
 
 -- Skip header and first 2 data rows, stop at row 1000
-CREATE CONNECTION paged AS FLATFILE('C:\Data\big.csv', HEADER=ON, START_AT=3, END_AT=1000);
+CREATE CONNECTION paged AS FLATFILE(PATH='C:\Data\big.csv', HEADER=ON, START_AT=3, END_AT=1000);
 ```
 
 ## Fixed-width layouts (`FORMAT = 'FIXED'`)

@@ -6,7 +6,7 @@ EXECUTE portal BEGIN
   VALIDATE REPORT SCRIPT 'C:\Reports\finance.rptsql' INTO #validation;
 END;
 
-VALIDATE BUNDLE FROM 'C:\Jobs\finance-load\main.etlsql';
+VALIDATE BUNDLE 'finance-load' FROM 'C:\Jobs\finance-load' ENTRY 'main.etlsql';
 ```
 
 Notes:

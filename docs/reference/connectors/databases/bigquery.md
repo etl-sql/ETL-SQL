@@ -40,8 +40,8 @@ LIMIT  100;
 -- Three-part table name (project.dataset.table)
 SELECT * FROM bq.`myproject.staging.raw_events` LIMIT 1000;
 
--- Copy into ETL-SQL variable table
-COPY INTO #events FROM bq.events WHERE event_date >= '2024-01-01';
+-- Stage rows in an engine temp table
+SELECT * INTO #events FROM bq.events WHERE event_date >= '2024-01-01';
 ```
 
 ## BigQuery SQL dialect notes

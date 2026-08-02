@@ -994,7 +994,7 @@ EXECUTE orch BEGIN
 END;
 ```
 
-> Pair this with recipe 20: publish an immutable bundle, then schedule `orch://<bundle>/<entry>` so production runs are pinned to a specific version. See [Job Scheduling](../reference/orchestrator-jobs/schedule.md) for `CREATE SCHEDULE`, `CREATE JOB`, `ALTER JOB`, and `SHOW JOB HISTORY`.
+> Pair this with recipe 20: publish an immutable bundle, then schedule `orch://<bundle>/<entry>` so production runs are pinned to a specific version. See [Job Scheduling](../reference/orchestrator-jobs/schedule.md) for `CREATE SCHEDULE`, `CREATE JOB`, `ALTER JOB`, and `eng.job_history`.
 
 ---
 
@@ -1025,9 +1025,9 @@ EXECUTE portal BEGIN
         );
 
     REFRESH REPORT 'Monthly Sales';
-    SHOW REPORT 'Monthly Sales' INTO #report;
-    SHOW REPORT HISTORY 'Monthly Sales' INTO #history;
-    SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
+    SELECT * INTO #report FROM eng.reports WHERE name = 'Monthly Sales';
+    SELECT * INTO #history FROM eng.report_history('Monthly Sales');
+    SELECT * INTO #dependencies FROM eng.report_dependencies('Monthly Sales');
 END;
 ```
 
