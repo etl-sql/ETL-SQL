@@ -1536,7 +1536,9 @@ public sealed record AssertJobStatement(
     string JobName,
     IReadOnlyList<JobMetricPredicate> Predicates,
     string? FailureNotification = null,
-    bool ThrowOnCritical = false) : Statement;
+    bool ThrowOnCritical = false,
+    /// <summary>Fails the run with a non-zero exit when any row triggered a WARN quality action.</summary>
+    bool FailOnWarn = false) : Statement;
 
 public sealed record ExpectedSchemaColumn
 {
@@ -2778,7 +2780,7 @@ public sealed record AddUserToPortalGroupStatement(string Username, string Group
 // an ordinary connector, so it uses CreateConnectionStatement/DropConnectionStatement like every
 // other type. An EXECUTE <portal> BEGIN ... END block routes those to the governed catalog.
 
-public sealed record CreatePortalFolderStatement(string Path) : Statement;
+public sealed record CreatePortalFolderStatement(string Path, string? CatalogOwner = null) : Statement;
 
 public sealed record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;
 
@@ -2808,7 +2810,7 @@ public sealed record RevokePortalDatasetPermissionStatement(
     string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
 
 public sealed record PublishPortalReportStatement(
-    string ReportName, string ScriptPath, string FolderPath, string? Description) : Statement;
+    string ReportName, string ScriptPath, string FolderPath, string? Description, string? CatalogOwner = null) : Statement;
 
 public sealed record AlterPortalReportStatement(
     string ReportName, string? NewFolder, string? NewDescription) : Statement;

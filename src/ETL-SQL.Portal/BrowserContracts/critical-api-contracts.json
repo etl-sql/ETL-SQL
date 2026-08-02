@@ -1,0 +1,73 @@
+{
+  "user": {
+    "kind": "object",
+    "fields": {
+      "id": "number",
+      "username": "string",
+      "isActive": "boolean",
+      "roles": "string[]",
+      "groups": "string[]",
+      "version": "number"
+    }
+  },
+  "userList": {
+    "kind": "array",
+    "items": "user"
+  },
+  "userCatalog": {
+    "kind": "object",
+    "fields": {
+      "items": "user[]",
+      "total": "number",
+      "page": "number",
+      "pageSize": "number"
+    }
+  },
+  "folder": {
+    "kind": "object",
+    "fields": {
+      "id": "number",
+      "name": "string",
+      "path": "string",
+      "children": "object[]",
+      "version": "number"
+    }
+  },
+  "folderList": {
+    "kind": "array",
+    "items": "folder"
+  },
+  "report": {
+    "kind": "object",
+    "fields": {
+      "id": "number",
+      "folderId": "number",
+      "folderPath": "string",
+      "name": "string",
+      "scriptPath": "string",
+      "hasSnapshot": "boolean",
+      "version": "number"
+    }
+  },
+  "reportList": {
+    "kind": "array",
+    "items": "report"
+  },
+  "jobAccepted": {
+    "kind": "object",
+    "fields": {
+      "jobId": "string"
+    }
+  },
+  "jobStatus": {
+    "kind": "object",
+    "fields": {
+      "jobId": "string",
+      "status": "string",
+      "createdAt": "string",
+      "rowsProcessed": "number",
+      "peakMemoryBytes": "number",
+      "cpuTimeSeconds": "number"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.13]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.45]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.46]   Starting:    ETL-SQL.Tests
+[xUnit.net 00:00:00.53]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Core.WorkspacePolicyDocumentTests.InvalidPolicy_ReportsPathLineAndColumn [27 ms]
+  Passed ETL_SQL.Tests.Core.WorkspacePolicyDocumentTests.ExamplePolicy_LoadsWithAllLocalFirstSections [2 ms]
+  Passed ETL_SQL.Tests.Core.WorkspacePolicyDocumentTests.Find_WalksFromScriptDirectoryToWorkspaceRoot [1 ms]
+  Passed ETL_SQL.Tests.Docs.DeploymentProfileContractTests.StandardPinsSmallestSafeFormsOverlaysAndReviewQuestions [< 1 ms]
+  Passed ETL_SQL.Tests.Docs.DeploymentProfileContractTests.ReleaseChecklistRequiresProfilePortabilityAndEvidenceReview [< 1 ms]
+  Passed ETL_SQL.Tests.Docs.DeploymentProfileContractTests.CapabilityMatrix_CoversEveryProfileConcernWithStatusAndEvidence [7 ms]
+
+Test Run Successful.
+Total tests: 6
+     Passed: 6
+ Total time: 0.8457 Seconds

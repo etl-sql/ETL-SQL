@@ -79,7 +79,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
                     process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
                     result.RowsQuarantined, result.RowsWarned, result.DataQualityFailures,
-                    result.DataQualityColumnMetrics);
+                    result.DataQualityColumnMetrics, result.DataQualityRuleFailures);
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(
                     activity,

@@ -50,6 +50,8 @@ namespace ETL_SQL.Orchestrator.Service
     ///   GET    /api/scheduled-jobs/{name}/history — execution history for a job
     ///   POST   /api/scheduled-jobs/{name}/trigger — trigger an immediate out-of-schedule run
     ///   POST   /api/scheduled-jobs/{name}/kill    — cancel the currently running instance
+    ///   GET    /api/data-quality/status           — canonical counts-only run quality status
+    ///   GET    /api/data-quality/failures         — normalized rule failure counts
     ///   GET    /api/scripts                     — list .etlsql files under ScriptRoot
     ///   GET    /api/scripts/content             — read script file content (?path=relative)
     ///
@@ -349,6 +351,36 @@ namespace ETL_SQL.Orchestrator.Service
                 var history = await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000));
                 return Results.Ok(history);
             }).WithName("getAllJobHistory");
+
+            app.MapGet("/api/data-quality/status", async (HttpContext ctx, IJobHistoryStore store,
+                IConfiguration cfg, int limit = 1000) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                return Results.Ok(await store.GetDataQualityStatusesAsync(Math.Clamp(limit, 1, 10000)));
+            }).WithName("getDataQualityStatus");
+
+            app.MapGet("/api/data-quality/failures", async (HttpContext ctx, IJobHistoryStore store,
+                IConfiguration cfg, int limit = 1000) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                return Results.Ok(await store.GetDataQualityFailuresAsync(Math.Clamp(limit, 1, 10000)));
+            }).WithName("getDataQualityFailures");
+
+            app.MapGet("/api/stewardship/score", async (HttpContext ctx, ILineageCatalogStore store,
+                IConfiguration cfg, int limit = 1000) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var evaluation = await EvaluateStewardshipAsync(store, limit);
+                return Results.Ok(evaluation.Scores);
+            }).WithName("getStewardshipScore");
+
+            app.MapGet("/api/stewardship/gaps", async (HttpContext ctx, ILineageCatalogStore store,
+                IConfiguration cfg, int limit = 1000) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var evaluation = await EvaluateStewardshipAsync(store, limit);
+                return Results.Ok(evaluation.Gaps);
+            }).WithName("getStewardshipGaps");
 
             app.MapPost("/api/notifications/{name}/dispatch", async (HttpContext ctx, string name,
                 DispatchNotificationApiRequest req, NotificationDispatchService dispatch, IConfiguration cfg,
@@ -1403,6 +1435,22 @@ namespace ETL_SQL.Orchestrator.Service
                 options,
                 status.ToString().ToLowerInvariant(),
                 definition?.SensitiveFields);
+        }
+
+        private static async Task<StewardshipEvaluation> EvaluateStewardshipAsync(
+            ILineageCatalogStore store, int limit)
+        {
+            var history = await store.GetRecentLineageAsync(Math.Clamp(limit, 1, 10000));
+            WorkspacePolicyDocument? policy = null;
+            var policyPath = WorkspacePolicyLoader.Find(Environment.CurrentDirectory);
+            if (policyPath != null)
+            {
+                var loaded = WorkspacePolicyLoader.Load(policyPath);
+                if (!loaded.IsValid)
+                    throw new InvalidOperationException($"Workspace policy '{policyPath}' is invalid.");
+                policy = loaded.Policy;
+            }
+            return StewardshipScoring.Evaluate(StewardshipScoring.FromHistory(history), policy);
         }
 
         private static async Task<string?> ReadBoundedAsync(string path, CancellationToken ct)

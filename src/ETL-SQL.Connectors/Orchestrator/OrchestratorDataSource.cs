@@ -94,7 +94,7 @@ namespace ETL_SQL.Connectors.Orchestrator
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
-        public IDataSource WithTable(string tableName) => this;
+        public IDataSource WithTable(string tableName) => new OrchestratorCatalogDataSource(_http, tableName);
         public ValueTask DisposeAsync() { _http.Dispose(); return ValueTask.CompletedTask; }
 
         // ── IPortalAdminConnection ────────────────────────────────────────────────
@@ -1028,5 +1028,108 @@ namespace ETL_SQL.Connectors.Orchestrator
             string? Status,
             string Detail,
             string? Remedy);
+    }
+
+    internal sealed class OrchestratorCatalogDataSource(HttpClient http, string tableName) : IDataSource
+    {
+        private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+        private readonly string _tableName = tableName.Trim();
+        public string Path => _tableName;
+        public string ConnectorType => "ORCHESTRATOR";
+        public Dictionary<string, string>? Options => null;
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var normalized = _tableName.Trim().ToLowerInvariant();
+            var endpoint = normalized switch
+            {
+                "eng.data_quality_status" => "api/data-quality/status",
+                "eng.data_quality_failures" => "api/data-quality/failures",
+                "eng.stewardship_score" => "api/stewardship/score",
+                "eng.stewardship_gaps" => "api/stewardship/gaps",
+                _ => throw new NotSupportedException($"ORCHESTRATOR SELECT does not expose '{_tableName}'.")
+            };
+            using var response = await http.GetAsync(endpoint, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw new ExecutionException($"Orchestrator API error ({(int)response.StatusCode}): {SecretRedactor.Redact(await response.Content.ReadAsStringAsync(cancellationToken))}");
+
+            if (normalized.EndsWith("data_quality_status", StringComparison.Ordinal))
+            {
+                var statuses = await response.Content.ReadFromJsonAsync<JobDataQualityStatus[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "run_id", "job_name", "start_time", "end_time", "status", "rows_processed", "rows_warned", "rows_quarantined", "warn_percent", "quarantine_percent", "failed_rule_count", "freshest_value_utc", "freshness_state", "error_summary", "source" };
+                var rows = statuses.Select(s =>
+                {
+                    var denominator = s.RowsProcessed <= 0 ? 0d : s.RowsProcessed;
+                    return new Row
+                    {
+                        ["run_id"] = s.RunId, ["job_name"] = s.JobName, ["start_time"] = s.StartTime,
+                        ["end_time"] = s.EndTime, ["status"] = s.Status, ["rows_processed"] = s.RowsProcessed,
+                        ["rows_warned"] = s.RowsWarned, ["rows_quarantined"] = s.RowsQuarantined,
+                        ["warn_percent"] = denominator == 0 ? 0d : s.RowsWarned * 100d / denominator,
+                        ["quarantine_percent"] = denominator == 0 ? 0d : s.RowsQuarantined * 100d / denominator,
+                        ["failed_rule_count"] = s.FailedRuleCount, ["freshest_value_utc"] = s.FreshestValueUtc,
+                        ["freshness_state"] = s.FreshnessState, ["error_summary"] = s.ErrorSummary,
+                        ["source"] = "REMOTE_ORCHESTRATOR"
+                    };
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+            else if (normalized.EndsWith("data_quality_failures", StringComparison.Ordinal))
+            {
+                var failures = await response.Content.ReadFromJsonAsync<JobDataQualityFailure[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "run_id", "job_name", "start_time", "end_time", "status", "target_table", "column_name", "rule", "action", "failure_count", "owner", "source" };
+                var rows = failures.Select(f => new Row
+                {
+                    ["run_id"] = f.RunId.ToString(), ["job_name"] = f.JobName, ["start_time"] = f.StartTime,
+                    ["end_time"] = f.EndTime, ["status"] = f.Status, ["target_table"] = f.TargetTable,
+                    ["column_name"] = f.ColumnName, ["rule"] = f.Rule, ["action"] = f.Action,
+                    ["failure_count"] = f.FailureCount, ["owner"] = f.Owner, ["source"] = "REMOTE_ORCHESTRATOR"
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+            else if (normalized.EndsWith("stewardship_score", StringComparison.Ordinal))
+            {
+                var scores = await response.Content.ReadFromJsonAsync<StewardshipScore[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "scope_type", "scope_name", "component", "numerator", "denominator", "percentage", "asset_count", "column_count", "weight", "evaluated_at_utc", "definition_version" };
+                var rows = scores.Select(s => new Row
+                {
+                    ["scope_type"] = s.ScopeType, ["scope_name"] = s.ScopeName, ["component"] = s.Component,
+                    ["numerator"] = s.Numerator, ["denominator"] = s.Denominator, ["percentage"] = s.Percentage,
+                    ["asset_count"] = s.AssetCount, ["column_count"] = s.ColumnCount, ["weight"] = s.Weight,
+                    ["evaluated_at_utc"] = s.EvaluatedAtUtc, ["definition_version"] = s.DefinitionVersion
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+            else
+            {
+                var gaps = await response.Content.ReadFromJsonAsync<StewardshipGap[]>(Json, cancellationToken) ?? [];
+                var columns = new[] { "scope_type", "scope_name", "component", "target_table", "target_column", "requirement", "source_file", "line", "evaluated_at_utc", "definition_version" };
+                var rows = gaps.Select(g => new Row
+                {
+                    ["scope_type"] = g.ScopeType, ["scope_name"] = g.ScopeName, ["component"] = g.Component,
+                    ["target_table"] = g.TargetTable, ["target_column"] = g.TargetColumn,
+                    ["requirement"] = g.Requirement, ["source_file"] = g.SourceFile, ["line"] = g.Line,
+                    ["evaluated_at_utc"] = g.EvaluatedAtUtc, ["definition_version"] = g.DefinitionVersion
+                }).ToList();
+                yield return await BuildAsync(columns, rows);
+            }
+        }
+
+        private static async Task<DataTable> BuildAsync(IEnumerable<string> columns, IEnumerable<Row> rows)
+        {
+            var table = new DataTable();
+            table.SetColumns(columns);
+            foreach (var row in rows) await table.AddRowAsync(row);
+            return table;
+        }
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("ORCHESTRATOR catalog tables are read-only.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("ORCHESTRATOR catalog tables are read-only.");
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
+        public object? Snapshot() => null;
+        public void Restore(object? snapshot) { }
+        public IDataSource WithTable(string name) => new OrchestratorCatalogDataSource(http, name);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

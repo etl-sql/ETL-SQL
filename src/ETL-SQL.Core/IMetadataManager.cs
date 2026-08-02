@@ -23,7 +23,7 @@ public static class EngineCatalog
         "profile", "connection_config", "jobs", "job_history", "job_state", "host_metrics",
         "bundles", "bundle_files", "bundle_dependencies", "tags",
         "lineage", "locks", "sessions", "lineage_history", "missing_tags",
-        "protected_data", "protected_data_suggestions", "data_quality_rules"
+        "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps"
     };
 
     public static readonly Dictionary<string, List<ColumnMetadata>> TableColumns = new(StringComparer.OrdinalIgnoreCase)
@@ -58,6 +58,8 @@ public static class EngineCatalog
         ["protected_data"] = new() { new("Id", "VARCHAR"), new("RunAt", "VARCHAR"), new("JobName", "VARCHAR"), new("TargetTable", "VARCHAR"), new("TargetColumn", "VARCHAR"), new("SourceTables", "VARCHAR"), new("Operation", "VARCHAR"), new("ProtectionTags", "VARCHAR"), new("ProtectionReason", "VARCHAR"), new("Owner", "VARCHAR"), new("Steward", "VARCHAR"), new("Contact", "VARCHAR"), new("Domain", "VARCHAR"), new("Classification", "VARCHAR"), new("Quality", "VARCHAR"), new("Tags", "VARCHAR"), new("SourceFile", "VARCHAR"), new("Line", "VARCHAR") },
         ["protected_data_suggestions"] = new() { new("Id", "VARCHAR"), new("RunAt", "VARCHAR"), new("JobName", "VARCHAR"), new("TargetTable", "VARCHAR"), new("TargetColumn", "VARCHAR"), new("SourceTables", "VARCHAR"), new("SourceColumns", "VARCHAR"), new("SuggestedTag", "VARCHAR"), new("SuggestedValue", "VARCHAR"), new("Confidence", "VARCHAR"), new("EvidenceKind", "VARCHAR"), new("Evidence", "VARCHAR"), new("Reason", "VARCHAR"), new("ExistingTags", "VARCHAR"), new("SourceFile", "VARCHAR"), new("Line", "VARCHAR") },
         ["data_quality_rules"] = new() { new("TargetTable", "VARCHAR"), new("TargetColumn", "VARCHAR"), new("RuleTag", "VARCHAR"), new("Rule", "VARCHAR"), new("Action", "VARCHAR"), new("SourceFile", "VARCHAR"), new("Line", "VARCHAR") },
+        ["stewardship_score"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("numerator", "INT"), new("denominator", "INT"), new("percentage", "DECIMAL"), new("asset_count", "INT"), new("column_count", "INT"), new("weight", "DECIMAL"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
+        ["stewardship_gaps"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("requirement", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "INT"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
         ["profile"] = new()
         {
             new("timestamp", "VARCHAR"), new("statement", "VARCHAR"), new("rows_processed", "VARCHAR"), new("index_used", "VARCHAR"), new("duration_ms", "VARCHAR"), new("memory_kb", "VARCHAR"),

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -399,6 +401,52 @@ namespace ETL_SQL.Tests.Engine
             await Run(eval, "ASSERT JOB import (ROW_COUNT WITHIN 0.01 OF HISTORICAL) ON CRITICAL_FAILURE THROW;");
         }
 
+        [Fact]
+        public async Task TeamSqliteBaselines_TriggerWebhookAndSmtpNotificationsWithoutPortal()
+        {
+            var dbPath = Path.Combine(AppContext.BaseDirectory, $"team_quality_{Guid.NewGuid():N}.db");
+            var store = new SQLiteJobHistoryStore(dbPath);
+            try
+            {
+                await store.InitializeAsync();
+                foreach (var jobName in new[] { "team_webhook", "team_smtp" })
+                {
+                    for (var run = 0; run < 3; run++)
+                    {
+                        var historyId = await store.LogJobStartAsync(jobName);
+                        await store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: 100);
+                    }
+                }
+
+                var metrics = new JobHistoryMetricsProvider(store);
+                var evaluator = NewEvaluatorWithHistory(metrics);
+                var webhook = new CapturingSink("WEBHOOK");
+                var smtp = new CapturingSink("SMTP");
+                await ConfigureNotification(evaluator, webhook, "webhook_alerts", "webhook_sink");
+                await ConfigureNotification(evaluator, smtp, "smtp_alerts", "smtp_sink");
+                await LoadWithQuarantine(evaluator, rows: 5, badRows: 0);
+
+                await Run(evaluator,
+                    "ASSERT JOB team_webhook (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON FAILURE NOTIFY webhook_alerts;");
+                await Run(evaluator,
+                    "ASSERT JOB team_smtp (ROW_COUNT WITHIN 0.2 OF HISTORICAL) ON FAILURE NOTIFY smtp_alerts;");
+
+                var webhookAlert = Assert.Single(webhook.Rows);
+                var smtpAlert = Assert.Single(smtp.Rows);
+                Assert.Equal("WEBHOOK", webhook.ConnectorType);
+                Assert.Equal("SMTP", smtp.ConnectorType);
+                Assert.Contains("baseline 100", webhookAlert["Text"]?.ToString(), StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("baseline 100", smtpAlert["Text"]?.ToString(), StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(3, (await store.GetHistoryAsync("team_webhook")).Count());
+                Assert.Equal(3, (await store.GetHistoryAsync("team_smtp")).Count());
+            }
+            finally
+            {
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                if (File.Exists(dbPath)) File.Delete(dbPath);
+            }
+        }
+
         // ── ALERT routing ──────────────────────────────────────────────────
 
         [Fact]
@@ -477,6 +525,27 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task FailOnWarn_ProducesExecutionFailureOnlyWhenWarnRowsExist()
+        {
+            var clean = NewEvaluator();
+            await Run(clean, @"
+                CREATE TABLE #clean_src (Id INT);
+                INSERT INTO #clean_src (Id) VALUES (1);
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */ INTO #clean FROM #clean_src;
+                ASSERT JOB import (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);");
+
+            var warned = NewEvaluator();
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(warned, @"
+                CREATE TABLE #warn_src (Id INT);
+                INSERT INTO #warn_src (Id) VALUES (NULL);
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */ INTO #warned FROM #warn_src;
+                ASSERT JOB import (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);"));
+
+            Assert.Contains("FAIL_ON_WARN = TRUE", ex.Message);
+            Assert.Contains("1 warned row", ex.Message);
+        }
+
+        [Fact]
         public async Task NotificationPayload_CarriesCountsOnly_NoSampleValues()
         {
             var eval = NewEvaluator();
@@ -503,8 +572,15 @@ namespace ETL_SQL.Tests.Engine
 
         // ── Harness ────────────────────────────────────────────────────────
 
-        private static Evaluator NewEvaluator() =>
-            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        private static Evaluator NewEvaluator()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.SessionRoot = Path.Combine(
+                AppContext.BaseDirectory,
+                "TestSessions",
+                Guid.NewGuid().ToString("N"));
+            return evaluator;
+        }
 
         private static Evaluator NewEvaluatorWithHistory(IJobMetricsProvider? provider)
         {
@@ -606,12 +682,12 @@ namespace ETL_SQL.Tests.Engine
             }
         }
 
-        private sealed class CapturingSink : IDataSource
+        private sealed class CapturingSink(string connectorType = "CAPTURE") : IDataSource
         {
             public List<Row> Rows { get; } = [];
             public string Path => "capture";
             public Dictionary<string, string>? Options => null;
-            public string ConnectorType => "CAPTURE";
+            public string ConnectorType => connectorType;
 
             public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
                 AsyncEnumerable.Empty<DataTable>();

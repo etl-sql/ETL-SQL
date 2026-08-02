@@ -18,7 +18,8 @@ public sealed record ColumnRunMetrics(
     string? TargetTable,
     string ColumnName,
     long TotalRows,
-    long NullRows);
+    long NullRows,
+    DateTimeOffset? MaxTimestampUtc = null);
 
 /// <summary>
 /// Last observed outcome for one <c>ASSERT JOB ... NOTIFY</c> assertion. Hosts persist this by

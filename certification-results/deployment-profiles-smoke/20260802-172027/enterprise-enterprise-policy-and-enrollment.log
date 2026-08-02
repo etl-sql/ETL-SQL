@@ -1,0 +1,65 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.13]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.45]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.47]   Starting:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.Rollback_MarksTheAbandonedVersionRolledBackInHistory [87 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.StagedVersion_ActivatesOnlyWhileItStillIssuesLaterThanActive [37 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.DisabledSigner_FailsWithoutLeakingConfigurationMaterial [< 1 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.Publishing_NewVersion_SupersedesPriorAndIssuesLater [26 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.VerifiesWithKey_DetectsSigningKeyRotation [87 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.Publish_RejectsDuplicateVersion_InvalidDocument_AndPastExpiry [58 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.CertificateSigner_LoadsPrivateKeyByCurrentUserStoreThumbprint [80 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.History_IsImmutableAndBoundToTenantEnvironment [34 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.CertificateSigner_ProducesClientVerifiableEnvelope_WithoutExportingPrivateKey [41 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.Rollback_RepublishesTargetWithFreshIssuance [32 ms]
+  Passed ETL_SQL.Tests.Core.PolicyAuthorityServiceTests.Published_Envelope_VerifiesAndParsesThroughTheClient [36 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsUnsafeOrInvalidSettings(endpoint: "https://siem.example.test/events", batchSize: 100, intervalSeconds: 0, leaseSeconds: 120) [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsUnsafeOrInvalidSettings(endpoint: "http://siem.example.test/events", batchSize: 100, intervalSeconds: 30, leaseSeconds: 120) [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsUnsafeOrInvalidSettings(endpoint: "https://siem.example.test/events", batchSize: 100, intervalSeconds: 30, leaseSeconds: 1) [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsUnsafeOrInvalidSettings(endpoint: "https://siem.example.test/events", batchSize: 0, intervalSeconds: 30, leaseSeconds: 120) [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsUnsafeOrInvalidSettings(endpoint: "https://user:password@siem.example.test/events", batchSize: 100, intervalSeconds: 30, leaseSeconds: 120) [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.MetadataPolicy_AcceptsKnownScopesAndRejectsMalformedRequirements [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_ValidatesHttpsCollectorAndFlattensTransportSettings [1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsBlankDockerImage [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsNegativeSpillCeiling [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.ParseAndValidateJson_AcceptsCurrentSchemaVersion [1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsAllowedHostsModeWithoutHosts [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.ToPolicyValues_FlattensDockerImages [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsInvalidWriteExtension [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsDuplicateConnectorTypes [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsRelativeFilesystemRoots [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.SecurityEvents_RejectsNonPositiveFailClosedThresholds [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.ToPolicyValues_FlattensWriteExtensionsAndSpillCeiling [< 1 ms]
+  Passed ETL_SQL.Tests.Core.OrganizationPolicySchemaTests.Validate_RejectsUnsupportedSchemaVersion [< 1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.EnterpriseOverlay_HasFinalConfigurationPrecedence [< 1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.HttpsSource_SendsMachineIdentityHeaders_AndReadsWebJson [30 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.SecurityEventCollector_RequiresMachineCertificateIdentity [27 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.SignatureVerification_RejectsTamperingTenantMismatchAndRotatedKey [62 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.ProtectedFileCache_RoundTripsAndInvokesProtection [49 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.ExecutionSnapshot_FreezesPolicyValuesAndCorrelationContext [2 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.EnterpriseOverlay_ReloadsWhenVerifiedRuntimePolicyChanges [< 1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.ExecutionSnapshot_FreshnessFailsExpiredPolicyAndFlagsOrdinaryRefresh [< 1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.ExpiredOfflineCache_FailsClosed [37 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.UnavailablePolicy_CanContinueOnlyWhenEnrollmentExplicitlyAllowsIt [42 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.LiveFailure_UsesVerifiedFreshCache [30 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.LiveSignedPolicy_IsVerifiedCachedAndFlattened [30 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.OperationDecision_IncludesPolicyAndExecutionCorrelation [< 1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.ExpiredEnvelope_IsRejectedEvenWhenSignatureIsValid [36 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.EnterpriseOverlay_IgnoresOutOfOrderPolicyNotifications [1 ms]
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.OlderLivePolicy_IsRejectedInFavorOfVerifiedCache [32 ms]
+[xUnit.net 00:00:01.44]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Core.EnterprisePolicyRuntimeTests.EnterpriseOverlay_UnsubscribesWhenConfigurationIsDisposed [< 1 ms]
+
+Test Run Successful.
+Total tests: 46
+     Passed: 46
+ Total time: 1.7341 Seconds

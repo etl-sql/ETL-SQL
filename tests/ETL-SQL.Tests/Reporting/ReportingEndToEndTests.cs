@@ -505,6 +505,27 @@ CREATE BUTTON SearchButton AS (
             }
         }
 
+        [Theory]
+        [Trait("Category", "Smoke.Reporting")]
+        [InlineData("data_quality_health.rptsql", "Data Quality Health", 10)]
+        [InlineData("stewardship_scorecard.rptsql", "Stewardship Scorecard", 7)]
+        public async Task OperatorReportTemplates_RunThroughSharedReportRuntimeUnchanged(
+            string fileName, string expectedTitle, int expectedVisuals)
+        {
+            var repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(GetGoldenWorkflowPath())!, "..", ".."));
+            var scriptPath = Path.Combine(repoRoot, "samples", "08_Reporting", fileName);
+            await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+
+            var manifest = await service.GetManifestAsync();
+
+            Assert.Equal(expectedTitle, manifest.Title);
+            Assert.Equal(expectedVisuals, manifest.Visuals.Count);
+            Assert.Equal(2, manifest.Pages.Count);
+            var source = File.ReadAllText(scriptPath);
+            Assert.DoesNotContain("CREATE CONNECTION", source, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("EXECUTE PORTAL", source, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static IEnumerable<object[]> RepresentativeReportScripts()
         {
             yield return new object[]

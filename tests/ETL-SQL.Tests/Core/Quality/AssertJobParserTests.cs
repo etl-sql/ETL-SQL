@@ -132,6 +132,19 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_FailOnWarnOption()
+        {
+            var enabled = ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE) ON FAILURE NOTIFY hook;");
+            Assert.True(enabled.FailOnWarn);
+            Assert.Equal("hook", enabled.FailureNotification);
+            Assert.Contains("WITH (FAIL_ON_WARN = TRUE)", enabled.ToSql());
+
+            Assert.False(ParseAssertJob(
+                "ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = FALSE);").FailOnWarn);
+        }
+
+        [Fact]
         public void RetiredAlertClause_ReportsNotifyReplacement()
         {
             var ex = Assert.Throws<SyntaxException>(() =>
@@ -170,6 +183,8 @@ namespace ETL_SQL.Tests.Core.Quality
         [InlineData("ASSERT JOB j (ROW_COUNT > abc);")]                    // non-numeric bound
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE THROW;")]     // NOTIFY is required after ON FAILURE
         [InlineData("ASSERT JOB j (ROW_COUNT > 0) ON FAILURE NOTIFY a ON FAILURE NOTIFY b;")] // duplicate
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) WITH (UNKNOWN = TRUE);")]
+        [InlineData("ASSERT JOB j (ROW_COUNT > 0) WITH (FAIL_ON_WARN = 1);")]
         public void MalformedForms_AreSyntaxErrors(string sql)
         {
             Assert.Throws<SyntaxException>(() => ParseAssertJob(sql));

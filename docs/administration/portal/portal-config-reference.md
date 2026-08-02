@@ -29,6 +29,13 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "Operations": true,
       "Documentation": true
     },
+    "Studio": {
+      "Mode": "SourceControlled",
+      "RoleCapabilities": {
+        "Admin": [ "StudioAccess", "ScriptRead", "ScriptPreview", "ScriptRun", "ScriptSave", "ReportPublish", "ScriptIngress", "SourceCommit", "SourcePush" ],
+        "Publisher": [ "StudioAccess", "ScriptRead", "ScriptPreview", "ScriptRun", "ScriptSave", "ReportPublish", "ScriptIngress", "SourceCommit" ]
+      }
+    },
     "Resources": {
       "MaxConcurrentReportExecutions": 4,
       "MaxConcurrentExecutionsPerUser": 2,
@@ -125,7 +132,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `SourceControl.CommitterName` | `ETL-SQL Portal` | Git committer name for portal-generated commits. The author name is the logged-in portal user. |
 | `SourceControl.CommitterEmail` | `portal@localhost` | Git author/committer email for portal-generated commits. |
 | `Modules.Reporting` | `true` | Feature flag for the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
-| `Modules.Designer` | `true` | Feature flag for the browser report designer entry page and design-time APIs. Disabled routes return 404. |
+| `Modules.Designer` | `true` | Feature flag for the browser Studio home, report designer entry page, and design-time APIs. Disabled routes return 404. |
+| `Studio.Mode` | `CatalogOnly` | Server-side authoring mode: `Disabled`, `CatalogOnly`, or `SourceControlled`. The checked-in host configuration explicitly uses `SourceControlled`; an omitted setting uses the safer `CatalogOnly` mode. |
+| `Studio.RoleCapabilities` | *(empty)* | Case-insensitive role-to-capability grants. Empty mappings deny every Studio API even when the Designer module is enabled. |
 | `Modules.ConnectionCatalog` | `true` | Feature flag for shared connection catalog APIs and diagnostics. Disabled routes return 404. |
 | `Modules.SecretStore` | `true` | Feature flag for Portal-managed secret vault APIs and secret resolution. Disabled routes return 404. |
 | `Modules.Scheduling` | `true` | Feature flag for refresh scheduling and orchestrator polling when Reporting is also enabled. |
@@ -137,6 +146,30 @@ Certified module profiles include a gateway node (`Reporting=false`, `Designer=f
 reporting node (`Reporting=true`, `Designer=false`, `Scheduling=false`, `Operations=false`,
 `ConnectionCatalog=false`, `SecretStore=false`). Security, identity, audit, database migration, and
 node heartbeat services remain active in both profiles.
+
+### Studio deployment modes and capabilities
+
+- **`Disabled`** — The Studio entry page and every authoring endpoint return 404.
+- **`CatalogOnly`** — Catalog-backed read, preview, run, and save endpoints may be granted. External
+  script enumeration/upload, path-based publication, commit, and push endpoints return 404 even if
+  a role lists the corresponding capability. `/studio.html` lists only reports and folders where
+  the caller has catalog `Manage` authority; creating an active catalog report requires both
+  `ScriptSave` and `ReportPublish`, writes an internally generated script key, and never returns the
+  storage path to the browser.
+- **`SourceControlled`** — External script ingress and source-control operations may be granted in
+  addition to catalog operations. Source push remains separate from source commit.
+
+The server checks both mode and capability on every designer, script-content, ingress, publish, and
+source-control action. `Admin` and `Publisher` role names do not bypass these checks. Available
+capabilities are `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`,
+`ReportPublish`, `ScriptIngress`, `SourceCommit`, and `SourcePush`. Keep `SourcePush` restricted to a
+deployment identity or administrator role; when `SourceControl.PushOnSave=true`, a commit caller
+must hold both `SourceCommit` and `SourcePush`.
+
+The Studio navigation is hidden until `GET /api/studio/session` succeeds. The same server policy
+returns 404 for `/studio.html`, `/designer.html`, and every authoring API in `Disabled` mode, so the
+navigation state is not the security boundary. Code and Design are equal entry modes over the same
+catalog report and optimistic-concurrency version.
 
 | `Resources.MaxConcurrentReportExecutions` | `4` | How many report execution jobs can run simultaneously. |
 | `Resources.MaxConcurrentExecutionsPerUser` | `2` | Workload fairness: the most of the shared execution slots a single non-administrator may hold at once, so one user flooding the queue cannot starve everyone else. Keep it below `MaxConcurrentReportExecutions`; administrators are exempt. |

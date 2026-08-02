@@ -39,7 +39,7 @@ window.
 Restrict policy-authority administration to the smallest administrator group that can approve
 organization policy. Treat that role separately from routine report, subscription, and connection
 catalog administration. Policy publication can change filesystem roots, connector destinations,
-security-event delivery, and execution ceilings across enrolled machines; require peer review outside
+security-event delivery, execution ceilings, and report/dataset metadata requirements across enrolled machines; require peer review outside
 the product workflow if your organization has four-eyes controls. Every policy-authority mutation is
 audited through the Portal audit trail, including publish, activate, rollback, canary, machine
 registration, and machine revocation actions.
@@ -199,6 +199,31 @@ parallelism, file/recursion operations, spill volume, SMTP sends, and maximum ma
   }
 }
 ```
+
+Organization policy can also make catalog metadata a hard report-publishing boundary. Configure the
+Portal authority scope explicitly on every node with `Portal:PolicyAuthority:Tenant` and
+`Portal:PolicyAuthority:Environment` (both default to `default`). Required tags support `REPORT`,
+`DATASET`, and `COLUMN` scopes:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "requiredTags": [
+      { "tag": "@classification", "scopes": ["DATASET", "COLUMN"] },
+      { "tag": "@owner", "scopes": ["REPORT"] }
+    ]
+  }
+}
+```
+
+Before `POST /api/reports` or a script-replacing `PUT /api/reports/{id}` writes catalog state, the
+Portal verifies the active envelope with the configured policy-authority public key, parses lineage
+from the `.rptsql` file, and checks every declared dataset output. Missing report or dataset-column
+tags return `400 organization_metadata_policy`. An invalid, expired, wrong-tenant, or unverifiable
+active envelope also fails closed. This applies equally to local and federated publishers; the
+Enterprise certification lane specifically exercises the boundary with an OIDC-authenticated
+Publisher and confirms that a rejected request leaves no report row.
 
 Verified policy values are added after JSON, environment variables, command-line configuration, and
 test/deployment overrides, giving the authoritative enterprise policy final configuration precedence.

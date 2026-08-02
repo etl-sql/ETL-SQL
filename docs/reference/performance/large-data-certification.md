@@ -125,6 +125,23 @@ Remove-Item Env:\NEO4J_SCALE_ROWS
 .\scripts\Test-ScaleCertification.ps1 -Tier All
 ```
 
+For a commit-to-commit decision, use the same-worktree comparison harness instead of comparing
+reports from separate checkout directories:
+
+```powershell
+.\scripts\Test-ScaleCommitComparison.ps1 `
+  -BaselineRef v0.17.0 `
+  -CandidateRef HEAD `
+  -Tier Standard `
+  -Scenario StreamingSelect `
+  -Samples 3
+```
+
+The harness requires a clean tracked worktree because it switches both refs through the same
+directory. It interleaves A/B arms, rebuilds and discards a warm-up for every sample, restores the
+original branch in a `finally` block, and records within-arm spread beside the median delta. Use
+`-PlanOnly` to validate refs and view the sequence without switching commits.
+
 ### Environment Tuning
 
 Set `CERT_ROW_SCALE` environment variable or pass `-RowCountScale` to the script to scale row counts for the target machine profile. Script defaults are tier-specific: Smoke = 1.0, Standard = 10.0, Stress = 100.0.

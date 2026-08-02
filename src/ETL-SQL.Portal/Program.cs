@@ -101,6 +101,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.Portal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
 builder.Services.AddSingleton<PortalModuleRegistry>();
+builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();
 builder.Services.AddSingleton<ETL_SQL.Core.Services.ILanguageService, GrammarLanguageService>();
 
@@ -379,6 +380,7 @@ builder.Services.AddHttpClient<ETL_SQL.Portal.Services.AuditOutboxTransportServi
 })
     .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ConfigurationExportService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ConfigurationPromotionValidationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.OperationalMetricsService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalPrometheusMetricsExporter>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalPrometheusMetricsCache>();
@@ -398,6 +400,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =
 });
 builder.Services.AddScoped<ETL_SQL.Core.Governance.IPolicyAuthorityStore, ETL_SQL.Portal.Data.DbPolicyAuthorityStore>();
 builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportPublishingPolicyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryStatusService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionScriptService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionQueryService>();
@@ -801,10 +804,11 @@ app.Use(async (context, next) =>
         var isReportEntry = string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
             || string.Equals(path, "/index.html", StringComparison.OrdinalIgnoreCase);
         var isDesignerEntry = string.Equals(path, "/designer.html", StringComparison.OrdinalIgnoreCase);
+        var isStudioEntry = string.Equals(path, "/studio.html", StringComparison.OrdinalIgnoreCase);
         var isDocsEntry = string.Equals(path, "/docs.html", StringComparison.OrdinalIgnoreCase);
 
         if ((isReportEntry && !modules.IsEnabled("Reporting"))
-            || (isDesignerEntry && !modules.IsEnabled("Designer")))
+            || ((isDesignerEntry || isStudioEntry) && !modules.IsEnabled("Designer")))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;

@@ -1,0 +1,1179 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.13]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.45]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.46]   Starting:    ETL-SQL.Tests
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[e289911e] Evaluator initialized.
+[e289911e] [SELECT] Executing SelectStatement. Session: e289911e
+[e289911e] 1 rows affected.
+[e289911e] [SELECT] Executing SelectStatement. Session: e289911e
+[e289911e] 1 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[5ae99869] Evaluator initialized.
+[5ae99869] ASSERT JOB import: skipping QUARANTINE_PERCENT > 0.9 - the metric was not observed during this run.
+[5ae99869] ASSERT JOB import: skipping QUARANTINE_PERCENT > 0.9 - the metric was not observed during this run.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[6e7099db] Evaluator initialized.
+[6e7099db] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.74]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6e7099db' is denied.
+[xUnit.net 00:00:00.74]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_FailingPredicate_ThrowsWhenCritical [FAIL]
+[xUnit.net 00:00:00.74]       Stack Trace:
+[xUnit.net 00:00:00.74]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.74]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.74]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.74]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.74]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.74]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.74]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.74]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.74]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(40,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_FailingPredicate_ThrowsWhenCritical()
+[xUnit.net 00:00:00.74]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[2d9864d2] Evaluator initialized.
+[2d9864d2] [SELECT] Executing SelectStatement. Session: 2d9864d2
+[2d9864d2] 4 rows affected.
+[2d9864d2] [SELECT] Executing SelectStatement. Session: 2d9864d2
+[2d9864d2] 4 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[7796b6b5] Evaluator initialized.
+[7796b6b5] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.81]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Notification_NamesTheFailingColumnsAndTheirOwners [FAIL]
+[xUnit.net 00:00:00.81]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\7796b6b5' is denied.
+[xUnit.net 00:00:00.81]       Stack Trace:
+[xUnit.net 00:00:00.81]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.81]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.81]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.81]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.81]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.81]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.81]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.81]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.81]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(229,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Notification_NamesTheFailingColumnsAndTheirOwners()
+[xUnit.net 00:00:00.81]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[9c7c6c49] Evaluator initialized.
+[9c7c6c49] [SELECT] Executing SelectStatement. Session: 9c7c6c49
+[9c7c6c49] 2 rows affected.
+[9c7c6c49] [SELECT] Executing SelectStatement. Session: 9c7c6c49
+[9c7c6c49] 1 rows affected.
+[9c7c6c49] ASSERT JOB import failed 1 of 1 predicate(s): FRESHNESS(old_clean.EventTime) < '1 HOURS' (actual 207870409.4488)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[64a778ae] Evaluator initialized.
+[64a778ae] [SELECT] Executing SelectStatement. Session: 64a778ae
+[64a778ae] 4 rows affected.
+[64a778ae] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(clean.Email) WITHIN 0.05 OF HISTORICAL (actual 0.5, baseline 0.1, drift 4)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[08030b66] Evaluator initialized.
+[08030b66] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+  Passed ETL_SQL.Tests.App.QualityRunReporterTests.Evidence_IsVersionedCountsOnlyAndRedacted [38 ms]
+  Passed ETL_SQL.Tests.App.QualityRunReporterTests.Summary_IsStableAndDoesNotContainSamples [< 1 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_WrittenByTwoSinks_IsACleanAmbiguityError [149 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UnobservedMetric_IsSkipped_NotAssertedOnNothing [30 ms]
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_FailingPredicate_ThrowsWhenCritical [20 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6e7099db' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_FailingPredicate_ThrowsWhenCritical() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 40
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_IsCollectedWhenColumnarSelectIntoWouldOtherwiseApply [14 ms]
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Notification_NamesTheFailingColumnsAndTheirOwners [53 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\7796b6b5' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Notification_NamesTheFailingColumnsAndTheirOwners() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 229
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Freshness_ComparesAgeOfNewestObservedTimestamp [13 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercentHistorical_UsesColumnMetricHistory [14 ms]
+[xUnit.net 00:00:00.87]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_PassesWhenUnderTheBound [FAIL]
+[xUnit.net 00:00:00.87]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\08030b66' is denied.
+[xUnit.net 00:00:00.87]       Stack Trace:
+[xUnit.net 00:00:00.87]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.87]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.87]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.87]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.87]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.87]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.87]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.87]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.87]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(31,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_PassesWhenUnderTheBound()
+[xUnit.net 00:00:00.87]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[6df23b5c] Evaluator initialized.
+[6df23b5c] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.88]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.ZeroSigma_FallsBackToARelativeBand_NotEquality [FAIL]
+[xUnit.net 00:00:00.88]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6df23b5c' is denied.
+[xUnit.net 00:00:00.88]       Stack Trace:
+[xUnit.net 00:00:00.88]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.88]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.88]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.88]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.88]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.88]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.88]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.88]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.89]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.89]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.89]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.89]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.89]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(270,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.ZeroSigma_FallsBackToARelativeBand_NotEquality()
+[xUnit.net 00:00:00.89]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[ebdfdf62] Evaluator initialized.
+[ebdfdf62] Notification 'alerts' created.
+[ebdfdf62] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.97]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingAssert_PostsASummaryThroughTheNotification [FAIL]
+[xUnit.net 00:00:00.97]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ebdfdf62' is denied.
+[xUnit.net 00:00:00.97]       Stack Trace:
+[xUnit.net 00:00:00.97]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.97]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.97]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.97]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.97]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.97]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.97]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.97]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.97]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(411,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingAssert_PostsASummaryThroughTheNotification()
+[xUnit.net 00:00:00.97]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[7623607e] Evaluator initialized.
+[7623607e] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.98]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingPredicate_WithoutCritical_DoesNotThrow [FAIL]
+[xUnit.net 00:00:00.98]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\7623607e' is denied.
+[xUnit.net 00:00:00.98]       Stack Trace:
+[xUnit.net 00:00:00.98]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.98]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.98]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.98]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.98]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.98]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.98]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.98]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.98]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(53,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingPredicate_WithoutCritical_DoesNotThrow()
+[xUnit.net 00:00:00.98]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[14675a6d] Evaluator initialized.
+[14675a6d] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:00.99]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_ColdStart_SkipsWithWarning_NoAlertStorm [FAIL]
+[xUnit.net 00:00:00.99]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\14675a6d' is denied.
+[xUnit.net 00:00:00.99]       Stack Trace:
+[xUnit.net 00:00:00.99]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:00.99]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:00.99]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:00.99]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.99]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.99]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:00.99]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:00.99]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:00.99]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(355,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_ColdStart_SkipsWithWarning_NoAlertStorm()
+[xUnit.net 00:00:00.99]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[859a3e98] Evaluator initialized.
+[859a3e98] [SELECT] Executing SelectStatement. Session: 859a3e98
+[859a3e98] 1 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[0293ce3c] Evaluator initialized.
+[0293ce3c] [SELECT] Executing SelectStatement. Session: 0293ce3c
+[0293ce3c] Data quality: 1 row(s) failed rule "NOT NULL" on column 'Id' [WARN]. Sample values: NULL
+[0293ce3c] 1 rows affected.
+[0293ce3c] ASSERT JOB import failed 1 of 1 predicate(s): FAIL_ON_WARN = TRUE (1 warned row(s))
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[62b07259] Evaluator initialized.
+[62b07259] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.03]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\62b07259' is denied.
+[xUnit.net 00:00:01.03]       Stack Trace:
+[xUnit.net 00:00:01.03]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_ComparesAgainstTelemetryRows [FAIL]
+[xUnit.net 00:00:01.03]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.03]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.03]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.03]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.03]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.03]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.03]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.03]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.03]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(63,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_ComparesAgainstTelemetryRows()
+[xUnit.net 00:00:01.03]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[cbfa849e] Evaluator initialized.
+[cbfa849e] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.05]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_BaselineIsTheMeanOfRecentRuns [FAIL]
+[xUnit.net 00:00:01.05]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\cbfa849e' is denied.
+[xUnit.net 00:00:01.05]       Stack Trace:
+[xUnit.net 00:00:01.06]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.06]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.06]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.06]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.06]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.06]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.06]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.06]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.06]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(398,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_BaselineIsTheMeanOfRecentRuns()
+[xUnit.net 00:00:01.06]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[ccfbe252] Evaluator initialized.
+[ccfbe252] Notification 'alerts' created.
+[ccfbe252] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.10]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ccfbe252' is denied.
+[xUnit.net 00:00:01.10]       Stack Trace:
+[xUnit.net 00:00:01.10]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery [FAIL]
+[xUnit.net 00:00:01.10]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.10]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.10]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.10]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.10]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.10]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.10]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.10]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(568,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RunAssertWithRows(FakeMetricsProvider provider, CapturingSink sink, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.10]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(441,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery()
+[xUnit.net 00:00:01.10]         --- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_PassesWhenUnderTheBound [14 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\08030b66' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_PassesWhenUnderTheBound() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 31
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.ZeroSigma_FallsBackToARelativeBand_NotEquality [14 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6df23b5c' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.ZeroSigma_FallsBackToARelativeBand_NotEquality() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 270
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingAssert_PostsASummaryThroughTheNotification [80 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ebdfdf62' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingAssert_PostsASummaryThroughTheNotification() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 411
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingPredicate_WithoutCritical_DoesNotThrow [10 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\7623607e' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingPredicate_WithoutCritical_DoesNotThrow() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 53
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_ColdStart_SkipsWithWarning_NoAlertStorm [9 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\14675a6d' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_ColdStart_SkipsWithWarning_NoAlertStorm() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 355
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailOnWarn_ProducesExecutionFailureOnlyWhenWarnRowsExist [31 ms]
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_ComparesAgainstTelemetryRows [10 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\62b07259' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_ComparesAgainstTelemetryRows() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 63
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_BaselineIsTheMeanOfRecentRuns [20 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\cbfa849e' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_BaselineIsTheMeanOfRecentRuns() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 398
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery [42 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ccfbe252' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RunAssertWithRows(FakeMetricsProvider provider, CapturingSink sink, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 568
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 441
+--- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[1e8360fd] Evaluator initialized.
+[1e8360fd] Notification 'alerts' created.
+[1e8360fd] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.15]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.PassingAssert_SendsNoAlert [FAIL]
+[xUnit.net 00:00:01.15]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\1e8360fd' is denied.
+[xUnit.net 00:00:01.15]       Stack Trace:
+[xUnit.net 00:00:01.15]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.15]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.15]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.15]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.15]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.15]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.15]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.15]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.15]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(428,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.PassingAssert_SendsNoAlert()
+[xUnit.net 00:00:01.15]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[28e3d794] Evaluator initialized.
+[28e3d794] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.16]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithProviderButNoRecordedRuns_ColdStarts_RatherThanErroring [FAIL]
+[xUnit.net 00:00:01.16]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\28e3d794' is denied.
+[xUnit.net 00:00:01.16]       Stack Trace:
+[xUnit.net 00:00:01.16]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.16]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.16]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.16]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.16]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.16]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.16]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.16]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.16]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(332,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithProviderButNoRecordedRuns_ColdStarts_RatherThanErroring()
+[xUnit.net 00:00:01.16]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[e0b44439] Evaluator initialized.
+[e0b44439] [SELECT] Executing SelectStatement. Session: e0b44439
+[e0b44439] 0 rows affected.
+[e0b44439] ASSERT JOB import failed 1 of 1 predicate(s): ROW_COUNT > 0 (actual 0)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[aa61ea09] Evaluator initialized.
+[aa61ea09] [SELECT] Executing SelectStatement. Session: aa61ea09
+[aa61ea09] 3 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[ba8929dd] Evaluator initialized.
+[ba8929dd] Notification 'alerts' created.
+[ba8929dd] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.24]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationPayload_CarriesCountsOnly_NoSampleValues [FAIL]
+[xUnit.net 00:00:01.24]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ba8929dd' is denied.
+[xUnit.net 00:00:01.24]       Stack Trace:
+[xUnit.net 00:00:01.24]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.24]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.24]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.24]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.24]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.24]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.24]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.24]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.24]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(511,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationPayload_CarriesCountsOnly_NoSampleValues()
+[xUnit.net 00:00:01.24]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[f8d85e56] Evaluator initialized.
+[f8d85e56] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.26]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.CollectorBackedPredicates_StillWorkWithoutAnyHistoryProvider [FAIL]
+[xUnit.net 00:00:01.26]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\f8d85e56' is denied.
+[xUnit.net 00:00:01.26]       Stack Trace:
+[xUnit.net 00:00:01.26]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.26]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.26]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.26]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.26]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.26]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.26]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.26]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.26]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(341,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.CollectorBackedPredicates_StillWorkWithoutAnyHistoryProvider()
+[xUnit.net 00:00:01.26]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[65c3d8de] Evaluator initialized.
+[65c3d8de] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.27]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\65c3d8de' is denied.
+[xUnit.net 00:00:01.27]       Stack Trace:
+[xUnit.net 00:00:01.27]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.27]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithinTolerance_Passes [FAIL]
+[xUnit.net 00:00:01.27]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.27]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.27]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.27]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.27]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.27]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.27]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.27]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(368,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithinTolerance_Passes()
+[xUnit.net 00:00:01.27]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[6682556e] Evaluator initialized.
+[6682556e] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.29]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UndefinedNotification_IsLoggedNotFatal [FAIL]
+[xUnit.net 00:00:01.29]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6682556e' is denied.
+[xUnit.net 00:00:01.29]       Stack Trace:
+[xUnit.net 00:00:01.29]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.29]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.29]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.29]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.29]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.29]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.29]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.29]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.29]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(475,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UndefinedNotification_IsLoggedNotFatal()
+[xUnit.net 00:00:01.29]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[a85e89fb] Evaluator initialized.
+[a85e89fb] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.30]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_OutsideTolerance_Fails_WithBaselineInTheMessage [FAIL]
+[xUnit.net 00:00:01.30]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\a85e89fb' is denied.
+[xUnit.net 00:00:01.30]       Stack Trace:
+[xUnit.net 00:00:01.30]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.30]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.30]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.30]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.30]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.30]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.30]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.30]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.30]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(382,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_OutsideTolerance_Fails_WithBaselineInTheMessage()
+[xUnit.net 00:00:01.30]         --- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.PassingAssert_SendsNoAlert [42 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\1e8360fd' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.PassingAssert_SendsNoAlert() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 428
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithProviderButNoRecordedRuns_ColdStarts_RatherThanErroring [15 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\28e3d794' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithProviderButNoRecordedRuns_ColdStarts_RatherThanErroring() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 332
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_FailsForEmptyUntaggedLoad [9 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_WorksForUntaggedLoads [9 ms]
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationPayload_CarriesCountsOnly_NoSampleValues [52 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\ba8929dd' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationPayload_CarriesCountsOnly_NoSampleValues() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 511
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.CollectorBackedPredicates_StillWorkWithoutAnyHistoryProvider [18 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\f8d85e56' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.CollectorBackedPredicates_StillWorkWithoutAnyHistoryProvider() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 341
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithinTolerance_Passes [14 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\65c3d8de' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithinTolerance_Passes() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 368
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UndefinedNotification_IsLoggedNotFatal [15 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\6682556e' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UndefinedNotification_IsLoggedNotFatal() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 475
+--- End of stack trace from previous location ---
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_OutsideTolerance_Fails_WithBaselineInTheMessage [11 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\a85e89fb' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_OutsideTolerance_Fails_WithBaselineInTheMessage() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 382
+--- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[f5569db8] Evaluator initialized.
+[f5569db8] Notification 'alerts' created.
+[f5569db8] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.36]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails [FAIL]
+[xUnit.net 00:00:01.36]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\f5569db8' is denied.
+[xUnit.net 00:00:01.36]       Stack Trace:
+[xUnit.net 00:00:01.36]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.36]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.36]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.36]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.36]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.36]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.36]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.36]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.36]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(459,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails()
+[xUnit.net 00:00:01.36]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[28662ed0] Evaluator initialized.
+[28662ed0] [SELECT] Executing SelectStatement. Session: 28662ed0
+[28662ed0] 4 rows affected.
+[28662ed0] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(clean.Email) WITHIN 2 SIGMA OF HISTORICAL (actual 1, baseline 0.1, sigma 0.01, distance 0.9)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[fb4a4ef6] Evaluator initialized.
+[fb4a4ef6] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[xUnit.net 00:00:01.39]       System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\fb4a4ef6' is denied.
+[xUnit.net 00:00:01.39]       Stack Trace:
+[xUnit.net 00:00:01.39]     ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithoutAProvider_FailsWithAClearMessage [FAIL]
+[xUnit.net 00:00:01.39]            at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+[xUnit.net 00:00:01.39]            at System.IO.Directory.CreateDirectory(String path)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0()
+[xUnit.net 00:00:01.39]            at System.Threading.Tasks.Task`1.InnerInvoke()
+[xUnit.net 00:00:01.39]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.39]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.39]            at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+[xUnit.net 00:00:01.39]            at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+[xUnit.net 00:00:01.39]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs(41,0): at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync()
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs(107,0): at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs(40,0): at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1461,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1128,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1187,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(546,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(557,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows)
+[xUnit.net 00:00:01.39]         C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs(318,0): at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithoutAProvider_FailsWithAClearMessage()
+[xUnit.net 00:00:01.39]         --- End of stack trace from previous location ---
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[baa381e6] Evaluator initialized.
+[baa381e6] [SELECT] Executing SelectStatement. Session: baa381e6
+[baa381e6] 2 rows affected.
+[baa381e6] [SELECT] Executing SelectStatement. Session: baa381e6
+[baa381e6] 2 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[f7f95f3c] Evaluator initialized.
+[f7f95f3c] [SELECT] Executing SelectStatement. Session: f7f95f3c
+[f7f95f3c] 2 rows affected.
+[f7f95f3c] [SELECT] Executing SelectStatement. Session: f7f95f3c
+[f7f95f3c] 2 rows affected.
+[f7f95f3c] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(out_b.Email) < 0.5 (actual 1)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[2fce0ecd] Evaluator initialized.
+[2fce0ecd] [SELECT] Executing SelectStatement. Session: 2fce0ecd
+[2fce0ecd] 4 rows affected.
+[2fce0ecd] [SELECT] Executing SelectStatement. Session: 2fce0ecd
+[2fce0ecd] 4 rows affected.
+[xUnit.net 00:00:01.43]   Finished:    ETL-SQL.Tests
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails [53 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\f5569db8' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 459
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercentHistorical_WithinSigmaFailsOutsideBand [14 ms]
+  Failed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithoutAProvider_FailsWithAClearMessage [12 ms]
+  Error Message:
+   System.UnauthorizedAccessException : Access to the path 'C:\Users\chuck\AppData\Local\ETL-SQL\Sessions\fb4a4ef6' is denied.
+  Stack Trace:
+     at System.IO.FileSystem.CreateDirectory(String fullPath, Byte[] securityDescriptor)
+   at System.IO.Directory.CreateDirectory(String path)
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.<>c__DisplayClass6_0.<InitializeAsync>b__0() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at System.Threading.Tasks.Task`1.InnerInvoke()
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at ETL_SQL.Core.Execution.SqliteSessionMetadataStore.InitializeAsync() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\SqliteSessionMetadataStore.cs:line 41
+   at ETL_SQL.Engine.Services.SessionStateManager.SaveSession(String sessionId, Object evaluatorObj, String scriptSource) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Services\SessionStateManager.cs:line 107
+   at ETL_SQL.Engine.Handlers.SectionLabelStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\SectionLabelStatementHandler.cs:line 40
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1461
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1128
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1187
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Run(Evaluator eval, String sql) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 546
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.LoadWithQuarantine(Evaluator eval, Int32 rows, Int32 badRows) in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 557
+   at ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithoutAProvider_FailsWithAClearMessage() in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\Engine\AssertJobRuntimeTests.cs:line 318
+--- End of stack trace from previous location ---
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QualifiedNullPercent_DisambiguatesMultipleSinks [25 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_UsesTheInStreamColumnTally [11 ms]
+
+Test Run Failed.
+Total tests: 32
+     Passed: 13
+     Failed: 19
+ Total time: 1.7963 Seconds

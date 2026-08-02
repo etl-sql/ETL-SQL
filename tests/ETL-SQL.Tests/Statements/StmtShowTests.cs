@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Statements.Statements
     /// </summary>
     public class ShowStatementTests
     {
-        private static Evaluator NewEval(IJobHistoryStore? mockStore = null)
+        private static Evaluator NewEval(IJobHistoryStore? mockStore = null, ILineageCatalogStore? lineageStore = null)
         {
             var services = new ServiceCollection();
             
@@ -47,6 +47,12 @@ namespace ETL_SQL.Tests.Statements.Statements
                 var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IJobHistoryStore));
                 if (descriptor != null) services.Remove(descriptor);
                 services.AddSingleton<IJobHistoryStore>(mockStore);
+            }
+            if (lineageStore != null)
+            {
+                var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ILineageCatalogStore));
+                if (descriptor != null) services.Remove(descriptor);
+                services.AddSingleton<ILineageCatalogStore>(lineageStore);
             }
             
             return services.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -333,6 +339,10 @@ WHERE connection_name = 'cfg_conn';";
         [Theory]
         [InlineData("eng.jobs", "name")]
         [InlineData("eng.job_history", "job_name")]
+        [InlineData("eng.data_quality_status", "failed_rule_count")]
+        [InlineData("eng.data_quality_failures", "failure_count")]
+        [InlineData("eng.stewardship_score", "definition_version")]
+        [InlineData("eng.stewardship_gaps", "requirement")]
         [InlineData("eng.job_state", "state_key")]
         [InlineData("eng.host_metrics", "node_id")]
         [InlineData("eng.bundles", "bundle_name")]
@@ -394,8 +404,55 @@ WHERE connection_name = 'cfg_conn';";
             var eval = NewEval(mockStore.Object);
             await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.job_history;"));
 
-            var expectedCols = new[] { "id", "job_name", "start_time", "end_time", "status", "rows_processed", "peak_ram_mb", "cpu_time_s", "error_message" };
+            var expectedCols = new[] { "id", "job_name", "start_time", "end_time", "status", "rows_processed", "rows_warned", "rows_quarantined", "failed_rule_counts", "peak_ram_mb", "cpu_time_s", "error_message" };
             Assert.Equal(expectedCols, eval.LastResult!.ColumnNames.ToArray());
+        }
+
+        [Fact]
+        public async Task EngDataQualityStatus_UsesCanonicalPersistedRunIdentityAndStatus()
+        {
+            var mockStore = new Mock<IJobHistoryStore>();
+            mockStore.Setup(s => s.GetDataQualityStatusesAsync(It.IsAny<int>())).ReturnsAsync(
+            [
+                new JobDataQualityStatus("42", "customers", new DateTime(2026, 1, 1),
+                    new DateTime(2026, 1, 1, 0, 1, 0), "FAILED", 100, 5, 2, 2, null,
+                    "NOT_TRACKED", "sanitized")
+            ]);
+            var eval = NewEval(mockStore.Object);
+
+            await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.data_quality_status;"));
+
+            var persisted = Assert.Single(eval.LastResult!.Rows, r => r["source"]?.ToString() == "ORCHESTRATOR");
+            Assert.Equal("42", persisted["run_id"]?.ToString());
+            Assert.Equal("FAILED", persisted["status"]?.ToString());
+            Assert.Equal(5d, Convert.ToDouble(persisted["warn_percent"]));
+        }
+
+        [Fact]
+        public async Task StewardshipScoreAndGaps_ReconcileFromTheSameCurrentLineage()
+        {
+            var lineageStore = new Mock<ILineageCatalogStore>();
+            lineageStore.Setup(s => s.GetRecentLineageAsync(It.IsAny<int>()))
+                .ReturnsAsync(Array.Empty<LineageHistoryEntry>());
+            var eval = NewEval(lineageStore: lineageStore.Object);
+            eval.CurrentScriptPath = Path.Combine(Path.GetTempPath(), "pipelines", "customers.etlsql");
+            await eval.Evaluate(TestHelpers.Parse(@"
+                CREATE TABLE #src (Email VARCHAR(100));
+                SELECT Email /* @pii: true */ INTO #customers FROM #src;
+                SELECT * FROM eng.stewardship_score;"));
+            var scores = eval.LastResult!.Rows.Where(r => r["scope_type"]?.ToString() == "GLOBAL").ToList();
+
+            await eval.Evaluate(TestHelpers.Parse("SELECT * FROM eng.stewardship_gaps;"));
+            var gaps = eval.LastResult!.Rows.Where(r => r["scope_type"]?.ToString() == "GLOBAL").ToList();
+
+            Assert.All(scores, score => Assert.Equal(
+                Convert.ToInt32(score["denominator"]) - Convert.ToInt32(score["numerator"]),
+                gaps.Count(g => g["component"]?.ToString() == score["component"]?.ToString())));
+            Assert.All(gaps, gap =>
+            {
+                Assert.NotNull(gap["source_file"]);
+                Assert.True(Convert.ToInt32(gap["line"]) > 0);
+            });
         }
 
         [Fact]

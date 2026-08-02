@@ -12,6 +12,27 @@ namespace ETL_SQL.Tests.Orchestration
     public class CliOrchestratorTests
     {
         [Fact]
+        public async Task CliOrchestrator_RunParsesQualityEvidenceOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exitCode = await root.Parse(new[]
+            {
+                "run", "pipeline.etlsql", "--quality-summary", "--output-json", "evidence/run.json"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exitCode);
+            Assert.NotNull(capturedContext);
+            Assert.True(capturedContext.QualitySummary);
+            Assert.Equal("evidence/run.json", capturedContext.OutputJsonPath);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_ParsesPerfFlag()
         {
             CliContext? capturedContext = null;
@@ -320,6 +341,110 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.Equal("enterprise-unenroll", capturedContext!.Command);
             Assert.True(capturedContext.EnterpriseConfirm);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ScanParsesSchemaOnlyOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exitCode = await root.Parse(new[]
+            {
+                "scan", "SHARED:warehouse", "--pii", "--table", "sales.customers", "--json"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exitCode);
+            Assert.NotNull(capturedContext);
+            Assert.Equal("scan", capturedContext.Command);
+            Assert.Equal("SHARED:warehouse", capturedContext.ScanSource);
+            Assert.Equal("sales.customers", capturedContext.ScanTable);
+            Assert.True(capturedContext.ScanPii);
+            Assert.True(capturedContext.IsJsonMode);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminPromotionPreflightParsesProfilesAndPaths()
+        {
+            CliContext? parsed = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                parsed = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(new[]
+            {
+                "admin", "promotion", "preflight",
+                "--source", "workspace",
+                "--from-profile", "Solo",
+                "--to-profile", "Team",
+                "--output", "preflight.json"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(parsed);
+            Assert.Equal("admin-promotion-preflight", parsed.Command);
+            Assert.Equal("workspace", parsed.PromotionSource);
+            Assert.Equal("Solo", parsed.PromotionFromProfile);
+            Assert.Equal("Team", parsed.PromotionToProfile);
+            Assert.Equal("preflight.json", parsed.PromotionOutput);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminPromotionValidateParsesPackageBindingsAndReport()
+        {
+            CliContext? parsed = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                parsed = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(new[]
+            {
+                "admin", "promotion", "validate", "--package", "promotion.json",
+                "--bind", "SHARED:dev=SHARED:prod", "--output", "validation.json"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(parsed);
+            Assert.Equal("admin-promotion-validate", parsed.Command);
+            Assert.Equal("promotion.json", parsed.PromotionPackage);
+            Assert.Equal(["SHARED:dev=SHARED:prod"], parsed.PromotionBindings);
+            Assert.Equal("validation.json", parsed.PromotionOutput);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_SaasOnboardParsesTenantBoundaryOptions()
+        {
+            CliContext? parsed = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                parsed = ctx;
+                return Task.FromResult(0);
+            });
+
+            var exit = await root.Parse(new[]
+            {
+                "admin", "promotion", "saas-onboard", "--tenant", "tenant-alpha",
+                "--source-profile", "Solo", "--source", "workspace", "--package", "promotion.json",
+                "--output-root", "tenants", "--max-concurrent-jobs", "3", "--max-storage-mb", "2048",
+                "--max-report-sessions", "9"
+            }).InvokeAsync();
+
+            Assert.Equal(0, exit);
+            Assert.NotNull(parsed);
+            Assert.Equal("admin-promotion-saas-onboard", parsed.Command);
+            Assert.Equal("tenant-alpha", parsed.SaasTenantId);
+            Assert.Equal("Solo", parsed.SaasSourceProfile);
+            Assert.Equal(3, parsed.SaasMaxConcurrentJobs);
+            Assert.Equal(2048, parsed.SaasMaxStorageMb);
+            Assert.Equal(9, parsed.SaasMaxReportSessions);
         }
 
         [Theory]

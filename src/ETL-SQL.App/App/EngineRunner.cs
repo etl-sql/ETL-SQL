@@ -83,6 +83,11 @@ namespace ETL_SQL.App
                 return 0;
             }
 
+            if (ctx.Command == "scan")
+            {
+                return await PiiSchemaScanner.RunAsync(ctx, logger, registry, CancellationToken.None);
+            }
+
             if (ctx.Command == "serve")
             {
                 return await ServeReport(ctx, logger);
@@ -138,6 +143,21 @@ namespace ETL_SQL.App
                 return await DatabaseMigrationService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-promotion-preflight")
+            {
+                return await DeploymentPromotionPreflightService.RunAsync(ctx, logger);
+            }
+
+            if (ctx.Command is "admin-promotion-export" or "admin-promotion-validate" or "admin-promotion-import")
+            {
+                return await DeploymentPromotionPackageAdminService.RunAsync(ctx, logger);
+            }
+
+            if (ctx.Command == "admin-promotion-saas-onboard")
+            {
+                return await SaasTenantOnboardingService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
             {
                 return await HaSoakAdminService.RunAsync(ctx, logger);
@@ -180,6 +200,8 @@ namespace ETL_SQL.App
                 if (ctx.ScriptFile == null || !ctx.ScriptFile.Exists)
                 {
                     logger.WriteLine($"File not found: {ctx.ScriptFile?.FullName}", ConsoleColor.Red);
+                    if (ctx.ScriptFile != null)
+                        await EmitQualityEvidenceAsync(ctx, null, 1, "FAILED", "Script file was not found.");
                     return 1;
                 }
 
@@ -207,6 +229,21 @@ namespace ETL_SQL.App
                 }
 
                 string source = File.ReadAllText(ctx.ScriptFile.FullName);
+
+                var workspacePolicyPath = WorkspacePolicyLoader.Find(ctx.ScriptFile.DirectoryName ?? Environment.CurrentDirectory);
+                if (workspacePolicyPath != null)
+                {
+                    var workspacePolicy = WorkspacePolicyLoader.Load(workspacePolicyPath);
+                    if (!workspacePolicy.IsValid)
+                    {
+                        foreach (var diagnostic in workspacePolicy.Diagnostics)
+                            logger.WriteLine($"Workspace policy error at {diagnostic.Path}:{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}", ConsoleColor.Red);
+                        await EmitQualityEvidenceAsync(ctx, null, 1, "FAILED", "Workspace policy validation failed.");
+                        return 1;
+                    }
+                    if (ctx.IsVerbose)
+                        logger.WriteLine($"Workspace policy: {workspacePolicy.Path} (schema {workspacePolicy.Policy!.SchemaVersion})", ConsoleColor.DarkGray);
+                }
 
                 long startMem = GC.GetTotalMemory(true);
 
@@ -242,6 +279,7 @@ namespace ETL_SQL.App
                             logger.WriteLine($"  - Line {err.Line}, Col {err.Column}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
+                    await EmitQualityEvidenceAsync(ctx, null, 1, "FAILED", "Script parsing failed.");
                     return 1;
                 }
 
@@ -296,6 +334,7 @@ namespace ETL_SQL.App
                             logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
+                    await EmitQualityEvidenceAsync(ctx, null, 1, "FAILED", "Script linting failed.");
                     return 1;
                 }
 
@@ -624,6 +663,8 @@ namespace ETL_SQL.App
                         logger.WriteLine($"Rows affected: {evaluator.Telemetry.RowsProcessed}");
                     }
 
+                    await EmitQualityEvidenceAsync(ctx, evaluator, 0, "COMPLETED", null);
+
                     if (evaluator.DockerManager.HasActiveContainers)
                     {
                         if (ctx.IsJsonMode)
@@ -657,7 +698,8 @@ namespace ETL_SQL.App
                             dataQualityFailures = evaluator.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
-                            dataQualityColumnMetrics = evaluator.DataQuality.ColumnMetrics
+                            dataQualityColumnMetrics = evaluator.DataQuality.ColumnMetrics,
+                            dataQualityRuleFailures = evaluator.DataQuality.FailureMetrics
                         }));
                     }
 
@@ -681,6 +723,7 @@ namespace ETL_SQL.App
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
                             await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
+                            await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
                         }
                         catch (Exception ex)
                         {
@@ -727,7 +770,8 @@ namespace ETL_SQL.App
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
-                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics
+                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
+                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics
                         }));
                     }
                     else
@@ -756,11 +800,15 @@ namespace ETL_SQL.App
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
                             if (evaluator != null)
+                            {
                                 await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
+                                await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
+                            }
                         }
                         catch { }
                     }
 
+                    await EmitQualityEvidenceAsync(ctx, evaluator, 1, "FAILED", ex.Message);
                     return 1;
                 }
                 catch (Exception ex)
@@ -779,7 +827,8 @@ namespace ETL_SQL.App
                             dataQualityFailures = evaluator?.DataQuality.TotalFailures > 0
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
-                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics
+                            dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
+                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics
                         }));
                     }
                     else
@@ -807,11 +856,15 @@ namespace ETL_SQL.App
                                     ? evaluator.DataQuality.ToHistoryPayload()
                                     : null);
                             if (evaluator != null)
+                            {
                                 await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
+                                await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
+                            }
                         }
                         catch { }
                     }
 
+                    await EmitQualityEvidenceAsync(ctx, evaluator, 1, "FAILED", ex.Message);
                     return 1;
                 }
                 finally
@@ -822,6 +875,29 @@ namespace ETL_SQL.App
 
             logger.WriteLine($"Unknown command: {ctx.Command}", ConsoleColor.Red);
             return 1;
+        }
+
+        private static async Task EmitQualityEvidenceAsync(
+            CliContext ctx,
+            Evaluator? evaluator,
+            int exitCode,
+            string status,
+            string? error)
+        {
+            if (!ctx.QualitySummary && string.IsNullOrWhiteSpace(ctx.OutputJsonPath)) return;
+            if (ctx.ScriptFile == null) return;
+
+            var evidence = QualityRunReporter.Create(
+                ctx.ScriptFile.FullName,
+                exitCode,
+                status,
+                evaluator?.Telemetry.RowsProcessed ?? 0,
+                evaluator?.DataQuality,
+                error);
+            if (ctx.QualitySummary && !ctx.IsSilentMode)
+                QualityRunReporter.WriteSummary(Console.Out, evidence);
+            if (!string.IsNullOrWhiteSpace(ctx.OutputJsonPath))
+                await QualityRunReporter.WriteAsync(ctx.OutputJsonPath, evidence);
         }
 
         internal static async Task<int> RunDoctor(CliContext ctx, ILogger logger)

@@ -801,7 +801,7 @@ namespace ETL_SQL.Connectors.Portal
             if (!string.IsNullOrEmpty(parentPath))
                 parentId = await LookupFolderIdAsync(parentPath);
 
-            var req = new { Name = name, ParentId = parentId };
+            var req = new { Name = name, ParentId = parentId, OwnerUsername = stmt.CatalogOwner };
             await CallAsync(HttpMethod.Post, "api/folders", req,
                 $"Folder '{stmt.Path}' created.");
         }
@@ -863,7 +863,8 @@ namespace ETL_SQL.Connectors.Portal
                 FolderId = folderId,
                 Name = stmt.ReportName,
                 ScriptPath = stmt.ScriptPath,
-                Description = stmt.Description
+                Description = stmt.Description,
+                CreatedByUsername = stmt.CatalogOwner
             };
             await CallAsync(HttpMethod.Post, "api/reports", req,
                 $"Report '{stmt.ReportName}' published to '{stmt.FolderPath}'.");

@@ -1,0 +1,36 @@
+-- One-person quality loop: script-first tags, row rules, quarantine, and a run-level gate.
+-- Run from the repository root:
+--   etl-sql run samples/quality-loop/customer_quality.etlsql --quality-summary
+
+CREATE TABLE #incoming_customers (
+  CustomerId INT,
+  Email STRING,
+  UpdatedAt DATETIME
+);
+
+INSERT INTO #incoming_customers (CustomerId, Email, UpdatedAt) VALUES
+  (1, 'ana@example.test', '2026-08-02 12:00:00'),
+  (2, 'ben@example.test', '2026-08-02 12:05:00');
+
+customer_quality_load:
+SELECT
+  CustomerId /* @owner: 'solo-operator'; @steward: 'solo-operator';
+                @contact: 'ops@example.test'; @classification: 'internal'; @quality: 'gold';
+                @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
+  Email /* @owner: 'solo-operator'; @steward: 'solo-operator';
+           @contact: 'ops@example.test'; @classification: 'restricted'; @quality: 'gold';
+           @pii: true; @expect: 'MATCHES ^[^@]+@[^@]+\.[^@]+$'; @fail: 'QUARANTINE'; */,
+  UpdatedAt /* @owner: 'solo-operator'; @steward: 'solo-operator';
+               @contact: 'ops@example.test'; @classification: 'internal'; @quality: 'gold';
+               @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+INTO #clean_customers
+FROM #incoming_customers
+ON FAILURE QUARANTINE TO #customer_quarantine;
+
+ASSERT JOB customer_quality (
+  ROW_COUNT > 0,
+  QUARANTINE_PERCENT < 0.01
+)
+ON CRITICAL_FAILURE THROW;
+
+SELECT COUNT(*) AS CleanRows FROM #clean_customers;

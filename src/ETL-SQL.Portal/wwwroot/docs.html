@@ -55,11 +55,12 @@
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu">☰</button>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html">Reports</a>
       <a href="/index.html#governance">Governance</a>
+      <a href="/studio.html" id="studioNav" style="display:none">Studio</a>
       <a href="/docs.html" class="active">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
@@ -98,7 +99,7 @@
     </aside>
 
     <!-- Main Content Area -->
-    <main class="main-content" id="mainContent" style="padding: 24px 32px; overflow-y: auto;">
+    <main class="main-content docs-main-content" id="mainContent" style="padding: 24px 32px; overflow-y: auto;">
       <article id="document" class="card docs-article" style="margin: 0 auto; padding: 32px;">
         <p class="docs-empty">Select a documentation topic or search the dictionary.</p>
       </article>
@@ -112,23 +113,16 @@
 </div>
 
 <script type="module">
-  import { auth } from '/js/api.js?v=0.17.0';
+  import { auth, studioApi } from '/js/api.js?v=0.17.0';
   import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
+  import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 
   initTheme();
   applyPortalBranding();
 
   if (auth.isLoggedIn()) {
-    const token = auth.getToken();
-    let payload = {};
-    if (token) {
-      try {
-        payload = JSON.parse(atob(token.split('.')[1]));
-      } catch {}
-    }
-
-    const userEl = document.getElementById('topbarUser');
-    if (userEl) userEl.textContent = payload.sub || payload.unique_name || payload.name || '';
+    const identity = getSessionIdentity(auth.getToken());
+    renderSessionIdentity(identity, document.getElementById('topbarUser'));
 
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
@@ -136,17 +130,15 @@
       logoutBtn.addEventListener('click', () => auth.logout());
     }
 
-    const rolesRaw = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
-    const roles = Array.isArray(rolesRaw) ? rolesRaw : [rolesRaw];
-
-    const isAdmin = roles.includes('Admin') || roles.includes('admin');
-    const isOrch = isAdmin || roles.includes('Orchestrator') || roles.includes('orchestrator');
+    const isAdmin = hasRole(identity, 'Admin');
+    const isOrch = hasRole(identity, 'Admin', 'Orchestrator', 'OrchestratorManager');
 
     const adminNav = document.getElementById('adminNav');
     if (adminNav) adminNav.style.display = isAdmin ? 'inline-block' : 'none';
 
     const orchNav = document.getElementById('orchestratorNav');
     if (orchNav) orchNav.style.display = isOrch ? 'inline-block' : 'none';
+    studioApi.session().then(() => { document.getElementById('studioNav').style.display = ''; }).catch(() => {});
   }
 </script>
 <script type="module" src="/js/docs.js?v=0.17.0"></script>

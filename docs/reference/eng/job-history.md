@@ -20,6 +20,9 @@ ORDER BY start_time DESC;
 | `end_time` | UTC timestamp when execution ended, when available. |
 | `status` | Execution status. |
 | `rows_processed` | Rows processed by the run. |
+| `rows_warned` | Rows retained after a WARN rule failure. |
+| `rows_quarantined` | Rows removed by a QUARANTINE rule failure. |
+| `failed_rule_counts` | Legacy compact counts-only display payload; use `eng.data_quality_failures` for automation. |
 | `peak_ram_mb` | Peak memory usage in MB. |
 | `cpu_time_s` | CPU time in seconds. |
 | `error_message` | Sanitized error message for failed runs. |

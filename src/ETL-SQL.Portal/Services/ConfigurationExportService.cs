@@ -129,14 +129,16 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         // ── Folders (parents before children) ────────────────────────────────
         var folderCount = 0;
         AppendSection(body, "Folders");
-        await foreach (var path in db.Folders.AsNoTracking()
-            .OrderBy(f => f.Path)
-            .Select(f => f.Path)
+        await foreach (var folder in (
+            from f in db.Folders.AsNoTracking()
+            join u in db.Users.AsNoTracking() on f.OwnerId equals u.Id
+            orderby f.Path
+            select new { f.Path, Owner = u.UserName })
             .AsAsyncEnumerable()
             .WithCancellation(ct))
         {
             folderCount++;
-            body.AppendLine($"    CREATE FOLDER {Q(path)};");
+            body.AppendLine($"    CREATE FOLDER {Q(folder.Path)} WITH (CATALOG_OWNER = {Q(folder.Owner!)});");
         }
         emitted.Add($"{folderCount} folder(s)");
 
@@ -183,24 +185,27 @@ public sealed class ConfigurationExportService(PortalDbContext db)
 
         // ── Reports (publication references — script files travel separately, P1.10) ─
         var reportCount = 0;
-        var reports = db.Reports.AsNoTracking()
-            .Where(r => !r.IsDeleted)
-            .OrderBy(r => r.Folder!.Path).ThenBy(r => r.Name)
-            .Select(r => new
+        var reports = (
+            from r in db.Reports.AsNoTracking()
+            join u in db.Users.AsNoTracking() on r.CreatedBy equals u.Id
+            where !r.IsDeleted
+            orderby r.Folder!.Path, r.Name
+            select new
             {
                 r.Name,
                 r.Description,
                 r.ScriptPath,
-                FolderPath = r.Folder!.Path
-            })
-            .AsAsyncEnumerable();
+                FolderPath = r.Folder!.Path,
+                Owner = u.UserName
+            }).AsAsyncEnumerable();
         AppendSection(body, "Reports (copy the referenced .rptsql script files before replay — see the export manifest)");
         await foreach (var r in reports.WithCancellation(ct))
         {
             reportCount++;
-            var withClause = string.IsNullOrWhiteSpace(r.Description)
-                ? ""
-                : $" WITH (DESCRIPTION = {Q(r.Description)})";
+            var reportOptions = new List<string> { $"CATALOG_OWNER = {Q(r.Owner!)}" };
+            if (!string.IsNullOrWhiteSpace(r.Description))
+                reportOptions.Insert(0, $"DESCRIPTION = {Q(r.Description)}");
+            var withClause = $" WITH ({string.Join(", ", reportOptions)})";
             body.AppendLine($"    PUBLISH REPORT {Q(r.Name)} FROM {Q(r.ScriptPath)} IN FOLDER {Q(r.FolderPath)}{withClause};");
             // The PUBLISH statement references a .rptsql path that must already exist at the target.
             manifest.Add(new ContentManifestItem(

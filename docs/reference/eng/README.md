@@ -18,6 +18,8 @@ ORDER BY connection_name;
 | [`eng.columns`](columns.md) | Column metadata for session tables and connection tables. |
 | [`eng.connection_config`](connection-config.md) | Redacted active connection configuration options. |
 | [`eng.connections`](connections.md) | Active session connections. |
+| [`eng.data_quality_failures`](data-quality-failures.md) | Normalized counts-only failed rules by run and target. |
+| [`eng.data_quality_status`](data-quality-status.md) | Current and orchestrated run quality summaries. |
 | [`eng.host_metrics`](host-metrics.md) | Recent Orchestrator host utilization samples. |
 | [`eng.job_history`](job-history.md) | Orchestrator job execution history. |
 | [`eng.job_state`](job-state.md) | Saved Orchestrator job state key/value records. |
@@ -31,6 +33,8 @@ ORDER BY connection_name;
 | [`eng.protected_data_suggestions`](protected-data-suggestions.md) | Reviewable protected-data classifier findings. |
 | [`eng.safe_zones`](safe-zones.md) | Configured file-system safe zones. |
 | [`eng.sessions`](sessions.md) | Persisted engine sessions. |
+| [`eng.stewardship_gaps`](stewardship-gaps.md) | Source-located unmet stewardship requirements that reconcile to component scores. |
+| [`eng.stewardship_score`](stewardship-score.md) | Transparent, versioned stewardship component scores by global, job, and table scope. |
 | [`eng.tables`](tables.md) | Table names exposed by active connections. |
 | [`eng.tags`](tags.md) | Lineage metadata tags. |
 | [`eng.data_quality_rules`](data-quality-rules.md) | Current-session `@expect`/`@fail` rules. |

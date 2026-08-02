@@ -1,8 +1,9 @@
 # ETL-SQL Product Roadmap
 
-This document tracks future product tracks and candidate phases. When development begins, the next
-actionable phase is moved to `TODO.md`. Shipped work belongs in `CHANGELOG.md` and the release notes
-under `docs/releases/`.
+This document tracks high-level product tracks and candidate phases. Their actionable work is
+decomposed in `TODO.md`. Once an initiative is verified, record its notable outcome in
+`CHANGELOG.md` and mark its retained progress entry complete; do not erase the historical progress
+signal. Release-specific detail belongs in the release notes under `docs/releases/`.
 
 The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment
 promise are defined in
@@ -10,168 +11,28 @@ promise are defined in
 
 ---
 
+## Completed roadmap progress
+
+These verified initiatives remain visible here for product-level progress review. Their detailed
+implementation tasks and verification state are retained in `TODO.md` and their shipped outcomes in
+`CHANGELOG.md`.
+
+- [x] **Workstation-to-Enterprise quality and stewardship:** local policy, CLI quality evidence,
+  durable `eng.*` quality/stewardship read models, PII scanning, reproducible scores, operator
+  reports, the one-person loop, and cross-profile parity/security fixtures.
+- [x] **Deployment profile contract and supported transitions:** Solo/Team/Enterprise/SaaS coverage,
+  portable-state rules, secret-safe promotion, direct/progressive SaaS onboarding, and N → N+1
+  lifecycle drills.
+- [x] **Portal critical-journey foundations:** generated API contracts and Admin casing repair,
+  recognizable shared identity, removal of demo governance evidence, parameterized first-run flow,
+  and responsive global navigation/content patterns.
+- [x] **Portal consumer home and discovery:** favorites, recent, featured, popular, fuzzy catalog
+  search, intentional report icons, and concise activity state.
+- [x] **First-class Portal Studio foundation:** explicit deployment modes and capabilities,
+  catalog-scoped authoring, equal Code/Design entry, internal catalog report creation, and disabled
+  or catalog-only route/navigation trust boundaries.
+
 ## Future Candidate Phases
-
-### Workstation-to-Enterprise — Data Quality and Stewardship
-
-**Review basis (2026-07-26).** The underlying small-scale capabilities are stronger than the current
-product story suggests:
-
-- `@expect` / `@fail` rules and `ON FAILURE WARN | QUARANTINE | THROW` execute in the engine and do
-  not require either host.
-- `ASSERT JOB` evaluates current-run row count, null percentage, freshness, quarantine percentage,
-  and warning percentage. It can fail a CLI/CI run directly; historical baselines and transition
-  alerts become available when the script runs through Orchestrator.
-- The single-node Orchestrator already uses local SQLite by default and persists job history,
-  warning/quarantine totals, compact per-rule failure counts, and structured per-column metrics.
-- The `eng.*` catalog already exposes core runtime and orchestration metadata such as tags,
-  columns, connections, tables, jobs, job history, job state, host metrics, and bundles.
-- Data-quality rule, stewardship-gap, protected-data, and protected-data-suggestion catalog tables
-  are still future work. The roadmap below keeps those as the normalized read model to add rather
-  than treating current engine/session diagnostics as complete catalog surfaces.
-
-The gap is not a second data-quality engine. It is a coherent operator-facing read model between a
-single script's result and the full Portal governance workflow. A one-person shop should be able to
-answer "Is my data healthy?", "What failed?", and "What metadata is missing?" from the CLI,
-Orchestrator, or a generated report, using the same durable evidence the Portal later presents.
-
-**Product invariant — Local and CLI First.** Portal is a presentation, collaboration, and remediation
-layer—not a prerequisite for data quality or stewardship. The progression must remain additive:
-
-1. **Workstation:** Source-controlled rules and tags, local-first configuration policy, current-run assertions, terminal quality reports, and a non-zero process exit when a critical gate fails.
-2. **Local Orchestrator:** Optional SQLite-backed scheduling, history, baselines, tag/lineage catalog, reports, and SMTP/WEBHOOK notifications with no Portal deployment.
-3. **Enterprise:** The same records and calculations gain Portal queues, assignments, approvals, access control, remote audit, PostgreSQL/HA, and organization policy. Moving up a tier must not require rewriting rules, tags, assertions, or score definitions.
-
-#### P0 — Ship a no-Portal quality status surface
-
-1. **Local-First Policy Configuration (`etlsql-policy.json`):** Provide a schema for a local, source-controlled file in the workspace root. It defines:
-   * Required tags (e.g. `["@owner", "@steward", "@classification"]`).
-   * Regex rules for PII detection suggestions.
-   * Default thresholds for warning and failure gates.
-2. **CLI-Native Quality Reports:** Add CLI-native formatting flags:
-   * `etlsql run --quality-summary` — prints clean, formatted ANSI text tables showing rule failures and warned/quarantined counts.
-   * `etlsql run --output-json path.json` — dumps structured verification evidence for CI/CD pipeline runs.
-3. Add `eng.data_quality_status` as a virtual table over the current run or the local Orchestrator
-   store:
-
-   ```sql
-   -- Current run or local Orchestrator store
-   SELECT * FROM eng.data_quality_status
-   WHERE job_name = 'nightly_etl' AND run_since > DATEADD(DAY, -7, GETDATE())
-   INTO #dq_status;
-
-   -- Remote Orchestrator
-   SELECT * FROM ProdOrch.eng.data_quality_status
-   WHERE job_name = 'nightly_etl'
-   INTO #dq_status;
-   ```
-
-   The virtual table must include job/run identity, time, status, rows processed, warned and
-   quarantined counts and percentages, failed-rule count, freshness state, and error summary. It
-   must consume structured history fields rather than parse display prose.
-4. Add `eng.data_quality_failures` as the drill-down paired with that summary:
-
-   ```sql
-   -- Current run or local Orchestrator store
-   SELECT * FROM eng.data_quality_failures
-   WHERE job_name = 'nightly_etl'
-   INTO #dq_failures;
-
-   -- Remote Orchestrator
-   SELECT * FROM ProdOrch.eng.data_quality_failures
-   WHERE job_name = 'nightly_etl' AND run_since > DATEADD(DAY, -7, GETDATE())
-   INTO #dq_failures;
-   ```
-
-   Return one row per run, target, column, rule, and action with the failure count. Persist a
-   normalized rule-failure record where necessary; keep the compact history string only as a
-   compatibility/display field. Do not persist or return sample values.
-5. Expand `eng.job_history` to include its already-persisted `RowsQuarantined`, `RowsWarned`, and
-   data-quality summary fields, or make the status command the documented quality projection over
-   that history. Both commands must agree on run identity and status.
-6. Preserve `ASSERT JOB` as the executable gate. Allow optional parameter configurations (e.g. `FAIL_ON_WARN = TRUE`) to enforce custom CI/CD exit-code behaviors. Document the zero-service pattern for Task Scheduler/cron/CI and the local-Orchestrator pattern for history, baselines, recovery notifications, and scheduled execution.
-7. Route optional alerts through the canonical managed connections from the language-consistency
-   phase:
-
-   ```sql
-   CREATE CONNECTION local_orch AS ORCHESTRATOR(...);
-   CREATE CONNECTION quality_mail AS SMTP(...) AT local_orch;
-   CREATE CONNECTION quality_hook AS WEBHOOK(...) AT local_orch;
-   ```
-
-   A workstation user may omit notifications entirely; notifications must not be required to
-   obtain a failing exit code or query the result.
-
-#### P1 — Add transparent stewardship scoring
-
-1. **Local CLI Scanning for PII/Stewardship Gaps:** Add a CLI scanner tool:
-   `etlsql scan --pii` (scans local schema, parquets, excels, or databases to suggest metadata classification matches based on `etlsql-policy.json` rules).
-2. Add `eng.stewardship_score` as a virtual table over the existing lineage/tag catalog:
-
-   ```sql
-   -- Current session or local Orchestrator store
-   SELECT * 
-   INTO #score
-   FROM eng.stewardship_score
-   WHERE scope_type = 'JOB' AND scope_name = 'nightly_etl'
-   ;
-
-   -- Remote Orchestrator or Portal
-   SELECT * 
-   INTO #score
-   FROM ProdOrch.eng.stewardship_score
-   WHERE scope_type = 'TABLE' AND scope_name = '#orders'
-   ;
-   ```
-
-   Report the numerator, denominator, and percentage for each component—not only a badge or opaque
-   composite. Initial components should include required-tag completeness, protected-data
-   ownership/classification coverage, and data-quality-rule coverage. Include asset/column counts
-   and the evaluation time so the score is reproducible and auditable.
-2. Make scoring policy explicit and source-control friendly. Default required tags may remain
-   `@owner`, `@steward`, `@contact`, `@classification`, and `@quality`, but an organization must be
-   able to declare required tags, scope, exclusions, and any weights in normal policy
-   configuration. If no weighted policy exists, show component percentages without inventing a
-   composite score.
-3. Use `SELECT * FROM eng.stewardship_gaps` (or `ProdOrch.eng.stewardship_gaps` for remote) as
-   the detail query behind tag completeness rather than introducing a synonymous "gaps" command.
-   Score totals and missing-tag rows must reconcile exactly.
-4. Treat tag source locations as the remediation path. Results should retain script path and line
-   when known so a solo operator fixes the source-controlled `INSERT TAG` / `INSERT LINEAGE`
-   statement instead of editing an isolated governance database.
-5. Make local and remote calculations identical. The CLI, local Orchestrator, Portal API, and
-   Portal dashboard must share one scoring service and versioned score definition; the Portal must
-   never calculate a more favorable score from browser state or demo records.
-
-#### P2 — Provide runnable operator reports and a small-shop starter path
-
-1. Ship source-controlled `.rptsql` templates for:
-   - **Data Quality Health:** latest status, recent failures, warning/quarantine trends, freshness,
-     and jobs with no recent successful run.
-   - **Stewardship Scorecard:** component scores, missing required tags, protected assets without
-     ownership/classification, and rule-coverage gaps.
-2. Build the templates from `SELECT ... FROM eng.*` statements so they run locally in the Report
-   Player or on a schedule through Orchestrator. Portal publishing is optional and must not change
-   the report's queries or meaning.
-3. Add a copy-pasteable "one-person quality loop" guide and sample:
-   define tags and column rules in the pipeline, run `ASSERT JOB`, schedule it in the local
-   Orchestrator, inspect the two reports, and optionally send failure/recovery notifications through
-   saved SMTP/WEBHOOK connections.
-4. Add fixtures and acceptance tests for all three deployment rungs. Given the same run history,
-   lineage catalog, and policy, workstation/local-Orchestrator queries and Portal APIs must return
-   the same counts and scores. Cover empty history, first run, clean run, warning, quarantine,
-   critical failure, stale data, missing tags, protected unowned data, and recovery.
-5. Apply zero-trust output rules throughout: redact connection/secret material, never include
-   failed sample values in history or alerts, enforce identity/policy when querying a remote
-   Orchestrator, and preserve counts-only behavior unless a separately authorized quarantine target
-   is opened.
-
-**Definition of done.** A user with only the CLI can enforce rules and fail automation; a user with
-the default single-node SQLite Orchestrator can schedule those scripts, query durable quality
-history, audit tag completeness, obtain transparent stewardship scores, run health/scorecard
-reports, and optionally receive SMTP/WEBHOOK notifications without installing Portal. Deploying
-Portal or HA reuses the same scripts, records, formulas, and reports while adding collaboration and
-enterprise controls.
 
 ### Platform — Deployment Profiles and Upgrade Certification
 
@@ -180,62 +41,12 @@ Build the profile, portability, and certification program defined in
 Treat **Solo / Workstation**, **Team / SME**, **Enterprise / Corporate**, and
 **SaaS / Multi-Organization** as cumulative support profiles rather than editions.
 
-#### P0 — Establish the profile contract and coverage matrix
-
-1. Inventory every product capability against all four profiles: authoring, execution, scheduling,
-   connections/secrets, reports, quality/stewardship, identity, policy, audit, backup/recovery,
-   observability, HA, and tenant isolation. Mark each cell Green, Yellow, Red, or justified N/A and
-   attach current evidence.
-2. Make portability an architectural invariant: `.etlsql`, `.rptsql`, rules, tags, assertions, and
-   canonical declarative job/report definitions must not require business-logic rewrites as a
-   deployment grows. Add profile review to new-feature design and release checklists.
-3. Define the smallest safe form of each enterprise-oriented capability. Portal must not become a
-   prerequisite where CLI, local SQLite, Orchestrator, `SELECT FROM eng.*`, or Report Player can provide
-   a secure useful experience.
-4. Keep regulated, air-gapped, high-volume, HA, disaster-recovery, and data-residency requirements
-   as overlays that add evidence to a profile rather than creating inconsistent fifth and sixth
-   product tiers.
-
-#### P1 — Build supported promotion and upgrade tooling
-
-1. Add versioned inventory and preflight that classifies portable artifacts, exportable catalog
-   state, target-environment bindings, protected material, operational evidence, and ephemeral
-   state before any mutation.
-2. Add validated export/import and mapping for connections, `SECRET:name` references, jobs,
-   refresh schedules, reports, folders, ownership, policy references, lineage, tags, quality
-   history, and other eligible state. Never export resolved secrets as ordinary configuration.
-3. Implement and document the supported transitions:
-   - Solo / Workstation → Team / SME
-   - Team / SME → Enterprise / Corporate
-   - Enterprise / Corporate → SaaS / Multi-Organization
-   - Direct Solo / Workstation → SaaS / Multi-Organization onboarding
-   - N → N+1 within every profile
-4. Each transition must include backup/export, target binding, collision reporting, idempotent
-   import or safe failure, validation, scheduler fencing/cutover, post-cutover proof, and a defined
-   rollback or restore point.
-5. Treat SaaS onboarding as an explicit tenant-scoped import, not merely a server-count change.
-   Preserve portable customer artifacts while proving isolation across identity, databases,
-   artifacts, secrets/keys, caches, jobs/queues, reports, lineage/quality, audit, telemetry, support
-   access, and resource limits.
-
 #### P2 — Add deployment-profile certification
 
-1. Add `scripts/Test-DeploymentProfileCertification.ps1` with selectable Solo, Team, Enterprise,
-   SaaS, and transition lanes. Compose existing connector, scale, hardening, HA, and pre-release
-   evidence rather than duplicating their tests.
-2. Implement journey-based fixtures for portable pipeline execution, connection/secret rebinding,
-   scheduling/notifications, quality/stewardship, report publication, identity/ownership mapping,
-   backup/restore, environment promotion, topology growth, N → N+1 upgrade, SaaS import/export, and
-   tenant isolation/failure containment.
-3. **Certify Enforceable Quality and Stewardship at All Stages:**
-   - **Workstation:** Prove static metadata tag audits (`@owner`, `@steward`) and `@expect` rule failures correctly fail local CLI runs with non-zero exit codes to block garbage ingestion.
-   - **Team/SME:** Prove local SQLite quality logs and history baselines successfully trigger notifications (SMTP/Webhook) without requiring Portal.
-   - **Enterprise:** Prove OIDC-authenticated report publishing is rejected if the underlying datasets violate organization-wide tag requirements (e.g., missing `@classification`).
-   - **SaaS/Multi-Organization:** Prove hard database and memory isolation of metadata. Verify Tenant A's lineage maps, PII scans, and audit log pipelines cannot be exposed to Tenant B via shared memory, global caches, or shared outbox queues.
-4. Retain commit-bound JSON and Markdown evidence under `certification-results/` with topology,
+1. Retain commit-bound JSON and Markdown evidence under `certification-results/` with topology,
    artifact hashes, mapping decisions, continuity counts, negative isolation results, and
    rollback/restore outcomes.
-5. Add the profile/transition matrix to release claims. A capability is not certified for every
+2. Add the profile/transition matrix to release claims. A capability is not certified for every
    deployment merely because its Solo or Enterprise test passes; each applicable profile and
    transition needs its own current evidence.
 
@@ -262,63 +73,14 @@ authority, subscriptions, datasets, ACLs, and Orchestrator integration expose su
 depth. The next update should make that depth feel like one trustworthy product rather than add
 another set of isolated capabilities.
 
-#### P0 — Restore trust in the critical journeys
-
-1. **Make browser/API contracts explicit.** The Admin Users screen currently fails after a
-   successful API response because `UserDto.Username` serializes as `username` while
-   `admin.html` reads `userName`. The same class of drift should not remain a runtime discovery:
-   publish an OpenAPI or generated TypeScript contract, validate critical responses at the client
-   boundary, and cover login → users → folders → report publish/run with a real browser test.
-2. **Fix identity presentation everywhere.** The shared header renders JWT `sub` before
-   `unique_name`, so the signed-in user appears as an internal numeric ID (for example, `1`) on
-   Reports, Admin, Docs, and Orchestrator. Use one session identity model and shared shell component;
-   audit rows should display the same recognizable identity.
-3. **Never present demo governance records as evidence.** A fresh installation currently reports
-   a governance score, active bypasses, named glossary stewards, badges, and settings sourced from
-   the prototype's demo/browser state. Ship real authorized APIs and explicit unavailable/empty
-   states, or hide unfinished routes. The detailed durability work remains in
-   [Portal — Governance Dashboard](#portal--governance-dashboard).
-4. **Make parameterized report execution one understandable flow.** Before a snapshot exists, keep
-   the report name as the page heading, collect required parameters before submitting work, use one
-   unambiguous Run action, and show the resulting job through a terminal state. The current flow
-   first runs a preparation step, labels the embedded parameter form `Ready`, then asks the user to
-   run again. Disable export/subscription actions until their prerequisites exist and give every
-   embedded input an accessible name.
-5. **Make the primary shell responsive.** At 390px the global navigation and Admin workspace clip
-   beyond the viewport; the Reports hamburger only controls the folder sidebar and leaves the page
-   underneath interactive. Collapse the global nav, use a modal drawer with overlay/focus
-   containment, and provide responsive table, form, tab, and action patterns for Reports, Admin,
-   Governance, Docs, and Orchestrator.
-6. **Split authoring authority before promoting Studio.** The current editor is gated by the
-   Designer module and `Admin,Publisher`; source read/save/commit additionally require report
-   `Manage`. This lets the same broad authority edit active source, commit it, and—when
-   `PushOnSave` is configured—push it. Introduce explicit authoring capabilities and enforce them in
-   every API before exposing Studio in global navigation. Hiding buttons is not authorization.
-
 #### P1 — Connect the product into coherent workspaces
 
-1. **Consumer home and global discovery.** Surface the existing consumer-home and fuzzy catalog
-   APIs as a useful landing page: favorites, recent, featured, popular, and one global report
-   search. Report cards should use intentional thumbnails/icons and one concise last-run/last-viewed
-   status instead of repeating `Not run`, `Never run`, and `Awaiting first run`.
-2. **Promote the script editor to a first-class Studio.** Add a top-level **Studio** destination for
-   authorized Admins and Publishers when the Designer module is enabled. It should open a
-   catalog-scoped authoring home for creating or editing `.rptsql` reports, with the existing script
-   editor and visual designer as equal Code and Design modes. This is especially important for a
-   closed SaaS deployment where Portal authoring is the approved path and outside files, raw upload,
-   or source-control write-back are disabled. Keep the existing interactive trust boundary:
-   ACL-filtered `SHARED:` connections, read-only queries plus `#temp` staging, server-enforced
-   limits, and no script-supplied credentials or arbitrary connection creation. Make the navigation
-   and every authoring API disappear when authoring is disabled; do not rely on hiding the menu.
-   Define an explicit deployment policy such as `Disabled`, `CatalogOnly`, or `SourceControlled`
-   rather than treating the current Designer and upload/source-control switches as unrelated
-   settings.
-3. **Administration and operations hub.** Add visible, role-gated workflows for the backend
+1. **Administration and operations hub.** Add visible, role-gated workflows for the backend
    capabilities that currently have no coherent browser home: service accounts and secret rotation,
    pending access approvals, anonymous share/embed inventory, fleet/node status, operational
    metrics, and administrative service runs. Join these with health, audit, outbox, and Orchestrator
    context so an operator can move from a symptom to the responsible job or node.
-4. **Surface departmental environments without weakening their isolation.** The shipped
+2. **Surface departmental environments without weakening their isolation.** The shipped
    departmental model is deployment isolation, not shared-table multitenancy: every department owns
    a separate Portal database/login, Orchestrator database/login, artifact root, key ring, signing
    and dataset keys, service identity, and network endpoint. Multiple department instances may run
@@ -331,18 +93,18 @@ another set of isolated capabilities.
    environment chooser may list only environments the signed-in identity is entitled to enter;
    each selection establishes that environment's own session and must never merge report catalogs,
    search results, datasets, connections, secrets, or authoring history.
-5. **Finish the data-steward journey.** Keep the real lineage and quarantine views, make
+3. **Finish the data-steward journey.** Keep the real lineage and quarantine views, make
    Stewardship and Audit genuine routes, and connect disposition/replay submissions to job status.
    Add rule visibility and structured failure trends. Governed quarantine row access is specified
    separately in [Portal — Quarantine Row Access](#portal--quarantine-row-access).
-6. **Use one documentation renderer.** Docs and connector Help currently expose raw Markdown table
+4. **Use one documentation renderer.** Docs and connector Help currently expose raw Markdown table
    pipes, admonition markers, and code fences. Use a shared, sanitized renderer with consistent
    headings, tables, admonitions, code blocks, links, topic search, and copy actions.
-7. **Use one feedback and dialog system.** Replace native `alert`, `prompt`, and `confirm` calls
+5. **Use one feedback and dialog system.** Replace native `alert`, `prompt`, and `confirm` calls
    across Reports, Admin, Governance, Designer, Orchestrator, and report runtime with accessible
    toasts and purpose-built dialogs. Password reset, destructive changes, policy rollout, and
    source-control commits need structured validation, clear impact text, and auditable outcomes.
-8. **Polish the visual designer without reducing its power.** Group or search the long visual
+6. **Polish the visual designer without reducing its power.** Group or search the long visual
    palette, replace the rainbow of equally weighted buttons with clearer hierarchy, label the
    icon-only toolbar, improve dataset/on-page empty states, and make the canvas/inspector useful at
    laptop and tablet widths.
@@ -428,25 +190,23 @@ containment operations must remain out-of-process.
 
 1. **Shell and contracts:** shared identity/navigation/theme shell, Admin Users fix, generated API
    contract, and first end-to-end login/admin smoke.
-2. **Report consumer flow:** consumer home/search, report-card cleanup, parameter preflight,
-   execution status, prerequisites, and accessible report runtime controls.
-3. **Studio authoring:** granular authoring capabilities and `Author` resource grants first, then the
-   top-level Studio, catalog-only SaaS policy, Code/Design modes, authoring home, review/promotion
-   flow, and end-to-end create/edit/validate/run/save/publish/commit coverage.
-4. **Responsive and accessible foundations:** mobile shell, responsive Admin patterns, semantic
+2. **Studio authorization and publishing:** complete group/service-account capability assignment
+   and `Author` resource grants, then add review/promotion flow and end-to-end
+   create/edit/validate/run/save/publish/commit coverage.
+3. **Responsive and accessible foundations:** semantic
    dialogs/drawers, keyboard/focus work, and shared feedback components.
-5. **Governance, enterprise operations, and environments:** remove demo evidence, finish
+4. **Governance, enterprise operations, and environments:** remove demo evidence, finish
    steward/audit routes, connect job status, implement the enterprise coverage matrix above, and add
    the isolation-safe departmental environment workflow.
-6. **Docs and designer polish:** shared Markdown renderer, designer hierarchy/discoverability, and
+5. **Docs and designer polish:** shared Markdown renderer, designer hierarchy/discoverability, and
    final visual consistency pass.
-7. **Architecture and administration documentation:** after the implementation and contracts have
+6. **Architecture and administration documentation:** after the implementation and contracts have
    stabilized, reconcile `Docs/Architecture/Portal.md`,
    `docs/architecture/decisions/Departmental_Isolation.md`, the Portal administration guides, API
    inventory, module/authoring policy matrix, HA diagrams, isolation threat model, and deployment
    verification runbook with the shipped behavior. Architecture diagrams and interface contracts
    must be checked against the final C# source rather than copied from this roadmap.
-8. **Release gate:** browser, accessibility, responsive, local/Docker parity, departmental
+7. **Release gate:** browser, accessibility, responsive, local/Docker parity, departmental
    isolation, and role/module/authoring-capability/policy acceptance runs.
 
 **Definition of done.** A first-time Viewer can find and run a parameterized report without

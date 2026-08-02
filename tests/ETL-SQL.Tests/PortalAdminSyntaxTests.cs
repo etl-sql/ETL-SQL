@@ -52,6 +52,24 @@ namespace ETL_SQL.Tests
                 d.Message.Contains("string literal", StringComparison.OrdinalIgnoreCase));
         }
 
+        [Fact]
+        public void PortalPromotion_ParsesExplicitCatalogOwnership()
+        {
+            var script = TestHelpers.Parse("""
+                CREATE FOLDER '/Finance' WITH (CATALOG_OWNER = 'alice');
+                PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly.rptsql' IN FOLDER '/Finance'
+                    WITH (DESCRIPTION = 'Monthly close', CATALOG_OWNER = 'alice');
+                """);
+
+            Assert.Empty(script.Diagnostics);
+            var folder = Assert.IsType<CreatePortalFolderStatement>(script.Statements[0]);
+            var report = Assert.IsType<PublishPortalReportStatement>(script.Statements[1]);
+            Assert.Equal("alice", folder.CatalogOwner);
+            Assert.Equal("alice", report.CatalogOwner);
+            Assert.Contains("CATALOG_OWNER = 'alice'", folder.ToSql());
+            Assert.Contains("CATALOG_OWNER = 'alice'", report.ToSql());
+        }
+
         [Theory]
         [InlineData(
             "CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;",

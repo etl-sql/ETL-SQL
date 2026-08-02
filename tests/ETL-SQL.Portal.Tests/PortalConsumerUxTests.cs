@@ -370,6 +370,7 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             null!,
             null!,
             null!,
+            null!,
             null!);
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;

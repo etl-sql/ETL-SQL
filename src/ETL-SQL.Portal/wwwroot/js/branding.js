@@ -73,19 +73,141 @@ export function initTheme() {
     });
   }
 
-  // Bind the mobile menu toggle button if it exists
+  initResponsiveNavigation();
+}
+
+function initResponsiveNavigation() {
   const menuBtn = document.getElementById('mobileMenuBtn');
+  if (!menuBtn || menuBtn.dataset.navigationReady === 'true') return;
+
+  menuBtn.dataset.navigationReady = 'true';
   const sidebar = document.getElementById('sidebar');
-  if (menuBtn && sidebar) {
-    menuBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      sidebar.classList.toggle('open');
+  const drawer = sidebar || document.body.appendChild(document.createElement('aside'));
+  if (!drawer.id) drawer.id = 'shellNavDrawer';
+  drawer.classList.add('shell-nav-drawer');
+
+  const mobilePanel = document.createElement('div');
+  mobilePanel.className = 'shell-nav-mobile';
+  mobilePanel.innerHTML = `
+    <div class="shell-nav-header">
+      <strong>Navigation</strong>
+      <button type="button" class="shell-nav-close" aria-label="Close navigation">×</button>
+    </div>
+    <div class="shell-nav-identity" aria-live="polite"></div>
+    <nav class="shell-nav-links" aria-label="Portal destinations"></nav>
+    <div class="shell-nav-actions">
+      <button type="button" class="shell-nav-theme">Toggle theme</button>
+      <button type="button" class="shell-nav-signout">Sign Out</button>
+    </div>`;
+  drawer.prepend(mobilePanel);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'shell-nav-overlay';
+  overlay.hidden = true;
+  document.body.appendChild(overlay);
+
+  menuBtn.setAttribute('aria-controls', drawer.id);
+  menuBtn.setAttribute('aria-expanded', 'false');
+  const closeBtn = mobilePanel.querySelector('.shell-nav-close');
+  const links = mobilePanel.querySelector('.shell-nav-links');
+  const identity = mobilePanel.querySelector('.shell-nav-identity');
+  const media = window.matchMedia('(max-width: 768px)');
+  let restoreFocus = null;
+  const inerted = [];
+
+  function refreshDrawer() {
+    links.replaceChildren();
+    document.querySelectorAll('.topbar-nav a').forEach(source => {
+      if (source.hidden || getComputedStyle(source).display === 'none') return;
+      const link = document.createElement('a');
+      link.href = source.href;
+      link.textContent = source.textContent;
+      if (source.classList.contains('active')) link.classList.add('active');
+      links.appendChild(link);
     });
-    // Click outside mobile menu closes it
-    document.addEventListener('click', e => {
-      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuBtn) {
-        sidebar.classList.remove('open');
-      }
-    });
+    identity.textContent = document.getElementById('topbarUser')?.textContent?.trim() || '';
   }
+
+  function setBackgroundInert(value) {
+    const candidates = [...document.querySelectorAll('.topbar > *, .main-content, .portal-corner-links')]
+      .filter(element => !drawer.contains(element));
+    if (value) {
+      candidates.forEach(element => {
+        inerted.push([element, element.inert]);
+        element.inert = true;
+      });
+      return;
+    }
+    inerted.splice(0).forEach(([element, previous]) => { element.inert = previous; });
+  }
+
+  function openDrawer() {
+    if (!media.matches) return;
+    refreshDrawer();
+    restoreFocus = document.activeElement;
+    drawer.classList.add('open');
+    drawer.setAttribute('role', 'dialog');
+    drawer.setAttribute('aria-modal', 'true');
+    drawer.setAttribute('aria-label', 'Portal navigation');
+    overlay.hidden = false;
+    overlay.classList.add('open');
+    document.body.classList.add('shell-drawer-open');
+    menuBtn.setAttribute('aria-expanded', 'true');
+    setBackgroundInert(true);
+    closeBtn.focus();
+  }
+
+  function closeDrawer() {
+    if (!drawer.classList.contains('open')) return;
+    drawer.classList.remove('open');
+    overlay.classList.remove('open');
+    overlay.hidden = true;
+    document.body.classList.remove('shell-drawer-open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+    setBackgroundInert(false);
+    restoreFocus?.focus?.();
+  }
+
+  function syncViewport() {
+    if (media.matches) return;
+    closeDrawer();
+    drawer.removeAttribute('role');
+    drawer.removeAttribute('aria-modal');
+    drawer.removeAttribute('aria-label');
+  }
+
+  menuBtn.addEventListener('click', openDrawer);
+  closeBtn.addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  links.addEventListener('click', event => {
+    if (event.target.closest('a')) closeDrawer();
+  });
+  mobilePanel.querySelector('.shell-nav-theme').addEventListener('click', () => {
+    document.getElementById('themeToggleBtn')?.click();
+  });
+  mobilePanel.querySelector('.shell-nav-signout').addEventListener('click', () => {
+    document.getElementById('logoutBtn')?.click();
+  });
+  drawer.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDrawer();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter(element => !element.hidden && element.getClientRects().length > 0);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  media.addEventListener('change', syncViewport);
+  syncViewport();
 }

@@ -29,7 +29,25 @@ public class PortalConfig
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
     public AdminServicesConfig AdminServices { get; set; } = new();
     public PortalSourceControlConfig SourceControl { get; set; } = new();
+    public PortalStudioConfig Studio { get; set; } = new();
     public PortalDesignerLimitsConfig DesignerLimits { get; set; } = new();
+}
+
+public enum StudioDeploymentMode
+{
+    Disabled,
+    CatalogOnly,
+    SourceControlled
+}
+
+/// <summary>
+/// Server-side authoring policy. Role mappings are intentionally empty unless configured; enabling
+/// the Designer module or assigning Publisher does not itself grant source access.
+/// </summary>
+public class PortalStudioConfig
+{
+    public StudioDeploymentMode Mode { get; set; } = StudioDeploymentMode.CatalogOnly;
+    public Dictionary<string, List<string>> RoleCapabilities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

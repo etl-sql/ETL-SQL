@@ -114,6 +114,10 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.alerts()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.catalog_search()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.connection_config` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
+| `eng.data_quality_failures` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_failures](reference/eng/data-quality-failures.md) |
+| `eng.data_quality_status` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_status](reference/eng/data-quality-status.md) |
+| `eng.stewardship_gaps` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_gaps](reference/eng/stewardship-gaps.md) |
+| `eng.stewardship_score` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_score](reference/eng/stewardship-score.md) |
 | `eng.effective_permissions()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.embed_tokens()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.favorites()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
@@ -1035,6 +1039,8 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.active_sessions`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `eng.jobs` | Orch | Queryable virtual table for scheduled background tasks |
 | `eng.job_history` | Orch | Queryable virtual table for job execution history |
+| `eng.data_quality_status` | Orch | Current/local/remote counts-only run quality summary |
+| `eng.data_quality_failures` | Orch | Normalized rule-failure counts by run and target |
 | `eng.job_state` | Orch | Queryable virtual table for saved job-state key/value pairs |
 | `eng.host_metrics` | Orch | Queryable virtual table for recent host-utilization samples |
 | `eng.lineage_history` | Lineage | Cross-run catalog of lineage entries; qualify with a connection for remote Orchestrators |

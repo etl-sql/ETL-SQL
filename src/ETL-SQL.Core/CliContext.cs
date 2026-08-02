@@ -29,6 +29,11 @@ public class CliContext
     public bool IsJsonMode { get; set; }
     public bool EnablePaging { get; set; }
     public bool DisplayProgress { get; set; }
+    public bool QualitySummary { get; set; }
+    public string? OutputJsonPath { get; set; }
+    public string? ScanSource { get; set; }
+    public string? ScanTable { get; set; }
+    public bool ScanPii { get; set; }
     public string SessionId { get; set; } = System.Guid.NewGuid().ToString("N");
     public bool Resume { get; set; }
     public bool UpdateConfig { get; set; }
@@ -76,6 +81,22 @@ public class CliContext
     public string? MigrateFrom { get; set; }
     public string? MigrateTo { get; set; }
     public bool MigrateDryRun { get; set; }
+
+    // admin promotion preflight command
+    public string? PromotionSource { get; set; }
+    public string? PromotionFromProfile { get; set; }
+    public string? PromotionToProfile { get; set; }
+    public string? PromotionOutput { get; set; }
+    public string? PromotionPackage { get; set; }
+    public string[]? PromotionBindings { get; set; }
+    public int PromotionHistoryLimit { get; set; } = 10_000;
+    public string? SaasTenantId { get; set; }
+    public string? SaasSourceProfile { get; set; }
+    public string? SaasPortalBootstrap { get; set; }
+    public string? SaasOutputRoot { get; set; }
+    public int SaasMaxConcurrentJobs { get; set; } = 4;
+    public int SaasMaxStorageMb { get; set; } = 10_240;
+    public int SaasMaxReportSessions { get; set; } = 20;
 
     // admin ha-soak commands
     public string? HaSoakRunId { get; set; }

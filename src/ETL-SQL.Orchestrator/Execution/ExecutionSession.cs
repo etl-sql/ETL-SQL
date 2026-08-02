@@ -159,6 +159,7 @@ namespace ETL_SQL.Orchestrator.Execution
             result.RowsQuarantined = dataQuality.RowsQuarantined;
             result.RowsWarned = dataQuality.RowsWarned;
             result.DataQualityColumnMetrics = dataQuality.ColumnMetrics.ToList();
+            result.DataQualityRuleFailures = dataQuality.FailureMetrics.ToList();
             if (dataQuality.TotalFailures <= 0) return;
 
             result.DataQualityFailures = dataQuality.ToHistoryPayload();

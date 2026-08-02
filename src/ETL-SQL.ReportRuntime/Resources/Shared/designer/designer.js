@@ -3322,6 +3322,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
  * @param {string|null} [opts.sourceRevision=null] Current source-control revision, when configured.
  * @param {string}      [opts.reportName='New Report']
  * @param {number|null} [opts.folderId=null]
+ * @param {Array}       [opts.folders=[]]          Catalog folders available for a new report.
+ * @param {'design'|'code'} [opts.initialMode='design'] Initial authoring mode.
  * @param {string}      [opts.apiBase='']          Portal API base URL.
  * @param {Function}    [opts.authFetch]            (url, fetchInit) → Promise<Response>. Falls back to plain fetch.
  * @param {Function}    [opts.onSaveScript]         (script: string) → Promise. VS Code host override — bypasses portal API save.
@@ -3348,6 +3350,8 @@ export function createDesigner(container, opts = {}) {
     let sourceRevision = opts.sourceRevision ?? null;
     const sourceControlEnabled = Boolean(opts.sourceControlEnabled);
     const folderId  = opts.folderId   ?? null;
+    const folders   = Array.isArray(opts.folders) ? opts.folders : [];
+    const initialMode = opts.initialMode === 'code' ? 'code' : 'design';
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
     const previewUrl = opts.previewUrl ?? '/designer-preview.html';
@@ -3522,8 +3526,11 @@ export function createDesigner(container, opts = {}) {
             <option value="nord">Nord</option>
         </select>
         <span class="etlsql-toolbar-divider"></span>
-        ${toolbarButton({ attr: 'id="dsgn-split-toggle"', icon: 'split', title: 'Toggle split script and canvas view' })}
-        ${toolbarButton({ attr: 'id="dsgn-script-toggle"', icon: 'commands', title: 'Open script editor' })}
+        <div class="etlsql-authoring-modes" role="tablist" aria-label="Authoring mode">
+            <button type="button" id="dsgn-design-mode" role="tab" aria-selected="true" class="active">Design</button>
+            <button type="button" id="dsgn-code-mode" role="tab" aria-selected="false">Code</button>
+        </div>
+        ${toolbarButton({ attr: 'id="dsgn-split-toggle"', icon: 'split', title: 'Show Code and Design together' })}
         ${toolbarButton({ attr: 'id="dsgn-preview-toggle"', icon: 'preview', title: 'Preview report' })}
         <span class="etlsql-toolbar-divider"></span>
         ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', primary: true })}
@@ -3621,8 +3628,10 @@ export function createDesigner(container, opts = {}) {
         <div class="etlsql-dsgn-modal-card">
             <div class="etlsql-dsgn-modal-hdr">Save Report</div>
             <label class="etlsql-dsgn-label">Name<input id="dsgn-modal-name" class="form-control" /></label>
-            <label class="etlsql-dsgn-label" style="margin-top:8px">Folder ID (optional)
-                <input id="dsgn-modal-folder" class="form-control" type="number" />
+            <label class="etlsql-dsgn-label" style="margin-top:8px">Catalog folder
+                <select id="dsgn-modal-folder" class="form-control">
+                    ${folders.map(folder => `<option value="${Number(folder.id)}">${esc(folder.path || folder.name)}</option>`).join('')}
+                </select>
             </label>
             <div class="etlsql-dsgn-modal-actions">
                 <button class="btn btn-sm" id="dsgn-modal-cancel">Cancel</button>
@@ -4824,6 +4833,10 @@ export function createDesigner(container, opts = {}) {
             text = r?.script ?? '';
         } catch { text = '-- Failed to generate script\n'; }
         scriptOverlay.classList.add('active');
+        topbar.querySelector('#dsgn-design-mode')?.classList.remove('active');
+        topbar.querySelector('#dsgn-design-mode')?.setAttribute('aria-selected', 'false');
+        topbar.querySelector('#dsgn-code-mode')?.classList.add('active');
+        topbar.querySelector('#dsgn-code-mode')?.setAttribute('aria-selected', 'true');
         const host = scriptOverlay.querySelector('#dsgn-script-workbench-host');
         host.innerHTML = '';
         scriptEditor = await createScriptEditorWorkbench(host, {
@@ -4852,6 +4865,10 @@ export function createDesigner(container, opts = {}) {
 
     function closeScript() {
         scriptOverlay.classList.remove('active');
+        topbar.querySelector('#dsgn-design-mode')?.classList.add('active');
+        topbar.querySelector('#dsgn-design-mode')?.setAttribute('aria-selected', 'true');
+        topbar.querySelector('#dsgn-code-mode')?.classList.remove('active');
+        topbar.querySelector('#dsgn-code-mode')?.setAttribute('aria-selected', 'false');
         scriptEditor?.dispose();
         scriptEditor = null;
         isSplitActive = false;
@@ -5016,14 +5033,11 @@ export function createDesigner(container, opts = {}) {
         const folder = parseInt(saveModal.querySelector('#dsgn-modal-folder').value, 10) || null;
         const script = saveModal._script;
         try {
-            const up = await apiJson('/api/scripts/upload', 'POST', { fileName: name + '.rptsql', scriptText: script });
-            await apiJson('/api/reports', 'POST', {
-                name, folderId: folder,
-                scriptPath: up?.path ?? up?.scriptPath ?? name + '.rptsql',
-                isPublished: false,
+            const created = await apiJson('/api/studio/reports', 'POST', {
+                name, folderId: folder, scriptText: script,
             });
             saveModal.style.display = 'none';
-            opts.onSave?.();
+            opts.onSave?.(created);
         } catch (e) { alert('Save failed: ' + e.message); }
     }
 
@@ -5150,8 +5164,10 @@ export function createDesigner(container, opts = {}) {
         renderCanvas();
     });
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
-    topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
-        scriptOverlay.classList.contains('active') ? closeScript() : openScript());
+    topbar.querySelector('#dsgn-design-mode').addEventListener('click', closeScript);
+    topbar.querySelector('#dsgn-code-mode').addEventListener('click', () => {
+        if (!scriptOverlay.classList.contains('active')) openScript();
+    });
     topbar.querySelector('#dsgn-split-toggle').addEventListener('click', async () => {
         isSplitActive = !isSplitActive;
         root.classList.toggle('split-screen', isSplitActive);
@@ -5593,6 +5609,7 @@ export function createDesigner(container, opts = {}) {
 
     // ── Initial render ────────────────────────────────────────────────────────
     renderAll();
+    if (initialMode === 'code') queueMicrotask(() => openScript());
 
     return {
         dispose: () => {

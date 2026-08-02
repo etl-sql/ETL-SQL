@@ -1,0 +1,120 @@
+-- Data Quality Health: portable CLI/Report Player/Orchestrator/Portal template.
+-- The host supplies the eng.* catalog, so this file needs no host-specific connection or rewrite.
+SET REPORT TITLE = 'Data Quality Health';
+SET REPORT DESCRIPTION = 'Counts-only run health, failures, warning/quarantine trends, freshness, and runs requiring attention.';
+
+SELECT * INTO #quality_status
+FROM eng.data_quality_status
+LIMIT 500;
+
+SELECT * INTO #quality_failures
+FROM eng.data_quality_failures
+LIMIT 500;
+
+SELECT
+  job_name,
+  SUM(rows_warned) AS warned_rows,
+  SUM(rows_quarantined) AS quarantined_rows
+INTO #quality_trend
+FROM #quality_status
+GROUP BY job_name;
+
+SELECT * INTO #freshness_attention
+FROM #quality_status
+WHERE freshness_state <> 'CURRENT';
+
+SELECT * INTO #run_attention
+FROM #quality_status
+WHERE status <> 'SUCCEEDED';
+
+CREATE VISUAL RunCount AS CARD (
+  SOURCE = (SELECT COUNT(*) AS Value FROM #quality_status),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Recent Runs', ICON = 'history', COLOR = '#175cd3')
+);
+
+CREATE VISUAL WarnedCount AS CARD (
+  SOURCE = (SELECT SUM(rows_warned) AS Value FROM #quality_status),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Warned Rows', ICON = 'warning', COLOR = '#b54708')
+);
+
+CREATE VISUAL QuarantinedCount AS CARD (
+  SOURCE = (SELECT SUM(rows_quarantined) AS Value FROM #quality_status),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Quarantined Rows', ICON = 'block', COLOR = '#b42318')
+);
+
+CREATE VISUAL FailedRuleCount AS CARD (
+  SOURCE = (SELECT SUM(failed_rule_count) AS Value FROM #quality_status),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Failed Rules', ICON = 'rule', COLOR = '#6941c6')
+);
+
+CREATE VISUAL WarningTrend AS BAR (
+  TITLE = 'Warnings by Job',
+  SOURCE = #quality_trend,
+  MAPPINGS (X = job_name, Y = warned_rows)
+);
+
+CREATE VISUAL QuarantineTrend AS BAR (
+  TITLE = 'Quarantines by Job',
+  SOURCE = #quality_trend,
+  MAPPINGS (X = job_name, Y = quarantined_rows)
+);
+
+CREATE VISUAL LatestStatus AS TABLE (
+  TITLE = 'Latest Quality Status',
+  SOURCE = #quality_status,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE VISUAL RecentFailures AS TABLE (
+  TITLE = 'Recent Counts-Only Rule Failures',
+  SOURCE = #quality_failures,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE VISUAL FreshnessAttention AS TABLE (
+  TITLE = 'Freshness Requiring Attention',
+  SOURCE = #freshness_attention,
+  STYLE (HEIGHT = '300px')
+);
+
+CREATE VISUAL RunsRequiringAttention AS TABLE (
+  TITLE = 'Runs Without a Recent Success',
+  SOURCE = #run_attention,
+  STYLE (HEIGHT = '300px')
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B C D / E E F F / G G G G',
+    MAP (
+      'A' = RunCount,
+      'B' = WarnedCount,
+      'C' = QuarantinedCount,
+      'D' = FailedRuleCount,
+      'E' = WarningTrend,
+      'F' = QuarantineTrend,
+      'G' = LatestStatus
+    )
+  )
+);
+
+CREATE PAGE Attention AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+      'A' = RecentFailures,
+      'B' = FreshnessAttention,
+      'C' = RunsRequiringAttention
+    )
+  )
+);
+
+CREATE NAVIGATION QualityHealthNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview,
+  PAGES (Overview, Attention)
+);

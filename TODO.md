@@ -1,8 +1,9 @@
 # ETL-SQL Development TODO List
 
-Use this list to track active-release bugs, features, hardening tasks, and verification work.
-Future-version planning belongs in `ROADMAP.md`; completed work belongs in `CHANGELOG.md`,
-release notes, or the relevant implementation/design document.
+Use this list as the execution ledger for active-release and roadmap work. Once work is verified,
+record its notable outcome in `CHANGELOG.md` and mark the task complete with `- [x]`; do **not**
+remove it. `ROADMAP.md` remains the high-level product-direction source, and its initiatives are
+decomposed into actionable tasks here. Checked entries are retained so progress remains reviewable.
 
 ---
 
@@ -12,14 +13,16 @@ First release on the monthly cadence (v0.7.0–v0.17.0 were weekly). Rationale i
 [Release_Workflows.md](docs/architecture/roadmaps/Release_Workflows.md#release-cadence).
 The date is a target, not a commitment — ship when the gate is green and the evidence is collected.
 
-### Release evidence gates — none run yet
+### Release evidence gates
 
 Carried forward from
 [Enterprise_Release_Evidence_Checklist.md](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
-None of these can be inherited from v0.17.0 — evidence is per-release, against the candidate commit.
+Release evidence is per-release and must be collected against the v0.18.0 candidate; it cannot be
+inherited from v0.17.0.
 
 - [ ] Full pre-release lane — `scripts/Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration`
 - [ ] Cross-platform test lane — `scripts/test-lane.ps1`
+- [ ] Documentation/security-boundary suite — `SecurityBoundaryDocTests` and the broader docs tests
 - [ ] Enterprise hardening certification — `scripts/Test-EnterpriseHardeningCertification.ps1`,
       Windows **and** Linux
 - [ ] Recovery drill — `etl-sql admin restore --validate --report`
@@ -28,8 +31,8 @@ None of these can be inherited from v0.17.0 — evidence is per-release, against
 - [ ] Evidence indexed under `artifacts/release-evidence/0.18.0/`, recording what was **not**
       covered as well as what was
 
-**Sequencing.** The language work below comes first; the release-process RCI items are scheduled
-**last**, deliberately. The RCI changes touch the validation gate and CI itself, so landing them
+**Sequencing.** The release-process RCI items are scheduled **last**, deliberately. The RCI changes
+touch the validation gate and CI itself, so landing them
 mid-release would mean debugging the measuring instrument and the product at the same time. Doing
 them at the end also means they are exercised for the first time on the *next* release rather than
 destabilising this one.
@@ -106,8 +109,8 @@ release day plus a false regression alarm.
 
 Remaining work:
 
-- [ ] **Run scale certification before the long test lanes**, or quiesce the machine first. Running
-      it last guarantees the worst measurement conditions in the gate.
+- [x] **Run scale certification before the long test lanes**, or quiesce the machine first. The
+      release gate now orders scale certification ahead of thermally noisy long-running lanes.
 - [ ] **Add a same-worktree A/B mode** for comparing two commits, so version comparisons cannot be
       contaminated by comparing two directories in different thermal states — the exact error that
       produced the v0.17.0 false alarm.
@@ -117,3 +120,240 @@ Remaining work:
 
 Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
 measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.
+
+---
+
+## Roadmap execution backlog
+
+These tasks decompose the future tracks in [ROADMAP.md](ROADMAP.md). Their presence here makes work
+reviewable; it does not assign them to v0.18.0 or turn candidate phases into release commitments.
+Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it.
+
+### Completed work retained for progress review
+
+#### Workstation-to-Enterprise quality and stewardship
+
+- [x] Add source-controlled workspace policy with required tags, PII suggestion rules, and quality
+      thresholds, including its JSON schema and example.
+- [x] Add CLI-native quality summaries, structured JSON evidence, and non-zero quality-gate exits.
+- [x] Add local and remote `eng.data_quality_status` and `eng.data_quality_failures` read models over
+      structured run history.
+- [x] Add the local-Orchestrator historical quality loop with baselines and SMTP/WEBHOOK recovery
+      notifications without requiring Portal.
+- [x] Add `etlsql scan --pii`, protected-data suggestions, stewardship gaps, and reproducible
+      stewardship component scores backed by one shared scoring service.
+- [x] Ship source-controlled Data Quality Health and Stewardship Scorecard reports plus the
+      one-person quality-loop guide and runnable sample.
+- [x] Add workstation, local-Orchestrator, Portal, Enterprise, and SaaS parity/security fixtures for
+      quality, policy, scoring, and tenant isolation.
+
+#### Deployment profiles, promotion, and upgrades
+
+- [x] Establish the Solo, Team, Enterprise, and SaaS capability/portability contract and profile
+      coverage matrix.
+- [x] Add secret-safe promotion inventory, preflight, export/import, target binding, collision
+      detection, scheduler fencing, cutover proof, and rollback guidance.
+- [x] Implement Solo → Team, Team → Enterprise, Enterprise → SaaS, and direct Solo → SaaS onboarding
+      while preserving portable state and proving tenant isolation.
+- [x] Add N → N+1 upgrade and transition lifecycle drills with backup, restore, continuity,
+      rollback, schema migration, and scheduler fencing evidence.
+- [x] Add selectable deployment-profile certification lanes and journey fixtures for Solo, Team,
+      Enterprise, SaaS, transitions, quality/stewardship enforcement, and isolation.
+
+#### Portal foundations and coherent workspaces
+
+- [x] Generate and enforce critical browser/API response contracts and fix Admin Users `username`
+      casing drift.
+- [x] Use one recognizable Portal session identity model across Reports, Admin, Docs, and
+      Orchestrator.
+- [x] Remove production governance demo evidence and route users only to durable Quarantine and
+      Lineage surfaces.
+- [x] Make parameterized first-run execution one preflight/Run flow with terminal polling,
+      prerequisite-gated actions, and accessible report controls.
+- [x] Add a modal responsive global navigation drawer and shared narrow-viewport table, form, tab,
+      action, Docs, and Orchestrator patterns.
+- [x] Add explicit `Disabled`, `CatalogOnly`, and `SourceControlled` Studio modes with deny-by-default,
+      action-specific authoring capabilities and server-side route fences.
+- [x] Build the consumer home with favorites, recent, featured, popular, fuzzy global search,
+      intentional icons, and one concise report activity status.
+- [x] Build a catalog-scoped Studio home with equal Code and Design modes.
+- [x] Enforce catalog-only Studio trust boundaries and remove authoring navigation and APIs when
+      authoring is disabled.
+
+### Platform — Deployment Profiles and Upgrade Certification
+
+#### P2 — Deployment-profile certification
+
+- [ ] Retain commit-bound JSON and Markdown certification evidence with topology, hashes, mappings,
+      continuity counts, negative isolation results, and rollback outcomes.
+- [ ] Add current per-profile and per-transition evidence to release claims.
+
+### Portal — Comprehensive Product and UX Update
+
+Follow the roadmap's suggested order: shell/contracts, consumer flow, Studio authorization and
+authoring, responsive/accessibility foundations, governance/operations/environments, docs/designer,
+documentation reconciliation, then release certification.
+
+#### P0 — Restore trust in critical journeys
+
+- [x] Fix Admin Users casing drift and enforce the generated browser/API contract.
+- [ ] Add a real login → users → folders → publish/run browser test.
+
+#### P1 — Coherent workspaces
+
+- [ ] Build an Administration/Operations hub for service accounts, approvals, share/embed inventory,
+      fleet status, metrics, and administrative service runs.
+- [ ] Add an isolation-safe Environments workflow that generates and validates deployment plans.
+  - [ ] Keep provisioning in a separately authorized control plane or exported package.
+  - [ ] Prove environment switching establishes separate sessions and never merges catalogs,
+        datasets, connections, secrets, or authoring history.
+- [ ] Complete Stewardship and Audit routes using durable evidence.
+- [ ] Connect disposition/replay submissions to terminal job status.
+- [ ] Add data-quality rule visibility and structured failure trends.
+- [ ] Use one sanitized Markdown renderer for Docs and connector Help.
+- [ ] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.
+- [ ] Improve designer palette discovery, action hierarchy, toolbar labels, empty states, and
+      laptop/tablet layouts.
+
+#### Studio authorization and controlled publishing
+
+- [ ] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
+      folder.
+- [ ] Implement deny-by-default, group/service-account-assignable Studio capabilities:
+  - [ ] `StudioAccess` for discovery/open.
+  - [ ] `ScriptRead` for source access.
+  - [ ] `ScriptPreview` for analysis/completion/rendering.
+  - [ ] `ScriptRun` plus existing shared-connection ACLs for interactive execution.
+  - [ ] `ScriptSave` for drafts without implicit publish/commit/push.
+  - [ ] `ReportPublish` for active-version publication.
+  - [ ] `ScriptIngress` for external upload/import, disabled in catalog-only SaaS.
+  - [ ] `SourceCommit` with actor, revision, diff summary, and correlation id.
+  - [ ] `SourcePush` or deployment-service authority, separate and disabled by default.
+- [ ] Include Studio capabilities in effective-permission diagnostics and mutation audits.
+- [ ] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
+- [ ] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
+      branches, and separation of duties.
+
+#### Enterprise administration coverage
+
+- [ ] Add identity-provider diagnostics for reachability, claims/groups, sync health, and break-glass
+      readiness without exposing client secrets.
+- [ ] Add a Service Accounts page with scope, expiry, last use, owner, rotation/revocation, one-time
+      secret display, and audit history.
+- [ ] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
+      links to policy history.
+- [ ] Show host enrollment/registration consistency, expiry, certificate posture, and remediation;
+      keep enrollment/unenrollment on the host.
+- [ ] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
+      plans.
+- [ ] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
+- [ ] Add native service enablement, schedule, recipient, last/next run, outcome, and history views.
+- [ ] Show backup freshness and validation/restore-drill evidence while keeping custody and recovery
+      outside the running Portal.
+- [ ] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
+- [ ] Add a read-only Fleet/Operations workspace with compatibility, divergence, drain, migration,
+      and upgrade evidence.
+- [ ] Add guarded dataset-key inventory, rotation preflight/progress/verification, and rollback
+      guidance without displaying key material.
+- [ ] Add guided secret-free configuration export, target-plan validation, diff, approval, and audit.
+- [ ] Add an access simulator explaining roles, groups, ACLs, connection grants, Studio capability,
+      and RLS outcomes without returning protected rows.
+- [ ] Verify the Environments workflow preserves separate departmental processes, databases,
+      artifacts, key rings, identities, and endpoints.
+
+#### P1 — Accessibility and visual-system completion
+
+- [ ] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
+      errors, loading states, and empty states into a shared component vocabulary.
+- [ ] Make every dialog/drawer semantic, named, modal where appropriate, focus-trapped, and absent
+      from the accessibility tree when closed.
+- [ ] Add accessible names and keyboard behavior for search, favorites, script pickers, parameters,
+      tabs, trees, palettes, tables, and cards.
+- [ ] Verify light/dark, forced contrast, reduced motion, 200% zoom, and narrow viewports without
+      clipping or color-only meaning.
+
+#### P2 — Browser quality and delivery guardrails
+
+- [ ] Add automated Chromium desktop and narrow-viewport lanes with seeded Viewer, Publisher,
+      Steward, Operator, and Admin journeys.
+- [ ] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
+- [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
+- [ ] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
+      overflow.
+- [ ] Reuse representative UI sandbox stories as automated fixtures.
+- [ ] Exclude generated review/build output from the container context and document a small seeded
+      acceptance profile.
+- [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
+      diagrams, threat model, and verification runbooks against final source.
+- [ ] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
+      isolation, role/module/capability, and policy journeys.
+
+### Portal — Authorship Is Not Permission
+
+- [ ] Decide and document whether dataset authorship upgrades an existing ACL grant but never
+      substitutes for one.
+- [ ] Add dataset revocation tests before implementation.
+  - [ ] Prove a creator removed from every group loses dataset access.
+  - [ ] Prove a creator retaining a lesser grant receives only the documented upgrade.
+- [ ] Apply the rule to both `DatasetPermissionService` paths and `ReportDependencyService`.
+- [ ] Add an architecture test rejecting unconditional `CreatedBy`/`OwnerId` permission
+      short-circuits that do not consult an ACL.
+- [ ] Audit and test revocation for connections, subscriptions, alerts, and saved views.
+- [ ] Prove directory/group removal revokes reports, datasets, connections, subscriptions, alerts,
+      saved views, and anonymous links created by that identity.
+
+### Orchestrator — Per-Object Authorization
+
+Trigger this track when a second client is introduced or an Orchestrator is shared across teams or
+tenants. Until then, retain v0.18.0 actor attribution as attribution—not authorization.
+
+- [ ] Federate a verifiable caller identity from Portal/OIDC; do not trust an identity header.
+- [ ] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant vocabulary.
+- [ ] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
+- [ ] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
+- [ ] Add negative tests proving a reachable Orchestrator does not imply authority over another
+      principal's objects.
+
+### Portal — Governance Dashboard
+
+- [ ] Inventory and remove production demo fallback and browser-memory governance state.
+- [ ] Define durable models and authorized APIs for findings, decisions, glossary terms, badges,
+      scans, and scoring settings.
+- [ ] Enforce resource/role authorization and security audit on every governance mutation.
+- [ ] Wire the dashboard exclusively to durable APIs with honest loading, empty, unavailable, and
+      failure states.
+- [ ] Add API/role tests for mutation boundaries.
+- [ ] Add UI tests for live, empty, unauthorized, and API-failure states.
+- [ ] Add a guard proving production never presents demo records as governance evidence.
+
+### Portal — Quarantine Row Access
+
+- [ ] Decide and document whether preview requires the caller's connection grant or whether
+      `DataQualityStewardAccess` plus a manifest-bound target is sufficient.
+- [ ] Add nullable target connection alias, connector type, and catalog-backed provenance fields to
+      `QuarantineReplayManifest` at capture time.
+- [ ] Preserve backward compatibility by classifying missing provenance as view-only.
+- [ ] Make target readability resolve enabled catalog entries with the caller's execution identity
+      and the chosen authorization rule.
+- [ ] Bootstrap preview only from manifest-owned `SHARED:` connection metadata; never trust request
+      connection names or accept arbitrary SQL.
+- [ ] Preserve the 15-second timeout, row cap, RLS identity, and redacted errors.
+- [ ] Gate connection preview behind `Portal:DataQuality:AllowConnectionPreview`, default off.
+- [ ] Audit every raw quarantine preview as a data-access event.
+- [ ] Add a positive catalog-backed preview test first.
+- [ ] Add tests for catalog miss, disabled entry, switch off, unauthorized identity, legacy manifest,
+      row cap/timeout, and failure-path redaction.
+- [ ] Document preview eligibility, the kill switch, authorization, and audit behavior.
+- [ ] Add readable and view-only data-quality queue sandbox fixtures.
+
+### Portal — Data Quality Follow-through
+
+- [ ] Track disposition and replay jobs to a terminal state, or at minimum link each submission to
+      durable job history.
+- [ ] Replace `ParseRuleFailures` display-string parsing with structured per-column run metrics.
+- [ ] Add a read-only Portal API and panel showing which rules protect each target/column.
+- [ ] Add `eng.data_quality_rules` and make it queryable through Portal `eng.*` access.
+- [ ] Measure preview-session startup and define an optimization threshold before enabling polling or
+      dashboard refresh.
+- [ ] If the threshold is exceeded, add a bounded reusable/read-only preview path without weakening
+      parsing, linting, policy, RLS, timeout, row-cap, or redaction guarantees.

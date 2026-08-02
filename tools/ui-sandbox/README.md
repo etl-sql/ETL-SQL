@@ -25,6 +25,7 @@ The sandbox currently hosts the following stories under `stories/`:
 | Story | ID | Component / UI Surface |
 |---|---|---|
 | **Portal Governance Module** | `portal-governance` | Governance overview, work queue, exceptions, badges, glossary, and settings |
+| **Portal Responsive Shell** | `portal-responsive-shell` | 390px Reports/Admin global drawer, overlay, and focus containment |
 | **Data Quality** | `data-quality-queue` | Quarantine queue, row editor, and quality trend panel |
 | **Script Editor** | `script-editor` | Monaco/CodeMirror based query editor |
 | **Unified Script Editor** | `script-editor-unified` | Stateful editor host with ETL and Report-SQL fixtures |
@@ -112,3 +113,6 @@ assets so it renders without a portal build.
 Write `stories/<name>.story.js` default-exporting `{ id, title, subtitle, fixtures: [{id,label}], async mount(stage, fixtureId, ctx) → instance }`, then list it in `stories/index.js`. `mount` returns an object with optional `dispose()`/`resize()`. Use `ctx.stat(text)` for the header status line.
 
 > Not shipped. Excluded from the build; safe to delete.
+
+The **Portal Studio home** story exercises the catalog-grouped report cards, equal Code/Design
+authoring rail, and 390px responsive layout without requiring a Portal database.

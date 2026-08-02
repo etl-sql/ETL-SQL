@@ -20,12 +20,15 @@ namespace ETL_SQL.Tests.Orchestration
     {
         private readonly string _testDbPath;
         private readonly string _tempScriptPath;
+        private readonly string _workspacePath;
         private readonly IServiceProvider? _originalServiceProvider;
 
         public AdHocAuditingTests()
         {
             _testDbPath = $"test_audit_{Guid.NewGuid():N}.db";
-            _tempScriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"temp_script_{Guid.NewGuid():N}.etlsql");
+            _workspacePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AuditWorkspaces", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_workspacePath);
+            _tempScriptPath = Path.Combine(_workspacePath, "pipeline.etlsql");
             _originalServiceProvider = ETL_SQL.Program.ServiceProvider;
         }
 
@@ -42,8 +45,8 @@ namespace ETL_SQL.Tests.Orchestration
 
             try
             {
-                if (File.Exists(_tempScriptPath))
-                    File.Delete(_tempScriptPath);
+                if (Directory.Exists(_workspacePath))
+                    Directory.Delete(_workspacePath, recursive: true);
             }
             catch { }
         }
@@ -235,5 +238,60 @@ namespace ETL_SQL.Tests.Orchestration
                 e.Operation.Equals("CREATE DATASET", StringComparison.OrdinalIgnoreCase)
             );
         }
+
+        [Fact]
+        public async Task WorkstationAutomation_MissingRequiredMetadataReturnsNonZero()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: false);
+            Program.ServiceProvider = provider;
+            await WritePolicyAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, "SELECT 1 AS CustomerId INTO #customers;");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true
+            });
+
+            Assert.Equal(1, exitCode);
+        }
+
+        [Fact]
+        public async Task WorkstationAutomation_ExpectThrowFailureReturnsNonZero()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: false);
+            Program.ServiceProvider = provider;
+            await WritePolicyAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, """
+                CREATE TABLE #source (
+                  CustomerId INT /* @owner: 'sales'; @steward: 'data-office' */
+                );
+                INSERT INTO #source (CustomerId) VALUES (NULL);
+                SELECT CustomerId /* @owner: 'sales'; @steward: 'data-office'; @expect: 'NOT NULL'; @fail: 'THROW' */
+                INTO #clean FROM #source;
+                """);
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true
+            });
+
+            Assert.Equal(1, exitCode);
+        }
+
+        private Task WritePolicyAsync() => File.WriteAllTextAsync(
+            Path.Combine(_workspacePath, "etlsql-policy.json"),
+            """
+            {
+              "schemaVersion": "1.0",
+              "requiredTags": [
+                { "tag": "@owner", "scopes": ["COLUMN"] },
+                { "tag": "@steward", "scopes": ["COLUMN"] }
+              ]
+            }
+            """);
     }
 }

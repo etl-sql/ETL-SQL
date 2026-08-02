@@ -211,6 +211,8 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | `Portal:Storage:KeyRingPath` | string | `null` | — | Folder storing Data Protection decryption keys (must be shared in HA). |
 | `Portal:Modules:Reporting` | boolean | `true` | — | Enables the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
 | `Portal:Modules:Designer` | boolean | `true` | — | Enables the browser report designer entry page and API routes. Disabled routes return 404. |
+| `Portal:Studio:Mode` | enum | `CatalogOnly` | — | Server-side Studio boundary: `Disabled`, `CatalogOnly`, or `SourceControlled`. |
+| `Portal:Studio:RoleCapabilities:<role>` | string array | `[]` | — | Explicit Studio capabilities granted to a role. Empty mappings deny authoring; role names never bypass capability checks. |
 | `Portal:Modules:ConnectionCatalog` | boolean | `true` | — | Enables the shared connection catalog and diagnostics API routes. Disabled routes return 404. |
 | `Portal:Modules:SecretStore` | boolean | `true` | — | Enables the Portal-managed secret store API routes and secret resolution surface. Disabled routes return 404. |
 | `Portal:Modules:Scheduling` | boolean | `true` | — | Enables scheduled refresh/orchestrator poller work when Reporting is also enabled. |
@@ -233,6 +235,21 @@ fence their frontend entry pages and API routes; ConnectionCatalog and SecretSto
 API routes. Reporting, Scheduling, and Operations also fence their owned background worker loops.
 Security, identity, audit, database migration, and node heartbeat services remain active because they
 protect the host itself.
+
+### Portal Studio (`Portal:Studio`)
+
+- `Mode=Disabled` removes the entry page and all authoring APIs.
+- `Mode=CatalogOnly` permits only explicitly granted catalog read/preview/run/save operations and
+  returns 404 for external ingress, path-based publish, commit, and push. The Studio home creates
+  active reports through an internal catalog artifact key only when the caller has both
+  `ScriptSave` and `ReportPublish`; that key is not exposed by the Studio API.
+- `Mode=SourceControlled` allows those external/source operations only when their individual
+  capabilities are also granted.
+- Capability names are `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`,
+  `ReportPublish`, `ScriptIngress`, `SourceCommit`, and `SourcePush`.
+- `SourcePush` is checked separately whenever `SourceControl.PushOnSave=true`.
+- `/studio.html`, `/designer.html`, and their APIs return 404 when Studio is disabled. Other Portal
+  workspaces show the Studio navigation only after the capability-aware session endpoint succeeds.
 
 Certified topology profiles include:
 - **Gateway node**: `Reporting=false`, `Designer=false`, `Scheduling=false`, `Operations=false`,

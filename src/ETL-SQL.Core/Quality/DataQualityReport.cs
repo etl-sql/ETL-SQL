@@ -21,7 +21,8 @@ public sealed class DataQualityReport
     /// <summary>Mask substituted for sample values captured from a <c>@pii</c>-tagged column.</summary>
     public const string PiiMask = "***";
 
-    private readonly ConcurrentDictionary<(string Column, string Rule), RuleFailureAccumulator> _failures = new();
+    private readonly ConcurrentDictionary<(string Target, string Column, string Rule), RuleFailureAccumulator> _failures =
+        new(RuleFailureKeyComparer.Instance);
     private long _rowsQuarantined;
     private long _rowsWarned;
     private long _rowsValidated;
@@ -34,6 +35,9 @@ public sealed class DataQualityReport
     private readonly ConcurrentDictionary<(string? Target, string Column), ColumnMetricRegistration> _columnRegistrations =
         new(ColumnMetricRegistrationComparer.Instance);
     private volatile bool _tracksColumnMetrics;
+
+    /// <summary>UTC instant at which this run accumulator was created or last reset.</summary>
+    public DateTimeOffset RunStartedAtUtc { get; private set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Maximum sample values retained per (rule, column) pair.</summary>
     public int MaxSamplesPerRule { get; init; } = 10;
@@ -251,8 +255,14 @@ public sealed class DataQualityReport
     /// </summary>
     public void RecordFailure(
         string column, string rule, FailAction action, object? sample, bool isPii, string? owner)
+        => RecordFailure(null, column, rule, action, sample, isPii, owner);
+
+    /// <summary>Records one rule failure and the statement target that received validated rows.</summary>
+    public void RecordFailure(
+        string? targetTable, string column, string rule, FailAction action, object? sample, bool isPii, string? owner = null)
     {
-        var accumulator = _failures.GetOrAdd((column, rule), _ => new RuleFailureAccumulator(MaxSamplesPerRule));
+        var target = NormalizeTarget(targetTable) ?? "";
+        var accumulator = _failures.GetOrAdd((target, column, rule), _ => new RuleFailureAccumulator(MaxSamplesPerRule));
         accumulator.Add(action, isPii ? PiiMask : Format(sample), owner);
     }
 
@@ -260,10 +270,18 @@ public sealed class DataQualityReport
     public IReadOnlyList<RuleFailureSummary> Failures =>
         _failures
             .Select(kv => new RuleFailureSummary(
-                kv.Key.Column, kv.Key.Rule, kv.Value.Action, kv.Value.Count, kv.Value.Samples, kv.Value.Owner))
-            .OrderBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
+                kv.Key.Column, kv.Key.Rule, kv.Value.Action, kv.Value.Count, kv.Value.Samples, kv.Value.Owner,
+                string.IsNullOrEmpty(kv.Key.Target) ? null : kv.Key.Target))
+            .OrderBy(f => f.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
             .ThenBy(f => f.Rule, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    /// <summary>Counts-only failure records for durable history and machine-readable output.</summary>
+    public IReadOnlyList<DataQualityRuleFailureMetric> FailureMetrics => Failures
+        .Select(f => new DataQualityRuleFailureMetric(
+            f.TargetTable, f.Column, f.Rule, f.Action.ToString().ToUpperInvariant(), f.Count, f.Owner))
+        .ToList();
 
     /// <summary>Total failures across every rule (a row failing two rules counts twice).</summary>
     public long TotalFailures => _failures.Values.Sum(v => v.Count);
@@ -286,6 +304,7 @@ public sealed class DataQualityReport
         Interlocked.Exchange(ref _rowsWarned, 0);
         Interlocked.Exchange(ref _rowsValidated, 0);
         Interlocked.Exchange(ref _rowsDryRunAffected, 0);
+        RunStartedAtUtc = DateTimeOffset.UtcNow;
     }
 
     private static string Format(object? value) => value switch
@@ -411,6 +430,20 @@ public sealed class DataQualityReport
         }
     }
 
+    private sealed class RuleFailureKeyComparer : IEqualityComparer<(string Target, string Column, string Rule)>
+    {
+        public static RuleFailureKeyComparer Instance { get; } = new();
+        public bool Equals((string Target, string Column, string Rule) x, (string Target, string Column, string Rule) y) =>
+            string.Equals(x.Target, y.Target, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Column, y.Column, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(x.Rule, y.Rule, StringComparison.OrdinalIgnoreCase);
+        public int GetHashCode((string Target, string Column, string Rule) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Target),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Column),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Rule));
+    }
+
     private sealed class ColumnMetricKeyComparer : IEqualityComparer<(string Target, string Column)>
     {
         public static ColumnMetricKeyComparer Instance { get; } = new();
@@ -457,7 +490,9 @@ public sealed record RuleFailureSummary(
     long Count,
     IReadOnlyList<string> Samples,
     /// <summary>The column's accountable steward, from its @steward/@owner/@contact tag.</summary>
-    string? Owner = null)
+    string? Owner = null,
+    /// <summary>The normalized SELECT INTO target, when the rule-bearing statement has one.</summary>
+    string? TargetTable = null)
 {
     /// <summary>The end-of-stream diagnostic text: count plus capped samples.</summary>
     public string ToMessage() =>
@@ -465,3 +500,13 @@ public sealed record RuleFailureSummary(
         $"[{Action.ToString().ToUpperInvariant()}]" +
         (Samples.Count > 0 ? $". Sample values: {string.Join(", ", Samples)}" : ".");
 }
+
+
+/// <summary>Counts-only rule failure suitable for process transport and durable history.</summary>
+public sealed record DataQualityRuleFailureMetric(
+    string? TargetTable,
+    string ColumnName,
+    string Rule,
+    string Action,
+    long FailureCount,
+    string? Owner = null);

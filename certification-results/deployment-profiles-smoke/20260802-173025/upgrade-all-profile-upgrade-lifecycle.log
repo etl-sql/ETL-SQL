@@ -1,0 +1,46 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Release\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Connectors.Common -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\bin\Release\net10.0\ETL-SQL.Connectors.Common.dll
+  ETL-SQL.Infrastructure.Sqlite -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\bin\Release\net10.0\ETL-SQL.Infrastructure.Sqlite.dll
+  ETL-SQL.Infrastructure.Logging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Logging\bin\Release\net10.0\ETL-SQL.Infrastructure.Logging.dll
+  ETL-SQL.Reporting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Reporting\bin\Release\net10.0\ETL-SQL.Reporting.dll
+  ETL-SQL.Infrastructure.Docker -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Docker\bin\Release\net10.0\ETL-SQL.Infrastructure.Docker.dll
+  ETL-SQL.Analysis -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Analysis\bin\Release\net10.0\ETL-SQL.Analysis.dll
+  ETL-SQL.Connectors.Remote -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Remote\bin\Release\net10.0\ETL-SQL.Connectors.Remote.dll
+  ETL-SQL.Connectors.Files -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Files\bin\Release\net10.0\ETL-SQL.Connectors.Files.dll
+  ETL-SQL.Connectors.Messaging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Messaging\bin\Release\net10.0\ETL-SQL.Connectors.Messaging.dll
+  ETL-SQL.Connectors.Cloud -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Cloud\bin\Release\net10.0\ETL-SQL.Connectors.Cloud.dll
+  ETL-SQL.Connectors.Databases -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\bin\Release\net10.0\ETL-SQL.Connectors.Databases.dll
+  ETL-SQL.ReportBuilder -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportBuilder\bin\Release\net10.0\ETL-SQL.ReportBuilder.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Release\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.ReportHosting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportHosting\bin\Release\net10.0\ETL-SQL.ReportHosting.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Release\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.Orchestrator -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Orchestrator\bin\Release\net10.0\ETL-SQL.Orchestrator.dll
+  ETL-SQL.TUI -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.TUI\bin\Release\net10.0\ETL-SQL-TUI.dll
+  ETL-SQL.WorkstationEditor -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.WorkstationEditor\bin\Release\net10.0\ETL-SQL-Editor.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Release\net10.0\ETL-SQL.dll
+  ETL-SQL.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.14]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.48]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.50]   Starting:    ETL-SQL.Tests
+[xUnit.net 00:00:01.07]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Orchestration.DeploymentProfileUpgradeLifecycleTests.Team_BackupFenceCutoverProofAndRollback [213 ms]
+  Passed ETL_SQL.Tests.Orchestration.DeploymentProfileUpgradeLifecycleTests.Enterprise_BackupFenceCutoverProofAndRollback [102 ms]
+  Passed ETL_SQL.Tests.Orchestration.DeploymentProfileUpgradeLifecycleTests.Solo_BackupFenceCutoverProofAndRollback [102 ms]
+  Passed ETL_SQL.Tests.Orchestration.DeploymentProfileUpgradeLifecycleTests.Saas_BackupFenceCutoverProofAndRollback [112 ms]
+
+Test Run Successful.
+Total tests: 4
+     Passed: 4
+ Total time: 1.4391 Seconds

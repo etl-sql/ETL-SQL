@@ -15,7 +15,8 @@ public record PublishReportRequest(
     string? Category = null,
     string? Domain = null,
     string? Steward = null,
-    string? Certification = null);
+    string? Certification = null,
+    string? CreatedByUsername = null);
 
 public record UpdateReportRequest(
     string? Name,

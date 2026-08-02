@@ -1,0 +1,104 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Release\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Connectors.Common -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\bin\Release\net10.0\ETL-SQL.Connectors.Common.dll
+  ETL-SQL.Reporting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Reporting\bin\Release\net10.0\ETL-SQL.Reporting.dll
+  ETL-SQL.Infrastructure.Sqlite -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\bin\Release\net10.0\ETL-SQL.Infrastructure.Sqlite.dll
+  ETL-SQL.Infrastructure.Logging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Logging\bin\Release\net10.0\ETL-SQL.Infrastructure.Logging.dll
+  ETL-SQL.Analysis -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Analysis\bin\Release\net10.0\ETL-SQL.Analysis.dll
+  ETL-SQL.Infrastructure.Docker -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Docker\bin\Release\net10.0\ETL-SQL.Infrastructure.Docker.dll
+  ETL-SQL.Connectors.Remote -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Remote\bin\Release\net10.0\ETL-SQL.Connectors.Remote.dll
+  ETL-SQL.Connectors.Messaging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Messaging\bin\Release\net10.0\ETL-SQL.Connectors.Messaging.dll
+  ETL-SQL.Connectors.Files -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Files\bin\Release\net10.0\ETL-SQL.Connectors.Files.dll
+  ETL-SQL.Connectors.Cloud -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Cloud\bin\Release\net10.0\ETL-SQL.Connectors.Cloud.dll
+  ETL-SQL.Connectors.Databases -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\bin\Release\net10.0\ETL-SQL.Connectors.Databases.dll
+  ETL-SQL.ReportBuilder -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportBuilder\bin\Release\net10.0\ETL-SQL.ReportBuilder.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Release\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.ReportHosting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportHosting\bin\Release\net10.0\ETL-SQL.ReportHosting.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Release\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.Orchestrator -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Orchestrator\bin\Release\net10.0\ETL-SQL.Orchestrator.dll
+  ETL-SQL.TUI -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.TUI\bin\Release\net10.0\ETL-SQL-TUI.dll
+  ETL-SQL.WorkstationEditor -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.WorkstationEditor\bin\Release\net10.0\ETL-SQL-Editor.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Release\net10.0\ETL-SQL.dll
+  ETL-SQL.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.14]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.48]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.50]   Starting:    ETL-SQL.Tests
+[testcontainers.org 00:00:00.09] Connected to Docker:
+  Host: npipe://./pipe/docker_engine
+  Server Version: 29.6.2
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.55
+  Operating System: Docker Desktop
+  Total Memory: 15.31 GB
+  Labels: 
+    com.docker.desktop.address=npipe://\\.\pipe\docker_cli
+[testcontainers.org 00:00:00.23] Docker container ba821982201f created
+[testcontainers.org 00:00:00.26] Start Docker container ba821982201f
+[testcontainers.org 00:00:00.37] Wait for Docker container ba821982201f to complete readiness checks
+[testcontainers.org 00:00:01.40] Docker container ba821982201f ready
+[testcontainers.org 00:00:01.50] Docker container 6d6f14d6bd0f created
+[testcontainers.org 00:00:01.50] Start Docker container 6d6f14d6bd0f
+[testcontainers.org 00:00:01.64] Wait for Docker container 6d6f14d6bd0f to complete readiness checks
+[testcontainers.org 00:00:01.65] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 6d6f14d6bd0f
+[testcontainers.org 00:00:02.72] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 6d6f14d6bd0f
+[testcontainers.org 00:00:03.78] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 6d6f14d6bd0f
+[testcontainers.org 00:00:03.84] Docker container 6d6f14d6bd0f ready
+[testcontainers.org 00:00:04.00] Delete Docker container 6d6f14d6bd0f
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.DryRun_FailsWhenTargetHasRequiredColumnMissingFromSource [5 s]
+[testcontainers.org 00:00:04.33] Docker container f16a3d84ccd6 created
+[testcontainers.org 00:00:04.33] Start Docker container f16a3d84ccd6
+[testcontainers.org 00:00:04.44] Wait for Docker container f16a3d84ccd6 to complete readiness checks
+[testcontainers.org 00:00:04.44] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container f16a3d84ccd6
+[testcontainers.org 00:00:05.50] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container f16a3d84ccd6
+[testcontainers.org 00:00:05.57] Docker container f16a3d84ccd6 ready
+[testcontainers.org 00:00:05.63] Delete Docker container f16a3d84ccd6
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.MissingTargetTable_FailsClosed [55 ms]
+[testcontainers.org 00:00:06.01] Docker container f7eb7765a115 created
+[testcontainers.org 00:00:06.02] Start Docker container f7eb7765a115
+[testcontainers.org 00:00:06.15] Wait for Docker container f7eb7765a115 to complete readiness checks
+[testcontainers.org 00:00:06.15] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container f7eb7765a115
+[testcontainers.org 00:00:07.24] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container f7eb7765a115
+[testcontainers.org 00:00:07.29] Docker container f7eb7765a115 ready
+[testcontainers.org 00:00:07.58] Delete Docker container f7eb7765a115
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.Migrate_RealOrchestratorSchemas_MapsFoldedPostgresIdentifiers [284 ms]
+[testcontainers.org 00:00:07.93] Docker container fed5e06bb7aa created
+[testcontainers.org 00:00:07.94] Start Docker container fed5e06bb7aa
+[testcontainers.org 00:00:08.03] Wait for Docker container fed5e06bb7aa to complete readiness checks
+[testcontainers.org 00:00:08.03] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container fed5e06bb7aa
+[testcontainers.org 00:00:09.10] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container fed5e06bb7aa
+[testcontainers.org 00:00:09.16] Docker container fed5e06bb7aa ready
+[testcontainers.org 00:00:09.21] Delete Docker container fed5e06bb7aa
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.DryRun_ValidatesSourceValuesAgainstTargetTypes [42 ms]
+[testcontainers.org 00:00:09.50] Docker container ab6e289bcec6 created
+[testcontainers.org 00:00:09.51] Start Docker container ab6e289bcec6
+[testcontainers.org 00:00:09.60] Wait for Docker container ab6e289bcec6 to complete readiness checks
+[testcontainers.org 00:00:09.61] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container ab6e289bcec6
+[testcontainers.org 00:00:10.67] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container ab6e289bcec6
+[testcontainers.org 00:00:10.72] Docker container ab6e289bcec6 ready
+[testcontainers.org 00:00:10.76] Delete Docker container ab6e289bcec6
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.DryRun_WritesNothing_ButReportsCounts [36 ms]
+[testcontainers.org 00:00:11.09] Docker container 97f20f882962 created
+[testcontainers.org 00:00:11.09] Start Docker container 97f20f882962
+[testcontainers.org 00:00:11.19] Wait for Docker container 97f20f882962 to complete readiness checks
+[testcontainers.org 00:00:11.19] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 97f20f882962
+[testcontainers.org 00:00:12.26] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 97f20f882962
+[testcontainers.org 00:00:12.31] Docker container 97f20f882962 ready
+[testcontainers.org 00:00:12.38] Delete Docker container 97f20f882962
+[xUnit.net 00:00:18.88]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Orchestration.DatabaseMigrationServiceTests.Migrate_CoercesTypes_PreservesKeys_AndVerifies [58 ms]
+
+Test Run Successful.
+Total tests: 6
+     Passed: 6
+ Total time: 19.2310 Seconds

@@ -1,0 +1,47 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.08]   Discovering: ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.13]   Discovered:  ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.14]   Starting:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.PercentageCanaryAt100_ReachesTheMachine_ThenHaltRevertsIt [2 s]
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.CanaryCohortMember_ReceivesCanary_WhileTheRestOfTheFleetStaysOnActive [916 ms]
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.EnrolledMachine_RetrievesEnvelope_ThroughTheRealClientSource [948 ms]
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.ClientCertificate_IsRequiredAndThumbprintBound_WhenRegistered [990 ms]
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.UnknownRevokedAndReassignedIdentities_AreRefusedAndAudited [1 s]
+  Passed ETL_SQL.Portal.Tests.PolicyDistributionApiTests.RetrievalWithoutPublishedPolicy_Returns404_AndReRegistrationRequiresRevocation [837 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.AllowsSelectIntoTempTable [22 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.AllowsReadOnlySelects(sql: "SELECT UserID FROM m.Users WHERE UserID > 10 ORDER"···) [1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.AllowsReadOnlySelects(sql: "SELECT UserID, UserName FROM m.Users;") [< 1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.AllowsReadOnlySelects(sql: "SELECT 1;") [< 1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectionNamesTheStatement [1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectsCreateConnection [1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectsSet [< 1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectsSelectIntoRealTable [< 1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectsWritesAndDdl(sql: "CREATE TABLE m.Staging (Id INT);") [1 ms]
+  Passed ETL_SQL.Portal.Tests.PortalInteractiveRunPolicyTests.RejectsWritesAndDdl(sql: "DROP TABLE m.Users;") [< 1 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Providers_ReflectsOidcEnabled [589 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Login_WhenOidcDisabled_Returns404 [577 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Diagnostics_ReturnsRedactedConfig_AndProbesDiscovery [71 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.LocalLogin_StillWorks_WhenOidcEnabled [74 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.OldSession_IsRevoked_AfterGroupClaimChange [110 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_RefusesToAttachToNonOidcAccount [15 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_ValidState_ProvisionsUser_IssuesSession_AndRefreshWorks [34 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Providers_WhenOidcDisabled_ReportsDisabled [653 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Diagnostics_RequiresAdmin [1 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_WhenProviderUnavailable_RedirectsToError_AndAudits [8 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_UsernameChangeAtIdp_KeepsSameAccount [21 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_RefusesWhenUsernameTakenByDifferentSubject [14 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_InvalidState_RedirectsToError [3 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.OidcPublisher_MissingOrganizationDatasetClassificationIsRejectedBeforeCatalogMutation [137 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_SyncsGroupClaims_AddingAndRemoving [28 ms]
+[xUnit.net 00:00:09.65]   Finished:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Callback_DisabledUser_RedirectsToAccountDisabled [14 ms]
+  Passed ETL_SQL.Portal.Tests.OidcAuthTests.Login_WhenOidcEnabled_RedirectsToProvider_AndSetsFlowCookie [1 ms]
+  Passed ETL_SQL.Portal.Tests.ReportPublishingPolicyTests.InvalidActiveEnvelopeFailsClosed [33 ms]
+  Passed ETL_SQL.Portal.Tests.ReportPublishingPolicyTests.ActiveSignedPolicyRejectsMissingDatasetClassificationAndAcceptsTaggedLineage [33 ms]
+
+Test Run Successful.
+Total tests: 35
+     Passed: 35
+ Total time: 9.9990 Seconds

@@ -1,0 +1,66 @@
+[
+  {
+    "name": "empty-history",
+    "runs": [],
+    "assets": [],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 0, "latestStatus": null }
+  },
+  {
+    "name": "first-run",
+    "runs": [{ "runId": "1", "status": "SUCCEEDED", "rowsProcessed": 2, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "pii": "true", "classification": "restricted", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "clean-run",
+    "runs": [{ "runId": "2", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "pii": "true", "classification": "restricted", "expect": "MATCHES email" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "warning",
+    "runs": [{ "runId": "3", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 5, "rowsQuarantined": 0, "failedRuleCount": 1, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "classification": "internal", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 5, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "quarantine",
+    "runs": [{ "runId": "4", "status": "SUCCEEDED", "rowsProcessed": 97, "rowsWarned": 0, "rowsQuarantined": 3, "failedRuleCount": 1, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "pii": "true", "classification": "restricted", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 3, "criticalFailures": 0, "stale": 0, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "critical-failure",
+    "runs": [{ "runId": "5", "status": "FAILED", "rowsProcessed": 40, "rowsWarned": 0, "rowsQuarantined": 60, "failedRuleCount": 2, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "pii": "true", "classification": "restricted", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 60, "criticalFailures": 1, "stale": 0, "globalGaps": 0, "latestStatus": "FAILED" }
+  },
+  {
+    "name": "stale-data",
+    "runs": [{ "runId": "6", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "STALE" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "classification": "internal", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 1, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "missing-tags",
+    "runs": [{ "runId": "7", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "customer_id", "tags": {}, "sourceFile": "pipelines/customers.etlsql", "line": 8 }],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 2, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "unowned-protected-data",
+    "runs": [{ "runId": "8", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "CURRENT" }],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "pii": "true", "classification": "restricted", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 0, "quarantined": 0, "criticalFailures": 0, "stale": 0, "globalGaps": 2, "latestStatus": "SUCCEEDED" }
+  },
+  {
+    "name": "recovery",
+    "runs": [
+      { "runId": "10", "status": "SUCCEEDED", "rowsProcessed": 100, "rowsWarned": 0, "rowsQuarantined": 0, "failedRuleCount": 0, "freshnessState": "CURRENT" },
+      { "runId": "9", "status": "FAILED", "rowsProcessed": 40, "rowsWarned": 1, "rowsQuarantined": 60, "failedRuleCount": 2, "freshnessState": "STALE" }
+    ],
+    "assets": [{ "table": "customers", "column": "email", "tags": { "owner": "ops", "pii": "true", "classification": "restricted", "expect": "NOT NULL" }, "sourceFile": "pipelines/customers.etlsql", "line": 12 }],
+    "expected": { "warned": 1, "quarantined": 60, "criticalFailures": 1, "stale": 1, "globalGaps": 0, "latestStatus": "SUCCEEDED" }
+  }
+]
+

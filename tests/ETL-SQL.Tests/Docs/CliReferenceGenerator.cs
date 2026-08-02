@@ -33,6 +33,9 @@ ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
 # Headless with JSON output for automation
 ETL-SQL run nightly_load.etlsql --json --silent
 
+# Counts-only quality summary plus a versioned CI evidence artifact
+ETL-SQL run nightly_load.etlsql --quality-summary --output-json artifacts/quality.json
+
 # Persistent session — connections survive between runs
 ETL-SQL run setup_connections.etlsql --session prod-session
 ETL-SQL run nightly_load.etlsql --session prod-session
@@ -40,6 +43,19 @@ ETL-SQL run nightly_load.etlsql --session prod-session
 # Live progress tree in the terminal
 ETL-SQL run heavy_transform.etlsql --progress --perf
 ```",
+
+        ["scan"] = @"```bash
+# Inspect one local file without reading or printing row values
+ETL-SQL scan ./data/customers.parquet --pii
+
+# Inspect supported schema files under a directory and emit the versioned JSON contract
+ETL-SQL scan ./data --pii --json
+
+# Inspect one table through a credential-safe shared connection-catalog alias
+ETL-SQL scan SHARED:warehouse --pii --table sales.customers --json
+```
+
+The scanner reads schema names only. It supports CSV/TSV/text, JSON, XML, Parquet, Excel, and Avro files, recurses at most five directory levels, and stops at 100 files. Database scans require a configured `SHARED:` alias and an explicit `--table`; raw connection strings and credentials are not accepted. Suggestions and transparent component scores use the nearest `etlsql-policy.json`.",
 
         ["ui-edit"] = @"```bash
 # Open the IDE with a file pre-loaded

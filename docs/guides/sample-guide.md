@@ -23,6 +23,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 | `golden_workflow` | End-to-end Report-SQL workflow used for demos and regression checks. |
 | `paginated` | Multi-report/paginated hosting examples. |
 | `portal_deployment` | Script-first portal promotion and deployment pattern. |
+| `quality-loop` | Runnable solo-operator policy, pipeline, quality gate, and local schedule. |
 | `99_Experimental` | Stress tests and experiments; not the first place to learn the language. |
 | `output` and nested `samples/output` folders | Generated or checked-in sample output artifacts. |
 
@@ -53,6 +54,24 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Uses `CREATE VIEW` to define a shared filtered query once.
 - Reuses the view directly as a table visual source and inside an aggregate chart query.
 - Demonstrates that views are query aliases, not materialized report datasets.
+
+### [08_Reporting/data_quality_health.rptsql](../../samples/08_Reporting/data_quality_health.rptsql)
+**Purpose**: Portable operator report for counts-only quality health.
+- Reads `eng.data_quality_status` and `eng.data_quality_failures` without a host-specific connection.
+- Shows latest status, normalized failures, warning/quarantine trends, freshness, and runs requiring attention.
+- Runs through the shared Report Player, Orchestrator, and Portal report runtime unchanged.
+
+### [08_Reporting/stewardship_scorecard.rptsql](../../samples/08_Reporting/stewardship_scorecard.rptsql)
+**Purpose**: Transparent stewardship score and remediation report.
+- Shows component numerators, denominators, percentages, definition version, and policy weights.
+- Uses `eng.stewardship_gaps` for missing tags, unowned/unclassified protected data, and quality-rule gaps.
+- Keeps source file and line visible so remediation happens in source-controlled scripts.
+
+### [quality-loop/customer_quality.etlsql](../../samples/quality-loop/customer_quality.etlsql)
+**Purpose**: Copy-pasteable one-person quality workflow.
+- Pairs a checked-in workspace policy with stewardship tags, `@expect` rules, quarantine routing, and `ASSERT JOB`.
+- Includes a local SQLite Orchestrator registration script and uses the two operator reports above.
+- See the [One-person quality loop guide](one-person-quality-loop.md) for CLI, scheduling, report, and optional notification steps.
 
 ### [08_Reporting/datasets/README.md](../../samples/08_Reporting/datasets/README.md)
 **Purpose**: Portal dataset security and portable-transfer verification deck.

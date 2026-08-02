@@ -6,7 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
@@ -568,7 +571,7 @@ public sealed class JobHistoryDataSource : IDataSource
 {
     private readonly IJobHistoryStore? _store;
     private readonly string? _jobNameFilter;
-    private static readonly string[] Columns = ["id", "job_name", "start_time", "end_time", "status", "rows_processed", "peak_ram_mb", "cpu_time_s", "error_message"];
+    private static readonly string[] Columns = ["id", "job_name", "start_time", "end_time", "status", "rows_processed", "rows_warned", "rows_quarantined", "failed_rule_counts", "peak_ram_mb", "cpu_time_s", "error_message"];
 
     public JobHistoryDataSource(IJobHistoryStore? store, string? jobNameFilter = null)
     {
@@ -598,9 +601,12 @@ public sealed class JobHistoryDataSource : IDataSource
                     ["end_time"] = entry.EndTime,
                     ["status"] = entry.Status,
                     ["rows_processed"] = entry.RowsProcessed,
+                    ["rows_warned"] = entry.RowsWarned,
+                    ["rows_quarantined"] = entry.RowsQuarantined,
+                    ["failed_rule_counts"] = entry.DataQualityFailures,
                     ["peak_ram_mb"] = entry.PeakMemoryBytes / (1024.0 * 1024.0),
                     ["cpu_time_s"] = entry.CpuTimeSeconds,
-                    ["error_message"] = entry.ErrorMessage
+                    ["error_message"] = entry.ErrorMessage == null ? null : SecretRedactor.Redact(entry.ErrorMessage)
                 });
 
                 if (rows.Count >= batchSize)
@@ -616,6 +622,134 @@ public sealed class JobHistoryDataSource : IDataSource
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.job_history is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class DataQualityStatusDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns = ["run_id", "job_name", "start_time", "end_time", "status", "rows_processed", "rows_warned", "rows_quarantined", "warn_percent", "quarantine_percent", "failed_rule_count", "freshest_value_utc", "freshness_state", "error_summary", "source"];
+
+    public DataQualityStatusDataSource(IExecutionContext context, IJobHistoryStore? store)
+    {
+        _context = context;
+        _store = store;
+    }
+
+    public string Path => "eng.data_quality_status";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+        var currentMetrics = _context.DataQuality.ColumnMetrics;
+        var freshest = currentMetrics.Where(m => m.MaxTimestampUtc.HasValue)
+            .Select(m => m.MaxTimestampUtc!.Value).DefaultIfEmpty().Max();
+        DateTimeOffset? currentFreshest = freshest == default ? null : freshest;
+        rows.Add(BuildRow(new JobDataQualityStatus(
+            _context.SessionId ?? "current", _context.JobName, _context.DataQuality.RunStartedAtUtc.UtcDateTime, null, "RUNNING",
+            _context.Telemetry.RowsProcessed, _context.DataQuality.RowsWarned, _context.DataQuality.RowsQuarantined,
+            _context.DataQuality.FailureMetrics.Count, currentFreshest,
+            currentFreshest.HasValue ? "OBSERVED" : "NOT_TRACKED", null), "CURRENT_RUN"));
+
+        if (_store != null)
+        {
+            foreach (var status in await _store.GetDataQualityStatusesAsync(Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(BuildRow(status, "ORCHESTRATOR"));
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    private static Row BuildRow(JobDataQualityStatus status, string source)
+    {
+        var denominator = status.RowsProcessed <= 0 ? 0d : status.RowsProcessed;
+        return new Row
+        {
+            ["run_id"] = status.RunId, ["job_name"] = status.JobName, ["start_time"] = status.StartTime,
+            ["end_time"] = status.EndTime, ["status"] = status.Status, ["rows_processed"] = status.RowsProcessed,
+            ["rows_warned"] = status.RowsWarned, ["rows_quarantined"] = status.RowsQuarantined,
+            ["warn_percent"] = denominator == 0 ? 0d : status.RowsWarned * 100d / denominator,
+            ["quarantine_percent"] = denominator == 0 ? 0d : status.RowsQuarantined * 100d / denominator,
+            ["failed_rule_count"] = status.FailedRuleCount, ["freshest_value_utc"] = status.FreshestValueUtc,
+            ["freshness_state"] = status.FreshnessState, ["error_summary"] = status.ErrorSummary, ["source"] = source
+        };
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.data_quality_status is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class DataQualityFailuresDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns = ["run_id", "job_name", "start_time", "end_time", "status", "target_table", "column_name", "rule", "action", "failure_count", "owner", "source"];
+
+    public DataQualityFailuresDataSource(IExecutionContext context, IJobHistoryStore? store)
+    {
+        _context = context;
+        _store = store;
+    }
+
+    public string Path => "eng.data_quality_failures";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = _context.DataQuality.FailureMetrics.Select(f => new Row
+        {
+            ["run_id"] = _context.SessionId ?? "current", ["job_name"] = _context.JobName,
+            ["start_time"] = _context.DataQuality.RunStartedAtUtc, ["end_time"] = null, ["status"] = "RUNNING",
+            ["target_table"] = f.TargetTable, ["column_name"] = f.ColumnName, ["rule"] = f.Rule,
+            ["action"] = f.Action, ["failure_count"] = f.FailureCount, ["owner"] = f.Owner,
+            ["source"] = "CURRENT_RUN"
+        }).ToList();
+
+        if (_store != null)
+        {
+            foreach (var f in await _store.GetDataQualityFailuresAsync(Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(new Row
+                {
+                    ["run_id"] = f.RunId.ToString(), ["job_name"] = f.JobName, ["start_time"] = f.StartTime,
+                    ["end_time"] = f.EndTime, ["status"] = f.Status, ["target_table"] = f.TargetTable,
+                    ["column_name"] = f.ColumnName, ["rule"] = f.Rule, ["action"] = f.Action,
+                    ["failure_count"] = f.FailureCount, ["owner"] = f.Owner, ["source"] = "ORCHESTRATOR"
+                });
+                if (rows.Count >= batchSize)
+                {
+                    yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                    rows = [];
+                }
+            }
+        }
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.data_quality_failures is read-only.");
     public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
     public object? Snapshot() => null;
     public void Restore(object? snapshot) { }
@@ -1483,6 +1617,104 @@ public sealed class DataQualityRulesDataSource : IDataSource
 
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => WriteBatches(batches, append, CancellationToken.None);
     public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.data_quality_rules is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class StewardshipScoreDataSource : IDataSource
+{
+    private readonly Evaluator _evaluator;
+    private readonly ILineageCatalogStore? _catalog;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
+    private static readonly string[] Columns = ["scope_type", "scope_name", "component", "numerator", "denominator", "percentage", "asset_count", "column_count", "weight", "evaluated_at_utc", "definition_version"];
+
+    public StewardshipScoreDataSource(Evaluator evaluator, ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        _evaluator = evaluator;
+        _catalog = catalog;
+        _config = config;
+    }
+
+    public string Path => "eng.stewardship_score";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var evaluation = await EvaluateAsync(cancellationToken);
+        var rows = evaluation.Scores.Select(s => new Row
+        {
+            ["scope_type"] = s.ScopeType, ["scope_name"] = s.ScopeName, ["component"] = s.Component,
+            ["numerator"] = s.Numerator, ["denominator"] = s.Denominator, ["percentage"] = s.Percentage,
+            ["asset_count"] = s.AssetCount, ["column_count"] = s.ColumnCount, ["weight"] = s.Weight,
+            ["evaluated_at_utc"] = s.EvaluatedAtUtc, ["definition_version"] = s.DefinitionVersion
+        });
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+
+    internal async Task<StewardshipEvaluation> EvaluateAsync(CancellationToken cancellationToken)
+    {
+        // Current-session lineage is first so it wins deterministic de-duplication; durable
+        // history is already ordered newest-first by the catalog store.
+        var assets = StewardshipScoring.FromCurrent(
+            _evaluator.LineageTracker.GetFullLineage(), _evaluator.JobName, _evaluator.CurrentScriptPath).ToList();
+        if (_catalog != null)
+        {
+            var limit = int.TryParse(_config?["Engine:DefaultHistoryLimit"], out var value) ? value : 1000;
+            cancellationToken.ThrowIfCancellationRequested();
+            assets.AddRange(StewardshipScoring.FromHistory(await _catalog.GetRecentLineageAsync(Math.Max(limit * 20, 1000))));
+        }
+        return StewardshipScoring.Evaluate(assets, LoadPolicy(_evaluator.CurrentScriptPath));
+    }
+
+    internal static WorkspacePolicyDocument? LoadPolicy(string? scriptPath)
+    {
+        var start = string.IsNullOrWhiteSpace(scriptPath) ? Environment.CurrentDirectory : System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(scriptPath))!;
+        var path = WorkspacePolicyLoader.Find(start);
+        if (path == null) return null;
+        var result = WorkspacePolicyLoader.Load(path);
+        if (!result.IsValid)
+            throw new ExecutionException($"Workspace policy '{path}' is invalid: {string.Join("; ", result.Diagnostics.Select(d => d.Message))}");
+        return result.Policy;
+    }
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("eng.stewardship_score is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.stewardship_score is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+public sealed class StewardshipGapsDataSource : IDataSource
+{
+    private readonly StewardshipScoreDataSource _scores;
+    private static readonly string[] Columns = ["scope_type", "scope_name", "component", "target_table", "target_column", "requirement", "source_file", "line", "evaluated_at_utc", "definition_version"];
+
+    public StewardshipGapsDataSource(Evaluator evaluator, ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config) =>
+        _scores = new StewardshipScoreDataSource(evaluator, catalog, config);
+    public string Path => "eng.stewardship_gaps";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var evaluation = await _scores.EvaluateAsync(cancellationToken);
+        var rows = evaluation.Gaps.Select(g => new Row
+        {
+            ["scope_type"] = g.ScopeType, ["scope_name"] = g.ScopeName, ["component"] = g.Component,
+            ["target_table"] = g.TargetTable, ["target_column"] = g.TargetColumn, ["requirement"] = g.Requirement,
+            ["source_file"] = g.SourceFile, ["line"] = g.Line, ["evaluated_at_utc"] = g.EvaluatedAtUtc,
+            ["definition_version"] = g.DefinitionVersion
+        });
+        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+    }
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("eng.stewardship_gaps is read-only.");
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken) => throw new NotSupportedException("eng.stewardship_gaps is read-only.");
     public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)Columns);
     public object? Snapshot() => null;
     public void Restore(object? snapshot) { }

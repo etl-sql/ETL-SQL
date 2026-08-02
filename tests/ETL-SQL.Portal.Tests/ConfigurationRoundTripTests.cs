@@ -369,8 +369,10 @@ public sealed class ConfigurationRoundTripTests
                                   where g.Name.EndsWith($"_{suffix}")
                                   select u.UserName + "@" + g.Name).ToListAsync()).ToHashSet();
 
-        var folders = (await db.Folders.Where(f => f.Path.Contains($"_{suffix}")).Select(f => f.Path).ToListAsync())
-            .ToHashSet();
+        var folders = (await (from f in db.Folders
+                              join u in db.Users on f.OwnerId equals u.Id
+                              where f.Path.Contains($"_{suffix}")
+                              select f.Path + "|owner=" + u.UserName).ToListAsync()).ToHashSet();
 
         var acls = (await (from a in db.FolderAcls
                            join f in db.Folders on a.FolderId equals f.Id
@@ -397,10 +399,10 @@ public sealed class ConfigurationRoundTripTests
                     .Select(o => $"{o.Key}={o.Value}")))
             .ToHashSet();
 
-        var reports = (await db.Reports
-            .Include(r => r.Folder)
-            .Where(r => r.Name.EndsWith($"_{suffix}") && !r.IsDeleted)
-            .Select(r => r.Folder.Path + "/" + r.Name + "|" + r.Description)
+        var reports = (await (from r in db.Reports
+                              join u in db.Users on r.CreatedBy equals u.Id
+                              where r.Name.EndsWith($"_{suffix}") && !r.IsDeleted
+                              select r.Folder.Path + "/" + r.Name + "|" + r.Description + "|owner=" + u.UserName)
             .ToListAsync()).ToHashSet();
         var datasets = (await db.Datasets
             .Where(d => d.Name.EndsWith($"_{suffix}"))

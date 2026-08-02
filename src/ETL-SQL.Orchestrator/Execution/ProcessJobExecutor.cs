@@ -293,9 +293,11 @@ namespace ETL_SQL.Orchestrator.Execution
                     string? dqFailures = root.TryGetProperty("dataQualityFailures", out var dq) && dq.ValueKind == JsonValueKind.String
                         ? dq.GetString() : null;
                     var columnMetrics = ParseColumnMetrics(root);
+                    var ruleFailures = ParseRuleFailures(root);
 
                     return new ScriptExecutionResult(
-                        success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures, columnMetrics);
+                        success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures,
+                        columnMetrics, ruleFailures);
                 }
                 catch (JsonException)
                 {
@@ -341,9 +343,31 @@ namespace ETL_SQL.Orchestrator.Execution
                     columnName,
                     ReadInt64(item, "totalRows", "TotalRows"),
                     ReadInt64(item, "nullRows", "NullRows"),
-                    null));
+                    ReadDateTimeOffset(item, "maxTimestampUtc", "MaxTimestampUtc")));
             }
 
+            return result;
+        }
+
+        private static IReadOnlyList<DataQualityRuleFailureMetric> ParseRuleFailures(JsonElement root)
+        {
+            if (!root.TryGetProperty("dataQualityRuleFailures", out var failures) ||
+                failures.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var result = new List<DataQualityRuleFailureMetric>();
+            foreach (var item in failures.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var column = ReadString(item, "columnName", "ColumnName");
+                var rule = ReadString(item, "rule", "Rule");
+                var action = ReadString(item, "action", "Action");
+                if (string.IsNullOrWhiteSpace(column) || string.IsNullOrWhiteSpace(rule) ||
+                    string.IsNullOrWhiteSpace(action)) continue;
+                result.Add(new DataQualityRuleFailureMetric(
+                    ReadString(item, "targetTable", "TargetTable"), column, rule, action,
+                    ReadInt64(item, "failureCount", "FailureCount"), ReadString(item, "owner", "Owner")));
+            }
             return result;
         }
 
@@ -363,6 +387,12 @@ namespace ETL_SQL.Orchestrator.Execution
             if (item.TryGetProperty(pascalName, out var pascal) && pascal.ValueKind == JsonValueKind.Number)
                 return pascal.GetInt64();
             return 0;
+        }
+
+        private static DateTimeOffset? ReadDateTimeOffset(JsonElement item, string camelName, string pascalName)
+        {
+            var raw = ReadString(item, camelName, pascalName);
+            return DateTimeOffset.TryParse(raw, out var parsed) ? parsed : null;
         }
 
         private string ResolveExecutablePath()
@@ -659,7 +689,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     response.RowsQuarantined,
                     response.RowsWarned,
                     response.DataQualityFailures,
-                    response.DataQualityColumnMetrics);
+                    response.DataQualityColumnMetrics,
+                    response.DataQualityRuleFailures);
             }
         }
 
@@ -705,5 +736,6 @@ namespace ETL_SQL.Orchestrator.Execution
         long RowsQuarantined = 0,
         long RowsWarned = 0,
         string? DataQualityFailures = null,
-        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null);
+        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
+        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null);
 }

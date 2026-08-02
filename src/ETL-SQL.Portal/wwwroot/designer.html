@@ -19,7 +19,7 @@
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
 <script type="module">
-import { auth, authApi, foldersApi, reportsApi } from '/js/api.js?v=0.17.0';
+import { auth, studioApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding } from '/js/branding.js?v=0.17.0';
 import { createDesigner } from '/designer/designer.js?v=0.17.0';
 
@@ -29,6 +29,7 @@ applyPortalBranding();
 const params     = new URLSearchParams(window.location.search);
 const reportId   = params.get('id')       ? parseInt(params.get('id'), 10)       : null;
 const folderId   = params.get('folderId') ? parseInt(params.get('folderId'), 10) : null;
+const initialMode = params.get('mode') === 'code' ? 'code' : 'design';
 
 const container = document.getElementById('designerHost');
 
@@ -55,12 +56,29 @@ async function apiJson(url, opts = {}) {
 }
 
 let initialState      = null;
-let initialReportName = 'New Report';
+let initialReportName = params.get('name')?.trim() || 'New Report';
 let initialFolderId   = folderId;
 let initialReportVersion = null;
 let initialSourceRevision = null;
 let initialSourceControlEnabled = false;
 let initialSnapshot = null;
+let studioSession = null;
+let studioFolders = [];
+
+try {
+  studioSession = await studioApi.session();
+  const required = reportId
+    ? ['ScriptRead', 'ScriptPreview', 'ScriptSave']
+    : ['ScriptPreview', 'ScriptSave', 'ReportPublish'];
+  if (!required.every(capability => studioSession.capabilities.includes(capability))) {
+    window.location.replace('/index.html');
+    throw new Error('Studio capability unavailable.');
+  }
+  studioFolders = await studioApi.folders();
+} catch (error) {
+  if (!studioSession) window.location.replace('/index.html');
+  throw error;
+}
 
 if (reportId) {
   try {
@@ -97,14 +115,16 @@ createDesigner(container, {
   reportId,
   reportVersion: initialReportVersion,
   sourceRevision: initialSourceRevision,
-  sourceControlEnabled: initialSourceControlEnabled,
+  sourceControlEnabled: initialSourceControlEnabled && studioSession.capabilities.includes('SourceCommit'),
   reportName:   initialReportName,
   folderId:     initialFolderId,
+  folders:      studioFolders,
+  initialMode,
   apiBase:      '',
   host:         'portal',
   authFetch,
-  onSave:  () => { window.location.href = reportId ? `/index.html#report-${reportId}` : '/index.html'; },
-  onCancel:() => { window.location.href = reportId ? `/index.html#report-${reportId}` : '/index.html'; },
+  onSave:  () => { window.location.href = '/studio.html'; },
+  onCancel:() => { window.location.href = '/studio.html'; },
 });
 </script>
 </body>

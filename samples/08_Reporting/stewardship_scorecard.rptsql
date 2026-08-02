@@ -1,0 +1,99 @@
+-- Stewardship Scorecard: transparent component scores and their exact remediation rows.
+SET REPORT TITLE = 'Stewardship Scorecard';
+SET REPORT DESCRIPTION = 'Versioned component scores, required metadata gaps, unowned protected data, and quality-rule coverage.';
+
+SELECT * INTO #stewardship_score
+FROM eng.stewardship_score
+LIMIT 500;
+
+SELECT * INTO #stewardship_gaps
+FROM eng.stewardship_gaps
+LIMIT 1000;
+
+SELECT * INTO #global_score
+FROM #stewardship_score
+WHERE scope_type = 'GLOBAL';
+
+SELECT * INTO #required_tag_gaps
+FROM #stewardship_gaps
+WHERE component = 'required_tag_completeness';
+
+SELECT * INTO #protected_gaps
+FROM #stewardship_gaps
+WHERE component = 'protected_data_coverage';
+
+SELECT * INTO #quality_rule_gaps
+FROM #stewardship_gaps
+WHERE component = 'quality_rule_coverage';
+
+CREATE VISUAL RequiredTagScore AS CARD (
+  SOURCE = (SELECT percentage AS Value FROM #global_score WHERE component = 'required_tag_completeness'),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Required Tags %', FORMAT = '0.00', ICON = 'sell', COLOR = '#175cd3')
+);
+
+CREATE VISUAL ProtectedDataScore AS CARD (
+  SOURCE = (SELECT percentage AS Value FROM #global_score WHERE component = 'protected_data_coverage'),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Protected Ownership/Class %', FORMAT = '0.00', ICON = 'shield', COLOR = '#b42318')
+);
+
+CREATE VISUAL QualityRuleScore AS CARD (
+  SOURCE = (SELECT percentage AS Value FROM #global_score WHERE component = 'quality_rule_coverage'),
+  MAPPINGS (VALUE = Value),
+  STYLE (TITLE = 'Quality Rule Coverage %', FORMAT = '0.00', ICON = 'rule', COLOR = '#0f766e')
+);
+
+CREATE VISUAL ComponentScores AS TABLE (
+  TITLE = 'Transparent Component Numerators and Denominators',
+  SOURCE = #stewardship_score,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE VISUAL MissingRequiredTags AS TABLE (
+  TITLE = 'Missing Required Tags',
+  SOURCE = #required_tag_gaps,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE VISUAL UnownedProtectedData AS TABLE (
+  TITLE = 'Protected Data Missing Ownership or Classification',
+  SOURCE = #protected_gaps,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE VISUAL MissingQualityRules AS TABLE (
+  TITLE = 'Columns Without Quality Rules',
+  SOURCE = #quality_rule_gaps,
+  STYLE (HEIGHT = '360px')
+);
+
+CREATE PAGE Scorecard AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B C / D D D',
+    MAP (
+      'A' = RequiredTagScore,
+      'B' = ProtectedDataScore,
+      'C' = QualityRuleScore,
+      'D' = ComponentScores
+    )
+  )
+);
+
+CREATE PAGE Remediation AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+      'A' = MissingRequiredTags,
+      'B' = UnownedProtectedData,
+      'C' = MissingQualityRules
+    )
+  )
+);
+
+CREATE NAVIGATION StewardshipNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Scorecard,
+  PAGES (Scorecard, Remediation)
+);
+

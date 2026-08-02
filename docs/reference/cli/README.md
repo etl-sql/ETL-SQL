@@ -52,6 +52,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql notices`](notices.md) | Show third-party notices and dependency credits |
 | [`etl-sql purge`](purge.md) | Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions) |
 | [`etl-sql run`](run.md) | Execute an ETL-SQL script |
+| [`etl-sql scan`](scan.md) | Inspect local or cataloged database schemas for stewardship gaps |
 | [`etl-sql serve`](serve.md) | Start a live preview server for a Report-SQL script |
 | [`etl-sql session`](session.md) | Manage ad-hoc execution sessions |
 | [`etl-sql session clear`](session-clear.md) | Clear a session state |

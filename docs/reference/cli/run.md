@@ -21,10 +21,12 @@ etl-sql run <script> [options]
 | `--batch-size, -b` | The size of data chunks to process in memory. |
 | `--json` | Output results and messages in structured JSON format. |
 | `--log, -l` | Enable logging. Optional: specify path/directory. |
+| `--output-json` | Write versioned, counts-only run evidence to the specified JSON file. |
 | `--page, -pa` | Pause and page between multiple result sets in the console. |
 | `--perf, -p` | Display performance metrics after execution. |
 | `--preview, -pr` | Preview top N results (e.g. 20, 100, *) |
 | `--progress, -g` | Display real-time graphical execution progress. |
+| `--quality-summary` | Print a counts-only data-quality summary after execution. |
 | `--resume` | Resume execution of a persistent session from the last successfully completed checkpoint. |
 | `--session` | Enable session persistence with the specified session ID. |
 | `--silent, -s` | Remove all console messages. |
@@ -45,6 +47,9 @@ ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
 
 # Headless with JSON output for automation
 ETL-SQL run nightly_load.etlsql --json --silent
+
+# Counts-only quality summary plus a versioned CI evidence artifact
+ETL-SQL run nightly_load.etlsql --quality-summary --output-json artifacts/quality.json
 
 # Persistent session — connections survive between runs
 ETL-SQL run setup_connections.etlsql --session prod-session

@@ -7,6 +7,9 @@ release evidence
 
 **Implementation sequence:** See [`ROADMAP.md`](../../../ROADMAP.md)
 
+**Normative current matrix and review contract:** See
+[`Deployment_Profile_Standards.md`](../standards/Deployment_Profile_Standards.md)
+
 **Related strategy:** See
 [`Enterprise_Platform_Strategy.md`](Enterprise_Platform_Strategy.md),
 [`Test_Strategy.md`](Test_Strategy.md), and

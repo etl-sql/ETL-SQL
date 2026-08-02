@@ -476,6 +476,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
                                     dataQualityFailures: lastResult.DataQualityFailures);
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
+                                await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
                             }
 
                             break; // Done
@@ -499,6 +500,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
                                     dataQualityFailures: lastResult.DataQualityFailures);
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
+                                await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
                             }
                         }
                     }

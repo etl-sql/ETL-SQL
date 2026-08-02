@@ -320,6 +320,33 @@ public class FlowParser : ParserComponent
             throw new SyntaxException("ASSERT JOB requires at least one metric predicate",
                 startToken.Line, startToken.Column);
 
+        bool failOnWarn = false;
+        if (IsContextualWord(_parser.Current, "WITH"))
+        {
+            Advance();
+            Consume(TokenType.LPAREN, "Expected '(' after ASSERT JOB ... WITH");
+            var option = ConsumeIdentifier("Expected FAIL_ON_WARN inside ASSERT JOB ... WITH");
+            if (!option.Value.Equals("FAIL_ON_WARN", StringComparison.OrdinalIgnoreCase))
+                throw new SyntaxException($"Unknown ASSERT JOB option '{option.Value}'. Supported: FAIL_ON_WARN",
+                    option.Line, option.Column);
+            Consume(TokenType.EQUALS, "Expected '=' after FAIL_ON_WARN");
+            if (_parser.Current.Type == TokenType.TRUE)
+            {
+                failOnWarn = true;
+                Advance();
+            }
+            else if (_parser.Current.Type == TokenType.FALSE)
+            {
+                Advance();
+            }
+            else
+            {
+                throw new SyntaxException("FAIL_ON_WARN must be TRUE or FALSE",
+                    _parser.Current.Line, _parser.Current.Column);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after ASSERT JOB options");
+        }
+
         string? failureNotification = null;
         bool throwOnCritical = false;
         while (_parser.Current.Type == TokenType.ON)
@@ -356,7 +383,7 @@ public class FlowParser : ParserComponent
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new AssertJobStatement(jobName, predicates, failureNotification, throwOnCritical)
+        return new AssertJobStatement(jobName, predicates, failureNotification, throwOnCritical, failOnWarn)
         {
             Line = startToken.Line,
             Column = startToken.Column

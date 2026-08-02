@@ -5,11 +5,12 @@ public sealed record PortalModuleStatus(string Name, bool Enabled, string Descri
 public sealed class PortalModuleRegistry(PortalConfig config)
 {
     private readonly PortalModuleConfig modules = config.Modules ?? new PortalModuleConfig();
+    private readonly StudioDeploymentMode studioMode = config.Studio?.Mode ?? StudioDeploymentMode.Disabled;
 
     public IReadOnlyList<PortalModuleStatus> All { get; } =
     [
         new("Reporting", config.Modules?.Reporting ?? true, "Report catalog, report player, datasets, and subscriptions."),
-        new("Designer", config.Modules?.Designer ?? true, "Browser report designer and design-time APIs."),
+        new("Designer", (config.Modules?.Designer ?? true) && config.Studio?.Mode != StudioDeploymentMode.Disabled, "Browser Studio and design-time APIs."),
         new("ConnectionCatalog", config.Modules?.ConnectionCatalog ?? true, "Shared connection catalog APIs and diagnostics."),
         new("SecretStore", config.Modules?.SecretStore ?? true, "Portal-managed secret vault APIs and secret resolution."),
         new("Scheduling", config.Modules?.Scheduling ?? true, "Refresh scheduling, orchestrator polling, and scheduled work."),
@@ -25,7 +26,7 @@ public sealed class PortalModuleRegistry(PortalConfig config)
         return Normalize(moduleName) switch
         {
             "reports" or "reporting" or "player" or "datasets" or "subscriptions" => modules.Reporting,
-            "designer" or "reportdesigner" => modules.Designer,
+            "designer" or "reportdesigner" or "studio" => modules.Designer && studioMode != StudioDeploymentMode.Disabled,
             "connectioncatalog" or "connections" or "diagnostics" => modules.ConnectionCatalog,
             "secretstore" or "secrets" => modules.SecretStore,
             "scheduling" or "scheduler" or "refresh" => modules.Scheduling,

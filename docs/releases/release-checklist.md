@@ -22,6 +22,12 @@ Replace `x.y.z` with the target version (current target: **0.17.0**) throughout.
 - [ ] You are on the release branch (e.g., `release/vx.y.z`), with all version features merged in.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
+- [ ] Deployment-profile portability review is complete using
+      [`Deployment_Profile_Standards.md`](../architecture/standards/Deployment_Profile_Standards.md):
+      canonical scripts/reports/rules/tags/assertions remain portable, smallest-safe profiles were
+      preserved, and target bindings or new N/A boundaries are explicit.
+- [ ] Release claims name only profiles/transitions with current linked evidence; changed matrix
+      cells and applicable regulated, air-gapped, high-volume, HA, DR, or residency overlays were reviewed.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
 - [ ] **Pause Dependabot during the release window.** Temporarily pause or comment out Dependabot update schedules in `.github/dependabot.yml` so automatic PR rebases and CI runs do not compete for runner capacity during release builds.
 - [ ] **Release path is actually open** (these blocked v0.16.0 mid-release):
@@ -129,13 +135,14 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
-The gate covers (in order): asset-drift check, **secret scan**, `dotnet restore`, dependency-audit
-self-test, NuGet dependency audit (no known-vulnerable/deprecated packages), **SBOM generation**,
-`dotnet build` (Release), `dotnet format --verify-no-changes` (auto-fixes drift), smoke lane,
-fast lane, **N→N+1 upgrade-path drill**, sample scripts, then optionally SLT, VS Code npm
-HA soak contract gate, then optionally SLT, VS Code npm (ci/audit/compile/**vsce package**/unit),
-scale certification (smoke + standard) with baseline regression checks, Docker integration, and
-installer builds.
+The gate covers (in order): asset-drift check, changelog compilation, **secret scan**,
+`dotnet restore`, dependency-audit self-test, NuGet dependency audit (no
+known-vulnerable/deprecated packages), **SBOM generation**, third-party inventory drift,
+`dotnet build` (Release), and `dotnet format --verify-no-changes` (auto-fixes drift). Scale
+certification (smoke and optional standard) plus baseline checks run next, before the long smoke,
+fast, engine, and Portal lanes heat the machine. The gate then runs the **N→N+1 upgrade-path
+drill**, sample scripts, HA soak contracts, optional SLT, VS Code npm
+(ci/audit/compile/**vsce package**/unit), optional Docker integration, and installer builds.
 
 The HA soak contract gate is intentionally short and non-destructive. It validates that the
 PostgreSQL HA topology, sustained workload materialization, metrics snapshot, diagnostics bundle,

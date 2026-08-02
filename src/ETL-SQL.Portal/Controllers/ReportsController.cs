@@ -38,8 +38,9 @@ public class ReportsController : ControllerBase
     private readonly ReportStructureService reportStructure;
     private readonly ReportDependencyService reportDependencies;
     private readonly LineageImpactService lineageImpact;
+    private readonly ReportPublishingPolicyService publishingPolicy;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy)
     {
         this.db = db;
         this.audit = audit;
@@ -54,6 +55,7 @@ public class ReportsController : ControllerBase
         this.reportStructure = reportStructure;
         this.reportDependencies = reportDependencies;
         this.lineageImpact = lineageImpact;
+        this.publishingPolicy = publishingPolicy;
     }
 
     private int CurrentUserId =>
@@ -313,6 +315,7 @@ public class ReportsController : ControllerBase
 
     [HttpPost("reports")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ReportPublish, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> Publish([FromBody] PublishReportRequest req)
     {
         var perm = await GetEffectivePermissionAsync(req.FolderId);
@@ -330,6 +333,24 @@ public class ReportsController : ControllerBase
             return BadRequest(validation);
 
         var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
+        SetMetadata(scriptMetadata, "owner", req.Owner);
+        SetMetadata(scriptMetadata, "contact", req.Contact);
+        SetMetadata(scriptMetadata, "steward", req.Steward);
+        var policyResult = await publishingPolicy.ValidateAsync(
+            scriptMetadata,
+            await scriptInspection.ReadScriptLineageAsync(resolved),
+            HttpContext.RequestAborted);
+        if (!policyResult.Allowed)
+            return BadRequest(new { error = "organization_metadata_policy", errors = policyResult.Errors });
+
+        var createdBy = CurrentUserId;
+        if (!string.IsNullOrWhiteSpace(req.CreatedByUsername))
+        {
+            if (!IsAdmin) return Forbid();
+            var requestedOwner = await db.Users.SingleOrDefaultAsync(u => u.UserName == req.CreatedByUsername);
+            if (requestedOwner is null) return BadRequest($"Catalog owner '{req.CreatedByUsername}' was not found.");
+            createdBy = requestedOwner.Id;
+        }
 
         var report = new Report
         {
@@ -347,7 +368,7 @@ public class ReportsController : ControllerBase
             ScriptPath = resolved,
             ScriptLastModified = validation.LastModified ?? DateTime.UtcNow,
             PublishedScriptHash = validation.Hash,
-            CreatedBy = CurrentUserId,
+            CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -365,6 +386,7 @@ public class ReportsController : ControllerBase
 
     [HttpPost("reports/validate")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> ValidateScript([FromBody] ValidateReportScriptRequest req)
     {
         if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
@@ -718,6 +740,12 @@ public class ReportsController : ControllerBase
 
         if (req.ScriptPath is not null)
         {
+            var studioAuthorization = HttpContext.RequestServices.GetRequiredService<StudioAuthorizationService>();
+            if (studioAuthorization.Mode != StudioDeploymentMode.SourceControlled)
+                return NotFound(new { error = "External script publication is unavailable in this Studio deployment mode." });
+            if (!studioAuthorization.HasCapability(User, StudioCapabilities.ReportPublish))
+                return Forbid();
+
             var scriptRoot = portalConfig.ScriptRootPath;
             if (string.IsNullOrWhiteSpace(scriptRoot))
                 return BadRequest(new { error = "ScriptRootPath is not configured." });
@@ -736,6 +764,15 @@ public class ReportsController : ControllerBase
             report.PublishedScriptHash = validation.Hash;
             report.ScriptLastModified = validation.LastModified ?? DateTime.UtcNow;
             var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
+            SetMetadata(scriptMetadata, "owner", req.Owner ?? report.Owner);
+            SetMetadata(scriptMetadata, "contact", req.Contact ?? report.Contact);
+            SetMetadata(scriptMetadata, "steward", req.Steward ?? report.Steward);
+            var policyResult = await publishingPolicy.ValidateAsync(
+                scriptMetadata,
+                await scriptInspection.ReadScriptLineageAsync(resolved),
+                HttpContext.RequestAborted);
+            if (!policyResult.Allowed)
+                return BadRequest(new { error = "organization_metadata_policy", errors = policyResult.Errors });
             report.MetadataJson = SerializeMetadata(scriptMetadata);
             report.Description = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d"), report.Description);
             report.Owner = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner"), report.Owner);
@@ -1140,6 +1177,11 @@ public class ReportsController : ControllerBase
         return Ok(alerts.Select(ToAlertDto));
     }
 
+    private static void SetMetadata(Dictionary<string, string> metadata, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) metadata[key] = value;
+    }
+
     [HttpPost("reports/{id:int}/alerts")]
     public async Task<IActionResult> CreateAlert(int id, [FromBody] CreateReportAlertRequest req)
     {
@@ -1502,6 +1544,7 @@ public class ReportsController : ControllerBase
 
     [HttpGet("reports/{id:int}/script-content")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetScriptContent(int id)
     {
         var report = await db.Reports.Include(r => r.Folder)
@@ -1526,6 +1569,7 @@ public class ReportsController : ControllerBase
 
     [HttpPut("reports/{id:int}/script-content")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptSave, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> SaveScriptContent(int id, [FromBody] ScriptContentRequest req)
     {
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
@@ -1545,8 +1589,14 @@ public class ReportsController : ControllerBase
 
     [HttpPost("reports/{id:int}/script-source/commit")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.SourceCommit, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> CommitScriptSource(int id, CancellationToken cancellationToken)
     {
+        if (portalConfig.SourceControl.PushOnSave
+            && !HttpContext.RequestServices.GetRequiredService<StudioAuthorizationService>()
+                .HasCapability(User, StudioCapabilities.SourcePush))
+            return Forbid();
+
         var report = await db.Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound();
@@ -1578,6 +1628,7 @@ public class ReportsController : ControllerBase
 
     [HttpPost("scripts/upload")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptIngress, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> UploadScript([FromBody] UploadScriptRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Filename))
@@ -1608,6 +1659,7 @@ public class ReportsController : ControllerBase
 
     [HttpGet("reports/available-scripts")]
     [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetAvailableScripts()
     {
         var files = new List<string>();

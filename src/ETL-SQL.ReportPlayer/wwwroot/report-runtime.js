@@ -434,6 +434,7 @@
             label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
 
             const input = document.createElement('input');
+            input.setAttribute('aria-label', label.textContent);
             input.type = inputTypeForParameter(meta);
             const currentValue = getParam(manifest.parameters, meta.name) || '';
             if (input.type === 'checkbox') input.checked = isOn(currentValue);
@@ -675,6 +676,7 @@
             inputGroup.className = 'input-group';
 
             const input = document.createElement('input');
+            input.setAttribute('aria-label', label.textContent);
             input.type = inputTypeForParameter(meta);
             const currentValue = getParam(manifest.parameters, meta.name) || '';
             if (input.type === 'checkbox') input.checked = isOn(currentValue);
@@ -3083,6 +3085,13 @@
 
     // ── Slicer ──────────────────────────────────────────────────────────────
 
+    function setParameterAccessibleName(control, visual, parameterName, qualifier) {
+        const visualName = String((visual && visual.name) || '').trim();
+        const normalizedParameter = String(parameterName || '').replace(/^@/, '').trim();
+        const baseName = visualName || normalizedParameter || 'Report parameter';
+        control.setAttribute('aria-label', qualifier ? `${baseName} ${qualifier}` : baseName);
+    }
+
     function renderSlicer(container, visual, manifest) {
         const wrapper = document.createElement('div');
         wrapper.className = 'slicer-wrapper';
@@ -3100,6 +3109,7 @@
             renderMultiSelectCheckboxes(wrapper, visual, manifest, paramName, changeActions);
         } else {
             const select = document.createElement('select');
+            setParameterAccessibleName(select, visual, paramName);
             if (paramName) select.setAttribute('data-parameter', paramName);
             if (isMulti) select.multiple = true;
 
@@ -3171,6 +3181,7 @@
             cb.type = 'checkbox';
             cb.value = optVal;
             cb.checked = selected.has(optVal);
+            setParameterAccessibleName(cb, visual, paramName, optVal);
 
             cb.addEventListener('change', () => {
                 if (cb.checked) selected.add(optVal);
@@ -3401,12 +3412,14 @@
 
         const textInput = document.createElement('input');
         textInput.type = 'text';
+        setParameterAccessibleName(textInput, visual, param, 'date');
         textInput.placeholder = 'YYYY-MM-DD or T-1...';
         textInput.value = def;
         if (param) textInput.setAttribute('data-parameter', param);
 
         const datePicker = document.createElement('input');
         datePicker.type = 'date';
+        setParameterAccessibleName(datePicker, visual, param, 'native date picker');
         datePicker.className = 'reldate-native-picker';
         if (min) datePicker.min = min;
         if (max) datePicker.max = max;
@@ -3535,12 +3548,14 @@
 
         const textInput = document.createElement('input');
         textInput.type = 'text';
+        setParameterAccessibleName(textInput, visual, param, 'relative date');
         textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
         textInput.value = def;
         if (param) textInput.setAttribute('data-parameter', param);
 
         const hiddenDate = document.createElement('input');
         hiddenDate.type = 'date';
+        setParameterAccessibleName(hiddenDate, visual, param, 'native date picker');
         hiddenDate.className = 'reldate-native-picker';
         if (min) hiddenDate.min = min;
         if (max) hiddenDate.max = max;
@@ -3647,6 +3662,7 @@
 
         const input = document.createElement('input');
         input.type  = 'range';
+        setParameterAccessibleName(input, visual, param);
         input.min   = min;
         input.max   = max;
         input.step  = step;
@@ -3702,6 +3718,7 @@
             cb.value = val;
             cb.checked = currentValues.includes(val);
             cb.className = 'multiselect-cb';
+            setParameterAccessibleName(cb, visual, param, val);
 
             label.appendChild(cb);
             label.appendChild(document.createTextNode(' ' + val));
@@ -3741,6 +3758,7 @@
 
         const input       = document.createElement('input');
         input.type        = 'search';
+        setParameterAccessibleName(input, visual, param);
         input.placeholder = placeholder;
         if (param) input.setAttribute('data-parameter', param);
 
@@ -3786,6 +3804,7 @@
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = checked;
+        setParameterAccessibleName(input, visual, param);
         if (param) input.setAttribute('data-parameter', param);
 
         const label = document.createElement('label');
@@ -3826,6 +3845,7 @@
 
         const input = document.createElement('input');
         input.type = 'text';
+        setParameterAccessibleName(input, visual, param);
         input.value = def;
         input.placeholder = placeholder;
         if (param) input.setAttribute('data-parameter', param);
@@ -3870,6 +3890,7 @@
 
         const input = document.createElement('input');
         input.type = 'number';
+        setParameterAccessibleName(input, visual, param);
         input.value = def;
         input.placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
         if (min !== undefined && min !== null) input.min = min;

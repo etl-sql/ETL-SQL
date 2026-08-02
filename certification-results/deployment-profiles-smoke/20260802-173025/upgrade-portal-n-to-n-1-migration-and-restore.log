@@ -1,0 +1,48 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Release\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Connectors.Common -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\bin\Release\net10.0\ETL-SQL.Connectors.Common.dll
+  ETL-SQL.Reporting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Reporting\bin\Release\net10.0\ETL-SQL.Reporting.dll
+  ETL-SQL.Portal.Data -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal.Data\bin\Release\net10.0\ETL-SQL.Portal.Data.dll
+  ETL-SQL.Infrastructure.Logging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Logging\bin\Release\net10.0\ETL-SQL.Infrastructure.Logging.dll
+  ETL-SQL.Infrastructure.Sqlite -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\bin\Release\net10.0\ETL-SQL.Infrastructure.Sqlite.dll
+  ETL-SQL.Analysis -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Analysis\bin\Release\net10.0\ETL-SQL.Analysis.dll
+  ETL-SQL.Infrastructure.Docker -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Docker\bin\Release\net10.0\ETL-SQL.Infrastructure.Docker.dll
+  ETL-SQL.Connectors.Messaging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Messaging\bin\Release\net10.0\ETL-SQL.Connectors.Messaging.dll
+  ETL-SQL.ReportBuilder -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportBuilder\bin\Release\net10.0\ETL-SQL.ReportBuilder.dll
+  ETL-SQL.Connectors.Cloud -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Cloud\bin\Release\net10.0\ETL-SQL.Connectors.Cloud.dll
+  ETL-SQL.Connectors.Files -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Files\bin\Release\net10.0\ETL-SQL.Connectors.Files.dll
+  ETL-SQL.Connectors.Databases -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\bin\Release\net10.0\ETL-SQL.Connectors.Databases.dll
+  ETL-SQL.Connectors.Remote -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Remote\bin\Release\net10.0\ETL-SQL.Connectors.Remote.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Release\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.Portal.Migrations.Postgres -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal.Migrations.Postgres\bin\Release\net10.0\ETL-SQL.Portal.Migrations.Postgres.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Release\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.ReportHosting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportHosting\bin\Release\net10.0\ETL-SQL.ReportHosting.dll
+  ETL-SQL.Orchestrator -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Orchestrator\bin\Release\net10.0\ETL-SQL.Orchestrator.dll
+  ETL-SQL.TUI -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.TUI\bin\Release\net10.0\ETL-SQL-TUI.dll
+  ETL-SQL.Portal -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal\bin\Release\net10.0\ETL-SQL-Portal.dll
+  ETL-SQL.WorkstationEditor -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.WorkstationEditor\bin\Release\net10.0\ETL-SQL-Editor.dll
+  ETL-SQL.Orchestrator.Service -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Orchestrator.Service\bin\Release\net10.0\ETL-SQL-Service.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Release\net10.0\ETL-SQL.dll
+  ETL-SQL.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll
+  ETL-SQL.Portal.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Release\net10.0\ETL-SQL.Portal.Tests.dll
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Release\net10.0\ETL-SQL.Portal.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.08]   Discovering: ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.14]   Discovered:  ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.15]   Starting:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.MigrationConvergenceTests.PortalDatabaseMigrationLock_SerializesConcurrentStartupMigrationWork [666 ms]
+  Passed ETL_SQL.Portal.Tests.MigrationConvergenceTests.FreshDatabase_MigratesToHead_AndReportsSchemaUpToDate [845 ms]
+  Passed ETL_SQL.Portal.Tests.MigrationConvergenceTests.PortalMigrations_UpOperationsFollowRollingExpandContract [7 ms]
+  Passed ETL_SQL.Portal.Tests.MigrationConvergenceTests.OutOfDateDatabase_AtPreviousRelease_ConvergesToHeadOnMigrate [298 ms]
+  Passed ETL_SQL.Portal.Tests.BackupRestoreDrillTests.CleanServerRestore_PreservesAuthPermissionsJobsSubscriptionsAudit [1 s]
+  Passed ETL_SQL.Portal.Tests.BackupRestoreDrillTests.DatasetCacheKeyVersionRead_SurvivesBackupRestore [380 ms]
+  Passed ETL_SQL.Portal.Tests.UpgradePathDrillTests.PortalCatalog_InPlaceUpgrade_PreservesDataAndAppliesNewSchema [285 ms]
+[xUnit.net 00:00:04.54]   Finished:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.UpgradePathDrillTests.OrchestratorJobStore_UpgradesLegacySchemaInPlace_AndPreservesJobs [45 ms]
+
+Test Run Successful.
+Total tests: 8
+     Passed: 8
+ Total time: 4.8851 Seconds

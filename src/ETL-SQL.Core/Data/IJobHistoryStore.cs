@@ -126,6 +126,35 @@ public record JobHistoryEntry(
     string? DataQualityFailures = null
 );
 
+/// <summary>One normalized, counts-only data-quality failure joined to its run identity.</summary>
+public sealed record JobDataQualityFailure(
+    long RunId,
+    string JobName,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string Status,
+    string? TargetTable,
+    string ColumnName,
+    string Rule,
+    string Action,
+    long FailureCount,
+    string? Owner = null);
+
+/// <summary>Canonical quality-status projection for one current or persisted run.</summary>
+public sealed record JobDataQualityStatus(
+    string RunId,
+    string? JobName,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string Status,
+    long RowsProcessed,
+    long RowsWarned,
+    long RowsQuarantined,
+    int FailedRuleCount,
+    DateTimeOffset? FreshestValueUtc,
+    string FreshnessState,
+    string? ErrorSummary);
+
 /// <summary>Daily-aggregated job execution for one job, retained far longer than raw history.</summary>
 public sealed record JobHistoryDailySummary(
     string Day,
@@ -171,7 +200,17 @@ public interface IJobHistoryStore
     // History Management
     Task<long> LogJobStartAsync(string jobName);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null, long rowsQuarantined = 0, long rowsWarned = 0, string? dataQualityFailures = null);
+    /// <summary>
+    /// Imports one completed historical run while preserving its original timestamps. Implementations
+    /// must be idempotent for the run's job/start/end tuple and return the target run id.
+    /// </summary>
+    Task<long> ImportJobHistoryAsync(JobHistoryEntry entry);
     Task SaveJobColumnMetricsAsync(long entryId, IEnumerable<DataQualityColumnMetric> metrics) => Task.CompletedTask;
+    Task SaveJobDataQualityFailuresAsync(long entryId, IEnumerable<DataQualityRuleFailureMetric> failures) => Task.CompletedTask;
+    Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresAsync(int limit = 1000) =>
+        Task.FromResult<IReadOnlyList<JobDataQualityFailure>>(Array.Empty<JobDataQualityFailure>());
+    Task<IReadOnlyList<JobDataQualityStatus>> GetDataQualityStatusesAsync(int limit = 1000) =>
+        Task.FromResult<IReadOnlyList<JobDataQualityStatus>>(Array.Empty<JobDataQualityStatus>());
     Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(string jobName, string? targetTable, string columnName, int limit = 100) =>
         Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);

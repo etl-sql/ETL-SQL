@@ -46,6 +46,29 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   unparseable interval as "off"; on a patch the same silence would report success while leaving the
   previous interval running.
 
+**Canonical language lifecycle and inspection surface**
+
+- Lifecycle modifiers now have one supported position and one capability matrix across core,
+  Report-SQL, and Portal objects. Unsupported `CREATE OR ALTER`, `CREATE OR REPLACE`,
+  `CREATE IF NOT EXISTS`, `ALTER`, and `DROP IF EXISTS` combinations fail during parsing instead of
+  producing statement shapes that cannot execute. Local connection upserts and report-object
+  replacement now share the documented semantics.
+- Local/report datasets consistently use `&name`; Portal catalog datasets retain quoted identities.
+  Publish commands are identity-first (`PUBLISH REPORT|BUNDLE|DATASET <name> FROM <source>`), and
+  typed or property-bag object definitions consistently use `AS`.
+- Tags and imported lineage are metadata records managed through `INSERT`, `UPDATE`, and `DELETE`.
+  Retired `CREATE TAG`, `CREATE LINEAGE`, and bare `TAG ... WITH (...)` forms are rejected, while
+  automatically captured lineage remains immutable.
+- Row-returning inspection commands are replaced by normal queries over `[connection.]eng.*`.
+  `SHOW TAGS`, `SHOW COLUMNS`, `SHOW SCHEMA`, and `DESCRIBE` are retired, and lineage file export is
+  now `EXPORT LINEAGE AS OPENLINEAGE TO <path>`.
+- Function-style file/email aliases, `FOR EACH`, and conditional `WAITFOR (<condition>)` are
+  retired. Use statement-form file/email operations, `FOREACH`, and `WAIT UNTIL`; `WAITFOR DELAY`
+  and `WAITFOR TIME` remain supported.
+- Portal share/embed expiration uses the structural `EXPIRES <timestamp>` clause, and compound
+  resource kinds such as `SHARE LINK`, `SAVED VIEW`, and `EMBED TOKEN` are reserved for named
+  lifecycle-managed resources.
+
 ### Security
 
 - Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
@@ -60,9 +83,173 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   credential that an engine error echoes back; pattern-based redaction does not match a bare
   password in free text. Net exposure is lower than before, but this specific mitigation is absent.
   Tracked for a fix at the point where `SECRET:` references are resolved.
+- Expanded the security-boundary documentation and pinned its required contracts with
+  `SecurityBoundaryDocTests`.
 
 ### Added
 
+- Added a generated Portal browser response contract for critical users, folders, reports, and
+  execution-job APIs. The API client validates responses before page code consumes them, the
+  generator has a drift-check mode, and a dependency-free test proves casing or required-field
+  mismatches fail explicitly. Admin Users now consumes and posts the canonical `username` field.
+- Added one shared Portal session identity model across Reports, Admin, Docs, and Orchestrator.
+  Recognizable username/name/email claims now win over internal JWT subject IDs, role checks share
+  one case-insensitive implementation, shell identity elements retain the immutable subject only as
+  non-visible metadata, and the Audit table consumes its canonical `username` response field.
+- Removed the prototype Governance dashboard from the production route graph. Governance now opens
+  the durable Quarantine Queue and exposes only Quarantine and Lineage navigation; overview scores,
+  exceptions, badges, glossary terms, and settings backed by static/browser-memory demo records are
+  unreachable until authorized durable APIs replace them. A static guard prevents their return.
+- Reworked first report execution into one preflight and one Run action. The report identity remains
+  visible before a snapshot exists, required parameters are validated with accessible labels before
+  enqueue, execution polls through Completed/Failed/Cancelled terminal states, and export or
+  subscription controls remain disabled until a successful snapshot exists. Embedded slicers,
+  date and relative-date pickers, sliders, multi-selects, search fields, checkboxes, text boxes,
+  number boxes, and generated parameter forms now expose programmatic accessible names from the
+  visual or parameter identity across every synchronized report host.
+- Added one responsive global navigation drawer across Reports, Admin, Docs, and Orchestrator. At
+  narrow widths it replaces the clipped top navigation, incorporates each workspace sidebar,
+  blocks and removes background content from interaction, traps focus, restores focus on close,
+  supports Escape and overlay dismissal, and retains identity, theme, and sign-out actions. A
+  dedicated 390px UI-sandbox story and dependency-free shell contract pin the behavior.
+- Added shared narrow-viewport patterns across Portal workspaces: dynamic tables receive contained
+  horizontal scrolling and stacked action cells, forms and command groups collapse without fixed
+  minimum widths, Admin and Orchestrator tabs remain scrollable, Orchestrator status cards form a
+  two-column grid, and Docs content and tables stay within the viewport. The responsive sandbox
+  fixtures exercise tabs, forms, tables, actions, and both sidebar/no-sidebar shells at 390px.
+- Added explicit Portal Studio deployment modes and server-side authoring capabilities. `Disabled`
+  removes Studio and authoring routes; `CatalogOnly` permits only granted catalog operations and
+  forcibly removes external ingress/source operations; `SourceControlled` permits those operations
+  only through separate grants. Designer analysis, schema, run, preview, save, snapshot, report
+  source read/write, path-based publish, upload, commit, and automatic push are all independently
+  fenced by `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`,
+  `ReportPublish`, `ScriptIngress`, `SourceCommit`, and `SourcePush`. Role mappings are empty and
+  deny access unless configured; Admin/Publisher names do not bypass capability checks.
+- Added a first-class, catalog-scoped Portal Studio home. It groups only authorable reports by
+  governed folder, offers equal Code and Design entry lanes, creates new reports through an
+  internal catalog artifact rather than raw upload, and never returns the backing script path.
+  Capability-aware navigation disappears outside authorized sessions; `Disabled` mode returns 404
+  for both Studio entry pages and every authoring API, while `CatalogOnly` removes external source
+  controls from Administration and routes editing through Studio. The shared designer now presents
+  explicit accessible Code/Design tabs, and desktop/mobile UI-sandbox fixtures plus static and
+  integration tests pin the workflow and interactive trust boundary.
+- Replaced the empty report-library landing state with a consumer home backed by the existing
+  favorites, recently viewed, featured, and popular catalog APIs. One fuzzy global search spans
+  folders, report metadata, ownership/stewardship, certification, and lineage terms. Compact cards
+  now use intentional catalog icons and one latest activity line (`Viewed`, `Updated`, failure,
+  cancellation, running, or first-run readiness) instead of repeating three contradictory
+  never-run statuses; the same concise presentation is used in folder and catalog lists.
+- Added fail-closed deployment-profile certification for Solo, Team, Enterprise, SaaS, supported
+  promotion paths, and N → N+1 upgrades. The cross-platform PowerShell runner composes focused
+  suites and retains commit-bound JSON/Markdown summaries plus exact phase logs. A versioned journey
+  fixture now defines positive and negative proof, portable versus host-owned state, and continuity
+  identifiers for pipelines, rebinding, scheduling, quality/stewardship, reports, identity,
+  backup/restore, promotion, topology growth, upgrades, SaaS transfer, and tenant isolation.
+- Added executable lifecycle drills for N → N+1 in Solo, Team, Enterprise, and SaaS and for every
+  supported promotion path. Each drill creates a versioned export/restore point, fences scheduled
+  jobs, performs cutover, reconciles artifact hashes plus job/history/quality/lineage continuity,
+  and proves rollback into a separate scheduler-fenced store; Portal/Orchestrator upgrade coverage
+  also migrates populated N schemas to HEAD and composes coordinated backup/restore proof.
+- Checked-in workspace policy now enforces required `SCRIPT` tags and materialized-output `COLUMN`
+  tags as local lint errors. Workstation automation returns a non-zero exit before target writes when
+  `@owner`, `@steward`, or another required tag is absent, while failing `@expect` rules with
+  `@fail: THROW` retain the same non-zero runtime gate; both paths are covered by the Solo
+  certification lane.
+- Certified the Team/SME quality loop without Portal: real SQLite run history supplies three-run
+  `HISTORICAL` baselines, out-of-band `ASSERT JOB` results trigger both SMTP- and WEBHOOK-typed
+  notification sinks, and the Team certification lane composes those checks with scheduler retry,
+  dispatch, and durable quality-history coverage.
+- Added signed organization metadata policy with `REPORT`, `DATASET`, and `COLUMN` required-tag
+  scopes. Portal report creation and script replacement now verify the active tenant/environment
+  envelope and parsed dataset lineage before catalog mutation, failing closed on missing tags or an
+  invalid policy. Enterprise certification proves an OIDC-authenticated Publisher cannot publish a
+  dataset missing required `@classification`, and that rejection creates no report row.
+- Added secret-safe deployment promotion for the complete currently eligible state surface. The
+  Portal bootstrap now preserves folder/report catalog ownership alongside identities, governed
+  connections, `SECRET:` references, ACLs, reports, subscriptions, and alerts. The provider-neutral
+  `etl-sql.orchestrator-promotion/v1` package exports/imports jobs, schedules, notifications,
+  ownership attribution, quality history/failures, lineage, and tags while rejecting raw
+  credentials and leaving resolved secrets, tokens, caches, and keys behind.
+- Added `admin promotion export`, `validate`, and `import` with repeatable target bindings,
+  duplicate/dangling-reference/collision checks, exact historical timestamps, idempotent replay,
+  and scheduler-safe disabled jobs at the target. Documented and tested the supported Solo → Team
+  and Team → Enterprise journeys, including preflight, backup, fencing, cutover proof, and rollback.
+- Added admin-only Portal bootstrap validation at `POST /api/admin/configuration/validate`. It
+  applies target bindings in memory and reports parse failures, raw credentials, duplicates, unused
+  mappings, and same-name/different-state collisions across identities, folders/owners, governed
+  connections, and reports without mutating the target catalog.
+- Added direct Solo/Enterprise SaaS tenant onboarding through `admin promotion saas-onboard`.
+  Onboarding fixes tenant authority at the host boundary, copies only hashed portable artifacts,
+  imports eligible catalog/quality/lineage state with jobs disabled, stages the Portal bootstrap,
+  creates disjoint database/artifact/key/cache/queue/audit/telemetry/support roots and secret
+  namespaces, applies runtime concurrency settings, records resource limits, defaults support and
+  activation off, and refuses to overwrite an existing tenant. All staged paths now resolve beneath
+  that fixed root and staged bytes are rejected above quota. SaaS certification proves negative
+  cross-tenant reads for lineage, quality failures, schema-only PII results, security-event queues,
+  Portal audit/outbox rows, and runtime security caches.
+- Added `etl-sql admin promotion preflight`, a mutation-free deployment-profile inventory with the
+  versioned `etl-sql.deployment-preflight/v1` JSON contract. It hashes portable scripts, policies,
+  and operational evidence; identifies exportable catalog state and required `SECRET:`/`SHARED:`
+  target bindings; summarizes ephemeral state; records protected files without reading, hashing,
+  sizing, or logging their contents; and fails closed on raw credential literals, unsafe traversal,
+  unsupported scale, or backward profile transitions.
+- Added schema-only `etl-sql scan --pii` for supported local files/directories and cataloged
+  database tables through credential-safe `SHARED:` aliases. It applies the nearest
+  `etlsql-policy.json`, retains file/line remediation locations, emits a versioned JSON contract,
+  enforces bounded recursion/file counts, and never reads or reports row values or credentials.
+- Added one versioned, transparent stewardship scoring service shared by CLI scans, local engine
+  catalogs, Orchestrator APIs, and remote/Portal consumers. `eng.stewardship_score` exposes global,
+  job, and table component numerators, denominators, percentages, counts, timestamps, policy
+  weights, and definition version without an opaque composite; `eng.stewardship_gaps` preserves
+  source locations and reconciles exactly to every component total. Current lineage wins over
+  history and the newest durable remediation wins over older catalog entries.
+- Added portable Data Quality Health and Stewardship Scorecard `.rptsql` operator reports over the
+  shared `eng.*` contracts, plus a runnable one-person workflow with checked-in policy, tagged and
+  quality-gated pipeline, local SQLite Orchestrator schedule, optional transition notifications,
+  and a copy-pasteable guide. Shared fixtures cover empty/first/clean/warn/quarantine/critical/stale,
+  missing-tag, unowned-protected-data, and recovery states; acceptance tests pin workstation,
+  Orchestrator, and Portal count/score parity and the steward-only quarantine boundary.
+- Published the normative four-profile deployment standard with Green/Yellow/Red/justified-N/A
+  evidence for every required capability, smallest-safe forms for enterprise-oriented features,
+  regulated/air-gapped/high-volume/HA/DR/residency overlays, and mandatory feature-design and
+  release portability reviews. Current gaps—especially SaaS isolation and incomplete promotion
+  certification—remain explicitly Red or Yellow rather than being presented as shipped claims.
+- Added the versioned workspace-root `etlsql-policy.json` contract and JSON Schema for required tags
+  with scope/exclusions, regex-based protected-data suggestions, and default warning/failure
+  thresholds. CLI runs discover the nearest workspace policy and fail with path/line/column
+  diagnostics when JSON, scopes, regexes, or threshold relationships are invalid.
+- Added `etlsql run --quality-summary` for stable counts-only terminal evidence and
+  `--output-json <path>` for a versioned CI artifact containing run totals, normalized rule counts,
+  and structured column metrics without failed sample values; errors are secret-redacted.
+- Added the no-Portal quality catalog: `eng.data_quality_status` provides canonical current/local
+  run identity, timing, status, processed/warned/quarantined totals and percentages, failed-rule
+  count, observed freshness, and redacted errors; `eng.data_quality_failures` provides normalized
+  counts by run/target/column/rule/action. Both tables are queryable through a remote
+  `ORCHESTRATOR` connection, while `eng.job_history` now exposes its persisted quality totals.
+- Added `ASSERT JOB ... WITH (FAIL_ON_WARN = TRUE)` so warned rows can fail unattended CLI and
+  orchestrated runs with a reliable non-zero exit code without requiring a notification channel.
+- Documented and pinned the no-service Task Scheduler/cron/CI quality workflow and the optional
+  local SQLite Orchestrator progression for scheduling, history, baselines, managed notifications,
+  and recovery state; notifications remain optional for exit codes and queryable evidence.
+- Added Windows MSI in-place upgrade certification on `release/**` pushes and version tags. The
+  elevated ephemeral runner installs the prior release, writes a sentinel into the registered
+  install location, upgrades to the candidate, rejects side-by-side installs, verifies preserved
+  data and the installed CLI version, then uninstalls and retains verbose logs plus JSON evidence.
+- Added one governed managed-connection lifecycle across Portal and Orchestrator admin blocks,
+  including create/alter/test/show/drop dispatch, Orchestrator REST administration, redacted
+  configuration inspection, disabled-definition export/import, impact analysis, `WHAT_IF`,
+  fail-closed authorization, and redacted security audit. SMTP and WEBHOOK catalog lifecycle and
+  Portal-to-Orchestrator notification delivery use the same contract.
+- Added the queryable `eng.*` catalog for session state, lineage/tags, governance, data quality,
+  connections/tables/variables/views, diagnostics, jobs/history/state/metrics, bundles, Portal
+  catalog data, and parameterized catalog functions. The `eng` schema is reserved, connection
+  configuration is redacted, `SELECT *` lint is off by default, and completion discovers catalog
+  tables after `eng.`.
+- Added complete executable-statement `ToSql()` serialization, a generated statement-surface
+  inventory, canonical parser → formatter → parser coverage, retired-form rejection tests, and
+  production-parser validation for documentation, help, snippets, and samples. Syntax indexes,
+  references, administration guides, architecture contracts, migration material, configuration
+  export, LSP grammar, and release notes now follow the same canonical contract.
 - `DROP BUTTON [IF EXISTS] <name>` and `ALTER BUTTON <name> (...)`. `BUTTON` previously had `CREATE`
   only, even though the engine already removed buttons on `DROP` and `CREATE BUTTON`'s
   duplicate-name error told the author to "use CREATE OR ALTER or DROP BUTTON first" — advice the
@@ -74,6 +261,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Moved smoke and optional Standard scale certification ahead of the long pre-release test lanes so
+  baseline comparisons measure warmed binaries before sustained lane and container activity heats
+  or pressures the machine; `Test-PreRelease.ps1 -Explain` reports the same execution order.
+- Added a same-worktree commit comparison harness for scale investigations. It measures both refs in
+  one directory with interleaved arms, identical copied runner logic, rebuilds and discarded warm-ups
+  per sample, restores the original checkout, and reports within-arm spread beside the median delta.
+- Removed TUI completion and lint latency that could leave suggestions or diagnostics nearly a
+  minute behind typing, and stopped showing the opt-in `SELECT *` warning when it is disabled.
 - `docs/reference/visuals-reporting/report/theme.md`, which is embedded as runtime `HELP`,
   documented `DROP THEME corporate IF EXISTS` — a form the parser has never accepted for `THEME`.
 

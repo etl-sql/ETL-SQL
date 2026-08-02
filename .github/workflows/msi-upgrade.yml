@@ -1,0 +1,92 @@
+name: MSI In-Place Upgrade
+
+on:
+  push:
+    branches:
+      - 'release/**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  msi-upgrade:
+    name: MSI In-Place Upgrade
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve current version and previous release
+        id: versions
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $currentVersion = [string]$props.Project.PropertyGroup.VersionPrefix
+          if ([string]::IsNullOrWhiteSpace($currentVersion)) { throw 'Directory.Build.props has no VersionPrefix.' }
+
+          $currentTag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$currentVersion" }
+          $releases = gh release list --limit 30 --json tagName,isDraft,isPrerelease,publishedAt | ConvertFrom-Json
+          $previous = $releases |
+            Where-Object { -not $_.isDraft -and -not $_.isPrerelease -and $_.tagName -ne $currentTag } |
+            Sort-Object { [version]($_.tagName.TrimStart('v')) } -Descending |
+            Select-Object -First 1
+          if (-not $previous) { throw "No prior stable GitHub release found before $currentTag." }
+
+          "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
+          "previous_tag=$($previous.tagName)" >> $env:GITHUB_OUTPUT
+
+      - name: Restore cached previous MSI
+        id: previous-cache
+        uses: actions/cache@v5
+        with:
+          path: .upgrade-cache
+          key: previous-msi-${{ steps.versions.outputs.previous_tag }}-x64
+
+      - name: Download previous MSI
+        if: steps.previous-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ steps.versions.outputs.previous_tag }}
+        run: |
+          New-Item -ItemType Directory -Force .upgrade-cache | Out-Null
+          gh release download $env:PREVIOUS_TAG --dir .upgrade-cache --pattern '*-x64-Setup.msi'
+          if (@(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi').Count -ne 1) {
+            throw "Expected exactly one x64 MSI for $env:PREVIOUS_TAG."
+          }
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset -y --no-progress --skip-if-installed
+
+      - name: Build current MSI
+        shell: pwsh
+        env:
+          ETL_SQL_VERSION: ${{ steps.versions.outputs.current_version }}
+        run: .\scripts\build-msi.ps1
+
+      - name: Certify in-place upgrade
+        shell: pwsh
+        env:
+          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+        run: |
+          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
+          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
+          $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
+          .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current
+
+      - name: Upload upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: msi-upgrade-${{ github.run_id }}
+          path: release-validation/msi-upgrade
+          if-no-files-found: warn
+          retention-days: 30

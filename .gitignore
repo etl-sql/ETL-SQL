@@ -163,6 +163,7 @@ certification-results/*.log
 certification-results/*.err
 certification-results/*.out
 certification-results/baseline-*-runs/
+certification-results/commit-comparison/
 # Local HA/enterprise certification evidence is retained for release packaging, not source control.
 certification-results/enterprise-hardening/
 certification-results/postgres-ha-soak/ha-overnight-*/

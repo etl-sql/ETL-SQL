@@ -8,6 +8,31 @@ themselves and deciding what happens when a row breaks one.
 For the full rule and clause syntax, see the
 [Data Quality Rules reference](../reference/statements/dml/data-quality-rules.md).
 
+## Workspace policy
+
+Place `etlsql-policy.json` at the workspace root to share local-first stewardship and quality
+defaults through source control. CLI runs search from the script directory toward the filesystem
+root and validate the nearest policy before parsing or executing the script. Invalid JSON, unknown
+properties/scopes, malformed regular expressions, and inconsistent thresholds fail the run with
+the policy path, line, and column.
+
+`SCRIPT` requirements are checked on script metadata, and `COLUMN` requirements are checked on
+columns materialized by `SELECT ... INTO`. A missing or empty required tag is a linter error, so the
+same `etl-sql run` command used by a workstation task or CI job exits non-zero before it writes the
+target. Exclusion globs match the qualified output name, such as `#scratch.*`.
+
+Use the published [JSON Schema](../../schemas/etlsql-policy.schema.json) for editor validation and
+the [complete example](../../samples/05_Security_Diagnostics/etlsql-policy.example.json) as a
+starting point. Schema version `1.0` supports:
+
+- required tags with `SCRIPT`, `JOB`, `TABLE`, `COLUMN`, `DATASET`, and `REPORT` scopes plus
+  exclusion globs;
+- named regex patterns that suggest protected-data classifications without changing metadata;
+- default warning and failure thresholds for warning, quarantine, null percentage, and freshness.
+
+Local policy can add checks and stricter defaults, but it cannot weaken authoritative organization
+policy in an enrolled environment.
+
 ## Start with one rule
 
 Rules are declared as tags in a comment on the column they protect:
@@ -203,6 +228,49 @@ the same rule failing on 30% of rows after a source change is an incident. Sampl
 persisted to history, and values from `@pii`-tagged columns are masked in warnings and logs — they
 survive only inside the capture table, which needs the same access controls as its source.
 
+The canonical query surface is `eng.data_quality_status`. It combines the in-flight run with the
+configured local Orchestrator history store and keeps the persisted run ID and status unchanged:
+
+```sql
+SELECT *
+FROM eng.data_quality_status
+WHERE job_name = 'nightly_etl'
+  AND start_time >= DATEADD(DAY, -7, GETDATE());
+```
+
+It returns timing and status, processed/warned/quarantined counts and percentages, the number of
+distinct failed rules, the freshest tracked timestamp and its state, and a sanitized error summary.
+`source` distinguishes `CURRENT_RUN` from `ORCHESTRATOR`. `OBSERVED` means a freshness timestamp
+was collected; `NOT_TRACKED` means the run did not collect one. Threshold-based stale/fresh gates
+remain the responsibility of `ASSERT JOB FRESHNESS(...)` because the catalog does not invent a
+freshness threshold.
+
+For rule-level drill-down, query the normalized counts-only catalog. It has one row per run,
+target, column, rule, and action and never contains failed sample values:
+
+```sql
+SELECT run_id, target_table, column_name, rule, action, failure_count
+FROM eng.data_quality_failures
+WHERE job_name = 'nightly_etl';
+```
+
+`eng.job_history` also exposes `rows_warned`, `rows_quarantined`, and the legacy compact
+`failed_rule_counts` display field. Use `eng.data_quality_status` and
+`eng.data_quality_failures` for automation; they are built from structured persisted records.
+
+To query another Orchestrator without deploying Portal, use an `ORCHESTRATOR` connection. The same
+column contract is returned with `source = 'REMOTE_ORCHESTRATOR'`:
+
+```sql
+CREATE CONNECTION ProdOrch AS ORCHESTRATOR(
+    HOST = 'https://orchestrator.example.test',
+    PASSWORD = 'SECRET:prod_orchestrator_key'
+);
+
+SELECT * INTO #remote_status FROM ProdOrch.eng.data_quality_status;
+SELECT * INTO #remote_failures FROM ProdOrch.eng.data_quality_failures;
+```
+
 ## Putting a ceiling on the whole run
 
 Column rules judge rows. [`ASSERT JOB`](../reference/statements/session-control/assert-job.md)
@@ -236,6 +304,49 @@ first failing run notifies, repeated failing runs are suppressed until the confi
 window elapses, and the first passing run after a failure sends a recovery notification. Suppressed
 notifications still appear in logs and run diagnostics, so Slack silence does not mean the run
 record is silent.
+
+## Running unattended without Portal
+
+For one or two jobs, invoke the CLI directly from the operating-system scheduler. Set the working
+directory to the workspace root so `etlsql-policy.json` discovery and relative safe-zone paths are
+deterministic. Both `ON CRITICAL_FAILURE THROW` and `FAIL_ON_WARN = TRUE` produce a non-zero process
+exit; SMTP and WEBHOOK connections are optional.
+
+Windows Task Scheduler action:
+
+```text
+Program/script: C:\Program Files\ETL-SQL\etl-sql.exe
+Arguments: run C:\ETL\nightly.etlsql --quality-summary --output-json C:\ETL\evidence\nightly.json
+Start in: C:\ETL
+```
+
+Cron entry:
+
+```cron
+15 2 * * * cd /opt/etl && /opt/etlsql/etl-sql run nightly.etlsql --quality-summary --output-json evidence/nightly.json
+```
+
+CI uses the same command and exit code. Preserve the JSON evidence even when the command fails:
+
+```yaml
+- name: Run governed ETL
+  run: ./etl-sql run pipelines/nightly.etlsql --output-json artifacts/nightly-quality.json
+- name: Upload quality evidence
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: nightly-quality
+    path: artifacts/nightly-quality.json
+```
+
+When several jobs need scheduling, historical baselines, durable recovery-notification state, or a
+shared managed SMTP/WEBHOOK catalog, run the local Orchestrator with its default SQLite store. It
+does not require Portal. Define source-controlled `CREATE SCHEDULE`/`CREATE JOB` objects, then query
+`eng.data_quality_status`, `eng.data_quality_failures`, and `eng.job_history` from the same host.
+Successful runs form historical baselines; failed and running rows do not. A configured
+`ON FAILURE NOTIFY` uses transition state in that SQLite store to send failure and recovery
+notifications, but omitting the clause leaves exit codes, history, baselines, and catalog queries
+fully functional.
 
 ## Related
 

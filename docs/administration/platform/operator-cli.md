@@ -133,6 +133,13 @@ This upgrade path is gated before every release tag by the **"N→N+1 upgrade-pa
 `scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over
 populated data, and asserts continuity.
 
+#### Promotion preflight
+
+Before moving artifacts or state between deployment profiles, run `etl-sql admin promotion
+preflight`. It produces a versioned, secret-safe inventory without changing the source or target.
+See [Deployment promotion](deployment-promotion.md) for classifications, failure behavior, and a
+complete example.
+
 ### 11.5 Migrating from SQLite to PostgreSQL — `etl-sql admin migrate-database`
 
 SQLite is the default, single-node store. To run multiple Portal/Orchestrator nodes behind a load

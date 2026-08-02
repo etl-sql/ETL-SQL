@@ -56,6 +56,30 @@ namespace ETL_SQL.App
         {
             Description = "Output results and messages in structured JSON format."
         };
+        private static readonly Option<bool> QualitySummaryOption = new("--quality-summary", Array.Empty<string>())
+        {
+            Description = "Print a counts-only data-quality summary after execution."
+        };
+        private static readonly Argument<string?> ScanSourceArg = new("source")
+        {
+            Description = "Local file/directory or SHARED: connection alias to inspect (default: current directory).",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        private static readonly Option<bool> ScanPiiOption = new("--pii", Array.Empty<string>())
+        {
+            Description = "Suggest protected-data tags from schema names and etlsql-policy.json."
+        };
+        private static readonly Option<string?> ScanTableOption = new("--table", Array.Empty<string>())
+        {
+            Description = "Database table whose schema should be inspected when source is SHARED:alias.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> OutputJsonOption = new("--output-json", Array.Empty<string>())
+        {
+            Description = "Write versioned, counts-only run evidence to the specified JSON file.",
+            Arity = ArgumentArity.ExactlyOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<bool> PageOption = new("--page", new[] { "-pa" })
         {
             Description = "Pause and page between multiple result sets in the console."
@@ -257,6 +281,75 @@ namespace ETL_SQL.App
         {
             Description = "Verify counts and target schema compatibility without writing any data."
         };
+        private static readonly Option<string?> PromotionSourceOption = new("--source", new[] { "-s" })
+        {
+            Description = "Workspace or export root to inventory (default: current directory).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> PromotionFromProfileOption = new("--from-profile", Array.Empty<string>())
+        {
+            Description = "Source deployment profile: Solo, Team, Enterprise, or SaaS.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> PromotionToProfileOption = new("--to-profile", Array.Empty<string>())
+        {
+            Description = "Target deployment profile: Solo, Team, Enterprise, or SaaS.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> PromotionOutputOption = new("--output", new[] { "-o" })
+        {
+            Description = "Destination for the versioned JSON inventory (default: deployment-preflight.json).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> PromotionPackageOption = new("--package", new[] { "-p" })
+        {
+            Description = "Path to a versioned Orchestrator promotion package.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string[]> PromotionBindingOption = new("--bind", Array.Empty<string>())
+        {
+            Description = "Target binding in SOURCE=TARGET form (repeatable).",
+            AllowMultipleArgumentsPerToken = true
+        };
+        private static readonly Option<int> PromotionHistoryLimitOption = new("--history-limit", Array.Empty<string>())
+        {
+            Description = "Maximum quality-history and lineage records to export (default: 10000).",
+            DefaultValueFactory = _ => 10_000
+        };
+        private static readonly Option<string?> SaasTenantOption = new("--tenant", Array.Empty<string>())
+        {
+            Description = "Stable tenant id (lowercase letters, digits, and hyphens).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasSourceProfileOption = new("--source-profile", Array.Empty<string>())
+        {
+            Description = "Onboarding source profile: Solo or Enterprise.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasPortalBootstrapOption = new("--portal-bootstrap", Array.Empty<string>())
+        {
+            Description = "Optional secret-free Portal configuration bootstrap to stage for tenant replay.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasOutputRootOption = new("--output-root", Array.Empty<string>())
+        {
+            Description = "Deployment-plane root under which the isolated tenant boundary is created.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<int> SaasMaxConcurrentJobsOption = new("--max-concurrent-jobs", Array.Empty<string>())
+        {
+            Description = "Tenant concurrent-job limit.", DefaultValueFactory = _ => 4
+        };
+        private static readonly Option<int> SaasMaxStorageMbOption = new("--max-storage-mb", Array.Empty<string>())
+        {
+            Description = "Tenant storage limit in MiB.", DefaultValueFactory = _ => 10_240
+        };
+        private static readonly Option<int> SaasMaxReportSessionsOption = new("--max-report-sessions", Array.Empty<string>())
+        {
+            Description = "Tenant concurrent report-session limit.", DefaultValueFactory = _ => 20
+        };
         private static readonly Option<string?> HaSoakRunIdOption = new("--run-id", Array.Empty<string>())
         {
             Description = "Stable run identifier for generated HA soak topology artifacts.",
@@ -446,7 +539,9 @@ namespace ETL_SQL.App
             var runCommand = new Command("run", "Execute an ETL-SQL script")
             {
                 RunScriptArg,
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption, ProgressOption, ResumeOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption,
+                JsonOption, QualitySummaryOption, OutputJsonOption, PageOption, SessionOption,
+                VarOption, ProgressOption, ResumeOption
             };
             runCommand.SetAction(context => Dispatch(context, "run", handler));
 
@@ -473,6 +568,12 @@ namespace ETL_SQL.App
 
             var noticesCommand = new Command("notices", "Show third-party notices and dependency credits");
             noticesCommand.SetAction(context => Dispatch(context, "notices", handler));
+
+            var scanCommand = new Command("scan", "Inspect local or cataloged database schemas for stewardship gaps")
+            {
+                ScanSourceArg, ScanPiiOption, ScanTableOption, JsonOption
+            };
+            scanCommand.SetAction(context => Dispatch(context, "scan", handler));
 
             // 5. SESSION Command
             var sessionCommand = new Command("session", "Manage ad-hoc execution sessions");
@@ -598,6 +699,55 @@ namespace ETL_SQL.App
             };
             migrateDbCommand.SetAction(context => Dispatch(context, "admin-migrate-database", handler));
             adminCommand.Add(migrateDbCommand);
+
+            var promotionCommand = new Command("promotion", "Inspect and prepare deployment-profile promotions");
+            var promotionPreflightCommand = new Command("preflight", "Create a secret-safe, mutation-free promotion inventory")
+            {
+                PromotionSourceOption,
+                PromotionFromProfileOption,
+                PromotionToProfileOption,
+                PromotionOutputOption,
+            };
+            promotionPreflightCommand.SetAction(context => Dispatch(context, "admin-promotion-preflight", handler));
+            promotionCommand.Add(promotionPreflightCommand);
+            var promotionExportCommand = new Command("export", "Export eligible Orchestrator catalog and governance state")
+            {
+                PromotionOutputOption,
+                PromotionHistoryLimitOption,
+            };
+            promotionExportCommand.SetAction(context => Dispatch(context, "admin-promotion-export", handler));
+            promotionCommand.Add(promotionExportCommand);
+            var promotionValidateCommand = new Command("validate", "Validate mappings and collisions without changing the target")
+            {
+                PromotionPackageOption,
+                PromotionBindingOption,
+                PromotionOutputOption,
+            };
+            promotionValidateCommand.SetAction(context => Dispatch(context, "admin-promotion-validate", handler));
+            promotionCommand.Add(promotionValidateCommand);
+            var promotionImportCommand = new Command("import", "Import an Orchestrator promotion package idempotently")
+            {
+                PromotionPackageOption,
+                PromotionBindingOption,
+            };
+            promotionImportCommand.SetAction(context => Dispatch(context, "admin-promotion-import", handler));
+            promotionCommand.Add(promotionImportCommand);
+            var saasOnboardCommand = new Command("saas-onboard", "Create and populate one physically isolated SaaS tenant boundary")
+            {
+                SaasTenantOption,
+                SaasSourceProfileOption,
+                PromotionSourceOption,
+                PromotionPackageOption,
+                SaasPortalBootstrapOption,
+                SaasOutputRootOption,
+                PromotionBindingOption,
+                SaasMaxConcurrentJobsOption,
+                SaasMaxStorageMbOption,
+                SaasMaxReportSessionsOption,
+            };
+            saasOnboardCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-onboard", handler));
+            promotionCommand.Add(saasOnboardCommand);
+            adminCommand.Add(promotionCommand);
 
             var haSoakCommand = new Command("ha-soak", "Prepare and collect PostgreSQL HA soak certification artifacts");
             var haSoakPrepareCommand = new Command("prepare", "Generate an isolated PostgreSQL HA soak topology run root")
@@ -848,6 +998,7 @@ namespace ETL_SQL.App
             rootCommand.Add(encryptCommand);
             rootCommand.Add(generateCommand);
             rootCommand.Add(noticesCommand);
+            rootCommand.Add(scanCommand);
             rootCommand.Add(sessionCommand);
             rootCommand.Add(uiCommand);
             rootCommand.Add(doctorCommand);
@@ -901,6 +1052,8 @@ namespace ETL_SQL.App
                 LogPath = res.GetResult(LogOption)?.GetValueOrDefault<string?>() ?? "logs/",
                 IsLogMode = res.GetResult(LogOption) != null,
                 IsJsonMode = res.GetValue(JsonOption),
+                QualitySummary = res.GetValue(QualitySummaryOption),
+                OutputJsonPath = res.GetValue(OutputJsonOption),
                 EnablePaging = res.GetValue(PageOption),
                 DisplayProgress = res.GetValue(ProgressOption)
             };
@@ -917,6 +1070,12 @@ namespace ETL_SQL.App
             else if (commandName == "test")
             {
                 cliContext.TestVal = res.GetValue(TestValArg);
+            }
+            else if (commandName == "scan")
+            {
+                cliContext.ScanSource = res.GetValue(ScanSourceArg);
+                cliContext.ScanPii = res.GetValue(ScanPiiOption);
+                cliContext.ScanTable = res.GetValue(ScanTableOption);
             }
             else if (commandName == "session-clear")
             {
@@ -989,6 +1148,38 @@ namespace ETL_SQL.App
                 cliContext.MigrateFrom = res.GetValue(MigrateFromOption);
                 cliContext.MigrateTo = res.GetValue(MigrateToOption);
                 cliContext.MigrateDryRun = res.GetValue(MigrateDryRunOption);
+            }
+            else if (commandName == "admin-promotion-preflight")
+            {
+                cliContext.PromotionSource = res.GetValue(PromotionSourceOption);
+                cliContext.PromotionFromProfile = res.GetValue(PromotionFromProfileOption);
+                cliContext.PromotionToProfile = res.GetValue(PromotionToProfileOption);
+                cliContext.PromotionOutput = res.GetValue(PromotionOutputOption);
+            }
+            else if (commandName == "admin-promotion-export")
+            {
+                cliContext.PromotionOutput = res.GetValue(PromotionOutputOption);
+                cliContext.PromotionHistoryLimit = res.GetValue(PromotionHistoryLimitOption);
+            }
+            else if (commandName is "admin-promotion-validate" or "admin-promotion-import")
+            {
+                cliContext.PromotionPackage = res.GetValue(PromotionPackageOption);
+                cliContext.PromotionBindings = res.GetValue(PromotionBindingOption);
+                if (commandName == "admin-promotion-validate")
+                    cliContext.PromotionOutput = res.GetValue(PromotionOutputOption);
+            }
+            else if (commandName == "admin-promotion-saas-onboard")
+            {
+                cliContext.SaasTenantId = res.GetValue(SaasTenantOption);
+                cliContext.SaasSourceProfile = res.GetValue(SaasSourceProfileOption);
+                cliContext.PromotionSource = res.GetValue(PromotionSourceOption);
+                cliContext.PromotionPackage = res.GetValue(PromotionPackageOption);
+                cliContext.SaasPortalBootstrap = res.GetValue(SaasPortalBootstrapOption);
+                cliContext.SaasOutputRoot = res.GetValue(SaasOutputRootOption);
+                cliContext.PromotionBindings = res.GetValue(PromotionBindingOption);
+                cliContext.SaasMaxConcurrentJobs = res.GetValue(SaasMaxConcurrentJobsOption);
+                cliContext.SaasMaxStorageMb = res.GetValue(SaasMaxStorageMbOption);
+                cliContext.SaasMaxReportSessions = res.GetValue(SaasMaxReportSessionsOption);
             }
             else if (commandName.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
             {

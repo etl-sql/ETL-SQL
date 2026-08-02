@@ -102,6 +102,9 @@ public sealed class ConfigurationPromotionTests
                            select a).AnyAsync(a => a.Permission == FolderPermission.Manage));
         var report = await db.Reports.Include(r => r.Folder).SingleAsync(r => r.Name == $"report_{suffix}");
         Assert.Equal($"/root_{suffix}", report.Folder.Path);
+        var promotedAlice = await db.Users.SingleAsync(u => u.UserName == $"alice_{suffix}");
+        Assert.Equal(promotedAlice.Id, report.CreatedBy);
+        Assert.Equal(promotedAlice.Id, report.Folder.OwnerId);
         Assert.True(await db.Subscriptions.AnyAsync(s => s.Name == $"sub_{suffix}" && s.Schedule == "Daily"));
 
         // Secret rebinding: the promoted connection carries the environment-neutral SECRET:
@@ -112,7 +115,7 @@ public sealed class ConfigurationPromotionTests
         Assert.Contains("SECRET:corp_smtp_password", smtp.OptionsJson);
         Assert.DoesNotContain(DevSmtpCipherPrefix, smtp.OptionsJson);
         Assert.DoesNotContain(ProdSecret, smtp.OptionsJson);
-        var alice = await db.Users.SingleAsync(u => u.UserName == $"alice_{suffix}");
+        var alice = promotedAlice;
         Assert.NotEqual($"{DevUserHashPrefix}{suffix}", alice.PasswordHash);
         Assert.False(string.IsNullOrEmpty(alice.PasswordHash));
 

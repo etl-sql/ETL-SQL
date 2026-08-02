@@ -15,10 +15,14 @@ import snapshotDesigner from './snapshot-designer.story.js';
 import lineageDag from './lineage-dag.story.js';
 import portalGovernance from './governance.story.js';
 import dataQualityQueue from './data-quality-queue.story.js';
+import portalResponsiveShell from './portal-responsive-shell.story.js';
+import portalStudio from './portal-studio.story.js';
 
 export const stories = [
   portalGovernance,
   dataQualityQueue,
+  portalResponsiveShell,
+  portalStudio,
   scriptEditor,
   scriptEditorUnified,
   designer,

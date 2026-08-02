@@ -13,10 +13,12 @@
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
   <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html">Reports</a>
       <a href="/index.html#governance">Governance</a>
+      <a href="/studio.html" id="studioNav" style="display:none">Studio</a>
       <a href="/docs.html" id="docsNav">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" class="active">Admin</a>
@@ -525,7 +527,7 @@
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
 <script type="module">
-import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi } from '/js/api.js?v=0.17.0';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi, studioApi } from '/js/api.js?v=0.17.0';
 import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js?v=0.17.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.17.0';
 import { bindSelection, catalogQuery, headerSelectionCell, renderCatalogPager, selectedIds, selectionCell } from '/js/admin-catalog-ui.js?v=0.17.0';
@@ -535,6 +537,7 @@ import { createDatasetsAdmin } from '/js/datasets-admin.js?v=0.17.0';
 import { createSecretsAdmin } from '/js/secrets-admin.js?v=0.17.0';
 import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.17.0';
 import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.17.0';
+import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -542,16 +545,23 @@ initTheme();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 try {
-  const payload = JSON.parse(atob(auth.getToken().split('.')[1]));
-  document.getElementById('topbarUser').textContent = payload.sub || payload.unique_name || '';
-  const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
-  const isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
+  const identity = getSessionIdentity(auth.getToken());
+  renderSessionIdentity(identity, document.getElementById('topbarUser'));
+  const isAdmin = hasRole(identity, 'Admin');
   if (!isAdmin) window.location.href = '/index.html';
-  const canOrch = Array.isArray(roles)
-    ? (roles.includes('Admin') || roles.includes('OrchestratorManager'))
-    : (roles === 'Admin' || roles === 'OrchestratorManager');
+  const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
   if (canOrch) document.getElementById('orchestratorNav').style.display = '';
 } catch { window.location.href = '/login.html'; }
+let studioSession = null;
+const studioSessionReady = studioApi.session().then(session => {
+  studioSession = session;
+  document.getElementById('studioNav').style.display = '';
+  if (session.mode === 'CatalogOnly') document.getElementById('openPublishBtn').textContent = 'Open Studio';
+  return session;
+}).catch(() => {
+  document.getElementById('openPublishBtn').style.display = 'none';
+  return null;
+});
 
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
@@ -673,8 +683,8 @@ async function loadUsers() {
     allUsers = result.items || [];
     const rows = allUsers.map(u => `
       <tr>
-        ${selectionCell(u.id, `user ${escAttr(u.userName)}`)}
-        <td>${esc(u.userName)}</td>
+        ${selectionCell(u.id, `user ${escAttr(u.username)}`)}
+        <td>${esc(u.username)}</td>
         <td>${esc(u.email || '')}</td>
         <td>${(u.roles || []).map(r => `<span class="chip chip-${r.toLowerCase()}">${esc(r)}</span>`).join(' ')}</td>
         <td><span class="chip ${u.isActive ? 'chip-active' : 'chip-inactive'}">${u.isActive ? 'Active' : 'Inactive'}</span></td>
@@ -747,7 +757,7 @@ async function handleUserAction(btn) {
     if (!u) return;
     document.getElementById('nu-title').textContent = 'Edit User';
     document.getElementById('nu-saveBtn').textContent = 'Save Changes';
-    document.getElementById('nu-username').value = u.userName;
+    document.getElementById('nu-username').value = u.username;
     document.getElementById('nu-username').disabled = true; // Identity doesn't usually like username changes
     document.getElementById('nu-email').value = u.email || '';
     document.getElementById('nu-password').value = '';
@@ -785,8 +795,8 @@ document.getElementById('nu-saveBtn').addEventListener('click', async () => {
   };
   
   if (!id) {
-    body.userName = document.getElementById('nu-username').value.trim();
-    if (!body.userName || !body.password) { $err.textContent = 'Username and password required.'; $err.classList.add('show'); return; }
+    body.username = document.getElementById('nu-username').value.trim();
+    if (!body.username || !body.password) { $err.textContent = 'Username and password required.'; $err.classList.add('show'); return; }
   }
 
   try {
@@ -990,7 +1000,7 @@ async function refreshAddMemberOptions() {
     pageSize: 25,
   })).catch(() => ({ items: [] }));
   document.getElementById('addMemberSelect').innerHTML = (result.items || [])
-    .map(u => `<option value="${u.id}">${esc(u.userName)}${u.email ? ` — ${esc(u.email)}` : ''}</option>`)
+    .map(u => `<option value="${u.id}">${esc(u.username)}${u.email ? ` — ${esc(u.email)}` : ''}</option>`)
     .join('');
 }
 document.getElementById('am-cancelBtn').addEventListener('click', () => {
@@ -1134,16 +1144,19 @@ let allReports = [];
 async function loadReports() {
   const $wrap = document.getElementById('reportsTableWrap');
   try {
+    await studioSessionReady;
     allReports = await adminApi.listAllReports();
+    const exposesExternalSource = studioSession?.mode === 'SourceControlled';
+    const canOpenStudio = Boolean(studioSession?.capabilities?.includes('StudioAccess'));
     const rows = allReports.map(r => `
       <tr>
         <td>${esc(r.name)}</td>
         <td class="text-sm text-muted">${esc(r.folderPath)}</td>
-        <td class="text-sm text-muted"><code>${esc(r.scriptPath)}</code></td>
+        ${exposesExternalSource ? `<td class="text-sm text-muted"><code>${esc(r.scriptPath)}</code></td>` : ''}
         <td class="text-sm">${new Date(r.createdAt).toLocaleDateString()}</td>
         <td>
           <div class="table-actions">
-            <button class="btn btn-outline btn-sm" data-action="edit-report" data-id="${r.id}">Edit</button>
+            ${canOpenStudio ? `<button class="btn btn-outline btn-sm" data-action="edit-report" data-id="${r.id}">${exposesExternalSource ? 'Edit' : 'Open in Studio'}</button>` : ''}
             <button class="btn btn-danger btn-sm" data-action="delete-report" data-id="${r.id}">Delete</button>
           </div>
         </td>
@@ -1151,8 +1164,8 @@ async function loadReports() {
 
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Report Name</th><th>Folder</th><th>Script Path</th><th>Created</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No reports published.</td></tr>'}</tbody>
+        <thead><tr><th>Report Name</th><th>Folder</th>${exposesExternalSource ? '<th>Script Path</th>' : ''}<th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="${exposesExternalSource ? 5 : 4}" class="empty-state">No reports published.</td></tr>`}</tbody>
       </table>`;
 
     $wrap.querySelectorAll('[data-action="delete-report"]').forEach(btn => {
@@ -1170,6 +1183,10 @@ async function loadReports() {
         const id = +btn.dataset.id;
         const r = allReports.find(x => x.id === id);
         if (!r) return;
+        if (studioSession?.mode === 'CatalogOnly') {
+          window.location.href = `/designer.html?id=${id}`;
+          return;
+        }
         
         const $form = document.getElementById('publishReportForm');
         $form.style.display = '';
@@ -1197,6 +1214,12 @@ async function loadReports() {
 document.getElementById('reportsRefreshBtn').addEventListener('click', () => loadReports());
 
 document.getElementById('openPublishBtn').addEventListener('click', async () => {
+  await studioSessionReady;
+  if (studioSession?.mode === 'CatalogOnly') {
+    window.location.href = '/studio.html';
+    return;
+  }
+  if (!studioSession) return;
   const $form = document.getElementById('publishReportForm');
   $form.style.display = '';
   document.getElementById('pr-title').textContent = 'Publish New Report';
@@ -1396,7 +1419,7 @@ async function loadAudit() {
     const rows = (data.items || data).map(e => `
       <tr>
         <td class="text-sm">${new Date(e.timestamp).toLocaleString()}</td>
-        <td>${esc(e.userName || '')}</td>
+        <td>${esc(e.username || '')}</td>
         <td><code>${esc(e.action)}</code></td>
         <td class="text-sm text-muted">${esc(e.resourceType || '')} ${esc(e.resourceId || '')}</td>
         <td class="text-sm text-muted">${esc(e.detail || '')}</td>

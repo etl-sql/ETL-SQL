@@ -29,6 +29,10 @@
     Number of repeated samples to capture. When omitted, Smoke and operator-style lanes use one
     sample; Standard uses three samples.
 
+.PARAMETER RepositoryRoot
+    Optional repository root containing the solution and tests. Intended for the same-worktree
+    commit-comparison harness, which keeps this runner outside the checkout while switching refs.
+
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
@@ -50,6 +54,8 @@ param(
     [ValidateRange(0, 20)]
     [int]$Samples = 0,
 
+    [string]$RepositoryRoot = '',
+
     [switch]$SkipBuild,
 
     # Skips the discarded warm-up run. Only for throwaway smoke checks where the numbers are not
@@ -59,7 +65,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$RepoRoot = Join-Path $PSScriptRoot '..'
+$RepoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    Join-Path $PSScriptRoot '..'
+} else {
+    (Resolve-Path -LiteralPath $RepositoryRoot).Path
+}
 $rowCountScaleWasSpecified = $RowCountScale -gt 0
 
 function Invoke-GitText {

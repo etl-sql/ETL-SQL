@@ -1,0 +1,77 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.13]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.45]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.47]   Starting:    ETL-SQL.Tests
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[e9215a97] Evaluator initialized.
+[e9215a97] Notification 'webhook_alerts' created.
+[e9215a97] Notification 'smtp_alerts' created.
+[e9215a97] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[e9215a97] [SESSION] Session e9215a97 persisted successfully (SQLite + Meta-Chunks)
+[e9215a97] [SELECT] Executing SelectStatement. Session: e9215a97
+[e9215a97] 5 rows affected.
+[e9215a97] ASSERT JOB team_webhook failed 1 of 1 predicate(s): ROW_COUNT WITHIN 0.2 OF HISTORICAL (actual 10, baseline 100, drift 0.9)
+[e9215a97] ASSERT JOB team_webhook: notification 'webhook_alerts' delivered through connection 'webhook_sink'.
+[e9215a97] ASSERT JOB team_smtp failed 1 of 1 predicate(s): ROW_COUNT WITHIN 0.2 OF HISTORICAL (actual 10, baseline 100, drift 0.9)
+[e9215a97] ASSERT JOB team_smtp: notification 'smtp_alerts' delivered through connection 'smtp_sink'.
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.TeamSqliteBaselines_TriggerWebhookAndSmtpNotificationsWithoutPortal [435 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchNotificationAsync_SmtpPayloadIncludesRecipientAndAttachments [85 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.ExecuteJobAsync_DispatchesCompletionNotificationAfterFinalOutcome [90 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchJobNotificationsAsync_SelectsLinksForFinalOutcome(finalStatus: "SUCCESS", expectedNotification: "OnSuccess", unexpectedNotification: "OnFailure", expectedTitle: "Job succeeded: TriggerJob") [38 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchJobNotificationsAsync_SelectsLinksForFinalOutcome(finalStatus: "FAILURE", expectedNotification: "OnFailure", unexpectedNotification: "OnSuccess", expectedTitle: "Job failed: TriggerJob") [41 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.NotificationDispatchPayload_RejectsMissingAttachment [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchNotificationAsync_SubscriptionSourceBypassesDisabledNotification [39 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchJobNotificationsAsync_SkipsMissingOrDisabledNotifications(notificationName: "MissingNotification") [33 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.DispatchJobNotificationsAsync_SkipsMissingOrDisabledNotifications(notificationName: "DisabledNotification") [32 ms]
+  Passed ETL_SQL.Tests.Orchestration.SchedulerRetryTests.ExecuteJobAsync_RetriesOnFailure_ExponentialBackoff [3 s]
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[adeda31e] Evaluator initialized.
+[adeda31e] [SELECT] Executing SelectStatement. Session: adeda31e
+[adeda31e] 2 rows affected.
+[adeda31e] [SELECT] Executing SelectStatement. Session: adeda31e
+[adeda31e] 1 rows affected.
+  Passed ETL_SQL.Tests.Orchestration.JobFailureDigestTemplateTests.ShippedTemplate_ParsesWithoutErrors [5 ms]
+  Passed ETL_SQL.Tests.Orchestration.JobFailureDigestTemplateTests.ShowJobHistoryInto_FiltersRecentFailures_ForDigest [93 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.RetryableStatus_RetriesThenSucceeds [96 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.SlackFormat_RowWithoutTextColumn_FallsBackToKeyValuePairs [1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.NonRetryableStatus_DoesNotRetry [1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.GenericFormat_PostsRowAsJsonObject [3 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.DeniedHost_IsRejectedAtCreation [17 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.NetworkFailure_IsWrappedAsExecutionException_WithoutProviderExceptionChained [3 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.SlackFormat_PostsTextPayload [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.Connector_Metadata_FollowsStandards [5 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.TeamsFormat_PostsMessageCardWithTitleAndText [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.RedirectHop_ToPolicyDeniedHost_IsRejectedBeforeRequest [1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.BodyTemplate_SubstitutesColumnsJsonEscaped [1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.GetConfigAndToString_MaskUrlPath [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.MissingOrRelativeUrl_ThrowsExecutionException [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.ReadBatches_YieldsNothing_AndDisposeCompletes [1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.NonSuccessStatus_ThrowsExecutionException_WithoutLeakingUrl [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.TemporaryRedirect307_IsFollowedWithBodyPreserved [< 1 ms]
+[xUnit.net 00:00:04.61]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.SecretReference_OnUrl_IsResolvableForWebhookTypesOnly [< 1 ms]
+  Passed ETL_SQL.Tests.Connectors.WebhookConnectorTests.PermanentRedirect301_FailsInsteadOfDowngradingToGet [< 1 ms]
+
+Test Run Successful.
+Total tests: 30
+     Passed: 30
+ Total time: 4.9420 Seconds

@@ -17,6 +17,7 @@ namespace ETL_SQL.Portal.Controllers;
 [Route("api/designer")]
 [Authorize(Roles = "Admin,Publisher")]
 [RequirePortalModule("Designer")]
+[RequireStudioCapability(StudioCapabilities.StudioAccess, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
 public class DesignerController : ControllerBase
 {
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> DesignerGates = new();
@@ -68,6 +69,7 @@ public class DesignerController : ControllerBase
 
     [HttpGet("/api/session/metadata")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> SessionMetadata([FromQuery] string? documentUri, CancellationToken cancellationToken)
     {
         var connections = _connectionCatalog is null
@@ -96,6 +98,7 @@ public class DesignerController : ControllerBase
     [HttpPost("/api/script/dag")]
     [HttpPost("dag")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult ScriptDag([FromBody] ScriptDagRequest req)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
@@ -117,6 +120,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 
     [HttpPost("parse")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Parse([FromBody] ParseDesignerRequest req)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
@@ -143,6 +147,7 @@ public class DesignerController : ControllerBase
 
     [HttpPost("analyze")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Analyze([FromBody] AnalyzeDesignerRequest req)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
@@ -169,6 +174,7 @@ public class DesignerController : ControllerBase
 
     [HttpGet("schema")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Schema([FromQuery] string connection, CancellationToken cancellationToken)
     {
         if (_schemaService is null)
@@ -203,6 +209,7 @@ public class DesignerController : ControllerBase
 
     [HttpPost("complete")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Complete([FromBody] CompleteDesignerRequest req, CancellationToken cancellationToken)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
@@ -298,6 +305,7 @@ public class DesignerController : ControllerBase
 
     [HttpPost("run")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRun)]
     public async Task<IActionResult> Run([FromBody] RunDesignerRequest req, CancellationToken cancellationToken)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } scriptLimit)
@@ -345,6 +353,7 @@ public class DesignerController : ControllerBase
     [HttpPost("preview")]
     [Authorize(Roles = "Admin,Publisher")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Preview([FromBody] PreviewDesignerRequest req, CancellationToken cancellationToken)
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } scriptLimit)
@@ -387,6 +396,7 @@ public class DesignerController : ControllerBase
     [HttpPost("save")]
     [Authorize(Roles = "Admin,Publisher")]
     [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptSave)]
     public async Task<IActionResult> Save([FromBody] SaveDesignerRequest req, CancellationToken cancellationToken)
     {
         if (ValidateTextLimit(req.ScriptText, "scriptText", MaxScriptCharacters) is { } limitResult)
@@ -432,6 +442,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/generate ───────────────────────────────────────────
 
     [HttpPost("generate")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Generate([FromBody] GenerateDesignerRequest req)
     {
         if (ValidateDesignerState(req.DesignState) is { } stateLimit)
@@ -558,6 +569,7 @@ public class DesignerController : ControllerBase
     // which is exactly what stops one designer seeing another's row-filtered data.
 
     [HttpGet("snapshot/{reportId:int}")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead)]
     public async Task<IActionResult> GetDesignerSnapshot(int reportId, CancellationToken cancellationToken)
     {
         if (_snapshots is null) return NotFound(new { error = "Snapshot designing is not available." });

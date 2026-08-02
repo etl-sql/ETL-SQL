@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
@@ -93,6 +95,69 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
         logoutReq.Content = JsonContent.Create(new RefreshRequest(refreshed.RefreshToken));
         var logoutRes = await client.SendAsync(logoutReq);
         Assert.Equal(HttpStatusCode.NoContent, logoutRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task OidcPublisher_MissingOrganizationDatasetClassificationIsRejectedBeforeCatalogMutation()
+    {
+        var username = "oidcpub_" + Guid.NewGuid().ToString("N")[..8];
+        _factory.Stub.Identity = new OidcIdentity("sub-" + username, username, $"{username}@example.com", []);
+
+        var bootstrapClient = NoRedirectClient();
+        await bootstrapClient.GetAsync("/api/auth/oidc/login");
+        var bootstrapCallback = await bootstrapClient.GetAsync(
+            $"/api/auth/oidc/callback?code=bootstrap&state={StubOidcAuthenticationService.State}");
+        Assert.Equal(HttpStatusCode.OK, bootstrapCallback.StatusCode);
+
+        int folderId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var user = await db.Users.SingleAsync(candidate => candidate.UserName == username);
+            var publisherRole = await db.Roles.SingleAsync(role => role.Name == "Publisher");
+            db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<int>
+                { UserId = user.Id, RoleId = publisherRole.Id });
+            var folder = new Folder { Name = "OIDC governed", Path = "/OIDC-governed-" + username, OwnerId = user.Id };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            folderId = folder.Id;
+
+            var authority = scope.ServiceProvider.GetRequiredService<PolicyAuthorityService>();
+            await authority.PublishAsync(new OrganizationPolicyDocument
+            {
+                Metadata = new MetadataGovernancePolicySection
+                {
+                    RequiredTags = [new OrganizationRequiredTagRule { Tag = "@classification", Scopes = ["DATASET"] }]
+                }
+            }, "default", "default", "oidc-metadata-v1", "security", "data-office",
+                DateTimeOffset.UtcNow.AddHours(1));
+        }
+
+        var scriptName = $"oidc_missing_classification_{Guid.NewGuid():N}.rptsql";
+        await File.WriteAllTextAsync(Path.Combine(_factory.TempDir, "scripts", scriptName), """
+            CREATE TABLE #customers (Email STRING);
+            CREATE DATASET &customers AS (
+              SELECT Email FROM #customers
+            );
+            """);
+
+        var publisherClient = NoRedirectClient();
+        await publisherClient.GetAsync("/api/auth/oidc/login");
+        var publisherCallback = await publisherClient.GetAsync(
+            $"/api/auth/oidc/callback?code=publisher&state={StubOidcAuthenticationService.State}");
+        var (accessToken, _) = await ParseHandoffTokensAsync(publisherCallback);
+        using var publishRequest = new HttpRequestMessage(HttpMethod.Post, "/api/reports");
+        publishRequest.Headers.Authorization = new("Bearer", accessToken);
+        publishRequest.Content = JsonContent.Create(new PublishReportRequest(
+            folderId, "Governed customer report", scriptName, null));
+
+        var response = await publisherClient.SendAsync(publishRequest);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("organization_metadata_policy", await response.Content.ReadAsStringAsync());
+        using var verifyScope = _factory.Services.CreateScope();
+        Assert.False(await verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>().Reports
+            .AnyAsync(report => report.Name == "Governed customer report"));
     }
 
     [Fact]
@@ -449,6 +514,8 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
             {
                 services.RemoveAll<IOidcAuthenticationService>();
                 services.AddSingleton<IOidcAuthenticationService>(Stub);
+                services.RemoveAll<IPolicyEnvelopeSigner>();
+                services.AddSingleton<IPolicyEnvelopeSigner>(new RsaPolicyEnvelopeSigner(RSA.Create(2048)));
             });
         }
     }

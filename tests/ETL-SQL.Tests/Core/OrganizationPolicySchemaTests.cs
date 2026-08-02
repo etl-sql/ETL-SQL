@@ -171,6 +171,35 @@ public class OrganizationPolicySchemaTests
     }
 
     [Fact]
+    public void MetadataPolicy_AcceptsKnownScopesAndRejectsMalformedRequirements()
+    {
+        var valid = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            Metadata = new MetadataGovernancePolicySection
+            {
+                RequiredTags = [new OrganizationRequiredTagRule { Tag = "@classification", Scopes = ["DATASET", "COLUMN"] }]
+            }
+        });
+        var invalid = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            Metadata = new MetadataGovernancePolicySection
+            {
+                RequiredTags =
+                [
+                    new OrganizationRequiredTagRule { Tag = "classification", Scopes = ["PIPELINE"] },
+                    new OrganizationRequiredTagRule { Tag = "classification", Scopes = [] }
+                ]
+            }
+        });
+
+        Assert.True(valid.IsValid);
+        Assert.False(invalid.IsValid);
+        Assert.Contains(invalid.Errors, error => error.Contains("start with '@'", StringComparison.Ordinal));
+        Assert.Contains(invalid.Errors, error => error.Contains("unsupported scope", StringComparison.Ordinal));
+        Assert.Contains(invalid.Errors, error => error.Contains("at least one scope", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void SecurityEvents_ValidatesHttpsCollectorAndFlattensTransportSettings()
     {
         var document = new OrganizationPolicyDocument

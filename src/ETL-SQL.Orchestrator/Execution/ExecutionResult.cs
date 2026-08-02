@@ -30,6 +30,8 @@ namespace ETL_SQL.Orchestrator.Execution
         public string? DataQualityFailures { get; set; }
         /// <summary>Column-level run metrics collected for ASSERT JOB predicates.</summary>
         public List<DataQualityColumnMetric> DataQualityColumnMetrics { get; set; } = new();
+        /// <summary>Structured counts-only rule failures; never contains sample values.</summary>
+        public List<DataQualityRuleFailureMetric> DataQualityRuleFailures { get; set; } = new();
         public bool Success { get; set; }
         /// <summary>Captured log messages for display in the TUI.</summary>
         public List<LogEntry> Messages { get; set; } = new();

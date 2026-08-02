@@ -8,11 +8,107 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Tests.Connectors;
 
 public class OrchestratorDataSourceConnectionCatalogTests
 {
+    [Theory]
+    [InlineData("eng.data_quality_status", "/api/data-quality/status", "run_id", "42")]
+    [InlineData("eng.data_quality_failures", "/api/data-quality/failures", "column_name", "email")]
+    public async Task RemoteDataQualityCatalog_ReadsOrchestratorEndpoints(
+        string tableName, string endpoint, string expectedColumn, string expectedValue)
+    {
+        var requested = "";
+        var presentedKey = "";
+        var handler = new RecordingHandler(request =>
+        {
+            requested = request.RequestUri?.AbsolutePath ?? "";
+            presentedKey = request.Headers.TryGetValues("X-Orchestrator-Key", out var values)
+                ? values.Single() : "";
+            return tableName.EndsWith("status", StringComparison.Ordinal)
+                ? JsonResponse("""[{"runId":"42","jobName":"nightly","startTime":"2026-01-01T00:00:00Z","status":"FAILED","rowsProcessed":100,"rowsWarned":5,"rowsQuarantined":2,"failedRuleCount":1,"freshnessState":"NOT_TRACKED"}]""")
+                : JsonResponse("""[{"runId":42,"jobName":"nightly","startTime":"2026-01-01T00:00:00Z","status":"FAILED","columnName":"email","rule":"NOT NULL","action":"WARN","failureCount":5}]""");
+        });
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key", NullLogger.Instance);
+
+        DataTable? result = null;
+        await foreach (var batch in source.WithTable(tableName).ReadBatches()) result = batch;
+
+        Assert.Equal(endpoint, requested);
+        Assert.Equal("key", presentedKey);
+        Assert.Equal(expectedValue, Assert.Single(result!.Rows)[expectedColumn]?.ToString());
+    }
+
+    [Theory]
+    [InlineData("eng.stewardship_score", "/api/stewardship/score", "component", "required_tag_completeness")]
+    [InlineData("eng.stewardship_gaps", "/api/stewardship/gaps", "requirement", "@owner")]
+    public async Task RemoteStewardshipCatalog_UsesVersionedServiceContract(
+        string tableName, string endpoint, string expectedColumn, string expectedValue)
+    {
+        var requested = "";
+        var handler = new RecordingHandler(request =>
+        {
+            requested = request.RequestUri?.AbsolutePath ?? "";
+            return tableName.EndsWith("score", StringComparison.Ordinal)
+                ? JsonResponse("""[{"scopeType":"GLOBAL","scopeName":"*","component":"required_tag_completeness","numerator":1,"denominator":2,"percentage":50,"assetCount":1,"columnCount":1,"weight":1,"evaluatedAtUtc":"2026-08-02T12:00:00Z","definitionVersion":"1.0"}]""")
+                : JsonResponse("""[{"scopeType":"GLOBAL","scopeName":"*","component":"required_tag_completeness","targetTable":"customers","requirement":"@owner","sourceFile":"pipelines/customers.etlsql","line":8,"evaluatedAtUtc":"2026-08-02T12:00:00Z","definitionVersion":"1.0"}]""");
+        });
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key", NullLogger.Instance);
+
+        DataTable? result = null;
+        await foreach (var batch in source.WithTable(tableName).ReadBatches()) result = batch;
+
+        Assert.Equal(endpoint, requested);
+        Assert.Equal(expectedValue, Assert.Single(result!.Rows)[expectedColumn]?.ToString());
+        Assert.Equal("1.0", result.Rows[0]["definition_version"]?.ToString());
+    }
+
+    [Fact]
+    public async Task RemoteStewardshipCatalog_PreservesSharedServiceTotalsAndGaps()
+    {
+        var policy = new WorkspacePolicyDocument
+        {
+            RequiredTags = [new WorkspaceRequiredTagRule { Tag = "@owner", Scopes = ["COLUMN"] }]
+        };
+        var evaluation = StewardshipScoring.Evaluate(
+        [
+            new StewardshipAsset("nightly", "customers", "email",
+                new Dictionary<string, string> { ["pii"] = "true" }, "pipelines/customers.etlsql", 8)
+        ], policy, new DateTimeOffset(2026, 8, 2, 12, 0, 0, TimeSpan.Zero));
+        var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var handler = new RecordingHandler(request => request.RequestUri?.AbsolutePath switch
+        {
+            "/api/stewardship/score" => JsonResponse(JsonSerializer.Serialize(evaluation.Scores, jsonOptions)),
+            "/api/stewardship/gaps" => JsonResponse(JsonSerializer.Serialize(evaluation.Gaps, jsonOptions)),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        await using var source = new OrchestratorDataSource(
+            new HttpClient(handler) { BaseAddress = new Uri("http://orchestrator.test/") },
+            "key", NullLogger.Instance);
+
+        DataTable? scores = null;
+        DataTable? gaps = null;
+        await foreach (var batch in source.WithTable("eng.stewardship_score").ReadBatches()) scores = batch;
+        await foreach (var batch in source.WithTable("eng.stewardship_gaps").ReadBatches()) gaps = batch;
+
+        Assert.Equal(evaluation.Scores.Count, scores!.Rows.Count);
+        Assert.Equal(evaluation.Gaps.Count, gaps!.Rows.Count);
+        foreach (var score in scores.Rows)
+        {
+            var missing = Convert.ToInt32(score["denominator"]) - Convert.ToInt32(score["numerator"]);
+            Assert.Equal(missing, gaps.Rows.Count(g =>
+                g["scope_type"]?.ToString() == score["scope_type"]?.ToString()
+                && g["scope_name"]?.ToString() == score["scope_name"]?.ToString()
+                && g["component"]?.ToString() == score["component"]?.ToString()));
+        }
+    }
+
     [Fact]
     public async Task PortalEngSubscriptions_ReadsSubscriptionCatalogEndpoint()
     {

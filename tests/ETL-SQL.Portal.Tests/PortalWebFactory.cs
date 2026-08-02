@@ -128,6 +128,15 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 },
                 FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                 Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },
+                Studio = new PortalStudioConfig
+                {
+                    Mode = StudioDeploymentMode.SourceControlled,
+                    RoleCapabilities = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Admin"] = StudioCapabilities.All.ToList(),
+                        ["Publisher"] = StudioCapabilities.All.Where(capability => capability != StudioCapabilities.SourcePush).ToList()
+                    }
+                },
             };
             CustomizePortalConfig(cfg);
             services.AddSingleton(cfg);

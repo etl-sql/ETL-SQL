@@ -115,13 +115,14 @@ public sealed class ConfigurationExportTests
         Assert.Contains($"CREATE USER 'exp_user_{suffix}' WITH (EMAIL = 'exp_{suffix}@test.local', " +
             $"PASSWORD = '${{PORTAL_USER_EXP_USER_{suffix.ToUpperInvariant()}_PASSWORD}}', ROLE = Publisher)", script);
         Assert.Contains($"ADD USER 'exp_user_{suffix}' TO GROUP 'exp_grp_{suffix}';", script);
-        Assert.Contains($"CREATE FOLDER '/exp_folder_{suffix}';", script);
+        Assert.Contains($"CREATE FOLDER '/exp_folder_{suffix}' WITH (CATALOG_OWNER = 'admin');", script);
         Assert.Contains($"GRANT MANAGE ON FOLDER '/exp_folder_{suffix}' TO GROUP 'exp_grp_{suffix}';", script);
         // SMTP exports as an ordinary connector, not a Portal-only statement family.
         Assert.Contains($"CREATE CONNECTION exp_smtp_{suffix} AS SMTP(", script);
         // A SECRET: reference is not a secret, so it exports verbatim rather than as a placeholder.
         Assert.Contains("PASSWORD = 'SECRET:smtp_secret_marker'", script);
         Assert.Contains($"PUBLISH REPORT 'Export Report {suffix}'", script);
+        Assert.Contains("CATALOG_OWNER = 'admin'", script);
         Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [alpha@test.local]'", script);
         Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [zeta@test.local]'", script);
         Assert.Contains("ON REFRESH", script);

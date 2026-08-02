@@ -37,6 +37,11 @@ SET REPORT TITLE = 'Monthly Sales';
 
 Publish request fields override script tags when both are supplied. On republish with a new script path, the portal refreshes the stored metadata from the new script while preserving explicit request values.
 
+When the active signed organization policy declares `metadata.requiredTags`, publishing also checks
+report metadata and the column lineage of every `CREATE DATASET` in the script. Missing required tags
+return `400 organization_metadata_policy` before the report catalog changes. An unverifiable active
+policy fails closed. See [Authoritative Organization Policy](../platform/organization-policy.md).
+
 ### 6.1 Script hash pinning
 
 When a report is published, the portal computes a SHA-256 hash of the `.rptsql` file and stores it as `PublishedScriptHash` in the database. This hash is the "known-good" fingerprint for that version of the report.

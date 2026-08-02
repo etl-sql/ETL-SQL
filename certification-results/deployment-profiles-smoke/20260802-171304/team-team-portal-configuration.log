@@ -1,0 +1,15 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.08]   Discovering: ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.13]   Discovered:  ETL-SQL.Portal.Tests
+[xUnit.net 00:00:00.14]   Starting:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.ConfigurationRoundTripTests.CleanServer_RoundTrip_ReconstructsEffectiveState_Idempotently [4 s]
+[xUnit.net 00:00:05.47]   Finished:    ETL-SQL.Portal.Tests
+  Passed ETL_SQL.Portal.Tests.ConfigurationPromotionValidationTests.Validation_RejectsRawCredentialsWithoutEchoingThem [557 ms]
+  Passed ETL_SQL.Portal.Tests.ConfigurationPromotionValidationTests.Validation_IsReadOnly_Idempotent_AndReportsTargetCollision [536 ms]
+
+Test Run Successful.
+Total tests: 3
+     Passed: 3
+ Total time: 5.8005 Seconds

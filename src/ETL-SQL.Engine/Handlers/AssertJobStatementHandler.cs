@@ -126,6 +126,10 @@ public class AssertJobStatementHandler(
                 context);
         }
 
+        var failForWarnRows = stmt.FailOnWarn && report.RowsWarned > 0;
+        if (failForWarnRows)
+            failures.Add($"FAIL_ON_WARN = TRUE ({report.RowsWarned:N0} warned row(s))");
+
         if (failures.Count == 0)
         {
             if (stmt.FailureNotification != null)
@@ -142,7 +146,7 @@ public class AssertJobStatementHandler(
         if (stmt.FailureNotification != null)
             await HandleAlertTransitionAsync(context, stmt, failed: true, failures, alertRealertHours, summary);
 
-        if (stmt.ThrowOnCritical)
+        if (stmt.ThrowOnCritical || failForWarnRows)
             throw new ExecutionException(summary, null, stmt.Line, stmt.Column);
     }
 

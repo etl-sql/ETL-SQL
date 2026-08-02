@@ -61,6 +61,38 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task StructuredFailuresAndFreshness_RoundTripWithoutSamples()
+        {
+            var store = new SQLiteJobHistoryStore(_dbPath);
+            await store.InitializeAsync();
+            var historyId = await store.LogJobStartAsync("quality_job");
+            await store.LogJobEndAsync(historyId, "FAILED", "SECRET:api_key was rejected",
+                rowsProcessed: 20, rowsQuarantined: 2, rowsWarned: 3);
+            await store.SaveJobColumnMetricsAsync(historyId,
+            [
+                new DataQualityColumnMetric("warehouse.customers", "updated_at", 20, 0,
+                    new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero))
+            ]);
+            await store.SaveJobDataQualityFailuresAsync(historyId,
+            [
+                new DataQualityRuleFailureMetric("warehouse.customers", "email", "MATCHES ^.+@.+$", "WARN", 3, "data@example.test"),
+                new DataQualityRuleFailureMetric("warehouse.customers", "id", "NOT NULL", "QUARANTINE", 2)
+            ]);
+
+            var failures = await store.GetDataQualityFailuresAsync();
+            Assert.Equal(2, failures.Count);
+            Assert.All(failures, f => Assert.Equal(historyId, f.RunId));
+            Assert.Contains(failures, f => f.TargetTable == "warehouse.customers" && f.Action == "WARN" && f.FailureCount == 3);
+
+            var status = Assert.Single(await store.GetDataQualityStatusesAsync());
+            Assert.Equal(historyId.ToString(), status.RunId);
+            Assert.Equal(2, status.FailedRuleCount);
+            Assert.Equal("OBSERVED", status.FreshnessState);
+            Assert.Equal("2026-07-01T12:00:00.0000000+00:00", status.FreshestValueUtc?.ToString("O"));
+            Assert.DoesNotContain("api_key", status.ErrorSummary ?? "", StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task PreExistingStore_IsMigratedAdditively_AndKeepsItsRows()
         {
             // Simulate a store created before the DQ columns existed: write a row, drop the

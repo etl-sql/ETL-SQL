@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Studio — ETL-SQL Portal</title>
+  <link rel="stylesheet" href="/css/portal.css?v=0.17.0">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
+    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
+    <nav class="topbar-nav">
+      <a href="/index.html">Reports</a>
+      <a href="/index.html#governance">Governance</a>
+      <a href="/studio.html" class="active">Studio</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
+      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
+    </nav>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-user" id="topbarUser"></span>
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
+    <button class="topbar-btn" id="logoutBtn">Sign Out</button>
+  </header>
+
+  <main class="studio-home" id="studioHome">
+    <section class="studio-intro" aria-labelledby="studioTitle">
+      <div>
+        <span class="library-kicker">Catalog authoring</span>
+        <h1 id="studioTitle">Studio</h1>
+        <p>Open a governed report from the catalog, then work in Code or Design without leaving its folder boundary.</p>
+      </div>
+      <button class="btn btn-primary" id="newReportBtn" type="button">New report</button>
+    </section>
+
+    <section class="studio-workbench" aria-label="Authorable reports">
+      <div class="studio-workbench-toolbar">
+        <label class="studio-search" for="studioSearch">
+          <span>Find a report</span>
+          <input id="studioSearch" type="search" placeholder="Search name or folder" autocomplete="off">
+        </label>
+        <span class="studio-mode-policy" id="studioModePolicy"></span>
+      </div>
+      <div id="studioReports" aria-live="polite">
+        <div class="loading-state"><span class="spinner"></span><span>Loading Studio catalog…</span></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="newReportModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="newReportTitle">
+  <form class="modal-card modal-sm" id="newReportForm">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Catalog report</span>
+        <h2 class="modal-title" id="newReportTitle">Start a report</h2>
+        <p class="modal-subtitle">Choose its governed folder now. You can begin in either authoring mode.</p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="newReportName">Report name</label>
+        <input id="newReportName" maxlength="160" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="newReportFolder">Folder</label>
+        <select id="newReportFolder" required></select>
+      </div>
+      <fieldset class="studio-start-mode">
+        <legend>Start in</legend>
+        <label><input type="radio" name="startMode" value="design" checked> <span><strong>Design</strong><small>Arrange pages, datasets, and visuals.</small></span></label>
+        <label><input type="radio" name="startMode" value="code"> <span><strong>Code</strong><small>Edit the complete Report-SQL script.</small></span></label>
+      </fieldset>
+      <div class="error-msg" id="newReportError" role="alert"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" type="submit">Create report</button>
+      <button class="btn btn-outline" id="newReportCancel" type="button">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<script type="module">
+import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
+import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
+import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+
+if (!auth.isLoggedIn()) auth.redirectToLogin();
+applyPortalBranding();
+initTheme();
+
+const reportsHost = document.getElementById('studioReports');
+const searchInput = document.getElementById('studioSearch');
+const modal = document.getElementById('newReportModal');
+const form = document.getElementById('newReportForm');
+const folderSelect = document.getElementById('newReportFolder');
+let reports = [];
+let folders = [];
+
+const esc = value => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+function renderReports() {
+  const term = searchInput.value.trim().toLocaleLowerCase();
+  const visible = reports.filter(report => !term
+    || report.name.toLocaleLowerCase().includes(term)
+    || report.folderPath.toLocaleLowerCase().includes(term));
+  if (!visible.length) {
+    reportsHost.innerHTML = `<div class="empty-state empty-state-panel"><h2>${term ? 'No matching reports' : 'No reports to author'}</h2><p>${term ? 'Try a report name or catalog folder.' : 'Create a report in a folder where you have authoring access.'}</p></div>`;
+    return;
+  }
+
+  const groups = new Map();
+  visible.forEach(report => {
+    if (!groups.has(report.folderPath)) groups.set(report.folderPath, []);
+    groups.get(report.folderPath).push(report);
+  });
+  reportsHost.innerHTML = [...groups].map(([folderPath, entries]) => `
+    <section class="studio-folder-group">
+      <header><span class="studio-folder-mark" aria-hidden="true"></span><h2>${esc(folderPath)}</h2><span>${entries.length} report${entries.length === 1 ? '' : 's'}</span></header>
+      <div class="studio-report-grid">
+        ${entries.map(report => `
+          <article class="studio-report-card">
+            <div class="studio-report-copy">
+              <h3>${esc(report.name)}</h3>
+              <p>${esc(report.description || 'No description yet.')}</p>
+              <small>Updated ${new Date(report.updatedAt).toLocaleDateString()}</small>
+            </div>
+            <div class="studio-mode-rail" aria-label="Open ${esc(report.name)}">
+              <a href="/designer.html?id=${report.id}&mode=design"><span aria-hidden="true">▦</span><strong>Design</strong><small>Canvas</small></a>
+              <a href="/designer.html?id=${report.id}&mode=code"><span aria-hidden="true">&lt;/&gt;</span><strong>Code</strong><small>Report-SQL</small></a>
+            </div>
+          </article>`).join('')}
+      </div>
+    </section>`).join('');
+}
+
+function openNewReport() {
+  document.getElementById('newReportError').textContent = '';
+  document.getElementById('newReportName').value = '';
+  folderSelect.innerHTML = folders.map(folder => `<option value="${folder.id}">${esc(folder.path)}</option>`).join('');
+  modal.style.display = 'flex';
+  document.getElementById('studioHome').inert = true;
+  document.getElementById('newReportName').focus();
+}
+
+function closeNewReport() {
+  modal.style.display = 'none';
+  document.getElementById('studioHome').inert = false;
+  document.getElementById('newReportBtn').focus();
+}
+
+async function init() {
+  try {
+    const identity = getSessionIdentity(auth.getToken());
+    renderSessionIdentity(identity, document.getElementById('topbarUser'));
+    if (hasRole(identity, 'Admin')) document.getElementById('adminNav').style.display = '';
+    if (hasRole(identity, 'Admin', 'OrchestratorManager')) document.getElementById('orchestratorNav').style.display = '';
+    const [session, reportRows, folderRows] = await Promise.all([
+      studioApi.session(), studioApi.reports(), studioApi.folders()
+    ]);
+    reports = reportRows ?? [];
+    folders = folderRows ?? [];
+    document.getElementById('studioModePolicy').textContent = session.mode === 'CatalogOnly'
+      ? 'Catalog-only authoring' : 'Source-controlled authoring';
+    document.getElementById('newReportBtn').disabled = !session.capabilities.includes('ReportPublish') || !folders.length;
+    renderReports();
+  } catch (error) {
+    if (error.status === 403 || error.status === 404) {
+      window.location.replace('/index.html');
+      return;
+    }
+    reportsHost.innerHTML = `<div class="error-msg">Studio could not load: ${esc(error.message)}</div>`;
+  }
+}
+
+searchInput.addEventListener('input', renderReports);
+document.getElementById('newReportBtn').addEventListener('click', openNewReport);
+document.getElementById('newReportCancel').addEventListener('click', closeNewReport);
+document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+modal.addEventListener('click', event => { if (event.target === modal) closeNewReport(); });
+modal.addEventListener('keydown', event => { if (event.key === 'Escape') closeNewReport(); });
+form.addEventListener('submit', event => {
+  event.preventDefault();
+  const name = document.getElementById('newReportName').value.trim();
+  const folderId = Number(folderSelect.value);
+  const mode = new FormData(form).get('startMode');
+  if (!name || !folderId) return;
+  window.location.href = `/designer.html?folderId=${folderId}&name=${encodeURIComponent(name)}&mode=${mode}`;
+});
+
+init();
+</script>
+</body>
+</html>

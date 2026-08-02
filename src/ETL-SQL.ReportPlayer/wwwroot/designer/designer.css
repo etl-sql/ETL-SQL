@@ -929,6 +929,41 @@ body.vscode-dark .cm-editor .cm-line::selection {
     background: rgba(255, 255, 255, 0.14);
 }
 
+.etlsql-authoring-modes {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--portal-radius-sm, 6px);
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.etlsql-authoring-modes button {
+    min-width: 58px;
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #aebbd0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.etlsql-authoring-modes button:hover { color: #fff; }
+.etlsql-authoring-modes button.active {
+    background: #fff;
+    color: #182336;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .22);
+}
+
+.etlsql-authoring-modes button:focus-visible {
+    outline: 2px solid var(--portal-focus-ring, #60a5fa);
+    outline-offset: 1px;
+}
+
 .etlsql-designer-topbar .etlsql-tool-btn {
     color: #cbd5e1;
     background: transparent;

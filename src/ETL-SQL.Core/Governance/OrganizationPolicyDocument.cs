@@ -32,6 +32,7 @@ public sealed record OrganizationPolicyDocument
     public RemoteExecutionPolicySection RemoteExecution { get; init; } = new();
     public MutationGuardrailPolicySection MutationGuardrails { get; init; } = new();
     public SecurityEventPolicySection SecurityEvents { get; init; } = new();
+    public MetadataGovernancePolicySection Metadata { get; init; } = new();
 
     public IReadOnlyDictionary<string, object> ToPolicyValues()
     {
@@ -85,6 +86,17 @@ public sealed record OrganizationPolicyDocument
 
         return values;
     }
+}
+
+public sealed record MetadataGovernancePolicySection
+{
+    public IReadOnlyList<OrganizationRequiredTagRule> RequiredTags { get; init; } = [];
+}
+
+public sealed record OrganizationRequiredTagRule
+{
+    public string Tag { get; init; } = string.Empty;
+    public IReadOnlyList<string> Scopes { get; init; } = [];
 }
 
 public sealed record ConnectorPolicySection
@@ -243,10 +255,28 @@ public static class OrganizationPolicySchema
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
         ValidateSecurityEvents(document.SecurityEvents, errors);
+        ValidateMetadata(document.Metadata, errors);
 
         return errors.Count == 0
             ? OrganizationPolicyValidationResult.Success
             : new OrganizationPolicyValidationResult(false, errors);
+    }
+
+    private static void ValidateMetadata(MetadataGovernancePolicySection metadata, List<string> errors)
+    {
+        var supportedScopes = new HashSet<string>(["REPORT", "DATASET", "COLUMN"], StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in metadata.RequiredTags)
+        {
+            if (string.IsNullOrWhiteSpace(rule.Tag) || !rule.Tag.StartsWith('@'))
+                errors.Add("Metadata required tag names must start with '@'.");
+            else if (!seen.Add(rule.Tag))
+                errors.Add($"Metadata required tag '{rule.Tag}' is duplicated.");
+            if (rule.Scopes.Count == 0)
+                errors.Add($"Metadata required tag '{rule.Tag}' must declare at least one scope.");
+            foreach (var scope in rule.Scopes.Where(scope => !supportedScopes.Contains(scope)))
+                errors.Add($"Metadata required tag '{rule.Tag}' has unsupported scope '{scope}'. Allowed scopes: COLUMN, DATASET, REPORT.");
+        }
     }
 
     public static OrganizationPolicyDocument ParseAndValidateJson(string json)

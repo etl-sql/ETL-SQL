@@ -73,12 +73,21 @@ public class FoldersController(
         if (await db.Folders.AnyAsync(f => f.Path == path))
             return Conflict(new { error = $"Folder '{path}' already exists" });
 
+        var ownerId = CurrentUserId;
+        if (!string.IsNullOrWhiteSpace(req.OwnerUsername))
+        {
+            if (!IsAdmin) return Forbid();
+            var requestedOwner = await db.Users.SingleOrDefaultAsync(u => u.UserName == req.OwnerUsername);
+            if (requestedOwner is null) return BadRequest($"Catalog owner '{req.OwnerUsername}' was not found.");
+            ownerId = requestedOwner.Id;
+        }
+
         var folder = new Folder
         {
             ParentId = req.ParentId,
             Name = req.Name,
             Path = path,
-            OwnerId = CurrentUserId
+            OwnerId = ownerId
         };
         db.Folders.Add(folder);
         try

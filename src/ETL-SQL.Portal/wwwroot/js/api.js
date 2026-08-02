@@ -1,5 +1,7 @@
 /* api.js — JWT storage + fetch interceptor + API client */
 
+import { assertApiContract } from './api-contracts.generated.js';
+
 // ── Token storage ──────────────────────────────────────────────────────────────
 
 const TOKEN_KEY   = 'etlsql_token';
@@ -87,6 +89,10 @@ function versionHeaders(version) {
     return { 'If-Match': `"${version}"` };
 }
 
+function contracted(name, request) {
+    return request.then(value => assertApiContract(name, value));
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -129,9 +135,9 @@ export const authApi = {
 // ── Folders ────────────────────────────────────────────────────────────────────
 
 export const foldersApi = {
-    list: ()                  => apiJson('/api/folders'),
-    create: (name, parentId)  => apiJson('/api/folders', { method: 'POST', body: { name, parentId } }),
-    update: (id, body, version) => apiJson(`/api/folders/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    list: ()                  => contracted('folderList', apiJson('/api/folders')),
+    create: (name, parentId)  => contracted('folder', apiJson('/api/folders', { method: 'POST', body: { name, parentId } })),
+    update: (id, body, version) => contracted('folder', apiJson(`/api/folders/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
     delete: (id, cascade, version) => apiJson(`/api/folders/${id}?cascade=${!!cascade}`, { method: 'DELETE', headers: versionHeaders(version) }),
     listAcl: (id)             => apiJson(`/api/folders/${id}/acl`),
     grantAcl: (id, groupId, permission, version) =>
@@ -143,10 +149,10 @@ export const foldersApi = {
 // ── Reports ────────────────────────────────────────────────────────────────────
 
 export const reportsApi = {
-    list:   (folderId) => apiJson(`/api/folders/${folderId}/reports`),
-    get:    (id)       => apiJson(`/api/reports/${id}`),
-    create: (body)     => apiJson('/api/reports', { method: 'POST', body }),
-    update: (id, body, version) => apiJson(`/api/reports/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    list:   (folderId) => contracted('reportList', apiJson(`/api/folders/${folderId}/reports`)),
+    get:    (id)       => contracted('report', apiJson(`/api/reports/${id}`)),
+    create: (body)     => contracted('report', apiJson('/api/reports', { method: 'POST', body })),
+    update: (id, body, version) => contracted('report', apiJson(`/api/reports/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
     delete: (id, version)       => apiJson(`/api/reports/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
     favorite: (id)    => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
     unfavorite: (id)  => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
@@ -157,12 +163,12 @@ export const reportsApi = {
         apiJson(`/api/reports/${id}/snapshot?includeManifest=${includeManifest}`),
 
     execute: (id, parameters) =>
-        apiJson(`/api/reports/${id}/execute`, { method: 'POST', body: { parameters } }),
+        contracted('jobAccepted', apiJson(`/api/reports/${id}/execute`, { method: 'POST', body: { parameters } })),
 
     refresh: (id) =>
         apiJson(`/api/reports/${id}/refresh`, { method: 'POST' }),
 
-    pollJob: (jobId) => apiJson(`/api/jobs/${jobId}`),
+    pollJob: (jobId) => contracted('jobStatus', apiJson(`/api/jobs/${jobId}`)),
 
     setParameter:  (id, name, value) =>
         apiJson(`/api/reports/${id}/parameter`,  { method: 'POST', body: { name, value } }),
@@ -310,6 +316,8 @@ export const datasetsApi = {
 // ── Catalog ───────────────────────────────────────────────────────────────────
 
 export const catalogApi = {
+    consumerHome: (limit = 8) =>
+        apiJson(`/api/catalog/consumer-home?limit=${limit}`),
     search: (q, limit = 50) =>
         apiJson(`/api/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`),
     recent: (limit = 20) =>
@@ -345,6 +353,15 @@ export const catalogApi = {
         if (column) p.set('column', column);
         return apiJson(`/api/catalog/impact?${p}`);
     }
+};
+
+// ── Studio ───────────────────────────────────────────────────────────────────
+
+export const studioApi = {
+    session: () => apiJson('/api/studio/session'),
+    reports: () => apiJson('/api/studio/reports'),
+    folders: () => apiJson('/api/studio/folders'),
+    createReport: (body) => apiJson('/api/studio/reports', { method: 'POST', body })
 };
 
 // ── Admin — Portal secret store (values are write-only) ───────────────────────
@@ -415,10 +432,10 @@ export const policyAuthorityApi = {
 
 export const adminApi = {
     // users
-    listUsers:       ()           => apiJson('/api/admin/users'),
-    userCatalog:     (query = '') => apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`),
-    createUser:      (body)       => apiJson('/api/admin/users',     { method: 'POST',   body }),
-    updateUser:      (id, body, version) => apiJson(`/api/admin/users/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    listUsers:       ()           => contracted('userList', apiJson('/api/admin/users')),
+    userCatalog:     (query = '') => contracted('userCatalog', apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`)),
+    createUser:      (body)       => contracted('user', apiJson('/api/admin/users',     { method: 'POST',   body })),
+    updateUser:      (id, body, version) => contracted('user', apiJson(`/api/admin/users/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
     deleteUser:      (id, version) => apiJson(`/api/admin/users/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
     bulkUserStatus:  (users, isActive) => apiJson('/api/admin/users/bulk-status',
                                         { method: 'POST', body: { users, isActive } }),

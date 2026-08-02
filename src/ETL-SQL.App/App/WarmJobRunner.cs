@@ -64,6 +64,7 @@ namespace ETL_SQL.App
                         0,
                         0,
                         null,
+                        null,
                         null);
                     await Console.Out.WriteLineAsync(JsonSerializer.Serialize(response, JsonOptions));
                     await Console.Out.FlushAsync();
@@ -118,7 +119,8 @@ namespace ETL_SQL.App
                 execution.RowsQuarantined,
                 execution.RowsWarned,
                 execution.DataQualityFailures,
-                execution.DataQualityColumnMetrics);
+                execution.DataQualityColumnMetrics,
+                execution.DataQualityRuleFailures);
         }
     }
 
@@ -142,5 +144,6 @@ namespace ETL_SQL.App
         long RowsQuarantined,
         long RowsWarned,
         string? DataQualityFailures,
-        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics);
+        IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics,
+        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures);
 }

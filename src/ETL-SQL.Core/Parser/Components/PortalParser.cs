@@ -185,11 +185,25 @@ public class PortalParser : ParserComponent
 
     // ── Folders ───────────────────────────────────────────────────────────
 
-    // CREATE FOLDER '/path'
+    // CREATE FOLDER '/path' [WITH (CATALOG_OWNER = 'username')]
     public Statement ParseCreateFolder(Token start)
     {
         string path = ConsumeStringLiteral("Expected folder path string literal");
-        return new CreatePortalFolderStatement(path)
+        string? catalogOwner = null;
+        if (Match(TokenType.WITH))
+        {
+            Consume(TokenType.LPAREN, "Expected '('");
+            ParseOptionList(() =>
+            {
+                string key = Advance().Value;
+                Consume(TokenType.EQUALS, "Expected '='");
+                if (key.Equals("CATALOG_OWNER", StringComparison.OrdinalIgnoreCase))
+                    catalogOwner = ConsumeStringLiteral("Expected catalog-owner username string literal");
+                else
+                    throw new SyntaxException($"Unknown CREATE FOLDER option: {key}", _parser.Current.Line, _parser.Current.Column);
+            });
+        }
+        return new CreatePortalFolderStatement(path, catalogOwner)
         { Line = start.Line, Column = start.Column };
     }
 
@@ -392,7 +406,7 @@ public class PortalParser : ParserComponent
         Consume(TokenType.IN, "Expected IN");
         Consume(TokenType.FOLDER, "Expected FOLDER");
         string folder = ConsumeStringLiteral("Expected folder path string literal");
-        string? description = null;
+        string? description = null, catalogOwner = null;
         if (Match(TokenType.WITH))
         {
             Consume(TokenType.LPAREN, "Expected '('");
@@ -402,11 +416,13 @@ public class PortalParser : ParserComponent
                 Consume(TokenType.EQUALS, "Expected '='");
                 if (key.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase))
                     description = ConsumeStringLiteral("Expected description string literal");
+                else if (key.Equals("CATALOG_OWNER", StringComparison.OrdinalIgnoreCase))
+                    catalogOwner = ConsumeStringLiteral("Expected catalog-owner username string literal");
                 else
                     ParseExpression();
             });
         }
-        return new PublishPortalReportStatement(name, scriptPath, folder, description)
+        return new PublishPortalReportStatement(name, scriptPath, folder, description, catalogOwner)
         { Line = start.Line, Column = start.Column };
     }
 

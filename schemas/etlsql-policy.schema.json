@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://etl-sql.org/schemas/etlsql-policy.schema.json",
+  "title": "ETL-SQL Workspace Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requiredTags", "protectedDataPatterns", "qualityThresholds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "requiredTags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tag", "scopes"],
+        "properties": {
+          "tag": { "type": "string", "pattern": "^@[A-Za-z][A-Za-z0-9_-]*$" },
+          "scopes": { "$ref": "#/$defs/scopes" },
+          "exclude": { "$ref": "#/$defs/nonEmptyStrings" }
+        }
+      }
+    },
+    "protectedDataPatterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "regex", "classification", "scopes"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "regex": { "type": "string", "minLength": 1 },
+          "classification": { "type": "string", "minLength": 1 },
+          "scopes": { "$ref": "#/$defs/scopes" },
+          "exclude": { "$ref": "#/$defs/nonEmptyStrings" }
+        }
+      }
+    },
+    "qualityThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warning", "failure"],
+      "properties": {
+        "warning": { "$ref": "#/$defs/threshold" },
+        "failure": { "$ref": "#/$defs/threshold" }
+      }
+    },
+    "stewardshipWeights": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requiredTagCompleteness": { "type": "number", "minimum": 0, "default": 1 },
+        "protectedDataCoverage": { "type": "number", "minimum": 0, "default": 1 },
+        "qualityRuleCoverage": { "type": "number", "minimum": 0, "default": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["SCRIPT", "JOB", "TABLE", "COLUMN", "DATASET", "REPORT"] }
+    },
+    "nonEmptyStrings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "warnPercent": { "type": "number", "minimum": 0, "maximum": 1 },
+        "quarantinePercent": { "type": "number", "minimum": 0, "maximum": 1 },
+        "nullPercent": { "type": "number", "minimum": 0, "maximum": 1 },
+        "freshnessMinutes": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

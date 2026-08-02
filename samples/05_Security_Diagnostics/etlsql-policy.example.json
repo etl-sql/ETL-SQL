@@ -1,0 +1,26 @@
+{
+  "$schema": "../../schemas/etlsql-policy.schema.json",
+  "schemaVersion": "1.0",
+  "requiredTags": [
+    { "tag": "@owner", "scopes": ["TABLE", "DATASET"], "exclude": ["tmp_*", "#*"] },
+    { "tag": "@classification", "scopes": ["COLUMN"] }
+  ],
+  "protectedDataPatterns": [
+    {
+      "name": "email-column",
+      "regex": "(?i)(email|e_mail|mail_address)",
+      "classification": "restricted",
+      "scopes": ["COLUMN"],
+      "exclude": ["*_hash"]
+    }
+  ],
+  "qualityThresholds": {
+    "warning": { "warnPercent": 0.02, "quarantinePercent": 0.01, "nullPercent": 0.05, "freshnessMinutes": 60 },
+    "failure": { "warnPercent": 0.10, "quarantinePercent": 0.05, "nullPercent": 0.20, "freshnessMinutes": 240 }
+  },
+  "stewardshipWeights": {
+    "requiredTagCompleteness": 1.0,
+    "protectedDataCoverage": 1.0,
+    "qualityRuleCoverage": 1.0
+  }
+}

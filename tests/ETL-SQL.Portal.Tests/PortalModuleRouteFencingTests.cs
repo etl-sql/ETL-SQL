@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,6 +53,133 @@ public class PortalModuleRouteFencingTests
         Assert.Equal(HttpStatusCode.NotFound, schema.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/designer.html")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/index.html")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Disabled_Studio_Mode_Hides_Designer_And_Authoring_Routes()
+    {
+        using var factory = new ModuleFenceFactory(config => config.Studio.Mode = StudioDeploymentMode.Disabled);
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/designer/parse", new { script = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Get, token, "/api/reports/available-scripts", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Get, token, "/api/studio/session", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/designer.html")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/studio.html")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Studio_Capabilities_Are_DenyByDefault_And_ActionSpecific()
+    {
+        using var factory = new ModuleFenceFactory(config =>
+        {
+            config.Studio.RoleCapabilities.Clear();
+            config.Studio.RoleCapabilities["Admin"] =
+                [StudioCapabilities.StudioAccess, StudioCapabilities.ScriptPreview];
+        });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/designer/parse", new { script = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new { script = "SELECT 1;" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/scripts/upload", new { filename = "x.rptsql", contentBase64 = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, token, "/api/studio/reports", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task CatalogOnly_Mode_Removes_External_Ingress_Even_When_Capability_Is_Assigned()
+    {
+        using var factory = new ModuleFenceFactory(config =>
+        {
+            config.Studio.Mode = StudioDeploymentMode.CatalogOnly;
+            config.Studio.RoleCapabilities["Admin"] = StudioCapabilities.All.ToList();
+        });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/scripts/upload", new { filename = "x.rptsql", contentBase64 = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await SendAsync(client, HttpMethod.Get, token, "/api/reports/available-scripts", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task CatalogOnly_Studio_Creates_And_Lists_Report_Without_Exposing_Script_Path()
+    {
+        using var factory = new ModuleFenceFactory(config =>
+        {
+            config.Studio.Mode = StudioDeploymentMode.CatalogOnly;
+            config.Studio.RoleCapabilities["Admin"] = StudioCapabilities.All.ToList();
+        });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        int folderId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var adminId = await db.Users.Where(user => user.UserName == "admin").Select(user => user.Id).SingleAsync();
+            var folder = new Folder { Name = "Studio", Path = "/Studio", OwnerId = adminId };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            folderId = folder.Id;
+        }
+
+        var session = await SendAsync(client, HttpMethod.Get, token, "/api/studio/session", null);
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+        var sessionBody = await session.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("CatalogOnly", sessionBody!["mode"]!.GetValue<string>());
+        Assert.False(sessionBody["sourceControlEnabled"]!.GetValue<bool>());
+
+        var created = await SendAsync(client, HttpMethod.Post, token, "/api/studio/reports", new
+        {
+            folderId,
+            name = "Margin Review",
+            scriptText = "SET REPORT TITLE = 'Margin Review';\nCREATE PAGE Main AS (TITLE = 'Margin Review');"
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var reportId = createdBody!["id"]!.GetValue<int>();
+        Assert.Equal("/Studio", createdBody["folderPath"]!.GetValue<string>());
+        Assert.Null(createdBody["scriptPath"]);
+
+        var listed = await SendAsync(client, HttpMethod.Get, token, "/api/studio/reports", null);
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var listedBody = await listed.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Contains(listedBody!, node => node!["id"]!.GetValue<int>() == reportId);
+        Assert.All(listedBody!, node => Assert.Null(node!["scriptPath"]));
+
+        var scripts = Directory.GetFiles(Path.Combine(factory.TempDir, "scripts", "studio"), "*.rptsql", SearchOption.AllDirectories);
+        Assert.Single(scripts);
+        Assert.Contains("Margin Review", await File.ReadAllTextAsync(scripts[0]));
+
+        using var auditScope = factory.Services.CreateScope();
+        var auditDb = auditScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.True(await auditDb.AuditLogs.AnyAsync(row => row.Action == "CREATE_STUDIO_REPORT" && row.ResourceType == "Report"));
+    }
+
+    [Fact]
+    public async Task SourcePush_Is_Separate_From_SourceCommit()
+    {
+        using var factory = new ModuleFenceFactory(config =>
+        {
+            config.SourceControl.PushOnSave = true;
+            config.Studio.RoleCapabilities["Admin"] =
+                [StudioCapabilities.StudioAccess, StudioCapabilities.SourceCommit];
+        });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/reports/1/script-source/commit", new { })).StatusCode);
     }
 
     [Fact]

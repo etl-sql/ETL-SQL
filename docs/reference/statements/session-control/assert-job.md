@@ -14,6 +14,7 @@ Where [`ASSERT`](assert.md) guards a condition inside the script,
 ASSERT JOB <job_name> (
   <predicate> [, <predicate> ...]
 )
+[WITH (FAIL_ON_WARN = TRUE|FALSE)]
 [ON FAILURE NOTIFY <notification>]
 [ON CRITICAL_FAILURE THROW];
 ```
@@ -72,6 +73,10 @@ By default a failing assertion is reported (log + run diagnostics) and the scrip
   time. The payload carries the job name, the failed predicates, and the run counts. **It never
   carries sample data**, so values from a `@pii`-tagged column cannot reach an alerting channel.
 - **`ON CRITICAL_FAILURE THROW`** raises an execution error after alerting, failing the run.
+- **`WITH (FAIL_ON_WARN = TRUE)`** raises an execution error when any row triggered a `WARN`
+  quality action, even when every explicit metric predicate passed. This gives Task Scheduler,
+  cron, and CI a reliable non-zero process exit without requiring a notification destination.
+  The default is `FALSE`.
 
 When orchestrator job state is available, notifications are transition-based per job/assertion signature:
 
@@ -113,6 +118,11 @@ ON CRITICAL_FAILURE THROW;
 ```sql
 -- Fail the run outright if the feed came back empty
 ASSERT JOB daily_feed (ROW_COUNT > 0) ON CRITICAL_FAILURE THROW;
+```
+
+```sql
+-- Treat any warned row as a failed CI run; notifications remain optional
+ASSERT JOB customer_ci (ROW_COUNT > 0) WITH (FAIL_ON_WARN = TRUE);
 ```
 
 ```sql

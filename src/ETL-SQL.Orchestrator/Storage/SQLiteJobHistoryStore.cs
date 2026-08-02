@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
@@ -135,12 +137,26 @@ namespace ETL_SQL.Orchestrator.Storage
                     var createColumnMetricsTable = @"
                 CREATE TABLE IF NOT EXISTS JobColumnMetrics (
                     JobHistoryId INTEGER NOT NULL,
-                    TargetTable TEXT,
+                    TargetTable TEXT NOT NULL DEFAULT '',
                     ColumnName TEXT NOT NULL,
                     TotalRows INTEGER NOT NULL,
                     NullRows INTEGER NOT NULL,
+                    MaxTimestampUtc TEXT,
                     PRIMARY KEY (JobHistoryId, TargetTable, ColumnName)
                 );";
+
+                    var createDataQualityFailuresTable = @"
+                CREATE TABLE IF NOT EXISTS JobDataQualityFailures (
+                    JobHistoryId INTEGER NOT NULL,
+                    TargetTable TEXT NOT NULL DEFAULT '',
+                    ColumnName TEXT NOT NULL,
+                    RuleText TEXT NOT NULL,
+                    Action TEXT NOT NULL,
+                    FailureCount INTEGER NOT NULL,
+                    Owner TEXT,
+                    PRIMARY KEY (JobHistoryId, TargetTable, ColumnName, RuleText, Action)
+                );
+                CREATE INDEX IF NOT EXISTS idx_dqf_history ON JobDataQualityFailures(JobHistoryId);";
 
                     var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
@@ -284,7 +300,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Day, NodeId)
                 );";
 
-                    var schema = createJobsTable + createCatalogTables + createHistoryTable + createColumnMetricsTable + createBundleTables
+                    var schema = createJobsTable + createCatalogTables + createHistoryTable + createColumnMetricsTable
+                        + createDataQualityFailuresTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
@@ -295,6 +312,7 @@ namespace ETL_SQL.Orchestrator.Storage
                         .Replace("RowsProcessed INTEGER", $"RowsProcessed {_dialect.Int64Type}")
                         .Replace("TotalRows INTEGER", $"TotalRows {_dialect.Int64Type}")
                         .Replace("NullRows INTEGER", $"NullRows {_dialect.Int64Type}")
+                        .Replace("FailureCount INTEGER", $"FailureCount {_dialect.Int64Type}")
                         .Replace("MaxPeakMemoryBytes INTEGER", $"MaxPeakMemoryBytes {_dialect.Int64Type}")
                         .Replace("StateDiskFreeBytes INTEGER", $"StateDiskFreeBytes {_dialect.Int64Type}")
                         .Replace("SpillDiskFreeBytes INTEGER", $"SpillDiskFreeBytes {_dialect.Int64Type}")
@@ -309,6 +327,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
                     // 8B-2: Schema migration — add resource tracking columns if missing
                     await EnsureHistoryColumnsExist(connection);
+                    await EnsureColumnMetricColumnsExist(connection);
                     await EnsureJobColumnsExist(connection);
                     await EnsureLineageHistoryColumnsExist(connection);
                     await EnsureHostMetricsDailyColumnsExist(connection);
@@ -515,6 +534,15 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN DataQualityFailures TEXT;";
                 await cmd.ExecuteNonQueryAsync();
             }
+        }
+
+        private async Task EnsureColumnMetricColumnsExist(DbConnection connection)
+        {
+            var columns = await _dialect.GetColumnNamesAsync(connection, "JobColumnMetrics");
+            if (columns.Contains("MaxTimestampUtc")) return;
+            using var command = connection.CreateCommand();
+            command.CommandText = "ALTER TABLE JobColumnMetrics ADD COLUMN MaxTimestampUtc TEXT;";
+            await command.ExecuteNonQueryAsync();
         }
 
         private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
@@ -1128,6 +1156,13 @@ namespace ETL_SQL.Orchestrator.Storage
                 commandMetrics.AddParam("@name", name);
                 await commandMetrics.ExecuteNonQueryAsync();
 
+                var sqlFailures = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                using var commandFailures = connection.CreateCommand();
+                commandFailures.CommandText = sqlFailures;
+                commandFailures.Transaction = transaction;
+                commandFailures.AddParam("@name", name);
+                await commandFailures.ExecuteNonQueryAsync();
+
                 var sql2 = "DELETE FROM JobHistory WHERE JobName = @name;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
@@ -1171,6 +1206,12 @@ namespace ETL_SQL.Orchestrator.Storage
             deleteMetrics.CommandText = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
             deleteMetrics.AddParam("@name", name);
             await deleteMetrics.ExecuteNonQueryAsync();
+
+            using var deleteFailures = connection.CreateCommand();
+            deleteFailures.Transaction = transaction;
+            deleteFailures.CommandText = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+            deleteFailures.AddParam("@name", name);
+            await deleteFailures.ExecuteNonQueryAsync();
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
@@ -1241,6 +1282,53 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task<long> ImportJobHistoryAsync(JobHistoryEntry entry)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using (var existing = connection.CreateCommand())
+            {
+                existing.CommandText = @"
+                    SELECT Id FROM JobHistory
+                    WHERE JobName = @name COLLATE NOCASE AND StartTime = @start
+                      AND ((EndTime IS NULL AND @end IS NULL) OR EndTime = @end)
+                    ORDER BY Id LIMIT 1;";
+                existing.AddParam("@name", entry.JobName);
+                existing.AddParam("@start", entry.StartTime.ToString("O"));
+                existing.AddParam("@end", entry.EndTime.HasValue ? entry.EndTime.Value.ToString("O") : DBNull.Value);
+                var found = await existing.ExecuteScalarAsync();
+                if (found is not null && found != DBNull.Value)
+                    return Convert.ToInt64(found);
+            }
+
+            var sql = _dialect.InsertReturningId(@"
+                INSERT INTO JobHistory
+                    (JobName, StartTime, EndTime, Status, ErrorMessage, RowsProcessed,
+                     PeakMemoryBytes, CpuTimeSeconds, ScriptHashAtRunTime, HashMatched,
+                     RowsQuarantined, RowsWarned, DataQualityFailures)
+                VALUES
+                    (@name, @start, @end, @status, @error, @rows,
+                     @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures)", "Id");
+            using var insert = connection.CreateCommand();
+            insert.CommandText = sql;
+            insert.AddParam("@name", entry.JobName);
+            insert.AddParam("@start", entry.StartTime.ToString("O"));
+            insert.AddParam("@end", entry.EndTime.HasValue ? entry.EndTime.Value.ToString("O") : DBNull.Value);
+            insert.AddParam("@status", entry.Status);
+            insert.AddParam("@error", (object?)entry.ErrorMessage ?? DBNull.Value);
+            insert.AddParam("@rows", entry.RowsProcessed);
+            insert.AddParam("@memory", entry.PeakMemoryBytes);
+            insert.AddParam("@cpu", entry.CpuTimeSeconds);
+            insert.AddParam("@hash", (object?)entry.ScriptHashAtRunTime ?? DBNull.Value);
+            insert.AddParam("@matched", entry.HashMatched.HasValue ? (object)(entry.HashMatched.Value ? 1 : 0) : DBNull.Value);
+            insert.AddParam("@quarantined", entry.RowsQuarantined);
+            insert.AddParam("@warned", entry.RowsWarned);
+            insert.AddParam("@failures", (object?)entry.DataQualityFailures ?? DBNull.Value);
+            return Convert.ToInt64((await insert.ExecuteScalarAsync())!);
+        }
+
         public async Task SaveJobColumnMetricsAsync(long entryId, IEnumerable<DataQualityColumnMetric> metrics)
         {
             var rows = metrics.Where(m => m.TotalRows > 0).ToList();
@@ -1254,22 +1342,120 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO JobColumnMetrics (JobHistoryId, TargetTable, ColumnName, TotalRows, NullRows)
-                    VALUES (@historyId, @target, @column, @total, @nulls)
+                    INSERT INTO JobColumnMetrics (JobHistoryId, TargetTable, ColumnName, TotalRows, NullRows, MaxTimestampUtc)
+                    VALUES (@historyId, @target, @column, @total, @nulls, @maxTimestamp)
                     ON CONFLICT (JobHistoryId, TargetTable, ColumnName) DO UPDATE SET
                         TotalRows = excluded.TotalRows,
-                        NullRows = excluded.NullRows;";
+                        NullRows = excluded.NullRows,
+                        MaxTimestampUtc = excluded.MaxTimestampUtc;";
                 command.AddParam("@historyId", entryId);
                 var target = string.IsNullOrWhiteSpace(metric.TargetTable)
                     ? null
                     : metric.TargetTable.Trim().TrimStart('#');
-                command.AddParam("@target", (object?)target ?? DBNull.Value);
+                command.AddParam("@target", target ?? "");
                 command.AddParam("@column", metric.ColumnName);
                 command.AddParam("@total", metric.TotalRows);
                 command.AddParam("@nulls", metric.NullRows);
+                command.AddParam("@maxTimestamp", metric.MaxTimestampUtc.HasValue
+                    ? metric.MaxTimestampUtc.Value.ToUniversalTime().ToString("O")
+                    : DBNull.Value);
                 await command.ExecuteNonQueryAsync();
             }
         }
+
+        public async Task SaveJobDataQualityFailuresAsync(long entryId, IEnumerable<DataQualityRuleFailureMetric> failures)
+        {
+            var rows = failures.Where(f => f.FailureCount > 0).ToList();
+            if (rows.Count == 0) return;
+
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            foreach (var failure in rows)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO JobDataQualityFailures
+                        (JobHistoryId, TargetTable, ColumnName, RuleText, Action, FailureCount, Owner)
+                    VALUES (@historyId, @target, @column, @rule, @action, @count, @owner)
+                    ON CONFLICT (JobHistoryId, TargetTable, ColumnName, RuleText, Action) DO UPDATE SET
+                        FailureCount = excluded.FailureCount,
+                        Owner = excluded.Owner;";
+                command.AddParam("@historyId", entryId);
+                command.AddParam("@target", string.IsNullOrWhiteSpace(failure.TargetTable)
+                    ? "" : failure.TargetTable.Trim().TrimStart('#'));
+                command.AddParam("@column", failure.ColumnName);
+                command.AddParam("@rule", failure.Rule);
+                command.AddParam("@action", failure.Action.ToUpperInvariant());
+                command.AddParam("@count", failure.FailureCount);
+                command.AddParam("@owner", (object?)failure.Owner ?? DBNull.Value);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresAsync(int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
+                       f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
+                FROM JobDataQualityFailures f
+                INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
+                ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
+                LIMIT @limit;";
+            command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+
+            var results = new List<JobDataQualityFailure>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new JobDataQualityFailure(
+                    reader.GetInt64(0), reader.GetString(1), DateTime.Parse(reader.GetString(2)),
+                    reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)), reader.GetString(4),
+                    reader.IsDBNull(5) || string.IsNullOrEmpty(reader.GetString(5)) ? null : reader.GetString(5),
+                    reader.GetString(6), reader.GetString(7),
+                    reader.GetString(8), reader.GetInt64(9), reader.IsDBNull(10) ? null : reader.GetString(10)));
+            }
+            return results;
+        }
+
+        public async Task<IReadOnlyList<JobDataQualityStatus>> GetDataQualityStatusesAsync(int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
+                       h.RowsProcessed, h.RowsWarned, h.RowsQuarantined, h.ErrorMessage,
+                       (SELECT COUNT(*) FROM JobDataQualityFailures f WHERE f.JobHistoryId = h.Id) AS FailedRuleCount,
+                       (SELECT MAX(m.MaxTimestampUtc) FROM JobColumnMetrics m WHERE m.JobHistoryId = h.Id) AS FreshestValueUtc
+                FROM JobHistory h
+                ORDER BY h.StartTime DESC, h.Id DESC
+                LIMIT @limit;";
+            command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+
+            var results = new List<JobDataQualityStatus>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var freshest = reader.IsDBNull(10) ? (DateTimeOffset?)null : DateTimeOffset.Parse(reader.GetString(10));
+                results.Add(new JobDataQualityStatus(
+                    reader.GetInt64(0).ToString(CultureInfo.InvariantCulture), reader.GetString(1),
+                    DateTime.Parse(reader.GetString(2)), reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
+                    reader.GetString(4), reader.GetInt64(5), ReadInt64(reader, 6), ReadInt64(reader, 7),
+                    Convert.ToInt32(reader.GetValue(9)), freshest, freshest.HasValue ? "OBSERVED" : "NOT_TRACKED",
+                    reader.IsDBNull(8) ? null : SecretRedactor.Redact(reader.GetString(8))));
+            }
+            return results;
+        }
+
+        private static long ReadInt64(DbDataReader reader, int ordinal) =>
+            reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
 
         public async Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(
             string jobName, string? targetTable, string columnName, int limit = 100)
@@ -1280,7 +1466,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT m.TargetTable, m.ColumnName, m.TotalRows, m.NullRows
+                SELECT m.TargetTable, m.ColumnName, m.TotalRows, m.NullRows, m.MaxTimestampUtc
                 FROM JobColumnMetrics m
                 INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
                 WHERE h.JobName = @job
@@ -1300,10 +1486,11 @@ namespace ETL_SQL.Orchestrator.Storage
             while (await reader.ReadAsync())
             {
                 results.Add(new ColumnRunMetrics(
-                    reader.IsDBNull(0) ? null : reader.GetString(0),
+                    reader.IsDBNull(0) || string.IsNullOrEmpty(reader.GetString(0)) ? null : reader.GetString(0),
                     reader.GetString(1),
                     Convert.ToInt64(reader.GetValue(2)),
-                    Convert.ToInt64(reader.GetValue(3))));
+                    Convert.ToInt64(reader.GetValue(3)),
+                    reader.IsDBNull(4) ? null : DateTimeOffset.Parse(reader.GetString(4))));
             }
             return results;
         }
@@ -1326,6 +1513,17 @@ namespace ETL_SQL.Orchestrator.Storage
                     );";
                 deleteMetrics.AddParam("@cutoff", cutoff);
                 await deleteMetrics.ExecuteNonQueryAsync();
+            }
+
+            using (var deleteFailures = connection.CreateCommand())
+            {
+                deleteFailures.CommandText = @"
+                    DELETE FROM JobDataQualityFailures
+                    WHERE JobHistoryId IN (
+                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    );";
+                deleteFailures.AddParam("@cutoff", cutoff);
+                await deleteFailures.ExecuteNonQueryAsync();
             }
 
             using var command = connection.CreateCommand();

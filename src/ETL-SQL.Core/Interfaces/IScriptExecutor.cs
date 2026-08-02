@@ -34,4 +34,6 @@ public record ScriptExecutionResult(
     /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>); counts only, never sample values.</summary>
     string? DataQualityFailures = null,
     /// <summary>Column-level run metrics collected for ASSERT JOB predicates.</summary>
-    IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null);
+    IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
+    /// <summary>Structured counts-only rule failures; never contains sample values.</summary>
+    IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null);

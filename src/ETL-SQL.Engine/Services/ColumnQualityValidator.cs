@@ -407,7 +407,8 @@ public sealed class ColumnQualityValidator
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
-                        ruleSet.ColumnName, rule.Text, binding.Action, value, ruleSet.IsPii, ruleSet.Owner);
+                        _statement.IntoTable?.ToString(), ruleSet.ColumnName, rule.Text, binding.Action,
+                        value, ruleSet.IsPii, ruleSet.Owner);
 
                     var reason = DescribeFailure(rule, value, ruleSet);
                     // A dry run must not abort the load — the point is to learn the impact of a

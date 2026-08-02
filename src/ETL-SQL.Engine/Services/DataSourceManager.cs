@@ -263,6 +263,14 @@ public class DataSourceManager(
         {
             return new JobHistoryDataSource(_jobHistoryStore);
         }
+        else if (IsEngineVirtualTable(table, "data_quality_status"))
+        {
+            return new DataQualityStatusDataSource(_evaluator, _jobHistoryStore);
+        }
+        else if (IsEngineVirtualTable(table, "data_quality_failures"))
+        {
+            return new DataQualityFailuresDataSource(_evaluator, _jobHistoryStore);
+        }
         else if (IsEngineVirtualTable(table, "job_state"))
         {
             return new JobStateDataSource(_jobHistoryStore);
@@ -290,6 +298,14 @@ public class DataSourceManager(
         else if (IsEngineVirtualTable(table, "data_quality_rules"))
         {
             return new DataQualityRulesDataSource(_evaluator);
+        }
+        else if (IsEngineVirtualTable(table, "stewardship_score"))
+        {
+            return new StewardshipScoreDataSource(_evaluator, _lineageCatalogStore, _configuration);
+        }
+        else if (IsEngineVirtualTable(table, "stewardship_gaps"))
+        {
+            return new StewardshipGapsDataSource(_evaluator, _lineageCatalogStore, _configuration);
         }
         else if (IsEngineVirtualTable(table, "lineage_history"))
         {

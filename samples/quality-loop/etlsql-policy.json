@@ -1,0 +1,29 @@
+{
+  "$schema": "../../schemas/etlsql-policy.schema.json",
+  "schemaVersion": "1.0",
+  "requiredTags": [
+    { "tag": "@owner", "scopes": ["COLUMN"] },
+    { "tag": "@steward", "scopes": ["COLUMN"] },
+    { "tag": "@contact", "scopes": ["COLUMN"] },
+    { "tag": "@classification", "scopes": ["COLUMN"] },
+    { "tag": "@quality", "scopes": ["COLUMN"] }
+  ],
+  "protectedDataPatterns": [
+    {
+      "name": "email-column",
+      "regex": "(?i)(email|e_mail|mail_address)",
+      "classification": "restricted",
+      "scopes": ["COLUMN"]
+    }
+  ],
+  "qualityThresholds": {
+    "warning": { "warnPercent": 0.01, "quarantinePercent": 0.005, "freshnessMinutes": 60 },
+    "failure": { "warnPercent": 0.05, "quarantinePercent": 0.01, "freshnessMinutes": 240 }
+  },
+  "stewardshipWeights": {
+    "requiredTagCompleteness": 1,
+    "protectedDataCoverage": 1,
+    "qualityRuleCoverage": 1
+  }
+}
+

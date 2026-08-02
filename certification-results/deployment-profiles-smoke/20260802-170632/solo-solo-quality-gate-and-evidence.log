@@ -1,0 +1,480 @@
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.13]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:00.46]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:00.48]   Starting:    ETL-SQL.Tests
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[e612b07a] Evaluator initialized.
+[e612b07a] [SELECT] Executing SelectStatement. Session: e612b07a
+[e612b07a] 1 rows affected.
+[e612b07a] [SELECT] Executing SelectStatement. Session: e612b07a
+[e612b07a] 1 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[23cabac8] Evaluator initialized.
+[23cabac8] ASSERT JOB import: skipping QUARANTINE_PERCENT > 0.9 - the metric was not observed during this run.
+[23cabac8] ASSERT JOB import: skipping QUARANTINE_PERCENT > 0.9 - the metric was not observed during this run.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[88533638] Evaluator initialized.
+[88533638] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[88533638] [SESSION] Session 88533638 persisted successfully (SQLite + Meta-Chunks)
+[88533638] [SELECT] Executing SelectStatement. Session: 88533638
+[88533638] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[88533638] 1 rows affected.
+[88533638] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[4d8a7b97] Evaluator initialized.
+[4d8a7b97] [SELECT] Executing SelectStatement. Session: 4d8a7b97
+[4d8a7b97] 4 rows affected.
+[4d8a7b97] [SELECT] Executing SelectStatement. Session: 4d8a7b97
+[4d8a7b97] 4 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[c94b9077] Evaluator initialized.
+[c94b9077] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[c94b9077] [SESSION] Session c94b9077 persisted successfully (SQLite + Meta-Chunks)
+[c94b9077] [SELECT] Executing SelectStatement. Session: c94b9077
+[c94b9077] Data quality: 1 row(s) failed rule "MATCHES ^ok$" on column 'Email' [QUARANTINE]. Sample values: bad
+[c94b9077] Data quality: 1 row(s) failed rule "MATCHES ^ok$" on column 'Ssn' [QUARANTINE]. Sample values: ***
+[c94b9077] 0 rows affected.
+[c94b9077] Notification 'alerts' created.
+[c94b9077] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 1)
+[c94b9077] ASSERT JOB import: notification 'alerts' delivered through connection 'alerts'.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[bc0abd2f] Evaluator initialized.
+[bc0abd2f] [SELECT] Executing SelectStatement. Session: bc0abd2f
+[bc0abd2f] 2 rows affected.
+[bc0abd2f] [SELECT] Executing SelectStatement. Session: bc0abd2f
+[bc0abd2f] 1 rows affected.
+[bc0abd2f] ASSERT JOB import failed 1 of 1 predicate(s): FRESHNESS(old_clean.EventTime) < '1 HOURS' (actual 207871596.8993)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[4f13a1ea] Evaluator initialized.
+[4f13a1ea] [SELECT] Executing SelectStatement. Session: 4f13a1ea
+[4f13a1ea] 4 rows affected.
+[4f13a1ea] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(clean.Email) WITHIN 0.05 OF HISTORICAL (actual 0.5, baseline 0.1, drift 4)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[72bcbd5c] Evaluator initialized.
+[72bcbd5c] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[72bcbd5c] [SESSION] Session 72bcbd5c persisted successfully (SQLite + Meta-Chunks)
+[72bcbd5c] [SELECT] Executing SelectStatement. Session: 72bcbd5c
+[72bcbd5c] 10 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[a773e108] Evaluator initialized.
+[a773e108] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[a773e108] [SESSION] Session a773e108 persisted successfully (SQLite + Meta-Chunks)
+[a773e108] [SELECT] Executing SelectStatement. Session: a773e108
+[a773e108] 1004 rows affected.
+[a773e108] ASSERT JOB import: ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL has zero historical sigma; falling back to a relative tolerance of 0.03 around the mean.
+[a773e108] ASSERT JOB import: ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL has zero historical sigma; falling back to a relative tolerance of 0.03 around the mean.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[129bb009] Evaluator initialized.
+[129bb009] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[129bb009] [SESSION] Session 129bb009 persisted successfully (SQLite + Meta-Chunks)
+[129bb009] [SELECT] Executing SelectStatement. Session: 129bb009
+[129bb009] 400 rows affected.
+[129bb009] ASSERT JOB import: ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL has zero historical sigma; falling back to a relative tolerance of 0.03 around the mean.
+[129bb009] ASSERT JOB import: ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL has zero historical sigma; falling back to a relative tolerance of 0.03 around the mean.
+[129bb009] ASSERT JOB import failed 1 of 1 predicate(s): ROW_COUNT WITHIN 3 SIGMA OF HISTORICAL (actual 800, baseline 2000, sigma 0, drift 0.6 > 0.03)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[1ab8fcee] Evaluator initialized.
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_WrittenByTwoSinks_IsACleanAmbiguityError [154 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UnobservedMetric_IsSkipped_NotAssertedOnNothing [31 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_FailingPredicate_ThrowsWhenCritical [182 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_IsCollectedWhenColumnarSelectIntoWouldOtherwiseApply [13 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Notification_NamesTheFailingColumnsAndTheirOwners [168 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Freshness_ComparesAgeOfNewestObservedTimestamp [12 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercentHistorical_UsesColumnMetricHistory [14 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QuarantinePercent_PassesWhenUnderTheBound [51 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.ZeroSigma_FallsBackToARelativeBand_NotEquality [119 ms]
+[1ab8fcee] Notification 'alerts' created.
+[1ab8fcee] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[1ab8fcee] [SESSION] Session 1ab8fcee persisted successfully (SQLite + Meta-Chunks)
+[1ab8fcee] [SELECT] Executing SelectStatement. Session: 1ab8fcee
+[1ab8fcee] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[1ab8fcee] 1 rows affected.
+[1ab8fcee] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[1ab8fcee] ASSERT JOB import: notification 'alerts' delivered through connection 'alerts'.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[f670cf45] Evaluator initialized.
+[f670cf45] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[f670cf45] [SESSION] Session f670cf45 persisted successfully (SQLite + Meta-Chunks)
+[f670cf45] [SELECT] Executing SelectStatement. Session: f670cf45
+[f670cf45] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[f670cf45] 1 rows affected.
+[f670cf45] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[7e92645a] Evaluator initialized.
+[7e92645a] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[7e92645a] [SESSION] Session 7e92645a persisted successfully (SQLite + Meta-Chunks)
+[7e92645a] [SELECT] Executing SelectStatement. Session: 7e92645a
+[7e92645a] 5 rows affected.
+[7e92645a] ASSERT JOB import: skipping ROW_COUNT WITHIN 0.05 OF HISTORICAL - insufficient history: 2 of 3 runs.
+[7e92645a] ASSERT JOB import: skipping ROW_COUNT WITHIN 0.05 OF HISTORICAL - insufficient history: 2 of 3 runs.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[f0b98c15] Evaluator initialized.
+[f0b98c15] [SELECT] Executing SelectStatement. Session: f0b98c15
+[f0b98c15] 1 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[edc248b6] Evaluator initialized.
+[edc248b6] [SELECT] Executing SelectStatement. Session: edc248b6
+[edc248b6] Data quality: 1 row(s) failed rule "NOT NULL" on column 'Id' [WARN]. Sample values: NULL
+[edc248b6] 1 rows affected.
+[edc248b6] ASSERT JOB import failed 1 of 1 predicate(s): FAIL_ON_WARN = TRUE (1 warned row(s))
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[56511322] Evaluator initialized.
+[56511322] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[56511322] [SESSION] Session 56511322 persisted successfully (SQLite + Meta-Chunks)
+[56511322] [SELECT] Executing SelectStatement. Session: 56511322
+[56511322] 6 rows affected.
+[56511322] ASSERT JOB import failed 1 of 1 predicate(s): ROW_COUNT > 100 (actual 12)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[01b75b17] Evaluator initialized.
+[01b75b17] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[01b75b17] [SESSION] Session 01b75b17 persisted successfully (SQLite + Meta-Chunks)
+[01b75b17] [SELECT] Executing SelectStatement. Session: 01b75b17
+[01b75b17] 10 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[94792a29] Evaluator initialized.
+[94792a29] Notification 'alerts' created.
+[94792a29] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[94792a29] [SESSION] Session 94792a29 persisted successfully (SQLite + Meta-Chunks)
+[94792a29] [SELECT] Executing SelectStatement. Session: 94792a29
+[94792a29] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[94792a29] 1 rows affected.
+[94792a29] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[94792a29] ASSERT JOB import: notification 'alerts' delivered through connection 'alerts'.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[fd8152b3] Evaluator initialized.
+[fd8152b3] Notification 'alerts' created.
+[fd8152b3] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[fd8152b3] [SESSION] Session fd8152b3 persisted successfully (SQLite + Meta-Chunks)
+[fd8152b3] [SELECT] Executing SelectStatement. Session: fd8152b3
+[fd8152b3] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[fd8152b3] 1 rows affected.
+[fd8152b3] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[fd8152b3] ASSERT JOB import: suppressing repeated alert for 1 predicate(s); last failure alert was 2026-08-02T22:06:37.4868852+00:00.
+[fd8152b3] ASSERT JOB import: suppressing repeated alert for 1 predicate(s); last failure alert was 2026-08-02T22:06:37.4868852+00:00.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[54cec3d4] Evaluator initialized.
+[54cec3d4] Notification 'alerts' created.
+[54cec3d4] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[54cec3d4] [SESSION] Session 54cec3d4 persisted successfully (SQLite + Meta-Chunks)
+[54cec3d4] [SELECT] Executing SelectStatement. Session: 54cec3d4
+[54cec3d4] 4 rows affected.
+[54cec3d4] ASSERT JOB import: notification 'alerts' delivered through connection 'alerts'.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[c581d418] Evaluator initialized.
+[c581d418] Notification 'alerts' created.
+[c581d418] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[c581d418] [SESSION] Session c581d418 persisted successfully (SQLite + Meta-Chunks)
+[c581d418] [SELECT] Executing SelectStatement. Session: c581d418
+[c581d418] 4 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[6da24b23] Evaluator initialized.
+[6da24b23] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[6da24b23] [SESSION] Session 6da24b23 persisted successfully (SQLite + Meta-Chunks)
+[6da24b23] [SELECT] Executing SelectStatement. Session: 6da24b23
+[6da24b23] 5 rows affected.
+[6da24b23] ASSERT JOB never_ran_before: skipping ROW_COUNT WITHIN 0.2 OF HISTORICAL - insufficient history: 0 of 3 runs.
+[6da24b23] ASSERT JOB never_ran_before: skipping ROW_COUNT WITHIN 0.2 OF HISTORICAL - insufficient history: 0 of 3 runs.
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingAssert_PostsASummaryThroughTheNotification [80 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailingPredicate_WithoutCritical_DoesNotThrow [49 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_ColdStart_SkipsWithWarning_NoAlertStorm [52 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.FailOnWarn_ProducesExecutionFailureOnlyWhenWarnRowsExist [20 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_ComparesAgainstTelemetryRows [53 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_BaselineIsTheMeanOfRecentRuns [45 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationTransition_SuppressesRepeatedFailure_AndSendsRecovery [249 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.PassingAssert_SendsNoAlert [91 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithProviderButNoRecordedRuns_ColdStarts_RatherThanErroring [82 ms]
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[e3dccfcd] Evaluator initialized.
+[e3dccfcd] [SELECT] Executing SelectStatement. Session: e3dccfcd
+[e3dccfcd] 0 rows affected.
+[e3dccfcd] ASSERT JOB import failed 1 of 1 predicate(s): ROW_COUNT > 0 (actual 0)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[1993a2a2] Evaluator initialized.
+[1993a2a2] [SELECT] Executing SelectStatement. Session: 1993a2a2
+[1993a2a2] 3 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[16007be5] Evaluator initialized.
+[16007be5] Notification 'alerts' created.
+[16007be5] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[16007be5] [SESSION] Session 16007be5 persisted successfully (SQLite + Meta-Chunks)
+[16007be5] [SELECT] Executing SelectStatement. Session: 16007be5
+[16007be5] Data quality: 2 row(s) failed rule "MATCHES ^ok$" on column 'Ssn' [QUARANTINE]. Sample values: ***, ***
+[16007be5] 0 rows affected.
+[16007be5] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 1)
+[16007be5] ASSERT JOB import: notification 'alerts' delivered through connection 'alerts'.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[0dc8b249] Evaluator initialized.
+[0dc8b249] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[0dc8b249] [SESSION] Session 0dc8b249 persisted successfully (SQLite + Meta-Chunks)
+[0dc8b249] [SELECT] Executing SelectStatement. Session: 0dc8b249
+[0dc8b249] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[0dc8b249] 1 rows affected.
+[0dc8b249] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[874a4eb4] Evaluator initialized.
+[874a4eb4] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[874a4eb4] [SESSION] Session 874a4eb4 persisted successfully (SQLite + Meta-Chunks)
+[874a4eb4] [SELECT] Executing SelectStatement. Session: 874a4eb4
+[874a4eb4] 9 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[fd4213c5] Evaluator initialized.
+[fd4213c5] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[fd4213c5] [SESSION] Session fd4213c5 persisted successfully (SQLite + Meta-Chunks)
+[fd4213c5] [SELECT] Executing SelectStatement. Session: fd4213c5
+[fd4213c5] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[fd4213c5] 1 rows affected.
+[fd4213c5] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[fd4213c5] ASSERT JOB import: notification 'missing_notification' does not exist; skipping the notification.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[b9502098] Evaluator initialized.
+[b9502098] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[b9502098] [SESSION] Session b9502098 persisted successfully (SQLite + Meta-Chunks)
+[b9502098] [SELECT] Executing SelectStatement. Session: b9502098
+[b9502098] 5 rows affected.
+[b9502098] ASSERT JOB import failed 1 of 1 predicate(s): ROW_COUNT WITHIN 0.2 OF HISTORICAL (actual 10, baseline 100, drift 0.9)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[55ee5d9b] Evaluator initialized.
+[55ee5d9b] Notification 'alerts' created.
+[55ee5d9b] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[55ee5d9b] [SESSION] Session 55ee5d9b persisted successfully (SQLite + Meta-Chunks)
+[55ee5d9b] [SELECT] Executing SelectStatement. Session: 55ee5d9b
+[55ee5d9b] Data quality: 3 row(s) failed rule "NOT NULL" on column 'Id' [QUARANTINE]. Sample values: NULL, NULL, NULL
+[55ee5d9b] 1 rows affected.
+[55ee5d9b] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[55ee5d9b] ASSERT JOB import: notification delivery through 'alerts' failed: webhook exploded
+[55ee5d9b] ASSERT JOB import failed 1 of 1 predicate(s): QUARANTINE_PERCENT < 0.1 (actual 0.75)
+[55ee5d9b] ASSERT JOB import: notification delivery through 'alerts' failed: webhook exploded
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[eb49e4d2] Evaluator initialized.
+[eb49e4d2] [SELECT] Executing SelectStatement. Session: eb49e4d2
+[eb49e4d2] 4 rows affected.
+[eb49e4d2] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(clean.Email) WITHIN 2 SIGMA OF HISTORICAL (actual 1, baseline 0.1, sigma 0.01, distance 0.9)
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_FailsForEmptyUntaggedLoad [13 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.RowCount_WorksForUntaggedLoads [15 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationPayload_CarriesCountsOnly_NoSampleValues [79 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.CollectorBackedPredicates_StillWorkWithoutAnyHistoryProvider [49 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithinTolerance_Passes [54 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.UndefinedNotification_IsLoggedNotFatal [76 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_OutsideTolerance_Fails_WithBaselineInTheMessage [48 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NotificationDeliveryFailure_DoesNotDecideWhetherTheRunFails [86 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercentHistorical_WithinSigmaFailsOutsideBand [12 ms]
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[78860a2f] Evaluator initialized.
+[78860a2f] [CHECKPOINT] Saving state at top-level checkpoint label 'import_rows'...
+[78860a2f] [SESSION] Session 78860a2f persisted successfully (SQLite + Meta-Chunks)
+[78860a2f] [SELECT] Executing SelectStatement. Session: 78860a2f
+[78860a2f] 5 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[fb71fb78] Evaluator initialized.
+[fb71fb78] [SELECT] Executing SelectStatement. Session: fb71fb78
+[fb71fb78] 2 rows affected.
+[fb71fb78] [SELECT] Executing SelectStatement. Session: fb71fb78
+[fb71fb78] 2 rows affected.
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[3330cf52] Evaluator initialized.
+[3330cf52] [SELECT] Executing SelectStatement. Session: 3330cf52
+[3330cf52] 2 rows affected.
+[3330cf52] [SELECT] Executing SelectStatement. Session: 3330cf52
+[3330cf52] 2 rows affected.
+[3330cf52] ASSERT JOB import failed 1 of 1 predicate(s): NULL_PERCENT(out_b.Email) < 0.5 (actual 1)
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[da3881ee] Evaluator initialized.
+[da3881ee] [SELECT] Executing SelectStatement. Session: da3881ee
+[da3881ee] 4 rows affected.
+[da3881ee] [SELECT] Executing SelectStatement. Session: da3881ee
+[da3881ee] 4 rows affected.
+[xUnit.net 00:00:02.60]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.Historical_WithoutAProvider_FailsWithAClearMessage [60 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.QualifiedNullPercent_DisambiguatesMultipleSinks [54 ms]
+  Passed ETL_SQL.Tests.Engine.AssertJobRuntimeTests.NullPercent_UsesTheInStreamColumnTally [16 ms]
+  Passed ETL_SQL.Tests.App.QualityRunReporterTests.Evidence_IsVersionedCountsOnlyAndRedacted [18 ms]
+  Passed ETL_SQL.Tests.App.QualityRunReporterTests.Summary_IsStableAndDoesNotContainSamples [< 1 ms]
+
+Test Run Successful.
+Total tests: 32
+     Passed: 32
+ Total time: 2.9614 Seconds

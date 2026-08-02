@@ -177,7 +177,8 @@ public static class AstSerializer
         CreatePortalGroupStatement s => $"CREATE GROUP {s.Name};",
         DropPortalGroupStatement s => $"DROP GROUP {s.Name}{(s.Cascade ? " CASCADE" : "")};",
         AddUserToPortalGroupStatement s => $"ADD USER {s.Username} TO GROUP {s.GroupName};",
-        CreatePortalFolderStatement s => $"CREATE FOLDER '{s.Path}';",
+        CreatePortalFolderStatement s => $"CREATE FOLDER '{s.Path}'"
+            + (s.CatalogOwner != null ? $" WITH (CATALOG_OWNER = {Quote(s.CatalogOwner)})" : "") + ";",
         AlterPortalFolderStatement s => $"ALTER FOLDER '{s.Path}' ...;",
         DropPortalFolderStatement s => $"DROP FOLDER '{s.Path}'{(s.Cascade ? " CASCADE" : "")};",
         GrantPortalPermissionStatement s => $"GRANT {s.Permission.ToString().ToUpper()} ON FOLDER '{s.FolderPath}' TO GROUP {s.GroupName};",
@@ -187,7 +188,14 @@ public static class AstSerializer
         DropPortalDatasetStatement s => $"DROP DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}';",
         GrantPortalDatasetPermissionStatement s => $"GRANT {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' TO GROUP {s.GroupName};",
         RevokePortalDatasetPermissionStatement s => $"REVOKE {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' FROM GROUP {s.GroupName};",
-        PublishPortalReportStatement s => $"PUBLISH REPORT {s.ReportName} FROM '{s.ScriptPath}' TO FOLDER '{s.FolderPath}';",
+        PublishPortalReportStatement s => $"PUBLISH REPORT {Quote(s.ReportName)} FROM {Quote(s.ScriptPath)} IN FOLDER {Quote(s.FolderPath)}"
+            + (s.Description != null || s.CatalogOwner != null
+                ? " WITH (" + string.Join(", ", new[]
+                {
+                    s.Description != null ? $"DESCRIPTION = {Quote(s.Description)}" : null,
+                    s.CatalogOwner != null ? $"CATALOG_OWNER = {Quote(s.CatalogOwner)}" : null
+                }.Where(value => value != null)) + ")"
+                : "") + ";",
         AlterPortalReportStatement s => $"ALTER REPORT {s.ReportName} ...;",
         DropPortalReportStatement s => $"DROP REPORT {s.ReportName}{(s.Cascade ? " CASCADE" : "")};",
         FavoritePortalReportStatement s => $"FAVORITE REPORT {s.ReportName}" + (s.Username != null ? $" FOR {s.Username}" : "") + ";",
@@ -284,7 +292,7 @@ public static class AstSerializer
         CreateThemeStatement s => FormatCreateTheme(s),
         SetTemplatePathStatement s => s.ToSql(),
         AssertStatement s => $"ASSERT {s.Condition.ToSql()}{(s.Message != null ? $", {s.Message.ToSql()}" : "")};",
-        AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})" + (s.FailureNotification != null ? $" ON FAILURE NOTIFY {s.FailureNotification}" : "") + (s.ThrowOnCritical ? " ON CRITICAL_FAILURE THROW" : "") + ";",
+        AssertJobStatement s => $"ASSERT JOB {s.JobName} ({string.Join(", ", s.Predicates.Select(p => p.Describe()))})" + (s.FailOnWarn ? " WITH (FAIL_ON_WARN = TRUE)" : "") + (s.FailureNotification != null ? $" ON FAILURE NOTIFY {s.FailureNotification}" : "") + (s.ThrowOnCritical ? " ON CRITICAL_FAILURE THROW" : "") + ";",
         SetReportMetadataStatement s => $"SET REPORT {s.Key} = '{s.Value.Replace("'", "''")}';",
         UseDatasetStatement s => $"USE DATASET {s.DatasetName};",
         ShowDatasetsStatement s => "SHOW DATASETS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
