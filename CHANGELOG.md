@@ -88,6 +88,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added first-class `#governance/stewardship` and administrator-only `#governance/audit` routes.
+  Governance navigation and internal mode changes now preserve the selected durable evidence view;
+  direct non-admin Audit navigation is safely redirected to Stewardship.
+
 - Added an Admin **Operations** control room that connects fleet and workload signals to pending
   report-access decisions, full service-account lifecycle and audit history, token-safe anonymous
   share/embed inventory and revocation, and native failure/backup/capacity service schedules and

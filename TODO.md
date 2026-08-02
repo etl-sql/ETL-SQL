@@ -207,7 +207,7 @@ documentation reconciliation, then release certification.
   - [ ] Keep provisioning in a separately authorized control plane or exported package.
   - [ ] Prove environment switching establishes separate sessions and never merges catalogs,
         datasets, connections, secrets, or authoring history.
-- [ ] Complete Stewardship and Audit routes using durable evidence.
+- [x] Complete Stewardship and Audit routes using durable evidence.
 - [ ] Connect disposition/replay submissions to terminal job status.
 - [ ] Add data-quality rule visibility and structured failure trends.
 - [ ] Use one sanitized Markdown renderer for Docs and connector Help.

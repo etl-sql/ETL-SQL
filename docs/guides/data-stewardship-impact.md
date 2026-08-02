@@ -147,7 +147,10 @@ The packaged starter report at `samples/08_Reporting/protected_data_audit.rptsql
 
 ## Portal Stewardship Review
 
-Open the Portal Lineage catalog and switch to Audit mode for the combined steward workflow, or Stewardship mode when you need a focused metadata queue.
+Open **Governance → Stewardship** (the durable route `#governance/stewardship`) for the focused
+metadata queue. Administrators can open **Governance → Audit Evidence**
+(`#governance/audit`) for the combined steward workflow; the Audit route is role-gated because it
+joins catalog evidence with Portal audit and operational outbox records.
 
 Audit mode combines:
 

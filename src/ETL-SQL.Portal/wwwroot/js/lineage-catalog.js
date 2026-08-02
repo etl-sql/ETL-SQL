@@ -40,6 +40,8 @@ const memoryStorage = (() => {
  * @param {Function} [opts.formatBuiltAt]       (iso) → absolute string.
  * @param {Storage}  [opts.storage]             localStorage-like store for saved views.
  * @param {Function} [opts.prepare]             Side-effects to run before each full render (nav state).
+ * @param {Function} [opts.onModeChange]        Updates the host route when the user changes mode.
+ * @param {boolean}  [opts.allowAudit]          Whether the administrator-only audit mode is visible.
  * @param {Function} [opts.promptFn]            Prompt used when naming a saved view.
  * @param {string}   [opts.viewKey]             Storage key for saved views.
  * @returns {{ render: Function, dispose: Function, state: Object }}
@@ -57,6 +59,8 @@ export function createLineageCatalog(opts = {}) {
     formatBuiltAt = v => v,
     storage = (typeof localStorage !== 'undefined' ? localStorage : memoryStorage),
     prepare = () => {},
+    onModeChange = () => {},
+    allowAudit = true,
     promptFn = (typeof window !== 'undefined' && window.prompt ? window.prompt.bind(window) : () => null),
     viewKey = 'etlsql_lineage_views',
   } = opts;
@@ -458,6 +462,7 @@ export function createLineageCatalog(opts = {}) {
         const target = btn.dataset.auditShortcut;
         if (target === 'impact') {
           state.mode = 'impact';
+          onModeChange(state.mode);
           const first = protectedRows[0];
           state.impactKind = 'table';
           state.impactName = first?.targetTable || '';
@@ -465,6 +470,7 @@ export function createLineageCatalog(opts = {}) {
           return;
         }
         state.mode = 'stewardship';
+        onModeChange(state.mode);
         state.stewardshipView = target;
         render();
       });
@@ -804,7 +810,7 @@ export function createLineageCatalog(opts = {}) {
           <button type="button" class="lineage-mode-btn ${state.mode === 'history' ? 'active' : ''}" data-lineage-mode="history" aria-selected="${state.mode === 'history'}">History</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'stewardship' ? 'active' : ''}" data-lineage-mode="stewardship" aria-selected="${state.mode === 'stewardship'}">Stewardship</button>
           <button type="button" class="lineage-mode-btn ${state.mode === 'protected' ? 'active' : ''}" data-lineage-mode="protected" aria-selected="${state.mode === 'protected'}">Protected</button>
-          <button type="button" class="lineage-mode-btn ${state.mode === 'audit' ? 'active' : ''}" data-lineage-mode="audit" aria-selected="${state.mode === 'audit'}">Audit</button>
+          ${allowAudit ? `<button type="button" class="lineage-mode-btn ${state.mode === 'audit' ? 'active' : ''}" data-lineage-mode="audit" aria-selected="${state.mode === 'audit'}">Audit</button>` : ''}
           <button type="button" class="lineage-mode-btn ${state.mode === 'impact' ? 'active' : ''}" data-lineage-mode="impact" aria-selected="${state.mode === 'impact'}">Impact</button>
         </div>
         <form id="lineageSearchForm" class="lineage-query" autocomplete="off" ${state.mode === 'history' ? '' : 'hidden'}>
@@ -918,6 +924,7 @@ export function createLineageCatalog(opts = {}) {
     host.querySelectorAll('[data-lineage-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
         state.mode = btn.dataset.lineageMode;
+        onModeChange(state.mode);
         render();
       });
     });

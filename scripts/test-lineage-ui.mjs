@@ -300,6 +300,19 @@ try {
     }
   }
 
+  const portalIndex = await fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8');
+  for (const expectedText of ['#governance/stewardship', '#governance/audit', "allowAudit: isAdmin", "mode === 'lineage' ? 'history' : mode"]) {
+    if (!portalIndex.includes(expectedText)) {
+      throw new Error(`Portal governance routing missing: ${expectedText}`);
+    }
+  }
+  const lineageCatalog = await fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/js/lineage-catalog.js'), 'utf8');
+  for (const expectedText of ['allowAudit = true', 'onModeChange(state.mode)', 'allowAudit ? `<button']) {
+    if (!lineageCatalog.includes(expectedText)) {
+      throw new Error(`Lineage catalog route/role contract missing: ${expectedText}`);
+    }
+  }
+
   console.log('lineage-ui smoke passed');
 } finally {
   await fs.rm(tempModule, { force: true });

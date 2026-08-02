@@ -34,6 +34,9 @@ implementation tasks and verification state are retained in `TODO.md` and their 
 - [x] **Administration Operations hub:** durable fleet/workload signals, report-access decisions,
   service-account lifecycle and audit history, token-safe anonymous access inventory/revocation,
   and native administrative service schedules and run history.
+- [x] **Durable Stewardship and Audit routes:** first-class Governance navigation and stable hash
+  routes now open the existing lineage, protected-data, stewardship, impact, audit-log, and outbox
+  evidence; Audit is administrator-only and no longer masquerades as an ordinary Lineage tab.
 
 ## Future Candidate Phases
 

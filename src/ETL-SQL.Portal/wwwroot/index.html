@@ -72,6 +72,12 @@
           <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
             <span>🔗 Lineage Search</span>
           </a>
+          <a href="#governance/stewardship" class="sidebar-nav-item" id="govNavStewardship">
+            <span>Stewardship</span>
+          </a>
+          <a href="#governance/audit" class="sidebar-nav-item" id="govNavAudit" style="display:none">
+            <span>Audit Evidence</span>
+          </a>
         </div>
       </div>
     </aside>
@@ -355,6 +361,7 @@ async function init() {
     renderSessionIdentity(identity, document.getElementById('topbarUser'));
     isAdmin = hasRole(identity, 'Admin');
     if (isAdmin) document.getElementById('adminNav').style.display = '';
+    if (isAdmin) document.getElementById('govNavAudit').style.display = '';
     const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
     if (canOrch) document.getElementById('orchestratorNav').style.display = '';
   } catch {}
@@ -394,6 +401,8 @@ async function init() {
   [
     ['Quarantine', 'quarantine', 'quarantine'],
     ['Lineage', 'lineage', 'lineage'],
+    ['Stewardship', 'stewardship', 'stewardship'],
+    ['Audit', 'audit', 'audit'],
   ].forEach(([name, route, mode]) => {
     document.getElementById(`govNav${name}`)?.addEventListener('click', e => {
       e.preventDefault();
@@ -505,6 +514,11 @@ function openReportHashView() {
   } else if (mainView === 'governance' || mainView === 'lineage') {
     let mode = 'quarantine';
     if (subView === 'lineage') mode = 'lineage';
+    if (subView === 'stewardship') mode = 'stewardship';
+    if (subView === 'audit') {
+      mode = isAdmin ? 'audit' : 'stewardship';
+      if (!isAdmin) setReportHash('governance/stewardship');
+    }
     showGovernanceCatalog(mode);
   } else if (/^report-\d+$/.test(mainView)) {
     const id = parseInt(mainView.split('-')[1], 10);
@@ -539,7 +553,9 @@ function setSidebarViewActive(view, govMode = 'quarantine') {
   } else {
     const activeGovId = {
       quarantine: 'govNavQuarantine',
-      lineage: 'govNavLineage'
+      lineage: 'govNavLineage',
+      stewardship: 'govNavStewardship',
+      audit: 'govNavAudit'
     }[govMode] || 'govNavQuarantine';
 
     document.querySelectorAll('#governanceSidebarSection .sidebar-nav-item').forEach(el =>
@@ -997,20 +1013,26 @@ function renderCatalogReportList(title, reports, emptyText) {
 let lineageCatalog = null;
 let dataQualityQueue = null;
 function showGovernanceCatalog(mode = 'quarantine') {
-  if (mode === 'lineage') {
+  if (mode !== 'quarantine') {
     if (dataQualityQueue) { dataQualityQueue.dispose(); dataQualityQueue = null; }
     if (!lineageCatalog) {
       lineageCatalog = createLineageCatalog({
         host: document.getElementById('mainContent'),
         adminApi, catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
+        allowAudit: isAdmin,
+        onModeChange: nextMode => {
+          const route = nextMode === 'history' ? 'lineage' : nextMode;
+          setReportHash(`governance/${route}`);
+          setSidebarViewActive('governance', route);
+        },
         openReport, timeAgo, formatBuiltAt,
         prepare: (currentMode) => {
-          setSidebarViewActive('governance', 'lineage');
+          setSidebarViewActive('governance', currentMode === 'history' ? 'lineage' : currentMode);
           clearFolderSelection();
         }
       });
     }
-    lineageCatalog.setMode('history');
+    lineageCatalog.setMode(mode === 'lineage' ? 'history' : mode);
   } else {
     if (lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
     if (!dataQualityQueue) {
