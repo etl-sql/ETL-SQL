@@ -102,7 +102,7 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       }
       if (type === 'MSSQL') {
         return {
-          content: `# MSSQL Options\n\nMicrosoft SQL Server connection options:\n- **SERVER** — Host name or IP address of the database server.\n- **DATABASE** — Database catalog name.\n- **TRUSTED_CONNECTION** — Set to \`TRUE\` to use Windows authentication.\n- **ENCRYPT** — Set to \`TRUE\` to encrypt the SQL transport channel.\n\nExample:\n\`\`\`\nSERVER=sql-prod-01\nDATABASE=Sales\nENCRYPT=TRUE\n\`\`\``
+          content: `# MSSQL Options\n\nMicrosoft SQL Server connection options:\n\n> [!NOTE]\n> Store passwords in the secret provider and use a \`SECRET:name\` reference.\n\n| Option | Purpose |\n| --- | --- |\n| **SERVER** | Host name or IP address of the database server. |\n| **DATABASE** | Database catalog name. |\n| **TRUSTED_CONNECTION** | Set to \`TRUE\` to use Windows authentication. |\n| **ENCRYPT** | Set to \`TRUE\` to encrypt the SQL transport channel. |\n\nExample:\n\`\`\`sql\nSERVER=sql-prod-01\nDATABASE=Sales\nENCRYPT=TRUE\n\`\`\``
         };
       }
       return {

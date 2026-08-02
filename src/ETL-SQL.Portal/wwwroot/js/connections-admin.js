@@ -1,3 +1,5 @@
+import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
+
 // Canonical "Shared Connections" admin surface (Admin → Connections) over api/admin/connections.
 //
 // Extracted so it can be previewed in the UI sandbox without the portal. The module owns its
@@ -186,46 +188,13 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       const res = await connectionsApi.getHelp(type);
       if (res && res.content) {
         helpContent.innerHTML = renderMarkdown(res.content);
+        bindMarkdownActions(helpContent);
       } else {
         helpContent.innerHTML = 'No documentation available for this connector.';
       }
     } catch (err) {
       helpContent.innerHTML = `<span style="color: var(--portal-danger);">Failed to load help: ${esc(err.message || err)}</span>`;
     }
-  }
-
-  function renderMarkdown(src) {
-    if (!src) return '';
-    let html = String(src).replace(/\\n/g, '\n');
-    
-    // Escape HTML first to prevent XSS
-    html = html
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-
-    // Headings
-    html = html.replace(/^#\s+(.+)$/gm, '<h3 style="margin: 8px 0 4px 0; font-size: 13px; border-bottom: 1px solid var(--portal-border); padding-bottom: 4px; color: var(--portal-accent);">$1</h3>');
-    html = html.replace(/^##\s+(.+)$/gm, '<h4 style="margin: 8px 0 4px 0; font-size: 12px; font-weight: 700;">$1</h4>');
-    html = html.replace(/^###\s+(.+)$/gm, '<h5 style="margin: 6px 0 2px 0; font-size: 11px;">$1</h5>');
-    
-    // Bold, Italic, Code
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/`(.+?)`/g, '<code style="background: var(--portal-bg-hover); padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--portal-accent);">$1</code>');
-    
-    // Lists
-    html = html.replace(/^\s*-\s+(.+)$/gm, '<li style="margin-left: 12px; margin-bottom: 2px; list-style-type: disc;">$1</li>');
-    
-    // Fenced code blocks
-    html = html.replace(/```[^\n]*\n([\s\S]*?)```/g, '<pre style="background: var(--portal-bg-hover); padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto; margin: 6px 0; font-size: 12px;">$1</pre>');
-    
-    // Line breaks for remaining text
-    html = html.replace(/\n/g, '<br>');
-    
-    return html;
   }
 
   function setStatus(text) { $('conn-status').textContent = text || ''; }

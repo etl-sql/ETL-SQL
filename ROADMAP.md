@@ -109,9 +109,9 @@ another set of isolated capabilities.
    Stewardship and Audit genuine routes, and connect disposition/replay submissions to job status.
    Add rule visibility and structured failure trends. Governed quarantine row access is specified
    separately in [Portal — Quarantine Row Access](#portal--quarantine-row-access).
-4. **Use one documentation renderer.** Docs and connector Help currently expose raw Markdown table
-   pipes, admonition markers, and code fences. Use a shared, sanitized renderer with consistent
-   headings, tables, admonitions, code blocks, links, topic search, and copy actions.
+4. [x] **Use one documentation renderer.** Docs and connector Help now use the same sanitized
+   renderer for headings, tables, admonitions, code blocks, allow-listed links, and copy actions;
+   Docs retains its topic search and section filters.
 5. **Use one feedback and dialog system.** Replace native `alert`, `prompt`, and `confirm` calls
    across Reports, Admin, Governance, Designer, Orchestrator, and report runtime with accessible
    toasts and purpose-built dialogs. Password reset, destructive changes, policy rollout, and

@@ -88,6 +88,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added one dependency-free, sanitized Markdown renderer for Portal Docs and connector Help.
+  Both surfaces now render tables, admonitions, fenced code, safe links, and copy actions
+  consistently; raw HTML is escaped and unsafe link protocols are rejected.
+
 - Added a read-only Portal data-quality rule inventory beside job trends. It lists parsed output
   protections even when they have never failed, and trend aggregation now consumes normalized
   durable target/column/rule/action/owner/count rows with legacy display-string fallback only for
