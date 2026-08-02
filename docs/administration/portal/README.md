@@ -9,6 +9,7 @@
 | [Deployment and First-Run Setup](deployment.md) | ## 1. Deployment |
 | [Health Monitoring and Audit Log](monitoring-and-audit.md) | ## 10. Health Monitoring |
 | [Orchestrator Management](orchestrator-integration.md) | ## 13. Orchestrator Management |
+| [Administration Operations Hub](operations.md) | Fleet and workload signals, service accounts, approvals, anonymous access, and administrative service history. |
 | [Groups and Folder Permissions](permissions.md) | ## 5. Groups & Folder Permissions |
 | [Configuration Reference](portal-config-reference.md) | ## 2. Configuration Reference |
 | [Production Readiness Checklist](production-readiness.md) | ## 14. Production Readiness Checklist |

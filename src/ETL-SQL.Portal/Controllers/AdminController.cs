@@ -1237,12 +1237,16 @@ public class AdminController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? action = null,
-        [FromQuery] int? userId = null)
+        [FromQuery] int? userId = null,
+        [FromQuery] string? resourceType = null,
+        [FromQuery] string? resourceId = null)
     {
         pageSize = Math.Clamp(pageSize, 1, 200);
         var query = db.AuditLogs.AsQueryable();
         if (action is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue) query = query.Where(a => a.UserId == userId);
+        if (!string.IsNullOrWhiteSpace(resourceType)) query = query.Where(a => a.ResourceType == resourceType);
+        if (!string.IsNullOrWhiteSpace(resourceId)) query = query.Where(a => a.ResourceId == resourceId);
 
         var total = await query.CountAsync();
         var items = await query

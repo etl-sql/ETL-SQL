@@ -464,9 +464,24 @@ export const adminApi = {
                                         { method: 'DELETE', headers: versionHeaders(version) }),
 
     // audit
-    auditLog: (page = 1, pageSize = 50, action = '', userId = '') =>
-        apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}`),
+    auditLog: (page = 1, pageSize = 50, action = '', userId = '', resourceType = '', resourceId = '') =>
+        apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}&resourceType=${encodeURIComponent(resourceType)}&resourceId=${encodeURIComponent(resourceId)}`),
     operationalMetrics: () => apiJson('/api/admin/metrics/operational'),
+
+    // operations hub
+    fleetStatus: () => apiJson('/api/fleet/status'),
+    listAdminServices: () => apiJson('/api/admin/services'),
+    adminServiceHistory: (name, limit = 50) => apiJson(`/api/admin/services/${encodeURIComponent(name)}/history?limit=${limit}`),
+    listServiceAccounts: () => apiJson('/api/admin/service-accounts'),
+    createServiceAccount: (body) => apiJson('/api/admin/service-accounts', { method: 'POST', body }),
+    updateServiceAccount: (id, body, version) => apiJson(`/api/admin/service-accounts/${encodeURIComponent(id)}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    rotateServiceAccount: (id, version) => apiJson(`/api/admin/service-accounts/${encodeURIComponent(id)}/rotate-secret`, { method: 'POST', headers: versionHeaders(version) }),
+    revokeServiceAccount: (id, version) => apiJson(`/api/admin/service-accounts/${encodeURIComponent(id)}/revoke`, { method: 'POST', headers: versionHeaders(version) }),
+    pendingAccessRequests: () => apiJson('/api/reports/access-requests/pending'),
+    approveAccessRequest: (id, body) => apiJson(`/api/reports/access-requests/${id}/approve`, { method: 'POST', body }),
+    denyAccessRequest: (id, body) => apiJson(`/api/reports/access-requests/${id}/deny`, { method: 'POST', body }),
+    anonymousReportAccess: () => apiJson('/api/admin/anonymous-report-access'),
+    revokeAnonymousReportAccess: (type, id) => apiJson(`/api/admin/anonymous-report-access/${encodeURIComponent(type)}/${id}`, { method: 'DELETE' }),
 
     // subscriptions (admin sees all)
     listAllSubscriptions: () => apiJson('/api/subscriptions'),

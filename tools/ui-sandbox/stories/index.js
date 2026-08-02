@@ -17,12 +17,14 @@ import portalGovernance from './governance.story.js';
 import dataQualityQueue from './data-quality-queue.story.js';
 import portalResponsiveShell from './portal-responsive-shell.story.js';
 import portalStudio from './portal-studio.story.js';
+import portalOperations from './portal-operations.story.js';
 
 export const stories = [
   portalGovernance,
   dataQualityQueue,
   portalResponsiveShell,
   portalStudio,
+  portalOperations,
   scriptEditor,
   scriptEditorUnified,
   designer,

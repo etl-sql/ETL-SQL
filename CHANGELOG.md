@@ -88,6 +88,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added an Admin **Operations** control room that connects fleet and workload signals to pending
+  report-access decisions, full service-account lifecycle and audit history, token-safe anonymous
+  share/embed inventory and revocation, and native failure/backup/capacity service schedules and
+  durable run history. Operational sources fail independently, one-time client secrets are removed
+  from the page when dismissed, and host deployment/recovery actions remain outside the Portal.
+
 - Added a generated Portal browser response contract for critical users, folders, reports, and
   execution-job APIs. The API client validates responses before page code consumes them, the
   generator has a drift-check mode, and a dependency-free test proves casing or required-field

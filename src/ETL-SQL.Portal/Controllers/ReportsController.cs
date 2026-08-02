@@ -1082,6 +1082,35 @@ public class ReportsController : ControllerBase
         return Ok(items.OrderByDescending(item => item.CreatedAt));
     }
 
+    [HttpDelete("admin/anonymous-report-access/{type}/{id:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> RevokeAnonymousReportAccess(string type, int id)
+    {
+        if (type.Equals("ShareLink", StringComparison.OrdinalIgnoreCase))
+        {
+            var link = await db.ReportShareLinks.FirstOrDefaultAsync(value => value.Id == id);
+            if (link is null || link.RevokedAt is not null) return NoContent();
+            link.RevokedAt = DateTime.UtcNow;
+            audit.Stage(CurrentUserId, "ADMIN_REVOKE_REPORT_SHARE_LINK", "Report", link.ReportId.ToString(),
+                $"shareLinkId={link.Id}");
+        }
+        else if (type.Equals("EmbedToken", StringComparison.OrdinalIgnoreCase))
+        {
+            var token = await db.ReportEmbedTokens.FirstOrDefaultAsync(value => value.Id == id);
+            if (token is null || token.RevokedAt is not null) return NoContent();
+            token.RevokedAt = DateTime.UtcNow;
+            audit.Stage(CurrentUserId, "ADMIN_REVOKE_REPORT_EMBED_TOKEN", "Report", token.ReportId.ToString(),
+                $"embedTokenId={token.Id}");
+        }
+        else
+        {
+            return BadRequest(new { error = "Type must be ShareLink or EmbedToken." });
+        }
+
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     // ── Saved parameter/filter views ────────────────────────────────────────
 
     [HttpGet("reports/{id:int}/saved-views")]

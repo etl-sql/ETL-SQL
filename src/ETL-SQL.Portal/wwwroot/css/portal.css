@@ -785,6 +785,65 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .chip-viewer    { background: var(--portal-success-soft); color: var(--portal-success); }
 .chip-active    { background: var(--portal-success-soft); color: var(--portal-success); }
 .chip-inactive  { background: var(--portal-danger-soft); color: var(--portal-danger); }
+
+/* Administration operations control room */
+.ops-hub { display: grid; gap: 22px; }
+.ops-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.ops-heading h3 { margin: 2px 0 4px; font-size: 1.5rem; }
+.ops-heading p { margin: 0; color: var(--portal-muted); }
+.ops-signal-rail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--portal-border); border-radius: var(--portal-radius); overflow: hidden; background: var(--portal-surface); box-shadow: var(--portal-shadow-sm); }
+.ops-signal { appearance: none; border: 0; border-right: 1px solid var(--portal-border); border-top: 3px solid transparent; background: transparent; color: var(--portal-text); padding: 14px 16px; text-align: left; cursor: pointer; display: grid; gap: 2px; }
+.ops-signal:last-child { border-right: 0; }
+.ops-signal:hover, .ops-signal:focus-visible { background: var(--portal-surface-subtle); }
+.ops-signal.is-good { border-top-color: var(--portal-success); }
+.ops-signal.is-warning { border-top-color: var(--portal-warning); }
+.ops-signal span { color: var(--portal-muted); font-size: .75rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.ops-signal strong { font-size: 1.25rem; }
+.ops-signal small { color: var(--portal-muted); line-height: 1.35; }
+.ops-lane { scroll-margin-top: 78px; }
+.ops-lane > header { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--portal-border); padding-bottom: 10px; margin-bottom: 14px; }
+.ops-lane > header > span { color: var(--portal-accent); font: 700 .76rem/1 var(--portal-font); letter-spacing: .08em; }
+.ops-lane > header h2, .ops-lane > header h3 { margin: 0; font-size: 1.15rem; }
+.ops-lane > header p { margin: 3px 0 0; color: var(--portal-muted); font-size: .86rem; }
+.ops-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ops-grid-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ops-card { margin: 0; }
+.ops-card .card-header h3, .ops-card .card-header h4 { margin: 0; }
+.ops-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 8px 0 0; }
+.ops-facts > div { border-top: 1px solid var(--portal-border-soft); padding: 10px 0; }
+.ops-facts dt { color: var(--portal-muted); font-size: .75rem; }
+.ops-facts dd { margin: 3px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.ops-finding { margin: 8px 0 0; padding: 10px 12px; border-left: 3px solid var(--portal-warning); background: var(--portal-warning-soft); color: var(--portal-warning); font-size: .84rem; }
+.ops-section-head { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 8px; }
+.ops-section-head h4 { margin: 0; }
+.ops-cell-note { display: block; margin-top: 3px; color: var(--portal-muted); }
+.ops-service-list { margin: 0; padding: 0; overflow: hidden; }
+.ops-service-list > button { width: 100%; display: grid; grid-template-columns: 10px minmax(150px, .65fr) minmax(100px, .45fr) 1fr auto; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--portal-border-soft); background: var(--portal-surface); color: var(--portal-text); padding: 13px 16px; text-align: left; cursor: pointer; }
+.ops-service-list > button:last-child { border-bottom: 0; }
+.ops-service-list > button:hover, .ops-service-list > button:focus-visible { background: var(--portal-surface-subtle); }
+.ops-service-list small { color: var(--portal-muted); }
+.ops-service-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--portal-success); }
+.ops-service-dot.is-warning { background: var(--portal-warning); }
+.ops-fieldset { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; padding: 12px; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm); }
+.ops-fieldset legend { font-weight: 650; padding: 0 4px; }
+.ops-fieldset label { display: flex; gap: 7px; align-items: center; }
+.ops-secret { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 14px; border: 1px solid var(--portal-warning); border-radius: var(--portal-radius); background: var(--portal-warning-soft); overflow-wrap: anywhere; }
+
+@media (max-width: 900px) {
+  .ops-signal-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ops-signal:nth-child(2) { border-right: 0; }
+  .ops-signal:nth-child(-n+2) { border-bottom: 1px solid var(--portal-border); }
+  .ops-grid, .ops-grid-wide { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .ops-heading { display: grid; }
+  .ops-signal-rail { grid-template-columns: 1fr; }
+  .ops-signal { border-right: 0; border-bottom: 1px solid var(--portal-border); }
+  .ops-signal:last-child { border-bottom: 0; }
+  .ops-service-list > button { grid-template-columns: 10px 1fr auto; }
+  .ops-service-list > button span:nth-of-type(2), .ops-service-list > button small { grid-column: 2 / -1; }
+  .ops-secret { align-items: stretch; flex-direction: column; }
+}
 .empty-state    { text-align: center; padding: 48px; color: var(--portal-muted); }
 .empty-state-panel { flex: 1; min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center;
                      background: var(--portal-surface); border: 1px dashed var(--portal-border); border-radius: var(--portal-radius); }

@@ -100,10 +100,26 @@ public class AnonymousReportAccessTests
 
         inventoryResponse = await AuthGet(client, adminToken, "/api/admin/anonymous-report-access");
         inventory = await inventoryResponse.Content.ReadFromJsonAsync<JsonArray>(Json);
-        Assert.Contains(inventory!, item =>
+        var shareInventory = inventory!.Single(item =>
             item!["type"]!.GetValue<string>() == "ShareLink"
-            && item["reportId"]!.GetValue<int>() == reportId
-            && item["status"]!.GetValue<string>() == "PermissionLost");
+            && item["reportId"]!.GetValue<int>() == reportId);
+        Assert.Equal("PermissionLost", shareInventory!["status"]!.GetValue<string>());
+        var embedInventory = inventory!.Single(item =>
+            item!["type"]!.GetValue<string>() == "EmbedToken"
+            && item["reportId"]!.GetValue<int>() == reportId);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await AuthDelete(client, adminToken,
+                $"/api/admin/anonymous-report-access/ShareLink/{shareInventory["id"]!.GetValue<int>()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await AuthDelete(client, adminToken,
+                $"/api/admin/anonymous-report-access/EmbedToken/{embedInventory!["id"]!.GetValue<int>()}")).StatusCode);
+
+        inventoryResponse = await AuthGet(client, adminToken, "/api/admin/anonymous-report-access");
+        inventory = await inventoryResponse.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Equal("Revoked", inventory!.Single(item =>
+            item!["type"]!.GetValue<string>() == "ShareLink"
+            && item["reportId"]!.GetValue<int>() == reportId)!["status"]!.GetValue<string>());
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -116,6 +132,16 @@ public class AnonymousReportAccessTests
         Assert.All(audits, entry =>
         {
             Assert.Null(entry.UserId);
+            Assert.DoesNotContain(shareToken, entry.Detail ?? "", StringComparison.Ordinal);
+            Assert.DoesNotContain(embedToken, entry.Detail ?? "", StringComparison.Ordinal);
+        });
+        var adminRevocations = await db.AuditLogs
+            .Where(entry => entry.ResourceId == reportId.ToString()
+                && entry.Action.StartsWith("ADMIN_REVOKE_REPORT_"))
+            .ToListAsync();
+        Assert.Equal(2, adminRevocations.Count);
+        Assert.All(adminRevocations, entry =>
+        {
             Assert.DoesNotContain(shareToken, entry.Detail ?? "", StringComparison.Ordinal);
             Assert.DoesNotContain(embedToken, entry.Detail ?? "", StringComparison.Ordinal);
         });
@@ -229,6 +255,9 @@ public class AnonymousReportAccessTests
 
     private static Task<HttpResponseMessage> AuthPut(HttpClient client, string token, string url, object body) =>
         SendAsync(client, HttpMethod.Put, token, url, body);
+
+    private static Task<HttpResponseMessage> AuthDelete(HttpClient client, string token, string url) =>
+        SendAsync(client, HttpMethod.Delete, token, url, null);
 
     private static async Task<HttpResponseMessage> SendAsync(
         HttpClient client,

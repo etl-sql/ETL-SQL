@@ -31,6 +31,9 @@ implementation tasks and verification state are retained in `TODO.md` and their 
 - [x] **First-class Portal Studio foundation:** explicit deployment modes and capabilities,
   catalog-scoped authoring, equal Code/Design entry, internal catalog report creation, and disabled
   or catalog-only route/navigation trust boundaries.
+- [x] **Administration Operations hub:** durable fleet/workload signals, report-access decisions,
+  service-account lifecycle and audit history, token-safe anonymous access inventory/revocation,
+  and native administrative service schedules and run history.
 
 ## Future Candidate Phases
 
@@ -75,7 +78,7 @@ another set of isolated capabilities.
 
 #### P1 — Connect the product into coherent workspaces
 
-1. **Administration and operations hub.** Add visible, role-gated workflows for the backend
+1. [x] **Administration and operations hub.** Add visible, role-gated workflows for the backend
    capabilities that currently have no coherent browser home: service accounts and secret rotation,
    pending access approvals, anonymous share/embed inventory, fleet/node status, operational
    metrics, and administrative service runs. Join these with health, audit, outbox, and Orchestrator
@@ -143,12 +146,12 @@ containment operations must remain out-of-process.
 | Enterprise area | Current Portal coverage | Portal update and boundary |
 | :--- | :--- | :--- |
 | OIDC and LDAP identity | Federated login, provisioning, and group sync are implemented; OIDC diagnostics is an API, while provider configuration is file/environment based. | Add identity-provider status, callback/issuer reachability, claim and group-mapping test results, sync health, and break-glass readiness. Never return client secrets; stage high-risk configuration changes and show restart impact. |
-| Service accounts | CRUD, secret rotation, revoke, scoped-token issuance, and middleware enforcement exist as APIs; no Admin page exists. | Add a Service Accounts page with scope, expiry, last use, owner, rotate/revoke, one-time secret display, and audit history. |
+| Service accounts | CRUD, secret rotation, revoke, scoped-token issuance, middleware enforcement, and the Admin Operations inventory are implemented. | The page shows scope, expiry, last use, owner, rotate/revoke, one-time secret display, and resource-filtered audit history. |
 | Policy authority and machine registry | The Admin Policy Authority page covers validation, publication, activation, canaries, rollback, and machine registration/revocation. | Preserve this as the model enterprise surface; add fleet impact, approval/separation-of-duty state, collector consequences, and links from affected machines to policy history. |
 | Host enrollment | `etl-sql enterprise enroll/status/unenroll` is an elevated host command; the Portal registers the corresponding machine identity. | Show enrollment and registration consistency, expiry, certificate posture, and remediation instructions. Keep enrollment/unenrollment on the host because it owns an OS-protected bootstrap and is intentionally outside lower-authority Portal configuration. |
 | Secrets and shared connections | Strong Admin pages already support write-only secrets, masked connections, verify, enable/disable, impact, ACLs, and metadata promotion. | Retain and integrate them with Studio capability checks, policy findings, rotation due dates, and cross-environment promotion plans. |
 | Audit outbox and security-event delivery | Audit rows are visible; outbox and security-event diagnostics are emitted through health, Prometheus, and fleet status, but have no operator workspace. | Add collector status, pending/failed counts and bytes, oldest age, last attempt/success, fail-closed threshold state, and a redacted test-delivery workflow. Security-event collector configuration remains signed organization policy. |
-| Native failure, backup, and capacity services | `api/admin/services` and per-service history exist; configuration is file based and the UI has no page. | Show enablement, schedule, recipients/SMTP alias, last/next run, outcomes, and history. Use staged configuration with validation and an explicit apply/restart contract where live reload is unsupported. |
+| Native failure, backup, and capacity services | The Operations page shows enablement, schedule, recipients/SMTP alias, last/calculated-next run, outcomes, and durable history. Configuration remains file based. | Add staged configuration with validation and an explicit apply/restart contract only if live configuration becomes a supported product capability. |
 | Backups and restore drills | Split-custody backup/restore and validation are CLI operations; the native backup service records age/failure evidence. | Show last successful backup, freshness policy, archive/manifest identifiers, validation and restore-drill evidence, and alerts. Keep backup custody, restore, and destructive recovery outside the running Portal. |
 | Doctor and support bundles | `etl-sql doctor` and redacted support-bundle generation are CLI-only. | Add an Admin Diagnostics page for the online-safe checks and an audited, redacted support bundle with an explicit review-before-download step. Keep the CLI path as the recovery option when Portal is unavailable. |
 | HA, fleet, migrations, and upgrades | Readiness, node heartbeats, fleet status/aggregation, compatibility metadata, migration ownership, and upgrade reports exist in backend contracts; no unified Portal view exists. | Add the read-only Fleet/Operations workspace, upgrade preflight/postflight evidence, node divergence, drain guidance, and migration owner/status. Package deployment, database migration, HA soak, and traffic control remain external operator actions. |

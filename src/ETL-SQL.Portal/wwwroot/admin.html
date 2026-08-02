@@ -53,6 +53,7 @@
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-secrets" aria-controls="panel-secrets" data-tab="secrets">Secrets</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-connections" aria-controls="panel-connections" data-tab="connections">Connections</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-policy" aria-controls="panel-policy" data-tab="policy">Policy Authority</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-operations" aria-controls="panel-operations" data-tab="operations">Operations</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-settings" aria-controls="panel-settings" data-tab="settings">Settings</button>
       </div>
 
@@ -383,6 +384,9 @@
       <!-- Policy Authority panel — content rendered by js/policy-authority-admin.js -->
       <div class="admin-panel" id="panel-policy" role="tabpanel" aria-labelledby="tab-policy" tabindex="0"></div>
 
+      <!-- Operations panel — content rendered by js/operations-admin.js -->
+      <div class="admin-panel" id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" tabindex="0"></div>
+
       <!-- ── Settings panel ──────────────────────────────────────────────── -->
       <div class="admin-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0">
         <div class="card">
@@ -537,6 +541,7 @@ import { createDatasetsAdmin } from '/js/datasets-admin.js?v=0.17.0';
 import { createSecretsAdmin } from '/js/secrets-admin.js?v=0.17.0';
 import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.17.0';
 import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.17.0';
+import { createOperationsAdmin } from '/js/operations-admin.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
@@ -566,7 +571,7 @@ const studioSessionReady = studioApi.session().then(session => {
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, secrets: null, connections: null, policy: null, settings: null };
+const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, secrets: null, connections: null, policy: null, operations: null, settings: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => {
@@ -585,7 +590,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: mountDatasets, secrets: mountSecrets, connections: mountConnections, policy: mountPolicyAuthority, settings: loadSettings };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: mountDatasets, secrets: mountSecrets, connections: mountConnections, policy: mountPolicyAuthority, operations: mountOperations, settings: loadSettings };
 // Load the initial tab (users)
 panels.users = true;
 initModalA11y();
@@ -1726,6 +1731,17 @@ function mountPolicyAuthority() {
     });
   }
   policyAuthorityAdmin.load();
+}
+
+let operationsAdmin = null;
+function mountOperations() {
+  if (!operationsAdmin) {
+    operationsAdmin = createOperationsAdmin({
+      host: document.getElementById('panel-operations'),
+      adminApi
+    });
+  }
+  return operationsAdmin.load();
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────────

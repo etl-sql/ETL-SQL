@@ -201,7 +201,7 @@ documentation reconciliation, then release certification.
 
 #### P1 — Coherent workspaces
 
-- [ ] Build an Administration/Operations hub for service accounts, approvals, share/embed inventory,
+- [x] Build an Administration/Operations hub for service accounts, approvals, share/embed inventory,
       fleet status, metrics, and administrative service runs.
 - [ ] Add an isolation-safe Environments workflow that generates and validates deployment plans.
   - [ ] Keep provisioning in a separately authorized control plane or exported package.
@@ -238,7 +238,7 @@ documentation reconciliation, then release certification.
 
 - [ ] Add identity-provider diagnostics for reachability, claims/groups, sync health, and break-glass
       readiness without exposing client secrets.
-- [ ] Add a Service Accounts page with scope, expiry, last use, owner, rotation/revocation, one-time
+- [x] Add a Service Accounts page with scope, expiry, last use, owner, rotation/revocation, one-time
       secret display, and audit history.
 - [ ] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
       links to policy history.
@@ -247,7 +247,7 @@ documentation reconciliation, then release certification.
 - [ ] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
       plans.
 - [ ] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
-- [ ] Add native service enablement, schedule, recipient, last/next run, outcome, and history views.
+- [x] Add native service enablement, schedule, recipient, last/next run, outcome, and history views.
 - [ ] Show backup freshness and validation/restore-drill evidence while keeping custody and recovery
       outside the running Portal.
 - [ ] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
