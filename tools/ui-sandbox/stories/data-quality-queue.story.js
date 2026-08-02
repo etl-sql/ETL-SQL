@@ -185,6 +185,10 @@ function mockApi(trendKey) {
     replayQuarantine: async () => ({ jobId: 'job-1', replayStatement: 'REPLAY QUARANTINE quarantine_users;' }),
     updateQuarantineDisposition: async () => ({ jobId: 'job-2', dispositionStatement: 'UPDATE ...' }),
     qualityTrend: async () => trends[trendKey],
+    qualityRules: async () => [
+      { targetTable: 'clean_users', targetColumn: 'Email', ruleTag: '@expect', rule: 'MATCHES ^[^@]+@[^@]+$', action: 'QUARANTINE', sourceFile: 'loads/users.etlsql', line: 18 },
+      { targetTable: 'clean_users', targetColumn: 'Age', ruleTag: '@fail', rule: '>= 0', action: 'WARN', sourceFile: 'loads/users.etlsql', line: 19 },
+    ],
     jobStatus: async jobId => ({
       jobId, status: 'Completed', createdAt: '2026-08-02T14:30:00Z',
       startedAt: '2026-08-02T14:30:01Z', completedAt: '2026-08-02T14:30:03Z',

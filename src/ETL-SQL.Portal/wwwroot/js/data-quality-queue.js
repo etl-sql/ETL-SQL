@@ -107,6 +107,7 @@ function renderTrendPanel(state) {
       <button class="btn btn-outline btn-xs" id="dqTrendClose" type="button">Close</button>
     </header>
     ${state.trendError ? `<div class="error-msg">${esc(state.trendError)}</div>` : ''}
+    ${state.rulesError ? `<div class="error-msg">Rule inventory unavailable: ${esc(state.rulesError)}</div>` : ''}
     ${state.trendLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quality trend...</span></div>' :
       !trend || trend.runCount === 0 ? `<div class="empty-state empty-state-panel">
         <h2>No recorded runs</h2>
@@ -129,6 +130,15 @@ function renderTrendPanel(state) {
         </div>
       </div>
       ${renderSparkline(trend.runs || [])}
+      <h4 class="dq-trend-subhead">Rules protecting columns</h4>
+      ${(state.rules || []).length ? `<table class="dq-rows-table">
+        <thead><tr><th>Target</th><th>Column</th><th>Tag</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
+        <tbody>${state.rules.map(rule => `<tr>
+          <td>${esc(rule.targetTable)}</td><td>${esc(rule.targetColumn || '—')}</td>
+          <td><code>${esc(rule.ruleTag)}</code></td><td><code>${esc(rule.rule)}</code></td>
+          <td>${esc(rule.action)}</td><td>${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : '<p class="library-subtitle">No readable rule definitions were found for this job script.</p>'}
       ${(trend.topRuleFailures || []).length ? `
         <h4 class="dq-trend-subhead">Rules firing most</h4>
         <table class="dq-rows-table">
@@ -251,8 +261,10 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     rowAction: null,
     trendJob: null,
     trend: null,
+    rules: [],
     trendLoading: false,
     trendError: null,
+    rulesError: null,
     trackedJobs: []
   };
 
@@ -311,11 +323,20 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
   async function loadTrend(jobName) {
     state.trendJob = jobName;
     state.trend = null;
+    state.rules = [];
     state.trendError = null;
+    state.rulesError = null;
     state.trendLoading = true;
     render();
     try {
-      state.trend = await dataQualityApi.qualityTrend({ jobName });
+      const [trend, rules] = await Promise.allSettled([
+        dataQualityApi.qualityTrend({ jobName }),
+        dataQualityApi.qualityRules(jobName)
+      ]);
+      if (trend.status === 'rejected') throw trend.reason;
+      state.trend = trend.value;
+      if (rules.status === 'fulfilled') state.rules = rules.value;
+      else state.rulesError = rules.reason?.message || 'Unable to load rule inventory.';
     } catch (err) {
       state.trendError = err.message || 'Unable to load quality trend.';
     } finally {

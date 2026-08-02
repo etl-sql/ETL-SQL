@@ -40,6 +40,9 @@ implementation tasks and verification state are retained in `TODO.md` and their 
 - [x] **Terminal quarantine-work tracking:** replay and disposition submissions retain their job
   identity across refreshes, follow the durable execution ledger through terminal status, expose
   sanitized failure evidence, and refresh affected queue/row state only after completion.
+- [x] **Portal rule inventory and normalized quality trends:** stewards can inspect every parsed
+  rule protecting a job's output columns, including rules that never failed, while trend totals use
+  normalized durable failure rows with target, action, and owner instead of reparsing display text.
 
 ## Future Candidate Phases
 
@@ -388,21 +391,13 @@ plus a manifest-bound target is authority enough. This changes slice 2's authori
 These lower-level data-quality findings support the comprehensive update above. Ordered by how much
 each affects day-to-day use.
 
-1. **Submitted jobs disappear.** Replay and disposition actions report
-   `Disposition job {id} submitted` and stop there — no status, no link into job history. A steward
-   cannot tell whether the release they just made actually applied. The queue should follow the job
-   to a terminal state, or at minimum link to it.
-2. **The trend panel re-parses a display string.** `ParseRuleFailures` reconstructs per-rule
-   failures by splitting the `DataQualityFailures` history payload on `;`, `:`, and `=`. That format
-   exists for humans reading run history; it already needed careful handling because rule text
-   contains both `:` and `=` (a `MATCHES` regex). v2 records per-column run metrics — the trend
-   should read those instead of parsing prose.
-3. **No rule visibility in the Portal.** Data-quality rule visibility is currently tied to
-   engine/session diagnostics, so a steward who lives in the Portal cannot see which rules protect
-   which columns — the thing they most need when a quarantine rate jumps. Wants a read-only endpoint
-   plus a panel beside the trend. Adding `eng.data_quality_rules`, then making it queryable via
-   `my_portal.eng.data_quality_rules`, is the fix once the `eng.*` virtual table layer is wired
-   through the Portal API.
+1. [x] **Submitted jobs stay connected.** Replay and disposition jobs persist in the browser session
+   and follow the durable execution ledger to Completed, Failed, or Cancelled.
+2. [x] **Trends use normalized failure rows.** New runs read structured target/column/rule/action/
+   owner/count records; the compact display string remains only as compatibility fallback for older
+   history.
+3. [x] **Rules are visible in the Portal.** The read-only rules endpoint parses the governed job
+   script and the trend panel lists every protection, including rules that have not failed.
 4. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
    new `ExecutionSession`. Acceptable at current volume; worth revisiting before any endpoint like
    this becomes a polled or dashboard-refreshed surface.

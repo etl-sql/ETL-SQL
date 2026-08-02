@@ -88,6 +88,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added a read-only Portal data-quality rule inventory beside job trends. It lists parsed output
+  protections even when they have never failed, and trend aggregation now consumes normalized
+  durable target/column/rule/action/owner/count rows with legacy display-string fallback only for
+  older history.
+
 - Connected Portal quarantine replay and disposition submissions to durable execution status.
   Submitted job IDs persist for the browser session, poll through Pending/Running to a terminal
   Completed/Failed/Cancelled result, show sanitized failure evidence, and refresh affected rows or

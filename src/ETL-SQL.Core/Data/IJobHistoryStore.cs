@@ -209,6 +209,11 @@ public interface IJobHistoryStore
     Task SaveJobDataQualityFailuresAsync(long entryId, IEnumerable<DataQualityRuleFailureMetric> failures) => Task.CompletedTask;
     Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresAsync(int limit = 1000) =>
         Task.FromResult<IReadOnlyList<JobDataQualityFailure>>(Array.Empty<JobDataQualityFailure>());
+    async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForJobAsync(string jobName, int limit = 1000) =>
+        (await GetDataQualityFailuresAsync(Math.Max(limit, 1000)))
+            .Where(row => row.JobName.Equals(jobName, StringComparison.OrdinalIgnoreCase))
+            .Take(limit)
+            .ToList();
     Task<IReadOnlyList<JobDataQualityStatus>> GetDataQualityStatusesAsync(int limit = 1000) =>
         Task.FromResult<IReadOnlyList<JobDataQualityStatus>>(Array.Empty<JobDataQualityStatus>());
     Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(string jobName, string? targetTable, string columnName, int limit = 100) =>

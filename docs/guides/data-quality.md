@@ -159,6 +159,11 @@ until it reaches `Completed`, `Failed`, or `Cancelled`. The submitted-work panel
 current state, timestamps, and sanitized terminal error. Queue or row evidence refreshes after the
 terminal result, so a successful submission cannot be mistaken for a successful mutation.
 
+Opening **Trend** also shows the rules protecting the job's output columns—including rules that
+have never failed—with their `@expect`/`@fail` tag, action, script source, and line. Failure trends
+read normalized per-run rule rows from durable history (target, column, rule, action, owner, and
+count); the compact legacy history string is used only for older runs that predate normalized rows.
+
 Retention is scoped by `__dq_capture_scope`, a stable job or script identity. On a shared capture
 target, one writer's retention window cannot prune another writer's rows. Only terminal
 dispositions (`warned`, `replayed`, or `discarded`) age out.

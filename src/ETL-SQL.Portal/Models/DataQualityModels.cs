@@ -69,7 +69,23 @@ public sealed record DataQualityRunDto(
     IReadOnlyList<DataQualityRuleFailureDto> RuleFailures);
 
 /// <summary>A per-rule failure count parsed from the run's compact history payload.</summary>
-public sealed record DataQualityRuleFailureDto(string Column, string Rule, long Count);
+public sealed record DataQualityRuleFailureDto(
+    string Column,
+    string Rule,
+    long Count,
+    string? TargetTable = null,
+    string? Action = null,
+    string? Owner = null);
+
+/// <summary>One rule protecting a script output column, including rules that have not failed.</summary>
+public sealed record DataQualityRuleDefinitionDto(
+    string TargetTable,
+    string? TargetColumn,
+    string RuleTag,
+    string Rule,
+    string Action,
+    string? SourceFile,
+    int Line);
 
 /// <summary>
 /// Quality trend for one job: the most recent runs plus the aggregate a steward triages on —

@@ -25,6 +25,7 @@ public sealed class DataQualityController(
     ETL_SQL.Portal.Data.PortalDbContext db,
     PortalConfig portalConfig,
     ETL_SQL.Portal.Services.AuditService audit,
+    ETL_SQL.Portal.Services.ReportScriptInspectionService scriptInspection,
     ILogger<DataQualityController> logger) : ControllerBase
 {
     private int? CurrentUserId =>
@@ -87,13 +88,20 @@ public sealed class DataQualityController(
             return BadRequest(new { error = "JobName is required." });
 
         limit = Math.Clamp(limit, 1, 200);
-        var history = await jobHistory.GetHistoryAsync(jobName.Trim(), limit);
+        var normalizedJobName = jobName.Trim();
+        var history = await jobHistory.GetHistoryAsync(normalizedJobName, limit);
+        var normalizedFailures = await jobHistory.GetDataQualityFailuresForJobAsync(
+            normalizedJobName, Math.Min(10000, Math.Max(1000, limit * 100)));
+        var failuresByRun = normalizedFailures
+            .GroupBy(failure => failure.RunId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<JobDataQualityFailure>)group.ToList());
 
         var runs = history
             .Where(h => h.EndTime.HasValue)
             .OrderByDescending(h => h.EndTime ?? h.StartTime)
             .Take(limit)
-            .Select(ToRunDto)
+            .Select(entry => ToRunDto(entry,
+                failuresByRun.TryGetValue(entry.Id, out var failures) ? failures : []))
             .ToList();
 
         if (runs.Count == 0)
@@ -112,15 +120,17 @@ public sealed class DataQualityController(
 
         var topFailures = runs
             .SelectMany(r => r.RuleFailures)
-            .GroupBy(f => (f.Column, f.Rule))
-            .Select(g => new DataQualityRuleFailureDto(g.Key.Column, g.Key.Rule, g.Sum(f => f.Count)))
+            .GroupBy(f => (f.TargetTable, f.Column, f.Rule, f.Action, f.Owner))
+            .Select(g => new DataQualityRuleFailureDto(
+                g.Key.Column, g.Key.Rule, g.Sum(f => f.Count),
+                g.Key.TargetTable, g.Key.Action, g.Key.Owner))
             .OrderByDescending(f => f.Count)
             .ThenBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
             .Take(20)
             .ToList();
 
         return Ok(new DataQualityTrendDto(
-            jobName.Trim(),
+            normalizedJobName,
             runs.Count,
             runs.Sum(r => r.RowsProcessed),
             runs.Sum(r => r.RowsQuarantined),
@@ -132,7 +142,63 @@ public sealed class DataQualityController(
             runs));
     }
 
-    private static DataQualityRunDto ToRunDto(JobHistoryEntry entry)
+    [HttpGet("rules")]
+    public async Task<IActionResult> GetQualityRules([FromQuery] string jobName)
+    {
+        if (string.IsNullOrWhiteSpace(jobName))
+            return BadRequest(new { error = "JobName is required." });
+
+        var normalizedJobName = jobName.Trim();
+        var definition = await jobHistory.GetJobAsync(normalizedJobName);
+        var scriptPath = definition?.Script;
+        if (string.IsNullOrWhiteSpace(scriptPath))
+        {
+            var manifest = (await jobHistory.GetJobStatesAsync(normalizedJobName, 500))
+                .Where(state => state.StateKey.StartsWith(QuarantineManifestPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(ReadManifest)
+                .Where(value => value is not null)
+                .OrderByDescending(value => value!.UpdatedAtUtc)
+                .FirstOrDefault();
+            scriptPath = manifest?.ScriptPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(scriptPath))
+            return Ok(Array.Empty<DataQualityRuleDefinitionDto>());
+
+        var lineage = await scriptInspection.ReadScriptLineageAsync(scriptPath);
+        var rules = new List<DataQualityRuleDefinitionDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in lineage.Where(value => ColumnRuleParser.HasRuleTags(value.Tags)))
+        {
+            IReadOnlyList<ColumnRuleBinding> bindings;
+            try { bindings = ColumnRuleParser.ParseBindings(entry.Tags); }
+            catch (ColumnRuleParseException) { continue; }
+
+            foreach (var binding in bindings)
+            foreach (var rule in binding.Rules)
+            {
+                var key = $"{entry.Target}|{entry.TargetColumn}|{binding.ExpectKey}|{rule.Text}|{binding.Action}";
+                if (!seen.Add(key)) continue;
+                rules.Add(new DataQualityRuleDefinitionDto(
+                    entry.Target,
+                    entry.TargetColumn,
+                    "@" + binding.ExpectKey,
+                    rule.Text,
+                    binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
+                    scriptPath,
+                    entry.Line));
+            }
+        }
+
+        return Ok(rules
+            .OrderBy(value => value.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.TargetColumn, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.Rule, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static DataQualityRunDto ToRunDto(
+        JobHistoryEntry entry,
+        IReadOnlyList<JobDataQualityFailure> normalizedFailures)
     {
         decimal? quarantineRate = entry.RowsProcessed > 0
             ? (decimal)entry.RowsQuarantined / entry.RowsProcessed
@@ -152,7 +218,15 @@ public sealed class DataQualityController(
             entry.RowsWarned,
             quarantineRate,
             warnRate,
-            ParseRuleFailures(entry.DataQualityFailures));
+            normalizedFailures.Count > 0
+                ? normalizedFailures.Select(failure => new DataQualityRuleFailureDto(
+                    failure.ColumnName,
+                    failure.Rule,
+                    failure.FailureCount,
+                    failure.TargetTable,
+                    failure.Action,
+                    failure.Owner)).ToList()
+                : ParseRuleFailures(entry.DataQualityFailures));
     }
 
     /// <summary>

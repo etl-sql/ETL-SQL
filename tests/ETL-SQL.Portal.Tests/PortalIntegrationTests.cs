@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Quality;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
@@ -1284,6 +1285,15 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             var id = await store.LogJobStartAsync(job);
             await store.LogJobEndAsync(id, "SUCCESS", rowsProcessed: rows,
                 rowsQuarantined: quarantined, rowsWarned: 0, dataQualityFailures: failures);
+            await store.SaveJobDataQualityFailuresAsync(id, [
+                new DataQualityRuleFailureMetric(
+                    "warehouse.Customers", "Email", "MATCHES ^[^@]+@[^@]+$", "QUARANTINE",
+                    failures.StartsWith("Email:", StringComparison.Ordinal) ? quarantined - (failures.Contains("Age:", StringComparison.Ordinal) ? 20 : 0) : 0,
+                    "DataSteward"),
+                .. (failures.Contains("Age:", StringComparison.Ordinal)
+                    ? new[] { new DataQualityRuleFailureMetric("warehouse.Customers", "Age", ">= 0", "WARN", 20, "DataSteward") }
+                    : Array.Empty<DataQualityRuleFailureMetric>())
+            ]);
             await Task.Delay(5);
         }
 
@@ -1303,6 +1313,39 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal("Email", top.Column);
         Assert.Equal("MATCHES ^[^@]+@[^@]+$", top.Rule);
         Assert.Equal(210, top.Count);
+        Assert.Equal("warehouse.Customers", top.TargetTable);
+        Assert.Equal("QUARANTINE", top.Action);
+        Assert.Equal("DataSteward", top.Owner);
+    }
+
+    [Fact]
+    public async Task DataQuality_Rules_ListsProtectionsThatHaveNotFailed()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var jobName = $"rules_{suffix}";
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"rules_{suffix}.etlsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'QUARANTINE'; */
+            INTO #clean FROM #source
+            ON FAILURE QUARANTINE TO #quarantine;
+            """);
+        await store.SaveJobAsync(new JobDefinition(
+            jobName, scriptPath, 1, "DAY", null, null, null));
+
+        var response = await AuthGet(token, $"/api/data-quality/rules?jobName={jobName}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rules = await response.Content.ReadFromJsonAsync<List<DataQualityRuleDefinitionDto>>(_json);
+        Assert.Equal(2, rules!.Count);
+        Assert.All(rules, rule =>
+        {
+            Assert.Equal("#clean", rule.TargetTable);
+            Assert.Equal("Id", rule.TargetColumn);
+            Assert.Equal("@expect", rule.RuleTag);
+            Assert.Equal("QUARANTINE", rule.Action);
+        });
     }
 
     [Fact]

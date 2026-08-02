@@ -11,11 +11,14 @@ const [queue, api, story, css] = await Promise.all([
 ]);
 
 assert.match(api, /jobStatus: \(jobId\).*\/api\/jobs\//);
+assert.match(api, /qualityRules: \(jobName\).*\/api\/data-quality\/rules/);
 assert.match(queue, /TERMINAL_JOB_STATUSES/);
 assert.match(queue, /sessionStorage/);
 assert.match(queue, /trackJob\(result\.jobId, 'Replay'/);
 assert.match(queue, /trackJob\(result\.jobId, 'Disposition'/);
 assert.match(queue, /dataQualityApi\.jobStatus\(jobId\)/);
+assert.match(queue, /dataQualityApi\.qualityRules\(jobName\)/);
+assert.match(queue, /Rules protecting columns/);
 assert.match(queue, /pollTimers\.forEach\(timer => clearTimeout\(timer\)\)/);
 assert.match(story, /id: 'job-status'/);
 assert.match(story, /status: 'Completed'/);

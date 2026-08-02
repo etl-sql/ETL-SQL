@@ -209,7 +209,7 @@ documentation reconciliation, then release certification.
         datasets, connections, secrets, or authoring history.
 - [x] Complete Stewardship and Audit routes using durable evidence.
 - [x] Connect disposition/replay submissions to terminal job status.
-- [ ] Add data-quality rule visibility and structured failure trends.
+- [x] Add data-quality rule visibility and structured failure trends.
 - [ ] Use one sanitized Markdown renderer for Docs and connector Help.
 - [ ] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.
 - [ ] Improve designer palette discovery, action hierarchy, toolbar labels, empty states, and
