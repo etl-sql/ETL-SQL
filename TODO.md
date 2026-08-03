@@ -323,7 +323,21 @@ documentation reconciliation, then release certification.
       equality, so a new short-circuit fails the build until someone justifies it and a removed one
       forces its entry out. The three open dataset sites are pinned in the inventory as `OPEN:` and
       must be deleted when the decision above lands.
-- [ ] Audit and test revocation for connections, subscriptions, alerts, and saved views.
+- [x] Audit and test revocation for connections, subscriptions, alerts, and saved views. One real gap
+      found, in alerts:
+  - **Alerts — was leaking, now fixed.** `PortalAlertEvaluationService` dispatched without
+    re-authorizing the alert's owner, so an alert outlived its author's access and kept pushing the
+    value that crossed the threshold into the channel they had chosen. It now applies the same
+    delivery-time check subscriptions do (owner active, still holds folder read, or is an admin) and
+    skips unauthorized alerts whole rather than recording a transition nobody was told about.
+  - **Subscriptions — already correct.** `SubscriptionDeliveryService.AuthorizeAsync` re-authorizes
+    at delivery, covered by `SubscriptionDeliverySecurityTests`.
+  - **Saved views — already correct.** Every route resolves report permission before narrowing to
+    the caller's own rows, so losing report access removes the views with it.
+  - **Connections — no authorship path exists.** `PortalConnectionCatalogService` resolves admin,
+    then group ACLs; `CreatedByUserId` is recorded but never consulted for authorization. (An
+    unrestricted connection — one with no ACL rows at all — is usable by everyone; that is a
+    separate default, not authorship persistence.)
 - [ ] Prove directory/group removal revokes reports, datasets, connections, subscriptions, alerts,
       saved views, and anonymous links created by that identity.
 

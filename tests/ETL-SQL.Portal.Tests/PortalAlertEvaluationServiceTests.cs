@@ -67,7 +67,10 @@ public sealed class PortalAlertEvaluationServiceTests : IDisposable
         {
             await db.Database.EnsureCreatedAsync();
             db.Users.Add(new PortalUser { Id = 1, UserName = "owner@example.com", NormalizedUserName = "OWNER@EXAMPLE.COM" });
-            var folder = new Folder { Name = "Reports" };
+            // The owner administers the folder, so they genuinely retain read access to the report.
+            // Alert evaluation re-authorizes the owner before dispatching, exactly as subscription
+            // delivery does, so a fixture where the owner holds no grant would deliver nothing.
+            var folder = new Folder { Name = "Reports", OwnerId = 1 };
             var report = new Report { Name = "Ops", Folder = folder, ScriptPath = "ops.rptsql", CreatedBy = 1 };
             var alert = new ReportAlert
             {
@@ -119,6 +122,118 @@ public sealed class PortalAlertEvaluationServiceTests : IDisposable
         Assert.Equal("TRIGGERED", stored.LastState);
         Assert.NotNull(stored.LastTriggeredAt);
         Assert.NotNull(stored.LastNotifiedAt);
+    }
+
+    /// <summary>
+    /// An alert notification carries the value that crossed the threshold, so an alert left running
+    /// after its owner lost access keeps pushing report data into the channel that owner chose.
+    /// Disabling the account, or removing the owner's last grant, has to stop it — the same
+    /// delivery-time re-authorization subscriptions perform.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true, 1)]    // owner active and still granted → delivered
+    [InlineData(false, true, 0)]   // owner deactivated → silent
+    [InlineData(true, false, 0)]   // owner lost every grant on the folder → silent
+    public async Task EvaluateScheduledRefresh_ReauthorizesTheAlertOwner(
+        bool ownerIsActive,
+        bool ownerRetainsAccess,
+        int expectedDispatches)
+    {
+        var dbPath = Path.Combine(_scratch, $"portal-{ownerIsActive}-{ownerRetainsAccess}.db");
+        var config = new PortalConfig
+        {
+            DatabasePath = dbPath,
+            ScriptRootPath = _scratch,
+            SnapshotDirectory = _scratch,
+            Orchestrator = { ApiUrl = "https://orchestrator.example.invalid", ApiKey = "test-key" }
+        };
+        var storage = new InMemoryArtifactStorage();
+        var packages = new SnapshotPackageService(config, storage, NullLogger<SnapshotPackageService>.Instance);
+        var manifestKey = SnapshotPackageService.BuildSnapshotKey(1, "refresh-1");
+        await packages.SaveAsync(new ReportManifest
+        {
+            Visuals =
+            [
+                new VisualManifest
+                {
+                    Name = "RevenueCard",
+                    VisualType = "CARD",
+                    Columns = ["Value"],
+                    Rows = [["125.5"]]
+                }
+            ]
+        }, manifestKey);
+
+        var services = new ServiceCollection();
+        services.AddDbContext<PortalDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+        await using (var provider = services.BuildServiceProvider())
+        await using (var db = provider.GetRequiredService<PortalDbContext>())
+        {
+            await db.Database.EnsureCreatedAsync();
+            db.Users.Add(new PortalUser
+            {
+                Id = 1,
+                UserName = "owner@example.com",
+                NormalizedUserName = "OWNER@EXAMPLE.COM",
+                IsActive = ownerIsActive
+            });
+            // Folder ownership is the owner's only grant, so handing it elsewhere revokes their
+            // read access without touching the alert itself.
+            var folder = new Folder { Name = "Reports", OwnerId = ownerRetainsAccess ? 1 : 0 };
+            var report = new Report { Name = "Ops", Folder = folder, ScriptPath = "ops.rptsql", CreatedBy = 1 };
+            var alert = new ReportAlert
+            {
+                Report = report,
+                OwnerId = 1,
+                Name = "RevenueHigh",
+                VisualName = "RevenueCard",
+                Operator = ">",
+                Threshold = 100
+            };
+            alert.Notifications.Add(new AlertNotification
+            {
+                OrchestratorAlias = "default",
+                NotificationName = "OpsMail"
+            });
+            db.ReportAlerts.Add(alert);
+            await db.SaveChangesAsync();
+        }
+
+        var handler = new CapturingHandler();
+        var http = new HttpClient(handler);
+        var protector = new OrchestratorApiKeyProtector(
+            DataProtectionProvider.Create(Path.Combine(_scratch, "keys")));
+        var proxy = new OrchestratorProxyService(
+            http,
+            new OrchestratorSettingsService(config, protector),
+            NullLogger<OrchestratorProxyService>.Instance);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var evaluator = new PortalAlertEvaluationService(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            config,
+            packages,
+            proxy,
+            NullLogger<PortalAlertEvaluationService>.Instance);
+
+        await evaluator.EvaluateScheduledRefreshAsync(1, "refresh-1", manifestKey, DateTime.UtcNow);
+
+        Assert.Equal(expectedDispatches, handler.RequestCount);
+
+        // A skipped alert is skipped whole. Recording a TRIGGERED transition nobody was told about
+        // would swallow the notification for good if access were later restored.
+        await using var verifyDb = serviceProvider.GetRequiredService<PortalDbContext>();
+        var stored = await verifyDb.ReportAlerts.SingleAsync();
+        if (expectedDispatches == 0)
+        {
+            Assert.Null(stored.LastState);
+            Assert.Null(stored.LastNotifiedAt);
+        }
+        else
+        {
+            Assert.Equal("TRIGGERED", stored.LastState);
+            Assert.NotNull(stored.LastNotifiedAt);
+        }
     }
 
     private sealed class CapturingHandler : HttpMessageHandler

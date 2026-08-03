@@ -52,8 +52,12 @@ public sealed class PortalAlertEvaluationService(
         var alerts = await db.ReportAlerts
             .Include(alert => alert.Notifications)
             .Include(alert => alert.Report)
+            .Include(alert => alert.Owner)
             .Where(alert => alert.ReportId == reportId && alert.IsActive && !alert.Report.IsDeleted)
             .ToListAsync(ct);
+        if (alerts.Count == 0) return;
+
+        alerts = await AuthorizedAlertsAsync(db, alerts, ct);
         if (alerts.Count == 0) return;
 
         foreach (var alert in alerts)
@@ -78,6 +82,78 @@ public sealed class PortalAlertEvaluationService(
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Drops alerts whose owner may no longer read the report, mirroring the delivery-time
+    /// re-authorization subscriptions already perform.
+    ///
+    /// An alert notification carries the value that crossed the threshold, so an alert left running
+    /// after its author was deactivated or removed from every group keeps pushing report data into a
+    /// channel that author chose — a deprovisioning gap that disabling the account did not close.
+    /// Unauthorized alerts are skipped whole rather than evaluated-but-not-sent: recording a
+    /// TRIGGERED transition nobody was told about would swallow the notification for good if access
+    /// were later restored.
+    ///
+    /// Scope note: like subscription delivery, this resolves folder permission. Report-level ACLs are
+    /// not consulted, so the two delivery paths stay consistent with one another.
+    /// </summary>
+    private async Task<List<ReportAlert>> AuthorizedAlertsAsync(
+        PortalDbContext db,
+        List<ReportAlert> alerts,
+        CancellationToken ct)
+    {
+        // Constructed over the scoped context rather than resolved: permission resolution is a pure
+        // function of this DbContext, and this service already owns the scope.
+        var folderPermissions = new FolderPermissionService(db);
+        var authorized = new List<ReportAlert>(alerts.Count);
+
+        foreach (var alert in alerts)
+        {
+            var denial = await DenyReasonAsync(db, folderPermissions, alert, ct);
+            if (denial is null)
+            {
+                authorized.Add(alert);
+                continue;
+            }
+
+            logger.LogWarning(
+                "Alert {AlertName} on report {ReportId} was not evaluated: {Reason}",
+                alert.Name, alert.ReportId, denial);
+        }
+
+        return authorized;
+    }
+
+    private static async Task<string?> DenyReasonAsync(
+        PortalDbContext db,
+        FolderPermissionService folderPermissions,
+        ReportAlert alert,
+        CancellationToken ct)
+    {
+        var owner = alert.Owner
+            ?? await db.Users.FirstOrDefaultAsync(u => u.Id == alert.OwnerId, ct);
+        if (owner is null)
+            return "alert owner no longer exists";
+        if (!owner.IsActive)
+            return "alert owner is disabled";
+
+        var isAdmin = await db.UserRoles
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
+            .AnyAsync(x => x.UserId == owner.Id && x.Name == "Admin", ct);
+        if (isAdmin)
+            return null;
+
+        var groupIds = new HashSet<int>(await db.UserGroups
+            .Where(ug => ug.UserId == owner.Id)
+            .Select(ug => ug.GroupId)
+            .ToListAsync(ct));
+        var permission = await folderPermissions.GetEffectivePermissionAsync(
+            alert.Report.FolderId, groupIds, owner.Id);
+
+        return permission is null || permission < FolderPermission.Read
+            ? "alert owner no longer has read permission on the report"
+            : null;
     }
 
     private async Task<bool> DispatchAlertNotificationsAsync(

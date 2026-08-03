@@ -52,6 +52,22 @@ short-circuit would have silently revoked access to every dataset in an existing
   A grant an administrator cannot see is a grant they cannot account for, and one they cannot revoke
   makes "authorship is revocable" true only in the database.
 
+## Delivery-time re-authorization
+
+Interactive access is not the only way a resource reaches someone. Anything the Portal *sends* has
+to re-check the recipient at send time, because the send happens long after the grant was made.
+
+| Path | Behaviour |
+| :--- | :--- |
+| **Subscriptions** | `SubscriptionDeliveryService.AuthorizeAsync` requires the owner to exist, be active, and hold folder `Read` (or be an admin) before every delivery. |
+| **Alerts** | `PortalAlertEvaluationService` applies the same check before evaluating. Unauthorized alerts are skipped whole — evaluating one and suppressing only the dispatch would record a `TRIGGERED` transition nobody was told about, and the notification would never fire again even after access was restored. |
+| **Saved views** | Read/write routes resolve report permission first, then narrow to the caller's own rows, so losing report access takes the views with it. |
+| **Shared connections** | No authorship path: `PortalConnectionCatalogService` resolves admin, then group ACLs. `CreatedByUserId` is recorded but never consulted for authorization. |
+
+An alert notification carries the value that crossed the threshold, so an alert outliving its
+author's access is data leakage, not just stale metadata — which is what made this the one real gap
+the audit found.
+
 ## Guardrail
 
 `AuthorshipPermissionBoundaryTests` (in `ETL-SQL.Tests/Architecture`) inventories every
