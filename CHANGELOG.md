@@ -88,6 +88,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added a shared accessible feedback system across Portal, ReportPlayer, Workstation, and VS Code
+  report surfaces. Native browser alerts, prompts, and confirmations were replaced with live-region
+  toasts and focus-trapped dialogs that provide validation, destructive-impact text, and
+  non-secret audit-action events; a repository contract prevents regressions.
+
 - Added one dependency-free, sanitized Markdown renderer for Portal Docs and connector Help.
   Both surfaces now render tables, admonitions, fenced code, safe links, and copy actions
   consistently; raw HTML is escaped and unsafe link protocols are rejected.

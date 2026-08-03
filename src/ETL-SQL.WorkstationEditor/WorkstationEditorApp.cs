@@ -352,6 +352,7 @@ public static class WorkstationEditorApp
     text-align: center;
   }
 </style>
+<script src="/runtime/feedback.js"></script>
 <script>
   window.__IS_PREVIEW__ = true;
   (function () {

@@ -148,6 +148,7 @@ export class ReportDesignerPanel {
         const designerJsUri  = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.js'));
         const designerCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.css'));
         const echartsUri     = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'echarts.min.js'));
+        const feedbackUri    = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'feedback.js'));
 
         // Safely encode initial script text for inline JSON injection
         const initJson = JSON.stringify({ scriptText, reportName })
@@ -181,6 +182,7 @@ export class ReportDesignerPanel {
 </head>
 <body>
 <div id="designerRoot"></div>
+<script nonce="${nonce}" src="${feedbackUri}"></script>
 
 <!-- Bridge: postMessage ↔ LSP + disk save -->
 <script nonce="${nonce}">

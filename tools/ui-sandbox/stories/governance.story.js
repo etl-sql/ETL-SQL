@@ -1082,8 +1082,8 @@ export default {
             <button class="gov-btn" id="btnResetFilters" style="padding: 4px 8px; font-size: 11px;">Clear All</button>
             
             <div style="margin-left: auto; display: flex; gap: 8px;">
-              <button class="gov-btn gov-btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="alert('Bulk marked selection as Reviewed.')">Batch Mark Reviewed</button>
-              <button class="gov-btn gov-btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="alert('Please select and bulk apply exceptions.')">Batch Accept Exception</button>
+              <button class="gov-btn gov-btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="ETLSQLFeedback.notify('Bulk marked selection as Reviewed.', { title: 'Review complete', tone: 'success' })">Batch Mark Reviewed</button>
+              <button class="gov-btn gov-btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="ETLSQLFeedback.notify('Please select and bulk apply exceptions.', { title: 'Select exceptions', tone: 'warning' })">Batch Accept Exception</button>
             </div>
           </div>
 
@@ -1098,7 +1098,7 @@ export default {
               <table class="dense-table">
                 <thead>
                   <tr>
-                    <th width="30"><input type="checkbox" onclick="alert('Toggled selection on all rows.')"></th>
+                    <th width="30"><input type="checkbox" onclick="ETLSQLFeedback.notify('Toggled selection on all rows.', { title: 'Selection updated' })"></th>
                     <th>Asset Path</th>
                     <th width="80">Score</th>
                     <th>Violation Badges</th>
@@ -1255,12 +1255,12 @@ export default {
                   <div style="background:var(--portal-bg, #0b0f19); border: 1px solid var(--portal-border, #374151); padding: 12px; border-radius:6px; display:flex; flex-direction:column; gap:6px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                       <span class="steward-badge-tag ${def.color}">★ ${def.name}</span>
-                      <button class="gov-btn gov-btn-danger" style="padding:1px 6px; font-size:10px;" onclick="alert('Badge definition removal must be approved by GovernanceManager role.')">Delete</button>
+                      <button class="gov-btn gov-btn-danger" style="padding:1px 6px; font-size:10px;" onclick="ETLSQLFeedback.notify('Badge definition removal must be approved by GovernanceManager role.', { title: 'Approval required', tone: 'warning' })">Delete</button>
                     </div>
                     <p style="font-size:12px; margin:0; color:var(--portal-muted, #9ca3af);">${def.desc}</p>
                   </div>
                 `).join('')}
-                <button class="gov-btn gov-btn-primary" style="align-self:flex-start;" onclick="alert('Create Badge definition form will launch a schema migration helper in portal settings.')">+ Create Custom Badge Definition</button>
+                <button class="gov-btn gov-btn-primary" style="align-self:flex-start;" onclick="ETLSQLFeedback.notify('Create Badge definition form will launch a schema migration helper in portal settings.', { title: 'Badge definition' })">+ Create Custom Badge Definition</button>
               </div>
             </div>
           </div>
@@ -1334,7 +1334,7 @@ export default {
             <div class="gov-filters-search-wrap">
               <input type="search" class="gov-filter-input" id="lineageSearch" placeholder="Search lineage index (e.g. length_of_stay)..." style="width:300px;">
             </div>
-            <button class="gov-btn gov-btn-primary" onclick="alert('Searching lineage graph index...')">🔍 Search Index</button>
+            <button class="gov-btn gov-btn-primary" onclick="ETLSQLFeedback.notify('Searching lineage graph index...', { title: 'Lineage search' })">🔍 Search Index</button>
             <span style="font-size:12.5px; color:var(--portal-muted, #9ca3af); margin-left: 10px;">Select nodes to investigate deep column dependencies.</span>
           </div>
 
@@ -1776,7 +1776,7 @@ export default {
       if (scanBtn) {
         scanBtn.addEventListener('click', () => {
           ctx.stat('Triggered full background workspace linter scan...');
-          alert('Initiating workspace governance linter scan...');
+          ETLSQLFeedback.notify('Initiating workspace governance linter scan...', { title: 'Governance scan', tone: 'success' });
         });
       }
       
@@ -1869,7 +1869,7 @@ export default {
         const categoryLabel = categorySelect.options[categorySelect.selectedIndex].text;
 
         if (!reason) {
-          alert('Please provide a justification reason.');
+          ETLSQLFeedback.notify('Please provide a justification reason.', { title: 'Justification required', tone: 'warning' });
           return;
         }
         
@@ -1928,7 +1928,7 @@ export default {
           const desc = wrapper.querySelector('#glossaryDesc').value.trim();
 
           if (!term || !type || !aliases || !desc) {
-            alert('Please fill out all fields.');
+            ETLSQLFeedback.notify('Please fill out all fields.', { title: 'Complete required fields', tone: 'warning' });
             return;
           }
 
@@ -1945,7 +1945,7 @@ export default {
           } else {
             // Check for duplicate term name
             if (modeData.glossary.some(t => t.term.toLowerCase() === term.toLowerCase())) {
-              alert(`Term "${term}" is already defined in the glossary.`);
+              ETLSQLFeedback.notify(`Term "${term}" is already defined in the glossary.`, { title: 'Duplicate term', tone: 'warning' });
               return;
             }
             // Add new
@@ -1987,12 +1987,12 @@ export default {
 
       // Bind Delete Term buttons
       wrapper.querySelectorAll('[data-delete-term]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-delete-term');
           const index = modeData.glossary.findIndex(t => t.id === id);
           if (index !== -1) {
             const name = modeData.glossary[index].term;
-            if (confirm(`Are you sure you want to delete term "${name}"? This will invalidate metadata linters checking for this alias.`)) {
+            if (await ETLSQLFeedback.confirm(`Delete glossary term "${name}"?`, { title: 'Delete glossary term', impact: 'Metadata linters checking this alias may stop matching.', confirmLabel: 'Delete term', danger: true })) {
               modeData.glossary.splice(index, 1);
               ctx.stat(`Deleted Glossary Term: ${name}`);
               render();
@@ -2103,7 +2103,7 @@ export default {
           modeData.settings.deductGlossary = parseInt(wrapper.querySelector('#settingsDeductGlossary').value) || 0;
           modeData.settings.deductStale = parseInt(wrapper.querySelector('#settingsDeductStale').value) || 0;
           ctx.stat('Saved linter deduction configuration weights successfully.');
-          alert('Scoring policy thresholds updated in Governance settings memory.');
+          ETLSQLFeedback.notify('Scoring policy thresholds updated in Governance settings memory.', { title: 'Scoring updated', tone: 'success' });
           render();
         });
       }
@@ -2157,7 +2157,7 @@ export default {
           const expiry = wrapper.querySelector('#catExpiry').value;
 
           if (!label || !value) {
-            alert('Please fill in Category Label and Value Identifier.');
+            ETLSQLFeedback.notify('Please fill in Category Label and Value Identifier.', { title: 'Complete required fields', tone: 'warning' });
             return;
           }
 
@@ -2205,12 +2205,12 @@ export default {
       });
 
       wrapper.querySelectorAll('[data-delete-cat]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-delete-cat');
           const realIndex = modeData.resolutionCategories.findIndex(c => c.id === id);
           if (realIndex !== -1) {
             const label = modeData.resolutionCategories[realIndex].label;
-            if (confirm(`Are you sure you want to delete resolution category "${label}"? Active exceptions using this bypass type will default back to standard alerts.`)) {
+            if (await ETLSQLFeedback.confirm(`Delete resolution category "${label}"?`, { title: 'Delete resolution category', impact: 'Active exceptions using this bypass type will fall back to standard alerts.', confirmLabel: 'Delete category', danger: true })) {
               modeData.resolutionCategories.splice(realIndex, 1);
               ctx.stat(`Deleted Bypass Category: ${label}`);
               render();

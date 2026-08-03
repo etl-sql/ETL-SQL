@@ -597,6 +597,7 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         ReportPlayerFooter() +
         // Pre-embed manifest; set __IS_WEB__ so interactive controls activate.
         "<script>window.__IS_WEB__ = true; window.__MANIFEST__ = " + manifestJson + ";</script>\n" +
+        "<script src=\"/feedback.js\"></script>\n" +
         "<script src=\"/echarts.min.js\"></script>\n" +
         "<script src=\"/report-runtime.js\"></script>\n" +
         "</body>\n</html>";
@@ -631,6 +632,7 @@ static string GetDashboardShellHtml(string reportName, string? description, stri
         "<div id=\"root\"></div>\n" +
         ReportPlayerFooter() +
         "<script>window.__IS_WEB__ = true; window.__API_BASE__ = '" + apiBase + "';</script>\n" +
+        "<script src=\"/feedback.js\"></script>\n" +
         "<script src=\"/echarts.min.js\"></script>\n" +
         "<script src=\"/report-runtime.js\"></script>\n" +
         "</body>\n</html>";

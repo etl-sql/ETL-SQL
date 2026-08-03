@@ -380,17 +380,17 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
         await loadVersions();
       } else if (btn.dataset.paAct === 'promote') {
         const version = btn.closest('tr')?.dataset.version;
-        if (!window.confirm(`Promote canary ${version} to the whole fleet?`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Promote canary ${version} to the whole fleet?`, { title: 'Promote policy canary', impact: 'All enrolled machines in this scope will receive this policy.', confirmLabel: 'Promote canary', auditAction: 'policy.canary.promote' })) return;
         await policyAuthorityApi.promoteCanary(tenant, environment, version);
         await loadVersions();
       } else if (btn.dataset.paAct === 'halt') {
         const version = btn.closest('tr')?.dataset.version;
-        if (!window.confirm(`Halt canary ${version} and revert its machines to the active policy?`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Halt canary ${version}?`, { title: 'Halt policy canary', impact: 'Canary machines will revert to the active policy.', confirmLabel: 'Halt canary', danger: true, auditAction: 'policy.canary.halt' })) return;
         await policyAuthorityApi.haltCanary(tenant, environment, version, $('pa-reviewer').value.trim() || null);
         await loadVersions();
       } else if (btn.dataset.paAct === 'rollback') {
         const targetPolicyVersion = btn.closest('tr')?.dataset.version;
-        const newPolicyVersion = window.prompt(`New policy version for rollback to ${targetPolicyVersion}:`);
+        const newPolicyVersion = await window.ETLSQLFeedback.prompt(`Create a rollback policy targeting ${targetPolicyVersion}.`, { title: 'Create rollback policy', label: 'New policy version', required: true, confirmLabel: 'Create rollback', auditAction: 'policy.rollback.create' });
         if (!newPolicyVersion) return;
         const expiresAtUtc = toIsoFromLocal($('pa-expires').value);
         await policyAuthorityApi.rollback({
@@ -404,7 +404,8 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
         await loadVersions();
       } else if (btn.dataset.paAct === 'revoke-machine') {
         const machineId = btn.closest('tr')?.dataset.machine;
-        const reason = window.prompt(`Reason for revoking machine ${machineId}:`) || null;
+        const reason = await window.ETLSQLFeedback.prompt(`Explain why machine ${machineId} must be revoked.`, { title: 'Revoke machine', label: 'Revocation reason', multiline: true, required: true, minLength: 8, confirmLabel: 'Revoke machine', danger: true, auditAction: 'policy.machine.revoke' });
+        if (!reason) return;
         await policyAuthorityApi.revokeMachine(machineId, reason);
         await loadMachines();
       }

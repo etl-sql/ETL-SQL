@@ -302,6 +302,7 @@
 </div>
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
+<script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
 import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
@@ -672,7 +673,7 @@ async function handleAction(btn) {
       await api.kill(name);
       showToast(`Kill signal sent to '${name}'.`);
     } else if (action === 'delete') {
-      if (!confirm(`Delete job '${name}' and all its history? This cannot be undone.`)) return;
+      if (!await ETLSQLFeedback.confirm(`Delete job '${name}'?`, { title: 'Delete job and history', impact: 'All execution history for this job will be removed. This cannot be undone.', confirmLabel: 'Delete job', danger: true, auditAction: 'orchestrator.job.delete' })) return;
       await api.delete(name);
       showToast(`Job '${name}' deleted.`);
       if (selectedJob?.Name === name) closeDetail();
@@ -1070,7 +1071,7 @@ document.getElementById('cj-saveBtn').addEventListener('click', async () => {
 
 // ── Service control ────────────────────────────────────────────────────────────
 document.getElementById('stopBtn').addEventListener('click', async () => {
-  if (!confirm('Send stop signal to the Orchestrator Service? It will restart automatically if managed by Windows Service Manager or systemd.')) return;
+  if (!await ETLSQLFeedback.confirm('Send a stop signal to the Orchestrator service?', { title: 'Stop Orchestrator service', impact: 'The service restarts only when managed by Windows Service Manager or systemd.', confirmLabel: 'Send stop signal', danger: true, auditAction: 'orchestrator.service.stop' })) return;
   try {
     await api.stop();
     showToast('Stop signal sent. Service is restarting…');
@@ -1078,7 +1079,7 @@ document.getElementById('stopBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('restartBtn').addEventListener('click', async () => {
-  if (!confirm('Restart the Orchestrator Service? Running jobs will be interrupted.')) return;
+  if (!await ETLSQLFeedback.confirm('Restart the Orchestrator service?', { title: 'Restart Orchestrator service', impact: 'Running jobs will be interrupted.', confirmLabel: 'Restart service', danger: true, auditAction: 'orchestrator.service.restart' })) return;
   try {
     await api.stop();
     showToast('Stop signal sent — service will restart if OS-managed.');
@@ -1087,19 +1088,7 @@ document.getElementById('restartBtn').addEventListener('click', async () => {
 
 // ── Toast notifications ────────────────────────────────────────────────────────
 function showToast(msg, isError = false) {
-  let t = document.getElementById('orch-toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'orch-toast';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:.875em;font-weight:600;z-index:9999;transition:opacity .3s;box-shadow:0 4px 16px rgba(0,0,0,.15)';
-    document.body.appendChild(t);
-  }
-  t.textContent = msg;
-  t.style.background = isError ? 'var(--portal-danger)' : 'var(--portal-success)';
-  t.style.color = '#fff';
-  t.style.opacity = '1';
-  clearTimeout(t._hide);
-  t._hide = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+  ETLSQLFeedback.notify(msg, { title: isError ? 'Orchestrator request failed' : 'Orchestrator', tone: isError ? 'error' : 'success' });
 }
 
 function escHtml(s) {

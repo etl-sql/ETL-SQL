@@ -377,14 +377,14 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       } else if (btn.dataset.act === 'test') {
         await showDiagnostic(alias);
       } else if (btn.dataset.act === 'disable') {
-        if (!window.confirm(`Disable shared connection '${alias}'? SHARED:${alias} will fail until it is re-enabled.`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Disable shared connection '${alias}'?`, { title: 'Disable shared connection', impact: `SHARED:${alias} will fail until it is re-enabled.`, confirmLabel: 'Disable connection', danger: true, auditAction: 'admin.connection.disable' })) return;
         await connectionsApi.disable(alias);
         await load();
       } else if (btn.dataset.act === 'enable') {
         await connectionsApi.enable(alias);
         await load();
       } else if (btn.dataset.act === 'delete') {
-        if (!window.confirm(`Permanently delete shared connection '${alias}'?`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Permanently delete shared connection '${alias}'?`, { title: 'Delete shared connection', confirmLabel: 'Delete connection', danger: true, auditAction: 'admin.connection.delete' })) return;
         await connectionsApi.remove(alias);
         await load();
       }

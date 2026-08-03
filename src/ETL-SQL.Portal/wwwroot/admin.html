@@ -530,6 +530,7 @@
 <!-- Dataset lineage + viewer modals are created by js/datasets-admin.js -->
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
+<script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi, studioApi } from '/js/api.js?v=0.17.0';
 import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js?v=0.17.0';
@@ -742,7 +743,7 @@ async function handleUserAction(btn) {
   const id = +btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'delete') {
-    if (!confirm('Delete this user? This cannot be undone.')) return;
+    if (!await ETLSQLFeedback.confirm('Delete this user?', { title: 'Delete user', impact: 'This cannot be undone.', confirmLabel: 'Delete user', danger: true, auditAction: 'admin.user.delete' })) return;
     const user = allUsers.find(x => x.id === id);
     await adminApi.deleteUser(id, user?.version).catch(alertErr);
     loadUsers();
@@ -752,11 +753,11 @@ async function handleUserAction(btn) {
     await adminApi.updateUser(id, { isActive: !active }, user?.version).catch(alertErr);
     loadUsers();
   } else if (action === 'reset') {
-    const pwd = prompt('Enter new temporary password (min 8 chars):');
+    const pwd = await ETLSQLFeedback.prompt('Set a temporary password for this user.', { title: 'Reset password', label: 'Temporary password', secret: true, required: true, minLength: 8, autocomplete: 'new-password', confirmLabel: 'Reset password', auditAction: 'admin.user.password-reset' });
     if (!pwd) return;
     const user = allUsers.find(x => x.id === id);
     await adminApi.resetPassword(id, pwd, user?.version).catch(alertErr);
-    alert('Password reset.');
+    ETLSQLFeedback.notify('The temporary password was set.', { title: 'Password reset', tone: 'success', auditAction: 'admin.user.password-reset' });
   } else if (action === 'edit-user') {
     const u = allUsers.find(x => x.id == id);
     if (!u) return;
@@ -870,7 +871,7 @@ async function loadGroups() {
 document.getElementById('groupFilter').addEventListener('input', () => { groupPage = 1; loadGroups(); });
 document.getElementById('groupsDeleteBtn').addEventListener('click', async () => {
   const ids = selectedIds(document.getElementById('groupTableWrap'));
-  if (!ids.length || !confirm('Delete the selected groups? Groups with members or ACL entries will be rejected.')) return;
+  if (!ids.length || !await ETLSQLFeedback.confirm('Delete the selected groups?', { title: 'Delete groups', impact: 'Groups with members or permission entries will be rejected.', confirmLabel: 'Delete groups', danger: true, auditAction: 'admin.group.bulk-delete' })) return;
   const groups = ids.map(id => {
     const group = allGroups.find(x => x.id === id);
     return { id, version: group?.version };
@@ -882,7 +883,7 @@ document.getElementById('groupsDeleteBtn').addEventListener('click', async () =>
 async function handleGroupAction(btn) {
   const id = +btn.dataset.id;
   if (btn.dataset.action === 'delete') {
-    if (!confirm('Delete this group?')) return;
+    if (!await ETLSQLFeedback.confirm('Delete this group?', { title: 'Delete group', confirmLabel: 'Delete group', danger: true, auditAction: 'admin.group.delete' })) return;
     const group = allGroups.find(x => x.id === id);
     await adminApi.deleteGroup(id, group?.version).catch(alertErr);
     loadGroups();
@@ -949,7 +950,7 @@ document.getElementById('memberFilter').addEventListener('input', () => {
 });
 document.getElementById('membersRemoveBtn').addEventListener('click', async () => {
   const ids = selectedIds(document.getElementById('memberTableWrap'));
-  if (!selectedGroupId || !ids.length || !confirm('Remove the selected users from this group?')) return;
+  if (!selectedGroupId || !ids.length || !await ETLSQLFeedback.confirm('Remove the selected users from this group?', { title: 'Remove group members', confirmLabel: 'Remove users', danger: true, auditAction: 'admin.group.members.remove' })) return;
   const group = allGroups.find(x => x.id === selectedGroupId);
   await adminApi.bulkRemoveMembers(selectedGroupId, ids, group?.version).catch(alertErr);
   loadMembers(selectedGroupId);
@@ -1061,7 +1062,7 @@ async function loadFolders() {
 async function handleFolderAction(btn) {
   const id = +btn.dataset.id;
   if (btn.dataset.action === 'delete') {
-    if (!confirm('Delete this folder? Reports inside will also be removed.')) return;
+    if (!await ETLSQLFeedback.confirm('Delete this folder?', { title: 'Delete folder and reports', impact: 'Reports inside the folder will also be removed.', confirmLabel: 'Delete folder', danger: true, auditAction: 'admin.folder.delete' })) return;
     const folder = allFolders.find(x => x.id === id);
     await foldersApi.delete(id, true, folder?.version).catch(alertErr);
     loadFolders();
@@ -1175,7 +1176,7 @@ async function loadReports() {
 
     $wrap.querySelectorAll('[data-action="delete-report"]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Delete this report? Subscription schedules for this report will be cancelled.')) return;
+        if (!await ETLSQLFeedback.confirm('Delete this report?', { title: 'Delete report', impact: 'Subscription schedules for this report will be cancelled.', confirmLabel: 'Delete report', danger: true, auditAction: 'admin.report.delete' })) return;
         const id = +btn.dataset.id;
         const report = allReports.find(x => x.id === id);
         await reportsApi.delete(id, report?.version).catch(alertErr);
@@ -1336,7 +1337,7 @@ document.getElementById('pr-saveBtn').addEventListener('click', async () => {
     }
     document.getElementById('publishReportForm').style.display = 'none';
     loadReports();
-    alert(id ? 'Report updated successfully.' : 'Report published successfully.');
+    ETLSQLFeedback.notify(id ? 'The report was updated.' : 'The report was published.', { title: id ? 'Report updated' : 'Report published', tone: 'success', auditAction: id ? 'admin.report.update' : 'admin.report.publish' });
   } catch (err) {
     if (err.body && err.body.isValid === false) renderPublishValidation(err.body);
     $err.textContent = err.message || 'Failed to save report.';
@@ -1473,7 +1474,7 @@ document.getElementById('auditExportBtn').addEventListener('click', () => {
     a.download = `audit_log_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }).catch(() => alert('Export failed.'));
+  }).catch(() => ETLSQLFeedback.notify('The audit export could not be created.', { title: 'Export failed', tone: 'error' }));
 });
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────
@@ -1565,7 +1566,7 @@ async function handleAdminSubscriptionAction(btn) {
     await subscriptionsApi.update(id, { isActive: btn.dataset.active !== 'true' }, subscription?.version).catch(alertErr);
     loadSubscriptions();
   } else if (btn.dataset.action === 'delete') {
-    if (!confirm('Delete this subscription? This stops future deliveries and removes its generated job.')) return;
+    if (!await ETLSQLFeedback.confirm('Delete this subscription?', { title: 'Delete subscription', impact: 'This stops future deliveries and removes its generated job.', confirmLabel: 'Delete subscription', danger: true, auditAction: 'admin.subscription.delete' })) return;
     const subscription = allSubscriptions.find(x => x.id === id);
     await subscriptionsApi.delete(id, subscription?.version).catch(alertErr);
     loadSubscriptions();
@@ -1834,7 +1835,7 @@ function escAttr(s) {
 function formatOptionalDate(value) {
   return value ? new Date(value).toLocaleString() : 'Not refreshed';
 }
-function alertErr(err) { alert(err.message || 'An error occurred.'); }
+function alertErr(err) { ETLSQLFeedback.notify(err.message || 'An error occurred.', { title: 'Request failed', tone: 'error' }); }
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {
   modal.addEventListener('click', e => {

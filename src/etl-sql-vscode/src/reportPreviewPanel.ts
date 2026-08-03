@@ -384,6 +384,7 @@ export class ReportPreviewPanel {
         const runtimeJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.js'));
         const runtimeCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.css'));
         const echartsJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'echarts.min.js'));
+        const feedbackJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'feedback.js'));
 
         const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
 
@@ -449,6 +450,7 @@ export class ReportPreviewPanel {
         // Injected manifest for the shared runtime
         window.__MANIFEST__ = ${manifestJson};
     </script>
+    <script nonce="${nonce}" src="${feedbackJsUri}"></script>
     <script nonce="${nonce}" src="${echartsJsUri}"></script>
     <script nonce="${nonce}" src="${runtimeJsUri}"></script>
 </body>

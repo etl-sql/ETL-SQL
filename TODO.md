@@ -211,7 +211,7 @@ documentation reconciliation, then release certification.
 - [x] Connect disposition/replay submissions to terminal job status.
 - [x] Add data-quality rule visibility and structured failure trends.
 - [x] Use one sanitized Markdown renderer for Docs and connector Help.
-- [ ] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.
+- [x] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.
 - [ ] Improve designer palette discovery, action hierarchy, toolbar labels, empty states, and
       laptop/tablet layouts.
 

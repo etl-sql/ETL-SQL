@@ -153,8 +153,8 @@ const MODALS_HTML = `
  * @param {Object}   opts.adminApi     Needs listGroups() for the ACL grant dropdown.
  * @param {Object}   opts.catalogApi   Needs lineage(kind, args) for the lineage DAG.
  * @param {Function} opts.renderDag    (container, {nodes, edges}) → { dispose }.
- * @param {Function} [opts.confirmFn]  Confirmation prompt (default window.confirm).
- * @param {Function} [opts.alertFn]    Alert (default window.alert).
+ * @param {Function} [opts.confirmFn]  Async confirmation dialog.
+ * @param {Function} [opts.alertFn]    Accessible notification function.
  * @param {Element}  [opts.modalRoot]  Where modals are appended (default document.body).
  * @returns {{ load: Function, dispose: Function }}
  */
@@ -165,8 +165,8 @@ export function createDatasetsAdmin(opts = {}) {
     adminApi,
     catalogApi,
     renderDag,
-    confirmFn = (typeof window !== 'undefined' ? window.confirm.bind(window) : () => true),
-    alertFn = (typeof window !== 'undefined' ? window.alert.bind(window) : () => {}),
+    confirmFn = (message => window.ETLSQLFeedback.confirm(message, { title: 'Delete dataset', impact: 'The registry entry and cached data will be removed.', confirmLabel: 'Delete dataset', danger: true, auditAction: 'admin.dataset.delete' })),
+    alertFn = (message => window.ETLSQLFeedback.notify(message, { title: 'Dataset', tone: 'info' })),
     modalRoot = document.body,
   } = opts;
 
@@ -265,7 +265,7 @@ export function createDatasetsAdmin(opts = {}) {
       showDatasetLineage(btn.dataset.name || 'Dataset');
       return;
     } else if (action === 'delete') {
-      if (!confirmFn('Delete this dataset? This removes the registry entry and cached data.')) return;
+      if (!await confirmFn('Delete this dataset? This removes the registry entry and cached data.')) return;
       const dataset = allDatasets.find(x => x.id === id);
       await datasetsApi.delete(id, dataset?.version).catch(alertErr);
       loadDatasets();

@@ -112,10 +112,11 @@ another set of isolated capabilities.
 4. [x] **Use one documentation renderer.** Docs and connector Help now use the same sanitized
    renderer for headings, tables, admonitions, code blocks, allow-listed links, and copy actions;
    Docs retains its topic search and section filters.
-5. **Use one feedback and dialog system.** Replace native `alert`, `prompt`, and `confirm` calls
-   across Reports, Admin, Governance, Designer, Orchestrator, and report runtime with accessible
-   toasts and purpose-built dialogs. Password reset, destructive changes, policy rollout, and
-   source-control commits need structured validation, clear impact text, and auditable outcomes.
+5. [x] **Use one feedback and dialog system.** Reports, Admin, Governance, Designer,
+   Orchestrator, ReportPlayer, Workstation, and VS Code report surfaces now share accessible toasts
+   and focus-trapped dialogs. Password reset, destructive changes, policy rollout, file naming,
+   dataset naming, and source-control actions include validation, impact text, and non-secret
+   audit-action events.
 6. **Polish the visual designer without reducing its power.** Group or search the long visual
    palette, replace the rainbow of equally weighted buttons with clearer hierarchy, label the
    icon-only toolbar, improve dataset/on-page empty states, and make the canvas/inspector useful at

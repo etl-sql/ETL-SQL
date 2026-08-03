@@ -1164,7 +1164,7 @@ export function createGovernancePortal(opts = {}) {
       render();
     });
     host.querySelector('#btnScanNow')?.addEventListener('click', () => {
-      alert('Initiating workspace governance linter scan...');
+      window.ETLSQLFeedback.notify('The workspace governance scan has started.', { title: 'Governance scan', tone: 'success', auditAction: 'governance.scan.start' });
     });
 
     // Filters
@@ -1273,7 +1273,7 @@ export function createGovernancePortal(opts = {}) {
       const label = select.options[select.selectedIndex].text;
 
       if (!reason) {
-        alert('Justification required.');
+        window.ETLSQLFeedback.notify('Enter a justification before accepting this risk.', { title: 'Justification required', tone: 'warning' });
         return;
       }
 
@@ -1321,7 +1321,7 @@ export function createGovernancePortal(opts = {}) {
       const desc = host.querySelector('#glossaryDesc').value.trim();
 
       if (!term || !type || !aliases || !desc) {
-        alert('All fields are required.');
+        window.ETLSQLFeedback.notify('Term, type, aliases, and description are required.', { title: 'Complete required fields', tone: 'warning' });
         return;
       }
 
@@ -1362,11 +1362,11 @@ export function createGovernancePortal(opts = {}) {
     });
 
     host.querySelectorAll('[data-delete-term]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-delete-term');
         const idx = state.glossary.findIndex(t => t.id === id);
         if (idx !== -1) {
-          if (confirm(`Delete glossary term "${state.glossary[idx].term}"?`)) {
+          if (await window.ETLSQLFeedback.confirm(`Delete glossary term "${state.glossary[idx].term}"?`, { title: 'Delete glossary term', impact: 'Metadata rules that reference this term may stop matching.', confirmLabel: 'Delete term', danger: true, auditAction: 'governance.glossary.delete' })) {
             state.glossary.splice(idx, 1);
             render();
           }
@@ -1440,7 +1440,7 @@ export function createGovernancePortal(opts = {}) {
       state.settings.deductPII = parseInt(host.querySelector('#settingsDeductPII').value) || 0;
       state.settings.deductGlossary = parseInt(host.querySelector('#settingsDeductGlossary').value) || 0;
       state.settings.deductStale = parseInt(host.querySelector('#settingsDeductStale').value) || 0;
-      alert('Scoring configurations updated.');
+      window.ETLSQLFeedback.notify('The scoring configuration was updated.', { title: 'Scoring saved', tone: 'success', auditAction: 'governance.scoring.update' });
       render();
     });
 
@@ -1468,7 +1468,7 @@ export function createGovernancePortal(opts = {}) {
       const expiry = host.querySelector('#catExpiry').value;
 
       if (!label || !val) {
-        alert('Label and value required.');
+        window.ETLSQLFeedback.notify('Enter both a category label and value.', { title: 'Complete required fields', tone: 'warning' });
         return;
       }
 
@@ -1501,11 +1501,11 @@ export function createGovernancePortal(opts = {}) {
     });
 
     host.querySelectorAll('[data-delete-cat]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-delete-cat');
         const idx = state.resolutionCategories.findIndex(c => c.id === id);
         if (idx !== -1) {
-          if (confirm(`Delete bypass category "${state.resolutionCategories[idx].label}"?`)) {
+          if (await window.ETLSQLFeedback.confirm(`Delete bypass category "${state.resolutionCategories[idx].label}"?`, { title: 'Delete bypass category', impact: 'Existing exceptions using this category will no longer have a matching definition.', confirmLabel: 'Delete category', danger: true, auditAction: 'governance.category.delete' })) {
             state.resolutionCategories.splice(idx, 1);
             render();
           }

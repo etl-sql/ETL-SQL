@@ -286,6 +286,7 @@
 </div>
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
+<script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
 import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, reportsApi, studioApi, subscriptionsApi } from '/js/api.js?v=0.17.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.17.0';
@@ -1071,7 +1072,7 @@ function wireFavoriteButtons(root, onChanged = null) {
         }
         onChanged?.();
       } catch (err) {
-        alert(err.message || 'Favorite update failed.');
+        ETLSQLFeedback.notify(err.message || 'Favorite update failed.', { title: 'Favorite not changed', tone: 'error' });
       } finally {
         btn.disabled = false;
       }
@@ -1486,7 +1487,7 @@ function showExport(id) {
   const doExport = async (format) => {
     $modal.style.display = 'none';
     try { await reportsApi.exportFile(id, format); }
-    catch (err) { alert(err.message || 'Export failed.'); }
+    catch (err) { ETLSQLFeedback.notify(err.message || 'Export failed.', { title: 'Export failed', tone: 'error' }); }
   };
   document.getElementById('exportCsvBtn').onclick  = () => doExport('csv');
   document.getElementById('exportXlsxBtn').onclick = () => doExport('xlsx');
@@ -1697,7 +1698,7 @@ function wireSubscribeModal() {
     try {
       await subscriptionsApi.create(body);
       document.getElementById('subscribeModal').style.display = 'none';
-      alert('Subscription created successfully.');
+      ETLSQLFeedback.notify('Future deliveries are now scheduled.', { title: 'Subscription created', tone: 'success', auditAction: 'subscription.create' });
     } catch (err) {
       $err.textContent = err.message || 'Failed to create subscription.';
       $err.classList.add('show');
@@ -1807,15 +1808,15 @@ async function handleSubAction(btn) {
   const id     = +btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'delete') {
-    if (!confirm('Delete this subscription? This stops future deliveries but does not remove generated report snapshots.')) return;
+    if (!await ETLSQLFeedback.confirm('Delete this subscription?', { title: 'Delete subscription', impact: 'This stops future deliveries but does not remove generated report snapshots.', confirmLabel: 'Delete subscription', danger: true, auditAction: 'subscription.delete' })) return;
     const subscription = mySubscriptions.find(x => x.id === id);
     try { await subscriptionsApi.delete(id, subscription?.version); showMySubscriptions(); }
-    catch (err) { alert(err.message); }
+    catch (err) { ETLSQLFeedback.notify(err.message, { title: 'Subscription not deleted', tone: 'error' }); }
   } else if (action === 'toggle') {
     const isActive = btn.dataset.active === 'true';
     const subscription = mySubscriptions.find(x => x.id === id);
     try { await subscriptionsApi.update(id, { isActive: !isActive }, subscription?.version); showMySubscriptions(); }
-    catch (err) { alert(err.message); }
+    catch (err) { ETLSQLFeedback.notify(err.message, { title: 'Subscription not updated', tone: 'error' }); }
   } else if (action === 'history') {
     showSubscriptionHistory(id, btn.dataset.name);
   } else if (action === 'edit-params') {

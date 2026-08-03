@@ -18,6 +18,7 @@ import dataQualityQueue from './data-quality-queue.story.js';
 import portalResponsiveShell from './portal-responsive-shell.story.js';
 import portalStudio from './portal-studio.story.js';
 import portalOperations from './portal-operations.story.js';
+import feedback from './feedback.story.js';
 
 export const stories = [
   portalGovernance,
@@ -25,6 +26,7 @@ export const stories = [
   portalResponsiveShell,
   portalStudio,
   portalOperations,
+  feedback,
   scriptEditor,
   scriptEditorUnified,
   designer,

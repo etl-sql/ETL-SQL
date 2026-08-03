@@ -18,6 +18,7 @@
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
     const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+    const feedback = window.ETLSQLFeedback;
 
     let baselineManifest = null;
 
@@ -768,9 +769,9 @@
                     const base = window.__API_BASE__ || '';
                     const res = await fetch(`${base}/api/reports/${reportId}/request-refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                     const data = await res.json().catch(() => ({}));
-                    alert(data.message || 'Data refresh requested.');
+                    feedback.notify(data.message || 'Data refresh requested.', { title: 'Refresh requested', tone: 'success', auditAction: 'report.refresh.request' });
                 } catch (e) {
-                    alert('Request failed: ' + e.message);
+                    feedback.notify('Request failed: ' + e.message, { title: 'Refresh request failed', tone: 'error' });
                 }
             });
             actions.appendChild(refreshBtn);
@@ -783,7 +784,7 @@
         defaultViewBtn.addEventListener('click', async () => {
             const reportId = manifest.id || window.__REPORT_ID__;
             if (!reportId) {
-                alert('Report ID not found.');
+                feedback.notify('Report ID not found.', { title: 'Default view not saved', tone: 'error' });
                 return;
             }
             try {
@@ -794,12 +795,12 @@
                     body: JSON.stringify(parameters || {})
                 });
                 if (res.ok) {
-                    alert('Saved current slicers as your default view.');
+                    feedback.notify('Saved current slicers as your default view.', { title: 'Default view saved', tone: 'success', auditAction: 'report.saved-view.update' });
                 } else {
-                    alert('Failed to save default view.');
+                    feedback.notify('Failed to save default view.', { title: 'Default view not saved', tone: 'error' });
                 }
             } catch (e) {
-                alert('Error saving default view: ' + e.message);
+                feedback.notify('Error saving default view: ' + e.message, { title: 'Default view not saved', tone: 'error' });
             }
         });
         // Saving a default view needs the Portal's per-user saved-views API, which the VS Code
@@ -4295,7 +4296,7 @@
 
             if (isInteractive) {
                 postRunScript(scriptPath, finalParams).then(res => {
-                    if (res && res.message) alert(res.message);
+                    if (res && res.message) feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
                     if (res && res.refresh) {
                         fetchManifest().then(m => { if (m) renderManifest(m); });
                     }

@@ -150,14 +150,14 @@ export function createSecretsAdmin({ host, secretsApi }) {
                 </tr>`).join('')}</tbody>
             </table>`;
       } else if (btn.dataset.act === 'disable') {
-        if (!window.confirm(`Disable secret '${name}'? SECRET:${name} will fail until it is re-enabled.`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Disable secret '${name}'?`, { title: 'Disable secret', impact: `SECRET:${name} will fail until it is re-enabled.`, confirmLabel: 'Disable secret', danger: true, auditAction: 'admin.secret.disable' })) return;
         await secretsApi.disable(name);
         await load();
       } else if (btn.dataset.act === 'enable') {
         await secretsApi.enable(name);
         await load();
       } else if (btn.dataset.act === 'delete') {
-        if (!window.confirm(`Permanently delete secret '${name}'?`)) return;
+        if (!await window.ETLSQLFeedback.confirm(`Permanently delete secret '${name}'?`, { title: 'Delete secret', confirmLabel: 'Delete secret', danger: true, auditAction: 'admin.secret.delete' })) return;
         await secretsApi.remove(name);
         await load();
       }

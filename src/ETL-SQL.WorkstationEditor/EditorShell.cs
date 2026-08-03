@@ -37,6 +37,7 @@ internal static class EditorShell
 </head>
 <body>
   <div id="workbench"></div>
+  <script src="/feedback.js?v={{options.SessionToken}}"></script>
   <script type="module">
     import { createScriptEditorWorkbench } from '/designer/designer.js?v={{options.SessionToken}}';
     const token = new URLSearchParams(location.search).get('token') || '';
@@ -67,12 +68,12 @@ internal static class EditorShell
         dagUrl: '/api/script/dag',
         authFetch,
         onExit: async () => {
-          if (confirm('Stop Workstation Editor process and exit?')) {
+          if (await ETLSQLFeedback.confirm('Stop the Workstation Editor process and exit?', { title: 'Stop Workstation Editor', impact: 'The local editor host will shut down and unsaved work may be lost.', confirmLabel: 'Stop editor', danger: true, auditAction: 'workstation.exit' })) {
             try {
               await authFetch('/api/shutdown', { method: 'POST' });
               document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Segoe UI,sans-serif;color:#9da7b1;background:#101317;font-size:18px;">Workstation Editor host stopped. You may close this browser tab.</div>';
             } catch (e) {
-              alert('Shutdown failed: ' + e.message);
+              ETLSQLFeedback.notify('Shutdown failed: ' + e.message, { title: 'Workstation Editor not stopped', tone: 'error' });
             }
           }
         },
@@ -95,7 +96,7 @@ internal static class EditorShell
             });
             if (!res.ok) throw new Error(await res.text());
           } catch (e) {
-            alert('Save failed: ' + e.message);
+            ETLSQLFeedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' });
           }
         }
       });

@@ -129,6 +129,8 @@ export class VisualFlowPanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.js'));
         const designerCssUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.css'));
+        const feedbackUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'feedback.js'));
 
         const csp = [
             `default-src 'none'`,
@@ -168,6 +170,8 @@ export class VisualFlowPanel {
   <span id="flowStatus">Loading…</span>
 </div>
 <div id="flowRoot"></div>
+
+<script nonce="${nonce}" src="${feedbackUri}"></script>
 
 <script nonce="${nonce}">
   const vscodeApi = acquireVsCodeApi();

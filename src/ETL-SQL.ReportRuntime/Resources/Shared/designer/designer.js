@@ -27,6 +27,8 @@ function _h(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+const _feedback = globalThis.ETLSQLFeedback;
+
 const _TYPE_COLOR = {
     dataset:     '#10b981',
     visual:      '#3b82f6',
@@ -2337,7 +2339,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             }
         } catch (err) {
             console.error(err);
-            alert(`Error loading file: ${err.message}`);
+            _feedback.notify(`Error loading file: ${err.message}`, { title: 'File not loaded', tone: 'error' });
         }
     }
 
@@ -2423,7 +2425,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
                         if (titleEl) titleEl.textContent = f.name;
                     } catch (e) {
-                        alert('Failed to read file: ' + e.message);
+                        _feedback.notify('Failed to read file: ' + e.message, { title: 'File not loaded', tone: 'error' });
                     }
                 });
                 filesEl.appendChild(item);
@@ -2688,7 +2690,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 const commentInput = gitEl.querySelector('[data-git-comment]');
                 commitBtn?.addEventListener('click', async () => {
                     const comment = commentInput.value || '';
-                    if (!comment.trim()) { alert('Please enter a commit message.'); return; }
+                    if (!comment.trim()) { _feedback.notify('Enter a commit message before committing.', { title: 'Commit message required', tone: 'warning' }); commentInput.focus(); return; }
                     commitBtn.disabled = true;
                     try {
                         const cRes = await fetcher('/api/git/commit', {
@@ -2698,14 +2700,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         });
                         const cData = await cRes.json();
                         if (cData.committed) {
-                            alert(`Committed successfully! Rev: ${cData.sourceRevision || cData.rev || ''}`);
+                            _feedback.notify(`Revision ${cData.sourceRevision || cData.rev || ''} was committed.`, { title: 'Commit completed', tone: 'success', auditAction: 'designer.source.commit' });
                             await loadGit();
                             await loadFiles();
                         } else {
-                            alert(cData.message || 'Nothing to commit.');
+                            _feedback.notify(cData.message || 'Nothing to commit.', { title: 'No commit created', tone: 'info' });
                         }
                     } catch (e) {
-                        alert('Commit failed: ' + e.message);
+                        _feedback.notify('Commit failed: ' + e.message, { title: 'Commit failed', tone: 'error' });
                     } finally {
                         commitBtn.disabled = false;
                     }
@@ -2808,7 +2810,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             if (!confirmDestructive && isDestructiveRefusal(result)) {
                 setRunning(false);
                 resultsPanel.stopElapsed();
-                if (confirm(`${result.message}\n\nRun anyway?`)) {
+                if (await _feedback.confirm(result.message, { title: 'Run despite validation findings?', impact: 'Running may execute a script that did not pass validation.', confirmLabel: 'Run anyway', danger: true, auditAction: 'designer.run.override' })) {
                     await run(scope, true);
                 } else {
                     resultsPanel.replay([
@@ -2849,15 +2851,15 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 const writable = await activeFileHandle.createWritable();
                 await writable.write(editor.getValue());
                 await writable.close();
-                alert('Saved successfully!');
+                _feedback.notify('The script was saved.', { title: 'Saved', tone: 'success', auditAction: 'designer.file.save' });
             } catch (err) {
-                alert('Browser save failed: ' + err.message);
+                _feedback.notify('Browser save failed: ' + err.message, { title: 'Save failed', tone: 'error' });
             }
             return;
         }
 
         if (activeDirectoryHandle) {
-            const requestedPath = prompt('Save new script as', currentFilePath || 'new-script.etlsql');
+            const requestedPath = await _feedback.prompt('Choose a path for the new script.', { title: 'Save script as', label: 'Relative file path', value: currentFilePath || 'new-script.etlsql', required: true, pattern: /\.(?:etlsql|rptsql)$/i, patternMessage: 'Use an .etlsql or .rptsql filename.', confirmLabel: 'Save script', auditAction: 'designer.file.save-as' });
             if (!requestedPath) return;
             try {
                 activeFileHandle = await activeDirectoryHandle.getFileHandle(requestedPath, { create: true });
@@ -2870,9 +2872,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     titleEl.textContent = requestedPath;
                 }
                 await renderDirectoryTree(activeDirectoryHandle);
-                alert('Saved successfully!');
+                _feedback.notify('The script was saved.', { title: 'Saved', tone: 'success', auditAction: 'designer.file.save-as' });
             } catch (err) {
-                alert('Browser save failed: ' + err.message);
+                _feedback.notify('Browser save failed: ' + err.message, { title: 'Save failed', tone: 'error' });
             }
             return;
         }
@@ -2881,7 +2883,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             await opts.onSave?.(editor.getValue(), currentFilePath);
         } else {
             if (!currentFilePath) {
-                const requestedPath = prompt('Save new script as', 'new-script.etlsql');
+                const requestedPath = await _feedback.prompt('Choose a path for the new script.', { title: 'Save script as', label: 'Relative file path', value: 'new-script.etlsql', required: true, pattern: /\.(?:etlsql|rptsql)$/i, patternMessage: 'Use an .etlsql or .rptsql filename.', confirmLabel: 'Save script', auditAction: 'designer.file.save-as' });
                 if (!requestedPath) return;
                 currentFilePath = requestedPath;
                 const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
@@ -2900,7 +2902,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 await loadFiles();
             } catch (err) {
                 console.error(err);
-                alert(`Error saving file: ${err.message}`);
+                _feedback.notify(`Error saving file: ${err.message}`, { title: 'Save failed', tone: 'error' });
             }
         }
     }
@@ -4711,8 +4713,8 @@ export function createDesigner(container, opts = {}) {
         renderAll();
     }
 
-    function addDataset() {
-        const name = prompt('Dataset name (used as #name in rptsql):');
+    async function addDataset() {
+        const name = await _feedback.prompt('Name the dataset used by this report.', { title: 'Add dataset', label: 'Dataset name', required: true, pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, patternMessage: 'Start with a letter or underscore and use only letters, numbers, and underscores.', confirmLabel: 'Add dataset', auditAction: 'designer.dataset.add' });
         if (!name?.trim()) return;
         state.datasets.push({ id: 'ds_' + uid(), name: name.trim(), query: 'SELECT 1 AS Placeholder' });
         renderDatasets();
@@ -4950,9 +4952,9 @@ export function createDesigner(container, opts = {}) {
                 }
                 renderAll();
             } else {
-                alert(r?.error || 'Could not parse script.');
+                _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
             }
-        } catch (e) { alert(e.message); }
+        } catch (e) { _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' }); }
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
@@ -4993,7 +4995,7 @@ export function createDesigner(container, opts = {}) {
                 saveModal._script = script;
                 saveModal.style.display = 'flex';
             }
-        } catch (e) { alert('Save failed: ' + e.message); }
+        } catch (e) { _feedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' }); }
     }
 
     // Explicit, separately reported source-control step. Commits the last-saved script
@@ -5038,7 +5040,7 @@ export function createDesigner(container, opts = {}) {
             });
             saveModal.style.display = 'none';
             opts.onSave?.(created);
-        } catch (e) { alert('Save failed: ' + e.message); }
+        } catch (e) { _feedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' }); }
     }
 
     // ── Event wiring ──────────────────────────────────────────────────────────
@@ -5605,7 +5607,7 @@ export function createDesigner(container, opts = {}) {
     });
 
     saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });
-    saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => alert(e.message)));
+    saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => _feedback.notify(e.message, { title: 'Save failed', tone: 'error' })));
 
     // ── Initial render ────────────────────────────────────────────────────────
     renderAll();

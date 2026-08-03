@@ -42,7 +42,7 @@ const memoryStorage = (() => {
  * @param {Function} [opts.prepare]             Side-effects to run before each full render (nav state).
  * @param {Function} [opts.onModeChange]        Updates the host route when the user changes mode.
  * @param {boolean}  [opts.allowAudit]          Whether the administrator-only audit mode is visible.
- * @param {Function} [opts.promptFn]            Prompt used when naming a saved view.
+ * @param {Function} [opts.promptFn]            Async validated dialog used when naming a saved view.
  * @param {string}   [opts.viewKey]             Storage key for saved views.
  * @returns {{ render: Function, dispose: Function, state: Object }}
  */
@@ -61,7 +61,7 @@ export function createLineageCatalog(opts = {}) {
     prepare = () => {},
     onModeChange = () => {},
     allowAudit = true,
-    promptFn = (typeof window !== 'undefined' && window.prompt ? window.prompt.bind(window) : () => null),
+    promptFn = ((message, value) => window.ETLSQLFeedback.prompt(message, { title: 'Save lineage view', label: 'View name', value, required: true, confirmLabel: 'Save view', auditAction: 'lineage.view.save' })),
     viewKey = 'etlsql_lineage_views',
   } = opts;
 
@@ -114,8 +114,8 @@ export function createLineageCatalog(opts = {}) {
   function currentLineageView(name) {
     return { name, kind: state.kind, query: state.query, column: state.column, tagValue: state.tagValue, from: state.from, to: state.to };
   }
-  function saveCurrentLineageView() {
-    const name = promptFn('Saved view name', state.query || state.kind);
+  async function saveCurrentLineageView() {
+    const name = await promptFn('Name this saved lineage view.', state.query || state.kind);
     if (!name || !name.trim()) return;
     state.savedViews = loadLineageViews().filter(v => v.name !== name.trim());
     state.selectedView = name.trim();
