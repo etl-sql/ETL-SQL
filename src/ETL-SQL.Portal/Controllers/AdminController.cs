@@ -864,6 +864,31 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Identity-provider diagnostics ────────────────────────────────────────
+
+    /// <summary>
+    /// Identity-provider health: OIDC reachability and configuration findings, LDAP configuration,
+    /// what claim value each provider-managed group expects, whether federated users are landing in
+    /// groups, and whether anyone could still administer this Portal with the provider unreachable.
+    /// Configured secrets appear as presence flags, never values.
+    /// </summary>
+    [HttpGet("identity/diagnostics")]
+    public async Task<IActionResult> GetIdentityDiagnostics(
+        [FromServices] IdentityDiagnosticsService diagnostics, CancellationToken ct) =>
+        Ok(await diagnostics.BuildAsync(ct));
+
+    /// <summary>
+    /// Resolves claim values against the configured group mappings without anyone signing in, so a
+    /// mapping can be checked before a user discovers it is wrong by not having the access they
+    /// expected. Reads only; grants nothing.
+    /// </summary>
+    [HttpPost("identity/diagnostics/group-mapping-test")]
+    public async Task<IActionResult> TestGroupMapping(
+        [FromBody] GroupMappingTestRequest request,
+        [FromServices] IdentityDiagnosticsService diagnostics,
+        CancellationToken ct) =>
+        Ok(await diagnostics.TestGroupMappingAsync(request.ClaimValues ?? [], ct));
+
     // ── Access simulator ─────────────────────────────────────────────────────
 
     /// <summary>

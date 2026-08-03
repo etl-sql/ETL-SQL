@@ -258,8 +258,16 @@ documentation reconciliation, then release certification.
 
 #### Enterprise administration coverage
 
-- [ ] Add identity-provider diagnostics for reachability, claims/groups, sync health, and break-glass
+- [x] Add identity-provider diagnostics for reachability, claims/groups, sync health, and break-glass
       readiness without exposing client secrets.
+      `GET /api/admin/identity/diagnostics` reports OIDC reachability and startup validation findings,
+      LDAP configuration, the claim value each provider-managed group expects, how many federated
+      users are in no mapped group, and whether any active **local** administrator could sign in with
+      the provider unreachable. Configured secrets are presence flags; a test asserts the configured
+      secret value appears nowhere in the whole response.
+  - `POST /api/admin/identity/diagnostics/group-mapping-test` resolves claim values against the
+      mappings without anyone signing in, and names the unmatched ones — sign-in working while
+      authorization silently does not is the failure this catches.
 - [x] Add a Service Accounts page with scope, expiry, last use, owner, rotation/revocation, one-time
       secret display, and audit history.
 - [ ] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
