@@ -208,10 +208,23 @@ documentation reconciliation, then release certification.
 
 - [x] Build an Administration/Operations hub for service accounts, approvals, share/embed inventory,
       fleet status, metrics, and administrative service runs.
-- [ ] Add an isolation-safe Environments workflow that generates and validates deployment plans.
-  - [ ] Keep provisioning in a separately authorized control plane or exported package.
-  - [ ] Prove environment switching establishes separate sessions and never merges catalogs,
-        datasets, connections, secrets, or authoring history.
+- [x] Add an isolation-safe Environments workflow that generates and validates deployment plans.
+      `GET /api/admin/environments/plan?environmentId=&portBase=` derives every isolated resource,
+      port and key requirement from the environment id per Departmental_Isolation.md §3–§4 — which is
+      what makes a plan checkable rather than a document someone has to follow carefully.
+      `POST /api/admin/environments/validate` checks it against this Portal's own environment, the
+      environments named for fleet visibility, and the machine registry. Any shared resource is a
+      collision, not a warning: sharing one is enough to break isolation.
+  - [x] Keep provisioning in a separately authorized control plane or exported package. The Portal
+        generates plans and never applies them — an environment able to provision another is not
+        isolated from it — and the plan states that boundary in the artifact rather than leaving it
+        to the reader. Plans are also secret-free: keys are requirements at named configuration keys,
+        never generated and never valued, so a plan is safe to review, store, and hand over.
+  - [x] Prove environment switching establishes separate sessions and never merges catalogs,
+        datasets, connections, secrets, or authoring history. `EnvironmentIsolationTests` runs two
+        deployments and proves catalogs and search do not merge, a resource id from one is meaningless
+        in the other, and a token minted in one is refused by the other while still working where it
+        was minted.
 - [x] Complete Stewardship and Audit routes using durable evidence.
 - [x] Connect disposition/replay submissions to terminal job status.
 - [x] Add data-quality rule visibility and structured failure trends.
@@ -389,8 +402,13 @@ documentation reconciliation, then release certification.
   - The report answer and its explanation both come from `FolderPermissionService`, so the
       diagnostic cannot drift from the enforcement it describes.
   - Reading someone else's effective access is itself audited (`SIMULATE_ACCESS`).
-- [ ] Verify the Environments workflow preserves separate departmental processes, databases,
-      artifacts, key rings, identities, and endpoints.
+- [x] Verify the Environments workflow preserves separate departmental processes, databases,
+      artifacts, key rings, identities, and endpoints. `GET /api/admin/environments/current` reports
+      this environment against the isolation contract and links to the read-only fleet workspace.
+      Resources the process **cannot** observe from inside — a shared database login, two environments
+      under one OS account, whether a key is unique across environments — are reported as *unknown*
+      rather than assumed isolated. A verification that quietly assumes the answer is worse than one
+      that admits the gap.
 
 #### P1 — Accessibility and visual-system completion
 

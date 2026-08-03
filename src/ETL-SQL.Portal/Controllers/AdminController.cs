@@ -864,6 +864,68 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Departmental environments ────────────────────────────────────────────
+
+    /// <summary>
+    /// Generates a deployment plan for a departmental environment: every isolated resource, port,
+    /// and key requirement derived from the environment id.
+    ///
+    /// The Portal generates plans and never applies them. Creating databases, accounts, key rings
+    /// and endpoints belongs to a separately authorized deployment plane, because an environment
+    /// able to provision another is not isolated from it. The plan is also secret-free: keys appear
+    /// as requirements at named configuration keys and are never generated here.
+    /// </summary>
+    [HttpGet("environments/plan")]
+    public IActionResult GetEnvironmentPlan(
+        [FromServices] EnvironmentPlanService environments,
+        [FromQuery] string environmentId,
+        [FromQuery] int portBase = 5000)
+    {
+        if (!EnvironmentPlanService.IsValidEnvironmentId(environmentId))
+        {
+            return BadRequest(new
+            {
+                error = "environmentId must be a short lowercase DNS-safe token (a-z, 0-9, hyphen), "
+                    + "because it becomes hostnames, account names, and paths."
+            });
+        }
+
+        return Ok(environments.GeneratePlan(environmentId, portBase));
+    }
+
+    /// <summary>
+    /// Checks a proposed environment against what this Portal can see — its own environment, the
+    /// environments named for fleet visibility, and the machine registry. Any shared resource is a
+    /// collision rather than a warning: sharing one is enough to break isolation.
+    /// </summary>
+    [HttpPost("environments/validate")]
+    public async Task<IActionResult> ValidateEnvironmentPlan(
+        [FromServices] EnvironmentPlanService environments,
+        [FromBody] ValidateEnvironmentPlanRequest request,
+        CancellationToken ct)
+    {
+        if (!EnvironmentPlanService.IsValidEnvironmentId(request.EnvironmentId ?? ""))
+            return BadRequest(new { error = "environmentId must be a short lowercase DNS-safe token." });
+
+        var plan = environments.GeneratePlan(request.EnvironmentId!, request.PortBase ?? 0);
+        var validation = await environments.ValidateAsync(plan, ct);
+
+        await audit.LogAsync(CurrentUserId, "VALIDATE_ENVIRONMENT_PLAN", "Environment",
+            request.EnvironmentId,
+            validation.IsValid ? "no collisions" : $"{validation.Collisions.Count} collision(s)");
+
+        return Ok(validation);
+    }
+
+    /// <summary>
+    /// This environment measured against the isolation contract, and the link to read-only fleet
+    /// status. Resources the process cannot observe from inside — a shared database login, a shared
+    /// OS account — are reported as unknown rather than assumed isolated.
+    /// </summary>
+    [HttpGet("environments/current")]
+    public IActionResult GetCurrentEnvironment([FromServices] EnvironmentPlanService environments) =>
+        Ok(environments.DescribeCurrent());
+
     // ── Support bundle ───────────────────────────────────────────────────────
 
     /// <summary>
