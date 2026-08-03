@@ -32,4 +32,5 @@
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |
 | [v0.17.0 Code Review & Security Pass](v0.17.0-code-review.md) | **Reviewed:** 2026-07-26 · **Range:** `v0.16.0..HEAD` (191 commits, 268 files, +52k/-2.9k in `src`) |
 | [Flaky Tests — noted during v0.17.0 release, fix in v0.18.0](v0.17.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.17.0 release. Policy is unchanged from |
+| [Flaky Tests — noted during v0.18.0 development, fix in v0.19.0](v0.18.0-flaky-tests.md) | Tracking note for flaky tests hit while building v0.18.0. Same policy: stabilize the minimum to ship, record, fix in a dedicated pass. |
 | [v0.17.0 Performance Results — Scale Certification](v0.17.0-performance-results.md) | **Status:** Decision record. **There is no v0.17.0 performance regression.** Both certification |

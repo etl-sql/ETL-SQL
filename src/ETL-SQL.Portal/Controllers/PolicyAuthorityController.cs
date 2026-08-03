@@ -156,6 +156,30 @@ public class PolicyAuthorityController(
     // Retrieval responses are bound to the tenant/environment registered here, never to what a
     // caller claims; revocation makes the identity unusable immediately.
 
+    /// <summary>
+    /// What activating a policy version would do: which registered machines actually receive it,
+    /// whether anyone other than its author approved it, and whether its audit requirement is about
+    /// to start refusing mutations against a collector that is not healthy.
+    ///
+    /// Omit <c>version</c> to describe the currently active one.
+    /// </summary>
+    [HttpGet("impact")]
+    public async Task<IActionResult> GetImpact(
+        [FromServices] ETL_SQL.Portal.Services.PolicyImpactService impact,
+        [FromQuery] string tenant,
+        [FromQuery] string environment,
+        [FromQuery] string? version = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+            return BadRequest(new { error = "tenant and environment are required." });
+
+        var result = await impact.BuildAsync(tenant, environment, version, cancellationToken);
+        return result is null
+            ? NotFound(new { error = $"No policy version found for {tenant}/{environment}." })
+            : Ok(result);
+    }
+
     [HttpGet("machines")]
     public async Task<IActionResult> ListMachines(
         [FromQuery] string? tenant, [FromQuery] string? environment, CancellationToken cancellationToken)

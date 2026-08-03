@@ -110,6 +110,7 @@ builder.Services.AddScoped<OperationsPostureService>();
 builder.Services.AddScoped<DatasetKeyPostureService>();
 builder.Services.AddScoped<CredentialPostureService>();
 builder.Services.AddScoped<PortalSupportBundleService>();
+builder.Services.AddScoped<PolicyImpactService>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();
 builder.Services.AddSingleton<ETL_SQL.Core.Services.ILanguageService, GrammarLanguageService>();
 

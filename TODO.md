@@ -270,8 +270,23 @@ documentation reconciliation, then release certification.
       authorization silently does not is the failure this catches.
 - [x] Add a Service Accounts page with scope, expiry, last use, owner, rotation/revocation, one-time
       secret display, and audit history.
-- [ ] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
-      links to policy history.
+- [x] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
+      links to policy history. `GET /api/admin/policy-authority/impact?tenant=&environment=&version=`
+      answers the question asked immediately before pressing activate: **what happens when I do?**
+      Policy Authority had every verb — validate, publish, activate, canary, roll back — and no
+      consequence.
+  - **Fleet impact** separates registered from reachable: a machine not seen for over 24h will not
+      pick the policy up until it checks in, so a large stale count means the rollout is narrower
+      than the fleet count suggests.
+  - **Approval state** distinguishes a recorded reviewer from a second pair of eyes — a version whose
+      reviewer *is* its author is reported as unreviewed in substance.
+  - **Collector consequences**: activating a policy that requires remote audit delivery against an
+      unhealthy collector starts refusing mutations with HTTP 503. Both halves were already known
+      (the policy states its requirement, `AuditDeliveryGate` states deliverability); this joins them
+      so the answer is not discovered by activating.
+  - **Machine links**: each machine is listed with the version it actually receives — the canary
+      version when it is in the targeted group, the active one otherwise, `none (revoked)` when it
+      has been revoked.
 - [x] Show host enrollment/registration consistency, expiry, certificate posture, and remediation;
       keep enrollment/unenrollment on the host. In `GET /api/admin/operations/posture`: the host's own
       enrolment compared against the Portal machine registration (tenant and enrollment-id drift, a
