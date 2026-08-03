@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -268,6 +268,15 @@ namespace ETL_SQL.Connectors.Portal
             {
                 var limit = funcArgs.Length > 0 && int.TryParse(funcArgs[0], out var l) ? l : 100;
                 url = $"api/catalog/protected-data/suggestions?limit={limit}";
+            }
+            else if (cleanName.Equals("data_quality_rules", StringComparison.OrdinalIgnoreCase))
+            {
+                // Job-scoped rather than catalog-wide: rules are enforcement directives bound to the
+                // statement that declares them, so "which rules protect this column" is only
+                // answerable against the script a given job runs.
+                if (funcArgs.Length == 0)
+                    throw new ExecutionException("data_quality_rules requires a job name argument.");
+                url = $"api/data-quality/rules?jobName={Uri.EscapeDataString(funcArgs[0])}";
             }
             else
             {

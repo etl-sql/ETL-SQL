@@ -1,0 +1,3 @@
+### Added
+
+- Added `eng.data_quality_rules(job)` over a `PORTAL` connection, so a steward can ask which `@expect`/`@fail` rules protect each target and column in a job someone else runs, without shell access to the machine that runs it. It projects the same seven columns as the engine-local `eng.data_quality_rules` table, so one SELECT reads the same shape either way, and joins directly against `eng.data_quality_failures` to separate rules that are failing from rules that are protecting silently. The job name is required: rules bind to the statement that declares them, so there is no catalog-wide rule list.

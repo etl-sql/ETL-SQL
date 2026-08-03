@@ -115,6 +115,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.catalog_search()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.connection_config` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.connection_config](reference/eng/connection-config.md) |
 | `eng.data_quality_failures` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_failures](reference/eng/data-quality-failures.md) |
+| `eng.data_quality_rules` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_rules](reference/eng/data-quality-rules.md) |
 | `eng.data_quality_status` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.data_quality_status](reference/eng/data-quality-status.md) |
 | `eng.stewardship_gaps` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_gaps](reference/eng/stewardship-gaps.md) |
 | `eng.stewardship_score` | Diagnostics / Orchestrator | [Engine Catalog](reference/eng/README.md) | [eng.stewardship_score](reference/eng/stewardship-score.md) |
@@ -1041,6 +1042,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `eng.job_history` | Orch | Queryable virtual table for job execution history |
 | `eng.data_quality_status` | Orch | Current/local/remote counts-only run quality summary |
 | `eng.data_quality_failures` | Orch | Normalized rule-failure counts by run and target |
+| `eng.data_quality_rules` | Orch | Current-session `@expect`/`@fail` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's |
 | `eng.job_state` | Orch | Queryable virtual table for saved job-state key/value pairs |
 | `eng.host_metrics` | Orch | Queryable virtual table for recent host-utilization samples |
 | `eng.lineage_history` | Lineage | Cross-run catalog of lineage entries; qualify with a connection for remote Orchestrators |

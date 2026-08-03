@@ -357,8 +357,13 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 - [ ] Track disposition and replay jobs to a terminal state, or at minimum link each submission to
       durable job history.
 - [ ] Replace `ParseRuleFailures` display-string parsing with structured per-column run metrics.
-- [ ] Add a read-only Portal API and panel showing which rules protect each target/column.
-- [ ] Add `eng.data_quality_rules` and make it queryable through Portal `eng.*` access.
+- [x] Add a read-only Portal API and panel showing which rules protect each target/column.
+      `GET /api/data-quality/rules?jobName=` plus the rule inventory in the data-quality queue panel.
+- [x] Add `eng.data_quality_rules` and make it queryable through Portal `eng.*` access. The engine
+      table already existed; `eng.data_quality_rules(job)` now resolves over a `PORTAL` connection to
+      the same seven columns, so one SELECT reads the same shape beside the engine or against the
+      Portal. The job name is required — rules bind to the statement that declares them, so there is
+      no catalog-wide answer.
 - [ ] Measure preview-session startup and define an optimization threshold before enabling polling or
       dashboard refresh.
 - [ ] If the threshold is exceeded, add a bounded reusable/read-only preview path without weakening

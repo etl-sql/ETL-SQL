@@ -285,4 +285,66 @@ public sealed class ScriptedPortalImportTests
         var sessionsTable = sessionBatches[0];
         Assert.Contains("username", sessionsTable.ColumnNames);
     }
+
+    /// <summary>
+    /// <c>eng.data_quality_rules(job)</c> over a PORTAL connection answers "which rules protect this
+    /// column" from the Portal's own rule inventory, so a steward can join it against
+    /// <c>eng.data_quality_failures</c> without shell access to the machine that runs the job.
+    /// The projected columns match the engine-local <c>eng.data_quality_rules</c> table, so the same
+    /// SELECT reads the same shape whether it runs beside the engine or against the Portal.
+    /// </summary>
+    [Fact]
+    public async Task QueryPortalDataQualityRules_ProjectsTheEngineTableShape()
+    {
+        using var factory = new PortalWebFactory();
+        var connector = await ConnectAsAdminAsync(factory);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var jobName = $"portal_rules_{suffix}";
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", $"portal_rules_{suffix}.etlsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            SELECT Id /* @expect: 'NOT NULL, >= 0'; @fail: 'QUARANTINE'; */
+            INTO #clean FROM #source
+            ON FAILURE QUARANTINE TO #quarantine;
+            """);
+        await factory.Services.GetRequiredService<ETL_SQL.Core.Data.IJobHistoryStore>()
+            .SaveJobAsync(new ETL_SQL.Core.Data.JobDefinition(jobName, scriptPath, 1, "DAY", null, null, null));
+
+        var batches = new List<DataTable>();
+        await foreach (var batch in connector.WithTable($"eng.data_quality_rules('{jobName}')").ReadBatches())
+        {
+            batches.Add(batch);
+        }
+
+        var table = Assert.Single(batches);
+        foreach (var column in new[] { "targetTable", "targetColumn", "ruleTag", "rule", "action", "sourceFile", "line" })
+        {
+            Assert.Contains(column, table.ColumnNames);
+        }
+        Assert.Equal(2, table.Rows.Count);
+        Assert.All(table.Rows, row =>
+        {
+            Assert.Equal("#clean", row["targetTable"]);
+            Assert.Equal("Id", row["targetColumn"]);
+            Assert.Equal("@expect", row["ruleTag"]);
+            Assert.Equal("QUARANTINE", row["action"]);
+        });
+    }
+
+    /// <summary>
+    /// Rules are enforcement directives bound to the statement that declares them, so there is no
+    /// catalog-wide answer. Omitting the job must say so rather than quietly return nothing.
+    /// </summary>
+    [Fact]
+    public async Task QueryPortalDataQualityRules_WithoutAJobName_Fails()
+    {
+        using var factory = new PortalWebFactory();
+        var connector = await ConnectAsAdminAsync(factory);
+
+        var error = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+        {
+            await foreach (var _ in connector.WithTable("eng.data_quality_rules").ReadBatches()) { }
+        });
+
+        Assert.Contains("job name", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

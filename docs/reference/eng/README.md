@@ -37,7 +37,7 @@ ORDER BY connection_name;
 | [`eng.stewardship_score`](stewardship-score.md) | Transparent, versioned stewardship component scores by global, job, and table scope. |
 | [`eng.tables`](tables.md) | Table names exposed by active connections. |
 | [`eng.tags`](tags.md) | Lineage metadata tags. |
-| [`eng.data_quality_rules`](data-quality-rules.md) | Current-session `@expect`/`@fail` rules. |
+| [`eng.data_quality_rules`](data-quality-rules.md) | Current-session `@expect`/`@fail` rules; `eng.data_quality_rules(job)` over a `PORTAL` connection for another job's. |
 | [`eng.variables`](variables.md) | Session variables with sensitive values masked. |
 | [`eng.version`](version.md) | Engine version metadata. |
 | [`eng.views`](views.md) | Session view definitions. |
