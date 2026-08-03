@@ -276,7 +276,16 @@ documentation reconciliation, then release certification.
       keep enrollment/unenrollment on the host.
 - [ ] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
       plans.
-- [ ] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
+- [x] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
+      `GET /api/admin/audit/collector` reports queue depth, queued bytes, oldest pending age, terminal
+      failures, last attempt/success/error, and the thresholds a reading is compared against — the
+      signals existed in health/Prometheus/fleet status, which is fine for a dashboard and no use
+      mid-incident. Fail-closed state is produced by calling `AuditDeliveryGate` itself, so what is
+      reported is what would actually happen to the next mutation.
+  - `POST /api/admin/audit/collector/test-delivery` posts a synthetic event through the real
+      delivery path (same endpoint resolution, auth, and body shape — a probe with its own path
+      proves only the probe). It carries no audit content, echoes the endpoint without its query
+      string, redacts failures, and is itself audited.
 - [x] Add native service enablement, schedule, recipient, last/next run, outcome, and history views.
 - [ ] Show backup freshness and validation/restore-drill evidence while keeping custody and recovery
       outside the running Portal.

@@ -277,6 +277,63 @@ public sealed class AuditOutboxTransportService(
         return now.AddSeconds(lockSeconds).AddTicks(jitterTicks);
     }
 
+    /// <summary>
+    /// Posts a synthetic event to the configured collector and reports the outcome, without touching
+    /// the outbox.
+    ///
+    /// It goes through <see cref="PostBatchAsync"/> — the same endpoint resolution, the same
+    /// authentication, the same body shape as a real delivery. A probe that took its own path would
+    /// prove the probe works, not the delivery. The event carries no real audit content, so a
+    /// misconfigured endpoint receives nothing of consequence.
+    /// </summary>
+    public async Task<ETL_SQL.Portal.Models.AuditCollectorTestDeliveryDto> SendTestDeliveryAsync(
+        CancellationToken ct = default)
+    {
+        var started = clock.GetTimestamp();
+        int Elapsed() => (int)clock.GetElapsedTime(started).TotalMilliseconds;
+
+        if (string.IsNullOrWhiteSpace(config.Audit.TransportEndpoint))
+        {
+            return new(false, null, "No collector endpoint is configured.", null, Elapsed());
+        }
+
+        Uri endpoint;
+        try
+        {
+            endpoint = GetEndpointOrThrow();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new(false, null, ex.Message, null, Elapsed());
+        }
+
+        var probe = new AuditOutboxMessage
+        {
+            Action = "AUDIT_COLLECTOR_TEST_DELIVERY",
+            ResourceType = "AuditCollector",
+            OccurredAt = clock.GetUtcNow().UtcDateTime,
+            PayloadJson = """{"probe":true,"note":"Synthetic delivery test; carries no audit content."}"""
+        };
+
+        var described = $"{endpoint.Scheme}://{endpoint.Host}{(endpoint.IsDefaultPort ? "" : $":{endpoint.Port}")}{endpoint.AbsolutePath}";
+        try
+        {
+            using var response = await PostBatchAsync(endpoint, [probe], ct);
+            return new(
+                response.IsSuccessStatusCode,
+                (int)response.StatusCode,
+                response.IsSuccessStatusCode ? null : $"Collector returned {(int)response.StatusCode}.",
+                described,
+                Elapsed());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            log.LogWarning(ex, "Audit collector test delivery failed.");
+            // Redacted: a transport failure can echo a URL carrying a token.
+            return new(false, null, ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message), described, Elapsed());
+        }
+    }
+
     private Uri GetEndpointOrThrow()
     {
         if (!Uri.TryCreate(config.Audit.TransportEndpoint, UriKind.Absolute, out var endpoint))

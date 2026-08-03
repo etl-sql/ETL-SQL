@@ -864,6 +864,35 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Audit collector health ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Durable remote audit delivery, for an operator mid-incident: queue depth and age, terminal
+    /// failures, last attempt and last success, the thresholds a reading is compared against, and
+    /// whether the fail-closed policy is currently refusing mutations. The collector endpoint is
+    /// reported without its query string, which can carry a token.
+    /// </summary>
+    [HttpGet("audit/collector")]
+    public async Task<IActionResult> GetAuditCollectorHealth(
+        [FromServices] AuditCollectorHealthService health, CancellationToken ct) =>
+        Ok(await health.BuildAsync(ct));
+
+    /// <summary>
+    /// Posts a synthetic event to the configured collector through the real delivery path and
+    /// reports the outcome. The probe carries no audit content, so a misconfigured endpoint receives
+    /// nothing of consequence — and the attempt is itself audited, because reaching out to a
+    /// configured external endpoint on demand is an operator action worth recording.
+    /// </summary>
+    [HttpPost("audit/collector/test-delivery")]
+    public async Task<IActionResult> TestAuditCollectorDelivery(
+        [FromServices] AuditOutboxTransportService transport, CancellationToken ct)
+    {
+        var result = await transport.SendTestDeliveryAsync(ct);
+        await audit.LogAsync(CurrentUserId, "TEST_AUDIT_COLLECTOR_DELIVERY", "AuditCollector",
+            result.Endpoint, result.Delivered ? "delivered" : $"failed: {result.Error}");
+        return Ok(result);
+    }
+
     // ── Identity-provider diagnostics ────────────────────────────────────────
 
     /// <summary>
