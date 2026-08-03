@@ -1510,21 +1510,88 @@ public class AdminController(
 
     // ── Configuration export (P1.7) ───────────────────────────────────────────
 
-    /// <summary>Generates the declarative configuration bootstrap script (admin-only). Secrets
-    /// are emitted as ${...} placeholders and unsupported resources are listed in the summary.</summary>
-    [HttpGet("configuration/export")]
-    public async Task<IActionResult> ExportConfiguration(
+    /// <summary>
+    /// The export plan: what leaves this Portal, what will not, and what must be moved separately —
+    /// without the script body.
+    ///
+    /// The export endpoint already returned all of this in its audit line and none of it to the
+    /// caller, so the only way to find out what an export omitted was to read the file. Reviewing
+    /// before downloading is the point: the skipped list and the content manifest are the parts that
+    /// silently do not arrive at the target.
+    /// </summary>
+    [HttpGet("configuration/export/plan")]
+    public async Task<IActionResult> GetConfigurationExportPlan(
         [FromServices] ConfigurationExportService exporter,
         [FromQuery] string? orchestratorAlias = null)
     {
         var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
+        return Ok(new
+        {
+            planHash = ComputeExportPlanHash(export),
+            emitted = export.Emitted,
+            requiredSecrets = export.RequiredSecrets,
+            skipped = export.Skipped,
+            contentManifest = export.ContentManifest,
+            note = "Secrets are emitted as placeholders and never exported. Items under 'skipped' and "
+                + "'contentManifest' do not travel in the script and must be handled separately."
+        });
+    }
+
+    /// <summary>Generates the declarative configuration bootstrap script (admin-only). Secrets
+    /// are emitted as ${...} placeholders and unsupported resources are listed in the summary.
+    ///
+    /// Pass <paramref name="acknowledgedPlan"/> with the hash from <c>configuration/export/plan</c>
+    /// to make review binding: a stale hash means the configuration changed after it was reviewed,
+    /// and the download is refused rather than handing over something different from what was
+    /// approved. The audit records either the acknowledged plan or that none was.</summary>
+    [HttpGet("configuration/export")]
+    public async Task<IActionResult> ExportConfiguration(
+        [FromServices] ConfigurationExportService exporter,
+        [FromQuery] string? orchestratorAlias = null,
+        [FromQuery] string? acknowledgedPlan = null)
+    {
+        var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
+        var planHash = ComputeExportPlanHash(export);
+
+        if (!string.IsNullOrWhiteSpace(acknowledgedPlan)
+            && !string.Equals(acknowledgedPlan, planHash, StringComparison.OrdinalIgnoreCase))
+        {
+            await audit.LogAsync(CurrentUserId, "EXPORT_PORTAL_CONFIGURATION_REFUSED", "System", null,
+                $"acknowledged plan {acknowledgedPlan} is stale; current plan is {planHash}");
+            return Conflict(new
+            {
+                error = "The configuration changed after the plan was reviewed.",
+                acknowledgedPlan,
+                currentPlan = planHash
+            });
+        }
+
         await audit.LogAsync(CurrentUserId, "EXPORT_PORTAL_CONFIGURATION", "System", null,
             $"{export.RequiredSecrets.Count} secret placeholder(s), {export.Skipped.Count} skipped item(s), " +
-            $"{export.ContentManifest.Count} content item(s)");
+            $"{export.ContentManifest.Count} content item(s); plan={planHash}; " +
+            (string.IsNullOrWhiteSpace(acknowledgedPlan) ? "no plan acknowledged" : "plan acknowledged"));
         return File(
             Encoding.UTF8.GetBytes(export.Script),
             "text/plain; charset=utf-8",
             $"portal_bootstrap_{DateTime.UtcNow:yyyyMMdd_HHmm}.etlsql.txt");
+    }
+
+    /// <summary>
+    /// Identifies exactly what a reviewer saw. Derived from the plan contents rather than the script
+    /// text, so cosmetic churn does not invalidate a review while a real change to what would be
+    /// promoted always does.
+    /// </summary>
+    private static string ComputeExportPlanHash(ConfigurationExportService.ExportResult export)
+    {
+        var payload = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            export.Emitted,
+            export.RequiredSecrets,
+            export.Skipped,
+            contentManifest = export.ContentManifest.Select(item => $"{item.Kind}:{item.Logical}:{item.Action}")
+        });
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(payload)))[..16].ToLowerInvariant();
     }
 
     // ── Orchestrator connection settings ──────────────────────────────────────

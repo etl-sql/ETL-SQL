@@ -31,6 +31,31 @@ public class PortalConfig
     public PortalSourceControlConfig SourceControl { get; set; } = new();
     public PortalStudioConfig Studio { get; set; } = new();
     public PortalDesignerLimitsConfig DesignerLimits { get; set; } = new();
+    public PortalFleetConfig Fleet { get; set; } = new();
+}
+
+/// <summary>
+/// The environments a fleet operator can see from this Portal.
+///
+/// Fleet aggregation is deliberately read-only and cross-environment: it issues one scoped
+/// <c>GET /api/fleet/status</c> per environment and nothing else. Naming an environment here grants
+/// visibility, never authority — a departmental deployment is not administered from another one's
+/// Portal. See Departmental_Isolation.md.
+/// </summary>
+public class PortalFleetConfig
+{
+    public List<PortalFleetEnvironmentConfig> Environments { get; set; } = new();
+}
+
+/// <param name="BearerToken">
+/// A FleetReader-scoped token for that environment. Supports <c>SECRET:name</c> like other portal
+/// credentials, and is never echoed back by any endpoint — only its presence is reported.
+/// </param>
+public class PortalFleetEnvironmentConfig
+{
+    public string Name { get; set; } = "";
+    public string BaseUrl { get; set; } = "";
+    public string? BearerToken { get; set; }
 }
 
 public enum StudioDeploymentMode

@@ -31,6 +31,69 @@ public sealed class FleetStatusController(
     PortalConfig config,
     PortalNodeIdentity nodeIdentity) : ControllerBase
 {
+    /// <summary>
+    /// The read-only Fleet/Operations workspace: every configured environment polled at once, with
+    /// divergence findings, grouping, and an upgrade preflight or postflight report.
+    ///
+    /// The aggregation itself has existed for a while but had nothing to aggregate — no
+    /// configuration named the environments, so it was machinery with no way in. This is that way
+    /// in. It issues one scoped read-only GET per environment and nothing else: naming an
+    /// environment here grants visibility, never authority, and a departmental deployment is not
+    /// administered from another one's Portal. An unreachable environment is reported as
+    /// unreachable rather than failing the whole view, because a partial outage is exactly when the
+    /// view is needed.
+    /// </summary>
+    [HttpGet("workspace")]
+    public async Task<IActionResult> Workspace(
+        [FromServices] FleetHealthAggregator aggregator,
+        [FromQuery] string mode = "preflight",
+        [FromQuery] string? search = null,
+        [FromQuery] string? status = null,
+        [FromQuery] bool? reachable = null,
+        [FromQuery] bool? upgradeReady = null,
+        [FromQuery] string groupBy = "none",
+        CancellationToken ct = default)
+    {
+        var configured = config.Fleet.Environments
+            .Where(environment => !string.IsNullOrWhiteSpace(environment.Name)
+                && Uri.TryCreate(environment.BaseUrl, UriKind.Absolute, out _))
+            .ToList();
+
+        if (configured.Count == 0)
+        {
+            // An empty workspace and a misconfigured one look identical unless one says so.
+            return Ok(new
+            {
+                configured = false,
+                environments = Array.Empty<object>(),
+                message = "No fleet environments are configured. Add them under Portal:Fleet:Environments "
+                    + "with a FleetReader-scoped token for each."
+            });
+        }
+
+        if (!Enum.TryParse<FleetUpgradeReportMode>(mode, ignoreCase: true, out var reportMode))
+            return BadRequest(new { error = "mode must be 'preflight' or 'postflight'." });
+        if (!Enum.TryParse<FleetGroupBy>(groupBy, ignoreCase: true, out var grouping))
+            return BadRequest(new { error = $"groupBy must be one of: {string.Join(", ", Enum.GetNames<FleetGroupBy>())}." });
+
+        var descriptors = configured.Select(environment => new FleetEnvironmentDescriptor(
+            environment.Name, new Uri(environment.BaseUrl), environment.BearerToken));
+
+        var report = await aggregator.AggregateAsync(
+            descriptors,
+            new FleetViewOptions(search, status, reachable, upgradeReady, GroupBy: grouping),
+            ct);
+
+        return Ok(new
+        {
+            configured = true,
+            // Presence only: the per-environment tokens are credentials, not status.
+            credentialsConfigured = configured.Count(environment => !string.IsNullOrWhiteSpace(environment.BearerToken)),
+            report,
+            upgrade = FleetHealthAggregator.BuildUpgradeReport(report, reportMode)
+        });
+    }
+
     [HttpGet("status")]
     public async Task<IActionResult> Status(CancellationToken ct)
     {

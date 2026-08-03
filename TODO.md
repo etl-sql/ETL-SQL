@@ -301,11 +301,32 @@ documentation reconciliation, then release certification.
       and the restore itself stay on the host; only the evidence travels, and every finding names the
       command that fixes it.
 - [ ] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
-- [ ] Add a read-only Fleet/Operations workspace with compatibility, divergence, drain, migration,
-      and upgrade evidence.
+- [x] Add a read-only Fleet/Operations workspace with compatibility, divergence, drain, migration,
+      and upgrade evidence. `GET /api/fleet/workspace` (FleetReader or Admin) polls every configured
+      environment at once and returns the merged report — compatibility metadata, policy/config/version
+      divergence findings, migration state, grouping and filtering — plus an upgrade **preflight or
+      postflight** report.
+  - `FleetHealthAggregator` had been built but had nothing to aggregate: no configuration named the
+      environments, so it was machinery with no way in. `Portal:Fleet:Environments` is that way in.
+  - Naming an environment grants **visibility, never authority**: one scoped read-only GET per
+      environment and nothing else. Per-environment tokens are never echoed, only counted, and an
+      unreachable environment is reported as unreachable rather than failing the whole view — a
+      partial outage is exactly when the view is needed.
 - [ ] Add guarded dataset-key inventory, rotation preflight/progress/verification, and rollback
       guidance without displaying key material.
-- [ ] Add guided secret-free configuration export, target-plan validation, diff, approval, and audit.
+- [x] Add guided secret-free configuration export, target-plan validation, diff, approval, and audit.
+  - `GET /api/admin/configuration/export/plan` returns what leaves this Portal, what will not, and
+      what must be moved separately — **without** the script body. The export endpoint already
+      computed all of it and put it in the audit line only, so the only way to learn what an export
+      omitted was to read the file.
+  - `POST /api/admin/configuration/validate` now returns a per-resource plan of `Create`/`Match`/
+      `Collision` alongside its findings. Findings carry only collisions, because that is what needs
+      a decision; a plan needs the whole picture, or an operator cannot tell an empty target from an
+      identical one.
+  - Approval is a plan hash: `export?acknowledgedPlan=<hash>` **409s** when the configuration changed
+      after review, so review is binding when used rather than advisory. The hash is derived from the
+      plan contents, not the script text, so cosmetic churn does not invalidate a review. The audit
+      records the acknowledged plan, or that none was.
 - [x] Add an access simulator explaining roles, groups, ACLs, connection grants, Studio capability,
       and RLS outcomes without returning protected rows.
       `GET /api/admin/access-simulator/user/{id}?reportId=&datasetId=` composes every authority into

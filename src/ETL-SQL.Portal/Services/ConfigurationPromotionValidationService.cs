@@ -12,7 +12,22 @@ namespace ETL_SQL.Portal.Services;
 public sealed partial class ConfigurationPromotionValidationService(PortalDbContext db)
 {
     public sealed record Finding(string Code, string Severity, string Resource, string Message);
-    public sealed record Result(IReadOnlyList<Finding> Findings, IReadOnlyList<string> AppliedBindings)
+
+    /// <summary>
+    /// What promoting this bootstrap would do to one resource on <em>this</em> target.
+    /// </summary>
+    /// <param name="Action">
+    /// <c>Create</c> - absent here; <c>Match</c> - already present and identical, so promotion is a
+    /// no-op for it; <c>Collision</c> - present and different, which promotion would overwrite.
+    /// The findings list carries only collisions, because that is what needs a decision. A plan needs
+    /// the whole picture, or an operator cannot tell an empty target from an identical one.
+    /// </param>
+    public sealed record PlanEntry(string Kind, string Name, string Action);
+
+    public sealed record Result(
+        IReadOnlyList<Finding> Findings,
+        IReadOnlyList<string> AppliedBindings,
+        IReadOnlyList<PlanEntry>? Plan = null)
     {
         public bool IsValid => Findings.All(f => f.Severity != "Error");
     }
@@ -49,6 +64,7 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
         if (findings.Count > 0) return new(findings, applied);
 
         var statements = Flatten(parsed.Statements).ToArray();
+        var plan = new List<PlanEntry>();
         AddDuplicateFindings(statements, findings);
         foreach (var statement in statements)
         {
@@ -57,37 +73,44 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
             {
                 case CreatePortalGroupStatement group:
                     var existingGroup = await db.Groups.AsNoTracking().SingleOrDefaultAsync(g => g.Name == group.Name, ct);
-                    if (existingGroup is not null &&
+                    var groupCollides = existingGroup is not null &&
                         (!Same(existingGroup.Description, group.Description)
                          || !Same(existingGroup.Provider, group.Provider ?? "Local")
-                         || !Same(existingGroup.AdGroup, group.AdGroup)))
-                        Collision(findings, "group", group.Name);
+                         || !Same(existingGroup.AdGroup, group.AdGroup));
+                    if (groupCollides) Collision(findings, "group", group.Name);
+                    plan.Add(Planned("group", group.Name, existingGroup is not null, groupCollides));
                     break;
                 case CreatePortalUserStatement user:
                     var existingUser = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.UserName == user.Username, ct);
+                    var userCollides = false;
                     if (existingUser is not null)
                     {
                         var role = await (from ur in db.UserRoles
                                           join r in db.Roles on ur.RoleId equals r.Id
                                           where ur.UserId == existingUser.Id
                                           select r.Name).FirstOrDefaultAsync(ct);
-                        if (!Same(existingUser.Email, user.Email) || !Same(role, user.Role)
-                            || !Same(existingUser.Provider, user.Provider ?? "Local"))
-                            Collision(findings, "user", user.Username);
+                        userCollides = !Same(existingUser.Email, user.Email) || !Same(role, user.Role)
+                            || !Same(existingUser.Provider, user.Provider ?? "Local");
+                        if (userCollides) Collision(findings, "user", user.Username);
                     }
+                    plan.Add(Planned("user", user.Username, existingUser is not null, userCollides));
                     break;
                 case CreatePortalFolderStatement folder:
                     var existingFolder = await db.Folders.AsNoTracking().SingleOrDefaultAsync(f => f.Path == folder.Path, ct);
+                    var folderCollides = false;
                     if (existingFolder is not null && folder.CatalogOwner is not null)
                     {
                         var owner = await db.Users.AsNoTracking().Where(u => u.Id == existingFolder.OwnerId)
                             .Select(u => u.UserName).SingleOrDefaultAsync(ct);
-                        if (!Same(owner, folder.CatalogOwner)) Collision(findings, "folder", folder.Path);
+                        folderCollides = !Same(owner, folder.CatalogOwner);
+                        if (folderCollides) Collision(findings, "folder", folder.Path);
                     }
+                    plan.Add(Planned("folder", folder.Path, existingFolder is not null, folderCollides));
                     break;
                 case CreateConnectionStatement connection:
                     var existingConnection = await db.PortalSharedConnections.AsNoTracking()
                         .SingleOrDefaultAsync(c => c.Alias == connection.name, ct);
+                    var connectionCollides = false;
                     if (existingConnection is not null)
                     {
                         var desired = connection.options?.ToDictionary(pair => pair.Key,
@@ -95,29 +118,41 @@ public sealed partial class ConfigurationPromotionValidationService(PortalDbCont
                             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                         var current = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(existingConnection.OptionsJson)
                             ?? new Dictionary<string, string>();
-                        if (!Same(existingConnection.ConnectorType, connection.type) || !DictionaryEqual(current, desired))
-                            Collision(findings, "connection", connection.name);
+                        connectionCollides = !Same(existingConnection.ConnectorType, connection.type)
+                            || !DictionaryEqual(current, desired);
+                        if (connectionCollides) Collision(findings, "connection", connection.name);
                     }
+                    plan.Add(Planned("connection", connection.name, existingConnection is not null, connectionCollides));
                     break;
                 case PublishPortalReportStatement report:
                     var existingReport = await db.Reports.AsNoTracking().Include(r => r.Folder)
                         .SingleOrDefaultAsync(r => !r.IsDeleted && r.Name == report.ReportName && r.Folder.Path == report.FolderPath, ct);
+                    var reportCollides = false;
                     if (existingReport is not null)
                     {
                         var owner = await db.Users.AsNoTracking().Where(u => u.Id == existingReport.CreatedBy)
                             .Select(u => u.UserName).SingleOrDefaultAsync(ct);
-                        if (!Same(existingReport.ScriptPath, report.ScriptPath)
+                        reportCollides = !Same(existingReport.ScriptPath, report.ScriptPath)
                             || !Same(existingReport.Description, report.Description)
-                            || (report.CatalogOwner is not null && !Same(owner, report.CatalogOwner)))
-                            Collision(findings, "report", $"{report.FolderPath}/{report.ReportName}");
+                            || (report.CatalogOwner is not null && !Same(owner, report.CatalogOwner));
+                        if (reportCollides) Collision(findings, "report", $"{report.FolderPath}/{report.ReportName}");
                     }
+                    plan.Add(Planned("report", $"{report.FolderPath}/{report.ReportName}",
+                        existingReport is not null, reportCollides));
                     break;
             }
         }
         foreach (var unused in (bindings ?? new Dictionary<string, string>()).Keys.Except(applied, StringComparer.OrdinalIgnoreCase))
             findings.Add(new("PV005", "Warning", $"binding:{unused}", "Binding did not match the bootstrap."));
-        return new(findings.OrderBy(f => f.Code).ThenBy(f => f.Resource, StringComparer.OrdinalIgnoreCase).ToArray(), applied);
+        return new(
+            findings.OrderBy(f => f.Code).ThenBy(f => f.Resource, StringComparer.OrdinalIgnoreCase).ToArray(),
+            applied,
+            [.. plan.OrderBy(entry => entry.Kind, StringComparer.Ordinal)
+                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)]);
     }
+
+    private static PlanEntry Planned(string kind, string name, bool exists, bool collides) =>
+        new(kind, name, !exists ? "Create" : collides ? "Collision" : "Match");
 
     private static IEnumerable<Statement> Flatten(IEnumerable<Statement> statements)
     {
