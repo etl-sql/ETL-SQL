@@ -2518,3 +2518,45 @@ body.vscode-dark .cm-editor .cm-line::selection {
     pointer-events: none;
     z-index: 100;
 }
+
+/* Designer discovery, hierarchy, and laptop/tablet ergonomics. */
+.etlsql-designer { grid-template-rows: auto minmax(0, 1fr); }
+.etlsql-designer-topbar { min-height: 48px; padding-block: 6px; }
+.etlsql-dsgn-palette-discovery { position: sticky; top: -8px; z-index: 3; padding: 12px 10px 10px; border-bottom: 1px solid var(--portal-border, #d9e0ea); background: var(--portal-surface, #fff); }
+.etlsql-dsgn-palette-discovery > label { display: block; margin-bottom: 7px; color: var(--portal-text, #172033); font-size: .8rem; font-weight: 700; }
+.etlsql-dsgn-palette-search-row { display: flex; align-items: center; gap: 6px; }
+.etlsql-dsgn-palette-search-row input { min-width: 0; width: 100%; padding: 7px 9px; border: 1px solid var(--portal-border, #d9e0ea); border-radius: var(--portal-radius-sm, 6px); background: var(--portal-bg, #fff); color: var(--portal-text, #172033); font: inherit; font-size: .76rem; }
+.etlsql-dsgn-palette-search-row input:focus-visible { outline: 2px solid var(--portal-focus-ring, #60a5fa); outline-offset: 1px; }
+.etlsql-dsgn-palette-search-row span { min-width: 30px; color: var(--portal-muted, #7a8798); font-size: .68rem; text-align: right; }
+.etlsql-dsgn-section-hdr > span:last-child { color: var(--portal-text-soft, #46556c); font-weight: 500; }
+.etlsql-dsgn-section-action { border: 0; background: transparent; color: var(--portal-accent, #2563eb); font: inherit; font-weight: 700; text-transform: none; cursor: pointer; }
+.etlsql-dsgn-palette-btn { display: flex; align-items: center; gap: 7px; background: var(--portal-surface-subtle, #f8fafc); color: var(--portal-text, #172033); border: 1px solid var(--portal-border-soft, #e8edf4); text-align: left; opacity: 1; transition: border-color .15s, background-color .15s; }
+.etlsql-dsgn-palette-btn:hover { border-color: var(--vc, #64748b); background: color-mix(in srgb, var(--vc, #64748b) 8%, var(--portal-surface, #fff)); }
+.etlsql-dsgn-palette-btn:focus-visible { outline: 2px solid var(--portal-focus-ring, #60a5fa); outline-offset: 1px; }
+.etlsql-dsgn-palette-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 999px; background: var(--vc, #64748b); }
+.etlsql-dsgn-palette-btn[hidden], .etlsql-dsgn-palette-section[hidden] { display: none; }
+.etlsql-dsgn-canvas-empty { flex-direction: column; gap: 7px; }
+.etlsql-dsgn-canvas-empty strong { color: var(--portal-text, #172033); font-size: 1rem; }
+.etlsql-dsgn-canvas-empty span { max-width: 360px; text-align: center; }
+.etlsql-dsgn-canvas-empty button { margin-top: 5px; padding: 7px 12px; border: 1px solid var(--portal-accent, #2563eb); border-radius: var(--portal-radius-sm, 6px); background: var(--portal-accent, #2563eb); color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+.etlsql-dsgn-sidebar-empty { display: grid; gap: 3px; padding: 10px 12px 12px; color: var(--portal-muted, #7a8798); font-size: .74rem; line-height: 1.4; }
+.etlsql-dsgn-sidebar-empty strong { color: var(--portal-text-soft, #46556c); font-size: .76rem; }
+
+@media (max-width: 1280px) {
+    .etlsql-designer { grid-template-columns: 196px minmax(0, 1fr) 250px; }
+    .etlsql-dsgn-name-input { width: 150px; }
+    .etlsql-designer-topbar { flex-wrap: wrap; row-gap: 5px; }
+    .etlsql-designer-pages { min-width: 130px; }
+    .etlsql-designer.split-screen { grid-template-columns: 196px minmax(330px, .8fr) minmax(360px, 1fr) 250px; }
+}
+
+@media (max-width: 900px) {
+    .etlsql-designer { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: auto minmax(300px, 1fr) minmax(210px, 38vh); grid-template-areas: "topbar topbar" "sidebar canvas" "sidebar props"; }
+    .etlsql-designer-props { border-left: 0; border-top: 1px solid var(--portal-border, #d9e0ea); }
+    .etlsql-designer-topbar .etlsql-tool-btn-labelled span { display: none; }
+    .etlsql-designer-topbar .etlsql-tool-btn-labelled { padding-inline: 7px; }
+    .etlsql-theme-select { max-width: 96px; }
+    .etlsql-dsgn-palette { grid-template-columns: 1fr; }
+    .etlsql-designer.split-screen { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: auto minmax(280px, 1fr) minmax(250px, 42vh); grid-template-areas: "topbar topbar" "sidebar canvas" "sidebar script"; }
+    .etlsql-designer.split-screen .etlsql-designer-props { display: none; }
+}

@@ -88,6 +88,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Improved the shared visual Designer with searchable grouped visual discovery, clearer neutral
+  palette hierarchy, labelled authoring actions, actionable dataset/page/canvas empty states, and
+  responsive laptop/tablet layouts that retain both canvas and inspector access.
+
 - Added a shared accessible feedback system across Portal, ReportPlayer, Workstation, and VS Code
   report surfaces. Native browser alerts, prompts, and confirmations were replaced with live-region
   toasts and focus-trapped dialogs that provide validation, destructive-impact text, and

@@ -117,10 +117,10 @@ another set of isolated capabilities.
    and focus-trapped dialogs. Password reset, destructive changes, policy rollout, file naming,
    dataset naming, and source-control actions include validation, impact text, and non-secret
    audit-action events.
-6. **Polish the visual designer without reducing its power.** Group or search the long visual
-   palette, replace the rainbow of equally weighted buttons with clearer hierarchy, label the
-   icon-only toolbar, improve dataset/on-page empty states, and make the canvas/inspector useful at
-   laptop and tablet widths.
+6. [x] **Polish the visual designer without reducing its power.** The full visual library is now
+   searchable and grouped, neutral palette actions retain small type-color markers, primary
+   toolbar actions have visible labels, empty datasets/pages/canvases explain the next action, and
+   laptop/tablet layouts preserve usable canvas and inspector space.
 
 #### Studio authorization model
 

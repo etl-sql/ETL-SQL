@@ -3514,12 +3514,12 @@ export function createDesigner(container, opts = {}) {
     const topbar = document.createElement('div');
     topbar.className = 'etlsql-designer-topbar';
     topbar.innerHTML = `
-        ${toolbarButton({ attr: 'id="dsgn-back"', icon: 'back', title: 'Back to reports' })}
-        <input id="dsgn-name" class="etlsql-dsgn-name-input" type="text" placeholder="Report name" />
+        ${toolbarButton({ attr: 'id="dsgn-back"', icon: 'back', title: 'Back to reports', label: 'Reports' })}
+        <input id="dsgn-name" class="etlsql-dsgn-name-input" type="text" placeholder="Report name" aria-label="Report name" />
         <div class="etlsql-designer-pages" id="dsgn-pages"></div>
         <span class="etlsql-toolbar-divider"></span>
-        ${toolbarButton({ attr: 'id="dsgn-add-page"', icon: 'addPage', title: 'Add page' })}
-        ${toolbarButton({ attr: 'id="dsgn-tidy"', icon: 'tidy', title: 'Tidy layout' })}
+        ${toolbarButton({ attr: 'id="dsgn-add-page"', icon: 'addPage', title: 'Add page', label: 'Page' })}
+        ${toolbarButton({ attr: 'id="dsgn-tidy"', icon: 'tidy', title: 'Tidy layout', label: 'Tidy' })}
         <select id="dsgn-theme-select" class="etlsql-theme-select" title="Select canvas theme">
             <option value="light">Light</option>
             <option value="dark">Dark</option>
@@ -3532,13 +3532,13 @@ export function createDesigner(container, opts = {}) {
             <button type="button" id="dsgn-design-mode" role="tab" aria-selected="true" class="active">Design</button>
             <button type="button" id="dsgn-code-mode" role="tab" aria-selected="false">Code</button>
         </div>
-        ${toolbarButton({ attr: 'id="dsgn-split-toggle"', icon: 'split', title: 'Show Code and Design together' })}
-        ${toolbarButton({ attr: 'id="dsgn-preview-toggle"', icon: 'preview', title: 'Preview report' })}
+        ${toolbarButton({ attr: 'id="dsgn-split-toggle"', icon: 'split', title: 'Show Code and Design together', label: 'Split' })}
+        ${toolbarButton({ attr: 'id="dsgn-preview-toggle"', icon: 'preview', title: 'Preview report', label: 'Preview' })}
         <span class="etlsql-toolbar-divider"></span>
-        ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', primary: true })}
-        ${toolbarButton({ attr: 'id="dsgn-commit" style="display:none"', icon: 'commit', title: 'Commit saved script to source control' })}
+        ${toolbarButton({ attr: 'id="dsgn-save"', icon: 'save', title: 'Save report', label: 'Save', primary: true })}
+        ${toolbarButton({ attr: 'id="dsgn-commit" style="display:none"', icon: 'commit', title: 'Commit saved script to source control', label: 'Commit' })}
         <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
-        ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing' })}
+        ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing', label: 'Cancel' })}
     `;
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
@@ -3559,15 +3559,22 @@ export function createDesigner(container, opts = {}) {
     // Sidebar
     const sidebar = document.createElement('div');
     sidebar.className = 'etlsql-designer-sidebar';
-    let sidebarHtml = '';
+    let sidebarHtml = `
+        <div class="etlsql-dsgn-palette-discovery">
+            <label for="dsgn-palette-search">Add a visual</label>
+            <div class="etlsql-dsgn-palette-search-row">
+                <input id="dsgn-palette-search" type="search" placeholder="Search ${VTYPES.length} visual types" autocomplete="off" />
+                <span id="dsgn-palette-count" aria-live="polite">${VTYPES.length}</span>
+            </div>
+        </div>`;
     for (const cat of VCATEGORIES) {
         sidebarHtml += `
-            <div class="etlsql-dsgn-section">
-                <div class="etlsql-dsgn-section-hdr">${cat.name}</div>
+            <div class="etlsql-dsgn-section etlsql-dsgn-palette-section" data-palette-category="${esc(cat.name)}">
+                <div class="etlsql-dsgn-section-hdr"><span>${cat.name}</span><span>${cat.types.length}</span></div>
                 <div class="etlsql-dsgn-palette">
                     ${cat.types.map(([type, color]) => `
-                        <button class="etlsql-dsgn-palette-btn" data-vtype="${type}" style="--vc: ${color}" title="Add ${type}">
-                            ${type}
+                        <button class="etlsql-dsgn-palette-btn" data-vtype="${type}" data-search="${type} ${cat.name}" style="--vc: ${color}" title="Add ${type}" aria-label="Add ${type} visual">
+                            <span class="etlsql-dsgn-palette-dot" aria-hidden="true"></span><span>${type}</span>
                         </button>
                     `).join('')}
                 </div>
@@ -3577,7 +3584,7 @@ export function createDesigner(container, opts = {}) {
     sidebarHtml += `
         <div class="etlsql-dsgn-section">
             <div class="etlsql-dsgn-section-hdr">
-                Datasets <button class="btn btn-xs" id="dsgn-add-ds">+</button>
+                Datasets <button class="etlsql-dsgn-section-action" id="dsgn-add-ds" type="button">+ Add</button>
             </div>
             <div id="dsgn-ds-list"></div>
         </div>
@@ -3588,6 +3595,30 @@ export function createDesigner(container, opts = {}) {
     `;
     sidebar.innerHTML = sidebarHtml;
     root.appendChild(sidebar);
+
+    const paletteSearch = sidebar.querySelector('#dsgn-palette-search');
+    const paletteCount = sidebar.querySelector('#dsgn-palette-count');
+    function filterPalette() {
+        const query = paletteSearch.value.trim().toLowerCase();
+        let visible = 0;
+        for (const section of sidebar.querySelectorAll('[data-palette-category]')) {
+            let sectionVisible = 0;
+            for (const button of section.querySelectorAll('[data-vtype]')) {
+                const matches = !query || button.dataset.search.toLowerCase().includes(query);
+                button.hidden = !matches;
+                if (matches) { visible++; sectionVisible++; }
+            }
+            section.hidden = sectionVisible === 0;
+        }
+        paletteCount.textContent = query ? `${visible} found` : String(VTYPES.length);
+    }
+    paletteSearch.addEventListener('input', filterPalette);
+    paletteSearch.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && paletteSearch.value) {
+            paletteSearch.value = '';
+            filterPalette();
+        }
+    });
 
     // Canvas
     const canvasWrap = document.createElement('div');
@@ -4090,7 +4121,7 @@ export function createDesigner(container, opts = {}) {
         if (!visuals.length) {
             const ph = document.createElement('div');
             ph.className = 'etlsql-dsgn-canvas-empty';
-            ph.textContent = 'Click a visual type in the sidebar to add it here';
+            ph.innerHTML = `<strong>Build your first visual</strong><span>Search the visual library, or start with a familiar chart.</span><button type="button" data-empty-vtype="BAR">+ Add bar chart</button>`;
             canvasGrid.appendChild(ph);
             return;
         }
@@ -4164,6 +4195,11 @@ export function createDesigner(container, opts = {}) {
         const containers = visuals.filter(v => v.type === 'CONTAINER');
         const rootVisuals = visuals.filter(v => !v.containerId || !containers.some(c => c.id === v.containerId));
 
+        if (!rootVisuals.length) {
+            tree.innerHTML = '<div class="etlsql-dsgn-sidebar-empty"><strong>No visuals on this page</strong><span>Add one from the visual library above.</span></div>';
+            return;
+        }
+
         for (const v of rootVisuals) {
             const item = document.createElement('div');
             item.className = 'etlsql-dsgn-tree-item' + (v.id === selVisualId ? ' selected' : '');
@@ -4189,6 +4225,10 @@ export function createDesigner(container, opts = {}) {
     function renderDatasets() {
         const list = sidebar.querySelector('#dsgn-ds-list');
         list.innerHTML = '';
+        if (!state.datasets.length) {
+            list.innerHTML = '<div class="etlsql-dsgn-sidebar-empty"><strong>No datasets yet</strong><span>Add a dataset to expose fields for mappings.</span></div>';
+            return;
+        }
         for (const ds of state.datasets) {
             const isExpanded = expandedDsIds.has(ds.id);
             const row = document.createElement('div');
@@ -5585,6 +5625,8 @@ export function createDesigner(container, opts = {}) {
     }
 
     canvasGrid.addEventListener('click', e => {
+        const emptyAdd = e.target.closest('[data-empty-vtype]');
+        if (emptyAdd) { addVisual(emptyAdd.dataset.emptyVtype); return; }
         const del = e.target.closest('[data-del]');
         if (del) { deleteVisual(del.dataset.del); return; }
         const card = e.target.closest('.etlsql-dsgn-visual-card');

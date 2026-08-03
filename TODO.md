@@ -212,7 +212,7 @@ documentation reconciliation, then release certification.
 - [x] Add data-quality rule visibility and structured failure trends.
 - [x] Use one sanitized Markdown renderer for Docs and connector Help.
 - [x] Replace native browser alerts/prompts/confirms with accessible, auditable feedback and dialogs.
-- [ ] Improve designer palette discovery, action hierarchy, toolbar labels, empty states, and
+- [x] Improve designer palette discovery, action hierarchy, toolbar labels, empty states, and
       laptop/tablet layouts.
 
 #### Studio authorization and controlled publishing
@@ -357,3 +357,6 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
       dashboard refresh.
 - [ ] If the threshold is exceeded, add a bounded reusable/read-only preview path without weakening
       parsing, linting, policy, RLS, timeout, row-cap, or redaction guarantees.
+
+## Documentation
+- [ ]
