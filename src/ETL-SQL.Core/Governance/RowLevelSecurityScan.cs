@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace ETL_SQL.Core.Governance;
@@ -15,7 +16,20 @@ public static class RowLevelSecurityScan
     private static readonly string[] IdentityTokens =
         { "@@CURRENT_USER", "@@REAL_USER", "@@IS_ADMIN", "HAS_GROUP", "HAS_ROLE", "USER_GROUPS", "USER_ROLES" };
 
-    public static bool ReferencesIdentity(string? scriptText) =>
-        !string.IsNullOrEmpty(scriptText)
-        && IdentityTokens.Any(token => scriptText.Contains(token, StringComparison.OrdinalIgnoreCase));
+    public static bool ReferencesIdentity(string? scriptText) => IdentityReferences(scriptText).Count > 0;
+
+    /// <summary>
+    /// The identity tokens the script actually mentions, in a stable order.
+    ///
+    /// <see cref="ReferencesIdentity"/> answers the host's question — cache this per viewer or not.
+    /// This answers an operator's: <em>which</em> identity does the report filter on? "Restricted by
+    /// HAS_GROUP" is something an administrator can reason about; "identity-sensitive: true" is not.
+    /// Same conservative raw-text scan, so the same over-flagging caveat applies.
+    /// </summary>
+    public static IReadOnlyList<string> IdentityReferences(string? scriptText) =>
+        string.IsNullOrEmpty(scriptText)
+            ? []
+            : [.. IdentityTokens
+                .Where(token => scriptText.Contains(token, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(token => token, StringComparer.Ordinal)];
 }

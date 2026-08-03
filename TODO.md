@@ -278,8 +278,18 @@ documentation reconciliation, then release certification.
 - [ ] Add guarded dataset-key inventory, rotation preflight/progress/verification, and rollback
       guidance without displaying key material.
 - [ ] Add guided secret-free configuration export, target-plan validation, diff, approval, and audit.
-- [ ] Add an access simulator explaining roles, groups, ACLs, connection grants, Studio capability,
+- [x] Add an access simulator explaining roles, groups, ACLs, connection grants, Studio capability,
       and RLS outcomes without returning protected rows.
+      `GET /api/admin/access-simulator/user/{id}?reportId=&datasetId=` composes every authority into
+      one answer **with its sources**, so "why can they still see this?" is answerable from one place
+      rather than by checking five surfaces and composing them by hand.
+  - Row-level security is explained by naming the identity tokens the script filters on
+      (`RowLevelSecurityScan.IdentityReferences`) and the values that would be bound — the report is
+      never run, and a test asserts no data from it appears in the response. A tool for auditing who
+      can see data must not become a way to see it.
+  - The report answer and its explanation both come from `FolderPermissionService`, so the
+      diagnostic cannot drift from the enforcement it describes.
+  - Reading someone else's effective access is itself audited (`SIMULATE_ACCESS`).
 - [ ] Verify the Environments workflow preserves separate departmental processes, databases,
       artifacts, key rings, identities, and endpoints.
 

@@ -78,6 +78,10 @@ public sealed class AuthorshipPermissionBoundaryTests
             ["FolderPermissionService.cs|if (report.CreatedBy == userId && (folderPerm.HasValue || directPerm.HasValue))"] =
                 "The rule itself: report authorship lifts a surviving grant to Manage, and yields "
                 + "nothing when every grant is gone.",
+            ["FolderPermissionService.cs|if (report.CreatedBy == userId)"] =
+                "DescribeReportGrantsAsync — names the grants behind an answer for the access "
+                + "simulator. Explains a permission, never resolves one; the permission itself comes "
+                + "from GetEffectiveReportPermissionAsync above.",
 
             // Datasets reach the same rule by a different route. DatasetAcl is group-scoped, so
             // there was no per-user grant for authorship to upgrade; a creator is now given an

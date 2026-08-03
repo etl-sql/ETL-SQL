@@ -864,6 +864,36 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Access simulator ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Explains one identity's access across every authority that composes into it: roles, groups,
+    /// folder and report ACLs, shared-connection grants, Studio capability, and row-level security.
+    ///
+    /// It answers <em>why</em>, and it never returns data. Row-level security is explained by naming
+    /// the identity the report filters on and the values that would be bound for this user; the
+    /// report is not run. A tool for auditing who can see data must not become a way to see it.
+    /// </summary>
+    [HttpGet("access-simulator/user/{userId:int}")]
+    public async Task<IActionResult> SimulateAccess(
+        int userId,
+        [FromServices] AccessSimulationService simulator,
+        [FromQuery] int? reportId = null,
+        [FromQuery] int? datasetId = null,
+        CancellationToken ct = default)
+    {
+        var simulation = await simulator.SimulateAsync(userId, reportId, datasetId, ct);
+        if (simulation is null) return NotFound();
+
+        // Reading someone else's effective access is itself a privileged act.
+        await audit.LogAsync(CurrentUserId, "SIMULATE_ACCESS", "User", userId.ToString(),
+            reportId is null && datasetId is null
+                ? "identity only"
+                : $"report={reportId?.ToString() ?? "-"}; dataset={datasetId?.ToString() ?? "-"}");
+
+        return Ok(simulation);
+    }
+
     // ── Studio capabilities granted to a group ───────────────────────────────
 
     [HttpGet("groups/{id:int}/studio-capabilities")]
