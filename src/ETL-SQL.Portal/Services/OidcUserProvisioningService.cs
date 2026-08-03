@@ -21,7 +21,8 @@ public sealed class OidcUserProvisioningService(
     TokenService tokenService,
     PortalConfig config,
     AuditService auditService,
-    SecuritySessionService securitySessions)
+    SecuritySessionService securitySessions,
+    StudioCapabilityStore studioCapabilities)
 {
     public const string ProviderName = "OIDC";
 
@@ -165,7 +166,10 @@ public sealed class OidcUserProvisioningService(
     private async Task<OidcSession> IssueSessionAsync(PortalUser user, CancellationToken ct)
     {
         var roles = await userManager.GetRolesAsync(user);
-        var jwt = tokenService.GenerateJwt(user, roles);
+        // Resolved after group sync, so a federated login picks up the capabilities its freshly
+        // synced groups grant rather than the previous session's.
+        var jwt = tokenService.GenerateJwt(user, roles,
+            await studioCapabilities.ResolveForUserAsync(user.Id, ct));
         var rawRefresh = tokenService.GenerateRefreshToken();
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 

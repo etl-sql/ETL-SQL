@@ -73,6 +73,14 @@ public record AuditLogDto(
 
 public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);
 
+/// <param name="Available">Every capability name, so an administrator does not have to guess them.</param>
+public record GroupStudioCapabilitiesDto(
+    int GroupId,
+    IReadOnlyList<string> Capabilities,
+    IReadOnlyList<string> Available);
+
+public record SetGroupStudioCapabilitiesRequest(IReadOnlyList<string>? Capabilities);
+
 public record EffectivePermissionEntryDto(
     string ResourceType,
     int ResourceId,

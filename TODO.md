@@ -224,12 +224,18 @@ documentation reconciliation, then release certification.
 
 - [ ] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
       folder.
-- [ ] Implement deny-by-default, group/service-account-assignable Studio capabilities. **All nine are
-      defined, deny-by-default, and enforced** — `StudioCapabilities` plus the
-      `RequireStudioCapability` filter on every gated route (`SourcePush` is checked inline in
-      `ReportsController`). What is missing is the *assignable* half: capabilities resolve only from
-      `Portal:Studio:RoleCapabilities` configuration or a per-token `studio_capability` claim that
-      nothing currently issues, so they cannot be granted to a group or a service account.
+- [x] Implement deny-by-default, group/service-account-assignable Studio capabilities. All nine are
+      defined, deny-by-default, and enforced by the `RequireStudioCapability` filter on every gated
+      route (`SourcePush` is checked inline in `ReportsController`). Capabilities are now assignable
+      as well as configurable:
+  - `GroupStudioCapabilities` grants them to a group;
+      `GET`/`PUT /api/admin/groups/{id}/studio-capabilities` manages the set and rejects an unknown
+      name rather than storing a typo that would read as a grant and do nothing.
+  - Grants are resolved at sign-in and refresh and carried as `studio_capability` claims, so the
+      per-request check stays a claim lookup. Changing a group's capabilities invalidates its
+      members' sessions, the same way an ACL change does.
+  - Service accounts carry their own set, **capped by the owner's** at token issue — mirroring how
+      roles are capped — so an account can never exceed the authority of the person who created it.
   - [x] `StudioAccess` for discovery/open.
   - [x] `ScriptRead` for source access.
   - [x] `ScriptPreview` for analysis/completion/rendering.

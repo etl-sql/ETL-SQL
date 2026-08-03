@@ -56,6 +56,29 @@ public class Group : IVersionedEntity
     public ICollection<UserGroup> UserGroups { get; set; } = [];
     public ICollection<FolderAcl> FolderAcls { get; set; } = [];
     public ICollection<DatasetAcl> DatasetAcls { get; set; } = [];
+    public ICollection<GroupStudioCapability> StudioCapabilities { get; set; } = [];
+}
+
+/// <summary>
+/// A Studio capability granted to a group.
+///
+/// Capabilities were previously resolvable only from <c>Portal:Studio:RoleCapabilities</c>
+/// configuration, which means changing who may publish or push required a config change and a
+/// restart, and could not be expressed for anything narrower than a whole role. Granting them to a
+/// group puts Studio authority on the same footing as every other grant: assignable, auditable, and
+/// revocable while the deployment is running.
+///
+/// The grant is resolved at sign-in and carried as a <c>studio_capability</c> claim, so the
+/// per-request check stays a claim lookup rather than a database read. Changing a group's
+/// capabilities therefore invalidates its members' sessions, the same way changing an ACL does.
+/// </summary>
+public class GroupStudioCapability
+{
+    public int Id { get; set; }
+    public int GroupId { get; set; }
+    public Group Group { get; set; } = null!;
+    public string Capability { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class UserGroup
@@ -295,6 +318,12 @@ public class ServiceAccount : IVersionedEntity
     public string SecretHash { get; set; } = "";
     public string Scopes { get; set; } = "";
     public string RoleNames { get; set; } = "";
+    /// <summary>
+    /// Space-separated Studio capabilities, following <see cref="RoleNames"/> and
+    /// <see cref="Scopes"/>. Capped by the owner's own capabilities at token issue time, so a
+    /// service account can never outlive or exceed the authority of the person who created it.
+    /// </summary>
+    public string StudioCapabilities { get; set; } = "";
     public bool IsEnabled { get; set; } = true;
     public DateTime? ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }

@@ -32,6 +32,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<DatasetUserAcl> DatasetUserAcls => Set<DatasetUserAcl>();
+    public DbSet<GroupStudioCapability> GroupStudioCapabilities => Set<GroupStudioCapability>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
     public DbSet<ReportAccessRequest> ReportAccessRequests => Set<ReportAccessRequest>();
     public DbSet<ReportAcl> ReportAcls => Set<ReportAcl>();
@@ -348,6 +349,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasOne(x => x.Dataset).WithMany(d => d.Acls).HasForeignKey(x => x.DatasetId);
             e.HasOne(x => x.Group).WithMany(g => g.DatasetAcls).HasForeignKey(x => x.GroupId);
+        });
+
+        builder.Entity<GroupStudioCapability>(e =>
+        {
+            e.HasOne(x => x.Group).WithMany(g => g.StudioCapabilities).HasForeignKey(x => x.GroupId);
+            e.Property(x => x.Capability).HasMaxLength(64);
+            e.HasIndex(x => new { x.GroupId, x.Capability }).IsUnique();
         });
 
         builder.Entity<DatasetUserAcl>(e =>

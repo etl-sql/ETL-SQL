@@ -864,6 +864,57 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Studio capabilities granted to a group ───────────────────────────────
+
+    [HttpGet("groups/{id:int}/studio-capabilities")]
+    public async Task<IActionResult> GetGroupStudioCapabilities(
+        int id, [FromServices] StudioCapabilityStore capabilities, CancellationToken ct)
+    {
+        if (!await db.Groups.AnyAsync(g => g.Id == id, ct)) return NotFound();
+        return Ok(new GroupStudioCapabilitiesDto(
+            id,
+            await capabilities.ResolveForGroupAsync(id, ct),
+            [.. StudioCapabilities.All.OrderBy(value => value, StringComparer.Ordinal)]));
+    }
+
+    /// <summary>
+    /// Replaces a group's Studio capabilities.
+    ///
+    /// Capabilities are carried as token claims, so a change here does not reach a session that
+    /// already exists — members are signed out, exactly as an ACL change does, rather than keeping
+    /// authority the administrator has just taken away.
+    /// </summary>
+    [HttpPut("groups/{id:int}/studio-capabilities")]
+    public async Task<IActionResult> SetGroupStudioCapabilities(
+        int id,
+        [FromBody] SetGroupStudioCapabilitiesRequest request,
+        [FromServices] StudioCapabilityStore capabilities,
+        CancellationToken ct)
+    {
+        var group = await db.Groups.FirstOrDefaultAsync(g => g.Id == id, ct);
+        if (group is null) return NotFound();
+
+        var unknown = await capabilities.ReplaceForGroupAsync(id, request.Capabilities ?? [], ct);
+        if (unknown.Count > 0)
+        {
+            return BadRequest(new
+            {
+                error = "Unknown Studio capability.",
+                unknown,
+                allowed = StudioCapabilities.All.OrderBy(value => value, StringComparer.Ordinal)
+            });
+        }
+
+        var granted = await capabilities.ResolveForGroupAsync(id, ct);
+        audit.Stage(CurrentUserId, "SET_GROUP_STUDIO_CAPABILITIES", "Group", id.ToString(),
+            $"{group.Name} -> {(granted.Count == 0 ? "none" : string.Join(' ', granted))}");
+        await db.SaveChangesAsync(ct);
+        await securitySessions.InvalidateGroupMembersAsync(id);
+
+        return Ok(new GroupStudioCapabilitiesDto(
+            id, granted, [.. StudioCapabilities.All.OrderBy(value => value, StringComparer.Ordinal)]));
+    }
+
     [HttpGet("groups/{id:int}/members")]
     public async Task<IActionResult> GetMembers(int id)
     {

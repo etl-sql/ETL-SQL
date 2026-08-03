@@ -21,7 +21,8 @@ public class AuthController(
     SecuritySessionService securitySessions,
     PortalDbContext db,
     PortalConfig config,
-    ILdapService ldapService) : ControllerBase
+    ILdapService ldapService,
+    StudioCapabilityStore studioCapabilities) : ControllerBase
 {
     /// <summary>Advertises the effective identity configuration so the login page can offer the right
     /// affordances (e.g. an SSO button) without hardcoding deployment posture. Anonymous and
@@ -236,7 +237,8 @@ public class AuthController(
         }
 
         var roles = await userManager.GetRolesAsync(user);
-        var jwt = tokenService.GenerateJwt(user, roles);
+        var jwt = tokenService.GenerateJwt(user, roles,
+            await studioCapabilities.ResolveForUserAsync(user.Id));
         var rawRefresh = tokenService.GenerateRefreshToken();
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
@@ -320,7 +322,10 @@ public class AuthController(
 
         var user = token.User;
         var roles = await userManager.GetRolesAsync(user);
-        var jwt = tokenService.GenerateJwt(user, roles);
+        // Refresh re-resolves group capabilities, so a grant changed since sign-in takes effect on
+        // the next refresh rather than lingering for the life of the session.
+        var jwt = tokenService.GenerateJwt(user, roles,
+            await studioCapabilities.ResolveForUserAsync(user.Id));
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
         return Ok(new LoginResponse(jwt, newRaw, expiresAt));

@@ -446,6 +446,31 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("Groups");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GroupStudioCapability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Capability")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "Capability")
+                        .IsUnique();
+
+                    b.ToTable("GroupStudioCapabilities");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.PolicyMachineEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -1440,6 +1465,10 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("StudioCapabilities")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -1846,6 +1875,17 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.GroupStudioCapability", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
+                        .WithMany("StudioCapabilities")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.RefreshToken", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
@@ -2192,6 +2232,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Navigation("DatasetAcls");
 
                     b.Navigation("FolderAcls");
+
+                    b.Navigation("StudioCapabilities");
 
                     b.Navigation("UserGroups");
                 });

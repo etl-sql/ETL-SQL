@@ -102,6 +102,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
 });
 builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
+builder.Services.AddScoped<StudioCapabilityStore>();
 builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();
 builder.Services.AddSingleton<ETL_SQL.Core.Services.ILanguageService, GrammarLanguageService>();
 

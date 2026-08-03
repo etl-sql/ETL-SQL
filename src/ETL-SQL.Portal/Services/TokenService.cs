@@ -22,7 +22,13 @@ public class TokenService(PortalConfig config)
     public const string TokenAudience = "etl-sql-portal-api";
     public int ServiceTokenLifetimeSeconds => Math.Min(15, Math.Max(1, config.Jwt.ExpiryMinutes)) * 60;
 
-    public string GenerateJwt(PortalUser user, IList<string> roles)
+    /// <param name="studioCapabilities">
+    /// Capabilities the user's groups grant, resolved at sign-in and carried as claims so the
+    /// per-request check stays a claim lookup. Role-mapped capabilities are resolved from
+    /// configuration at check time and are deliberately not duplicated here.
+    /// </param>
+    public string GenerateJwt(PortalUser user, IList<string> roles,
+        IEnumerable<string>? studioCapabilities = null)
     {
         // COMPAT_BREAK: 0.11
         var claims = new List<Claim>
@@ -34,6 +40,8 @@ public class TokenService(PortalConfig config)
         };
         foreach (var role in roles)
             claims.Add(new Claim(ClaimTypes.Role, role));
+        foreach (var capability in (studioCapabilities ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+            claims.Add(new Claim(StudioAuthorizationService.CapabilityClaim, capability));
 
         var key = JwtSigningKeyRing.Current(config.Jwt);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -54,7 +62,8 @@ public class TokenService(PortalConfig config)
         return Convert.ToBase64String(bytes);
     }
 
-    public string GenerateServiceJwt(ServiceAccount account, IEnumerable<string> roles, IEnumerable<string> scopes)
+    public string GenerateServiceJwt(ServiceAccount account, IEnumerable<string> roles,
+        IEnumerable<string> scopes, IEnumerable<string>? studioCapabilities = null)
     {
         var claims = new List<Claim>
         {
@@ -70,6 +79,8 @@ public class TokenService(PortalConfig config)
             claims.Add(new Claim(ClaimTypes.Role, role));
         foreach (var scope in scopes.Distinct(StringComparer.OrdinalIgnoreCase))
             claims.Add(new Claim(ScopeClaim, scope));
+        foreach (var capability in (studioCapabilities ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+            claims.Add(new Claim(StudioAuthorizationService.CapabilityClaim, capability));
 
         var key = JwtSigningKeyRing.Current(config.Jwt);
         var token = new JwtSecurityToken(

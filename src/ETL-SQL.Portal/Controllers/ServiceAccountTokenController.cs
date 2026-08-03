@@ -18,7 +18,9 @@ public sealed class ServiceAccountTokenController(
     UserManager<PortalUser> users,
     IPasswordHasher<ServiceAccount> passwordHasher,
     TokenService tokens,
-    AuditService audit) : ControllerBase
+    AuditService audit,
+    StudioCapabilityStore studioCapabilities,
+    StudioAuthorizationService studio) : ControllerBase
 {
     private static readonly string DummyHash = new PasswordHasher<ServiceAccount>().HashPassword(null!, "dummy_secret_for_timing_protection");
 
@@ -43,6 +45,17 @@ public sealed class ServiceAccountTokenController(
         var cappedRoles = activeAccount.RoleNames.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Intersect(currentOwnerRoles, StringComparer.OrdinalIgnoreCase).ToArray();
         var scopes = ServiceAccountScopes.Parse(activeAccount.Scopes);
+        // Capped by the owner's own capabilities, exactly as roles are: a service account must not
+        // outlive or exceed the authority of the person who created it, so an owner who loses
+        // SourcePush takes it from every account they own at the next token issue.
+        var ownerCapabilities = new HashSet<string>(
+            await studioCapabilities.ResolveForUserAsync(activeAccount.OwnerUserId, ct),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var capability in studio.EffectiveCapabilitiesForRoles(currentOwnerRoles))
+            ownerCapabilities.Add(capability);
+        var cappedCapabilities = StudioCapabilityStore.Parse(activeAccount.StudioCapabilities)
+            .Where(ownerCapabilities.Contains)
+            .ToArray();
         activeAccount.LastUsedAt = DateTime.UtcNow;
         activeAccount.UpdatedAt = DateTime.UtcNow;
         audit.Stage(activeAccount.OwnerUserId, "SERVICE_ACCOUNT_TOKEN_ISSUED", "ServiceAccount", activeAccount.Id,
@@ -51,7 +64,8 @@ public sealed class ServiceAccountTokenController(
         await db.SaveChangesAsync(ct);
 
         return Ok(new ServiceAccountTokenResponse(
-            tokens.GenerateServiceJwt(activeAccount, cappedRoles, scopes), "Bearer", tokens.ServiceTokenLifetimeSeconds));
+            tokens.GenerateServiceJwt(activeAccount, cappedRoles, scopes, cappedCapabilities),
+            "Bearer", tokens.ServiceTokenLifetimeSeconds));
     }
 
     private static bool CanAuthenticate(ServiceAccount account) =>

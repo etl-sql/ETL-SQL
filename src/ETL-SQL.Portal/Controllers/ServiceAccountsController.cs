@@ -45,6 +45,7 @@ public sealed class ServiceAccountsController(
             ClientId = ServiceAccountCredentials.NewClientId(),
             Scopes = ServiceAccountScopes.Serialize(request.Scopes),
             RoleNames = string.Join(' ', validation.Roles),
+            StudioCapabilities = StudioCapabilityStore.Format(request.StudioCapabilities ?? []),
             ExpiresAt = request.ExpiresAt?.ToUniversalTime()
         };
         var secret = ServiceAccountCredentials.NewSecret();
@@ -73,6 +74,10 @@ public sealed class ServiceAccountsController(
         account.IsEnabled = request.IsEnabled;
         account.ExpiresAt = request.ExpiresAt?.ToUniversalTime();
         account.Scopes = ServiceAccountScopes.Serialize(scopes);
+        if (request.StudioCapabilities is not null)
+            account.StudioCapabilities = StudioCapabilityStore.Format(request.StudioCapabilities);
+        // A new stamp invalidates outstanding tokens, so a narrowed capability set takes effect now
+        // rather than at the end of the current token's life.
         account.SecurityStamp = Guid.NewGuid().ToString("N");
         account.UpdatedAt = DateTime.UtcNow;
         audit.Stage(CurrentUserId, "UPDATE_SERVICE_ACCOUNT", "ServiceAccount", account.Id,
@@ -173,5 +178,6 @@ public sealed class ServiceAccountsController(
         value.Id, value.ClientId, value.Name, value.Description, value.OwnerUserId,
         ServiceAccountScopes.Parse(value.Scopes),
         value.RoleNames.Split(' ', StringSplitOptions.RemoveEmptyEntries), value.IsEnabled,
-        value.ExpiresAt, value.RevokedAt, value.CreatedAt, value.UpdatedAt, value.LastUsedAt, value.Version);
+        value.ExpiresAt, value.RevokedAt, value.CreatedAt, value.UpdatedAt, value.LastUsedAt, value.Version,
+        [.. StudioCapabilityStore.Parse(value.StudioCapabilities)]);
 }
