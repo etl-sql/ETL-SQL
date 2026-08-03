@@ -41,6 +41,7 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
         var registeredDatasets = (await db.Datasets
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
+            .Include(d => d.UserAcls)
             .Where(d => d.OwningReportId == id)
             .OrderBy(d => d.FolderPath)
             .ThenBy(d => d.Name)
@@ -117,17 +118,24 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
             lineageEntries);
     }
 
+    /// <summary>
+    /// Reads from grants only. Authorship of the owning report used to short-circuit to true here,
+    /// which meant the dependency view kept listing a private dataset to someone whose every grant
+    /// had been revoked. The author still sees it — they hold an explicit Owner grant written when
+    /// the dataset was registered — but now through a row that deprovisioning can remove.
+    /// </summary>
     private static bool CanReadDataset(Dataset dataset, IReadOnlyCollection<int> groupIds, bool isAdmin, int currentUserId)
     {
         if (isAdmin) return true;
         if (dataset.AccessLevel == DatasetAccessLevel.Public) return true;
-        if (dataset.OwningReport?.CreatedBy == currentUserId) return true;
 
-        return dataset.Acls.Any(a =>
-            groupIds.Contains(a.GroupId)
-            && a.Permission is DatasetPermission.Viewer
-                or DatasetPermission.Refresh
-                or DatasetPermission.Editor
-                or DatasetPermission.Owner);
+        return dataset.Acls.Any(a => groupIds.Contains(a.GroupId) && IsReadable(a.Permission))
+            || dataset.UserAcls.Any(a => a.UserId == currentUserId && IsReadable(a.Permission));
     }
+
+    private static bool IsReadable(DatasetPermission permission) =>
+        permission is DatasetPermission.Viewer
+            or DatasetPermission.Refresh
+            or DatasetPermission.Editor
+            or DatasetPermission.Owner;
 }

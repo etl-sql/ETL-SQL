@@ -632,6 +632,32 @@ public class Dataset : IVersionedEntity
     public long Version { get; set; } = 1;
 
     public ICollection<DatasetAcl> Acls { get; set; } = [];
+    public ICollection<DatasetUserAcl> UserAcls { get; set; } = [];
+}
+
+/// <summary>
+/// A dataset grant made directly to one user, rather than to a group.
+///
+/// This is a sibling table instead of a nullable <c>UserId</c> on <see cref="DatasetAcl"/> (the
+/// shape <see cref="ReportAcl"/> uses) for one reason: relaxing <c>DatasetAcl.GroupId</c> to
+/// nullable is an <c>AlterColumn</c>, which the rolling-expand migration contract rejects, and which
+/// SQLite implements as a full table rebuild. Adding a table is additive and safe to deploy under a
+/// rolling upgrade.
+///
+/// It exists so dataset authorship does not have to act as standing permission. A dataset's creator
+/// is granted <see cref="DatasetPermission.Owner"/> here at creation time, which means removing
+/// their access is a matter of deleting a row — where a <c>CreatedBy == userId</c> short-circuit
+/// left every dataset a departing user had ever created permanently reachable by them.
+/// </summary>
+public class DatasetUserAcl
+{
+    public int Id { get; set; }
+    public int DatasetId { get; set; }
+    public Dataset Dataset { get; set; } = null!;
+    public int UserId { get; set; }
+    public PortalUser User { get; set; } = null!;
+    public DatasetPermission Permission { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class DatasetAcl

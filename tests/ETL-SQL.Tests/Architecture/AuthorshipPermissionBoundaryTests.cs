@@ -59,6 +59,9 @@ public sealed class AuthorshipPermissionBoundaryTests
                 "Reassigns ownership away from a deleted user.",
             ["AdminController.cs|await db.Datasets.Where(d => d.CreatedBy == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user.",
+            ["AdminController.cs|.Where(d => d.CreatedBy == id)"] =
+                "Collects the datasets being reassigned so the new owner's grant can be written. "
+                + "Reads which rows to move; grants nothing by itself.",
             ["ReportsController.cs|.Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId))"] =
                 "Scopes an alert listing down to the caller's own alerts. Narrows access, never widens it.",
 
@@ -76,18 +79,10 @@ public sealed class AuthorshipPermissionBoundaryTests
                 "The rule itself: report authorship lifts a surviving grant to Manage, and yields "
                 + "nothing when every grant is gone.",
 
-            // ── Unconditional: open decision, TODO.md \"Portal — Authorship Is Not Permission\" ──
-            // DatasetAcl is group-only (no UserId column), so a Private dataset has no per-user grant
-            // path the way a report does through ReportAcl. Applying the report rule verbatim would
-            // make a freshly created private dataset invisible to its own creator, so the fix is a
-            // product decision, not a mechanical edit. Tracked in TODO.md; these entries must go when
-            // it lands.
-            ["DatasetPermissionService.cs|if (dataset.CreatedBy == userId ||"] =
-                "OPEN: unconditional dataset-authorship short-circuit (single-dataset path).",
-            ["DatasetPermissionService.cs|dataset.OwningReport?.CreatedBy == userId)"] =
-                "OPEN: unconditional owning-report-authorship short-circuit.",
-            ["ReportDependencyService.cs|if (dataset.OwningReport?.CreatedBy == currentUserId) return true;"] =
-                "OPEN: unconditional owning-report-authorship short-circuit in the dependency view.",
+            // Datasets reach the same rule by a different route. DatasetAcl is group-scoped, so
+            // there was no per-user grant for authorship to upgrade; a creator is now given an
+            // explicit Owner row in DatasetUserAcls instead, and DatasetPermissionService and
+            // ReportDependencyService read grants only. That is why no dataset entry appears here.
         };
 
     [Fact]

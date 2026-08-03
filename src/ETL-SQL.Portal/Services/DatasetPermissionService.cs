@@ -44,12 +44,6 @@ public sealed class DatasetPermissionService(
         if (userId is null)
             return null;
 
-        if (dataset.CreatedBy == userId ||
-            dataset.OwningReport?.CreatedBy == userId)
-        {
-            return DatasetPermission.Owner;
-        }
-
         groupIds ??= await GetUserGroupIdsAsync(userId.Value);
 
         FolderPermission? folderPermission = null;
@@ -104,21 +98,27 @@ public sealed class DatasetPermissionService(
         return result;
     }
 
+    /// <summary>
+    /// Resolves a dataset permission from grants only.
+    ///
+    /// Authorship is deliberately absent: a creator reaches their dataset through the explicit Owner
+    /// row <see cref="DatasetRegistryService"/> writes at creation time, not through a
+    /// <c>CreatedBy == userId</c> comparison. The difference is that a row can be revoked. While
+    /// authorship was checked here, removing a user from every group — or from the directory —
+    /// left every dataset they had ever created fully open to them.
+    /// </summary>
     private static DatasetPermission? Evaluate(
         Dataset dataset,
         int userId,
         ISet<int> groupIds,
         FolderPermission? folderPermission)
     {
-        if (dataset.CreatedBy == userId ||
-            dataset.OwningReport?.CreatedBy == userId)
-        {
-            return DatasetPermission.Owner;
-        }
-
         var aclPermission = dataset.Acls
             .Where(a => groupIds.Contains(a.GroupId))
             .Select(a => (DatasetPermission?)a.Permission)
+            .Concat(dataset.UserAcls
+                .Where(a => a.UserId == userId)
+                .Select(a => (DatasetPermission?)a.Permission))
             .Max();
 
         if (dataset.AccessLevel == DatasetAccessLevel.Public)

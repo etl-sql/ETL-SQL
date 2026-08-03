@@ -403,9 +403,40 @@ public class AdminController(
             await db.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.CreatedBy, target.Id)
                 .SetProperty(r => r.Version, r => r.Version + 1));
+            // Capture before the update, because afterwards these rows no longer match `id`.
+            var transferredDatasetIds = await db.Datasets
+                .Where(d => d.CreatedBy == id)
+                .Select(d => d.Id)
+                .ToListAsync();
+
             await db.Datasets.Where(d => d.CreatedBy == id).ExecuteUpdateAsync(s => s
                 .SetProperty(d => d.CreatedBy, (int?)target.Id)
                 .SetProperty(d => d.Version, d => d.Version + 1));
+
+            // Dataset access follows grants, not CreatedBy, so transferring ownership has to move
+            // the grant as well — otherwise the new owner inherits the record and none of the
+            // access. The departing user's own grants disappear with their row (cascade), which is
+            // the point: that is what makes deprovisioning actually revoke.
+            if (transferredDatasetIds.Count > 0)
+            {
+                var alreadyGranted = await db.DatasetUserAcls
+                    .Where(a => a.UserId == target.Id && transferredDatasetIds.Contains(a.DatasetId))
+                    .Select(a => a.DatasetId)
+                    .ToListAsync();
+
+                foreach (var datasetId in transferredDatasetIds.Except(alreadyGranted))
+                {
+                    db.DatasetUserAcls.Add(new DatasetUserAcl
+                    {
+                        DatasetId = datasetId,
+                        UserId = target.Id,
+                        Permission = DatasetPermission.Owner
+                    });
+                }
+
+                await db.SaveChangesAsync();
+            }
+
             audit.Stage(CurrentUserId, "TRANSFER_OWNERSHIP", "User", id.ToString(),
                 $"{ownedFolders} folder(s), {ownedReports} report(s), {ownedDatasets} dataset(s) → {target.UserName}");
         }

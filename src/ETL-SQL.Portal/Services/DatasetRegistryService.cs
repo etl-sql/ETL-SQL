@@ -78,7 +78,57 @@ namespace ETL_SQL.Portal.Services
             existing.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+            await EnsureAuthorGrantsAsync(existing);
             return existing.Id;
+        }
+
+        /// <summary>
+        /// Gives the dataset's creator — and the creator of the report that owns it — an explicit
+        /// Owner grant.
+        ///
+        /// This is what lets permission resolution stop treating <c>CreatedBy</c> as standing
+        /// permission. An author needs to reach the dataset they just made, and a group-scoped ACL
+        /// cannot express that, so the grant is recorded as a row that deprovisioning can delete
+        /// rather than as an identity comparison that nothing can revoke.
+        /// </summary>
+        private async Task EnsureAuthorGrantsAsync(Dataset dataset)
+        {
+            var authorIds = new List<int>(2);
+            if (dataset.CreatedBy is int creator) authorIds.Add(creator);
+            if (dataset.OwningReportId is int reportId)
+            {
+                var reportAuthor = await _db.Reports
+                    .Where(r => r.Id == reportId)
+                    .Select(r => r.CreatedBy)
+                    .FirstOrDefaultAsync();
+                if (reportAuthor is int author) authorIds.Add(author);
+            }
+
+            if (authorIds.Count == 0) return;
+
+            var distinct = authorIds.Distinct().ToList();
+            // A grant for a user that no longer exists would violate the foreign key, and an author
+            // whose account was deleted has nothing to be granted anyway.
+            var live = await _db.Users.Where(u => distinct.Contains(u.Id)).Select(u => u.Id).ToListAsync();
+            var already = await _db.DatasetUserAcls
+                .Where(a => a.DatasetId == dataset.Id && live.Contains(a.UserId))
+                .Select(a => a.UserId)
+                .ToListAsync();
+
+            var missing = live.Except(already).ToList();
+            if (missing.Count == 0) return;
+
+            foreach (var userId in missing)
+            {
+                _db.DatasetUserAcls.Add(new DatasetUserAcl
+                {
+                    DatasetId = dataset.Id,
+                    UserId = userId,
+                    Permission = DatasetPermission.Owner
+                });
+            }
+
+            await _db.SaveChangesAsync();
         }
 
         public async Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "")
@@ -86,6 +136,7 @@ namespace ETL_SQL.Portal.Services
             var d = await _db.Datasets
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
+                .Include(x => x.UserAcls)
                 .FirstOrDefaultAsync(x => x.Name == name);
 
             if (d == null) return null;
@@ -104,6 +155,7 @@ namespace ETL_SQL.Portal.Services
             var d = await _db.Datasets
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
+                .Include(x => x.UserAcls)
                 .FirstOrDefaultAsync(x => x.Name == name);
 
             if (d == null) return false;
@@ -115,6 +167,7 @@ namespace ETL_SQL.Portal.Services
             var d = await _db.Datasets
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
+                .Include(x => x.UserAcls)
                 .FirstOrDefaultAsync(x => x.Name == name);
 
             if (d == null) return false;
@@ -144,6 +197,7 @@ namespace ETL_SQL.Portal.Services
             var list = await _db.Datasets
                 .Include(d => d.OwningReport)
                 .Include(d => d.Acls)
+                .Include(d => d.UserAcls)
                 .ToListAsync();
 
             var permissions = await _permissions.GetEffectivePermissionsAsync(

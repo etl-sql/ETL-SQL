@@ -61,6 +61,7 @@ public sealed class LineageImpactService(
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
+            .Include(d => d.UserAcls)
             .Where(d => (d.OwningReportId.HasValue && reportIdSet.Contains(d.OwningReportId.Value))
                 || (kind == "dataset" && d.Name == name))
             .ToListAsync(cancellationToken);

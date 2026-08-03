@@ -29,6 +29,7 @@ public sealed class DatasetDeleteService(
             var current = await db.Datasets
                 .Include(d => d.OwningReport)
                 .Include(d => d.Acls)
+                .Include(d => d.UserAcls)
                 .FirstOrDefaultAsync(d => d.Id == dataset.Id);
             return current is null
                 ? DatasetDeleteResult.NotFound()

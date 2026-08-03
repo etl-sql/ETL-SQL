@@ -31,6 +31,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
+    public DbSet<DatasetUserAcl> DatasetUserAcls => Set<DatasetUserAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
     public DbSet<ReportAccessRequest> ReportAccessRequests => Set<ReportAccessRequest>();
     public DbSet<ReportAcl> ReportAcls => Set<ReportAcl>();
@@ -347,6 +348,15 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasOne(x => x.Dataset).WithMany(d => d.Acls).HasForeignKey(x => x.DatasetId);
             e.HasOne(x => x.Group).WithMany(g => g.DatasetAcls).HasForeignKey(x => x.GroupId);
+        });
+
+        builder.Entity<DatasetUserAcl>(e =>
+        {
+            e.HasOne(x => x.Dataset).WithMany(d => d.UserAcls).HasForeignKey(x => x.DatasetId);
+            // Deleting a user removes their direct grants: a grant that outlived its principal would
+            // be re-attached to whoever next receives that id.
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.DatasetId, x.UserId }).IsUnique();
         });
     }
 }

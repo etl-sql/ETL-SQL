@@ -238,9 +238,26 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, patchRes.StatusCode);
     }
 
+    /// <summary>
+    /// Orphaning a private dataset — deleting the report that owned it — must leave access resting
+    /// on an explicit, revocable grant and nothing else.
+    ///
+    /// This assertion changed when dataset authorship stopped being standing permission. It used to
+    /// prove that nulling <c>OwningReportId</c>/<c>CreatedBy</c> denied the former report owner,
+    /// because access was <em>derived</em> from those columns. It no longer is: the report's author
+    /// was granted Owner in <c>DatasetUserAcls</c> when the dataset was registered, and deleting the
+    /// report does not delete that grant. That is deliberate — the alternative leaves an orphaned
+    /// private dataset reachable by administrators only, which is the outcome
+    /// <c>AdminController</c>'s ownership-transfer path exists to avoid.
+    ///
+    /// The security property is preserved and strengthened: access is now revocable. Deleting the
+    /// user cascades their grants away, and revoking the grant directly denies them immediately —
+    /// neither of which an identity comparison could do. See
+    /// <see cref="DatasetAuthorshipRevocationTests"/>.
+    /// </summary>
     [Fact]
     [Trait("Category", "Smoke.Security")]
-    public async Task PrivateDataset_OrphanedOwningReport_DeniesFormerReportOwner()
+    public async Task PrivateDataset_OrphanedOwningReport_LeavesOnlyARevocableGrant()
     {
         var adminToken = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -304,6 +321,20 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             var orphan = await db.Datasets.SingleAsync(d => d.Id == datasetId);
             Assert.Null(orphan.OwningReportId);
             Assert.Null(orphan.CreatedBy);
+        }
+
+        // Every authorship link is gone, so whatever access remains can only come from a grant.
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(ownerToken, $"/api/datasets/{datasetId}")).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var grants = await db.DatasetUserAcls
+                .Where(a => a.DatasetId == datasetId && a.UserId == userId)
+                .ToListAsync();
+            Assert.Single(grants);
+            db.DatasetUserAcls.RemoveRange(grants);
+            await db.SaveChangesAsync();
         }
 
         Assert.Equal(

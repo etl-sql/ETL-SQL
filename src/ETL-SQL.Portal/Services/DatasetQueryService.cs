@@ -16,6 +16,7 @@ public sealed class DatasetQueryService(
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
+            .Include(d => d.UserAcls)
             .ToListAsync();
 
         var permissions = await datasetPermissions.GetEffectivePermissionsAsync(datasets, currentUserId, isAdmin);
@@ -30,6 +31,7 @@ public sealed class DatasetQueryService(
         await db.Datasets
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
+            .Include(d => d.UserAcls)
             .FirstOrDefaultAsync(d => d.Id == id);
 
     public async Task<Dataset?> LoadDatasetWithAclGroupsAsync(int id)
@@ -38,6 +40,7 @@ public sealed class DatasetQueryService(
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls).ThenInclude(a => a.Group)
+            .Include(d => d.UserAcls)
             .FirstOrDefaultAsync(d => d.Id == id);
     }
 

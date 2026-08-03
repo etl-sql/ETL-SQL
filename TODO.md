@@ -296,18 +296,27 @@ documentation reconciliation, then release certification.
 
 ### Portal — Authorship Is Not Permission
 
-- [ ] Decide and document whether dataset authorship upgrades an existing ACL grant but never
-      substitutes for one. **Blocked on a product decision, not on implementation.** `DatasetAcl` is
-      group-only — it has no `UserId` column, unlike `ReportAcl` — so a Private dataset has no
-      per-user grant path and nothing grants its creator an ACL at creation time. Applying the report
-      rule verbatim would make a freshly created private dataset invisible to its own creator. The
-      options are: copy the report rule and accept that (plus some companion grant), add `UserId` to
-      `DatasetAcl` and grant the creator Owner on creation, or keep authorship standing for datasets
-      and say so.
-- [ ] Add dataset revocation tests before implementation.
-  - [ ] Prove a creator removed from every group loses dataset access.
-  - [ ] Prove a creator retaining a lesser grant receives only the documented upgrade.
-- [ ] Apply the rule to both `DatasetPermissionService` paths and `ReportDependencyService`.
+- [x] Decide and document whether dataset authorship upgrades an existing ACL grant but never
+      substitutes for one. **Decided: datasets get a real grant instead of an upgrade.** `DatasetAcl`
+      is group-only, so there was no per-user grant for authorship to upgrade and removing the check
+      alone would have hidden a new private dataset from its own author. A creator (and the author of
+      the report that owns the dataset) is now granted `Owner` in the new `DatasetUserAcls` table at
+      registration time, and permission resolution reads grants only. Recorded in
+      [AuthorshipIsNotPermission.md](docs/architecture/decisions/AuthorshipIsNotPermission.md).
+  - The table is a sibling of `DatasetAcl` rather than a nullable `UserId` on it because relaxing
+    `DatasetAcl.GroupId` to nullable is an `AlterColumn`, which the rolling-expand migration contract
+    rejects and SQLite implements as a table rebuild.
+- [x] Add dataset revocation tests before implementation.
+  - [x] Prove a creator removed from every group loses dataset access. `DatasetAuthorshipRevocationTests`
+        revokes the grant and asserts both the single-dataset and batch permission paths deny.
+  - [x] Prove a creator retaining a lesser grant receives only the documented upgrade. A creator left
+        with only a group `Viewer` grant can read and cannot manage ACLs.
+- [x] Apply the rule to both `DatasetPermissionService` paths and `ReportDependencyService`.
+- [ ] Show and revoke per-user dataset grants in the Admin dataset permissions panel. The grants are
+      enforced and are revoked by user deletion (FK cascade) and ownership transfer, but the ACL
+      listing still shows group rows only, so an administrator cannot see or revoke one from the
+      product. Needs `DatasetAclEntryDto` to carry the principal kind, a user-revoke route, and the
+      regenerated browser/API contract.
 - [x] Add an architecture test rejecting unconditional `CreatedBy`/`OwnerId` permission
       short-circuits that do not consult an ACL. `AuthorshipPermissionBoundaryTests` inventories
       every `CreatedBy`/`OwnerId` comparison in the Portal with the reason it is safe and asserts set

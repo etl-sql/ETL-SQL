@@ -322,6 +322,34 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("DatasetAcls");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetUserAcl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DatasetId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Permission")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("DatasetId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("DatasetUserAcls");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.Property<int>("Id")
@@ -1765,6 +1793,25 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetUserAcl", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.Dataset", "Dataset")
+                        .WithMany("UserAcls")
+                        .HasForeignKey("DatasetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dataset");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Folder", "Parent")
@@ -2121,6 +2168,8 @@ namespace ETL_SQL.Portal.Data.Migrations
             modelBuilder.Entity("ETL_SQL.Portal.Data.Dataset", b =>
                 {
                     b.Navigation("Acls");
+
+                    b.Navigation("UserAcls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
