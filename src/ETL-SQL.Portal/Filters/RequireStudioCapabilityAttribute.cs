@@ -25,6 +25,9 @@ public sealed class RequireStudioCapabilityAttribute(
             return;
         }
 
+        // Record what authorized this request so any audit the action stages names the capability.
+        context.HttpContext.Items[StudioAuthorizationService.AuthorizedCapabilityItem] = capability;
+
         await next();
     }
 }

@@ -495,6 +495,14 @@ public class AuditLog
     /// audit row can be tied back to the operation that produced it.</summary>
     public string? CorrelationId { get; set; }
 
+    /// <summary>
+    /// The Studio capability that authorized this mutation, when one did. Roles and capabilities are
+    /// separate authorities — a Publisher may hold <c>ReportPublish</c> but not <c>SourcePush</c> —
+    /// so reviewing a Studio mutation means knowing which capability let it through, not just who
+    /// the actor was. Null for anything not gated on a Studio capability.
+    /// </summary>
+    public string? StudioCapability { get; set; }
+
     public ICollection<AuditOutboxMessage> OutboxMessages { get; set; } = [];
 }
 
@@ -512,6 +520,8 @@ public class AuditOutboxMessage
     public string? ResourceType { get; set; }
     public string? ResourceId { get; set; }
     public string? CorrelationId { get; set; }
+    /// <summary>Mirrors <see cref="AuditLog.StudioCapability"/> so a remote collector sees it too.</summary>
+    public string? StudioCapability { get; set; }
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
     public string PayloadJson { get; set; } = "{}";
     public string Status { get; set; } = "Pending";

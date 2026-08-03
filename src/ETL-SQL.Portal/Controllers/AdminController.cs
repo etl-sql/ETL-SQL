@@ -1129,7 +1129,21 @@ public class AdminController(
             .Select(e => e!)
             .ToList();
 
-        return Ok(new EffectiveUserPermissionsDto(user.Id, user.UserName!, groupNames, folderEntries, reports));
+        // Studio authority is a separate axis from resource permission: folder Manage does not imply
+        // the right to publish, commit, or push. Answering "why can they do that?" from one place
+        // means reporting both, plus the deployment mode that can make every capability moot.
+        var roles = (await userManager.GetRolesAsync(user)).OrderBy(r => r, StringComparer.Ordinal).ToList();
+        var studio = HttpContext.RequestServices.GetRequiredService<StudioAuthorizationService>();
+
+        return Ok(new EffectiveUserPermissionsDto(
+            user.Id,
+            user.UserName!,
+            groupNames,
+            folderEntries,
+            reports,
+            roles,
+            studio.Mode.ToString(),
+            studio.Mode == StudioDeploymentMode.Disabled ? [] : studio.EffectiveCapabilitiesForRoles(roles)));
     }
 
     [HttpGet("permissions/effective/folder/{folderId:int}")]
@@ -1289,7 +1303,8 @@ public class AdminController(
                   a => a.UserId,
                   u => (int?)u.Id,
                   (a, u) => new AuditLogDto(a.Id, a.UserId, u != null ? u.UserName! : null,
-                      a.Action, a.ResourceType, a.ResourceId, a.Timestamp, a.Detail, a.CorrelationId))
+                      a.Action, a.ResourceType, a.ResourceId, a.Timestamp, a.Detail, a.CorrelationId,
+                      a.StudioCapability))
 #pragma warning restore CS8602
             .ToListAsync();
 

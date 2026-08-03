@@ -224,17 +224,28 @@ documentation reconciliation, then release certification.
 
 - [ ] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
       folder.
-- [ ] Implement deny-by-default, group/service-account-assignable Studio capabilities:
-  - [ ] `StudioAccess` for discovery/open.
-  - [ ] `ScriptRead` for source access.
-  - [ ] `ScriptPreview` for analysis/completion/rendering.
-  - [ ] `ScriptRun` plus existing shared-connection ACLs for interactive execution.
-  - [ ] `ScriptSave` for drafts without implicit publish/commit/push.
-  - [ ] `ReportPublish` for active-version publication.
-  - [ ] `ScriptIngress` for external upload/import, disabled in catalog-only SaaS.
-  - [ ] `SourceCommit` with actor, revision, diff summary, and correlation id.
-  - [ ] `SourcePush` or deployment-service authority, separate and disabled by default.
-- [ ] Include Studio capabilities in effective-permission diagnostics and mutation audits.
+- [ ] Implement deny-by-default, group/service-account-assignable Studio capabilities. **All nine are
+      defined, deny-by-default, and enforced** — `StudioCapabilities` plus the
+      `RequireStudioCapability` filter on every gated route (`SourcePush` is checked inline in
+      `ReportsController`). What is missing is the *assignable* half: capabilities resolve only from
+      `Portal:Studio:RoleCapabilities` configuration or a per-token `studio_capability` claim that
+      nothing currently issues, so they cannot be granted to a group or a service account.
+  - [x] `StudioAccess` for discovery/open.
+  - [x] `ScriptRead` for source access.
+  - [x] `ScriptPreview` for analysis/completion/rendering.
+  - [x] `ScriptRun` plus existing shared-connection ACLs for interactive execution.
+  - [x] `ScriptSave` for drafts without implicit publish/commit/push.
+  - [x] `ReportPublish` for active-version publication.
+  - [x] `ScriptIngress` for external upload/import, disabled in catalog-only SaaS.
+  - [x] `SourceCommit` with actor, revision, diff summary, and correlation id.
+  - [x] `SourcePush` or deployment-service authority, separate and disabled by default.
+- [x] Include Studio capabilities in effective-permission diagnostics and mutation audits.
+      `GET /api/admin/permissions/effective/user/{id}` now reports roles, the Studio deployment mode,
+      and the capabilities those roles resolve to — reporting grants without the mode would overstate
+      what a user can do when Studio is off. `RequireStudioCapability` stamps the capability that
+      authorized the request and `AuditService` records it on the audit row, its outbox message, and
+      the outbox payload, so reviewing a Studio mutation does not mean inferring authority from the
+      route.
 - [ ] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
 - [ ] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
       branches, and separation of duties.

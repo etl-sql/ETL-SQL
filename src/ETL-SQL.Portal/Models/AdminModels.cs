@@ -67,7 +67,9 @@ public record AuditLogDto(
     string? ResourceId,
     DateTime Timestamp,
     string? Detail,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    /// <summary>The Studio capability that authorized the mutation, when one did.</summary>
+    string? StudioCapability = null);
 
 public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);
 
@@ -79,12 +81,25 @@ public record EffectivePermissionEntryDto(
     string Permission,
     IReadOnlyList<string> Sources);
 
+/// <param name="Roles">Role names, since Studio capabilities are resolved from them.</param>
+/// <param name="StudioMode">
+/// Deployment mode. Capabilities mean nothing when Studio is <c>Disabled</c>, so reporting the
+/// grants without the mode would overstate what the user can do.
+/// </param>
+/// <param name="StudioCapabilities">
+/// Resolved from the configured role mapping. Studio authority is separate from resource
+/// permission — folder <c>Manage</c> does not imply the right to publish or push — so an
+/// administrator answering "why can they do that?" needs both halves in one place.
+/// </param>
 public record EffectiveUserPermissionsDto(
     int UserId,
     string Username,
     IReadOnlyList<string> Groups,
     IReadOnlyList<EffectivePermissionEntryDto> Folders,
-    IReadOnlyList<EffectivePermissionEntryDto> Reports);
+    IReadOnlyList<EffectivePermissionEntryDto> Reports,
+    IReadOnlyList<string> Roles,
+    string StudioMode,
+    IReadOnlyList<string> StudioCapabilities);
 
 public record EffectivePrincipalPermissionDto(
     int UserId,

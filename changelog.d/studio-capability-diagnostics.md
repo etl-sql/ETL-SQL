@@ -1,0 +1,4 @@
+### Added
+
+- Studio authority is now visible where it is reviewed. `GET /api/admin/permissions/effective/user/{id}` reports the user's roles, the Studio deployment mode, and the capabilities those roles resolve to, alongside the folder and report permissions it already returned — Studio authority is a separate axis from resource permission, and folder `Manage` does not imply the right to publish, commit, or push. Capabilities are reported as empty when Studio is disabled, since listing configured grants a deployment cannot honour would overstate what the user can do.
+- Audited Studio mutations now record the capability that authorized them, on the audit row, its outbox message, and the outbox payload. Reviewing a publish or a commit no longer means inferring the authority from the route it came in on.

@@ -26,6 +26,11 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
         var safeDetail = SecretRedactor.Redact(detail);
         var effectiveCorrelationId = correlationId ?? httpContext.HttpContext?.TraceIdentifier;
         var principal = httpContext.HttpContext?.User;
+        // Stamped by RequireStudioCapabilityAttribute when a Studio capability gated this request.
+        var studioCapability =
+            httpContext.HttpContext?.Items.TryGetValue(StudioAuthorizationService.AuthorizedCapabilityItem, out var value) == true
+                ? value as string
+                : null;
         var effectiveActorType = actorType ??
             (principal?.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType
                 ? "ServiceAccount" : "User");
@@ -51,7 +56,8 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
             ResourceId = safeResourceId,
             Timestamp = occurredAt,
             Detail = safeDetail,
-            CorrelationId = effectiveCorrelationId
+            CorrelationId = effectiveCorrelationId,
+            StudioCapability = studioCapability
         };
 
         db.AuditLogs.Add(auditLog);
@@ -66,6 +72,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
             ResourceType = resourceType,
             ResourceId = safeResourceId,
             CorrelationId = effectiveCorrelationId,
+            StudioCapability = studioCapability,
             OccurredAt = occurredAt,
             PayloadJson = JsonSerializer.Serialize(new
             {
@@ -78,6 +85,7 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
                 resourceId = safeResourceId,
                 detail = safeDetail,
                 correlationId = effectiveCorrelationId,
+                studioCapability,
                 occurredAt
             }, PayloadJsonOptions),
             Status = "Pending",

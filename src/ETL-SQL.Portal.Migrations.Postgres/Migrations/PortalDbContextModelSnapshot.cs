@@ -130,6 +130,9 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("ResourceType")
                         .HasColumnType("text");
 
+                    b.Property<string>("StudioCapability")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp with time zone");
 
@@ -214,6 +217,9 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StudioCapability")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
