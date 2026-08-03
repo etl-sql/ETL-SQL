@@ -864,6 +864,40 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Dataset at-rest key posture ──────────────────────────────────────────
+
+    /// <summary>
+    /// Dataset at-rest key inventory, rotation preflight, verification, and rollback guidance.
+    ///
+    /// Rotation itself is <c>POST datasets/rotate-at-rest-key</c> and reports what it did. This is
+    /// everything around it: which key version each cache is on, what would rotate, and — the part
+    /// worth knowing beforehand — which datasets <em>cannot</em>, because a cache encrypted under a
+    /// version whose key is no longer configured can be neither rotated nor read.
+    ///
+    /// Key versions are non-secret identifiers and are named. Key material never appears: a key is
+    /// reported as configured or not.
+    /// </summary>
+    [HttpGet("datasets/at-rest-key/posture")]
+    public async Task<IActionResult> GetDatasetKeyPosture(
+        [FromServices] DatasetKeyPostureService posture, CancellationToken ct) =>
+        Ok(await posture.BuildAsync(ct));
+
+    // ── Secret and connection posture ────────────────────────────────────────
+
+    /// <summary>
+    /// Secrets and shared connections resolved against each other: which connections reference which
+    /// secrets, which references do not resolve, when each secret was last rotated, and which the
+    /// target of a promotion would have to be given.
+    ///
+    /// The failure this exists for is invisible on either page alone — a connection referencing a
+    /// secret that was renamed, disabled, or never created looks healthy in both lists and fails the
+    /// first time something runs. No secret value is read to build it.
+    /// </summary>
+    [HttpGet("credentials/posture")]
+    public async Task<IActionResult> GetCredentialPosture(
+        [FromServices] CredentialPostureService posture, CancellationToken ct) =>
+        Ok(await posture.BuildAsync(ct));
+
     // ── Recovery and host-identity posture ───────────────────────────────────
 
     /// <summary>

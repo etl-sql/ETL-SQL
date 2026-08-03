@@ -279,8 +279,16 @@ documentation reconciliation, then release certification.
       which is the point of comparing them), client-certificate thumbprint match and expiry with an
       advance warning, and remediation that names the **host** commands, because enrolment owns an
       OS-protected bootstrap deliberately outside lower-authority Portal configuration.
-- [ ] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
-      plans.
+- [x] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
+      plans. `GET /api/admin/credentials/posture` resolves secrets and shared connections **against
+      each other**: which connections reference which secrets, which references do not resolve, when
+      each secret was last rotated, which secrets nothing references, and which the target of a
+      promotion would have to be supplied.
+  - The failure it exists for is invisible on either page alone: a connection referencing a secret
+      that was renamed, disabled, or never created looks healthy in both lists and fails the first
+      time something runs.
+  - No secret value is read to build it — references are matched by name, because resolving them
+      would mean decrypting every secret to render a page.
 - [x] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
       `GET /api/admin/audit/collector` reports queue depth, queued bytes, oldest pending age, terminal
       failures, last attempt/success/error, and the thresholds a reading is compared against — the
@@ -312,8 +320,19 @@ documentation reconciliation, then release certification.
       environment and nothing else. Per-environment tokens are never echoed, only counted, and an
       unreachable environment is reported as unreachable rather than failing the whole view — a
       partial outage is exactly when the view is needed.
-- [ ] Add guarded dataset-key inventory, rotation preflight/progress/verification, and rollback
-      guidance without displaying key material.
+- [x] Add guarded dataset-key inventory, rotation preflight/progress/verification, and rollback
+      guidance without displaying key material. `GET /api/admin/datasets/at-rest-key/posture` reports
+      the per-version inventory, what rotation would do, what it has done, and what to do if it goes
+      wrong. Rotation itself remains `POST datasets/rotate-at-rest-key`.
+  - **Preflight is the point.** A cache encrypted under a version whose key is no longer configured
+      can be neither rotated nor read, and the only way to discover that was to start the rotation
+      and read the failure list. Blocked datasets are now named beforehand, with the reason.
+  - Key *versions* are non-secret identifiers and are named; key **material** never appears — a key
+      is reported as configured or not, and a test asserts the configured key value is absent from
+      the whole response.
+  - Progress is the rotation result itself: rotation stamps each cache as it goes, so it is
+      resumable rather than transactional, and re-running it retries only what has not moved. That
+      property is what the rollback guidance is built on.
 - [x] Add guided secret-free configuration export, target-plan validation, diff, approval, and audit.
   - `GET /api/admin/configuration/export/plan` returns what leaves this Portal, what will not, and
       what must be moved separately — **without** the script body. The export endpoint already
