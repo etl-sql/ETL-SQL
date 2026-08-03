@@ -171,6 +171,18 @@ public interface IDataContext
     string? SessionId { get; }
     string SessionRoot { get; }
     IDictionary<string, IDataSource> Connections { get; }
+
+    /// <summary>
+    /// Aliases created from a governed <c>SHARED:</c> catalog entry, mapped to their connector type.
+    ///
+    /// Recorded so a durable artifact written during the run — a quarantine replay manifest — can
+    /// state that its target sits behind a catalog-backed connection, which is the only kind another
+    /// process can later reopen through the governed path. Inferring that afterwards from the target
+    /// string would mean opening a production connection on a guess; a script-local connection with
+    /// the same alias is not the same connection.
+    /// </summary>
+    IDictionary<string, string> CatalogBackedConnections { get; }
+
     /// <summary>Statement-local data source overrides (used for CTEs).</summary>
     IDictionary<string, IDataSource> LocalSources { get; }
     string? MasterPassword { get; }

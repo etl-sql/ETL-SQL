@@ -1,21 +1,18 @@
 import { createDataQualityQueue } from '../../../src/ETL-SQL.Portal/wwwroot/js/data-quality-queue.js';
 
-// Three shapes of quarantine target, because they behave differently in the row editor:
-//   1. a table the Portal's own execution session can resolve  → editable
-//   2. a durable table on a named production connection        → listed, view-only
-//   3. a #temp table that died with the producing run          → listed, view-only
-//
-// `rowsReadable` mirrors what `QuarantineTargetReadability` reports. The shipped classifier
-// returns false for every shape today — the Portal's preview session restores no connections —
-// so the readable manifests below are the design target for the catalog-backed preview on the
-// roadmap, kept here so the row editor stays developable in the meantime.
+// `rowsReadable` mirrors what `QuarantineTargetReadability` reports, and every fixture below is a
+// verdict the shipped classifier actually returns. Rows are readable only when the capture recorded
+// that its target sits behind a governed shared connection, the operator turned
+// `Portal:DataQuality:AllowConnectionPreview` on, and this caller holds a grant on that connection.
+// Failing any one of those is the common case, so the view-only shapes get as much fixture coverage
+// as the readable one — the reason text is the whole UI in that state.
 const manifests = [
   {
     jobName: 'nightly_import',
     scriptPath: 'loads/users.etlsql',
     sectionLabel: 'import_users',
     sourceTable: '#raw_users',
-    quarantineTarget: 'quarantine_users',
+    quarantineTarget: 'warehouse.quarantine_users',
     isReplayable: true,
     nonReplayableReason: null,
     inputColumns: ['UserId', 'Email', 'Age', 'Region', 'Source'],
@@ -26,17 +23,17 @@ const manifests = [
     joinBuildTable: null,
     joinObservedN1: null,
     joinNonReplayableReason: null,
-    replayStatement: 'REPLAY QUARANTINE quarantine_users;',
+    replayStatement: 'REPLAY QUARANTINE warehouse.quarantine_users;',
     rowsReadable: true,
     rowsUnavailableReason: null,
-    reviewStatement: "SELECT * FROM quarantine_users WHERE __dq_status = 'quarantined';",
+    reviewStatement: "SELECT * FROM warehouse.quarantine_users WHERE __dq_status = 'quarantined';",
   },
   {
     jobName: 'nightly_import',
     scriptPath: 'loads/orders.etlsql',
     sectionLabel: 'import_orders',
     sourceTable: '#raw_orders,#dim_region',
-    quarantineTarget: 'quarantine_orders',
+    quarantineTarget: 'warehouse.quarantine_orders',
     isReplayable: false,
     nonReplayableReason: 'quarantine source spans a fan-out join; replay requires an observed N:1 join',
     inputColumns: ['OrderId', 'RegionId'],
@@ -47,19 +44,20 @@ const manifests = [
     joinBuildTable: '#dim_region',
     joinObservedN1: false,
     joinNonReplayableReason: 'build side had duplicate keys',
-    replayStatement: 'REPLAY QUARANTINE quarantine_orders;',
+    replayStatement: 'REPLAY QUARANTINE warehouse.quarantine_orders;',
     rowsReadable: true,
     rowsUnavailableReason: null,
-    reviewStatement: "SELECT * FROM quarantine_orders WHERE __dq_status = 'quarantined';",
+    reviewStatement: "SELECT * FROM warehouse.quarantine_orders WHERE __dq_status = 'quarantined';",
   },
   {
-    // The shape the docs tell stewards to use for anything they intend to review later: a durable
-    // table on the warehouse connection. It queues and replays, but the row editor cannot read it.
-    jobName: 'warehouse_load',
-    scriptPath: 'loads/warehouse_users.etlsql',
+    // Catalog-backed and previewable in principle — this steward simply has no grant on the
+    // connection. The queue still lists and replays it, because replay runs in the orchestrator
+    // under the job's own authority, not the reader's.
+    jobName: 'finance_load',
+    scriptPath: 'loads/finance_users.etlsql',
     sectionLabel: 'load_dim_users',
     sourceTable: 'stage.dbo.raw_users',
-    quarantineTarget: 'warehouse.dbo.quarantine_users',
+    quarantineTarget: 'finance_dw.quarantine_users',
     isReplayable: true,
     nonReplayableReason: null,
     inputColumns: ['UserId', 'Email', 'Age', 'Region'],
@@ -70,10 +68,34 @@ const manifests = [
     joinBuildTable: null,
     joinObservedN1: null,
     joinNonReplayableReason: null,
-    replayStatement: 'REPLAY QUARANTINE warehouse.dbo.quarantine_users;',
+    replayStatement: 'REPLAY QUARANTINE finance_dw.quarantine_users;',
     rowsReadable: false,
-    rowsUnavailableReason: "Portal cannot open connection 'warehouse'. The row editor runs inside the Portal process, which has no access to the connections the job used.",
-    reviewStatement: "SELECT * FROM warehouse.dbo.quarantine_users WHERE __dq_status = 'quarantined';",
+    rowsUnavailableReason: "Portal cannot open shared connection 'finance_dw' for you — it is not a usable entry in the shared connection catalog, or you have no grant on it. Quarantined rows are raw source rows, so reading them needs the same authority as using the connection they came from, not only data-quality steward access.",
+    reviewStatement: "SELECT * FROM finance_dw.quarantine_users WHERE __dq_status = 'quarantined';",
+  },
+  {
+    // Written before captures recorded provenance. The connection is right there in the catalog and
+    // the target looks identical to the readable one — absent provenance still means unknown,
+    // because matching by name would be inferring what capture never proved.
+    jobName: 'legacy_load',
+    scriptPath: 'loads/legacy_users.etlsql',
+    sectionLabel: 'load_legacy_users',
+    sourceTable: 'stage.dbo.legacy_users',
+    quarantineTarget: 'warehouse.quarantine_legacy',
+    isReplayable: true,
+    nonReplayableReason: null,
+    inputColumns: ['UserId', 'Email'],
+    inputSchemaFingerprint: 'schema-e',
+    updatedAtUtc: '2026-06-30T03:05:00Z',
+    replayMode: 'single-table',
+    probeSourceTable: null,
+    joinBuildTable: null,
+    joinObservedN1: null,
+    joinNonReplayableReason: null,
+    replayStatement: 'REPLAY QUARANTINE warehouse.quarantine_legacy;',
+    rowsReadable: false,
+    rowsUnavailableReason: "Portal cannot open connection 'warehouse'. This capture has no record of a governed shared connection behind its target, so there is no path the Portal can reopen it through.",
+    reviewStatement: "SELECT * FROM warehouse.quarantine_legacy WHERE __dq_status = 'quarantined';",
   },
   {
     // A #temp capture target: the manifest outlives the run, the table does not.
@@ -161,28 +183,40 @@ const rowsByStatus = {
 
 const rowColumns = ['UserId', 'Email', 'Source', '__dq_row_id', '__dq_column', '__dq_reason', '__dq_status'];
 
+// The kill switch is deployment-wide, not per-capture: with it off, every otherwise-eligible target
+// falls back to view-only at once. That is a different page from "this one target is not eligible",
+// and an operator who has just turned it off needs to recognise it, so it gets its own fixture.
+const previewOffManifests = manifests.map(m => (
+  m.rowsReadable
+    ? {
+      ...m,
+      rowsReadable: false,
+      rowsUnavailableReason: `Connection preview is disabled. '${m.quarantineTarget.split('.')[0]}' is catalog-backed and could be read, but Portal:DataQuality:AllowConnectionPreview is off.`,
+    }
+    : m));
+
 // `GetQuarantineRows` declines a target it knows this process cannot resolve, rather than running
 // the SELECT and returning an engine error (or, for a #temp target, an empty result that reads as
 // "nothing was quarantined"). The queue hides the row editor for these, so this only fires if a
 // stale manifest slips through.
-function viewOnlyTargetError(target) {
-  const item = manifests.find(m => m.quarantineTarget === target);
+function viewOnlyTargetError(target, from = manifests) {
+  const item = from.find(m => m.quarantineTarget === target);
   return Object.assign(new Error(item?.rowsUnavailableReason || 'Portal cannot read this target.'),
     { status: 409 });
 }
 
-function mockApi(trendKey) {
+function mockApi(trendKey, queueManifests = manifests) {
   return {
-    quarantineQueue: async () => manifests,
+    quarantineQueue: async () => queueManifests,
     quarantineRows: async ({ quarantineTarget, status }) => {
-      const item = manifests.find(m => m.quarantineTarget === quarantineTarget);
-      if (item && item.rowsReadable === false) throw viewOnlyTargetError(quarantineTarget);
+      const item = queueManifests.find(m => m.quarantineTarget === quarantineTarget);
+      if (item && item.rowsReadable === false) throw viewOnlyTargetError(quarantineTarget, queueManifests);
       const rows = status === 'all'
         ? Object.values(rowsByStatus).flat()
         : (rowsByStatus[status] || []);
       return { quarantineTarget, status, columns: rowColumns, rows, capped: false };
     },
-    replayQuarantine: async () => ({ jobId: 'job-1', replayStatement: 'REPLAY QUARANTINE quarantine_users;' }),
+    replayQuarantine: async () => ({ jobId: 'job-1', replayStatement: 'REPLAY QUARANTINE warehouse.quarantine_users;' }),
     updateQuarantineDisposition: async () => ({ jobId: 'job-2', dispositionStatement: 'UPDATE ...' }),
     qualityTrend: async () => trends[trendKey],
     qualityRules: async () => [
@@ -209,6 +243,7 @@ export default {
     { id: 'rows', label: 'Row editor (resolvable target)' },
     { id: 'rows-replaying', label: 'Row editor (incomplete replay)' },
     { id: 'view-only', label: 'Queue (targets Portal cannot read)' },
+    { id: 'preview-off', label: 'Queue (preview switch off)' },
     { id: 'trend', label: 'Quality trend (degrading)' },
     { id: 'trend-empty', label: 'Quality trend (no runs)' },
     { id: 'job-status', label: 'Tracked replay completion' },
@@ -219,12 +254,13 @@ export default {
     stage.replaceChildren(host);
 
     const trendKey = fixtureId === 'trend-empty' ? 'empty' : 'degrading';
-    const queue = createDataQualityQueue({ host, dataQualityApi: mockApi(trendKey) });
+    const shown = fixtureId === 'preview-off' ? previewOffManifests : manifests;
+    const queue = createDataQualityQueue({ host, dataQualityApi: mockApi(trendKey, shown) });
     queue.show();
     await settle();
 
     if (fixtureId === 'job-status') {
-      host.querySelector('[data-replay-target="quarantine_users"]')?.click();
+      host.querySelector('[data-replay-target="warehouse.quarantine_users"]')?.click();
       await settle();
       await settle();
       ctx.stat('Replay submission connected to Completed execution status');
@@ -233,7 +269,7 @@ export default {
       host.querySelector('[data-trend-job]')?.click();
       ctx.stat(trendKey === 'empty' ? 'trend panel — empty state' : 'trend panel — degrading quality');
     } else if (fixtureId === 'rows' || fixtureId === 'rows-replaying') {
-      host.querySelector('[data-review-target="quarantine_users"]')?.click();
+      host.querySelector('[data-review-target="warehouse.quarantine_users"]')?.click();
       await settle();
       if (fixtureId === 'rows-replaying') {
         const status = host.querySelector('#dqRowsStatus');
@@ -244,11 +280,13 @@ export default {
       ctx.stat(fixtureId === 'rows'
         ? 'row editor — edit cells, add an audited reason, release or discard'
         : 'row editor — return an incomplete claim to released or mark it replayed');
-    } else if (fixtureId === 'view-only') {
+    } else if (fixtureId === 'view-only' || fixtureId === 'preview-off') {
       // No row editor is offered for these: the queue states why and hands over the statement to
       // run where the connection exists. Replay and trend still work.
-      const viewOnly = manifests.filter(m => m.rowsReadable === false).length;
-      ctx.stat(`${viewOnly} of ${manifests.length} targets are view-only — reason shown inline`);
+      const viewOnly = shown.filter(m => m.rowsReadable === false).length;
+      ctx.stat(fixtureId === 'preview-off'
+        ? `preview switch off — all ${viewOnly} targets view-only, switch named in each reason`
+        : `${viewOnly} of ${shown.length} targets are view-only — reason shown inline`);
     } else {
       ctx.stat(`${manifests.length} manifests`);
     }

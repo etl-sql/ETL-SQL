@@ -564,6 +564,28 @@ public sealed class ColumnQualityValidator
         else if (sourceTables.Count != 1)
             nonReplayableReason = "quarantine source spans a join; replay requires a single-table input in this version";
 
+        // Target provenance: only an alias the run created from the governed catalog can be
+        // reopened later through the same governed path. Anything else stays unknown, which the
+        // Portal classifies as view-only rather than guessing.
+        string? targetAlias = null;
+        string? targetConnectorType = null;
+        bool? targetIsCatalogBacked = null;
+        var aliasSeparator = target.IndexOf('.');
+        if (aliasSeparator > 0 && target[0] is not ('#' or '&'))
+        {
+            targetAlias = target[..aliasSeparator];
+            if (_context.CatalogBackedConnections.TryGetValue(targetAlias, out var connectorType))
+            {
+                targetConnectorType = connectorType;
+                targetIsCatalogBacked = true;
+            }
+            else
+            {
+                // Named a connection, but not one this run took from the catalog.
+                targetIsCatalogBacked = false;
+            }
+        }
+
         var manifest = new QuarantineReplayManifest(
             JobName: _context.JobName!,
             ScriptPath: _context.CurrentScriptPath,
@@ -579,7 +601,10 @@ public sealed class ColumnQualityValidator
             ProbeSourceTable: probeSourceTable,
             JoinBuildTable: joinBuildTable,
             JoinObservedN1: joinObservedN1,
-            JoinNonReplayableReason: joinNonReplayableReason);
+            JoinNonReplayableReason: joinNonReplayableReason,
+            TargetConnectionAlias: targetAlias,
+            TargetConnectorType: targetConnectorType,
+            TargetIsCatalogBacked: targetIsCatalogBacked);
 
         try
         {

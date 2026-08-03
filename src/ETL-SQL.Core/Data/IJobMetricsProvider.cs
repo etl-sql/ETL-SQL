@@ -51,7 +51,21 @@ public sealed record QuarantineReplayManifest(
     string? ProbeSourceTable = null,
     string? JoinBuildTable = null,
     bool? JoinObservedN1 = null,
-    string? JoinNonReplayableReason = null);
+    string? JoinNonReplayableReason = null,
+    // ── Target provenance, written at capture time ───────────────────────────
+    // Appended, all nullable, so a manifest written by an older engine still deserializes. Absent
+    // means "unknown", which classifies the target as view-only — the same backward-compatibility
+    // shape the replay-mode fields above used. Guessing provenance from the target string would
+    // mean opening a production connection on an inference.
+    /// <summary>Shared-connection alias the target lives behind, when it is catalog-backed.</summary>
+    string? TargetConnectionAlias = null,
+    /// <summary>Connector type of that alias, needed to bootstrap a preview session.</summary>
+    string? TargetConnectorType = null,
+    /// <summary>
+    /// True only when capture proved the alias came from the governed shared-connection catalog.
+    /// A script-local connection is not previewable: the Portal has no governed way to open it.
+    /// </summary>
+    bool? TargetIsCatalogBacked = null);
 
 /// <summary>
 /// Narrow Engine→Orchestrator seam giving <c>ASSERT JOB … WITHIN … OF HISTORICAL</c> access to

@@ -36,6 +36,7 @@ namespace ETL_SQL.TUI.UI
         public string FullScript { get; set; } = "";
         public string ScriptBefore { get; set; } = "";
         public IDictionary<string, IDataSource> Connections { get; set; } = new Dictionary<string, IDataSource>();
+        public IDictionary<string, string> CatalogBackedConnections { get; set; } = new Dictionary<string, string>();
         public IDictionary<string, AliasInfo> Aliases { get; set; } = new Dictionary<string, AliasInfo>();
         public IDictionary<string, List<string>> VirtualSchemas { get; set; } = new Dictionary<string, List<string>>();
         public ILogger? Logger { get; set; }

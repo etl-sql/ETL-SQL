@@ -32,6 +32,28 @@ public class PortalConfig
     public PortalStudioConfig Studio { get; set; } = new();
     public PortalDesignerLimitsConfig DesignerLimits { get; set; } = new();
     public PortalFleetConfig Fleet { get; set; } = new();
+    public PortalDataQualityConfig DataQuality { get; set; } = new();
+}
+
+/// <summary>
+/// Data-quality review behaviour in the Portal.
+/// </summary>
+public class PortalDataQualityConfig
+{
+    /// <summary>
+    /// Whether the quarantine row editor may open the shared connection behind a capture's target and
+    /// read its rows.
+    ///
+    /// <para><b>Default off, deliberately.</b> Turning it on lets the web tier open production
+    /// connections, so it must be a decision an operator makes rather than a capability that arrives
+    /// with an upgrade. When off, every quarantine target is reported view-only with a reason, and the
+    /// Portal still offers the SELECT a steward can run themselves.</para>
+    ///
+    /// <para>The switch gates the feature, not the data: even with it on, a caller reads rows only for
+    /// shared connections they are separately granted. See
+    /// <c>ETL_SQL.Portal.Services.QuarantineTargetReadability</c>.</para>
+    /// </summary>
+    public bool AllowConnectionPreview { get; set; } = false;
 }
 
 /// <summary>

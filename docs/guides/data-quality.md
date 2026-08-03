@@ -164,6 +164,40 @@ have never failed—with their `@expect`/`@fail` tag, action, script source, and
 read normalized per-run rule rows from durable history (target, column, rule, action, owner, and
 count); the compact legacy history string is used only for older runs that predate normalized rows.
 
+### Reading quarantined rows in Portal
+
+The Portal queue always lists a capture, always offers the `SELECT` you can run against it yourself,
+and always replays it where the manifest allows. Reading the **rows** inside the Portal is separate,
+because it means the web tier opens the source connection and returns raw captured data. Four things
+must all hold, and the queue names the first one that does not:
+
+| Requirement | Why | What you see when it fails |
+| :--- | :--- | :--- |
+| The capture recorded a governed shared connection behind its target | Provenance is written when the rows are captured. Portal will not work out where a target lives after the fact — that would mean opening a production connection on an inference | *"This capture has no record of a governed shared connection…"* — including every capture written before v0.18.0 |
+| `Portal:DataQuality:AllowConnectionPreview` is `true` | Default **off**, so upgrading never silently starts opening production connections from the web tier | *"Connection preview is disabled…"*, naming the setting |
+| You hold a grant on that shared connection | Quarantined rows are raw source rows carrying whatever the source carried. The connection ACL exists to say who may read that | *"…it is not a usable entry in the shared connection catalog, or you have no grant on it"* |
+| The capture is self-consistent | A manifest whose target names one alias and whose provenance records another is a contradiction; Portal will not pick one | *"This capture is inconsistent…"* — re-run the job to write a fresh capture |
+
+Two consequences are deliberate:
+
+- **Steward access is not enough.** `DataSteward` gets you to the queue; it does not get you the
+  data. An operator who wants a steward reading rows grants them the connection as well. The
+  alternative — one role that implicitly reads every connection that has ever produced a capture —
+  is an authority that accumulates silently and cannot be revoked where it was granted.
+- **Session-local (`#temp`) capture targets are never readable**, and say so rather than showing an
+  empty grid. The manifest outlives the run; the table does not. Quarantine into a durable table
+  for anything you intend to review later.
+
+The connection Portal opens is the one the *capture* recorded, resolved as `SHARED:<alias>` — never
+an alias taken from the request — so policy, secret resolution, and redaction apply exactly as they
+do to any script using that connection. A missing, disabled, and ungranted connection all give the
+same wording on purpose: the catalog does not disclose the existence of connections you cannot use.
+
+Every successful read writes an audit entry (`READ_QUARANTINE_ROWS`) naming the target, the
+connection, the status filter, and the row limit. Reading production data is a data-access event,
+not a page view. Previews are row-capped and time-bounded, and a capped result is reported as capped
+so a truncated grid is never mistaken for the full quarantine set.
+
 Retention is scoped by `__dq_capture_scope`, a stable job or script identity. On a shared capture
 target, one writer's retention window cannot prune another writer's rows. Only terminal
 dispositions (`warned`, `replayed`, or `discarded`) age out.

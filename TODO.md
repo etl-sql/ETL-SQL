@@ -520,23 +520,23 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 
 ### Portal — Quarantine Row Access
 
-- [ ] Decide and document whether preview requires the caller's connection grant or whether
+- [x] Decide and document whether preview requires the caller's connection grant or whether
       `DataQualityStewardAccess` plus a manifest-bound target is sufficient.
-- [ ] Add nullable target connection alias, connector type, and catalog-backed provenance fields to
+- [x] Add nullable target connection alias, connector type, and catalog-backed provenance fields to
       `QuarantineReplayManifest` at capture time.
-- [ ] Preserve backward compatibility by classifying missing provenance as view-only.
-- [ ] Make target readability resolve enabled catalog entries with the caller's execution identity
+- [x] Preserve backward compatibility by classifying missing provenance as view-only.
+- [x] Make target readability resolve enabled catalog entries with the caller's execution identity
       and the chosen authorization rule.
-- [ ] Bootstrap preview only from manifest-owned `SHARED:` connection metadata; never trust request
+- [x] Bootstrap preview only from manifest-owned `SHARED:` connection metadata; never trust request
       connection names or accept arbitrary SQL.
-- [ ] Preserve the 15-second timeout, row cap, RLS identity, and redacted errors.
-- [ ] Gate connection preview behind `Portal:DataQuality:AllowConnectionPreview`, default off.
-- [ ] Audit every raw quarantine preview as a data-access event.
-- [ ] Add a positive catalog-backed preview test first.
-- [ ] Add tests for catalog miss, disabled entry, switch off, unauthorized identity, legacy manifest,
+- [x] Preserve the 15-second timeout, row cap, RLS identity, and redacted errors.
+- [x] Gate connection preview behind `Portal:DataQuality:AllowConnectionPreview`, default off.
+- [x] Audit every raw quarantine preview as a data-access event.
+- [x] Add a positive catalog-backed preview test first.
+- [x] Add tests for catalog miss, disabled entry, switch off, unauthorized identity, legacy manifest,
       row cap/timeout, and failure-path redaction.
-- [ ] Document preview eligibility, the kill switch, authorization, and audit behavior.
-- [ ] Add readable and view-only data-quality queue sandbox fixtures.
+- [x] Document preview eligibility, the kill switch, authorization, and audit behavior.
+- [x] Add readable and view-only data-quality queue sandbox fixtures.
 
 ### Portal — Data Quality Follow-through
 

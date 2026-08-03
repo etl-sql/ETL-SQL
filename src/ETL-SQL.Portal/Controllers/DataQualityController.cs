@@ -57,10 +57,18 @@ public sealed class DataQualityController(
             string.IsNullOrWhiteSpace(jobName) ? null : jobName.Trim(),
             scanLimit);
 
+        // The queue and the row endpoint must reach the same verdict from the same inputs, or the
+        // list offers a row editor that then refuses — so both resolve readability the same way
+        // rather than the queue guessing from the target string.
+        var previewEnabled = portalConfig.DataQuality.AllowConnectionPreview;
+        var usableAliases = previewEnabled
+            ? await ResolveUsableConnectionAliasesAsync(HttpContext.RequestAborted)
+            : null;
+
         var query = q?.Trim();
         var items = states
             .Where(s => s.StateKey.StartsWith(QuarantineManifestPrefix, StringComparison.OrdinalIgnoreCase))
-            .Select(TryReadManifest)
+            .Select(state => TryReadManifest(state, previewEnabled, usableAliases))
             .Where(item => item != null)
             .Select(item => item!)
             .Where(item => replayable == null || item.IsReplayable == replayable.Value)
@@ -196,6 +204,21 @@ public sealed class DataQualityController(
             .ThenBy(value => value.Rule, StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Shared-connection aliases this caller may use. Steward access gates the feature; this gates
+    /// the data — quarantined rows are raw source rows, so reading them takes the same authority as
+    /// using the connection they came from.
+    /// </summary>
+    private async Task<IReadOnlyCollection<string>> ResolveUsableConnectionAliasesAsync(
+        CancellationToken cancellationToken)
+    {
+        var catalog = services.GetService<ETL_SQL.Portal.Services.PortalConnectionCatalogService>();
+        if (catalog is null) return [];
+
+        var identity = await BuildExecutionIdentityAsync(cancellationToken);
+        return [.. await catalog.ListUsableAliasesAsync(identity, cancellationToken)];
+    }
+
     private static DataQualityRunDto ToRunDto(
         JobHistoryEntry entry,
         IReadOnlyList<JobDataQualityFailure> normalizedFailures)
@@ -280,8 +303,12 @@ public sealed class DataQualityController(
         // anyway produces either an engine resolution error dressed up as a 502, or — for a
         // #temp target, which auto-creates empty — an empty result that reads as "nothing was
         // quarantined". Both are worse than declining with a reason.
+        var previewEnabled = portalConfig.DataQuality.AllowConnectionPreview;
+        var usableAliases = previewEnabled
+            ? await ResolveUsableConnectionAliasesAsync(cancellationToken)
+            : null;
         var readability = ETL_SQL.Portal.Services.QuarantineTargetReadability
-            .Describe(manifest.QuarantineTarget);
+            .Describe(manifest.QuarantineTarget, manifest, previewEnabled, usableAliases);
         if (!readability.Readable)
         {
             return Conflict(new
@@ -295,7 +322,14 @@ public sealed class DataQualityController(
         var where = status.Equals("all", StringComparison.OrdinalIgnoreCase)
             ? string.Empty
             : $" WHERE {DataQualityColumns.Status} = {ToSqlLiteral(status)}";
-        var script = $"SET MAX_LAST_RESULT_ROWS = {limit};\nSELECT * FROM {manifest.QuarantineTarget}{where};";
+        // The connection is bootstrapped from the *manifest's* alias and connector type — never
+        // from the request — and the only statement that follows is a SELECT from the manifest's
+        // target. Resolving it as SHARED: sends it through the governed path, so policy, secret
+        // resolution, and redaction apply exactly as they do to any script using that connection.
+        var bootstrap = $"CREATE CONNECTION {readability.ConnectionAlias} AS "
+            + $"{readability.ConnectorType}('SHARED:{readability.ConnectionAlias}');\n";
+        var script = bootstrap
+            + $"SET MAX_LAST_RESULT_ROWS = {limit};\nSELECT * FROM {manifest.QuarantineTarget}{where};";
 
         try
         {
@@ -323,6 +357,12 @@ public sealed class DataQualityController(
                     : "Unable to read quarantine rows.";
                 return StatusCode(502, new { error = ETL_SQL.Core.Common.SecretRedactor.Redact(message) });
             }
+
+            // Reading raw quarantined source rows is a data-access event, not a page view — the
+            // same reason dispositions are audited.
+            await audit.LogAsync(CurrentUserId, "READ_QUARANTINE_ROWS", "QuarantineTarget",
+                manifest.QuarantineTarget,
+                $"connection={readability.ConnectionAlias}; status={status}; limit={limit}");
 
             var table = session.LastEvaluator?.LastResult ?? new DataTable();
             var columns = table.ColumnNames;
@@ -552,7 +592,10 @@ public sealed class DataQualityController(
             .FirstOrDefault();
     }
 
-    private static QuarantineQueueItemDto? TryReadManifest(JobStateEntry state)
+    private static QuarantineQueueItemDto? TryReadManifest(
+        JobStateEntry state,
+        bool previewEnabled,
+        IReadOnlyCollection<string>? usableAliases)
     {
         if (string.IsNullOrWhiteSpace(state.StateValue)) return null;
 
@@ -561,7 +604,7 @@ public sealed class DataQualityController(
             var manifest = ReadManifest(state);
             if (manifest == null) return null;
             var readability = ETL_SQL.Portal.Services.QuarantineTargetReadability
-                .Describe(manifest.QuarantineTarget);
+                .Describe(manifest.QuarantineTarget, manifest, previewEnabled, usableAliases);
             return new QuarantineQueueItemDto(
                 manifest.JobName,
                 manifest.ScriptPath,

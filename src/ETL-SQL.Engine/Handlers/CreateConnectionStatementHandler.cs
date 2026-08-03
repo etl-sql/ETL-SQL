@@ -108,6 +108,11 @@ public class CreateConnectionStatementHandler(
             target = expanded.Target;
             options = expanded.Options;
             entrySensitiveFields = expanded.SensitiveFields;
+            // Remember that this alias came from the governed catalog. A durable artifact written
+            // later in the run (a quarantine replay manifest) can then say its target is reopenable
+            // through the same governed path, instead of a reader inferring it from the alias — a
+            // script-local connection sharing the name is not the same connection.
+            context.CatalogBackedConnections[stmt.ConnectionName] = connectionType ?? string.Empty;
         }
         target = await _secretResolver.ResolveTargetAsync(
             target, context.CancellationToken, connectionType, entrySensitiveFields);

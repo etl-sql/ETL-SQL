@@ -72,6 +72,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public string SessionId { get; set; } = Guid.NewGuid().ToString("N");
     public string SessionRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
     public IDictionary<string, IDataSource> Connections { get; } = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
+    public IDictionary<string, string> CatalogBackedConnections { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, IDataSource> LocalSources => new Dictionary<string, IDataSource>();
     public IDictionary<string, NamedSet> NamedSets => new Dictionary<string, NamedSet>();
 
