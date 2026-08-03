@@ -23,6 +23,7 @@ etl-sql admin <subcommand>
 | [`ha-soak`](admin-ha-soak.md) | Prepare and collect PostgreSQL HA soak certification artifacts |
 | [`list-connections`](admin-list-connections.md) | List shared connection catalog entries and their status |
 | [`migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
+| [`promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
 | [`restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`rotate-secret`](admin-rotate-secret.md) | Replace the value of an existing named secret |
 | [`set-connection`](admin-set-connection.md) | Store a shared connection in the catalog for scripts to use as SHARED:alias |

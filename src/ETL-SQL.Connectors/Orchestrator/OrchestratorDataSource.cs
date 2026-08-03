@@ -1063,13 +1063,20 @@ namespace ETL_SQL.Connectors.Orchestrator
                     var denominator = s.RowsProcessed <= 0 ? 0d : s.RowsProcessed;
                     return new Row
                     {
-                        ["run_id"] = s.RunId, ["job_name"] = s.JobName, ["start_time"] = s.StartTime,
-                        ["end_time"] = s.EndTime, ["status"] = s.Status, ["rows_processed"] = s.RowsProcessed,
-                        ["rows_warned"] = s.RowsWarned, ["rows_quarantined"] = s.RowsQuarantined,
+                        ["run_id"] = s.RunId,
+                        ["job_name"] = s.JobName,
+                        ["start_time"] = s.StartTime,
+                        ["end_time"] = s.EndTime,
+                        ["status"] = s.Status,
+                        ["rows_processed"] = s.RowsProcessed,
+                        ["rows_warned"] = s.RowsWarned,
+                        ["rows_quarantined"] = s.RowsQuarantined,
                         ["warn_percent"] = denominator == 0 ? 0d : s.RowsWarned * 100d / denominator,
                         ["quarantine_percent"] = denominator == 0 ? 0d : s.RowsQuarantined * 100d / denominator,
-                        ["failed_rule_count"] = s.FailedRuleCount, ["freshest_value_utc"] = s.FreshestValueUtc,
-                        ["freshness_state"] = s.FreshnessState, ["error_summary"] = s.ErrorSummary,
+                        ["failed_rule_count"] = s.FailedRuleCount,
+                        ["freshest_value_utc"] = s.FreshestValueUtc,
+                        ["freshness_state"] = s.FreshnessState,
+                        ["error_summary"] = s.ErrorSummary,
                         ["source"] = "REMOTE_ORCHESTRATOR"
                     };
                 }).ToList();
@@ -1081,10 +1088,18 @@ namespace ETL_SQL.Connectors.Orchestrator
                 var columns = new[] { "run_id", "job_name", "start_time", "end_time", "status", "target_table", "column_name", "rule", "action", "failure_count", "owner", "source" };
                 var rows = failures.Select(f => new Row
                 {
-                    ["run_id"] = f.RunId.ToString(), ["job_name"] = f.JobName, ["start_time"] = f.StartTime,
-                    ["end_time"] = f.EndTime, ["status"] = f.Status, ["target_table"] = f.TargetTable,
-                    ["column_name"] = f.ColumnName, ["rule"] = f.Rule, ["action"] = f.Action,
-                    ["failure_count"] = f.FailureCount, ["owner"] = f.Owner, ["source"] = "REMOTE_ORCHESTRATOR"
+                    ["run_id"] = f.RunId.ToString(),
+                    ["job_name"] = f.JobName,
+                    ["start_time"] = f.StartTime,
+                    ["end_time"] = f.EndTime,
+                    ["status"] = f.Status,
+                    ["target_table"] = f.TargetTable,
+                    ["column_name"] = f.ColumnName,
+                    ["rule"] = f.Rule,
+                    ["action"] = f.Action,
+                    ["failure_count"] = f.FailureCount,
+                    ["owner"] = f.Owner,
+                    ["source"] = "REMOTE_ORCHESTRATOR"
                 }).ToList();
                 yield return await BuildAsync(columns, rows);
             }
@@ -1094,10 +1109,17 @@ namespace ETL_SQL.Connectors.Orchestrator
                 var columns = new[] { "scope_type", "scope_name", "component", "numerator", "denominator", "percentage", "asset_count", "column_count", "weight", "evaluated_at_utc", "definition_version" };
                 var rows = scores.Select(s => new Row
                 {
-                    ["scope_type"] = s.ScopeType, ["scope_name"] = s.ScopeName, ["component"] = s.Component,
-                    ["numerator"] = s.Numerator, ["denominator"] = s.Denominator, ["percentage"] = s.Percentage,
-                    ["asset_count"] = s.AssetCount, ["column_count"] = s.ColumnCount, ["weight"] = s.Weight,
-                    ["evaluated_at_utc"] = s.EvaluatedAtUtc, ["definition_version"] = s.DefinitionVersion
+                    ["scope_type"] = s.ScopeType,
+                    ["scope_name"] = s.ScopeName,
+                    ["component"] = s.Component,
+                    ["numerator"] = s.Numerator,
+                    ["denominator"] = s.Denominator,
+                    ["percentage"] = s.Percentage,
+                    ["asset_count"] = s.AssetCount,
+                    ["column_count"] = s.ColumnCount,
+                    ["weight"] = s.Weight,
+                    ["evaluated_at_utc"] = s.EvaluatedAtUtc,
+                    ["definition_version"] = s.DefinitionVersion
                 }).ToList();
                 yield return await BuildAsync(columns, rows);
             }
@@ -1107,10 +1129,16 @@ namespace ETL_SQL.Connectors.Orchestrator
                 var columns = new[] { "scope_type", "scope_name", "component", "target_table", "target_column", "requirement", "source_file", "line", "evaluated_at_utc", "definition_version" };
                 var rows = gaps.Select(g => new Row
                 {
-                    ["scope_type"] = g.ScopeType, ["scope_name"] = g.ScopeName, ["component"] = g.Component,
-                    ["target_table"] = g.TargetTable, ["target_column"] = g.TargetColumn,
-                    ["requirement"] = g.Requirement, ["source_file"] = g.SourceFile, ["line"] = g.Line,
-                    ["evaluated_at_utc"] = g.EvaluatedAtUtc, ["definition_version"] = g.DefinitionVersion
+                    ["scope_type"] = g.ScopeType,
+                    ["scope_name"] = g.ScopeName,
+                    ["component"] = g.Component,
+                    ["target_table"] = g.TargetTable,
+                    ["target_column"] = g.TargetColumn,
+                    ["requirement"] = g.Requirement,
+                    ["source_file"] = g.SourceFile,
+                    ["line"] = g.Line,
+                    ["evaluated_at_utc"] = g.EvaluatedAtUtc,
+                    ["definition_version"] = g.DefinitionVersion
                 }).ToList();
                 yield return await BuildAsync(columns, rows);
             }

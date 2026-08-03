@@ -47,9 +47,15 @@ internal static class PiiSchemaScanner
     private static readonly IReadOnlyDictionary<string, string> FileConnectors =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            [".csv"] = "FLATFILE", [".tsv"] = "FLATFILE", [".txt"] = "FLATFILE",
-            [".json"] = "JSON", [".xml"] = "XML", [".parquet"] = "PARQUET",
-            [".xlsx"] = "EXCEL", [".xls"] = "EXCEL", [".avro"] = "AVRO"
+            [".csv"] = "FLATFILE",
+            [".tsv"] = "FLATFILE",
+            [".txt"] = "FLATFILE",
+            [".json"] = "JSON",
+            [".xml"] = "XML",
+            [".parquet"] = "PARQUET",
+            [".xlsx"] = "EXCEL",
+            [".xls"] = "EXCEL",
+            [".avro"] = "AVRO"
         };
 
     internal static async Task<int> RunAsync(

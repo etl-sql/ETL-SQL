@@ -32,13 +32,19 @@ public sealed class SaasTenantRuntimeIsolationTests : IDisposable
 
         alphaDb.Users.Add(new PortalUser
         {
-            Id = 41, UserName = "alpha-user", NormalizedUserName = "ALPHA-USER",
-            IsActive = true, SecurityStamp = "alpha-stamp"
+            Id = 41,
+            UserName = "alpha-user",
+            NormalizedUserName = "ALPHA-USER",
+            IsActive = true,
+            SecurityStamp = "alpha-stamp"
         });
         betaDb.Users.Add(new PortalUser
         {
-            Id = 41, UserName = "beta-user", NormalizedUserName = "BETA-USER",
-            IsActive = false, SecurityStamp = "beta-stamp"
+            Id = 41,
+            UserName = "beta-user",
+            NormalizedUserName = "BETA-USER",
+            IsActive = false,
+            SecurityStamp = "beta-stamp"
         });
         await alphaDb.SaveChangesAsync();
         await betaDb.SaveChangesAsync();

@@ -265,32 +265,32 @@ public sealed class ConfigurationRoundTripTests
                 IsActive = false
             });
         var activeAlert = new ReportAlert
-            {
-                ReportId = report.Id,
-                OwnerId = alice.Id,
-                Name = $"active_alert_{suffix}",
-                VisualName = "Revenue",
-                Operator = ">=",
-                Threshold = 100,
-                Description = "Active revenue alert",
-                IsActive = true
-            };
+        {
+            ReportId = report.Id,
+            OwnerId = alice.Id,
+            Name = $"active_alert_{suffix}",
+            VisualName = "Revenue",
+            Operator = ">=",
+            Threshold = 100,
+            Description = "Active revenue alert",
+            IsActive = true
+        };
         activeAlert.Notifications.Add(new AlertNotification
         {
             OrchestratorAlias = "target_orchestrator",
             NotificationName = $"active_notification_{suffix}"
         });
         var disabledAlert = new ReportAlert
-            {
-                ReportId = report.Id,
-                OwnerId = alice.Id,
-                Name = $"disabled_alert_{suffix}",
-                VisualName = "Failures",
-                Operator = ">",
-                Threshold = 5,
-                Description = "Disabled failure alert",
-                IsActive = false
-            };
+        {
+            ReportId = report.Id,
+            OwnerId = alice.Id,
+            Name = $"disabled_alert_{suffix}",
+            VisualName = "Failures",
+            Operator = ">",
+            Threshold = 5,
+            Description = "Disabled failure alert",
+            IsActive = false
+        };
         disabledAlert.Notifications.Add(new AlertNotification
         {
             OrchestratorAlias = "target_orchestrator",

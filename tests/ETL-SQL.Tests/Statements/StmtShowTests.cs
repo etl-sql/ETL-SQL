@@ -4,17 +4,17 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Orchestrator;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
-using ETL_SQL.Common;
-using ETL_SQL.Orchestrator;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         private static Evaluator NewEval(IJobHistoryStore? mockStore = null, ILineageCatalogStore? lineageStore = null)
         {
             var services = new ServiceCollection();
-            
+
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true)
@@ -39,9 +39,9 @@ namespace ETL_SQL.Tests.Statements.Statements
             services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
             services.AddLogging();
-            
+
             services.AddEtlSqlEngine(configuration);
-            
+
             if (mockStore != null)
             {
                 var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IJobHistoryStore));
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Statements.Statements
                 if (descriptor != null) services.Remove(descriptor);
                 services.AddSingleton<ILineageCatalogStore>(lineageStore);
             }
-            
+
             return services.BuildServiceProvider().GetRequiredService<Evaluator>();
         }
 

@@ -234,7 +234,7 @@ USING PIVOT (
         var rows = batches.SelectMany(b => b.Rows).ToList();
 
         Assert.Equal(2, rows.Count);
-        
+
         var east = rows.Single(r => r["Region"]?.ToString() == "East");
         Assert.Equal(100m, Convert.ToDecimal(east["2024"]));
         Assert.Equal(150m, Convert.ToDecimal(east["2025"]));
@@ -311,7 +311,7 @@ USING PERIOD_COMPARISON (
         var rows = batches.SelectMany(b => b.Rows).ToList();
 
         Assert.Equal(3, rows.Count);
-        
+
         var r1 = rows.Single(r => Convert.ToDateTime(r["Dt"]).Date == new DateTime(2026, 1, 1));
         Assert.Null(r1["Val_Diff"]);
         Assert.Null(r1["Val_Pct"]);

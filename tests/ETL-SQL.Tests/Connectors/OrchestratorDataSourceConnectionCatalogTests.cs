@@ -7,8 +7,8 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Tests.Connectors;
 
@@ -320,7 +320,7 @@ public class OrchestratorDataSourceConnectionCatalogTests
             {
                 ["HOST"] = Literal("smtp.example.test"),
                 ["PASSWORD"] = Literal("SECRET:smtp_password")
-        });
+            });
         await source.ExecuteAdminStatementAsync(create, context);
         await source.ExecuteAdminStatementAsync(new AlterConnectionStatement(
             "notify_smtp",

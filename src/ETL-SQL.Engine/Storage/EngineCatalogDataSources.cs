@@ -680,13 +680,21 @@ public sealed class DataQualityStatusDataSource : IDataSource
         var denominator = status.RowsProcessed <= 0 ? 0d : status.RowsProcessed;
         return new Row
         {
-            ["run_id"] = status.RunId, ["job_name"] = status.JobName, ["start_time"] = status.StartTime,
-            ["end_time"] = status.EndTime, ["status"] = status.Status, ["rows_processed"] = status.RowsProcessed,
-            ["rows_warned"] = status.RowsWarned, ["rows_quarantined"] = status.RowsQuarantined,
+            ["run_id"] = status.RunId,
+            ["job_name"] = status.JobName,
+            ["start_time"] = status.StartTime,
+            ["end_time"] = status.EndTime,
+            ["status"] = status.Status,
+            ["rows_processed"] = status.RowsProcessed,
+            ["rows_warned"] = status.RowsWarned,
+            ["rows_quarantined"] = status.RowsQuarantined,
             ["warn_percent"] = denominator == 0 ? 0d : status.RowsWarned * 100d / denominator,
             ["quarantine_percent"] = denominator == 0 ? 0d : status.RowsQuarantined * 100d / denominator,
-            ["failed_rule_count"] = status.FailedRuleCount, ["freshest_value_utc"] = status.FreshestValueUtc,
-            ["freshness_state"] = status.FreshnessState, ["error_summary"] = status.ErrorSummary, ["source"] = source
+            ["failed_rule_count"] = status.FailedRuleCount,
+            ["freshest_value_utc"] = status.FreshestValueUtc,
+            ["freshness_state"] = status.FreshnessState,
+            ["error_summary"] = status.ErrorSummary,
+            ["source"] = source
         };
     }
 
@@ -719,10 +727,17 @@ public sealed class DataQualityFailuresDataSource : IDataSource
     {
         var rows = _context.DataQuality.FailureMetrics.Select(f => new Row
         {
-            ["run_id"] = _context.SessionId ?? "current", ["job_name"] = _context.JobName,
-            ["start_time"] = _context.DataQuality.RunStartedAtUtc, ["end_time"] = null, ["status"] = "RUNNING",
-            ["target_table"] = f.TargetTable, ["column_name"] = f.ColumnName, ["rule"] = f.Rule,
-            ["action"] = f.Action, ["failure_count"] = f.FailureCount, ["owner"] = f.Owner,
+            ["run_id"] = _context.SessionId ?? "current",
+            ["job_name"] = _context.JobName,
+            ["start_time"] = _context.DataQuality.RunStartedAtUtc,
+            ["end_time"] = null,
+            ["status"] = "RUNNING",
+            ["target_table"] = f.TargetTable,
+            ["column_name"] = f.ColumnName,
+            ["rule"] = f.Rule,
+            ["action"] = f.Action,
+            ["failure_count"] = f.FailureCount,
+            ["owner"] = f.Owner,
             ["source"] = "CURRENT_RUN"
         }).ToList();
 
@@ -733,10 +748,18 @@ public sealed class DataQualityFailuresDataSource : IDataSource
                 cancellationToken.ThrowIfCancellationRequested();
                 rows.Add(new Row
                 {
-                    ["run_id"] = f.RunId.ToString(), ["job_name"] = f.JobName, ["start_time"] = f.StartTime,
-                    ["end_time"] = f.EndTime, ["status"] = f.Status, ["target_table"] = f.TargetTable,
-                    ["column_name"] = f.ColumnName, ["rule"] = f.Rule, ["action"] = f.Action,
-                    ["failure_count"] = f.FailureCount, ["owner"] = f.Owner, ["source"] = "ORCHESTRATOR"
+                    ["run_id"] = f.RunId.ToString(),
+                    ["job_name"] = f.JobName,
+                    ["start_time"] = f.StartTime,
+                    ["end_time"] = f.EndTime,
+                    ["status"] = f.Status,
+                    ["target_table"] = f.TargetTable,
+                    ["column_name"] = f.ColumnName,
+                    ["rule"] = f.Rule,
+                    ["action"] = f.Action,
+                    ["failure_count"] = f.FailureCount,
+                    ["owner"] = f.Owner,
+                    ["source"] = "ORCHESTRATOR"
                 });
                 if (rows.Count >= batchSize)
                 {
@@ -966,50 +989,50 @@ public sealed class BundleFilesDataSource : IDataSource
                 else
                 {
                     foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                    foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        rows.Add(new Row
+                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
                         {
-                            ["bundle_name"] = file.BundleName,
-                            ["version"] = file.Version,
-                            ["virtual_path"] = file.VirtualPath,
-                            ["content_hash"] = file.ContentHash,
-                            ["size_bytes"] = file.SizeBytes,
-                            ["content_type"] = file.ContentType
-                        });
+                            cancellationToken.ThrowIfCancellationRequested();
+                            rows.Add(new Row
+                            {
+                                ["bundle_name"] = file.BundleName,
+                                ["version"] = file.Version,
+                                ["virtual_path"] = file.VirtualPath,
+                                ["content_hash"] = file.ContentHash,
+                                ["size_bytes"] = file.SizeBytes,
+                                ["content_type"] = file.ContentType
+                            });
 
-                        if (rows.Count >= batchSize)
-                        {
-                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
-                            rows = [];
+                            if (rows.Count >= batchSize)
+                            {
+                                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                                rows = [];
+                            }
                         }
-                    }
                 }
             }
             else
             {
                 foreach (var bundle in await _store.GetBundlesAsync())
-                foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    rows.Add(new Row
-                    {
-                        ["bundle_name"] = file.BundleName,
-                        ["version"] = file.Version,
-                        ["virtual_path"] = file.VirtualPath,
-                        ["content_hash"] = file.ContentHash,
-                        ["size_bytes"] = file.SizeBytes,
-                        ["content_type"] = file.ContentType
-                    });
+                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+                        foreach (var file in await _store.GetFilesAsync(version.BundleName, version.Version))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            rows.Add(new Row
+                            {
+                                ["bundle_name"] = file.BundleName,
+                                ["version"] = file.Version,
+                                ["virtual_path"] = file.VirtualPath,
+                                ["content_hash"] = file.ContentHash,
+                                ["size_bytes"] = file.SizeBytes,
+                                ["content_type"] = file.ContentType
+                            });
 
-                    if (rows.Count >= batchSize)
-                    {
-                        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
-                        rows = [];
-                    }
-                }
+                            if (rows.Count >= batchSize)
+                            {
+                                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                                rows = [];
+                            }
+                        }
             }
         }
 
@@ -1075,46 +1098,46 @@ public sealed class BundleDependenciesDataSource : IDataSource
                 else
                 {
                     foreach (var version in await _store.GetVersionsAsync(_filterBundle))
-                    foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        rows.Add(new Row
+                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
                         {
-                            ["bundle_name"] = dependency.BundleName,
-                            ["version"] = dependency.Version,
-                            ["from_path"] = dependency.FromPath,
-                            ["to_path"] = dependency.ToPath
-                        });
+                            cancellationToken.ThrowIfCancellationRequested();
+                            rows.Add(new Row
+                            {
+                                ["bundle_name"] = dependency.BundleName,
+                                ["version"] = dependency.Version,
+                                ["from_path"] = dependency.FromPath,
+                                ["to_path"] = dependency.ToPath
+                            });
 
-                        if (rows.Count >= batchSize)
-                        {
-                            yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
-                            rows = [];
+                            if (rows.Count >= batchSize)
+                            {
+                                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                                rows = [];
+                            }
                         }
-                    }
                 }
             }
             else
             {
                 foreach (var bundle in await _store.GetBundlesAsync())
-                foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
-                foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    rows.Add(new Row
-                    {
-                        ["bundle_name"] = dependency.BundleName,
-                        ["version"] = dependency.Version,
-                        ["from_path"] = dependency.FromPath,
-                        ["to_path"] = dependency.ToPath
-                    });
+                    foreach (var version in await _store.GetVersionsAsync(bundle.BundleName))
+                        foreach (var dependency in await _store.GetDependenciesAsync(version.BundleName, version.Version))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            rows.Add(new Row
+                            {
+                                ["bundle_name"] = dependency.BundleName,
+                                ["version"] = dependency.Version,
+                                ["from_path"] = dependency.FromPath,
+                                ["to_path"] = dependency.ToPath
+                            });
 
-                    if (rows.Count >= batchSize)
-                    {
-                        yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
-                        rows = [];
-                    }
-                }
+                            if (rows.Count >= batchSize)
+                            {
+                                yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
+                                rows = [];
+                            }
+                        }
             }
         }
 
@@ -1647,10 +1670,17 @@ public sealed class StewardshipScoreDataSource : IDataSource
         var evaluation = await EvaluateAsync(cancellationToken);
         var rows = evaluation.Scores.Select(s => new Row
         {
-            ["scope_type"] = s.ScopeType, ["scope_name"] = s.ScopeName, ["component"] = s.Component,
-            ["numerator"] = s.Numerator, ["denominator"] = s.Denominator, ["percentage"] = s.Percentage,
-            ["asset_count"] = s.AssetCount, ["column_count"] = s.ColumnCount, ["weight"] = s.Weight,
-            ["evaluated_at_utc"] = s.EvaluatedAtUtc, ["definition_version"] = s.DefinitionVersion
+            ["scope_type"] = s.ScopeType,
+            ["scope_name"] = s.ScopeName,
+            ["component"] = s.Component,
+            ["numerator"] = s.Numerator,
+            ["denominator"] = s.Denominator,
+            ["percentage"] = s.Percentage,
+            ["asset_count"] = s.AssetCount,
+            ["column_count"] = s.ColumnCount,
+            ["weight"] = s.Weight,
+            ["evaluated_at_utc"] = s.EvaluatedAtUtc,
+            ["definition_version"] = s.DefinitionVersion
         });
         yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);
     }
@@ -1706,9 +1736,15 @@ public sealed class StewardshipGapsDataSource : IDataSource
         var evaluation = await _scores.EvaluateAsync(cancellationToken);
         var rows = evaluation.Gaps.Select(g => new Row
         {
-            ["scope_type"] = g.ScopeType, ["scope_name"] = g.ScopeName, ["component"] = g.Component,
-            ["target_table"] = g.TargetTable, ["target_column"] = g.TargetColumn, ["requirement"] = g.Requirement,
-            ["source_file"] = g.SourceFile, ["line"] = g.Line, ["evaluated_at_utc"] = g.EvaluatedAtUtc,
+            ["scope_type"] = g.ScopeType,
+            ["scope_name"] = g.ScopeName,
+            ["component"] = g.Component,
+            ["target_table"] = g.TargetTable,
+            ["target_column"] = g.TargetColumn,
+            ["requirement"] = g.Requirement,
+            ["source_file"] = g.SourceFile,
+            ["line"] = g.Line,
+            ["evaluated_at_utc"] = g.EvaluatedAtUtc,
             ["definition_version"] = g.DefinitionVersion
         });
         yield return await EngineCatalogTableBuilder.BuildAsync(Columns, rows);

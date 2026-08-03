@@ -340,15 +340,18 @@ namespace ETL_SQL.App
         };
         private static readonly Option<int> SaasMaxConcurrentJobsOption = new("--max-concurrent-jobs", Array.Empty<string>())
         {
-            Description = "Tenant concurrent-job limit.", DefaultValueFactory = _ => 4
+            Description = "Tenant concurrent-job limit.",
+            DefaultValueFactory = _ => 4
         };
         private static readonly Option<int> SaasMaxStorageMbOption = new("--max-storage-mb", Array.Empty<string>())
         {
-            Description = "Tenant storage limit in MiB.", DefaultValueFactory = _ => 10_240
+            Description = "Tenant storage limit in MiB.",
+            DefaultValueFactory = _ => 10_240
         };
         private static readonly Option<int> SaasMaxReportSessionsOption = new("--max-report-sessions", Array.Empty<string>())
         {
-            Description = "Tenant concurrent report-session limit.", DefaultValueFactory = _ => 20
+            Description = "Tenant concurrent report-session limit.",
+            DefaultValueFactory = _ => 20
         };
         private static readonly Option<string?> HaSoakRunIdOption = new("--run-id", Array.Empty<string>())
         {

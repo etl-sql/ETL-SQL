@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Core
             foreach (var type in statementTypes)
             {
                 var typeName = type.Name;
-                
+
                 // Exempt auxiliary or internal statements if needed
                 if (typeName == "NoOpStatement") continue;
 
@@ -74,7 +74,7 @@ namespace ETL_SQL.Tests.Core
                 var cleanKeyword = keywords.Replace(" ", "").Replace("_", "").Replace("-", "");
 
                 // Check if any doc file contains the class name or the normalized keyword statement
-                var found = docFiles.Any(content => 
+                var found = docFiles.Any(content =>
                 {
                     if (content.Contains(typeName, StringComparison.OrdinalIgnoreCase) ||
                         content.Contains(keywords, StringComparison.OrdinalIgnoreCase) ||
@@ -120,7 +120,7 @@ namespace ETL_SQL.Tests.Core
                 name = name.Substring(0, name.Length - "Statement".Length);
             }
             name = name.Replace("Portal", "");
-            
+
             var result = "";
             for (int i = 0; i < name.Length; i++)
             {

@@ -116,7 +116,7 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
             var user = await db.Users.SingleAsync(candidate => candidate.UserName == username);
             var publisherRole = await db.Roles.SingleAsync(role => role.Name == "Publisher");
             db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<int>
-                { UserId = user.Id, RoleId = publisherRole.Id });
+            { UserId = user.Id, RoleId = publisherRole.Id });
             var folder = new Folder { Name = "OIDC governed", Path = "/OIDC-governed-" + username, OwnerId = user.Id };
             db.Folders.Add(folder);
             await db.SaveChangesAsync();

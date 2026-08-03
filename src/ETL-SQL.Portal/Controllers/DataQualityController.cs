@@ -175,19 +175,19 @@ public sealed class DataQualityController(
             catch (ColumnRuleParseException) { continue; }
 
             foreach (var binding in bindings)
-            foreach (var rule in binding.Rules)
-            {
-                var key = $"{entry.Target}|{entry.TargetColumn}|{binding.ExpectKey}|{rule.Text}|{binding.Action}";
-                if (!seen.Add(key)) continue;
-                rules.Add(new DataQualityRuleDefinitionDto(
-                    entry.Target,
-                    entry.TargetColumn,
-                    "@" + binding.ExpectKey,
-                    rule.Text,
-                    binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
-                    scriptPath,
-                    entry.Line));
-            }
+                foreach (var rule in binding.Rules)
+                {
+                    var key = $"{entry.Target}|{entry.TargetColumn}|{binding.ExpectKey}|{rule.Text}|{binding.Action}";
+                    if (!seen.Add(key)) continue;
+                    rules.Add(new DataQualityRuleDefinitionDto(
+                        entry.Target,
+                        entry.TargetColumn,
+                        "@" + binding.ExpectKey,
+                        rule.Text,
+                        binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
+                        scriptPath,
+                        entry.Line));
+                }
         }
 
         return Ok(rules

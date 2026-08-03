@@ -1004,7 +1004,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
     {
         if (!options.TryGetValue(key, out var expr))
             throw new ExecutionException($"Algorithm {algorithm} requires option '{key}'");
-        
+
         if (expr is LiteralExpression { Value: string s })
             return s;
         if (expr is IdentifierExpression id)
@@ -1021,7 +1021,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             val = id.Name;
         else
             throw new ExecutionException("Option must be a string literal or identifier");
-        
+
         return val.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
