@@ -864,6 +864,64 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Support bundle ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The support bundle as a reviewable document: every section an operator would send, with the
+    /// redaction note and — explicitly — what it leaves out. A support artifact that does not say
+    /// what it omitted invites the assumption that it omitted nothing.
+    ///
+    /// Reviewing is the whole point of splitting this from the download. The CLI's
+    /// <c>admin support-bundle</c> remains the recovery path for when the Portal is unavailable; it
+    /// reads files and host configuration this cannot.
+    /// </summary>
+    [HttpGet("support-bundle/review")]
+    public async Task<IActionResult> ReviewSupportBundle(
+        [FromServices] PortalSupportBundleService bundle, CancellationToken ct)
+    {
+        var content = await bundle.BuildAsync(ct);
+        await audit.LogAsync(CurrentUserId, "REVIEW_SUPPORT_BUNDLE", "System", null,
+            $"{content.Sections.Count} section(s); content={content.ContentHash}");
+        return Ok(content);
+    }
+
+    /// <summary>
+    /// Downloads the bundle. Pass <paramref name="acknowledgedContent"/> with the hash from
+    /// <c>support-bundle/review</c> to make the review binding: a stale hash means the deployment
+    /// changed after it was reviewed, and the download is refused rather than handing over something
+    /// other than what was approved.
+    /// </summary>
+    [HttpGet("support-bundle")]
+    public async Task<IActionResult> DownloadSupportBundle(
+        [FromServices] PortalSupportBundleService bundle,
+        [FromQuery] string? acknowledgedContent = null,
+        CancellationToken ct = default)
+    {
+        var content = await bundle.BuildAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(acknowledgedContent)
+            && !string.Equals(acknowledgedContent, content.ContentHash, StringComparison.OrdinalIgnoreCase))
+        {
+            await audit.LogAsync(CurrentUserId, "DOWNLOAD_SUPPORT_BUNDLE_REFUSED", "System", null,
+                $"acknowledged {acknowledgedContent} is stale; current is {content.ContentHash}");
+            return Conflict(new
+            {
+                error = "The deployment changed after the bundle was reviewed.",
+                acknowledgedContent,
+                currentContent = content.ContentHash
+            });
+        }
+
+        await audit.LogAsync(CurrentUserId, "DOWNLOAD_SUPPORT_BUNDLE", "System", null,
+            $"content={content.ContentHash}; "
+            + (string.IsNullOrWhiteSpace(acknowledgedContent) ? "no review acknowledged" : "review acknowledged"));
+
+        var json = System.Text.Json.JsonSerializer.Serialize(content,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        return File(Encoding.UTF8.GetBytes(json), "application/json",
+            $"etl-sql-portal-support-{DateTime.UtcNow:yyyyMMdd_HHmm}.json");
+    }
+
     // ── Dataset at-rest key posture ──────────────────────────────────────────
 
     /// <summary>

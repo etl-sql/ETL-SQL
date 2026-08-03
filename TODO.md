@@ -308,7 +308,23 @@ documentation reconciliation, then release certification.
       recovery plan, so "never proven readable" is reported as a finding instead of a blank. Custody
       and the restore itself stay on the host; only the evidence travels, and every finding names the
       command that fixes it.
-- [ ] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
+- [x] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
+      `GET /api/admin/support-bundle/review` returns every section as a reviewable document — health,
+      deployment identity and versions, migration state, catalog **counts**, audit-outbox state, and
+      the redacted Portal configuration — with the redaction note and an explicit list of what it
+      leaves out. `GET /api/admin/support-bundle` downloads it. Both are audited.
+  - Safe to expose because it collects counts, versions and states rather than content, and all text
+      passes through the redactor. Tests assert a report's name and title, the JWT secret, and the
+      dataset at-rest key are all absent from the whole response.
+  - The redaction rules moved to `ETL_SQL.Core.Common.SupportBundleRedactor` and the CLI builder now
+      delegates to them. Two hosts producing support material from two nearly-identical rule sets
+      would yield two artifacts that look equally safe and are not.
+  - `?acknowledgedContent=<hash>` **409s** when the disclosure changed after review. The hash covers
+      the deployment and configuration, not live counters: reviewing audits the review, which moves
+      the outbox counts the bundle reports, so hashing everything would make each review stale the
+      instant it was made and the check would become noise an operator learns to bypass.
+  - The CLI `admin support-bundle` remains the recovery path when the Portal is unavailable — it
+      reads host files and configuration the Portal cannot.
 - [x] Add a read-only Fleet/Operations workspace with compatibility, divergence, drain, migration,
       and upgrade evidence. `GET /api/fleet/workspace` (FleetReader or Admin) polls every configured
       environment at once and returns the merged report — compatibility metadata, policy/config/version
