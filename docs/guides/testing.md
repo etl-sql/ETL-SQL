@@ -280,9 +280,36 @@ dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedNam
 
 The `SftpFixture` starts an `atmoz/sftp` container once per collection. Tests cover password auth, private-key auth, upload/download round-trips, list, delete, overwrite semantics, large-file checksum, `ReadBatches`, credential masking, and host allowlist enforcement. Container startup typically takes 3–8 seconds.
 
+## Browser lane (Playwright, opt-in)
+
+The critical Portal journey is covered end-to-end in a real browser by
+`tests/ETL-SQL.Portal.BrowserTests`: first-run sign-in including the forced password change, then
+creating a user, creating a folder, publishing a report into it, and running that report until
+rendered rows appear.
+
+```powershell
+pwsh -File scripts\test-lane.ps1 -Lane browser
+```
+
+The lane is **opt-in** — its tests carry `Category=Browser`, which the default filter excludes,
+because it downloads Chromium (~113 MB) the first time it runs. Set
+`ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` where the browsers are provisioned separately (the CI job
+restores them from cache). `PortalBrowserFactory` reuses `PortalWebFactory`'s isolated temp-directory
+SQLite databases but additionally binds Kestrel to `127.0.0.1:0`, because a browser cannot talk to
+the in-memory `TestServer` the other Portal tests use.
+
+The journey asserts on what the page shows, and fails on any unhandled JavaScript exception raised
+during the run. It is one journey, deliberately: the broader matrix — narrow viewport, seeded
+Viewer/Publisher/Steward/Operator/Admin roles, accessibility assertions, visual snapshots, and the
+Docker-image smoke — is tracked as **P2 — Browser quality and delivery guardrails** in
+[`TODO.md`](../../TODO.md).
+
 ## Browser-side UI (sandbox, manual)
 
-The portal and report-runtime JavaScript components — `renderDag` (structure/lineage DAG), the report designer (`createDesigner`), the script editor (`createScriptEditor`), and the extracted lineage/dependencies render module (`src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`) — have **no automated browser test lane yet**. Verify them **manually** in the no-Docker UI sandbox:
+The individual portal and report-runtime JavaScript components — `renderDag` (structure/lineage
+DAG), the report designer (`createDesigner`), the script editor (`createScriptEditor`), and the
+extracted lineage/dependencies render module (`src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`) — are
+not driven individually by the browser lane. Verify them in the no-Docker UI sandbox:
 
 ```powershell
 pwsh -File tools\ui-sandbox\serve.ps1
@@ -290,7 +317,7 @@ pwsh -File tools\ui-sandbox\serve.ps1
 
 It serves a Storybook-style harness that imports the canonical/source files directly and drives each component with fixture data (and a mock `fetch` for API-backed surfaces) — no Docker, no portal build, no catalog DB. Pick a story + fixture from the sidebar; edits show on **↻ Reload**. See [`tools/ui-sandbox/README.md`](../../README.md) for the story list and how to add one.
 
-The **data contracts** these components consume *are* covered by automated tests — e.g. the structure/lineage DTOs and the cross-script dataset bridge are asserted in `PortalIntegrationTests` (Portal lane, no Docker). The sandbox covers the **rendering** those tests don't. Automated browser coverage (Playwright) remains a future QA improvement and should be promoted to `ROADMAP.md` or `TODO.md` when it becomes active release work.
+The **data contracts** these components consume *are* covered by automated tests — e.g. the structure/lineage DTOs and the cross-script dataset bridge are asserted in `PortalIntegrationTests` (Portal lane, no Docker). The sandbox covers the **rendering** those tests don't, for components the single browser journey does not walk through.
 
 ## Code Coverage
 
@@ -298,7 +325,7 @@ The CI minimum is **70% line coverage** across all non-integration test runs.
 
 ```powershell
 # Collect coverage (Portal tests are included — they run without Docker)
-dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT" `
+dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT&Category!=Browser" `
     --collect:"XPlat Code Coverage" --results-directory ./coverage
 
 # Generate an HTML + text summary report

@@ -197,7 +197,12 @@ documentation reconciliation, then release certification.
 #### P0 — Restore trust in critical journeys
 
 - [x] Fix Admin Users casing drift and enforce the generated browser/API contract.
-- [ ] Add a real login → users → folders → publish/run browser test.
+- [x] Add a real login → users → folders → publish/run browser test. `tests/ETL-SQL.Portal.BrowserTests`
+      drives Chromium against a Kestrel-hosted Portal (`test-lane.ps1 -Lane browser`, `Category=Browser`,
+      opt-in because it downloads Chromium). It found two defects on its first two runs: the forced
+      first-run password change signed the user into an already-invalidated session and bounced the
+      user back to login with no explanation, and the catalog's view transitions left unhandled
+      promise rejections on the page. Both are fixed.
 
 #### P1 — Coherent workspaces
 
@@ -275,7 +280,8 @@ documentation reconciliation, then release certification.
 #### P2 — Browser quality and delivery guardrails
 
 - [ ] Add automated Chromium desktop and narrow-viewport lanes with seeded Viewer, Publisher,
-      Steward, Operator, and Admin journeys.
+      Steward, Operator, and Admin journeys. The lane and the Admin journey exist
+      (`tests/ETL-SQL.Portal.BrowserTests`); the narrow viewport and the other four roles do not.
 - [ ] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
 - [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
 - [ ] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
@@ -359,4 +365,9 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
       parsing, linting, policy, RLS, timeout, row-cap, or redaction guarantees.
 
 ## Documentation
-- [ ]
+- [ ] Make sure everything above is documented.  We may want to follow our 4 path process.  How would a solo, team, enterprise, and Saas
+      accomplish these items
+
+## Pre-configured reports
+- [ ] We have added a lot of standard reports in /samples  Which is great, we should add a way to install them automatically in portal with
+      a checkbox.  Include reports, the reports are automatically configured and ready to run after install.

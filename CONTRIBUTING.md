@@ -49,8 +49,8 @@ swept into the commit.
 # All tests (unit + integration — Docker required for Testcontainers tests)
 dotnet test
 
-# Unit tests only (no Docker required)
-dotnet test --filter "Category!=Integration"
+# Unit tests only (no Docker and no browser download required)
+dotnet test --filter "Category!=Integration&Category!=Browser"
 
 # A single test project
 dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
@@ -273,7 +273,7 @@ Signed-off-by: Your Name <you@example.com>
 Before opening a PR, verify:
 
 - [ ] `dotnet build` passes with zero warnings
-- [ ] `dotnet test --filter "Category!=Integration"` passes (all unit tests green)
+- [ ] `dotnet test --filter "Category!=Integration&Category!=Browser"` passes (all unit tests green)
 - [ ] New or changed behavior has test coverage
 - [ ] No `.Result`, `.Wait()`, or `Logger.Instance` introduced
 - [ ] All new file paths go through `ResolvePath()`

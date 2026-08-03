@@ -58,6 +58,7 @@
 <script type="module">
 import { auth, authApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding } from '/js/branding.js?v=0.17.0';
+import { getSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 
 applyPortalBranding();
 
@@ -148,17 +149,50 @@ document.getElementById('changeBtn').addEventListener('click', async () => {
   const btn = document.getElementById('changeBtn');
   btn.disabled = true; btn.textContent = 'Saving…';
 
+  // Read the account name before the invalidated token is dropped: on the mid-session
+  // ?changePassword=true path the user never typed a username, so the token is the only source.
+  const username = document.getElementById('username').value.trim() || tokenUsername();
+
   try {
     const current = document.getElementById('currentPwd').value
                  || document.getElementById('password').value;
     await authApi.changePassword(current, np);
-    window.location.href = '/index.html';
   } catch (err) {
     showError(err.message || 'Password change failed.');
-  } finally {
+    btn.disabled = false; btn.textContent = 'Set Password';
+    return;
+  }
+
+  // The server invalidates every session for the account on a password change, so the token we
+  // still hold is already dead. Navigating into the app with it bounced the user straight back
+  // here with no explanation, which made the forced first-run change look like a failed sign-in.
+  // Exchange the new password for a fresh session instead; clear first so the sign-in request
+  // does not carry the invalidated bearer token.
+  auth.clear();
+  try {
+    const data = await authApi.login(username, np);
+    auth.setTokens(data.token, data.refreshToken);
+    window.location.href = '/index.html';
+  } catch {
+    // The password *was* changed; only the automatic sign-in failed. Say so, rather than
+    // reporting a password-change failure the user would try to repeat.
+    $banner.style.display = 'none';
+    $change.style.display = 'none';
+    $login.style.display  = '';
+    document.getElementById('password').value = '';
+    showError('Your password was changed. Sign in with your new password.');
     btn.disabled = false; btn.textContent = 'Set Password';
   }
 });
+
+/** Account name carried by the current session token, or '' when there is no readable token. */
+function tokenUsername() {
+  try {
+    return getSessionIdentity(auth.getToken()).displayName || '';
+  } catch {
+    return '';
+  }
+}
 </script>
 </body>
 </html>

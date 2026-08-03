@@ -123,10 +123,15 @@ npm package details can be reviewed at:
 ## Development and Test Dependencies
 
 ETL-SQL also uses third-party development and test dependencies, including
-BenchmarkDotNet, coverlet.collector, ESLint, jsdom, Moq, TypeScript, Vite,
-Vitest, xUnit, and VS Code test tooling. These should be included in a
-generated dependency report for source distributions and CI artifacts, but they
-are usually not shown in product UI acknowledgements.
+BenchmarkDotNet, coverlet.collector, ESLint, jsdom, Microsoft.Playwright, Moq,
+TypeScript, Vite, Vitest, xUnit, and VS Code test tooling. These should be
+included in a generated dependency report for source distributions and CI
+artifacts, but they are usually not shown in product UI acknowledgements.
+
+Microsoft.Playwright (MIT) additionally downloads browser binaries at test time —
+Chromium and its headless shell, which carry their own upstream licenses. Those
+browsers are fetched into a per-machine cache by the opt-in browser test lane and
+are never redistributed in ETL-SQL archives, installers, containers, or extensions.
 
 ## Release Checklist
 

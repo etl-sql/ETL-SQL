@@ -33,6 +33,7 @@
     <Project Path="src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj" />
     <Project Path="tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" />
     <Project Path="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" />
     <Project Path="tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" />

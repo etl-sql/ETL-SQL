@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "integration", "perf", "release", "full", "benchmarks", "slt", "fuzz-smoke", "fuzz")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "fuzz-smoke", "fuzz")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -134,6 +134,11 @@ switch ($Lane) {
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
         Invoke-LineageUiSmoke
+    }
+    "browser" {
+        # Opt-in: drives a real Chromium against a Kestrel-hosted Portal. Chromium is downloaded on
+        # first run unless ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1 says the browsers are already provisioned.
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.BrowserTests\ETL-SQL.Portal.BrowserTests.csproj" "Category=Browser"
     }
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"

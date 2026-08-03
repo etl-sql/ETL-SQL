@@ -111,6 +111,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
     $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine"; Reason = "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane." })
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane." })
+    $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "The critical Portal journey — first-run sign-in, user, folder, publish, run — still works in a real browser, not just through controllers." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
     $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
     $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release." })
@@ -399,6 +400,7 @@ function Get-PreReleasePhaseDependencies {
         "Fast lane" { return @("Dotnet build") }
         "Engine lane" { return @("Dotnet build") }
         "Portal lane" { return @("Dotnet build") }
+        "Browser lane" { return @("Dotnet build") }
         "N->N+1 upgrade-path drill" { return @("Dotnet build") }
         "SLT lane" { return @("Dotnet build") }
         "Docker integration lane" { return @("Dotnet build") }
@@ -852,6 +854,11 @@ try {
     Invoke-LoggedPhase "Portal lane" `
         ".\scripts\test-lane.ps1 -Lane portal -Configuration $Configuration -NoRestore -NoBuild" `
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "portal" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Browser lane" `
+        ".\scripts\test-lane.ps1 -Lane browser -Configuration $Configuration -NoRestore -NoBuild" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "browser" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
     # Explicit release gate: prove the in-place N->N+1 upgrade drill on its own so it can never be

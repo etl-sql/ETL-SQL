@@ -302,11 +302,14 @@ applyPortalBranding();
 initTheme();
 
 function transitionDOM(updateCallback) {
-  if (document.startViewTransition) {
-    document.startViewTransition(updateCallback);
-  } else {
-    updateCallback();
-  }
+  if (!document.startViewTransition) { updateCallback(); return; }
+  const transition = document.startViewTransition(updateCallback);
+  // Starting a transition while one is still running skips the earlier one, rejecting its ready and
+  // finished promises with AbortError. That is expected whenever a user navigates faster than the
+  // animation, so consume those rejections rather than leaving unhandled rejections on the page.
+  // updateCallbackDone is deliberately left alone: a throw inside updateCallback is a real error.
+  transition.ready.catch(() => { });
+  transition.finished.catch(() => { });
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────

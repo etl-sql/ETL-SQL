@@ -185,9 +185,10 @@ containment operations must remain out-of-process.
 
 #### P2 — Browser quality and delivery guardrails
 
-1. Add an automated browser lane; the current testing guide explicitly records that Portal and
-   report-runtime JavaScript have none. Cover Chromium desktop and a narrow viewport, at minimum,
-   with seeded Viewer, Publisher, Steward, Operator, and Admin journeys.
+1. Broaden the automated browser lane. The lane itself now exists (`test-lane.ps1 -Lane browser`,
+   Chromium against a Kestrel-hosted Portal) and carries the one critical admin journey. It still
+   needs a narrow viewport and seeded Viewer, Publisher, Steward, and Operator journeys alongside
+   the Admin one.
 2. Add accessibility assertions (including no hidden modal content), visual snapshots for the
    shared shell and critical empty/error/data states, and request/response contract fixtures.
 3. Run the same smoke suite against `dotnet run` and the production Docker image. Treat console
