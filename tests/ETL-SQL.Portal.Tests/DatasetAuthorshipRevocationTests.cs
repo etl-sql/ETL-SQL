@@ -138,6 +138,48 @@ public sealed class DatasetAuthorshipRevocationTests
             "The dependency view must not keep exposing a private dataset the caller has no grant on.");
     }
 
+    [Fact]
+    public async Task AdministratorCanSeeAndRevokeTheCreatorsGrantThroughTheApi()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var creator = await CreateReadyUserAsync(client, adminToken, $"dsadmin_{suffix}", "Publisher");
+        var datasetName = $"ds_admin_{suffix}";
+        await RegisterDatasetAsync(factory, datasetName, createdBy: creator.UserId);
+        var datasetId = await DatasetIdAsync(factory, datasetName);
+
+        // A grant an administrator cannot see is a grant they cannot account for.
+        var listed = await AuthGet(client, adminToken, $"/api/datasets/{datasetId}/acl");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var entries = await listed.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var creatorEntry = Assert.Single(entries!, e =>
+            e!["principalKind"]!.GetValue<string>() == "User"
+            && e["userId"]!.GetValue<int>() == creator.UserId);
+        Assert.Equal("Owner", creatorEntry!["permission"]!.GetValue<string>());
+        Assert.Equal(creator.Username, creatorEntry["userName"]!.GetValue<string>());
+
+        var creatorToken = (await LoginAsync(client, creator.Username, "Ready@Test2!")).AccessToken;
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(client, creatorToken, $"/api/datasets/{datasetId}")).StatusCode);
+
+        // ...and one they cannot revoke is only revocable in the database.
+        var revoke = await SendAsync(client, HttpMethod.Delete, adminToken,
+            $"/api/datasets/{datasetId}/acl/user/{creator.UserId}", null);
+        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+
+        // Revoking invalidates the creator's sessions, so they re-authenticate — and get nothing.
+        creatorToken = (await LoginAsync(client, creator.Username, "Ready@Test2!")).AccessToken;
+        var after = (await AuthGet(client, creatorToken, $"/api/datasets/{datasetId}")).StatusCode;
+        Assert.True(after is HttpStatusCode.Forbidden or HttpStatusCode.NotFound,
+            $"Revoking the creator's grant must deny them; got {after}.");
+
+        var afterList = await AuthGet(client, adminToken, $"/api/datasets/{datasetId}/acl");
+        var afterEntries = await afterList.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.DoesNotContain(afterEntries!, e => e!["userId"]?.GetValue<int?>() == creator.UserId);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static async Task RegisterDatasetAsync(

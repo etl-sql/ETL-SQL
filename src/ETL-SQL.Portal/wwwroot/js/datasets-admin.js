@@ -1,3 +1,5 @@
+import { aclTableHtml } from './dataset-acl-ui.js?v=0.17.0';
+
 // Canonical "Shared Datasets" admin surface (Admin → Shared Datasets).
 //
 // Extracted from admin.html so it can be previewed in the UI sandbox without the
@@ -337,24 +339,20 @@ export function createDatasetsAdmin(opts = {}) {
     const $wrap = document.getElementById('dsAclTableWrap');
     try {
       const acls = await datasetsApi.listAcl(datasetId);
-      const rows = acls.map(a => `
-        <tr>
-          <td>${esc(a.groupName)}</td>
-          <td><span class="chip chip-${(a.permission || '').toLowerCase()}">${esc(a.permission)}</span></td>
-          <td><button class="btn btn-outline btn-sm btn-danger-soft" data-gid="${a.groupId}">Revoke</button></td>
-        </tr>`).join('');
-      $wrap.innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Group</th><th>Permission</th><th></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="3" class="empty-state">No group ACLs set.</td></tr>'}</tbody>
-        </table>`;
+      $wrap.innerHTML = aclTableHtml(acls, esc, escAttr);
+      const revoke = async (call) => {
+        const dataset = allDatasets.find(x => x.id === datasetId);
+        await call(dataset?.version).catch(alertErr);
+        await loadDatasets();
+        loadDatasetAcl(datasetId);
+      };
       $wrap.querySelectorAll('[data-gid]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const dataset = allDatasets.find(x => x.id === datasetId);
-          await datasetsApi.revokeAcl(datasetId, +btn.dataset.gid, dataset?.version).catch(alertErr);
-          await loadDatasets();
-          loadDatasetAcl(datasetId);
-        });
+        btn.addEventListener('click', () =>
+          revoke(version => datasetsApi.revokeAcl(datasetId, +btn.dataset.gid, version)));
+      });
+      $wrap.querySelectorAll('[data-uid]').forEach(btn => {
+        btn.addEventListener('click', () =>
+          revoke(version => datasetsApi.revokeUserAcl(datasetId, +btn.dataset.uid, version)));
       });
     } catch {}
   }

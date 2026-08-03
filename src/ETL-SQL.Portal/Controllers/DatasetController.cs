@@ -372,6 +372,35 @@ public class DatasetController(
         return Ok(new { dataset.Version });
     }
 
+    // ── DELETE /api/datasets/{id}/acl/user/{userId} ───────────────────────────
+
+    /// <summary>
+    /// Revokes a grant made directly to a user, including the Owner grant a dataset's creator
+    /// receives when the dataset is registered. Revoking a creator's grant removes their access —
+    /// that is the point of recording authorship as a grant rather than as an identity comparison.
+    /// </summary>
+    [HttpDelete("{id:int}/acl/user/{userId:int}")]
+    public async Task<IActionResult> RevokeUserPermission(int id, int userId)
+    {
+        var dataset = await queries.LoadDatasetAsync(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanManage(perm)) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+
+        var result = await acls.RevokeUserAsync(dataset, userId, expectedVersion.Value, CurrentUserId);
+        if (result.Kind == DatasetAclMutationResultKind.AclNotFound)
+            return NotFound(new { error = "ACL entry not found." });
+        if (result.Kind == DatasetAclMutationResultKind.Conflict)
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
+
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
+        return Ok(new { dataset.Version });
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static IEnumerable<DatasetColumnFilterDto> ParseFilters(string? json)

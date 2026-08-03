@@ -21,7 +21,8 @@ internal static partial class IfMatchVersioning
     [GeneratedRegex(@"^(?<r>/api/admin/groups/\d+)(/members(/bulk-add|/bulk-remove|/\d+)?)?$")]
     private static partial Regex GroupRoute();
 
-    [GeneratedRegex(@"^(?<r>/api/datasets/\d+)(/acl(/\d+)?|/move)?$")]
+    // /acl/{groupId} revokes a group grant; /acl/user/{userId} revokes a direct user grant.
+    [GeneratedRegex(@"^(?<r>/api/datasets/\d+)(/acl(/user)?(/\d+)?|/move)?$")]
     private static partial Regex DatasetRoute();
 
     [GeneratedRegex(@"^(?<r>/api/folders/\d+)(/acl(/\d+)?)?$")]

@@ -264,6 +264,8 @@ export const datasetsApi = {
         apiJson(`/api/datasets/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
     revokeAcl:     (id, groupId, version) =>
         apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    revokeUserAcl: (id, userId, version) =>
+        apiJson(`/api/datasets/${id}/acl/user/${userId}`, { method: 'DELETE', headers: versionHeaders(version) }),
 
     data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}) {
         const p = new URLSearchParams({ page, pageSize });

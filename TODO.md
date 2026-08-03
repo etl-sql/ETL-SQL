@@ -312,11 +312,11 @@ documentation reconciliation, then release certification.
   - [x] Prove a creator retaining a lesser grant receives only the documented upgrade. A creator left
         with only a group `Viewer` grant can read and cannot manage ACLs.
 - [x] Apply the rule to both `DatasetPermissionService` paths and `ReportDependencyService`.
-- [ ] Show and revoke per-user dataset grants in the Admin dataset permissions panel. The grants are
-      enforced and are revoked by user deletion (FK cascade) and ownership transfer, but the ACL
-      listing still shows group rows only, so an administrator cannot see or revoke one from the
-      product. Needs `DatasetAclEntryDto` to carry the principal kind, a user-revoke route, and the
-      regenerated browser/API contract.
+- [x] Show and revoke per-user dataset grants in the Admin dataset permissions panel.
+      `GET /api/datasets/{id}/acl` now returns group and user grants with a `principalKind`, and
+      `DELETE /api/datasets/{id}/acl/user/{userId}` revokes a direct grant (invalidating that user's
+      sessions). The table rendering is extracted to `dataset-acl-ui.js` with node unit tests, so the
+      group/user distinction and the two revoke routes cannot silently cross over.
 - [x] Add an architecture test rejecting unconditional `CreatedBy`/`OwnerId` permission
       short-circuits that do not consult an ACL. `AuthorshipPermissionBoundaryTests` inventories
       every `CreatedBy`/`OwnerId` comparison in the Portal with the reason it is safe and asserts set

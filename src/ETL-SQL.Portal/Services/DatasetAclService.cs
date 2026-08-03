@@ -58,6 +58,44 @@ public sealed class DatasetAclService(
         return await SaveAndInvalidateAsync(dataset, groupId);
     }
 
+    /// <summary>
+    /// Revokes a grant made directly to a user — including the Owner grant a dataset's creator
+    /// receives at registration. Without this an administrator could see that grant but not remove
+    /// it, which would leave "authorship is revocable" true only in the database.
+    /// </summary>
+    public async Task<DatasetAclMutationResult> RevokeUserAsync(
+        Dataset dataset,
+        int userId,
+        long expectedVersion,
+        int currentUserId)
+    {
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion))
+            return DatasetAclMutationResult.Conflict();
+
+        var acl = await db.DatasetUserAcls
+            .FirstOrDefaultAsync(a => a.DatasetId == dataset.Id && a.UserId == userId);
+        if (acl is null)
+            return DatasetAclMutationResult.AclNotFound();
+
+        db.DatasetUserAcls.Remove(acl);
+        audit.Stage(currentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", dataset.Id.ToString(),
+            $"{dataset.Name} -> user {userId}");
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(dataset).ReloadAsync();
+            return DatasetAclMutationResult.Conflict();
+        }
+
+        // The revoked user's own sessions must stop carrying the old answer.
+        await securitySessions.InvalidateUserAsync(userId);
+        return DatasetAclMutationResult.Saved();
+    }
+
     private async Task<DatasetAclMutationResult> SaveAndInvalidateAsync(Dataset dataset, int groupId)
     {
         try

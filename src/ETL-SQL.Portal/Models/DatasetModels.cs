@@ -29,7 +29,22 @@ public record UpdateDatasetRequest(string? AccessLevel, string? Ttl);
 
 public record MoveDatasetRequest(int DestinationFolderId);
 
-public record DatasetAclEntryDto(int GroupId, string GroupName, string Permission);
+/// <summary>
+/// One dataset grant, to either a group or a single user.
+///
+/// <paramref name="PrincipalKind"/> says which. The group fields are kept as-is for existing
+/// callers; on a user grant <paramref name="GroupId"/> is 0 and <paramref name="GroupName"/> is
+/// empty, and the principal is in <paramref name="UserId"/>/<paramref name="UserName"/>. User
+/// grants exist because dataset authorship is not standing permission: a creator holds an explicit
+/// Owner row, which an administrator has to be able to see and revoke.
+/// </summary>
+public record DatasetAclEntryDto(
+    int GroupId,
+    string GroupName,
+    string Permission,
+    string PrincipalKind = "Group",
+    int? UserId = null,
+    string? UserName = null);
 
 public record GrantDatasetPermissionRequest(int GroupId, string Permission);
 

@@ -40,13 +40,24 @@ public sealed class DatasetQueryService(
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls).ThenInclude(a => a.Group)
-            .Include(d => d.UserAcls)
+            .Include(d => d.UserAcls).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(d => d.Id == id);
     }
 
+    /// <summary>
+    /// Lists group and user grants together. A creator's Owner grant is a user grant, so leaving
+    /// them out would show an administrator a dataset whose real access they cannot account for.
+    /// </summary>
     public IReadOnlyList<DatasetAclEntryDto> ToAclEntries(Dataset dataset) =>
         dataset.Acls
             .Select(a => new DatasetAclEntryDto(a.GroupId, a.Group.Name, a.Permission.ToString()))
+            .Concat(dataset.UserAcls.Select(a => new DatasetAclEntryDto(
+                GroupId: 0,
+                GroupName: string.Empty,
+                Permission: a.Permission.ToString(),
+                PrincipalKind: "User",
+                UserId: a.UserId,
+                UserName: a.User?.UserName ?? $"user {a.UserId}")))
             .ToList();
 
     public DatasetPreviewDto ToPreview(Dataset dataset) =>

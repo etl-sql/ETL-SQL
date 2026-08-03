@@ -46,8 +46,11 @@ short-circuit would have silently revoked access to every dataset in an existing
 - **Transferring ownership.** Deleting a user who owns datasets requires a `reassignTo` target;
   the transfer moves `CreatedBy` *and* writes the new owner's `Owner` grant, because access no
   longer follows `CreatedBy`.
-- **Removing the row directly.** Not yet exposed in the Admin dataset permissions panel — the ACL
-  listing shows group rows only. Tracked in `TODO.md`.
+- **Removing the row directly.** `GET /api/datasets/{id}/acl` lists group and user grants together,
+  each with a `principalKind`, and `DELETE /api/datasets/{id}/acl/user/{userId}` revokes a direct
+  grant and invalidates that user's sessions. The Admin dataset permissions panel shows both kinds.
+  A grant an administrator cannot see is a grant they cannot account for, and one they cannot revoke
+  makes "authorship is revocable" true only in the database.
 
 ## Guardrail
 
