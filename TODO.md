@@ -297,13 +297,23 @@ documentation reconciliation, then release certification.
 ### Portal — Authorship Is Not Permission
 
 - [ ] Decide and document whether dataset authorship upgrades an existing ACL grant but never
-      substitutes for one.
+      substitutes for one. **Blocked on a product decision, not on implementation.** `DatasetAcl` is
+      group-only — it has no `UserId` column, unlike `ReportAcl` — so a Private dataset has no
+      per-user grant path and nothing grants its creator an ACL at creation time. Applying the report
+      rule verbatim would make a freshly created private dataset invisible to its own creator. The
+      options are: copy the report rule and accept that (plus some companion grant), add `UserId` to
+      `DatasetAcl` and grant the creator Owner on creation, or keep authorship standing for datasets
+      and say so.
 - [ ] Add dataset revocation tests before implementation.
   - [ ] Prove a creator removed from every group loses dataset access.
   - [ ] Prove a creator retaining a lesser grant receives only the documented upgrade.
 - [ ] Apply the rule to both `DatasetPermissionService` paths and `ReportDependencyService`.
-- [ ] Add an architecture test rejecting unconditional `CreatedBy`/`OwnerId` permission
-      short-circuits that do not consult an ACL.
+- [x] Add an architecture test rejecting unconditional `CreatedBy`/`OwnerId` permission
+      short-circuits that do not consult an ACL. `AuthorshipPermissionBoundaryTests` inventories
+      every `CreatedBy`/`OwnerId` comparison in the Portal with the reason it is safe and asserts set
+      equality, so a new short-circuit fails the build until someone justifies it and a removed one
+      forces its entry out. The three open dataset sites are pinned in the inventory as `OPEN:` and
+      must be deleted when the decision above lands.
 - [ ] Audit and test revocation for connections, subscriptions, alerts, and saved views.
 - [ ] Prove directory/group removal revokes reports, datasets, connections, subscriptions, alerts,
       saved views, and anonymous links created by that identity.
