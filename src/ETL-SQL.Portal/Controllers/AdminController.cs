@@ -864,6 +864,21 @@ public class AdminController(
         return Ok(new { Deleted = deleted, Results = results });
     }
 
+    // ── Recovery and host-identity posture ───────────────────────────────────
+
+    /// <summary>
+    /// Backup freshness, restore-drill evidence, and host enrolment consistency — read-only.
+    ///
+    /// Backup custody, the restore itself, and host enrolment all stay outside the running Portal:
+    /// they own key material and an OS-protected bootstrap that the Portal deliberately does not
+    /// have. What the Portal can do is notice the evidence is missing, stale, or inconsistent, and
+    /// say what to run to fix it.
+    /// </summary>
+    [HttpGet("operations/posture")]
+    public async Task<IActionResult> GetOperationsPosture(
+        [FromServices] OperationsPostureService posture, CancellationToken ct) =>
+        Ok(await posture.BuildAsync(ct));
+
     // ── Audit collector health ───────────────────────────────────────────────
 
     /// <summary>

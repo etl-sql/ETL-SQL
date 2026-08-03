@@ -81,6 +81,35 @@ namespace ETL_SQL.App
             }
         }
 
+        /// <summary>
+        /// Records a restore or validation outcome under job-state name 'admin-restore', mirroring
+        /// <see cref="RecordBackupOutcomeAsync"/>.
+        ///
+        /// A backup nobody has ever restored is a hope, not a recovery plan — so the Portal has to be
+        /// able to show when the archive was last proven readable, not only when one was last
+        /// written. Custody and the restore itself stay out here on the host; only the evidence that
+        /// a drill happened travels. Best-effort: recording never changes the command's exit code.
+        /// </summary>
+        private static async Task RecordRestoreOutcomeAsync(
+            int exitCode, bool validateOnly, int problemCount, ILogger logger)
+        {
+            try
+            {
+                var store = Program.ServiceProvider.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                if (store == null) return;
+                await store.InitializeAsync();
+                await store.SetJobStateAsync("admin-restore", "last_restore_mode", validateOnly ? "validate" : "restore");
+                await store.SetJobStateAsync("admin-restore", "last_restore_status", exitCode == 0 ? "success" : "failed");
+                await store.SetJobStateAsync("admin-restore", "last_restore_at", DateTime.UtcNow.ToString("o"));
+                await store.SetJobStateAsync("admin-restore", "last_restore_exit_code", exitCode.ToString());
+                await store.SetJobStateAsync("admin-restore", "last_restore_problems", problemCount.ToString());
+            }
+            catch (Exception ex)
+            {
+                logger.WriteLine($"Note: the restore outcome could not be recorded: {ex.Message}", ConsoleColor.Yellow);
+            }
+        }
+
         /// <summary>Testable backup core: explicit config, install/base directory, and output directory.</summary>
         internal static async Task<int> BackupCoreAsync(IConfiguration config, string baseDir, string outputDir, ILogger logger)
         {
@@ -195,16 +224,26 @@ namespace ETL_SQL.App
 
         internal static async Task<int> RestoreAsync(CliContext ctx, ILogger logger)
         {
+            var (exitCode, problemCount) = await RestoreCoreAsync(ctx, logger);
+            await RecordRestoreOutcomeAsync(exitCode, ctx.RestoreValidateOnly, problemCount, logger);
+            return exitCode;
+        }
+
+        /// <summary>Restore/validate proper. Returns the exit code and how many validation problems
+        /// were found, so <see cref="RestoreAsync"/> can record drill evidence around it.</summary>
+        private static async Task<(int ExitCode, int Problems)> RestoreCoreAsync(CliContext ctx, ILogger logger)
+        {
+            var problems = new List<string>();
             if (string.IsNullOrWhiteSpace(ctx.RestoreFrom) || string.IsNullOrWhiteSpace(ctx.RestoreKeys))
             {
                 logger.WriteLine("Both --from <data.zip> and --keys <keys.zip> are required.", ConsoleColor.Red);
-                return 1;
+                return (1, 0);
             }
 
             var dataZip = Path.GetFullPath(ctx.RestoreFrom.Trim('"', '\'', ' '));
             var keysZip = Path.GetFullPath(ctx.RestoreKeys.Trim('"', '\'', ' '));
-            if (!File.Exists(dataZip)) { logger.WriteLine($"Data archive not found: {dataZip}", ConsoleColor.Red); return 1; }
-            if (!File.Exists(keysZip)) { logger.WriteLine($"Keys archive not found: {keysZip}", ConsoleColor.Red); return 1; }
+            if (!File.Exists(dataZip)) { logger.WriteLine($"Data archive not found: {dataZip}", ConsoleColor.Red); return (1, 0); }
+            if (!File.Exists(keysZip)) { logger.WriteLine($"Keys archive not found: {keysZip}", ConsoleColor.Red); return (1, 0); }
 
             // Extract under a per-user secure root with owner-only (0700) permissions; the keys archive
             // expands to plaintext secrets + the key ring, which must not be readable by other users.
@@ -219,7 +258,7 @@ namespace ETL_SQL.App
                 await ExtractZipToDirectoryAsync(dataZip, dataExtract);
                 await ExtractZipToDirectoryAsync(keysZip, keysExtract);
 
-                var problems = await ValidateAsync(dataExtract, keysExtract, logger);
+                problems = await ValidateAsync(dataExtract, keysExtract, logger);
                 await WriteRecoveryReportIfRequestedAsync(
                     ctx,
                     dataExtract,
@@ -232,7 +271,7 @@ namespace ETL_SQL.App
                 {
                     logger.WriteLine($"Validation FAILED ({problems.Count} problem(s)):", ConsoleColor.Red);
                     foreach (var p in problems) logger.WriteLine($"  - {p}", ConsoleColor.Yellow);
-                    return 1;
+                    return (1, problems.Count);
                 }
 
                 logger.WriteLine("Validation passed: archive integrity, key versions, and app-version compatibility OK.", ConsoleColor.Green);
@@ -240,13 +279,13 @@ namespace ETL_SQL.App
                 if (ctx.RestoreValidateOnly)
                 {
                     logger.WriteLine("--validate specified: no files were written.", ConsoleColor.Gray);
-                    return 0;
+                    return (0, 0);
                 }
 
                 if (string.IsNullOrWhiteSpace(ctx.RestoreTo))
                 {
                     logger.WriteLine("--to <dir> is required to perform a restore (omit it only with --validate).", ConsoleColor.Red);
-                    return 1;
+                    return (1, 0);
                 }
 
                 var target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
@@ -286,12 +325,12 @@ namespace ETL_SQL.App
                 logger.WriteLine("  2. Start the portal — pending migrations apply automatically on startup.", ConsoleColor.Gray);
                 logger.WriteLine("  3. Dataset caches referenced by ABSOLUTE path in the catalog must be restored to", ConsoleColor.Gray);
                 logger.WriteLine("     their original DatasetRootPath, or re-materialized (see admin guide §6.5).", ConsoleColor.Gray);
-                return 0;
+                return (0, 0);
             }
             catch (Exception ex)
             {
                 logger.WriteLine($"Restore failed: {ex.Message}", ConsoleColor.Red);
-                return 1;
+                return (1, problems.Count);
             }
             finally
             {

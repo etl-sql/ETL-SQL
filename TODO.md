@@ -272,8 +272,13 @@ documentation reconciliation, then release certification.
       secret display, and audit history.
 - [ ] Extend Policy Authority with fleet impact, approval state, collector consequences, and machine
       links to policy history.
-- [ ] Show host enrollment/registration consistency, expiry, certificate posture, and remediation;
-      keep enrollment/unenrollment on the host.
+- [x] Show host enrollment/registration consistency, expiry, certificate posture, and remediation;
+      keep enrollment/unenrollment on the host. In `GET /api/admin/operations/posture`: the host's own
+      enrolment compared against the Portal machine registration (tenant and enrollment-id drift, a
+      revoked registration, a host enrolled but never registered — each side looks healthy alone,
+      which is the point of comparing them), client-certificate thumbprint match and expiry with an
+      advance warning, and remediation that names the **host** commands, because enrolment owns an
+      OS-protected bootstrap deliberately outside lower-authority Portal configuration.
 - [ ] Integrate secrets/connections with Studio checks, policy findings, rotation dates, and promotion
       plans.
 - [x] Add audit/security collector health, queue metrics, fail-closed state, and redacted test delivery.
@@ -287,8 +292,14 @@ documentation reconciliation, then release certification.
       proves only the probe). It carries no audit content, echoes the endpoint without its query
       string, redacts failures, and is itself audited.
 - [x] Add native service enablement, schedule, recipient, last/next run, outcome, and history views.
-- [ ] Show backup freshness and validation/restore-drill evidence while keeping custody and recovery
-      outside the running Portal.
+- [x] Show backup freshness and validation/restore-drill evidence while keeping custody and recovery
+      outside the running Portal. `GET /api/admin/operations/posture` reports the last backup outcome,
+      its age against the configured freshness policy, and — new — restore-drill evidence:
+      `etl-sql admin restore`/`--validate` now records its outcome under job-state `admin-restore`,
+      mirroring what backup already did. A backup nobody has ever restored is a hope rather than a
+      recovery plan, so "never proven readable" is reported as a finding instead of a blank. Custody
+      and the restore itself stay on the host; only the evidence travels, and every finding names the
+      command that fixes it.
 - [ ] Add online-safe diagnostics and an audited, redacted, review-before-download support bundle.
 - [ ] Add a read-only Fleet/Operations workspace with compatibility, divergence, drain, migration,
       and upgrade evidence.
