@@ -391,7 +391,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     {
         limit = Math.Clamp(limit, 1, 500);
         staleAfterDays = Math.Clamp(staleAfterDays, 1, 3660);
-        view = NormalizeStewardshipView(view);
+        view = ETL_SQL.Portal.Services.StewardshipProjection.NormalizeView(view);
 
         var scanLimit = Math.Max(limit * 20, 1000);
         var latestTargets = (await lineageCatalog.GetRecentLineageAsync(scanLimit))
@@ -402,7 +402,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .ToList();
 
         var allItems = latestTargets
-            .Select(e => ToStewardshipAsset(e, staleAfterDays))
+            .Select(e => ETL_SQL.Portal.Services.StewardshipProjection.ToAsset(e, staleAfterDays))
             .ToList();
 
         var normalizedQuery = q?.Trim();
@@ -411,7 +411,7 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
 
         var filtered = allItems.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(normalizedQuery))
-            filtered = filtered.Where(i => MatchesStewardshipQuery(i, normalizedQuery));
+            filtered = filtered.Where(i => ETL_SQL.Portal.Services.StewardshipProjection.MatchesQuery(i, normalizedQuery));
         if (!string.IsNullOrWhiteSpace(normalizedSteward))
             filtered = filtered.Where(i => string.Equals(i.Steward, normalizedSteward, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrWhiteSpace(normalizedDomain))
@@ -610,89 +610,6 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return string.IsNullOrWhiteSpace(column)
             ? entries
             : entries.Where(e => string.Equals(e.TargetColumn, column, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string NormalizeStewardshipView(string? view)
-    {
-        view = view?.Trim().ToLowerInvariant();
-        return view is "sensitive" or "missing" or "stale" or "queue" ? view : "all";
-    }
-
-    private static StewardshipAssetDto ToStewardshipAsset(LineageHistoryEntry entry, int staleAfterDays)
-    {
-        var tags = new Dictionary<string, string>(entry.Tags, StringComparer.OrdinalIgnoreCase);
-        var missing = StewardshipTagCatalog.RequiredStewardshipTags
-            .Where(tag => !tags.ContainsKey(tag) || string.IsNullOrWhiteSpace(tags[tag]))
-            .ToList();
-
-        var isRestricted = HasTagValue(tags, "classification", "restricted");
-        var isSensitive = LineageProtectedData.IsProtected(tags);
-
-        var (isStale, staleReason) = GetStaleState(entry.RunAt, tags, staleAfterDays);
-
-        return new StewardshipAssetDto(
-            entry.TargetTable,
-            entry.TargetColumn,
-            entry.RunAt,
-            entry.JobName,
-            entry.ScriptPath,
-            entry.SourceTables,
-            tags,
-            missing,
-            isSensitive,
-            isRestricted,
-            isStale,
-            staleReason,
-            GetTag(tags, "owner"),
-            GetTag(tags, "steward"),
-            GetTag(tags, "contact"),
-            GetTag(tags, "domain"),
-            GetTag(tags, "classification"),
-            GetTag(tags, "quality"),
-            GetTag(tags, "freshness"));
-    }
-
-    private static (bool IsStale, string Reason) GetStaleState(DateTime runAt, IReadOnlyDictionary<string, string> tags, int staleAfterDays)
-    {
-        var now = DateTime.UtcNow;
-        var freshness = GetTag(tags, "freshness");
-        if (!string.IsNullOrWhiteSpace(freshness) && TryParseFreshness(freshness, out var freshnessWindow))
-        {
-            var staleByFreshness = runAt.ToUniversalTime().Add(freshnessWindow) < now;
-            return (staleByFreshness, staleByFreshness ? $"Freshness window {freshness} expired" : "Fresh");
-        }
-
-        var staleByDefault = runAt.ToUniversalTime().AddDays(staleAfterDays) < now;
-        return (staleByDefault, staleByDefault ? $"No lineage in {staleAfterDays} days" : "Fresh");
-    }
-
-    private static bool TryParseFreshness(string value, out TimeSpan span)
-    {
-        span = TimeSpan.Zero;
-        value = value.Trim();
-        if (value.Length < 2 || !double.TryParse(value[..^1], out var amount)) return false;
-        span = char.ToLowerInvariant(value[^1]) switch
-        {
-            's' => TimeSpan.FromSeconds(amount),
-            'm' => TimeSpan.FromMinutes(amount),
-            'h' => TimeSpan.FromHours(amount),
-            'd' => TimeSpan.FromDays(amount),
-            _ => TimeSpan.Zero
-        };
-        return span > TimeSpan.Zero;
-    }
-
-    private static bool MatchesStewardshipQuery(StewardshipAssetDto item, string query)
-    {
-        static bool Contains(string? value, string query) =>
-            value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
-
-        return Contains(item.TargetTable, query)
-            || Contains(item.TargetColumn, query)
-            || Contains(item.JobName, query)
-            || Contains(item.ScriptPath, query)
-            || item.SourceTables.Any(s => Contains(s, query))
-            || item.Tags.Any(t => Contains(t.Key, query) || Contains(t.Value, query));
     }
 
     private static IReadOnlyList<StewardshipFacetDto> BuildFacet(IEnumerable<string?> values) =>

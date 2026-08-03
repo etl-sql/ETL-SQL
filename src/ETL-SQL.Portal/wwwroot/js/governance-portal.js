@@ -1,1526 +1,840 @@
-// Governance Portal Dashboard Module for ETL-SQL Portal client
+// Governance dashboard for the ETL-SQL Portal.
+//
+// Every value shown here comes from `/api/governance/*`. There is no demo data and no local
+// workflow state: a finding a steward ignored has to still be ignored after a refresh, on someone
+// else's screen, and in an audit six months later. State that lives in a tab satisfies none of
+// those, and — worse — looks identical to state that does.
+//
+// The four states below are rendered honestly and separately, because collapsing them is how a
+// dashboard lies:
+//   loading      — we do not know yet, so we claim nothing
+//   unauthorized — you are not permitted to see this (403), not "there is nothing here"
+//   failed       — we asked and could not find out; never a fabricated stand-in
+//   empty        — we asked, we know, and the answer is genuinely nothing
+//
+// A fifth distinction matters just as much: "never scanned" is not "no findings". A KPI tile
+// showing zero cannot tell those apart on its own, so the scan banner says which one it is.
 export function createGovernancePortal(opts = {}) {
   const {
     host,
-    catalogApi,
-    adminApi = {},
-    renderLineageRow,
-    lineageRowsToCsv,
-    openReport = () => {},
-    timeAgo = v => v,
-    formatBuiltAt = v => v,
+    governanceApi,
     prepare = () => {},
+    notify = (msg, o) => window.ETLSQLFeedback?.notify(msg, o),
+    confirm = (msg, o) => window.ETLSQLFeedback?.confirm(msg, o),
   } = opts;
 
   const state = {
-    mode: 'steward', // 'steward' or 'all'
-    tab: 'overview', // 'overview', 'workqueue', 'exceptions', 'badges', 'glossary', 'lineage', 'settings'
+    mode: 'all',            // 'mine' | 'all'
+    tab: 'overview',        // overview | workqueue | exceptions | badges | glossary | settings
     searchFilter: '',
     badgeFilter: 'all',
     categoryFilter: 'all',
-    editingTermId: null,
-    editingCatId: null,
-    // Live items loaded from backend API
-    stewardshipItems: [],
-    loaded: false,
-    auditEvents: [],
-    // In-memory governance states
-    settings: {
-      targetScore: 80,
-      deductMeta: 5,
-      deductPII: 10,
-      deductGlossary: 5,
-      deductStale: 15,
-      enableMeta: true,
-      enablePII: true,
-      enableGlossary: true,
-      enableStale: true,
-      auditBehavior: 'fail-closed'
-    },
-    resolutionCategories: [
-      { id: 'cat-1', value: 'risk', label: 'Durable Bypass (Security Risk)', color: 'risk', colorLabel: 'Red (Risk Escalation)', expiry: 'None' },
-      { id: 'cat-2', value: 'false-positive', label: 'False Positive', color: 'false-positive', colorLabel: 'Green (Compliance Exclude)', expiry: 'None' },
-      { id: 'cat-3', value: 'noise', label: 'Safe Mock / Low Priority', color: 'noise', colorLabel: 'Yellow (Muted Noise)', expiry: '90 Days' }
-    ],
-    risks: [
-      { id: 'risk-1', asset: 'stage_customer_temp.etlsql', category: 'risk', categoryLabel: 'Durable Bypass (Security Risk)', reason: 'Temporary scratch table, will be deleted next week', date: '2026-07-23', steward: 'Chuck' },
-      { id: 'risk-2', asset: 'bi_report_debug.rptsql', category: 'noise', categoryLabel: 'Safe Mock (Noise Dismissal)', reason: 'Local developer sandbox dashboard, no connection to prod DB', date: '2026-07-21', steward: 'Chuck' }
-    ],
-    glossary: [
-      { id: 'term-1', term: 'revenue', type: 'DECIMAL(18,2)', aliases: 'rev, gross_sales, turnover', desc: 'Standard business definition of sales intake, calculated before deductions.', steward: 'Chuck', formula: 'SUM(sales_amount)' },
-      { id: 'term-2', term: 'salary', type: 'DECIMAL(10,2)', aliases: 'emp_salary, base_pay, compensation', desc: 'Employee annual base compensation rate. Subject to strict PII encryption.', steward: 'Sarah', formula: 'N/A (Stored Attribute)' },
-      { id: 'term-3', term: 'patient_ssn', type: 'VARCHAR(11)', aliases: 'ssn, patient_id, soc_sec_num', desc: 'Social Security Number for medical record tracking. Sensitive PHI.', steward: 'Dan', formula: 'N/A (Identified Token)' },
-      { id: 'term-4', term: 'length_of_stay', type: 'INT', aliases: 'los, stay_duration, days_hospitalized', desc: 'Total calendar days hospitalized for patient care audit reports.', steward: 'Dan', formula: 'DATEDIFF(DAY, admission_date, discharge_date)' }
-    ],
-    badgeDefinitions: [
-      { name: 'Certified', desc: 'Officially certified by data governance. Meets all metadata and compliance standards.', color: 'cert' },
-      { name: 'Trusted', desc: 'Verified source dataset or connection with lineage confirmed.', color: 'trust' },
-      { name: 'GDPR Scoped', desc: 'Subject to General Data Protection Regulation audit checks.', color: 'gdpr' },
-      { name: 'HIPAA Scoped', desc: 'Contains Protected Health Information (PHI) subject to HIPAA rules.', color: 'hipaa' }
-    ],
-    assignedBadgesMap: {
-      'hr_salary_report.rptsql': ['GDPR Scoped'],
-      'sales_yearly_rollup.etlsql': ['Trusted']
-    }
+    // load: 'idle' | 'loading' | 'ready' | 'unauthorized' | 'failed'
+    load: 'idle',
+    error: null,
+    dashboard: null,
+    findings: [],
+    categories: [],
+    glossary: [],
+    settings: null,
+    editingTerm: null,
+    editingCategory: null,
+    pendingFindingId: null,
   };
 
-  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  // Score Calculator
-  const computeScores = (item, settings) => {
-    let score = 100;
-    const path = item.path || '';
-    if (settings.enableMeta && item.badges.includes('Needs Metadata')) {
-      score -= settings.deductMeta;
-    }
-    if (settings.enablePII) {
-      if (item.badges.includes('Untagged PII') || item.badges.includes('Untagged PHI') || item.badges.includes('Untagged PCI')) {
-        score -= settings.deductPII;
-      }
-    }
-    if (settings.enableGlossary && item.badges.includes('Glossary Review')) {
-      score -= settings.deductGlossary;
-    }
-    if (settings.enableStale && item.badges.includes('Needs Review')) {
-      score -= settings.deductStale;
-    }
-    score = Math.max(0, Math.min(100, score));
-    
-    let scoreClass = 'score-high';
-    if (score < 60) {
-      scoreClass = 'score-low';
-    } else if (score < 80) {
-      scoreClass = 'score-med';
-    }
-    return { score, scoreClass };
-  };
+  const isForbidden = err => err?.status === 403 || err?.status === 401;
 
-  // Fetch real assets from backend to populate the dashboard!
-  async function loadStewardshipData() {
+  /** Runs a mutation and reports the outcome; never leaves the UI showing a change that failed. */
+  async function mutate(action, { success, failure, auditAction }) {
     try {
-      const result = await catalogApi.stewardship({
-        view: 'all',
-        q: state.searchFilter
-      });
-      const items = Array.isArray(result?.items) ? result.items : [];
-      
-      // Transform backend assets to match our dashboard format
-      state.stewardshipItems = items.map((item, idx) => {
-        const path = item.targetTable + (item.targetColumn ? `.${item.targetColumn}` : '');
-        const badges = [];
-        if (item.missingTags && item.missingTags.length) badges.push('Needs Metadata');
-        if (item.isSensitive) badges.push('Untagged PII');
-        if (item.isStale) badges.push('Needs Review');
-        if (path.includes('revenue') || path.includes('salary')) badges.push('Glossary Review');
-        
-        return {
-          id: `asset-${idx}`,
-          path: path,
-          meta: `Steward: ${item.steward || 'Unassigned'} · Owner: ${item.owner || 'Unassigned'} · Domain: ${item.domain || 'Unassigned'}`,
-          badges: badges,
-          assignedBadges: state.assignedBadgesMap[path] || [],
-          evidence: [
-            { num: 1, text: `-- Auto-generated lineage evidence for ${path}` },
-            { num: 2, text: `SELECT * FROM ${item.targetTable};`, hl: true }
-          ]
-        };
-      });
-      state.loaded = true;
+      const result = await action();
+      notify(success, { title: 'Governance', tone: 'success', auditAction });
+      // Re-read and redraw. Reloading without redrawing leaves the steward looking at the state
+      // before their change — which reads as the change having failed.
+      await load();
+      await render();
+      return result;
     } catch (err) {
-      console.error('Failed to load live stewardship catalog items:', err);
-      // Fallback to static mock items if API fails/is empty
-      state.stewardshipItems = [
-        { id: 'asset-1', path: 'sales_yearly_rollup.etlsql', meta: 'Steward: Chuck · Domain: Sales', badges: ['Needs Metadata', 'Needs Review'], assignedBadges: ['Trusted'], evidence: [{ num: 1, text: '-- Yearly rollup process' }, { num: 4, text: 'SELECT SUM(Revenue) FROM src.Sales;', hl: true }] },
-        { id: 'asset-2', path: 'hr_salary_report.rptsql', meta: 'Steward: Chuck · Domain: Human Resources', badges: ['Untagged PII', 'Needs Review'], assignedBadges: ['GDPR Scoped'], evidence: [{ num: 10, text: "  'Salary' = emp_salary,  -- Untagged sensitive field", hl: true }] },
-        { id: 'asset-4', path: 'finance_balance_sheet.etlsql', meta: 'Steward: Chuck · Domain: Finance', badges: ['Needs Metadata'], assignedBadges: [], evidence: [{ num: 5, text: 'CREATE CONNECTION dest AS MSSQL(...);', hl: true }] },
-        { id: 'asset-5', path: 'patient_health_audit.etlsql', meta: 'Steward: Chuck · Domain: Healthcare', badges: ['Untagged PHI', 'Needs Review'], assignedBadges: ['HIPAA Scoped'], evidence: [{ num: 12, text: 'SELECT diagnosis_code, patient_ssn FROM records;', hl: true }] },
-        { id: 'asset-7', path: 'inventory_reorder_trigger.etlsql', meta: 'Steward: Chuck · Domain: Logistics', badges: ['Glossary Review'], assignedBadges: [], evidence: [{ num: 8, text: 'SELECT lead_time_days AS ltd FROM warehouse;', hl: true }] }
-      ];
-      state.loaded = true;
+      notify(
+        isForbidden(err)
+          ? 'Your role does not permit this governance change.'
+          : `${failure} ${err?.message || ''}`.trim(),
+        { title: 'Governance', tone: 'warning' });
+      return null;
     }
   }
 
-  const render = async () => {
-    prepare(state.tab);
-    
-    if (!state.loaded) {
-      await loadStewardshipData();
+  async function load() {
+    state.load = 'loading';
+    state.error = null;
+    try {
+      const scope = state.mode === 'mine' ? 'mine' : 'all';
+      const [dashboard, findings, categories, glossary, settings] = await Promise.all([
+        governanceApi.dashboard({ scope }),
+        governanceApi.findings({ limit: 500 }),
+        governanceApi.categories(),
+        governanceApi.glossary(),
+        governanceApi.settings(),
+      ]);
+      state.dashboard = dashboard;
+      state.findings = Array.isArray(findings) ? findings : [];
+      state.categories = Array.isArray(categories) ? categories : [];
+      state.glossary = Array.isArray(glossary) ? glossary : [];
+      state.settings = settings;
+      state.load = 'ready';
+    } catch (err) {
+      // No fallback dataset. Showing invented assets when the API is unreachable would put
+      // fictional governance evidence in front of a steward with nothing marking it as fiction.
+      state.dashboard = null;
+      state.findings = [];
+      state.load = isForbidden(err) ? 'unauthorized' : 'failed';
+      state.error = err?.message || 'The governance API could not be reached.';
     }
+  }
 
-    const scoredQueue = state.stewardshipItems.map(item => {
-      const { score, scoreClass } = computeScores(item, state.settings);
-      return { ...item, score, scoreClass };
-    });
+  const stateBanner = () => {
+    if (state.load === 'loading') {
+      return `<div class="gov-state gov-state-loading" data-gov-state="loading">
+        <span class="gov-spinner"></span> Loading governance data…</div>`;
+    }
+    if (state.load === 'unauthorized') {
+      return `<div class="gov-state gov-state-denied" data-gov-state="unauthorized">
+        <b>You do not have access to governance data.</b>
+        <p>Viewing the estate's governance posture needs the GovernanceViewer, DataSteward, or
+        GovernanceManager role. This is not an empty estate — it is a view you cannot see.</p></div>`;
+    }
+    if (state.load === 'failed') {
+      return `<div class="gov-state gov-state-error" data-gov-state="failed">
+        <b>Governance data is unavailable.</b>
+        <p>${esc(state.error)}</p>
+        <p class="gov-state-note">Nothing is shown in place of the real posture. Retry once the
+        service is reachable.</p>
+        <button class="btn btn-outline btn-xs" id="btnGovRetry" type="button">Retry</button></div>`;
+    }
+    return '';
+  };
 
-    const missingMetaCount = scoredQueue.filter(item => item.badges.includes('Needs Metadata') && state.settings.enableMeta).length;
-    const activeSecurityRisksCount = state.risks.filter(r => r.category === 'risk').length;
-    const unresolvedFindings = scoredQueue.filter(item => item.score < state.settings.targetScore);
-    const totalOpenFindingsCount = unresolvedFindings.length;
-    
-    const governedPercent = Math.round(100 - (totalOpenFindingsCount / (scoredQueue.length || 1)) * 30);
-    const radius = 18;
-    const circ = 2 * Math.PI * radius;
-    const strokeDashoffset = circ - (Math.max(0, Math.min(100, governedPercent)) / 100) * circ;
+  const scanBanner = () => {
+    const scan = state.dashboard?.lastScan;
+    if (!scan) {
+      // The distinction the whole surface depends on.
+      return `<div class="gov-state gov-state-unscanned" data-gov-state="never-scanned">
+        <b>This estate has never been scanned.</b>
+        <p>The tiles below show no findings because none have been computed — not because none
+        exist. Run a scan to establish the current posture.</p></div>`;
+    }
+    if (scan.status === 'failed') {
+      return `<div class="gov-state gov-state-error" data-gov-state="scan-failed">
+        <b>The last scan failed.</b>
+        <p>${esc(scan.error || 'No error detail was recorded.')}</p>
+        <p class="gov-state-note">Findings below are from before that scan and may be stale.</p></div>`;
+    }
+    return `<div class="gov-scanline" data-gov-state="scanned">Last scan
+      ${esc(new Date(scan.startedAtUtc).toLocaleString())} · ${esc(scan.assetsScanned)} assets ·
+      ${esc(scan.findingsOpened)} opened · ${esc(scan.findingsResolved)} resolved ·
+      ${esc(scan.findingsReopened)} reopened</div>`;
+  };
 
-    const filteredQueue = scoredQueue.filter(item => {
-      const matchesSearch = item.path.toLowerCase().includes(state.searchFilter.toLowerCase());
-      const matchesBadge = state.badgeFilter === 'all' || item.badges.includes(state.badgeFilter);
+  const emptyRow = (colspan, message) =>
+    `<tr><td colspan="${colspan}" class="gov-empty" data-gov-state="empty">${esc(message)}</td></tr>`;
+
+  const filteredAssets = () => {
+    const assets = state.dashboard?.assets || [];
+    const q = state.searchFilter.toLowerCase();
+    return assets.filter(a => {
+      const matchesSearch = !q || a.assetKey.toLowerCase().includes(q)
+        || (a.scriptPath || '').toLowerCase().includes(q);
+      const matchesBadge = state.badgeFilter === 'all'
+        || (a.automaticBadges || []).includes(state.badgeFilter)
+        || (a.assignedBadges || []).includes(state.badgeFilter);
       return matchesSearch && matchesBadge;
     });
+  };
 
-    const filteredRisks = state.risks.filter(risk => {
-      const matchesSearch = risk.asset.toLowerCase().includes(state.searchFilter.toLowerCase());
-      const matchesCategory = state.categoryFilter === 'all' || risk.category === state.categoryFilter;
-      return matchesSearch && matchesCategory;
-    });
+  const suppressed = () => state.findings.filter(
+    f => f.status === 'ignored' || f.status === 'accepted-risk');
 
-    const filteredGlossary = state.glossary.filter(term => {
-      const matchesSearch = term.term.toLowerCase().includes(state.searchFilter.toLowerCase()) || 
-                            term.aliases.toLowerCase().includes(state.searchFilter.toLowerCase()) ||
-                            term.desc.toLowerCase().includes(state.searchFilter.toLowerCase()) ||
-                            term.formula.toLowerCase().includes(state.searchFilter.toLowerCase());
-      return matchesSearch;
-    });
+  const renderOverview = () => {
+    const s = state.dashboard?.summary;
+    if (!s) return '';
+    const pct = s.totalAssets ? Math.round((s.governedAssets / s.totalAssets) * 100) : 0;
+    return `
+      ${scanBanner()}
+      <div class="gov-kpis">
+        ${kpi('Governed assets', `${s.governedAssets}/${s.totalAssets}`, `${pct}% at or above ${s.targetScore}`, 'ok')}
+        ${kpi('Below threshold', s.belowThreshold, 'Need follow-up', s.belowThreshold ? 'warn' : 'ok')}
+        ${kpi('Open findings', s.openFindings, 'Awaiting a steward', s.openFindings ? 'warn' : 'ok')}
+        ${kpi('Accepted risk', s.acceptedRisks, 'Suppressed with a reason', s.acceptedRisks ? 'risk' : 'ok')}
+        ${kpi('Ignored', s.ignoredFindings, 'Declared false positives', 'muted')}
+      </div>`;
+  };
 
-    let html = `
-      <style>
-        /* Layout structure matching Portal dashboard aesthetics */
-        .gov-container {
-          font-family: var(--portal-font, system-ui, sans-serif);
-          color: var(--portal-text, #f9fafb);
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          box-sizing: border-box;
-          gap: 16px;
-        }
+  const kpi = (label, value, sub, tone) => `
+    <div class="gov-kpi gov-kpi-${tone}">
+      <div class="gov-kpi-value">${esc(value)}</div>
+      <div class="gov-kpi-label">${esc(label)}</div>
+      <div class="gov-kpi-sub">${esc(sub)}</div>
+    </div>`;
 
-        .gov-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 1px solid var(--portal-border, #374151);
-          padding-bottom: 16px;
-        }
-        .gov-header-title h1 {
-          margin: 0;
-          font-size: 22px;
-          font-weight: 700;
-        }
-        .gov-header-title p {
-          margin: 4px 0 0 0;
-          color: var(--portal-muted, #9ca3af);
-          font-size: 13px;
-        }
-
-        .gov-actions {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-        
-        .scope-toggle {
-          display: flex;
-          background: var(--portal-bg-soft, #111827);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          padding: 3px;
-        }
-        .scope-btn {
-          background: none;
-          border: none;
-          color: var(--portal-muted, #9ca3af);
-          padding: 6px 12px;
-          font-size: 12px;
-          font-weight: 600;
-          border-radius: var(--portal-radius-sm, 5px);
-          cursor: pointer;
-        }
-        .scope-btn.active {
-          background: var(--portal-accent, #3b82f6);
-          color: #ffffff;
-        }
-        
-        /* KPI Cards Grid using Flexbox row wrap */
-        .gov-kpi-grid {
-          display: flex;
-          gap: 16px;
-          flex-wrap: wrap;
-        }
-        .kpi-card {
-          flex: 1 1 200px;
-          background: var(--portal-surface, #1f2937);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          padding: 14px 18px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          position: relative;
-          box-shadow: var(--portal-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .kpi-card:hover {
-          transform: translateY(-2px);
-          border-color: var(--portal-accent, #3b82f6);
-        }
-        .kpi-card::before {
-          content: '';
-          position: absolute;
-          top: 0; left: 0; right: 0; height: 3px;
-          border-radius: var(--portal-radius, 8px) var(--portal-radius, 8px) 0 0;
-        }
-        .kpi-card.blue::before { background: var(--portal-accent, #3b82f6); }
-        .kpi-card.amber::before { background: var(--portal-warning, #fbbf24); }
-        .kpi-card.purple::before { background: var(--portal-danger, #f87171); }
-        .kpi-card.red::before { background: var(--portal-danger, #f87171); }
-
-        .kpi-card-info h3 {
-          margin: 0;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--portal-muted, #9ca3af);
-        }
-        .kpi-card-info .kpi-val {
-          font-size: 24px;
-          font-weight: 700;
-          margin-top: 6px;
-        }
-        .kpi-card-chart {
-          width: 44px;
-          height: 44px;
-        }
-        .circular-ring {
-          transform: rotate(-90deg);
-        }
-        .circular-ring circle {
-          fill: none;
-          stroke-width: 4;
-        }
-        .circular-ring .bg {
-          stroke: var(--portal-border, #374151);
-        }
-        .circular-ring .bar {
-          stroke: var(--portal-success, #34d399);
-        }
-
-        /* Panels and grids */
-        .gov-panel {
-          background: var(--portal-surface, #1f2937);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          padding: 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .gov-panel-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-bottom: 1px solid var(--portal-border-soft, #1f2937);
-          padding-bottom: 12px;
-        }
-        .gov-panel-header h2 {
-          margin: 0;
-          font-size: 15px;
-          font-weight: 600;
-        }
-
-        /* Dense tables */
-        .dense-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-        .dense-table th {
-          text-align: left;
-          padding: 10px 12px;
-          color: var(--portal-muted, #9ca3af);
-          border-bottom: 1px solid var(--portal-border, #374151);
-        }
-        .dense-table td {
-          padding: 10px 12px;
-          border-bottom: 1px solid var(--portal-border-soft, #1f2937);
-        }
-        .dense-table tr:hover {
-          background: var(--portal-surface-subtle, #111827);
-        }
-
-        .gov-filters-bar {
-          display: flex;
-          gap: 12px;
-          align-items: center;
-          background: var(--portal-surface-subtle, #111827);
-          border: 1px solid var(--portal-border, #374151);
-          padding: 8px 16px;
-          border-radius: var(--portal-radius-sm, 5px);
-          flex-wrap: wrap;
-        }
-        .gov-filter-search-wrap {
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-        .gov-filter-input {
-          background: var(--portal-bg, #0b0f19);
-          border: 1px solid var(--portal-border, #374151);
-          color: var(--portal-text, #ffffff);
-          padding: 6px 12px;
-          font-size: 12px;
-          border-radius: var(--portal-radius-sm, 5px);
-          width: 240px;
-        }
-        .gov-filter-select {
-          background: var(--portal-bg, #0b0f19);
-          border: 1px solid var(--portal-border, #374151);
-          color: var(--portal-text, #ffffff);
-          padding: 6px 12px;
-          font-size: 12px;
-          border-radius: var(--portal-radius-sm, 5px);
-        }
-
-        .queue-list {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-        .queue-item {
-          background: var(--portal-surface-subtle, #111827);
-          border: 1px solid var(--portal-border-soft, #1f2937);
-          border-radius: var(--portal-radius, 8px);
-          padding: 16px;
-        }
-        .queue-item-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        .asset-path {
-          font-family: ui-monospace, monospace;
-          font-size: 13px;
-          color: var(--portal-accent, #3b82f6);
-          font-weight: 600;
-        }
-        
-        .score-badge {
-          font-size: 11px;
-          padding: 2px 8px;
-          border-radius: 12px;
-          font-weight: 700;
-        }
-        .score-high { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-        .score-med { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-        .score-low { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-        
-        .queue-item-meta {
-          font-size: 12px;
-          color: var(--portal-muted, #9ca3af);
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 14px;
-        }
-        .badge-pill {
-          background: var(--portal-bg, #0b0f19);
-          padding: 1px 6px;
-          border-radius: 4px;
-          font-size: 11px;
-          border: 1px solid var(--portal-border, #374151);
-        }
-        .badge-pill.danger {
-          border-color: var(--portal-danger, #f87171);
-          color: var(--portal-danger, #f87171);
-          background: rgba(248, 113, 113, 0.15);
-        }
-        
-        .queue-item-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-
-        .steward-badge-tag {
-          font-size: 10.5px;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-weight: 700;
-          margin-right: 4px;
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-        }
-        .steward-badge-tag.cert { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
-        .steward-badge-tag.trust { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-        .steward-badge-tag.gdpr { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-        .steward-badge-tag.hipaa { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
-        
-        .remove-badge-btn {
-          background: none;
-          border: none;
-          color: inherit;
-          cursor: pointer;
-          font-size: 11px;
-          font-weight: bold;
-          padding: 0 0 0 2px;
-          opacity: 0.6;
-        }
-        .remove-badge-btn:hover { opacity: 1; }
-
-        .exception-tag {
-          font-size: 10px;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-weight: 700;
-          text-transform: uppercase;
-        }
-        .exception-tag.risk { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-        .exception-tag.false-positive { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-        .exception-tag.noise { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-
-        .gov-btn {
-          background: var(--portal-surface, #1f2937);
-          color: var(--portal-text-soft, #d1d5db);
-          border: 1px solid var(--portal-border, #374151);
-          padding: 6px 12px;
-          border-radius: var(--portal-radius-sm, 5px);
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        .gov-btn:hover {
-          background: var(--portal-bg-soft, #111827);
-          color: var(--portal-text, #ffffff);
-          border-color: var(--portal-accent, #3b82f6);
-        }
-        .gov-btn-primary {
-          background: var(--portal-accent, #3b82f6);
-          color: #ffffff;
-          border-color: var(--portal-accent, #3b82f6);
-        }
-        .gov-btn-danger {
-          background: rgba(248, 113, 113, 0.15);
-          color: #f87171;
-          border-color: rgba(248, 113, 113, 0.3);
-        }
-
-        .evidence-panel {
-          background: var(--portal-bg, #0b0f19);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius-sm, 5px);
-          margin-top: 10px;
-          padding: 12px;
-          font-family: ui-monospace, monospace;
-          font-size: 12px;
-          display: none;
-        }
-        .evidence-panel.open { display: block; }
-        .code-line { display: flex; gap: 10px; }
-        .code-num { color: #5a6778; text-align: right; width: 20px; }
-        .code-text { color: var(--portal-text-soft, #d1d5db); white-space: pre; }
-        .code-hl { background: rgba(248, 113, 113, 0.15); border-left: 2px solid var(--portal-danger, #f87171); }
-
-        .settings-section-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-        .settings-group {
-          background: var(--portal-surface-subtle, #111827);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          padding: 16px 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 14px;
-        }
-        .settings-group h3 {
-          margin: 0;
-          font-size: 14px;
-          font-weight: 600;
-          border-bottom: 1px solid var(--portal-border-soft, #1f2937);
-          padding-bottom: 8px;
-        }
-        .setting-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .setting-label {
-          font-size: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .setting-label span {
-          font-size: 10px;
-          color: var(--portal-muted, #9ca3af);
-        }
-        .setting-input-number {
-          width: 60px;
-          background: var(--portal-bg, #0b0f19);
-          border: 1px solid var(--portal-border, #374151);
-          color: var(--portal-text, #ffffff);
-          padding: 4px 8px;
-          font-size: 12px;
-          text-align: center;
-        }
-
-        .lineage-graph-container {
-          display: flex;
-          flex-direction: column;
-          background: var(--portal-surface-subtle, #111827);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          padding: 20px;
-          gap: 16px;
-          height: 400px;
-        }
-        .lineage-canvas {
-          flex: 1;
-          border: 1px dashed var(--portal-border-soft, #374151);
-          background: radial-gradient(circle, var(--portal-surface, #1f2937) 1px, transparent 1px);
-          background-size: 16px 16px;
-          position: relative;
-        }
-        .lineage-node {
-          background: var(--portal-surface, #1f2937);
-          border: 2px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius-sm, 5px);
-          padding: 10px 14px;
-          font-size: 12px;
-          position: absolute;
-        }
-        .lineage-node .node-type { font-size: 9px; font-weight:700; color:var(--portal-muted, #9ca3af); }
-        .lineage-node .node-name { font-family: ui-monospace, monospace; font-weight:700; }
-        .lineage-arrow-svg { position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
-        .arrow-path { fill: none; stroke: var(--portal-border, #374151); stroke-width: 2; marker-end: url(#arrowhead); }
-
-        .gov-modal-backdrop {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0, 0, 0, 0.6);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 0.2s ease;
-        }
-        .gov-modal-backdrop.open { opacity: 1; pointer-events: auto; }
-        .gov-modal {
-          background: var(--portal-surface, #1f2937);
-          border: 1px solid var(--portal-border, #374151);
-          border-radius: var(--portal-radius, 8px);
-          width: 460px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .gov-modal-body select, .gov-modal-body textarea, .gov-modal-body input {
-          width: 100%;
-          background: var(--portal-bg, #0b0f19);
-          border: 1px solid var(--portal-border, #374151);
-          color: var(--portal-text, #ffffff);
-          padding: 8px;
-          font-size: 13px;
-          margin-top: 6px;
-          box-sizing: border-box;
-        }
-        .gov-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
-      </style>
-
-      <div class="gov-container">
-        <!-- Main Workspace (Tabs removed to delegate fully to portal sidebar) -->
-        <div class="gov-main-area" style="padding: 0;">
-          <!-- Header -->
-          <div class="gov-header">
-            <div class="gov-header-title">
-              <h1>Portal Governance Core</h1>
-              <p>Data Stewardship overview and rule resolution portal</p>
-            </div>
-            <div class="gov-actions">
-              ${state.tab === 'overview' || state.tab === 'workqueue' || state.tab === 'exceptions' ? `
-                <div class="scope-toggle">
-                  <button class="scope-btn ${state.mode === 'steward' ? 'active' : ''}" id="btnStewardScope">My Steward Work</button>
-                  <button class="scope-btn ${state.mode === 'all' ? 'active' : ''}" id="btnAllScope">All Governance</button>
-                </div>
-                <button class="gov-btn gov-btn-primary" id="btnScanNow">⚡ Scan Now</button>
-              ` : ''}
-            </div>
-          </div>
-    `;
-
-    const renderAssignedBadges = (item) => {
-      if (!item.assignedBadges || !item.assignedBadges.length) return '';
-      return item.assignedBadges.map(b => {
-        const styleClass = b.toLowerCase().includes('cert') ? 'cert' : b.toLowerCase().includes('trust') ? 'trust' : b.toLowerCase().includes('gdpr') ? 'gdpr' : 'hipaa';
+  const renderWorkqueue = () => {
+    const assets = filteredAssets();
+    const rows = assets.length
+      ? assets.map(a => {
+        const open = (a.findings || []).filter(
+          f => f.status === 'open' || f.status === 'reopened');
         return `
-          <span class="steward-badge-tag ${styleClass}">
-            ★ ${esc(b)}
-            <button class="remove-badge-btn" title="Remove Badge" data-remove-badge-name="${esc(b)}" data-remove-badge-asset="${item.id}">×</button>
-          </span>
-        `;
-      }).join(' ');
-    };
-
-    if (state.tab === 'overview') {
-      html += `
-        <!-- KPI Cards Grid -->
-        <div class="gov-kpi-grid">
-          <div class="kpi-card blue" id="kpiGoverned">
-            <div class="kpi-card-info">
-              <h3>Governed Assets</h3>
-              <div class="kpi-val">${governedPercent}%</div>
-            </div>
-            <div class="kpi-card-chart">
-              <svg class="circular-ring" width="44" height="44" viewBox="0 0 44 44">
-                <circle class="bg" cx="22" cy="22" r="${radius}" fill="none" />
-                <circle class="bar" cx="22" cy="22" r="${radius}" fill="none"
-                  stroke-dasharray="${circ}" stroke-dashoffset="${strokeDashoffset}" />
-              </svg>
-            </div>
-          </div>
-          <div class="kpi-card amber" id="kpiMetadata">
-            <div class="kpi-card-info">
-              <h3>Missing Metadata</h3>
-              <div class="kpi-val">${missingMetaCount}</div>
-            </div>
-          </div>
-          <div class="kpi-card purple" id="kpiBypasses">
-            <div class="kpi-card-info">
-              <h3>Active Security Bypasses</h3>
-              <div class="kpi-val">${activeSecurityRisksCount}</div>
-            </div>
-          </div>
-          <div class="kpi-card red" id="kpiFindings">
-            <div class="kpi-card-info">
-              <h3>Open Findings</h3>
-              <div class="kpi-val">${totalOpenFindingsCount}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="gov-panel">
-          <div class="gov-panel-header">
-            <h2>Quick Actions Queue</h2>
-            <span style="font-size:12px; color:var(--portal-muted, #9ca3af);">${filteredQueue.slice(0, 3).length} urgent items displayed</span>
-          </div>
-          <div class="queue-list">
-            ${filteredQueue.slice(0, 3).map(item => `
-              <div class="queue-item" id="item-${item.id}">
-                <div class="queue-item-header">
-                  <span class="asset-path">${esc(item.path)}</span>
-                  <span class="score-badge ${item.scoreClass}">Score: ${item.score}/100</span>
-                </div>
-                <div class="queue-item-meta">
-                  <span>${esc(item.meta)}</span>
-                  <span style="color:var(--portal-border, #374151);">|</span>
-                  ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${esc(b)}</span>`).join(' ')}
-                  ${item.assignedBadges && item.assignedBadges.length ? 
-                    `<span style="color:var(--portal-border, #374151);">|</span>` + renderAssignedBadges(item) : ''
-                  }
-                </div>
-                <div class="queue-item-actions">
-                  <button class="gov-btn" data-toggle-evidence="${item.id}">🔍 View Evidence</button>
-                  <button class="gov-btn" data-mark-reviewed="${item.id}">✓ Verify</button>
-                  <button class="gov-btn gov-btn-danger" data-accept-risk="${item.id}">⚠️ Resolve Exception</button>
-                </div>
-                <div class="evidence-panel" id="evidence-${item.id}">
-                  ${item.evidence.map(line => `
-                    <div class="code-line ${line.hl ? 'code-hl' : ''}">
-                      <span class="code-num">${line.num}</span>
-                      <span class="code-text">${esc(line.text)}</span>
-                    </div>
-                  `).join('')}
-                </div>
+          <tr>
+            <td>
+              <div class="gov-asset-path">${esc(a.assetKey)}</div>
+              <div class="gov-asset-meta">Steward: ${esc(a.steward || 'Unassigned')} ·
+                Owner: ${esc(a.owner || 'Unassigned')} · Domain: ${esc(a.domain || 'Unassigned')}</div>
+              <div class="gov-badges">
+                ${(a.automaticBadges || []).map(b => `<span class="gov-badge gov-badge-auto">${esc(b)}</span>`).join('')}
+                ${(a.assignedBadges || []).map(b => `<span class="gov-badge gov-badge-assigned">${esc(b)}
+                  <button class="remove-badge-btn" type="button" data-remove-badge-asset="${esc(a.assetKey)}"
+                    data-remove-badge-name="${esc(b)}" title="Remove badge">×</button></span>`).join('')}
               </div>
-            `).join('')}
-            <button class="gov-btn gov-btn-primary" id="btnGoToWorkqueue" style="align-self: flex-start; margin-top:8px;">View Full Workqueue (${scoredQueue.length} items) →</button>
-          </div>
+            </td>
+            <td class="gov-score-cell">
+              <span class="gov-score ${a.governed ? 'score-high' : 'score-low'}">${esc(a.score)}</span>
+            </td>
+            <td>
+              ${a.deductions?.length
+            ? `<ul class="gov-deductions">${a.deductions.map(d =>
+              `<li><code>${esc(d.ruleKey)}</code> −${esc(d.points)}: ${esc(d.reason)}</li>`).join('')}</ul>`
+            : '<span class="gov-muted">No deductions</span>'}
+            </td>
+            <td class="gov-actions">
+              <button class="btn btn-primary btn-xs" type="button"
+                data-review-asset="${esc(a.assetKey)}" data-asset-version="${esc(a.assetVersion)}">Mark reviewed</button>
+              ${open.length
+            ? `<button class="btn btn-outline btn-xs" type="button" data-accept-risk="${esc(open[0].id)}"
+                   data-asset-version="${esc(a.assetVersion)}">Accept risk</button>
+                 <button class="btn btn-outline btn-xs" type="button" data-ignore-finding="${esc(open[0].id)}"
+                   data-asset-version="${esc(a.assetVersion)}">Ignore</button>`
+            : ''}
+              <select class="gov-badge-select" data-assign-badge-to="${esc(a.assetKey)}"
+                data-asset-version="${esc(a.assetVersion)}">
+                <option value="">Assign badge…</option>
+                ${STEWARD_BADGES.filter(b => !(a.assignedBadges || []).includes(b))
+            .map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('')}
+              </select>
+            </td>
+          </tr>`;
+      }).join('')
+      : emptyRow(4, state.dashboard?.lastScan
+        ? 'No assets match the current filters.'
+        : 'No assets yet. Run a scan to compute the estate posture.');
+
+    return `
+      ${scanBanner()}
+      <table class="gov-table">
+        <thead><tr><th>Asset</th><th>Score</th><th>Why</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  };
+
+  const renderExceptions = () => {
+    const items = suppressed().filter(f =>
+      (state.categoryFilter === 'all' || f.decisions?.[0]?.categoryValue === state.categoryFilter)
+      && (!state.searchFilter || f.assetKey.toLowerCase().includes(state.searchFilter.toLowerCase())));
+
+    const rows = items.length
+      ? items.map(f => {
+        const d = f.decisions?.[0];
+        return `
+          <tr>
+            <td><div class="gov-asset-path">${esc(f.assetKey)}</div>
+              <div class="gov-asset-meta"><code>${esc(f.ruleKey)}</code></div></td>
+            <td><span class="gov-badge gov-badge-${f.status === 'accepted-risk' ? 'risk' : 'noise'}">${esc(f.status)}</span></td>
+            <td>${esc(d?.reason || '')}</td>
+            <td>${esc(d?.decidedBy || 'unknown')}<br>
+              <span class="gov-muted">${esc(new Date(f.lastSeenUtc).toLocaleDateString())}</span></td>
+            <td>${f.suppressedUntilUtc
+            ? esc(new Date(f.suppressedUntilUtc).toLocaleDateString())
+            : '<span class="gov-muted">No expiry</span>'}</td>
+            <td><button class="btn btn-outline btn-xs" type="button" data-reopen-finding="${esc(f.id)}">Reopen</button></td>
+          </tr>`;
+      }).join('')
+      : emptyRow(6, 'No suppressed findings. Ignored and accepted-risk decisions appear here with their reasons.');
+
+    return `<table class="gov-table">
+      <thead><tr><th>Asset</th><th>Disposition</th><th>Reason</th><th>Decided by</th><th>Expires</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  };
+
+  const renderGlossary = () => {
+    const q = state.searchFilter.toLowerCase();
+    const terms = state.glossary.filter(t => !q
+      || t.term.toLowerCase().includes(q) || (t.aliases || '').toLowerCase().includes(q));
+    const rows = terms.length
+      ? terms.map(t => `
+        <tr>
+          <td><b>${esc(t.term)}</b><div class="gov-asset-meta">${esc(t.dataType)}</div></td>
+          <td>${esc(t.aliases)}</td>
+          <td>${esc(t.description)}</td>
+          <td><code>${esc(t.formula || 'N/A')}</code></td>
+          <td>${esc(t.steward || 'Unassigned')}</td>
+          <td>
+            <button class="btn btn-outline btn-xs" type="button" data-edit-term="${esc(t.term)}">Edit</button>
+            <button class="btn btn-outline btn-xs" type="button" data-delete-term="${esc(t.term)}">Delete</button>
+          </td>
+        </tr>`).join('')
+      : emptyRow(6, 'No glossary terms defined. Glossary checks stay off until terms exist and the check is enabled.');
+
+    return `
+      <div class="gov-toolbar">
+        <button class="btn btn-primary btn-xs" id="btnAddNewTerm" type="button">Define term</button>
+        ${state.settings && !state.settings.enableGlossaryCheck
+        ? '<span class="gov-muted">Glossary checks are disabled — terms here do not affect scores.</span>'
+        : ''}
+      </div>
+      <table class="gov-table">
+        <thead><tr><th>Term</th><th>Aliases</th><th>Definition</th><th>Calculation</th><th>Steward</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>`;
+  };
+
+  const renderSettings = () => {
+    const s = state.settings;
+    if (!s) return '';
+    const check = (id, key, label, deductId, deductKey) => `
+      <div class="gov-setting">
+        <label><input type="checkbox" id="${id}" ${s[key] ? 'checked' : ''}> ${esc(label)}</label>
+        <input type="number" id="${deductId}" min="0" max="100" value="${esc(s[deductKey])}" ${s[key] ? '' : 'disabled'}>
+      </div>`;
+
+    const categoryRows = state.categories.length
+      ? state.categories.map(c => `
+        <tr>
+          <td><b>${esc(c.label)}</b><div class="gov-asset-meta"><code>${esc(c.value)}</code></div></td>
+          <td>${esc(c.color)}</td>
+          <td>${c.expiryDays ? `${esc(c.expiryDays)} days` : '<span class="gov-muted">No expiry</span>'}</td>
+          <td>${c.disabled ? '<span class="gov-muted">Disabled</span>' : 'Active'}</td>
+          <td>
+            <button class="btn btn-outline btn-xs" type="button" data-edit-cat="${esc(c.value)}">Edit</button>
+            ${c.disabled ? '' : `<button class="btn btn-outline btn-xs" type="button" data-disable-cat="${esc(c.value)}">Disable</button>`}
+          </td>
+        </tr>`).join('')
+      : emptyRow(5, 'No suppression categories defined. Stewards can still record a reason without one.');
+
+    return `
+      <div class="gov-settings-grid">
+        <section>
+          <h3>Scoring</h3>
+          <label class="setting-label">Target score <span><b>${esc(s.targetScore)}</b>/100</span></label>
+          <input type="range" id="settingsTargetScore" min="0" max="100" value="${esc(s.targetScore)}">
+          ${check('chkEnableMeta', 'enableMetadataCheck', 'Required metadata', 'settingsDeductMeta', 'deductMetadata')}
+          ${check('chkEnablePII', 'enableProtectedDataCheck', 'Protected data classification', 'settingsDeductPII', 'deductProtectedData')}
+          ${check('chkEnableGlossary', 'enableGlossaryCheck', 'Glossary coverage', 'settingsDeductGlossary', 'deductGlossary')}
+          ${check('chkEnableStale', 'enableStalenessCheck', 'Staleness', 'settingsDeductStale', 'deductStaleness')}
+          <label class="setting-label">Stale after
+            <input type="number" id="settingsStaleDays" min="1" value="${esc(s.staleAfterDays)}"> days</label>
+          <label class="setting-label">Policy level
+            <select id="settingsPolicyLevel">
+              ${['visible', 'suggestion', 'scored', 'certification-gate'].map(l =>
+      `<option value="${l}" ${s.policyLevel === l ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></label>
+          <button class="btn btn-primary btn-xs" id="btnSaveScoringSettings" type="button">Save scoring</button>
+        </section>
+        <section>
+          <h3>Suppression categories</h3>
+          <button class="btn btn-primary btn-xs" id="btnAddNewCategory" type="button">Define category</button>
+          <table class="gov-table">
+            <thead><tr><th>Category</th><th>Colour</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
+            <tbody>${categoryRows}</tbody></table>
+        </section>
+      </div>`;
+  };
+
+  const STEWARD_BADGES = ['Reviewed', 'Trusted', 'Certified'];
+
+  const TABS = [
+    ['overview', 'Overview'],
+    ['workqueue', 'Workqueue'],
+    ['exceptions', 'Exceptions'],
+    ['glossary', 'Glossary'],
+    ['settings', 'Settings'],
+  ];
+
+  const render = async () => {
+    prepare(state.tab);
+    if (state.load === 'idle') await load();
+
+    const body = state.load !== 'ready' ? stateBanner() : ({
+      overview: renderOverview,
+      workqueue: renderWorkqueue,
+      exceptions: renderExceptions,
+      glossary: renderGlossary,
+      settings: renderSettings,
+    }[state.tab] || renderOverview)();
+
+    host.innerHTML = `<div class="gov-container">
+      <style>.gov-container{font-family:var(--portal-font,system-ui,sans-serif);color:var(--portal-text,#f9fafb);width:100%;display:flex;flex-direction:column;gap:16px;box-sizing:border-box}
+.gov-header{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--portal-border,#374151);padding-bottom:16px;flex-wrap:wrap}
+.gov-header-title h1{margin:0;font-size:22px;font-weight:700}
+.gov-header-title p{margin:4px 0 0;color:var(--portal-muted,#9ca3af);font-size:13px}
+.gov-header-actions{display:flex;gap:8px;align-items:center}
+.gov-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--portal-border,#374151)}
+.gov-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--portal-muted,#9ca3af);padding:8px 14px;font-size:13px;cursor:pointer}
+.gov-tab.active{color:var(--portal-text,#f9fafb);border-bottom-color:var(--portal-accent,#3b82f6)}
+.gov-filters{display:flex;gap:8px;flex-wrap:wrap}
+.gov-filters input[type=search]{flex:1;min-width:220px;padding:6px 10px;border-radius:6px;border:1px solid var(--portal-border,#374151);background:var(--portal-surface,#111827);color:inherit}
+.gov-body{display:flex;flex-direction:column;gap:16px}
+
+/* The four honest states. Each is visually distinct so "denied", "broken", and "nothing here"
+   can never be mistaken for one another at a glance. */
+.gov-state{border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.5;border:1px solid}
+.gov-state p{margin:6px 0 0}
+.gov-state-note{color:var(--portal-muted,#9ca3af);font-size:12px}
+.gov-state-loading{border-color:var(--portal-border,#374151);color:var(--portal-muted,#9ca3af);display:flex;align-items:center;gap:10px}
+.gov-state-denied{border-color:#7c3aed;background:rgba(124,58,237,.12)}
+.gov-state-error{border-color:#dc2626;background:rgba(220,38,38,.12)}
+.gov-state-unscanned{border-color:#d97706;background:rgba(217,119,6,.12)}
+.gov-spinner{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:gov-spin .7s linear infinite}
+@keyframes gov-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.gov-spinner{animation:none}}
+.gov-scanline{font-size:12px;color:var(--portal-muted,#9ca3af)}
+
+.gov-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.gov-kpi{border:1px solid var(--portal-border,#374151);border-radius:8px;padding:14px;background:var(--portal-surface,#111827)}
+.gov-kpi-value{font-size:26px;font-weight:700;line-height:1}
+.gov-kpi-label{margin-top:6px;font-size:13px}
+.gov-kpi-sub{margin-top:2px;font-size:11px;color:var(--portal-muted,#9ca3af)}
+.gov-kpi-warn .gov-kpi-value{color:#f59e0b}
+.gov-kpi-risk .gov-kpi-value{color:#ef4444}
+.gov-kpi-ok .gov-kpi-value{color:#10b981}
+.gov-kpi-muted .gov-kpi-value{color:var(--portal-muted,#9ca3af)}
+
+.gov-table{width:100%;border-collapse:collapse;font-size:13px;display:block;overflow-x:auto}
+.gov-table thead th{text-align:left;padding:8px;border-bottom:1px solid var(--portal-border,#374151);color:var(--portal-muted,#9ca3af);font-weight:600;white-space:nowrap}
+.gov-table tbody td{padding:10px 8px;border-bottom:1px solid var(--portal-border,#374151);vertical-align:top}
+.gov-empty{text-align:center;color:var(--portal-muted,#9ca3af);padding:24px 8px}
+.gov-muted{color:var(--portal-muted,#9ca3af)}
+.gov-asset-path{font-weight:600;word-break:break-all}
+.gov-asset-meta{font-size:11px;color:var(--portal-muted,#9ca3af);margin-top:2px}
+.gov-deductions{margin:0;padding-left:16px}
+.gov-deductions li{margin-bottom:3px}
+.gov-deductions code{font-size:11px}
+.gov-score{font-size:18px;font-weight:700}
+.score-high{color:#10b981}
+.score-low{color:#ef4444}
+.gov-score-cell{text-align:center}
+.gov-actions{display:flex;flex-direction:column;gap:6px;min-width:150px}
+.gov-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.gov-badge{font-size:10px;border-radius:999px;padding:2px 8px;border:1px solid var(--portal-border,#374151);display:inline-flex;align-items:center;gap:4px}
+.gov-badge-auto{color:var(--portal-muted,#9ca3af)}
+.gov-badge-assigned{color:#60a5fa;border-color:#60a5fa}
+.gov-badge-risk{color:#ef4444;border-color:#ef4444}
+.gov-badge-noise{color:#f59e0b;border-color:#f59e0b}
+.remove-badge-btn{background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:12px;line-height:1}
+.gov-badge-select{font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--portal-border,#374151);background:var(--portal-surface,#111827);color:inherit}
+
+.gov-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px}
+.gov-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.gov-settings-grid h3{margin:0 0 10px;font-size:14px}
+.gov-setting{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:13px}
+.gov-setting input[type=number],.setting-label input[type=number],.setting-label select{width:80px;padding:4px 6px;border-radius:6px;border:1px solid var(--portal-border,#374151);background:var(--portal-surface,#111827);color:inherit}
+.setting-label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;margin:10px 0}
+.gov-settings-grid input[type=range]{width:100%}
+
+.gov-modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;align-items:center;justify-content:center;padding:16px}
+.gov-modal-backdrop.open{display:flex}
+.gov-modal{background:var(--portal-surface,#111827);border:1px solid var(--portal-border,#374151);border-radius:10px;padding:20px;width:min(460px,100%);max-height:90vh;overflow-y:auto}
+.gov-modal h3{margin:0 0 14px;font-size:16px}
+.gov-modal label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--portal-muted,#9ca3af);margin-bottom:10px}
+.gov-modal input,.gov-modal select,.gov-modal textarea{padding:6px 8px;border-radius:6px;border:1px solid var(--portal-border,#374151);background:var(--portal-bg,#0b1220);color:var(--portal-text,#f9fafb);font:inherit}
+.gov-modal-note{font-size:11px;color:var(--portal-muted,#9ca3af);margin:0 0 14px}
+.gov-modal-actions{display:flex;justify-content:flex-end;gap:8px}</style>
+      <div class="gov-header">
+        <div class="gov-header-title">
+          <h1>Governance</h1>
+          <p>Estate posture, steward workqueue, and the decisions behind both.</p>
         </div>
-      `;
-    } else if (state.tab === 'workqueue') {
-      html += `
-        <div class="gov-filters-bar">
-          <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter by asset path..." value="${esc(state.searchFilter)}">
-            <button class="gov-search-clear" id="btnSearchClear" style="display:${state.searchFilter?'block':'none'}">×</button>
-          </div>
-          <select class="gov-filter-select" id="badgeFilter">
-            <option value="all" ${state.badgeFilter === 'all' ? 'selected' : ''}>All Violation Types</option>
-            <option value="Needs Metadata" ${state.badgeFilter === 'Needs Metadata' ? 'selected' : ''}>Needs Metadata</option>
-            <option value="Untagged PII" ${state.badgeFilter === 'Untagged PII' ? 'selected' : ''}>Untagged PII</option>
-            <option value="Needs Review" ${state.badgeFilter === 'Needs Review' ? 'selected' : ''}>Needs Review</option>
-            <option value="Glossary Review" ${state.badgeFilter === 'Glossary Review' ? 'selected' : ''}>Glossary Review</option>
+        <div class="gov-header-actions">
+          <select id="govScope">
+            <option value="all" ${state.mode === 'all' ? 'selected' : ''}>All governance work</option>
+            <option value="mine" ${state.mode === 'mine' ? 'selected' : ''}>My steward work</option>
           </select>
-          <button class="gov-btn" id="btnResetFilters">Clear All</button>
-        </div>
-
-        <div class="gov-panel">
-          <div class="gov-panel-header">
-            <h2>High-Density Task Workqueue</h2>
-            <span style="font-size:12px; color:var(--portal-muted, #9ca3af);">${filteredQueue.length} items visible</span>
-          </div>
-          <div class="queue-scroll-container">
-            <table class="dense-table">
-              <thead>
-                <tr>
-                  <th width="30"><input type="checkbox" id="chkSelectAllRows" title="Select all rows"></th>
-                  <th>Asset Path</th>
-                  <th width="80">Score</th>
-                  <th>Violation Badges</th>
-                  <th>Assigned Badges</th>
-                  <th>Steward/Domain</th>
-                  <th width="240" style="text-align:right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${filteredQueue.map(item => `
-                  <tr>
-                    <td><input type="checkbox" class="wq-row-check" value="${item.id}"></td>
-                    <td class="asset-path">${esc(item.path)}</td>
-                    <td><span class="score-badge ${item.scoreClass}">${item.score}</span></td>
-                    <td>
-                      ${item.badges.map(b => `<span class="badge-pill ${b.includes('PII') || b.includes('PHI') || b.includes('PCI') ? 'danger' : ''}">${esc(b)}</span>`).join(' ')}
-                    </td>
-                    <td>${renderAssignedBadges(item)}</td>
-                    <td>${esc(item.meta.replace('Steward: ', '').replace('Domain: ', ''))}</td>
-                    <td style="text-align:right;">
-                      <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-toggle-evidence="${item.id}">Code</button>
-                      <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-mark-reviewed="${item.id}">Verify</button>
-                      <button class="gov-btn gov-btn-danger" style="padding:2px 8px; font-size:11px;" data-accept-risk="${item.id}">Bypass</button>
-                    </td>
-                  </tr>
-                  <tr id="evidence-row-${item.id}" style="display:none;">
-                    <td colspan="7" style="background:var(--portal-bg, #020617); padding: 12px;">
-                      <div class="evidence-panel open" style="margin: 0; border: none;">
-                        ${item.evidence.map(line => `
-                          <div class="code-line ${line.hl ? 'code-hl' : ''}">
-                            <span class="code-num">${line.num}</span>
-                            <span class="code-text">${esc(line.text)}</span>
-                          </div>
-                        `).join('')}
-                      </div>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    } else if (state.tab === 'exceptions') {
-      html += `
-        <div class="gov-filters-bar">
-          <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter exceptions..." value="${esc(state.searchFilter)}">
-          </div>
-          <select class="gov-filter-select" id="categoryFilter">
-            <option value="all" ${state.categoryFilter === 'all' ? 'selected' : ''}>All Resolution Types</option>
-            <option value="risk" ${state.categoryFilter === 'risk' ? 'selected' : ''}>Durable Bypass (Security Risk)</option>
-            <option value="false-positive" ${state.categoryFilter === 'false-positive' ? 'selected' : ''}>False Positive</option>
-          </select>
-        </div>
-
-        <div class="gov-panel">
-          <div class="gov-panel-header">
-            <h2>Active Exceptions & Security Bypasses Ledger</h2>
-            <span style="font-size:12px; color:var(--portal-muted, #9ca3af);">${filteredRisks.length} exceptions active</span>
-          </div>
-          <div class="queue-scroll-container">
-            <table class="dense-table">
-              <thead>
-                <tr>
-                  <th>Bypassed Asset</th>
-                  <th width="180">Category</th>
-                  <th>Justification Reason</th>
-                  <th width="180">Steward / Date</th>
-                  <th width="120" style="text-align:right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${filteredRisks.map(risk => `
-                  <tr>
-                    <td class="asset-path">${esc(risk.asset)}</td>
-                    <td><span class="exception-tag ${esc(risk.category)}">${esc(risk.categoryLabel)}</span></td>
-                    <td style="font-style: italic;">"${esc(risk.reason)}"</td>
-                    <td>${esc(risk.steward)} · ${esc(risk.date)}</td>
-                    <td style="text-align:right;">
-                      <button class="gov-btn gov-btn-danger" style="padding:2px 8px; font-size:11px;" data-reenable-risk="${risk.id}">Re-Enable</button>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    } else if (state.tab === 'badges') {
-      html += `
-        <div class="gov-filters-bar">
-          <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Filter assets to badge..." value="${esc(state.searchFilter)}">
-          </div>
-          <button class="gov-btn" id="btnResetFilters">Clear All</button>
-        </div>
-
-        <div class="settings-section-grid">
-          <div class="settings-group" style="padding: 20px;">
-            <h3>Steward Badge Assignment Panel</h3>
-            <div style="flex:1 1 auto; overflow-y:auto;">
-              <table class="dense-table" style="font-size:12px;">
-                <thead>
-                  <tr>
-                    <th>Asset Path</th>
-                    <th>Assigned Badges</th>
-                    <th style="text-align:right;">Manage Tags</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${scoredQueue.filter(item => item.path.toLowerCase().includes(state.searchFilter.toLowerCase())).map(item => `
-                    <tr>
-                      <td class="asset-path">${esc(item.path)}</td>
-                      <td>${item.assignedBadges && item.assignedBadges.length ? renderAssignedBadges(item) : '<span style="color:var(--portal-muted, #9ca3af); font-style:italic; font-size:11px;">None</span>'}</td>
-                      <td style="text-align:right;">
-                        <select class="gov-filter-select" style="padding: 3px 6px; font-size:11px;" data-assign-badge-to="${item.id}">
-                          <option value="">+ Assign Badge</option>
-                          ${state.badgeDefinitions.filter(def => !item.assignedBadges.includes(def.name)).map(def => `
-                            <option value="${esc(def.name)}">${esc(def.name)}</option>
-                          `).join('')}
-                          ${item.assignedBadges.length ? '<option value="__CLEAR__">- Clear Badges</option>' : ''}
-                        </select>
-                      </td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="settings-group">
-            <h3>Defined Certification Badges</h3>
-            <div style="flex:1 1 auto; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
-              ${state.badgeDefinitions.map(def => `
-                <div style="background:var(--portal-bg, #0b0f19); border: 1px solid var(--portal-border, #374151); padding: 12px; border-radius:6px;">
-                  <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="steward-badge-tag ${def.color}">★ ${esc(def.name)}</span>
-                  </div>
-                  <p style="font-size:12px; margin:6px 0 0 0; color:var(--portal-muted, #9ca3af);">${esc(def.desc)}</p>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-    } else if (state.tab === 'glossary') {
-      html += `
-        <div class="gov-filters-bar">
-          <div class="gov-filter-search-wrap">
-            <input type="search" class="gov-filter-input" id="searchFilter" placeholder="Search glossary..." value="${esc(state.searchFilter)}">
-          </div>
-          <button class="gov-btn gov-btn-primary" id="btnAddNewTerm" style="margin-left:auto;">➕ Define Term</button>
-        </div>
-
-        <div class="gov-panel">
-          <div class="gov-panel-header">
-            <h2>Business Glossary & Terms</h2>
-            <span style="font-size:12px; color:var(--portal-muted, #9ca3af);">${filteredGlossary.length} terminology entries defined</span>
-          </div>
-          <div class="queue-scroll-container">
-            <table class="dense-table">
-              <thead>
-                <tr>
-                  <th>Term Name</th>
-                  <th>Standard Type</th>
-                  <th>Aliases</th>
-                  <th>Defined Formula Rule</th>
-                  <th>Description</th>
-                  <th>Steward</th>
-                  <th style="text-align:right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${filteredGlossary.map(t => `
-                  <tr>
-                    <td style="font-weight:700; color:var(--portal-accent, #3b82f6);">${esc(t.term)}</td>
-                    <td><code>${esc(t.type)}</code></td>
-                    <td>${t.aliases.split(',').map(a => `<span class="badge-pill" style="margin-right:2px;">${esc(a.trim())}</span>`).join('')}</td>
-                    <td>${t.formula && t.formula !== 'N/A' ? `<code>${esc(t.formula)}</code>` : esc(t.formula)}</td>
-                    <td style="font-size:12px;">${esc(t.desc)}</td>
-                    <td>${esc(t.steward)}</td>
-                    <td style="text-align:right;">
-                      <button class="gov-btn" style="padding:2px 8px; font-size:11px;" data-edit-term="${t.id}">Edit</button>
-                      <button class="gov-btn gov-btn-danger" style="padding:2px 8px; font-size:11px;" data-delete-term="${t.id}">Delete</button>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    } else if (state.tab === 'settings') {
-      html += `
-        <div class="settings-section-grid">
-          <div class="settings-group">
-            <h3>Governance Score Thresholds</h3>
-            <div class="setting-row">
-              <div class="setting-label">
-                Target Clean Score Target Threshold
-                <span>Findings generated below this score. Current: <b>${state.settings.targetScore}</b></span>
-              </div>
-              <input type="range" id="settingsTargetScore" min="50" max="100" value="${state.settings.targetScore}" style="width:120px;">
-            </div>
-            <div style="margin-top: 8px; font-size:11px; color:var(--portal-muted, #9ca3af); font-weight:700; text-transform:uppercase;">Active Governance Checks</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <span><input type="checkbox" id="chkEnableMeta" ${state.settings.enableMeta?'checked':''}> Ownership Metadata Check</span>
-                <span>Verify @owner, @steward tags.</span>
-              </div>
-              <input type="number" id="settingsDeductMeta" class="setting-input-number" value="${state.settings.deductMeta}" ${state.settings.enableMeta?'':'disabled'}>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <span><input type="checkbox" id="chkEnablePII" ${state.settings.enablePII?'checked':''}> Sensitive Data Classification</span>
-                <span>Audit verification of PII/PHI tags.</span>
-              </div>
-              <input type="number" id="settingsDeductPII" class="setting-input-number" value="${state.settings.deductPII}" ${state.settings.enablePII?'':'disabled'}>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <span><input type="checkbox" id="chkEnableGlossary" ${state.settings.enableGlossary?'checked':''}> Glossary Alignment Checks</span>
-                <span>Validate aliases and business formulas.</span>
-              </div>
-              <input type="number" id="settingsDeductGlossary" class="setting-input-number" value="${state.settings.deductGlossary}" ${state.settings.enableGlossary?'':'disabled'}>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <span><input type="checkbox" id="chkEnableStale" ${state.settings.enableStale?'checked':''}> Review Staleness Checks</span>
-                <span>Audit edits made since the last steward review.</span>
-              </div>
-              <input type="number" id="settingsDeductStale" class="setting-input-number" value="${state.settings.deductStale}" ${state.settings.enableStale?'':'disabled'}>
-            </div>
-            <div style="margin-top:auto; padding-top:12px; border-top:1px solid var(--portal-border-soft, #1f2937); text-align:right;">
-              <button class="gov-btn gov-btn-primary" id="btnSaveScoringSettings">Save Scoring Config</button>
-            </div>
-          </div>
-
-          <div class="settings-group">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <h3>Configurable Bypass Categories</h3>
-              <button class="gov-btn" id="btnAddNewCategory" style="padding:4px 8px; font-size:11px;">➕ Add</button>
-            </div>
-            <div style="flex:1 1 auto; overflow-y:auto; max-height:260px;">
-              <table class="dense-table" style="font-size:12px;">
-                <thead>
-                  <tr>
-                    <th>Label Name</th>
-                    <th>Color Tag</th>
-                    <th>Default Expiry</th>
-                    <th style="text-align:right;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${state.resolutionCategories.map(cat => `
-                    <tr>
-                      <td style="font-weight:600;">${esc(cat.label)}</td>
-                      <td><span class="exception-tag ${esc(cat.color)}">${esc(cat.color)}</span></td>
-                      <td>${esc(cat.expiry)}</td>
-                      <td style="text-align:right;">
-                        <button class="gov-btn" style="padding:1px 6px; font-size:10px;" data-edit-cat="${cat.id}">Edit</button>
-                        <button class="gov-btn gov-btn-danger" style="padding:1px 6px; font-size:10px;" data-delete-cat="${cat.id}">Del</button>
-                      </td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    // Modal backdrops & structures
-    html += `
-        </div> <!-- End Main Workspace -->
-        
-        <!-- Accept Risk Modal -->
-        <div class="gov-modal-backdrop" id="modalBackdrop">
-          <div class="gov-modal">
-            <div class="gov-modal-header">
-              <h3>Resolve Exception / Mark Bypass</h3>
-            </div>
-            <div class="gov-modal-body">
-              <label>Target Asset</label>
-              <input type="text" id="modalAssetPath" readonly>
-              <div style="margin-top:12px;">
-                <label>Resolution Category</label>
-                <select id="modalCategory"></select>
-              </div>
-              <div style="margin-top:12px;">
-                <label>Exception Reason / Justification</label>
-                <textarea id="modalReason" rows="3" placeholder="Explain why this bypass is safe..."></textarea>
-              </div>
-            </div>
-            <div class="gov-modal-footer">
-              <button class="gov-btn" id="btnCancelModal">Cancel</button>
-              <button class="gov-btn gov-btn-primary" id="btnConfirmModal">Confirm & Save</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Glossary Modal -->
-        <div class="gov-modal-backdrop" id="glossaryModalBackdrop">
-          <div class="gov-modal">
-            <div class="gov-modal-header">
-              <h3 id="glossaryModalTitle">Define New Term</h3>
-            </div>
-            <div class="gov-modal-body">
-              <label>Term Name</label>
-              <input type="text" id="glossaryTerm">
-              <div style="margin-top:12px;">
-                <label>Standard DataType</label>
-                <input type="text" id="glossaryType">
-              </div>
-              <div style="margin-top:12px;">
-                <label>Business Aliases</label>
-                <input type="text" id="glossaryAliases">
-              </div>
-              <div style="margin-top:12px;">
-                <label>Defined Calculation Formula Rule</label>
-                <input type="text" id="glossaryFormula">
-              </div>
-              <div style="margin-top:12px;">
-                <label>Description & Rule Context</label>
-                <textarea id="glossaryDesc" rows="3"></textarea>
-              </div>
-            </div>
-            <div class="gov-modal-footer">
-              <button class="gov-btn" id="btnCancelGlossaryModal">Cancel</button>
-              <button class="gov-btn gov-btn-primary" id="btnConfirmGlossaryModal">Save Term</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Category Management Modal -->
-        <div class="gov-modal-backdrop" id="categoryModalBackdrop">
-          <div class="gov-modal">
-            <div class="gov-modal-header">
-              <h3 id="categoryModalTitle">Define Bypass Category</h3>
-            </div>
-            <div class="gov-modal-body">
-              <label>Category Label</label>
-              <input type="text" id="catLabel">
-              <div style="margin-top:12px;">
-                <label>Value Identifier</label>
-                <input type="text" id="catValue">
-              </div>
-              <div style="margin-top:12px;">
-                <label>Color Class Theme Tag</label>
-                <select id="catColor">
-                  <option value="risk">Red</option>
-                  <option value="noise">Yellow</option>
-                  <option value="false-positive">Green</option>
-                </select>
-              </div>
-              <div style="margin-top:12px;">
-                <label>Durable Expiry Limit</label>
-                <select id="catExpiry">
-                  <option value="None">None</option>
-                  <option value="90 Days">90 Days</option>
-                </select>
-              </div>
-            </div>
-            <div class="gov-modal-footer">
-              <button class="gov-btn" id="btnCancelCategoryModal">Cancel</button>
-              <button class="gov-btn gov-btn-primary" id="btnConfirmCategoryModal">Save Category</button>
-            </div>
-          </div>
+          <button class="btn btn-primary btn-xs" id="btnRunScan" type="button">Run scan</button>
         </div>
       </div>
-    `;
+      <div class="gov-tabs">
+        ${TABS.map(([id, label]) =>
+      `<button class="gov-tab ${state.tab === id ? 'active' : ''}" type="button" data-gov-tab="${id}">${label}</button>`).join('')}
+      </div>
+      <div class="gov-filters">
+        <input type="search" id="govSearch" placeholder="Filter by asset or script path"
+          value="${esc(state.searchFilter)}">
+      </div>
+      <div class="gov-body">${body}</div>
+      ${modals()}
+    </div>`;
 
-    host.innerHTML = html;
+    bind();
+  };
 
-    // Bind quick actions go to workqueue
-    host.querySelector('#btnGoToWorkqueue')?.addEventListener('click', () => {
-      state.tab = 'workqueue';
+  const modals = () => `
+    <div class="gov-modal-backdrop" id="decisionModalBackdrop">
+      <div class="gov-modal">
+        <h3 id="decisionModalTitle">Accept risk</h3>
+        <label>Asset<input id="decisionAsset" readonly></label>
+        <label>Category<select id="decisionCategory"></select></label>
+        <label>Justification<textarea id="decisionReason" rows="3"
+          placeholder="Why this does not require remediation"></textarea></label>
+        <p class="gov-modal-note">Recorded against this asset version. If the asset changes, the
+          finding reopens — a suppression does not carry forward onto content nobody reviewed.</p>
+        <div class="gov-modal-actions">
+          <button class="btn btn-outline btn-xs" id="btnCancelDecision" type="button">Cancel</button>
+          <button class="btn btn-primary btn-xs" id="btnConfirmDecision" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <div class="gov-modal-backdrop" id="glossaryModalBackdrop">
+      <div class="gov-modal">
+        <h3 id="glossaryModalTitle">Define term</h3>
+        <label>Term<input id="glossaryTerm"></label>
+        <label>Data type<input id="glossaryType" placeholder="DECIMAL(18,2)"></label>
+        <label>Aliases<input id="glossaryAliases" placeholder="rev, gross_sales"></label>
+        <label>Approved calculation<input id="glossaryFormula" placeholder="SUM(sales_amount)"></label>
+        <label>Definition<textarea id="glossaryDesc" rows="3"></textarea></label>
+        <div class="gov-modal-actions">
+          <button class="btn btn-outline btn-xs" id="btnCancelGlossaryModal" type="button">Cancel</button>
+          <button class="btn btn-primary btn-xs" id="btnConfirmGlossaryModal" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+    <div class="gov-modal-backdrop" id="categoryModalBackdrop">
+      <div class="gov-modal">
+        <h3 id="categoryModalTitle">Define category</h3>
+        <label>Label<input id="catLabel"></label>
+        <label>Value<input id="catValue" placeholder="false-positive"></label>
+        <label>Colour<select id="catColor">
+          <option value="risk">Red (risk escalation)</option>
+          <option value="false-positive">Green (compliance exclude)</option>
+          <option value="noise">Yellow (muted noise)</option>
+        </select></label>
+        <label>Expiry (days, blank for none)<input id="catExpiry" type="number" min="1"></label>
+        <div class="gov-modal-actions">
+          <button class="btn btn-outline btn-xs" id="btnCancelCategoryModal" type="button">Cancel</button>
+          <button class="btn btn-primary btn-xs" id="btnConfirmCategoryModal" type="button">Save</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Listeners are bound rather than inlined: the Portal CSP sets script-src-attr 'none', so an
+  // inline onclick silently does nothing.
+  function bind() {
+    const on = (sel, evt, fn) => host.querySelector(sel)?.addEventListener(evt, fn);
+    const each = (sel, evt, fn) => host.querySelectorAll(sel).forEach(el => el.addEventListener(evt, fn));
+
+    host.querySelectorAll('[data-gov-tab]').forEach(btn => btn.addEventListener('click', () => {
+      state.tab = btn.getAttribute('data-gov-tab');
       render();
+    }));
+    on('#btnGovRetry', 'click', async () => { state.load = 'idle'; await render(); });
+    on('#govScope', 'change', async e => {
+      state.mode = e.target.value;
+      state.load = 'idle';
+      await render();
     });
-
-    // Bind Scope & actions
-    host.querySelector('#btnStewardScope')?.addEventListener('click', () => {
-      state.mode = 'steward';
-      render();
-    });
-    host.querySelector('#btnAllScope')?.addEventListener('click', () => {
-      state.mode = 'all';
-      render();
-    });
-    host.querySelector('#btnScanNow')?.addEventListener('click', () => {
-      window.ETLSQLFeedback.notify('The workspace governance scan has started.', { title: 'Governance scan', tone: 'success', auditAction: 'governance.scan.start' });
-    });
-
-    // Filters
-    const searchInput = host.querySelector('#searchFilter');
-    if (searchInput) {
-      searchInput.addEventListener('change', (e) => {
-        state.searchFilter = e.target.value;
-        render();
-      });
-    }
-    host.querySelector('#btnSearchClear')?.addEventListener('click', () => {
-      state.searchFilter = '';
-      render();
-    });
-    host.querySelector('#btnResetFilters')?.addEventListener('click', () => {
-      state.searchFilter = '';
-      state.badgeFilter = 'all';
-      state.categoryFilter = 'all';
-      render();
-    });
-    host.querySelector('#badgeFilter')?.addEventListener('change', (e) => {
-      state.badgeFilter = e.target.value;
-      render();
-    });
-    host.querySelector('#categoryFilter')?.addEventListener('change', (e) => {
-      state.categoryFilter = e.target.value;
-      render();
-    });
-
-    // Select-all toggle for the workqueue table. Bound here (not an inline onclick)
-    // because the Portal CSP sets script-src-attr 'none', which blocks inline handlers.
-    host.querySelector('#chkSelectAllRows')?.addEventListener('change', (e) => {
-      host.querySelectorAll('.wq-row-check').forEach(cb => { cb.checked = e.target.checked; });
-    });
-
-    // Evidence
-    host.querySelectorAll('[data-toggle-evidence]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-toggle-evidence');
-        const evRow = host.querySelector(`#evidence-row-${id}`);
-        if (evRow) {
-          evRow.style.display = evRow.style.display === 'none' ? 'table-row' : 'none';
-        } else {
-          host.querySelector(`#evidence-${id}`)?.classList.toggle('open');
-        }
-      });
-    });
-
-    // Verify / Mark reviewed
-    host.querySelectorAll('[data-mark-reviewed]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-mark-reviewed');
-        const index = state.stewardshipItems.findIndex(item => item.id === id);
-        if (index !== -1) {
-          state.stewardshipItems.splice(index, 1);
-          render();
-        }
-      });
-    });
-
-    // Re-enable
-    host.querySelectorAll('[data-reenable-risk]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-reenable-risk');
-        const index = state.risks.findIndex(r => r.id === id);
-        if (index !== -1) {
-          const risk = state.risks[index];
-          state.risks.splice(index, 1);
-          state.stewardshipItems.push({
-            id: 'asset-' + Date.now(),
-            path: risk.asset,
-            meta: `Steward: Chuck · Domain: General`,
-            badges: ['Needs Review'],
-            assignedBadges: [],
-            evidence: [{ num: 1, text: '-- Re-opened from accepted risks' }]
-          });
-          render();
-        }
+    on('#govSearch', 'input', e => {
+      state.searchFilter = e.target.value;
+      const active = host.querySelector('#govSearch');
+      const caret = active?.selectionStart;
+      render().then(() => {
+        const next = host.querySelector('#govSearch');
+        if (next) { next.focus(); next.setSelectionRange(caret, caret); }
       });
     });
 
-    // Accept risk modal
-    let pendingAssetId = null;
-    host.querySelectorAll('[data-accept-risk]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        pendingAssetId = btn.getAttribute('data-accept-risk');
-        const asset = state.stewardshipItems.find(item => item.id === pendingAssetId);
-        if (asset) {
-          host.querySelector('#modalAssetPath').value = asset.path;
-          host.querySelector('#modalReason').value = '';
-          const select = host.querySelector('#modalCategory');
-          select.innerHTML = state.resolutionCategories.map(cat => `<option value="${esc(cat.value)}">${esc(cat.label)}</option>`).join('');
-          host.querySelector('#modalBackdrop').classList.add('open');
-        }
+    on('#btnRunScan', 'click', () => mutate(() => governanceApi.scan(), {
+      success: 'Governance scan completed.',
+      failure: 'The scan could not be run.',
+      auditAction: 'governance.scan',
+    }));
+
+    each('[data-review-asset]', 'click', e => {
+      const btn = e.currentTarget;
+      mutate(() => governanceApi.reviewAsset({
+        assetKey: btn.getAttribute('data-review-asset'),
+        assetVersion: btn.getAttribute('data-asset-version'),
+      }), {
+        success: 'Asset marked reviewed at its current version.',
+        failure: 'The review could not be recorded.',
+        auditAction: 'governance.asset.review',
       });
     });
 
-    host.querySelector('#btnCancelModal')?.addEventListener('click', () => {
-      host.querySelector('#modalBackdrop').classList.remove('open');
+    each('[data-assign-badge-to]', 'change', e => {
+      const select = e.currentTarget;
+      const badge = select.value;
+      if (!badge) return;
+      mutate(() => governanceApi.assignBadge({
+        assetKey: select.getAttribute('data-assign-badge-to'),
+        badge,
+        assetVersion: select.getAttribute('data-asset-version'),
+      }), {
+        success: `Badge "${badge}" assigned.`,
+        failure: 'The badge could not be assigned.',
+        auditAction: 'governance.badge.assign',
+      });
     });
 
-    host.querySelector('#btnConfirmModal')?.addEventListener('click', () => {
-      const reason = host.querySelector('#modalReason').value.trim();
-      const select = host.querySelector('#modalCategory');
-      const val = select.value;
-      const label = select.options[select.selectedIndex].text;
+    each('.remove-badge-btn', 'click', e => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      mutate(() => governanceApi.removeBadge({
+        assetKey: btn.getAttribute('data-remove-badge-asset'),
+        badge: btn.getAttribute('data-remove-badge-name'),
+      }), {
+        success: 'Badge removed.',
+        failure: 'The badge could not be removed.',
+        auditAction: 'governance.badge.remove',
+      });
+    });
 
+    each('[data-reopen-finding]', 'click', e => {
+      const id = Number(e.currentTarget.getAttribute('data-reopen-finding'));
+      mutate(() => governanceApi.decideFinding(id, {
+        decision: 'reopen',
+        reason: 'Reopened by steward from the exceptions queue.',
+        assetVersion: null,
+      }), {
+        success: 'Finding reopened.',
+        failure: 'The finding could not be reopened.',
+        auditAction: 'governance.finding.reopen',
+      });
+    });
+
+    const decisionModal = host.querySelector('#decisionModalBackdrop');
+    const openDecision = (id, version, decision, assetLabel) => {
+      state.pendingFindingId = id;
+      state.pendingDecision = decision;
+      state.pendingVersion = version;
+      host.querySelector('#decisionModalTitle').textContent =
+        decision === 'ignore' ? 'Ignore as false positive' : 'Accept risk';
+      host.querySelector('#decisionAsset').value = assetLabel;
+      host.querySelector('#decisionReason').value = '';
+      host.querySelector('#decisionCategory').innerHTML =
+        ['<option value="">No category</option>']
+          .concat(state.categories.filter(c => !c.disabled)
+            .map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`))
+          .join('');
+      decisionModal.classList.add('open');
+    };
+
+    each('[data-accept-risk]', 'click', e => {
+      const btn = e.currentTarget;
+      const finding = state.findings.find(f => f.id === Number(btn.getAttribute('data-accept-risk')));
+      openDecision(Number(btn.getAttribute('data-accept-risk')),
+        btn.getAttribute('data-asset-version'), 'accept-risk', finding?.assetKey || '');
+    });
+    each('[data-ignore-finding]', 'click', e => {
+      const btn = e.currentTarget;
+      const finding = state.findings.find(f => f.id === Number(btn.getAttribute('data-ignore-finding')));
+      openDecision(Number(btn.getAttribute('data-ignore-finding')),
+        btn.getAttribute('data-asset-version'), 'ignore', finding?.assetKey || '');
+    });
+
+    on('#btnCancelDecision', 'click', () => decisionModal.classList.remove('open'));
+    on('#btnConfirmDecision', 'click', async () => {
+      const reason = host.querySelector('#decisionReason').value.trim();
       if (!reason) {
-        window.ETLSQLFeedback.notify('Enter a justification before accepting this risk.', { title: 'Justification required', tone: 'warning' });
+        notify('Enter a justification. The decision has to be reviewable later.',
+          { title: 'Justification required', tone: 'warning' });
         return;
       }
-
-      const index = state.stewardshipItems.findIndex(i => i.id === pendingAssetId);
-      if (index !== -1) {
-        const asset = state.stewardshipItems[index];
-        state.stewardshipItems.splice(index, 1);
-        state.risks.push({
-          id: 'risk-' + Date.now(),
-          asset: asset.path,
-          category: val,
-          categoryLabel: label,
-          reason: reason,
-          date: new Date().toISOString().split('T')[0],
-          steward: 'Chuck'
-        });
-        host.querySelector('#modalBackdrop').classList.remove('open');
-        render();
-      }
+      decisionModal.classList.remove('open');
+      await mutate(() => governanceApi.decideFinding(state.pendingFindingId, {
+        decision: state.pendingDecision,
+        categoryValue: host.querySelector('#decisionCategory').value || null,
+        reason,
+        assetVersion: state.pendingVersion,
+      }), {
+        success: 'Decision recorded.',
+        failure: 'The decision could not be recorded.',
+        auditAction: `governance.finding.${state.pendingDecision}`,
+      });
     });
 
-    // Glossary CRUD
+    // ── glossary ──
     const gModal = host.querySelector('#glossaryModalBackdrop');
-    host.querySelector('#btnAddNewTerm')?.addEventListener('click', () => {
-      state.editingTermId = null;
-      host.querySelector('#glossaryModalTitle').textContent = 'Define New Term';
-      host.querySelector('#glossaryTerm').value = '';
+    on('#btnAddNewTerm', 'click', () => {
+      state.editingTerm = null;
+      host.querySelector('#glossaryModalTitle').textContent = 'Define term';
+      ['#glossaryTerm', '#glossaryType', '#glossaryAliases', '#glossaryFormula', '#glossaryDesc']
+        .forEach(sel => { host.querySelector(sel).value = ''; });
       host.querySelector('#glossaryTerm').readOnly = false;
-      host.querySelector('#glossaryType').value = '';
-      host.querySelector('#glossaryAliases').value = '';
-      host.querySelector('#glossaryFormula').value = '';
-      host.querySelector('#glossaryDesc').value = '';
       gModal.classList.add('open');
     });
-
-    host.querySelector('#btnCancelGlossaryModal')?.addEventListener('click', () => {
-      gModal.classList.remove('open');
+    on('#btnCancelGlossaryModal', 'click', () => gModal.classList.remove('open'));
+    each('[data-edit-term]', 'click', e => {
+      const term = state.glossary.find(t => t.term === e.currentTarget.getAttribute('data-edit-term'));
+      if (!term) return;
+      state.editingTerm = term.term;
+      host.querySelector('#glossaryModalTitle').textContent = 'Edit term';
+      host.querySelector('#glossaryTerm').value = term.term;
+      host.querySelector('#glossaryTerm').readOnly = true;
+      host.querySelector('#glossaryType').value = term.dataType;
+      host.querySelector('#glossaryAliases').value = term.aliases;
+      host.querySelector('#glossaryFormula').value = term.formula || '';
+      host.querySelector('#glossaryDesc').value = term.description;
+      gModal.classList.add('open');
     });
-
-    host.querySelector('#btnConfirmGlossaryModal')?.addEventListener('click', () => {
-      const term = host.querySelector('#glossaryTerm').value.trim();
-      const type = host.querySelector('#glossaryType').value.trim();
-      const aliases = host.querySelector('#glossaryAliases').value.trim();
-      const formula = host.querySelector('#glossaryFormula').value.trim();
-      const desc = host.querySelector('#glossaryDesc').value.trim();
-
-      if (!term || !type || !aliases || !desc) {
-        window.ETLSQLFeedback.notify('Term, type, aliases, and description are required.', { title: 'Complete required fields', tone: 'warning' });
+    on('#btnConfirmGlossaryModal', 'click', async () => {
+      const payload = {
+        term: host.querySelector('#glossaryTerm').value.trim(),
+        dataType: host.querySelector('#glossaryType').value.trim(),
+        aliases: host.querySelector('#glossaryAliases').value.trim(),
+        formula: host.querySelector('#glossaryFormula').value.trim() || null,
+        description: host.querySelector('#glossaryDesc').value.trim(),
+        disabled: false,
+      };
+      if (!payload.term || !payload.dataType || !payload.aliases || !payload.description) {
+        notify('Term, type, aliases, and definition are required.',
+          { title: 'Complete required fields', tone: 'warning' });
         return;
       }
-
-      if (state.editingTermId) {
-        const idx = state.glossary.findIndex(t => t.id === state.editingTermId);
-        if (idx !== -1) {
-          state.glossary[idx].type = type;
-          state.glossary[idx].aliases = aliases;
-          state.glossary[idx].formula = formula || 'N/A';
-          state.glossary[idx].desc = desc;
-        }
-      } else {
-        state.glossary.push({
-          id: 'term-' + Date.now(),
-          term, type, aliases, formula: formula || 'N/A', desc, steward: 'Chuck'
-        });
-      }
       gModal.classList.remove('open');
-      render();
-    });
-
-    host.querySelectorAll('[data-edit-term]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-edit-term');
-        const term = state.glossary.find(t => t.id === id);
-        if (term) {
-          state.editingTermId = id;
-          host.querySelector('#glossaryModalTitle').textContent = 'Edit Defined Term';
-          host.querySelector('#glossaryTerm').value = term.term;
-          host.querySelector('#glossaryTerm').readOnly = true;
-          host.querySelector('#glossaryType').value = term.type;
-          host.querySelector('#glossaryAliases').value = term.aliases;
-          host.querySelector('#glossaryFormula').value = term.formula === 'N/A' ? '' : term.formula;
-          host.querySelector('#glossaryDesc').value = term.desc;
-          gModal.classList.add('open');
-        }
+      await mutate(() => governanceApi.saveGlossaryTerm(payload), {
+        success: 'Glossary term saved.',
+        failure: 'The term could not be saved.',
+        auditAction: 'governance.glossary.save',
       });
     });
-
-    host.querySelectorAll('[data-delete-term]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-delete-term');
-        const idx = state.glossary.findIndex(t => t.id === id);
-        if (idx !== -1) {
-          if (await window.ETLSQLFeedback.confirm(`Delete glossary term "${state.glossary[idx].term}"?`, { title: 'Delete glossary term', impact: 'Metadata rules that reference this term may stop matching.', confirmLabel: 'Delete term', danger: true, auditAction: 'governance.glossary.delete' })) {
-            state.glossary.splice(idx, 1);
-            render();
-          }
-        }
+    each('[data-delete-term]', 'click', async e => {
+      const term = e.currentTarget.getAttribute('data-delete-term');
+      const ok = await confirm(`Delete glossary term "${term}"?`, {
+        title: 'Delete glossary term',
+        impact: 'Metadata rules that reference this term may stop matching.',
+        confirmLabel: 'Delete term',
+        danger: true,
+        auditAction: 'governance.glossary.delete',
+      });
+      if (!ok) return;
+      await mutate(() => governanceApi.deleteGlossaryTerm(term), {
+        success: 'Glossary term deleted.',
+        failure: 'The term could not be deleted.',
+        auditAction: 'governance.glossary.delete',
       });
     });
 
-    // Badge Assignment
-    host.querySelectorAll('[data-assign-badge-to]').forEach(select => {
-      select.addEventListener('change', (e) => {
-        const assetId = select.getAttribute('data-assign-badge-to');
-        const badgeVal = e.target.value;
-        if (!badgeVal) return;
-
-        const idx = state.stewardshipItems.findIndex(i => i.id === assetId);
-        if (idx !== -1) {
-          const item = state.stewardshipItems[idx];
-          if (badgeVal === '__CLEAR__') {
-            item.assignedBadges = [];
-          } else if (!item.assignedBadges.includes(badgeVal)) {
-            item.assignedBadges.push(badgeVal);
-          }
-          state.assignedBadgesMap[item.path] = item.assignedBadges;
-          render();
-        }
-      });
+    // ── settings ──
+    on('#settingsTargetScore', 'input', e => {
+      const label = host.querySelector('.setting-label span b');
+      if (label) label.textContent = e.target.value;
     });
-
-    host.querySelectorAll('.remove-badge-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const assetId = btn.getAttribute('data-remove-badge-asset');
-        const badgeName = btn.getAttribute('data-remove-badge-name');
-        const idx = state.stewardshipItems.findIndex(i => i.id === assetId);
-        if (idx !== -1) {
-          const item = state.stewardshipItems[idx];
-          item.assignedBadges = item.assignedBadges.filter(b => b !== badgeName);
-          state.assignedBadgesMap[item.path] = item.assignedBadges;
-          render();
-        }
-      });
-    });
-
-    // Settings adjustments
-    const slider = host.querySelector('#settingsTargetScore');
-    if (slider) {
-      slider.addEventListener('input', (e) => {
-        state.settings.targetScore = parseInt(e.target.value);
-        host.querySelector('.setting-label span b').textContent = e.target.value;
-      });
-      slider.addEventListener('change', () => {
-        render();
-      });
-    }
-
-    const bindToggle = (chkId, settingKey, inputId) => {
-      host.querySelector(chkId)?.addEventListener('change', (e) => {
-        state.settings[settingKey] = e.target.checked;
-        const input = host.querySelector(inputId);
+    [['#chkEnableMeta', '#settingsDeductMeta'], ['#chkEnablePII', '#settingsDeductPII'],
+    ['#chkEnableGlossary', '#settingsDeductGlossary'], ['#chkEnableStale', '#settingsDeductStale']]
+      .forEach(([chk, num]) => on(chk, 'change', e => {
+        const input = host.querySelector(num);
         if (input) input.disabled = !e.target.checked;
-        render();
-      });
-    };
-    bindToggle('#chkEnableMeta', 'enableMeta', '#settingsDeductMeta');
-    bindToggle('#chkEnablePII', 'enablePII', '#settingsDeductPII');
-    bindToggle('#chkEnableGlossary', 'enableGlossary', '#settingsDeductGlossary');
-    bindToggle('#chkEnableStale', 'enableStale', '#settingsDeductStale');
+      }));
 
-    host.querySelector('#btnSaveScoringSettings')?.addEventListener('click', () => {
-      state.settings.deductMeta = parseInt(host.querySelector('#settingsDeductMeta').value) || 0;
-      state.settings.deductPII = parseInt(host.querySelector('#settingsDeductPII').value) || 0;
-      state.settings.deductGlossary = parseInt(host.querySelector('#settingsDeductGlossary').value) || 0;
-      state.settings.deductStale = parseInt(host.querySelector('#settingsDeductStale').value) || 0;
-      window.ETLSQLFeedback.notify('The scoring configuration was updated.', { title: 'Scoring saved', tone: 'success', auditAction: 'governance.scoring.update' });
-      render();
+    on('#btnSaveScoringSettings', 'click', async () => {
+      const num = (sel, fallback) => {
+        const parsed = parseInt(host.querySelector(sel)?.value, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+      await mutate(() => governanceApi.saveSettings({
+        targetScore: num('#settingsTargetScore', state.settings.targetScore),
+        enableMetadataCheck: host.querySelector('#chkEnableMeta').checked,
+        enableProtectedDataCheck: host.querySelector('#chkEnablePII').checked,
+        enableGlossaryCheck: host.querySelector('#chkEnableGlossary').checked,
+        enableStalenessCheck: host.querySelector('#chkEnableStale').checked,
+        deductMetadata: num('#settingsDeductMeta', 5),
+        deductProtectedData: num('#settingsDeductPII', 10),
+        deductGlossary: num('#settingsDeductGlossary', 5),
+        deductStaleness: num('#settingsDeductStale', 15),
+        staleAfterDays: num('#settingsStaleDays', 30),
+        policyLevel: host.querySelector('#settingsPolicyLevel').value,
+      }), {
+        success: 'Scoring configuration saved.',
+        failure: 'The scoring configuration could not be saved.',
+        auditAction: 'governance.scoring.update',
+      });
     });
 
-    // Category CRUD settings
     const cModal = host.querySelector('#categoryModalBackdrop');
-    host.querySelector('#btnAddNewCategory')?.addEventListener('click', () => {
-      state.editingCatId = null;
-      host.querySelector('#categoryModalTitle').textContent = 'Define Bypass Category';
+    on('#btnAddNewCategory', 'click', () => {
+      state.editingCategory = null;
+      host.querySelector('#categoryModalTitle').textContent = 'Define category';
       host.querySelector('#catLabel').value = '';
       host.querySelector('#catValue').value = '';
+      host.querySelector('#catValue').readOnly = false;
       host.querySelector('#catColor').value = 'noise';
-      host.querySelector('#catExpiry').value = 'None';
+      host.querySelector('#catExpiry').value = '';
       cModal.classList.add('open');
     });
-
-    host.querySelector('#btnCancelCategoryModal')?.addEventListener('click', () => {
-      cModal.classList.remove('open');
+    on('#btnCancelCategoryModal', 'click', () => cModal.classList.remove('open'));
+    each('[data-edit-cat]', 'click', e => {
+      const cat = state.categories.find(c => c.value === e.currentTarget.getAttribute('data-edit-cat'));
+      if (!cat) return;
+      state.editingCategory = cat.value;
+      host.querySelector('#categoryModalTitle').textContent = 'Edit category';
+      host.querySelector('#catLabel').value = cat.label;
+      host.querySelector('#catValue').value = cat.value;
+      host.querySelector('#catValue').readOnly = true;
+      host.querySelector('#catColor').value = cat.color;
+      host.querySelector('#catExpiry').value = cat.expiryDays ?? '';
+      cModal.classList.add('open');
     });
-
-    host.querySelector('#btnConfirmCategoryModal')?.addEventListener('click', () => {
+    on('#btnConfirmCategoryModal', 'click', async () => {
       const label = host.querySelector('#catLabel').value.trim();
-      const val = host.querySelector('#catValue').value.trim();
-      const color = host.querySelector('#catColor').value;
-      const colorLabel = host.querySelector('#catColor').options[host.querySelector('#catColor').selectedIndex].text;
-      const expiry = host.querySelector('#catExpiry').value;
-
-      if (!label || !val) {
-        window.ETLSQLFeedback.notify('Enter both a category label and value.', { title: 'Complete required fields', tone: 'warning' });
+      const value = host.querySelector('#catValue').value.trim();
+      if (!label || !value) {
+        notify('Enter both a category label and value.',
+          { title: 'Complete required fields', tone: 'warning' });
         return;
       }
-
-      if (state.editingCatId) {
-        const idx = state.resolutionCategories.findIndex(c => c.id === state.editingCatId);
-        if (idx !== -1) {
-          state.resolutionCategories[idx] = { id: state.editingCatId, value: val, label, color, colorLabel, expiry };
-        }
-      } else {
-        state.resolutionCategories.push({ id: 'cat-' + Date.now(), value: val, label, color, colorLabel, expiry });
-      }
+      const expiry = parseInt(host.querySelector('#catExpiry').value, 10);
       cModal.classList.remove('open');
-      render();
-    });
-
-    host.querySelectorAll('[data-edit-cat]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-edit-cat');
-        const cat = state.resolutionCategories.find(c => c.id === id);
-        if (cat) {
-          state.editingCatId = id;
-          host.querySelector('#categoryModalTitle').textContent = 'Edit Bypass Category';
-          host.querySelector('#catLabel').value = cat.label;
-          host.querySelector('#catValue').value = cat.value;
-          host.querySelector('#catColor').value = cat.color;
-          host.querySelector('#catExpiry').value = cat.expiry;
-          cModal.classList.add('open');
-        }
+      await mutate(() => governanceApi.saveCategory({
+        value,
+        label,
+        color: host.querySelector('#catColor').value,
+        expiryDays: Number.isFinite(expiry) && expiry > 0 ? expiry : null,
+        disabled: false,
+      }), {
+        success: 'Category saved.',
+        failure: 'The category could not be saved.',
+        auditAction: 'governance.category.save',
       });
     });
-
-    host.querySelectorAll('[data-delete-cat]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-delete-cat');
-        const idx = state.resolutionCategories.findIndex(c => c.id === id);
-        if (idx !== -1) {
-          if (await window.ETLSQLFeedback.confirm(`Delete bypass category "${state.resolutionCategories[idx].label}"?`, { title: 'Delete bypass category', impact: 'Existing exceptions using this category will no longer have a matching definition.', confirmLabel: 'Delete category', danger: true, auditAction: 'governance.category.delete' })) {
-            state.resolutionCategories.splice(idx, 1);
-            render();
-          }
-        }
+    each('[data-disable-cat]', 'click', async e => {
+      const value = e.currentTarget.getAttribute('data-disable-cat');
+      // Disable, never delete: historical suppressions cite this value, and removing it would
+      // leave them pointing at a reason nobody can look up.
+      const ok = await confirm(`Disable bypass category "${value}"?`, {
+        title: 'Disable category',
+        impact: 'Stewards can no longer choose it. Existing decisions keep citing it.',
+        confirmLabel: 'Disable',
+        danger: true,
+        auditAction: 'governance.category.disable',
+      });
+      if (!ok) return;
+      await mutate(() => governanceApi.disableCategory(value), {
+        success: 'Category disabled.',
+        failure: 'The category could not be disabled.',
+        auditAction: 'governance.category.disable',
       });
     });
-  };
+  }
 
   return {
     render,
     setTab(tabName) {
       state.tab = tabName;
-      render();
+      return render();
     },
-    dispose() {},
-    state
+    reload() {
+      state.load = 'idle';
+      return render();
+    },
+    dispose() { },
+    state,
   };
 }

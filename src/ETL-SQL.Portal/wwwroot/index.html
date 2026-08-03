@@ -66,6 +66,9 @@
           <span class="sidebar-hint">Data & Catalog</span>
         </div>
         <div class="sidebar-nav" aria-label="Governance views">
+          <a href="#governance/overview" class="sidebar-nav-item" id="govNavOverview">
+            <span>Overview</span>
+          </a>
           <a href="#governance/quarantine" class="sidebar-nav-item" id="govNavQuarantine">
             <span>✅ Quarantine Queue</span>
           </a>
@@ -288,12 +291,13 @@
 <script src="/js/echarts.min.js?v=0.17.0"></script>
 <script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
-import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, reportsApi, studioApi, subscriptionsApi } from '/js/api.js?v=0.17.0';
+import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, governanceApi, reportsApi, studioApi, subscriptionsApi } from '/js/api.js?v=0.17.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js?v=0.17.0';
 import { createLineageCatalog } from '/js/lineage-catalog.js?v=0.17.0';
 import { createDataQualityQueue } from '/js/data-quality-queue.js?v=0.17.0';
+import { createGovernancePortal } from '/js/governance-portal.js?v=0.17.0';
 import { renderDag } from '/designer/designer.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 
@@ -517,6 +521,7 @@ function openReportHashView() {
     showFavorites();
   } else if (mainView === 'governance' || mainView === 'lineage') {
     let mode = 'quarantine';
+    if (subView === 'overview') mode = 'overview';
     if (subView === 'lineage') mode = 'lineage';
     if (subView === 'stewardship') mode = 'stewardship';
     if (subView === 'audit') {
@@ -556,6 +561,7 @@ function setSidebarViewActive(view, govMode = 'quarantine') {
       el.classList.toggle('active', el.id === activeId));
   } else {
     const activeGovId = {
+      overview: 'govNavOverview',
       quarantine: 'govNavQuarantine',
       lineage: 'govNavLineage',
       stewardship: 'govNavStewardship',
@@ -1013,10 +1019,39 @@ function renderCatalogReportList(title, reports, emptyText) {
   });
 }
 
-// Production Governance exposes only the durable lineage and quarantine modules.
+// Every Governance surface here is durable and server-backed. The overview dashboard used to be
+// excluded from production because it kept its findings, decisions, glossary, and scoring in browser
+// memory and substituted demo assets when its API failed — evidence that could not survive a
+// refresh, and fiction that did not announce itself. It now reads and writes /api/governance/*, so
+// it ships alongside lineage and quarantine.
 let lineageCatalog = null;
 let dataQualityQueue = null;
+let governancePortal = null;
+
+function disposeGovernanceModules(keep) {
+  if (keep !== 'lineage' && lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
+  if (keep !== 'quarantine' && dataQualityQueue) { dataQualityQueue.dispose(); dataQualityQueue = null; }
+  if (keep !== 'overview' && governancePortal) { governancePortal.dispose(); governancePortal = null; }
+}
+
 function showGovernanceCatalog(mode = 'quarantine') {
+  if (mode === 'overview') {
+    disposeGovernanceModules('overview');
+    if (!governancePortal) {
+      governancePortal = createGovernancePortal({
+        host: document.getElementById('mainContent'),
+        governanceApi,
+        prepare: () => {
+          setSidebarViewActive('governance', 'overview');
+          clearFolderSelection();
+        }
+      });
+    }
+    governancePortal.reload();
+    return;
+  }
+
+  if (governancePortal) { governancePortal.dispose(); governancePortal = null; }
   if (mode !== 'quarantine') {
     if (dataQualityQueue) { dataQualityQueue.dispose(); dataQualityQueue = null; }
     if (!lineageCatalog) {

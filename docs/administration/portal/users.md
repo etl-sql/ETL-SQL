@@ -131,6 +131,26 @@ CREATE GROUP 'GG-Finance-Readers' WITH (
 | **Publisher** | Create folders, publish reports, manage subscriptions |
 | **Viewer** | Browse accessible folders, run and export reports, manage their own subscriptions |
 | **OrchestratorManager** | Orchestrator tab only — create/edit/delete/trigger/kill scheduled jobs, view execution history. Cannot access the Admin panel. |
+| **GovernanceViewer** | Read the governance dashboard — estate posture, scores and the rules behind them, badges, findings, and the decisions on them. No mutations. |
+| **DataSteward** | Everything GovernanceViewer can do, plus the steward decisions: ignore a finding as a false positive, accept a risk, reopen, mark an asset reviewed, and assign badges. Also gates the data-quality quarantine queue. |
+| **GovernanceManager** | Everything DataSteward can do, plus configuration: run scans, change the score threshold and enabled checks, manage glossary terms, and manage suppression categories. |
+
+<a name="governance-roles"></a>
+The three governance roles are separate authorities, not a convenience ladder:
+
+- **Reading is deliberately wide.** A steward who cannot see other stewards' work cannot cover for
+  them, and a governance lead needs the whole estate. `?scope=mine` narrows the queue to the caller,
+  but it is a filter they choose, never a boundary imposed on them.
+- **Deciding is steward judgement.** Ignoring a finding or accepting a risk requires a written reason
+  and is recorded against the asset version it was decided on. When that asset changes, the
+  suppression stops applying and the finding reopens — so a decision cannot quietly cover content
+  nobody reviewed.
+- **Configuring changes what "governed" means** for everyone. Whoever can lower the threshold should
+  not be the same person working against it, which is why `DataSteward` cannot: a steward able to
+  clear their own queue by moving the bar is not being held to one.
+
+Every governance mutation is audited. Threshold changes record the value **before** as well as after,
+because "who lowered the threshold" cannot be answered from the new value alone.
 
 <a name="orchestrator-manager-role"></a>
 Assign `OrchestratorManager` to operations staff who need to manage the ETL-SQL Orchestrator from the web UI without needing full admin rights. A user with only this role can see and use the Orchestrator tab but has no access to user management, groups, folders, audit logs, or report publishing.

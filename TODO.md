@@ -508,15 +508,15 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 
 ### Portal — Governance Dashboard
 
-- [ ] Inventory and remove production demo fallback and browser-memory governance state.
-- [ ] Define durable models and authorized APIs for findings, decisions, glossary terms, badges,
+- [x] Inventory and remove production demo fallback and browser-memory governance state.
+- [x] Define durable models and authorized APIs for findings, decisions, glossary terms, badges,
       scans, and scoring settings.
-- [ ] Enforce resource/role authorization and security audit on every governance mutation.
-- [ ] Wire the dashboard exclusively to durable APIs with honest loading, empty, unavailable, and
+- [x] Enforce resource/role authorization and security audit on every governance mutation.
+- [x] Wire the dashboard exclusively to durable APIs with honest loading, empty, unavailable, and
       failure states.
-- [ ] Add API/role tests for mutation boundaries.
-- [ ] Add UI tests for live, empty, unauthorized, and API-failure states.
-- [ ] Add a guard proving production never presents demo records as governance evidence.
+- [x] Add API/role tests for mutation boundaries.
+- [x] Add UI tests for live, empty, unauthorized, and API-failure states.
+- [x] Add a guard proving production never presents demo records as governance evidence.
 
 ### Portal — Quarantine Row Access
 

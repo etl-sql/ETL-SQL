@@ -104,6 +104,7 @@ builder.Services.AddSingleton<PortalModuleRegistry>();
 builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddScoped<StudioCapabilityStore>();
 builder.Services.AddScoped<AccessSimulationService>();
+builder.Services.AddScoped<GovernanceService>();
 builder.Services.AddScoped<IdentityDiagnosticsService>();
 builder.Services.AddScoped<AuditCollectorHealthService>();
 builder.Services.AddScoped<OperationsPostureService>();
@@ -298,6 +299,17 @@ builder.Services.AddAuthorization(opt =>
     // carried), edits them, and enqueues jobs that re-run production loads. That is steward work,
     // not something every authenticated report reader may do.
     opt.AddPolicy("DataQualityStewardAccess", p => p.RequireRole("Admin", "DataSteward"));
+
+    // Governance splits into three authorities on purpose. Read is deliberately wide — a steward
+    // who cannot see other stewards' work cannot cover for them, and a governance lead needs the
+    // whole estate. Deciding is steward judgement. Configuring changes what "governed" means for
+    // everyone, so whoever can lower the bar is not whoever works against it.
+    opt.AddPolicy("GovernanceRead", p =>
+        p.RequireRole("Admin", "GovernanceManager", "DataSteward", "GovernanceViewer"));
+    opt.AddPolicy("GovernanceDecide", p =>
+        p.RequireRole("Admin", "GovernanceManager", "DataSteward"));
+    opt.AddPolicy("GovernanceConfigure", p =>
+        p.RequireRole("Admin", "GovernanceManager"));
 });
 builder.Services.AddRateLimiter(options =>
 {

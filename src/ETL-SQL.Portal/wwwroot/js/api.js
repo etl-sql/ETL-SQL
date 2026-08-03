@@ -216,6 +216,45 @@ export const subscriptionsApi = {
 
 // ── Data Quality ──────────────────────────────────────────────────────────────
 
+// Durable governance workflow. Every call reaches the server: there is no cached or seeded
+// fallback, because a governance figure that survives an unreachable API is a figure nobody can
+// trace back to evidence. Errors keep their `status`, which is how the dashboard tells "you may
+// not see this" (403) apart from "we could not find out" (anything else).
+export const governanceApi = {
+    dashboard({ scope = 'all' } = {}) {
+        return apiJson(`/api/governance/dashboard?scope=${encodeURIComponent(scope)}`);
+    },
+    findings({ status = '', limit = 200 } = {}) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (status) params.set('status', status);
+        return apiJson(`/api/governance/findings?${params.toString()}`);
+    },
+    scans: ({ limit = 20 } = {}) => apiJson(`/api/governance/scans?limit=${limit}`),
+    scan: () => apiJson('/api/governance/scan', { method: 'POST' }),
+    settings: () => apiJson('/api/governance/settings'),
+    saveSettings: (body) => apiJson('/api/governance/settings',
+        { method: 'PUT', body: JSON.stringify(body) }),
+    categories: () => apiJson('/api/governance/categories'),
+    saveCategory: (body) => apiJson('/api/governance/categories',
+        { method: 'POST', body: JSON.stringify(body) }),
+    disableCategory: (value) =>
+        apiJson(`/api/governance/categories/${encodeURIComponent(value)}`, { method: 'DELETE' }),
+    glossary: () => apiJson('/api/governance/glossary'),
+    saveGlossaryTerm: (body) => apiJson('/api/governance/glossary',
+        { method: 'POST', body: JSON.stringify(body) }),
+    deleteGlossaryTerm: (term) =>
+        apiJson(`/api/governance/glossary/${encodeURIComponent(term)}`, { method: 'DELETE' }),
+    decideFinding: (id, body) => apiJson(`/api/governance/findings/${id}/decide`,
+        { method: 'POST', body: JSON.stringify(body) }),
+    reviewAsset: (body) => apiJson('/api/governance/assets/review',
+        { method: 'POST', body: JSON.stringify(body) }),
+    assignBadge: (body) => apiJson('/api/governance/assets/badges',
+        { method: 'POST', body: JSON.stringify(body) }),
+    removeBadge: ({ assetKey, badge }) => apiJson(
+        `/api/governance/assets/badges?assetKey=${encodeURIComponent(assetKey)}&badge=${encodeURIComponent(badge)}`,
+        { method: 'DELETE' }),
+};
+
 export const dataQualityApi = {
     quarantineQueue({ jobName = '', q = '', replayable = '', limit = 100 } = {}) {
         const params = new URLSearchParams();
