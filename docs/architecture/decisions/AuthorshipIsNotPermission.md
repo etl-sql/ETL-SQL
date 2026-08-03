@@ -78,6 +78,19 @@ removed one forces its entry out. The inventory can only shrink or change delibe
 Reading a diff is not a reliable way to catch this class of bug — that has been tried and it failed.
 The inventory is.
 
+`DirectoryRemovalRevocationTests` is the behavioural counterpart: one identity creates a report,
+saved views, anonymous share and embed links, and a dataset, then loses its group and finally its
+account, and every surface is checked. It is one scenario on purpose. The original regression was not
+one broken function but five surfaces that each looked reasonable alone; what has to hold is the
+property across all of them at once.
+
+Note what the two phases revoke. **Group removal** takes everything reached through the group,
+including the anonymous links — their authority is the grantor's *continuing* access, so nobody has
+to remember they exist. A **direct** dataset grant survives it, deliberately: losing a group must not
+revoke a grant made to you personally. **Directory removal** cascades the direct grants away, and
+ownership transfer carries a grant to the new owner so the dataset does not become
+administrator-only.
+
 ## References
 
 - [v0.17.0 code review](v0.17.0-code-review.md) — the original regression and its report-side fix.

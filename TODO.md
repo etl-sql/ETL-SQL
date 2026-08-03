@@ -321,8 +321,8 @@ documentation reconciliation, then release certification.
       short-circuits that do not consult an ACL. `AuthorshipPermissionBoundaryTests` inventories
       every `CreatedBy`/`OwnerId` comparison in the Portal with the reason it is safe and asserts set
       equality, so a new short-circuit fails the build until someone justifies it and a removed one
-      forces its entry out. The three open dataset sites are pinned in the inventory as `OPEN:` and
-      must be deleted when the decision above lands.
+      forces its entry out. It earned itself immediately: the three dataset short-circuits it pinned
+      as open are now gone, and it caught a new comparison added while fixing them.
 - [x] Audit and test revocation for connections, subscriptions, alerts, and saved views. One real gap
       found, in alerts:
   - **Alerts — was leaking, now fixed.** `PortalAlertEvaluationService` dispatched without
@@ -338,8 +338,17 @@ documentation reconciliation, then release certification.
     then group ACLs; `CreatedByUserId` is recorded but never consulted for authorization. (An
     unrestricted connection — one with no ACL rows at all — is usable by everyone; that is a
     separate default, not authorship persistence.)
-- [ ] Prove directory/group removal revokes reports, datasets, connections, subscriptions, alerts,
+- [x] Prove directory/group removal revokes reports, datasets, connections, subscriptions, alerts,
       saved views, and anonymous links created by that identity.
+      `DirectoryRemovalRevocationTests` runs it as one scenario in two phases, because they revoke
+      different things: **group removal** takes the report, its saved views, and the anonymous
+      share/embed links (and flips the admin anonymous-access inventory off `Active`), while a
+      **direct** dataset grant deliberately survives — losing a group must not revoke a grant made to
+      you personally. **Directory removal** then cascades the direct grant away and proves ownership
+      transfer carries a grant to the new owner rather than leaving the dataset administrator-only.
+      Subscription and alert delivery are re-authorized on the same rule and proven against it in
+      `SubscriptionDeliverySecurityTests` and `PortalAlertEvaluationServiceTests`, which drive those
+      delivery paths directly. Connections have no authorship path to revoke.
 
 ### Orchestrator — Per-Object Authorization
 

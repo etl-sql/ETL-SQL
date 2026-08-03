@@ -1,0 +1,3 @@
+### Added
+
+- Added the end-to-end proof that deprovisioning deprovisions: one identity creates a report, saved views, anonymous share and embed links, and a dataset, then loses its group and finally its account, and every surface it left behind is checked. It runs as a single scenario on purpose — the regression this guards against was not one broken function but five surfaces that each looked reasonable in isolation, so what has to hold is the property across all of them at once. The two phases revoke different things: group removal takes everything reached through the group, including the anonymous links, while a grant made directly to a person survives it and is cascaded away only when the account itself is deleted.
