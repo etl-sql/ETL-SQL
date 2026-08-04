@@ -66,10 +66,10 @@
           <span class="sidebar-hint">Data & Catalog</span>
         </div>
         <div class="sidebar-nav" aria-label="Governance views">
-          <a href="#governance/overview" class="sidebar-nav-item" id="govNavOverview">
+          <a href="#governance/overview" class="sidebar-nav-item" id="govNavOverview" style="display:none">
             <span>Overview</span>
           </a>
-          <a href="#governance/quarantine" class="sidebar-nav-item" id="govNavQuarantine">
+          <a href="#governance/quarantine" class="sidebar-nav-item" id="govNavQuarantine" style="display:none">
             <span>✅ Quarantine Queue</span>
           </a>
           <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
@@ -363,6 +363,18 @@ window.addEventListener('popstate', e => {
 
 window.addEventListener('hashchange', () => openReportHashView());
 
+let canGovernanceOverview = false;
+let canQuarantine = false;
+
+/// The Governance view to open when no specific one was asked for. Lineage is the floor because it
+/// is open to every authenticated user; landing anyone on a view they are refused would make the
+/// section look broken at the exact moment they first try it.
+function defaultGovernanceMode() {
+  if (canGovernanceOverview) return 'overview';
+  if (canQuarantine) return 'quarantine';
+  return 'lineage';
+}
+
 async function init() {
   try {
     const identity = getSessionIdentity(auth.getToken());
@@ -372,6 +384,20 @@ async function init() {
     if (isAdmin) document.getElementById('govNavAudit').style.display = '';
     const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
     if (canOrch) document.getElementById('orchestratorNav').style.display = '';
+
+    // Governance itself stays visible to everyone: Lineage Search and Stewardship are open to any
+    // authenticated user, and tracing where a number came from is exactly what a report consumer
+    // needs them for. Its individual views are not all open, and each is revealed only to the roles
+    // its API accepts — offering a view that answers 403 reads as the product being broken rather
+    // than as a permission the user lacks.
+    if (hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer'))
+      document.getElementById('govNavOverview').style.display = '';
+    if (hasRole(identity, 'Admin', 'DataSteward'))
+      document.getElementById('govNavQuarantine').style.display = '';
+
+    canGovernanceOverview =
+      hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
+    canQuarantine = hasRole(identity, 'Admin', 'DataSteward');
   } catch {}
   try {
     const studio = await studioApi.session();
@@ -402,11 +428,13 @@ async function init() {
   });
   document.getElementById('navGovernance')?.addEventListener('click', e => {
     e.preventDefault();
-    setReportHash('governance/quarantine');
-    showGovernanceCatalog('quarantine');
+    const mode = defaultGovernanceMode();
+    setReportHash(`governance/${mode}`);
+    showGovernanceCatalog(mode);
   });
 
   [
+    ['Overview', 'overview', 'overview'],
     ['Quarantine', 'quarantine', 'quarantine'],
     ['Lineage', 'lineage', 'lineage'],
     ['Stewardship', 'stewardship', 'stewardship'],
@@ -520,10 +548,19 @@ function openReportHashView() {
   } else if (mainView === 'favorites') {
     showFavorites();
   } else if (mainView === 'governance' || mainView === 'lineage') {
-    let mode = 'quarantine';
-    if (subView === 'overview') mode = 'overview';
+    let mode = defaultGovernanceMode();
     if (subView === 'lineage') mode = 'lineage';
     if (subView === 'stewardship') mode = 'stewardship';
+    // A view the user cannot use is redirected rather than opened. Deep links get shared and
+    // bookmarked, so this path is reached by people the sender never thought about.
+    if (subView === 'overview') {
+      mode = canGovernanceOverview ? 'overview' : 'stewardship';
+      if (!canGovernanceOverview) setReportHash('governance/stewardship');
+    }
+    if (subView === 'quarantine') {
+      mode = canQuarantine ? 'quarantine' : 'stewardship';
+      if (!canQuarantine) setReportHash('governance/stewardship');
+    }
     if (subView === 'audit') {
       mode = isAdmin ? 'audit' : 'stewardship';
       if (!isAdmin) setReportHash('governance/stewardship');

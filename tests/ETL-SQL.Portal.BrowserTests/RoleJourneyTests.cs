@@ -67,6 +67,77 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
         _ = user;
     }
 
+    /// <param name="canOverview">Governance Overview needs GovernanceRead.</param>
+    /// <param name="canQuarantine">The quarantine queue needs DataQualityStewardAccess.</param>
+    [Theory]
+    [InlineData("Viewer", false, false)]
+    [InlineData("Publisher", false, false)]
+    [InlineData("OrchestratorManager", false, false)]
+    [InlineData("DataSteward", true, true)]
+    public async Task GovernanceSubViews_AreOfferedOnlyToRolesTheirApisAccept(
+        string role, bool canOverview, bool canQuarantine)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await CreateAndSignInAsync(page, role);
+
+        // The section itself is open to everyone, because Lineage Search and Stewardship are. The
+        // views inside it are not all open, and checking only the top-level entry — which is what
+        // the first version of this suite did — misses exactly that.
+        await page.ClickAsync("#navGovernance");
+        await page.WaitForTimeoutAsync(300);
+
+        await AssertNavAsync(page, "#govNavOverview", canOverview, role, "Governance Overview");
+        await AssertNavAsync(page, "#govNavQuarantine", canQuarantine, role, "Quarantine Queue");
+        await AssertNavAsync(page, "#govNavAudit", false, role, "Audit Evidence");
+        // The two that are genuinely open, so the section is not empty for a report consumer.
+        await AssertNavAsync(page, "#govNavLineage", true, role, "Lineage Search");
+        await AssertNavAsync(page, "#govNavStewardship", true, role, "Stewardship");
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("Viewer")]
+    [InlineData("Publisher")]
+    public async Task ClickingGovernance_LandsOnAViewTheRoleCanActuallyUse(string role)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await CreateAndSignInAsync(page, role);
+
+        await page.ClickAsync("#navGovernance");
+        await page.WaitForTimeoutAsync(500);
+
+        // It used to route everyone to the quarantine queue, so a report consumer's first click on
+        // Governance landed them on the one view they are refused.
+        Assert.DoesNotContain("governance/quarantine", page.Url);
+        Assert.DoesNotContain("governance/overview", page.Url);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("Viewer", "overview")]
+    [InlineData("Viewer", "quarantine")]
+    [InlineData("Publisher", "quarantine")]
+    public async Task ADeepLinkToAViewTheRoleCannotUse_RedirectsRatherThanOpening(
+        string role, string view)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await CreateAndSignInAsync(page, role);
+
+        // Deep links get shared and bookmarked, so this path is reached by people whoever sent it
+        // never thought about. Hiding the nav entry does nothing for them.
+        await page.GotoAsync($"/index.html#governance/{view}");
+        await page.ReloadAsync();
+        await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+            new PageWaitForLoadStateOptions { Timeout = 20_000 });
+
+        Assert.DoesNotContain($"governance/{view}", page.Url);
+        Assert.Empty(session.PageErrors);
+    }
+
     [Theory(Skip = "Known finding, not yet root-caused: the report library still probes three "
         + "endpoints every non-admin role is refused.")]
     [MemberData(nameof(Roles))]
