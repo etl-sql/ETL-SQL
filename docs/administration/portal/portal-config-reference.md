@@ -31,8 +31,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     },
     "Studio": {
       "Mode": "SourceControlled",
+      "RequireApprovalToPublish": false,
       "RoleCapabilities": {
-        "Admin": [ "StudioAccess", "ScriptRead", "ScriptPreview", "ScriptRun", "ScriptSave", "ReportPublish", "ScriptIngress", "SourceCommit", "SourcePush" ],
+        "Admin": [ "StudioAccess", "ScriptRead", "ScriptPreview", "ScriptRun", "ScriptSave", "ReportPublish", "ReportApprove", "ScriptIngress", "SourceCommit", "SourcePush" ],
         "Publisher": [ "StudioAccess", "ScriptRead", "ScriptPreview", "ScriptRun", "ScriptSave", "ReportPublish", "ScriptIngress", "SourceCommit" ]
       }
     },
@@ -127,6 +128,10 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `SourceControl.Provider` | `None` | Set to `Git` to commit edited report scripts to a local git working tree. |
 | `SourceControl.RepositoryRoot` | *(empty)* | Local git repository root. When `Provider = Git`, `ScriptRootPath` must be inside this directory. |
 | `SourceControl.PushOnSave` | `false` | Pushes committed designer saves after each successful commit. Use only with a configured service credential on the host. |
+| `SourceControl.ProtectedBranches` | *(empty)* | Branches a Portal-originated commit may not land on without an approved draft behind it. Exact names, or a prefix when the pattern ends in `*` (`release/*`). Empty means nothing is protected. Meant to be enabled together with `Studio.RequireApprovalToPublish`: protecting a branch without a review path only blocks people, and a review path without protection only asks nicely. |
+| `Studio.RequireApprovalToPublish` | `false` | Saving a script produces a **draft** that someone other than its author must approve before it can be published. Default off, so an upgrade never interposes a review step into a workflow people depend on. An author can never approve their own draft, whatever roles or capabilities they hold — including Admin. |
+| `Studio.RoleCapabilities` | *(empty)* | Deny-by-default Studio capabilities per role. Ten exist: `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`, `ReportPublish`, **`ReportApprove`**, `ScriptIngress`, `SourceCommit`, `SourcePush`. `ReportApprove` is separate from `ReportPublish` so reviewing a change and shipping it can be given to different people. |
+| `DataQuality.AllowConnectionPreview` | `false` | Lets the quarantine row editor open the shared connection behind a capture and read its rows. Default off: turning it on lets the web tier open production connections. Even when on, a caller reads rows only for shared connections they are separately granted — steward access gates the feature, the connection grant gates the data. |
 | `SourceControl.Remote` | `origin` | Git remote used when `PushOnSave = true`. |
 | `SourceControl.Branch` | *(empty)* | Optional branch ref used for push. Empty uses git's current upstream/default push behavior. |
 | `SourceControl.CommitterName` | `ETL-SQL Portal` | Git committer name for portal-generated commits. The author name is the logged-in portal user. |

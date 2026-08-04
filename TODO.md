@@ -638,7 +638,17 @@ documentation reconciliation, then release certification.
       `security-events.md`, and pinned by a test. Found empirically: it was what made the browser
       lane fail whenever two test processes started back to back.
 
-      **Remaining: administration, HA diagrams, threat model, and verification runbooks.**
+      **Administration reconciled.** Four settings this release added existed only in guides and
+      architecture prose, and were absent from the configuration reference — which is the document
+      an operator actually opens when configuring: `Studio.RequireApprovalToPublish`,
+      `SourceControl.ProtectedBranches`, `DataQuality.AllowConnectionPreview`, and the tenth Studio
+      capability `ReportApprove`. All four are now there, and
+      `EveryStudioCapability_AppearsInTheConfigurationReference` guards the class of drift:
+      capabilities are granted by typing their name, and the filter rejects an unknown name rather
+      than storing a typo, so one missing from the reference is one nobody can grant deliberately
+      and nothing reports.
+
+      **Remaining: HA diagrams, threat model, and verification runbooks.**
 - [x] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
       isolation, role/module/capability, and policy journeys. All seven are now gate phases in
       `Test-PreRelease.ps1`, and each phase's stated reason names what it actually covers rather

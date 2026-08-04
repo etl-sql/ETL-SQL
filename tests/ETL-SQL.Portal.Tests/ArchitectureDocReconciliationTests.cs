@@ -118,6 +118,32 @@ public sealed class ArchitectureDocReconciliationTests
             + string.Join("\n  ", missing));
     }
 
+    [Fact]
+    public void EveryStudioCapability_AppearsInTheConfigurationReference()
+    {
+        // Capabilities are configured by name in Portal:Studio:RoleCapabilities, so an operator
+        // grants them by typing them. One that exists in code and not in the reference is one
+        // nobody can grant deliberately — and the filter rejects an unknown name rather than
+        // storing a typo, so the failure is silent from the reference's side: the capability simply
+        // never gets used.
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "ETL-SQL.Portal", "Services", "StudioAuthorizationService.cs"));
+        var capabilities = Regex.Matches(source, @"public const string (?<c>\w+) = nameof\(")
+            .Select(m => m.Groups["c"].Value)
+            .Where(c => c != "CapabilityClaim")
+            .ToList();
+        Assert.NotEmpty(capabilities);
+
+        var reference = File.ReadAllText(Path.Combine(
+            RepoRoot(), "docs", "administration", "portal", "portal-config-reference.md"));
+        var missing = capabilities.Where(c => !reference.Contains(c, StringComparison.Ordinal)).ToList();
+
+        Assert.True(missing.Count == 0,
+            $"{capabilities.Count} Studio capabilities exist; these are absent from the "
+            + "configuration reference operators use to grant them:\n  "
+            + string.Join("\n  ", missing));
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
