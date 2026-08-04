@@ -237,6 +237,18 @@ documentation reconciliation, then release certification.
 
 - [ ] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
       folder.
+      **Blocked on a deliberate ordering hazard, and the safety net for it now exists.**
+      `FolderPermission` is an ordered enum (`Read=0, Execute=1, Manage=2`) compared with `>=` in
+      about 40 places, and its values are stored as integers in every ACL row. Inserting `Author`
+      between `Execute` and `Manage` renumbers `Manage` and silently reinterprets every stored
+      grant. Appending `Author = 3` keeps storage stable but makes it satisfy every `>= Manage`
+      check — handing the new, weaker grant *more* authority than Manage, which is the opposite of
+      the requirement and would ship as a privilege escalation by omission.
+
+      The fix is to separate storage value from authority order: append `Author = 3`, add a rank
+      function that places it between Execute and Manage, and convert all ~40 ordinal comparisons to
+      use it. `AuthorizationMatrixTests` is the guard that makes that conversion checkable — it was
+      written first and mutation-verified to catch exactly this class of widening.
 - [x] Implement deny-by-default, group/service-account-assignable Studio capabilities. All nine are
       defined, deny-by-default, and enforced by the `RequireStudioCapability` filter on every gated
       route (`SourcePush` is checked inline in `ReportsController`). Capabilities are now assignable
@@ -266,6 +278,19 @@ documentation reconciliation, then release certification.
       the outbox payload, so reviewing a Studio mutation does not mean inferring authority from the
       route.
 - [ ] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
+      **Viewer/Publisher/Admin and all three ACL levels are covered** by
+      `AuthorizationMatrixTests`, written as data so a widened grant fails a `denied` row and a
+      narrowed one fails an `allowed` row. Author and Approver rows are pending because neither
+      grant exists yet — they land with the two items around this one.
+
+      Writing it established two things worth recording. Portal authorization is
+      **two-dimensional**: a role decides which *class* of operation you may perform, an ACL decides
+      which *resources* you may perform it on, and the axes are not interchangeable. And holding
+      `Manage` on a folder deliberately does **not** let you read or re-grant its ACL, create a
+      subfolder, or delete it — those are Admin-role acts. Without that split the highest ACL grant
+      would be self-propagating: whoever held it could hand it out, and the set of people with
+      access could only ever grow. That boundary was previously discoverable only by reading ~40
+      enum comparisons plus scattered `[Authorize(Roles=…)]` attributes; it is now asserted.
 - [ ] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
       branches, and separation of duties.
 
