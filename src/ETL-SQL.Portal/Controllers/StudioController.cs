@@ -40,13 +40,23 @@ public sealed partial class StudioController(
     /// than "nothing" — a console error on every sign-in for three of the five roles, and a
     /// capability check that cannot be asked without already having the capability.</para>
     /// </summary>
+    // AllowAnonymous, then an explicit authentication check. An action-level [Authorize] does NOT
+    // override the class-level [Authorize(Roles = "Admin,Publisher")] -- both apply -- which is why
+    // the first attempt at this fix left the endpoint answering 403 to everyone else. AllowAnonymous
+    // is the only attribute that takes the action out of that policy, so the authentication
+    // requirement is restated here rather than inherited.
     [HttpGet("session")]
-    [Authorize]
+    [AllowAnonymous]
     [AllowStudioCapabilityBypass]
-    public ActionResult<StudioSessionDto> GetSession() => Ok(new StudioSessionDto(
-        studioAuthorization.Mode.ToString(),
-        studioAuthorization.EffectiveCapabilities(User),
-        studioAuthorization.Mode == StudioDeploymentMode.SourceControlled && sourceControl.IsEnabled));
+    public ActionResult<StudioSessionDto> GetSession()
+    {
+        if (User.Identity?.IsAuthenticated != true) return Unauthorized();
+
+        return Ok(new StudioSessionDto(
+            studioAuthorization.Mode.ToString(),
+            studioAuthorization.EffectiveCapabilities(User),
+            studioAuthorization.Mode == StudioDeploymentMode.SourceControlled && sourceControl.IsEnabled));
+    }
 
     [HttpGet("reports")]
     [RequireStudioCapability(StudioCapabilities.ScriptRead,
