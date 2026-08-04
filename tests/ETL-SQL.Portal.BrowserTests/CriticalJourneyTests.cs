@@ -14,11 +14,9 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// a stale cached folder list, or a page that throws mid-flow fails here rather than in production.
 /// </summary>
 [Trait("Category", "Browser")]
-public sealed class CriticalJourneyTests(PortalBrowserFixture fixture) : IClassFixture<PortalBrowserFixture>
+[Collection(PortalBrowserCollection.Name)]
+public sealed class CriticalJourneyTests(PortalBrowserFixture fixture)
 {
-    private const string FirstRunUsername = "admin";
-    private const string FirstRunPassword = "Admin@12345!";
-    private const string ChangedPassword = "Admin@Journey99!";
 
     /// <summary>Self-contained report: no connections, no parameters, one visual with one row.</summary>
     private const string ReportScript = """
@@ -46,7 +44,7 @@ public sealed class CriticalJourneyTests(PortalBrowserFixture fixture) : IClassF
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await SignInThroughForcedPasswordChangeAsync(page);
+        await fixture.SignInAsync(page);
         await CreateUserAsync(page, newUsername);
         await CreateFolderAsync(page, folderName);
         await PublishReportAsync(page, reportName, scriptFileName, folderName);
@@ -56,26 +54,6 @@ public sealed class CriticalJourneyTests(PortalBrowserFixture fixture) : IClassF
     }
 
     // ── Step 1: sign in ──────────────────────────────────────────────────────
-    // The seeded first-run admin has MustChangePassword set, so the real first sign-in is two
-    // forms, not one. Anything that breaks the hand-off between them locks every new deployment out.
-    private static async Task SignInThroughForcedPasswordChangeAsync(IPage page)
-    {
-        await page.GotoAsync("/login.html");
-        await page.FillAsync("#username", FirstRunUsername);
-        await page.FillAsync("#password", FirstRunPassword);
-        await page.ClickAsync("#loginBtn");
-
-        await Expect(page.Locator("#changeForm")).ToBeVisibleAsync();
-        await Expect(page.Locator("#mustChangeBanner")).ToBeVisibleAsync();
-
-        await page.FillAsync("#currentPwd", FirstRunPassword);
-        await page.FillAsync("#newPwd", ChangedPassword);
-        await page.FillAsync("#confirmPwd", ChangedPassword);
-        await page.ClickAsync("#changeBtn");
-
-        await page.WaitForURLAsync("**/index.html");
-    }
-
     // ── Step 2: create a user ────────────────────────────────────────────────
     private static async Task CreateUserAsync(IPage page, string username)
     {

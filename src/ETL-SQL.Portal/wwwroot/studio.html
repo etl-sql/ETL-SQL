@@ -86,6 +86,11 @@
 import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.17.0';
+
+// Studio's dialogs had no focus management at all: opening one left the keyboard user behind it,
+// and Tab walked straight out into the page the dialog was supposedly blocking.
+installDialogAccessibility();
 
 if (!auth.isLoggedIn()) auth.redirectToLogin();
 applyPortalBranding();

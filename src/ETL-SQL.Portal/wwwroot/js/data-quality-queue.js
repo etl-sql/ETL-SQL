@@ -445,7 +445,8 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
         <button class="btn btn-outline" id="dqRefreshBtn" type="button">Refresh</button>
       </div>
       <form class="dq-toolbar" id="dqQueueForm">
-        <input id="dqQueueSearch" type="search" placeholder="Search job, target, source, or column" value="${esc(state.q)}">
+        <input id="dqQueueSearch" type="search" placeholder="Search job, target, source, or column"
+          aria-label="Search the quarantine queue by job, target, source, or column" value="${esc(state.q)}">
         <select id="dqReplayableFilter" aria-label="Replayability filter">
           <option value=""${state.replayable === '' ? ' selected' : ''}>All targets</option>
           <option value="true"${state.replayable === 'true' ? ' selected' : ''}>Replayable</option>

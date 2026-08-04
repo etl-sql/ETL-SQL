@@ -50,15 +50,42 @@ public sealed class PortalBrowserFactory : PortalWebFactory
         return testHost;
     }
 
-    protected override void Dispose(bool disposing)
+    /// <summary>
+    /// Stops the Kestrel host and <b>waits for it</b> before anything else is torn down.
+    ///
+    /// <para><c>IHost.Dispose()</c> does not stop a running host — it signals shutdown and returns.
+    /// Disposing without stopping left Kestrel still unbinding its loopback port and still holding
+    /// the shared SQLite files while <c>base.DisposeAsync</c> deleted the temp directory underneath
+    /// it. The next run in the same process then failed to start at all, and every test in the class
+    /// reported <c>The server has not been started</c> in about a millisecond. Stopping first makes
+    /// teardown ordered instead of racing.</para>
+    /// </summary>
+    public override async ValueTask DisposeAsync()
     {
-        if (disposing)
+        if (kestrelHost is not null)
         {
-            kestrelHost?.Dispose();
+            // Bounded, so a wedged host fails the run rather than hanging it.
+            try { await kestrelHost.StopAsync(TimeSpan.FromSeconds(15)); }
+            catch (OperationCanceledException) { }
+            kestrelHost.Dispose();
             kestrelHost = null;
         }
 
         // Deletes the shared temp directory, so it must run after the Kestrel host has released it.
+        await base.DisposeAsync();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Synchronous disposal cannot await the stop, so callers should prefer DisposeAsync.
+            // Kept working rather than throwing, because xunit disposes fixtures either way.
+            kestrelHost?.StopAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+            kestrelHost?.Dispose();
+            kestrelHost = null;
+        }
+
         base.Dispose(disposing);
     }
 }

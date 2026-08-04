@@ -467,6 +467,7 @@ export function createGovernancePortal(opts = {}) {
       </div>
       <div class="gov-filters">
         <input type="search" id="govSearch" placeholder="Filter by asset or script path"
+          aria-label="Filter governance assets by asset key or script path"
           value="${esc(state.searchFilter)}">
       </div>
       <div class="gov-body">${body}</div>
@@ -477,7 +478,8 @@ export function createGovernancePortal(opts = {}) {
   };
 
   const modals = () => `
-    <div class="gov-modal-backdrop" id="decisionModalBackdrop">
+    <div class="gov-modal-backdrop" id="decisionModalBackdrop" role="dialog" aria-modal="true"
+      aria-labelledby="decisionModalTitle" aria-hidden="true">
       <div class="gov-modal">
         <h3 id="decisionModalTitle">Accept risk</h3>
         <label>Asset<input id="decisionAsset" readonly></label>
@@ -492,7 +494,8 @@ export function createGovernancePortal(opts = {}) {
         </div>
       </div>
     </div>
-    <div class="gov-modal-backdrop" id="glossaryModalBackdrop">
+    <div class="gov-modal-backdrop" id="glossaryModalBackdrop" role="dialog" aria-modal="true"
+      aria-labelledby="glossaryModalTitle" aria-hidden="true">
       <div class="gov-modal">
         <h3 id="glossaryModalTitle">Define term</h3>
         <label>Term<input id="glossaryTerm"></label>
@@ -506,7 +509,8 @@ export function createGovernancePortal(opts = {}) {
         </div>
       </div>
     </div>
-    <div class="gov-modal-backdrop" id="categoryModalBackdrop">
+    <div class="gov-modal-backdrop" id="categoryModalBackdrop" role="dialog" aria-modal="true"
+      aria-labelledby="categoryModalTitle" aria-hidden="true">
       <div class="gov-modal">
         <h3 id="categoryModalTitle">Define category</h3>
         <label>Label<input id="catLabel"></label>
@@ -523,6 +527,46 @@ export function createGovernancePortal(opts = {}) {
         </div>
       </div>
     </div>`;
+
+  // Opening a dialog moves focus into it and traps Tab; closing returns focus to whatever opened
+  // it. Without the return, keyboard focus lands back at the top of the document and the user has
+  // to tab through the whole page to get back to where they were — which is why "it works with a
+  // mouse" is not evidence a dialog is usable.
+  let dialogReturnFocus = null;
+  let trapHandler = null;
+
+  const focusable = dialog => [...dialog.querySelectorAll(
+    'button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+
+  function openDialog(dialog) {
+    dialogReturnFocus = document.activeElement;
+    dialog.classList.add('open');
+    dialog.removeAttribute('aria-hidden');
+
+    const items = focusable(dialog);
+    items[0]?.focus();
+
+    trapHandler = event => {
+      if (event.key === 'Escape') { closeDialog(dialog); return; }
+      if (event.key !== 'Tab') return;
+      const current = focusable(dialog);
+      if (current.length === 0) return;
+      const first = current[0];
+      const last = current[current.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    dialog.addEventListener('keydown', trapHandler);
+  }
+
+  function closeDialog(dialog) {
+    if (trapHandler) { dialog.removeEventListener('keydown', trapHandler); trapHandler = null; }
+    dialog.classList.remove('open');
+    dialog.setAttribute('aria-hidden', 'true');
+    if (dialogReturnFocus?.isConnected) dialogReturnFocus.focus();
+    dialogReturnFocus = null;
+  }
 
   // Listeners are bound rather than inlined: the Portal CSP sets script-src-attr 'none', so an
   // inline onclick silently does nothing.
@@ -623,7 +667,7 @@ export function createGovernancePortal(opts = {}) {
           .concat(state.categories.filter(c => !c.disabled)
             .map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`))
           .join('');
-      decisionModal.classList.add('open');
+      openDialog(decisionModal);
     };
 
     each('[data-accept-risk]', 'click', e => {
@@ -647,7 +691,7 @@ export function createGovernancePortal(opts = {}) {
           { title: 'Justification required', tone: 'warning' });
         return;
       }
-      decisionModal.classList.remove('open');
+      closeDialog(decisionModal);
       await mutate(() => governanceApi.decideFinding(state.pendingFindingId, {
         decision: state.pendingDecision,
         categoryValue: host.querySelector('#decisionCategory').value || null,
@@ -668,7 +712,7 @@ export function createGovernancePortal(opts = {}) {
       ['#glossaryTerm', '#glossaryType', '#glossaryAliases', '#glossaryFormula', '#glossaryDesc']
         .forEach(sel => { host.querySelector(sel).value = ''; });
       host.querySelector('#glossaryTerm').readOnly = false;
-      gModal.classList.add('open');
+      openDialog(gModal);
     });
     on('#btnCancelGlossaryModal', 'click', () => gModal.classList.remove('open'));
     each('[data-edit-term]', 'click', e => {
@@ -682,7 +726,7 @@ export function createGovernancePortal(opts = {}) {
       host.querySelector('#glossaryAliases').value = term.aliases;
       host.querySelector('#glossaryFormula').value = term.formula || '';
       host.querySelector('#glossaryDesc').value = term.description;
-      gModal.classList.add('open');
+      openDialog(gModal);
     });
     on('#btnConfirmGlossaryModal', 'click', async () => {
       const payload = {
@@ -698,7 +742,7 @@ export function createGovernancePortal(opts = {}) {
           { title: 'Complete required fields', tone: 'warning' });
         return;
       }
-      gModal.classList.remove('open');
+      closeDialog(gModal);
       await mutate(() => governanceApi.saveGlossaryTerm(payload), {
         success: 'Glossary term saved.',
         failure: 'The term could not be saved.',
@@ -767,7 +811,7 @@ export function createGovernancePortal(opts = {}) {
       host.querySelector('#catValue').readOnly = false;
       host.querySelector('#catColor').value = 'noise';
       host.querySelector('#catExpiry').value = '';
-      cModal.classList.add('open');
+      openDialog(cModal);
     });
     on('#btnCancelCategoryModal', 'click', () => cModal.classList.remove('open'));
     each('[data-edit-cat]', 'click', e => {
@@ -780,7 +824,7 @@ export function createGovernancePortal(opts = {}) {
       host.querySelector('#catValue').readOnly = true;
       host.querySelector('#catColor').value = cat.color;
       host.querySelector('#catExpiry').value = cat.expiryDays ?? '';
-      cModal.classList.add('open');
+      openDialog(cModal);
     });
     on('#btnConfirmCategoryModal', 'click', async () => {
       const label = host.querySelector('#catLabel').value.trim();
@@ -791,7 +835,7 @@ export function createGovernancePortal(opts = {}) {
         return;
       }
       const expiry = parseInt(host.querySelector('#catExpiry').value, 10);
-      cModal.classList.remove('open');
+      closeDialog(cModal);
       await mutate(() => governanceApi.saveCategory({
         value,
         label,

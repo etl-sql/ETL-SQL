@@ -18,19 +18,15 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// of the module can pass while the page never loads it.</para>
 /// </summary>
 [Trait("Category", "Browser")]
+[Collection(PortalBrowserCollection.Name)]
 public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
-    : IClassFixture<PortalBrowserFixture>
 {
-    private const string FirstRunUsername = "admin";
-    private const string FirstRunPassword = "Admin@12345!";
-    private const string ChangedPassword = "Gov@Journey99!";
-
     [Fact]
     public async Task NeverScannedEstate_SaysSo_RatherThanShowingACleanBillOfHealth()
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await SignInAsync(page);
+        await fixture.SignInAsync(page);
         await OpenGovernanceOverviewAsync(page);
 
         // The whole point: zero findings on a never-scanned estate means "not measured", and the
@@ -49,7 +45,7 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await SignInAsync(page);
+        await fixture.SignInAsync(page);
         await OpenGovernanceOverviewAsync(page);
 
         // A scan is the only thing that turns lineage into findings, so run one through the UI.
@@ -81,7 +77,7 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await SignInAsync(page);
+        await fixture.SignInAsync(page);
 
         // Break the API at the network layer — the honest failure path is the one that runs when
         // the server cannot answer, which no amount of server-side testing reaches.
@@ -101,7 +97,7 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await SignInAsync(page);
+        await fixture.SignInAsync(page);
 
         await page.RouteAsync("**/api/governance/**", route => route.FulfillAsync(new RouteFulfillOptions
         {
@@ -125,7 +121,7 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await SignInAsync(page);
+        await fixture.SignInAsync(page);
 
         var broken = true;
         await page.RouteAsync("**/api/governance/**", async route =>
@@ -155,43 +151,4 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
             new LocatorAssertionsToBeVisibleOptions { Timeout = 20_000 });
     }
 
-    // The Portal is shared by every test in this class, so the seeded admin's forced password
-    // change happens exactly once; afterwards the original password no longer works. Tracking that
-    // here — rather than each test rediscovering it — is what keeps the tests order-independent.
-    private static readonly SemaphoreSlim SignInGate = new(1, 1);
-    private static bool passwordChanged;
-
-    private static async Task SignInAsync(IPage page)
-    {
-        await SignInGate.WaitAsync();
-        try
-        {
-            await page.GotoAsync("/login.html");
-            await page.FillAsync("#username", FirstRunUsername);
-            await page.FillAsync("#password", passwordChanged ? ChangedPassword : FirstRunPassword);
-            await page.ClickAsync("#loginBtn");
-
-            if (!passwordChanged)
-            {
-                // Waiting for the selector rather than polling visibility: the form is rendered by
-                // the login script after the response lands, so an immediate check races it.
-                await page.WaitForSelectorAsync("#changeForm", new PageWaitForSelectorOptions
-                {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = 20_000
-                });
-                await page.FillAsync("#currentPwd", FirstRunPassword);
-                await page.FillAsync("#newPwd", ChangedPassword);
-                await page.FillAsync("#confirmPwd", ChangedPassword);
-                await page.ClickAsync("#changeBtn");
-                passwordChanged = true;
-            }
-
-            await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
-        }
-        finally
-        {
-            SignInGate.Release();
-        }
-    }
 }

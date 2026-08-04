@@ -414,22 +414,53 @@ documentation reconciliation, then release certification.
 
 - [ ] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
       errors, loading states, and empty states into a shared component vocabulary.
-- [ ] Make every dialog/drawer semantic, named, modal where appropriate, focus-trapped, and absent
-      from the accessibility tree when closed.
-- [ ] Add accessible names and keyboard behavior for search, favorites, script pickers, parameters,
-      tabs, trees, palettes, tables, and cards.
-- [ ] Verify light/dark, forced contrast, reduced motion, 200% zoom, and narrow viewports without
-      clipping or color-only meaning.
+      **Started, not done.** Dialog behaviour is now shared (`js/dialog-a11y.js`) and the governance
+      module's loading/unauthorized/failed/empty states are a reusable pattern, but headers,
+      identity, module gating, spacing, icons, and status chips are still per-page. The three
+      remaining inline focus traps in `index.html`, `admin.html`, and `orchestrator.html` should
+      move onto the shared module too — they work, so replacing them needs per-page browser
+      coverage of their dialogs first rather than a blind swap.
+- [x] Make every dialog/drawer semantic, named, modal where appropriate, focus-trapped, and absent
+      from the accessibility tree when closed. `PortalDialogAccessibilityTests` enforces
+      `role="dialog"`, `aria-modal`, and an accessible name on every overlay across every page and
+      JS module, and that no page presents a dialog without focus management; the browser lane
+      asserts closed dialogs are not tab-reachable. The detector matches by class *pattern* rather
+      than a list of known names — its first version passed with 31 green assertions while three
+      unmarked dialogs sat behind a prefixed class the list did not contain. Fixed on the way:
+      three governance dialogs had no semantics or focus trap, and `studio.html` had no focus
+      management at all.
+- [x] Add accessible names and keyboard behavior for search, favorites, script pickers, parameters,
+      tabs, trees, palettes, tables, and cards. `PortalAccessibilityTests` computes the accessible
+      name of every visible interactive control on every page the way the accessibility tree does,
+      and fails with the offending selectors. It found four unlabelled search boxes — admin users,
+      docs dictionary, governance filter, quarantine queue — all relying on a placeholder, which is
+      not a name and disappears as soon as the user types. Keyboard behaviour for dialogs (focus
+      entry, Tab containment, focus restore, Escape) is covered by `dialog-a11y.js`.
+- [x] Verify light/dark, forced contrast, reduced motion, 200% zoom, and narrow viewports without
+      clipping or color-only meaning. All six axes are asserted in the browser lane at 390px and
+      1440px. Two of the probes were wrong before they were right, and both corrections matter:
+      reduced motion must treat the standard `.001ms` collapse as honoured rather than as animation,
+      and a translucent background must be composited rather than read as opaque — otherwise white
+      text on a `rgba(255,255,255,.12)` overlay reports as invisible.
 
 #### P2 — Browser quality and delivery guardrails
 
 - [ ] Add automated Chromium desktop and narrow-viewport lanes with seeded Viewer, Publisher,
-      Steward, Operator, and Admin journeys. The lane and the Admin journey exist
-      (`tests/ETL-SQL.Portal.BrowserTests`); the narrow viewport and the other four roles do not.
+      Steward, Operator, and Admin journeys. Desktop (1440px) and narrow (390px) lanes now both
+      exist and every accessibility/responsive check runs at both. **The four non-Admin role
+      journeys are still missing** — that is the remaining work in this item.
 - [ ] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
+      Accessibility assertions are done (`PortalAccessibilityTests`: computed accessible names,
+      horizontal overflow at 390px and at 200% text, closed-dialog reachability, light/dark
+      legibility, reduced motion, forced colours, colour-only meaning). Visual snapshots and API
+      contract fixtures are not started.
 - [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
-- [ ] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
-      overflow.
+- [x] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
+      overflow. `BrowserSession` now records `console.error` alongside thrown exceptions — the two
+      catch different failures, since a console error usually stops nothing, which is exactly why it
+      survives review. Horizontal overflow is asserted at 390px and at 200% text, ignoring content
+      that scrolls inside its own container. Demo fallback is guarded at the source by
+      `GovernanceNoDemoDataTests`.
 - [ ] Reuse representative UI sandbox stories as automated fixtures.
 - [ ] Exclude generated review/build output from the container context and document a small seeded
       acceptance profile.
