@@ -102,13 +102,13 @@ export function createGovernancePortal(opts = {}) {
     }
     if (state.load === 'unauthorized') {
       return `<div class="gov-state gov-state-denied" data-gov-state="unauthorized">
-        <b>You do not have access to governance data.</b>
+        <h2 class="gov-state-title">You do not have access to governance data.</h2>
         <p>Viewing the estate's governance posture needs the GovernanceViewer, DataSteward, or
         GovernanceManager role. This is not an empty estate — it is a view you cannot see.</p></div>`;
     }
     if (state.load === 'failed') {
       return `<div class="gov-state gov-state-error" data-gov-state="failed">
-        <b>Governance data is unavailable.</b>
+        <h2 class="gov-state-title">Governance data is unavailable.</h2>
         <p>${esc(state.error)}</p>
         <p class="gov-state-note">Nothing is shown in place of the real posture. Retry once the
         service is reachable.</p>
@@ -122,13 +122,13 @@ export function createGovernancePortal(opts = {}) {
     if (!scan) {
       // The distinction the whole surface depends on.
       return `<div class="gov-state gov-state-unscanned" data-gov-state="never-scanned">
-        <b>This estate has never been scanned.</b>
+        <h2 class="gov-state-title">This estate has never been scanned.</h2>
         <p>The tiles below show no findings because none have been computed — not because none
         exist. Run a scan to establish the current posture.</p></div>`;
     }
     if (scan.status === 'failed') {
       return `<div class="gov-state gov-state-error" data-gov-state="scan-failed">
-        <b>The last scan failed.</b>
+        <h2 class="gov-state-title">The last scan failed.</h2>
         <p>${esc(scan.error || 'No error detail was recorded.')}</p>
         <p class="gov-state-note">Findings below are from before that scan and may be stale.</p></div>`;
     }
@@ -163,7 +163,7 @@ export function createGovernancePortal(opts = {}) {
     const pct = s.totalAssets ? Math.round((s.governedAssets / s.totalAssets) * 100) : 0;
     return `
       ${scanBanner()}
-      <div class="gov-kpis">
+      <div class="gov-kpis" role="list" aria-label="Governance summary">
         ${kpi('Governed assets', `${s.governedAssets}/${s.totalAssets}`, `${pct}% at or above ${s.targetScore}`, 'ok')}
         ${kpi('Below threshold', s.belowThreshold, 'Need follow-up', s.belowThreshold ? 'warn' : 'ok')}
         ${kpi('Open findings', s.openFindings, 'Awaiting a steward', s.openFindings ? 'warn' : 'ok')}
@@ -172,11 +172,16 @@ export function createGovernancePortal(opts = {}) {
       </div>`;
   };
 
+  // Each tile is one list item carrying its whole meaning in an accessible name. Rendered as three
+  // sibling divs, the five tiles collapsed into a single run of text -- a screen reader read
+  // "0/0 Governed assets 0% at or above 80 0 Below threshold..." with no number attached to any
+  // label. The visible text is hidden from the tree precisely because the name already says it.
   const kpi = (label, value, sub, tone) => `
-    <div class="gov-kpi gov-kpi-${tone}">
-      <div class="gov-kpi-value">${esc(value)}</div>
-      <div class="gov-kpi-label">${esc(label)}</div>
-      <div class="gov-kpi-sub">${esc(sub)}</div>
+    <div class="gov-kpi gov-kpi-${tone}" role="listitem"
+      aria-label="${esc(label)}: ${esc(value)}. ${esc(sub)}">
+      <div class="gov-kpi-value" aria-hidden="true">${esc(value)}</div>
+      <div class="gov-kpi-label" aria-hidden="true">${esc(label)}</div>
+      <div class="gov-kpi-sub" aria-hidden="true">${esc(sub)}</div>
     </div>`;
 
   const renderWorkqueue = () => {
@@ -388,6 +393,7 @@ export function createGovernancePortal(opts = {}) {
    can never be mistaken for one another at a glance. */
 .gov-state{border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.5;border:1px solid}
 .gov-state p{margin:6px 0 0}
+.gov-state-title{margin:0;font-size:14px;font-weight:700}
 .gov-state-note{color:var(--portal-muted,#9ca3af);font-size:12px}
 .gov-state-loading{border-color:var(--portal-border,#374151);color:var(--portal-muted,#9ca3af);display:flex;align-items:center;gap:10px}
 .gov-state-denied{border-color:#7c3aed;background:rgba(124,58,237,.12)}

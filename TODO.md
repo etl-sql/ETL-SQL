@@ -518,14 +518,21 @@ documentation reconciliation, then release certification.
       report library, half of them because the Studio *capability probe* was itself role-gated, so
       asking "what may I do?" was an error for anyone outside two roles. Fixed. The remaining three
       are recorded as an explicitly skipped test rather than deleted.
-- [ ] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
-      Accessibility assertions are done (`PortalAccessibilityTests`). **API contract fixtures are
-      done**: `BrowserApiContractTests` exercises the real endpoints and validates the responses
-      against the same `critical-api-contracts.json` the browser validates against, reading the file
-      rather than restating it — a C# copy would be a second source of truth that agrees until the
-      day it quietly does not. The contract already existed but was only enforced *in the user's
-      session*, so a server-side rename reached production and a `TypeError` on somebody's screen was
-      the first thing that noticed. **Visual snapshots are the remaining work.**
+- [x] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
+      **Accessibility assertions** — `PortalAccessibilityTests`. **API contract fixtures** —
+      `BrowserApiContractTests` exercises the real endpoints and validates responses against the same
+      `critical-api-contracts.json` the browser uses, reading the file rather than restating it; the
+      contract existed but was only enforced in the user's session, so a rename reached production
+      and a `TypeError` on somebody's screen was the first thing that noticed. **Visual snapshots** —
+      `CriticalSurfaceSnapshotTests` captures **accessibility trees**, not pixels: no churn on fonts
+      or GPU, a text diff reviewable in the PR that causes it, and failures for the changes that
+      matter rather than a handful of grey pixels nobody investigates. Baselines live beside the
+      tests; `ETLSQL_UPDATE_SNAPSHOTS=1` regenerates them, and updating one is a review decision.
+
+      It found a defect in the governance dashboard on its first run: the five KPI tiles collapsed
+      into a single undifferentiated run of text, so a screen reader read the numbers with no label
+      attached to any of them, and the state banners were anonymous bold runs rather than headings.
+      Both fixed.
 - [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
 - [x] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
       overflow. `BrowserSession` now records `console.error` alongside thrown exceptions — the two
