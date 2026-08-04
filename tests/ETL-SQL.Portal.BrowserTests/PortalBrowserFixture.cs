@@ -129,6 +129,7 @@ public sealed class BrowserSession : IAsyncDisposable
     private readonly List<string> pageErrors = [];
 
     private readonly List<string> consoleErrors = [];
+    private readonly List<string> failedRequests = [];
 
     private BrowserSession(IBrowserContext context, IPage page)
     {
@@ -138,6 +139,14 @@ public sealed class BrowserSession : IAsyncDisposable
         page.Console += (_, message) =>
         {
             if (message.Type == "error") consoleErrors.Add(message.Text);
+        };
+        page.Response += (_, response) =>
+        {
+            // The browser's own console error for a failed request says only "the server responded
+            // with 403" — no URL. Recording the request alongside it is the difference between a
+            // finding someone can act on and one they have to reproduce by hand to understand.
+            if (response.Status >= 400)
+                failedRequests.Add($"{response.Status} {response.Request.Method} {response.Url}");
         };
     }
 
@@ -156,6 +165,9 @@ public sealed class BrowserSession : IAsyncDisposable
     /// been forced to look at.</para>
     /// </summary>
     public IReadOnlyList<string> ConsoleErrors => consoleErrors;
+
+    /// <summary>Requests that came back 4xx or 5xx, with method and URL.</summary>
+    public IReadOnlyList<string> FailedRequests => failedRequests;
 
     internal static async Task<BrowserSession> CreateAsync(IBrowserContext context)
         => new(context, await context.NewPageAsync());

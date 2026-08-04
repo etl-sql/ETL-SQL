@@ -31,3 +31,15 @@ certification-results/ha-fault-injection/
 *.user
 *.suo
 *.sln.dotSettings
+
+# ── Build context size ────────────────────────────────────────────────────────
+# Neither Dockerfile copies these, but everything not ignored is still packed up
+# and shipped to the daemon before the first instruction runs. tests/ alone is
+# ~14 GB of fixtures and corpora, so excluding it is the difference between a
+# build that starts immediately and one that spends minutes transferring data it
+# will never open.
+#
+# docs/ and snippets/ are deliberately NOT here: both images COPY them for the
+# embedded runtime help.
+tests/
+artifacts/

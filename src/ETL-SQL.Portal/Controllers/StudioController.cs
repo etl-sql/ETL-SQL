@@ -31,7 +31,18 @@ public sealed partial class StudioController(
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    /// <summary>
+    /// What this caller may do in Studio. Reachable by any authenticated user, overriding the
+    /// class-level role and capability requirements.
+    ///
+    /// <para>This is a <b>probe</b>: the shell calls it on every page load to decide whether to
+    /// offer Studio at all. Gating it by role made the answer for everyone else an error rather
+    /// than "nothing" — a console error on every sign-in for three of the five roles, and a
+    /// capability check that cannot be asked without already having the capability.</para>
+    /// </summary>
     [HttpGet("session")]
+    [Authorize]
+    [AllowStudioCapabilityBypass]
     public ActionResult<StudioSessionDto> GetSession() => Ok(new StudioSessionDto(
         studioAuthorization.Mode.ToString(),
         studioAuthorization.EffectiveCapabilities(User),

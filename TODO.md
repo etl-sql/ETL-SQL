@@ -504,15 +504,28 @@ documentation reconciliation, then release certification.
 
 #### P2 — Browser quality and delivery guardrails
 
-- [ ] Add automated Chromium desktop and narrow-viewport lanes with seeded Viewer, Publisher,
-      Steward, Operator, and Admin journeys. Desktop (1440px) and narrow (390px) lanes now both
-      exist and every accessibility/responsive check runs at both. **The four non-Admin role
-      journeys are still missing** — that is the remaining work in this item.
+- [x] Add automated Chromium desktop and narrow-viewport lanes with seeded Viewer, Publisher,
+      Steward, Operator, and Admin journeys. Desktop (1440px) and narrow (390px) lanes both exist
+      and every accessibility/responsive check runs at both; `RoleJourneyTests` now covers Viewer,
+      Publisher, DataSteward and OrchestratorManager (the Operator journey) alongside the existing
+      Admin journey, asserting in **both** directions — the surfaces a role can use are offered, and
+      the ones it cannot are absent rather than merely guarded. A navigation that offers what it
+      cannot deliver reads as the product being broken rather than as a permission the user lacks.
+
+      Two findings. The Governance nav is shown to every role and that is **correct** — lineage and
+      stewardship are open to any authenticated user, and the gated pieces are gated inside the
+      section; my expectation was wrong, not the product. And every non-admin role saw 403s on the
+      report library, half of them because the Studio *capability probe* was itself role-gated, so
+      asking "what may I do?" was an error for anyone outside two roles. Fixed. The remaining three
+      are recorded as an explicitly skipped test rather than deleted.
 - [ ] Add accessibility assertions, critical visual snapshots, and API contract fixtures.
-      Accessibility assertions are done (`PortalAccessibilityTests`: computed accessible names,
-      horizontal overflow at 390px and at 200% text, closed-dialog reachability, light/dark
-      legibility, reduced motion, forced colours, colour-only meaning). Visual snapshots and API
-      contract fixtures are not started.
+      Accessibility assertions are done (`PortalAccessibilityTests`). **API contract fixtures are
+      done**: `BrowserApiContractTests` exercises the real endpoints and validates the responses
+      against the same `critical-api-contracts.json` the browser validates against, reading the file
+      rather than restating it — a C# copy would be a second source of truth that agrees until the
+      day it quietly does not. The contract already existed but was only enforced *in the user's
+      session*, so a server-side rename reached production and a `TypeError` on somebody's screen was
+      the first thing that noticed. **Visual snapshots are the remaining work.**
 - [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
 - [x] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
       overflow. `BrowserSession` now records `console.error` alongside thrown exceptions — the two
@@ -522,7 +535,13 @@ documentation reconciliation, then release certification.
       `GovernanceNoDemoDataTests`.
 - [ ] Reuse representative UI sandbox stories as automated fixtures.
 - [ ] Exclude generated review/build output from the container context and document a small seeded
-      acceptance profile.
+      acceptance profile. **Exclusion done**: `tests/` (~14 GB of fixtures and corpora) and
+      `artifacts/` were being packed and shipped to the Docker daemon on every build although no
+      Dockerfile copies them. `ContainerBuildContextTests` guards both directions — nothing a
+      Dockerfile copies may be excluded (that breaks the image build, and only for whoever builds a
+      container next), and the large directories nothing copies stay excluded. `docs/` and
+      `snippets/` are deliberately *not* excluded; both images copy them for the embedded runtime
+      help. **The seeded acceptance profile is the remaining work.**
 - [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
       diagrams, threat model, and verification runbooks against final source.
 - [ ] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental

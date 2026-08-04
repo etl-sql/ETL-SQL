@@ -43,7 +43,21 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         Directory.CreateDirectory(Path.Combine(TempDir, "maps"));
         Directory.CreateDirectory(Path.Combine(TempDir, "datasets"));
         Directory.CreateDirectory(Path.Combine(TempDir, "keys"));
+        Directory.CreateDirectory(Path.Combine(TempDir, "security"));
         File.WriteAllBytes(Path.Combine(TempDir, "etlsql.db"), []);
+
+        // The security-event outbox otherwise defaults to a MACHINE-WIDE SQLite file under
+        // LocalApplicationData, shared by every ETL-SQL process on the host. Program.cs opens it
+        // before the host is built, so a previous test process still shutting down could hold it and
+        // the next host would fail to start at all — every test in the assembly reporting
+        // "The server has not been started" in about a millisecond. Pointing each factory at its own
+        // file removes the contention rather than timing around it.
+        //
+        // Worth noting the same sharing exists in production: two Portal or Orchestrator processes on
+        // one host contend for this file too.
+        Environment.SetEnvironmentVariable(
+            ETL_SQL.Core.Governance.SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable,
+            Path.Combine(TempDir, "security", "security-events.db"));
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
