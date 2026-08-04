@@ -1,4 +1,5 @@
 import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
+import { deniedState, failedState, installPortalStateStyles } from './portal-states.js';
 
 // Canonical "Shared Connections" admin surface (Admin → Connections) over api/admin/connections.
 //
@@ -253,7 +254,21 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
           </tbody>
         </table>`;
     } catch (err) {
-      $('conn-tableWrap').innerHTML = `<div class="error-msg show">Could not load connections: ${esc(err.message)}</div>`;
+      // A 403 and an unreachable service produced the same message here, which told the reader the
+      // wrong thing half the time: "could not load" reads as a fault to report, when the answer may
+      // simply be that this account may not see the catalog.
+      installPortalStateStyles();
+      $('conn-tableWrap').innerHTML = err?.status === 403 || err?.status === 401
+        ? deniedState({
+          title: 'You do not have access to the connection catalog.',
+          roles: ['Admin'],
+        })
+        : failedState({
+          title: 'The connection catalog is unavailable.',
+          body: err?.message,
+          retryId: 'conn-retry',
+        });
+      document.getElementById('conn-retry')?.addEventListener('click', () => load());
     }
   }
 

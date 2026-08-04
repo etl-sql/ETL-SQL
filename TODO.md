@@ -483,12 +483,22 @@ documentation reconciliation, then release certification.
 
 - [ ] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
       errors, loading states, and empty states into a shared component vocabulary.
-      **Started, not done.** Dialog behaviour is now shared (`js/dialog-a11y.js`) and the governance
-      module's loading/unauthorized/failed/empty states are a reusable pattern, but headers,
-      identity, module gating, spacing, icons, and status chips are still per-page. The three
-      remaining inline focus traps in `index.html`, `admin.html`, and `orchestrator.html` should
-      move onto the shared module too — they work, so replacing them needs per-page browser
-      coverage of their dialogs first rather than a blind swap.
+      **Two of the ten are now shared, with the rest still per-page.**
+
+      - **Dialog behaviour** — `js/dialog-a11y.js`: focus entry, Tab containment, focus restore,
+        Escape. Adopted where there was none.
+      - **States and status chips** — `js/portal-states.js`: loading, denied, failed, empty, and
+        `statusChip`, extracted from the governance module's pattern. Guarded by
+        `PortalStateVocabularyTests`, which asserts the vocabulary is complete, each state emits a
+        distinguishable marker, a denial names the roles that would grant access, a failure refuses
+        to invent content, and every caller-supplied value is escaped at the point of interpolation.
+        Adopted in `connections-admin.js`, which previously rendered one message for both a 403 and
+        an unreachable service — telling the reader the wrong thing half the time.
+
+      Still per-page: headers, identity, module gating, themes, spacing, icons. The three inline
+      focus traps in `index.html`, `admin.html` and `orchestrator.html` also still duplicate
+      `dialog-a11y.js`; they work, so replacing them needs per-page browser coverage of their
+      dialogs first rather than a blind swap.
 - [x] Make every dialog/drawer semantic, named, modal where appropriate, focus-trapped, and absent
       from the accessibility tree when closed. `PortalDialogAccessibilityTests` enforces
       `role="dialog"`, `aria-modal`, and an accessible name on every overlay across every page and
