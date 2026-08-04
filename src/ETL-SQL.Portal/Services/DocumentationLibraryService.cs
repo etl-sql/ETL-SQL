@@ -130,7 +130,8 @@ public sealed class DocumentationLibraryService
         {
             var diskEntries = Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
                 .Where(IsIndexable)
-                .Select(path => {
+                .Select(path =>
+                {
                     indexedTopics.Add(Path.GetFileNameWithoutExtension(path));
                     return BuildEntry(root, path);
                 });
