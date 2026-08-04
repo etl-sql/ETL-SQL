@@ -82,6 +82,17 @@ public sealed class DataQualityController(
         return Ok(items);
     }
 
+    [HttpGet("jobs")]
+    public async Task<IActionResult> GetJobs()
+    {
+        var jobs = await jobHistory.GetAllJobsAsync();
+        var result = jobs
+            .Select(j => new { Name = j.Name, DisplayName = j.DisplayName ?? j.Name, Script = j.Script, Description = j.Description })
+            .OrderBy(j => j.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return Ok(result);
+    }
+
     /// <summary>
     /// Quality trend for a job: per-run quarantine/warn outcomes plus the rules that fire most.
     /// This is the read surface for the metrics the engine has been persisting per run — without
@@ -202,6 +213,64 @@ public sealed class DataQualityController(
             .OrderBy(value => value.TargetTable, StringComparer.OrdinalIgnoreCase)
             .ThenBy(value => value.TargetColumn, StringComparer.OrdinalIgnoreCase)
             .ThenBy(value => value.Rule, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [HttpGet("rules/all")]
+    public async Task<IActionResult> GetAllQualityRules()
+    {
+        var jobs = await jobHistory.GetAllJobsAsync();
+        var rules = new List<DataQualityRuleDefinitionDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var job in jobs)
+        {
+            var scriptPath = job.Script;
+            if (string.IsNullOrWhiteSpace(scriptPath))
+            {
+                var manifest = (await jobHistory.GetJobStatesAsync(job.Name, 500))
+                    .Where(state => state.StateKey.StartsWith(QuarantineManifestPrefix, StringComparison.OrdinalIgnoreCase))
+                    .Select(ReadManifest)
+                    .Where(value => value is not null)
+                    .OrderByDescending(value => value!.UpdatedAtUtc)
+                    .FirstOrDefault();
+                scriptPath = manifest?.ScriptPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(scriptPath)) continue;
+
+            try
+            {
+                var lineage = await scriptInspection.ReadScriptLineageAsync(scriptPath);
+                foreach (var entry in lineage.Where(value => ColumnRuleParser.HasRuleTags(value.Tags)))
+                {
+                    IReadOnlyList<ColumnRuleBinding> bindings;
+                    try { bindings = ColumnRuleParser.ParseBindings(entry.Tags); }
+                    catch (ColumnRuleParseException) { continue; }
+
+                    foreach (var binding in bindings)
+                        foreach (var rule in binding.Rules)
+                        {
+                            var key = $"{job.Name}|{entry.Target}|{entry.TargetColumn}|{binding.ExpectKey}|{rule.Text}|{binding.Action}";
+                            if (!seen.Add(key)) continue;
+                            rules.Add(new DataQualityRuleDefinitionDto(
+                                entry.Target,
+                                entry.TargetColumn,
+                                "@" + binding.ExpectKey,
+                                rule.Text,
+                                binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)"),
+                                scriptPath,
+                                entry.Line,
+                                job.Name));
+                        }
+                }
+            }
+            catch { }
+        }
+
+        return Ok(rules
+            .OrderBy(value => value.JobName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.TargetColumn, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>

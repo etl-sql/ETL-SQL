@@ -38,21 +38,33 @@ public sealed class DocumentationLibraryService
 
     public IReadOnlyList<DocumentationEntry> GetIndex() => index.Value;
 
-    public IReadOnlyList<DocumentationSearchResult> Search(string? query, int limit = 25)
+    public IReadOnlyList<DocumentationSearchResult> Search(string? query, int limit = 25) =>
+        Search(query, null, limit);
+
+    public IReadOnlyList<DocumentationSearchResult> Search(string? query, string? section, int limit = 25)
     {
+        var allEntries = GetIndex();
+
+        if (!string.IsNullOrWhiteSpace(section) && !string.Equals(section, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            allEntries = allEntries
+                .Where(e => string.Equals(e.Section, section, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
         var terms = SplitTerms(query);
         if (terms.Length == 0)
-            return GetIndex()
-                .Take(Math.Clamp(limit, 1, 200))
+            return allEntries
+                .Take(Math.Clamp(limit, 1, 1000))
                 .Select(entry => new DocumentationSearchResult(entry.Path, entry.Title, entry.Section, entry.Summary, 1))
                 .ToArray();
 
-        return GetIndex()
+        return allEntries
             .Select(entry => Score(entry, terms))
             .Where(result => result.Score > 0)
             .OrderByDescending(result => result.Score)
             .ThenBy(result => result.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(Math.Clamp(limit, 1, 200))
+            .Take(Math.Clamp(limit, 1, 1000))
             .ToArray();
     }
 
@@ -110,6 +122,7 @@ public sealed class DocumentationLibraryService
     private static IReadOnlyList<DocumentationEntry> BuildIndex()
     {
         var list = new List<DocumentationEntry>();
+        var indexedTopics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // 1. Index local disk files
         var root = FindDocsRoot();
@@ -117,7 +130,10 @@ public sealed class DocumentationLibraryService
         {
             var diskEntries = Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
                 .Where(IsIndexable)
-                .Select(path => BuildEntry(root, path));
+                .Select(path => {
+                    indexedTopics.Add(Path.GetFileNameWithoutExtension(path));
+                    return BuildEntry(root, path);
+                });
             list.AddRange(diskEntries);
         }
 
@@ -134,7 +150,7 @@ public sealed class DocumentationLibraryService
                     var title = FormatTitle(topic);
                     var summary = SummaryFromMarkdown(topHelp);
                     var path = $"{section}/{topic}.md";
-                    if (!list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    if (!indexedTopics.Contains(topic) && !list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
                     {
                         list.Add(new DocumentationEntry(path, title, section, summary));
                     }
@@ -149,7 +165,7 @@ public sealed class DocumentationLibraryService
                         var title = FormatTitle(sub);
                         var summary = SummaryFromMarkdown(subHelp);
                         var path = $"{section}/{sub}.md";
-                        if (!list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
+                        if (!indexedTopics.Contains(sub) && !list.Any(e => string.Equals(e.Path, path, StringComparison.OrdinalIgnoreCase)))
                         {
                             list.Add(new DocumentationEntry(path, title, section, summary));
                         }
@@ -170,9 +186,7 @@ public sealed class DocumentationLibraryService
         var markdown = File.ReadAllText(path);
         var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
         var title = TitleFromMarkdown(markdown, Path.GetFileNameWithoutExtension(path));
-        var section = relative.Contains('/')
-            ? relative[..relative.IndexOf('/')]
-            : "General";
+        var section = GetSectionForRelativePath(relative);
         var summary = SummaryFromMarkdown(markdown);
         return new DocumentationEntry(relative, title, section, summary);
     }
@@ -282,4 +296,30 @@ public sealed class DocumentationLibraryService
 
     private static string FormatTitle(string raw) =>
         string.IsNullOrWhiteSpace(raw) ? raw : raw.Replace('_', ' ');
+
+    private static string GetSectionForRelativePath(string relative)
+    {
+        var normalized = relative.Replace('\\', '/').Trim('/');
+        var parts = normalized.Split('/');
+        if (parts.Length == 0) return "General";
+
+        var first = parts[0].ToLowerInvariant();
+        if (first == "reference")
+        {
+            if (parts.Length > 1)
+            {
+                var sub = parts[1].ToLowerInvariant();
+                if (sub.Contains("connector")) return "Connectors";
+                if (sub.Contains("function")) return "Functions";
+                if (sub.Contains("statement")) return "Keywords";
+                if (sub.Contains("variable") || sub.Contains("parameter")) return "Variables";
+                if (sub.Contains("visual") || sub.Contains("report")) return "Report-SQL";
+            }
+            return "Keywords";
+        }
+
+        if (first.Equals("spec-import", StringComparison.OrdinalIgnoreCase)) return "Spec Import";
+        if (first.Equals("report-sql", StringComparison.OrdinalIgnoreCase)) return "Report-SQL";
+        return char.ToUpper(first[0]) + first[1..].ToLowerInvariant();
+    }
 }

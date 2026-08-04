@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -14,24 +14,58 @@
 </head>
 <body>
 <div class="app-shell">
+  <!-- ── Top bar ────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation menu" type="button">☰</button>
+    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
+    <nav class="topbar-nav">
+      <a href="/index.html">Reports</a>
+      <a href="/index.html#governance">Governance</a>
+      <a href="/studio.html" class="active">Studio</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
+      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
+    </nav>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-user" id="topbarUser"></span>
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
+    <button class="topbar-btn" id="logoutBtn" style="display:none">Sign Out</button>
+  </header>
+
   <div id="designerHost"></div>
 </div>
 
 <script src="/js/echarts.min.js?v=0.17.0"></script>
 <script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
-import { auth, studioApi } from '/js/api.js?v=0.17.0';
-import { applyPortalBranding } from '/js/branding.js?v=0.17.0';
+import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
+import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
+import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 import { createDesigner } from '/designer/designer.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+initTheme();
 applyPortalBranding();
+
+const identity = getSessionIdentity(auth.getToken());
+renderSessionIdentity(identity, document.getElementById('topbarUser'));
+
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+  logoutBtn.style.display = 'inline-block';
+  logoutBtn.addEventListener('click', () => authApi.logout());
+}
+
+const adminNav = document.getElementById('adminNav');
+if (adminNav) adminNav.style.display = hasRole(identity, 'Admin') ? 'inline-block' : 'none';
+
+const orchNav = document.getElementById('orchestratorNav');
+if (orchNav) orchNav.style.display = hasRole(identity, 'Admin', 'OrchestratorManager') ? 'inline-block' : 'none';
 
 const params     = new URLSearchParams(window.location.search);
 const reportId   = params.get('id')       ? parseInt(params.get('id'), 10)       : null;
 const folderId   = params.get('folderId') ? parseInt(params.get('folderId'), 10) : null;
 const initialMode = params.get('mode') === 'code' ? 'code' : 'design';
-
 const container = document.getElementById('designerHost');
 
 // ── Load initial state ─────────────────────────────────────────────────────

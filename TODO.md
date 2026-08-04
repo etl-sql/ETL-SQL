@@ -730,3 +730,10 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 ## Pre-configured reports
 - [ ] We have added a lot of standard reports in /samples  Which is great, we should add a way to install them automatically in portal with
       a checkbox.  Include reports, the reports are automatically configured and ready to run after install.
+
+## Portal bugs
+- [x] Why the casing differences in documents?  Also All filter does not look like it has all documents.  Seems like some are missing.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-04 134045.png"
+- [x] Studio has a great front page but once you click into code editor or the report visual designer the main toolbar goes away and you can't navigate out.  Can these two pages fit better within the overall page so you have the exiting navigation buttons.
+- [x] Governance sidebar has Overview, Quarantine Queue, Lineage Search, Stewardship, Audit Evidence.  Lineage Search, Stewardship, Audit Evidence all point to the same place just different top selector.  These are redundant simplify it down to just Lineage Search.
+- [x] Governance Overview includes Overview, Workqueue, Exceptions, Glossary, and Settings.  These should not all exist under the Overview.  I feel like we have two menu's going that should be combined into one.  The sidebar should have Overview, Workqueue, Exceptions, Glossary, Quarantine Queue, Lineage Search, and Settings.  The Overview page should not have a separate menu options.
+- [x] We have the Quarantine Queue but there is supposed to be a lot more available so the user can see metrics on failure rate of data quality they also should be able to look up jobs and what rules (@expect tags) are applied to each job.  All of that is missing.  See this document: C:\Users\chuck\scratch\ETL-SQL\docs\architecture\decisions\DataQualityRules.md

@@ -251,6 +251,32 @@ export default {
     const portal = createGovernancePortal({
       host,
       governanceApi: mockApi(mode),
+      dataQualityApi: {
+        qualityJobs: async () => [
+          { name: 'nightly_import', displayName: 'Nightly Import', description: 'Loads raw user logs and stages them.' },
+          { name: 'finance_load', displayName: 'Finance Load', description: 'Daily aggregation of finance records.' }
+        ],
+        qualityTrend: async () => ({
+          jobName: 'nightly_import',
+          runCount: 5,
+          totalRowsProcessed: 5000,
+          totalRowsQuarantined: 200,
+          totalRowsWarned: 10,
+          latestQuarantineRate: 0.04,
+          averageQuarantineRate: 0.04,
+          quarantineRateDelta: 0,
+          runs: [
+            { startTime: '2026-08-04T12:00:00Z', endTime: '2026-08-04T12:05:00Z', status: 'Completed', rowsProcessed: 1000, rowsQuarantined: 40, rowsWarned: 2, quarantineRate: 0.04 }
+          ],
+          topRuleFailures: []
+        }),
+        qualityRules: async () => [],
+        qualityRulesAll: async () => [
+          { jobName: 'nightly_import', targetTable: 'staging_users', targetColumn: 'email', ruleTag: '@expect', rule: 'LIKE %_@_%._%', action: 'QUARANTINE', sourceFile: 'import.etlsql', line: 12 },
+          { jobName: 'finance_load', targetTable: 'prod_transactions', targetColumn: 'amount', ruleTag: '@fail', rule: '> 0', action: 'WARN', sourceFile: 'finance.etlsql', line: 45 }
+        ],
+        quarantineQueue: async () => []
+      },
       // Keep sandbox runs quiet and non-blocking; the portal supplies the real implementations.
       notify: (message, o) => ctx.stat(`${o?.title || 'Governance'}: ${message}`),
       confirm: async () => true,

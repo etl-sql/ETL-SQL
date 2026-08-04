@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -69,17 +69,26 @@
           <a href="#governance/overview" class="sidebar-nav-item" id="govNavOverview" style="display:none">
             <span>Overview</span>
           </a>
+          <a href="#governance/workqueue" class="sidebar-nav-item" id="govNavWorkqueue" style="display:none">
+            <span>Workqueue</span>
+          </a>
+          <a href="#governance/exceptions" class="sidebar-nav-item" id="govNavExceptions" style="display:none">
+            <span>Exceptions</span>
+          </a>
+          <a href="#governance/glossary" class="sidebar-nav-item" id="govNavGlossary" style="display:none">
+            <span>Glossary</span>
+          </a>
           <a href="#governance/quarantine" class="sidebar-nav-item" id="govNavQuarantine" style="display:none">
             <span>✅ Quarantine Queue</span>
+          </a>
+          <a href="#governance/quality" class="sidebar-nav-item" id="govNavQuality" style="display:none">
+            <span>📊 Data Quality</span>
           </a>
           <a href="#governance/lineage" class="sidebar-nav-item" id="govNavLineage">
             <span>🔗 Lineage Search</span>
           </a>
-          <a href="#governance/stewardship" class="sidebar-nav-item" id="govNavStewardship">
-            <span>Stewardship</span>
-          </a>
-          <a href="#governance/audit" class="sidebar-nav-item" id="govNavAudit" style="display:none">
-            <span>Audit Evidence</span>
+          <a href="#governance/settings" class="sidebar-nav-item" id="govNavSettings" style="display:none">
+            <span>Settings</span>
           </a>
         </div>
       </div>
@@ -381,19 +390,26 @@ async function init() {
     renderSessionIdentity(identity, document.getElementById('topbarUser'));
     isAdmin = hasRole(identity, 'Admin');
     if (isAdmin) document.getElementById('adminNav').style.display = '';
-    if (isAdmin) document.getElementById('govNavAudit').style.display = '';
     const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
     if (canOrch) document.getElementById('orchestratorNav').style.display = '';
 
-    // Governance itself stays visible to everyone: Lineage Search and Stewardship are open to any
+    // Governance itself stays visible to everyone: Lineage Search is open to any
     // authenticated user, and tracing where a number came from is exactly what a report consumer
     // needs them for. Its individual views are not all open, and each is revealed only to the roles
     // its API accepts — offering a view that answers 403 reads as the product being broken rather
     // than as a permission the user lacks.
-    if (hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer'))
+    const isGovUser = hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
+    if (isGovUser) {
       document.getElementById('govNavOverview').style.display = '';
-    if (hasRole(identity, 'Admin', 'DataSteward'))
+      document.getElementById('govNavWorkqueue').style.display = '';
+      document.getElementById('govNavExceptions').style.display = '';
+      document.getElementById('govNavGlossary').style.display = '';
+      document.getElementById('govNavQuality').style.display = '';
+      document.getElementById('govNavSettings').style.display = '';
+    }
+    if (hasRole(identity, 'Admin', 'DataSteward')) {
       document.getElementById('govNavQuarantine').style.display = '';
+    }
 
     canGovernanceOverview =
       hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
@@ -432,13 +448,15 @@ async function init() {
     setReportHash(`governance/${mode}`);
     showGovernanceCatalog(mode);
   });
-
   [
     ['Overview', 'overview', 'overview'],
+    ['Workqueue', 'workqueue', 'workqueue'],
+    ['Exceptions', 'exceptions', 'exceptions'],
+    ['Glossary', 'glossary', 'glossary'],
+    ['Quality', 'quality', 'quality'],
     ['Quarantine', 'quarantine', 'quarantine'],
     ['Lineage', 'lineage', 'lineage'],
-    ['Stewardship', 'stewardship', 'stewardship'],
-    ['Audit', 'audit', 'audit'],
+    ['Settings', 'settings', 'settings'],
   ].forEach(([name, route, mode]) => {
     document.getElementById(`govNav${name}`)?.addEventListener('click', e => {
       e.preventDefault();
@@ -550,20 +568,33 @@ function openReportHashView() {
   } else if (mainView === 'governance' || mainView === 'lineage') {
     let mode = defaultGovernanceMode();
     if (subView === 'lineage') mode = 'lineage';
-    if (subView === 'stewardship') mode = 'stewardship';
-    // A view the user cannot use is redirected rather than opened. Deep links get shared and
-    // bookmarked, so this path is reached by people the sender never thought about.
     if (subView === 'overview') {
-      mode = canGovernanceOverview ? 'overview' : 'stewardship';
-      if (!canGovernanceOverview) setReportHash('governance/stewardship');
+      mode = canGovernanceOverview ? 'overview' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
+    }
+    if (subView === 'workqueue') {
+      mode = canGovernanceOverview ? 'workqueue' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
+    }
+    if (subView === 'exceptions') {
+      mode = canGovernanceOverview ? 'exceptions' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
+    }
+    if (subView === 'glossary') {
+      mode = canGovernanceOverview ? 'glossary' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
     }
     if (subView === 'quarantine') {
-      mode = canQuarantine ? 'quarantine' : 'stewardship';
-      if (!canQuarantine) setReportHash('governance/stewardship');
+      mode = canQuarantine ? 'quarantine' : 'lineage';
+      if (!canQuarantine) setReportHash('governance/lineage');
     }
-    if (subView === 'audit') {
-      mode = isAdmin ? 'audit' : 'stewardship';
-      if (!isAdmin) setReportHash('governance/stewardship');
+    if (subView === 'quality') {
+      mode = canGovernanceOverview ? 'quality' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
+    }
+    if (subView === 'settings') {
+      mode = canGovernanceOverview ? 'settings' : 'lineage';
+      if (!canGovernanceOverview) setReportHash('governance/lineage');
     }
     showGovernanceCatalog(mode);
   } else if (/^report-\d+$/.test(mainView)) {
@@ -599,11 +630,14 @@ function setSidebarViewActive(view, govMode = 'quarantine') {
   } else {
     const activeGovId = {
       overview: 'govNavOverview',
+      workqueue: 'govNavWorkqueue',
+      exceptions: 'govNavExceptions',
+      glossary: 'govNavGlossary',
+      quality: 'govNavQuality',
       quarantine: 'govNavQuarantine',
       lineage: 'govNavLineage',
-      stewardship: 'govNavStewardship',
-      audit: 'govNavAudit'
-    }[govMode] || 'govNavQuarantine';
+      settings: 'govNavSettings'
+    }[govMode] || 'govNavLineage';
 
     document.querySelectorAll('#governanceSidebarSection .sidebar-nav-item').forEach(el =>
       el.classList.toggle('active', el.id === activeGovId));
@@ -1071,20 +1105,21 @@ function disposeGovernanceModules(keep) {
   if (keep !== 'overview' && governancePortal) { governancePortal.dispose(); governancePortal = null; }
 }
 
-function showGovernanceCatalog(mode = 'quarantine') {
-  if (mode === 'overview') {
+function showGovernanceCatalog(mode = 'lineage') {
+  if (mode === 'overview' || mode === 'workqueue' || mode === 'exceptions' || mode === 'glossary' || mode === 'settings' || mode === 'quality') {
     disposeGovernanceModules('overview');
     if (!governancePortal) {
       governancePortal = createGovernancePortal({
         host: document.getElementById('mainContent'),
         governanceApi,
-        prepare: () => {
-          setSidebarViewActive('governance', 'overview');
+        dataQualityApi,
+        prepare: (currentTab) => {
+          setSidebarViewActive('governance', currentTab);
           clearFolderSelection();
         }
       });
     }
-    governancePortal.reload();
+    governancePortal.setTab(mode);
     return;
   }
 

@@ -19,12 +19,12 @@ public sealed class DocumentationController(
     }
 
     [HttpGet("search")]
-    public IActionResult Search([FromQuery] string? q, [FromQuery] int limit = 25)
+    public IActionResult Search([FromQuery] string? q, [FromQuery] string? section, [FromQuery] int limit = 25)
     {
         if (!modules.IsEnabled("Documentation"))
             return NotFound(new { error = "documentation_disabled" });
 
-        return Ok(docs.Search(q, limit));
+        return Ok(docs.Search(q, section, limit));
     }
 
     [HttpGet("document")]

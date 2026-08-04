@@ -85,7 +85,8 @@ public sealed record DataQualityRuleDefinitionDto(
     string Rule,
     string Action,
     string? SourceFile,
-    int Line);
+    int Line,
+    string? JobName = null);
 
 /// <summary>
 /// Quality trend for one job: the most recent runs plus the aggregate a steward triages on —

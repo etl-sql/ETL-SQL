@@ -98,68 +98,73 @@ function renderSparkline(runs) {
 function renderTrendPanel(state) {
   if (!state.trendJob) return '';
   const trend = state.trend;
-  return `<section class="dq-rows-panel" id="dqTrendPanel">
-    <header class="dq-rows-header">
-      <div>
-        <h3>Quality trend — ${esc(state.trendJob)}</h3>
-        <p class="library-subtitle">Quarantine and warn outcomes recorded on each completed run.</p>
+  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true">
+    <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
+        <div>
+          <span class="library-kicker">Quality trend</span>
+          <h2 class="modal-title" style="margin: 4px 0 0 0;">${esc(state.trendJob)}</h2>
+          <p class="modal-subtitle" style="margin: 4px 0 0 0;">Quarantine and warn outcomes recorded on each completed run.</p>
+        </div>
+        <button class="btn btn-outline" id="dqTrendClose" type="button">Close</button>
       </div>
-      <button class="btn btn-outline btn-xs" id="dqTrendClose" type="button">Close</button>
-    </header>
-    ${state.trendError ? `<div class="error-msg">${esc(state.trendError)}</div>` : ''}
-    ${state.rulesError ? `<div class="error-msg">Rule inventory unavailable: ${esc(state.rulesError)}</div>` : ''}
-    ${state.trendLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quality trend...</span></div>' :
-      !trend || trend.runCount === 0 ? `<div class="empty-state empty-state-panel">
-        <h2>No recorded runs</h2>
-        <p>This job has no completed runs with data-quality metrics yet.</p>
-      </div>` : `
-      <div class="dq-trend-stats">
-        <div class="dq-trend-stat">
-          <span class="dq-trend-label">Latest quarantine rate</span>
-          <strong>${formatRate(trend.latestQuarantineRate)}</strong>
-          ${renderTrendDelta(trend.quarantineRateDelta)}
-        </div>
-        <div class="dq-trend-stat">
-          <span class="dq-trend-label">Average over ${trend.runCount} run(s)</span>
-          <strong>${formatRate(trend.averageQuarantineRate)}</strong>
-        </div>
-        <div class="dq-trend-stat">
-          <span class="dq-trend-label">Rows quarantined / warned</span>
-          <strong>${trend.totalRowsQuarantined.toLocaleString()} / ${trend.totalRowsWarned.toLocaleString()}</strong>
-          <span class="dq-trend-flat">of ${trend.totalRowsProcessed.toLocaleString()} processed</span>
-        </div>
+      <div class="modal-body" style="flex: 1; overflow: auto; padding-top: 16px;">
+        ${state.trendError ? `<div class="error-msg">${esc(state.trendError)}</div>` : ''}
+        ${state.rulesError ? `<div class="error-msg">Rule inventory unavailable: ${esc(state.rulesError)}</div>` : ''}
+        ${state.trendLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quality trend...</span></div>' :
+          !trend || trend.runCount === 0 ? `<div class="empty-state empty-state-panel">
+            <h2>No recorded runs</h2>
+            <p>This job has no completed runs with data-quality metrics yet.</p>
+          </div>` : `
+          <div class="dq-trend-stats">
+            <div class="dq-trend-stat">
+              <span class="dq-trend-label">Latest quarantine rate</span>
+              <strong>${formatRate(trend.latestQuarantineRate)}</strong>
+              ${renderTrendDelta(trend.quarantineRateDelta)}
+            </div>
+            <div class="dq-trend-stat">
+              <span class="dq-trend-label">Average over ${trend.runCount} run(s)</span>
+              <strong>${formatRate(trend.averageQuarantineRate)}</strong>
+            </div>
+            <div class="dq-trend-stat">
+              <span class="dq-trend-label">Rows quarantined / warned</span>
+              <strong>${trend.totalRowsQuarantined.toLocaleString()} / ${trend.totalRowsWarned.toLocaleString()}</strong>
+              <span class="dq-trend-flat">of ${trend.totalRowsProcessed.toLocaleString()} processed</span>
+            </div>
+          </div>
+          ${renderSparkline(trend.runs || [])}
+          <h4 class="dq-trend-subhead">Rules protecting columns</h4>
+          ${(state.rules || []).length ? `<table class="dq-rows-table">
+            <thead><tr><th>Target</th><th>Column</th><th>Tag</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
+            <tbody>${state.rules.map(rule => `<tr>
+              <td>${esc(rule.targetTable)}</td><td>${esc(rule.targetColumn || '—')}</td>
+              <td><code>${esc(rule.ruleTag)}</code></td><td><code>${esc(rule.rule)}</code></td>
+              <td>${esc(rule.action)}</td><td>${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
+            </tr>`).join('')}</tbody>
+          </table>` : '<p class="library-subtitle">No readable rule definitions were found for this job script.</p>'}
+          ${(trend.topRuleFailures || []).length ? `
+            <h4 class="dq-trend-subhead">Rules firing most</h4>
+            <table class="dq-rows-table">
+              <thead><tr><th>Column</th><th>Rule</th><th>Failures</th></tr></thead>
+              <tbody>${trend.topRuleFailures.map(f => `<tr>
+                <td>${esc(f.column)}</td><td><code>${esc(f.rule)}</code></td><td>${f.count.toLocaleString()}</td>
+              </tr>`).join('')}</tbody>
+            </table>` : '<p class="library-subtitle">No per-rule failure counts recorded for these runs.</p>'}
+          <h4 class="dq-trend-subhead">Recent runs</h4>
+          <table class="dq-rows-table">
+            <thead><tr><th>Completed</th><th>Status</th><th>Processed</th><th>Quarantined</th><th>Warned</th><th>Rate</th></tr></thead>
+            <tbody>${(trend.runs || []).map(run => `<tr>
+              <td>${esc(formatDate(run.endTime || run.startTime))}</td>
+              <td>${esc(run.status)}</td>
+              <td>${run.rowsProcessed.toLocaleString()}</td>
+              <td>${run.rowsQuarantined.toLocaleString()}</td>
+              <td>${run.rowsWarned.toLocaleString()}</td>
+              <td>${formatRate(run.quarantineRate)}</td>
+            </tr>`).join('')}</tbody>
+          </table>`}
       </div>
-      ${renderSparkline(trend.runs || [])}
-      <h4 class="dq-trend-subhead">Rules protecting columns</h4>
-      ${(state.rules || []).length ? `<table class="dq-rows-table">
-        <thead><tr><th>Target</th><th>Column</th><th>Tag</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
-        <tbody>${state.rules.map(rule => `<tr>
-          <td>${esc(rule.targetTable)}</td><td>${esc(rule.targetColumn || '—')}</td>
-          <td><code>${esc(rule.ruleTag)}</code></td><td><code>${esc(rule.rule)}</code></td>
-          <td>${esc(rule.action)}</td><td>${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
-        </tr>`).join('')}</tbody>
-      </table>` : '<p class="library-subtitle">No readable rule definitions were found for this job script.</p>'}
-      ${(trend.topRuleFailures || []).length ? `
-        <h4 class="dq-trend-subhead">Rules firing most</h4>
-        <table class="dq-rows-table">
-          <thead><tr><th>Column</th><th>Rule</th><th>Failures</th></tr></thead>
-          <tbody>${trend.topRuleFailures.map(f => `<tr>
-            <td>${esc(f.column)}</td><td><code>${esc(f.rule)}</code></td><td>${f.count.toLocaleString()}</td>
-          </tr>`).join('')}</tbody>
-        </table>` : '<p class="library-subtitle">No per-rule failure counts recorded for these runs.</p>'}
-      <h4 class="dq-trend-subhead">Recent runs</h4>
-      <table class="dq-rows-table">
-        <thead><tr><th>Completed</th><th>Status</th><th>Processed</th><th>Quarantined</th><th>Warned</th><th>Rate</th></tr></thead>
-        <tbody>${(trend.runs || []).map(run => `<tr>
-          <td>${esc(formatDate(run.endTime || run.startTime))}</td>
-          <td>${esc(run.status)}</td>
-          <td>${run.rowsProcessed.toLocaleString()}</td>
-          <td>${run.rowsQuarantined.toLocaleString()}</td>
-          <td>${run.rowsWarned.toLocaleString()}</td>
-          <td>${formatRate(run.quarantineRate)}</td>
-        </tr>`).join('')}</tbody>
-      </table>`}
-  </section>`;
+    </div>
+  </div>`;
 }
 
 function renderRowsPanel(state) {
@@ -170,52 +175,55 @@ function renderRowsPanel(state) {
   const rows = response?.rows || [];
   const sourceColumns = columns.filter(column => !isEvidenceColumn(column));
   const evidenceColumns = columns.filter(column => isEvidenceColumn(column));
-  return `<section class="dq-rows-panel">
-    <div class="dq-rows-header">
-      <div>
-        <h3>${esc(target.quarantineTarget)}</h3>
-        <p>${rows.length} row${rows.length === 1 ? '' : 's'} loaded${response?.capped ? ' · capped' : ''}</p>
+  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true">
+    <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
+        <div>
+          <span class="library-kicker">${esc(target.jobName)} · Section ${esc(target.sectionLabel || 'Unlabeled')}</span>
+          <h2 class="modal-title" style="margin: 4px 0 0 0;">${esc(target.quarantineTarget)}</h2>
+          <p class="modal-subtitle" style="margin: 4px 0 0 0;">${rows.length} row${rows.length === 1 ? '' : 's'} loaded${response?.capped ? ' · capped' : ''}</p>
+        </div>
+        <div class="dq-row-actions" style="display: flex; gap: 8px; align-items: center;">
+          <select id="dqRowsStatus" aria-label="Row status filter">
+            ${['quarantined', 'released', 'replaying', 'discarded', 'replayed', 'all'].map(status =>
+              `<option value="${status}"${state.rowStatus === status ? ' selected' : ''}>${status}</option>`).join('')}
+          </select>
+          <button class="btn btn-outline btn-xs" id="dqReloadRows" type="button">Reload</button>
+          <button class="btn btn-outline btn-xs" id="dqCloseRows" type="button">Close</button>
+        </div>
       </div>
-      <div class="dq-row-actions">
-        <select id="dqRowsStatus" aria-label="Row status filter">
-          ${['quarantined', 'released', 'replaying', 'discarded', 'replayed', 'all'].map(status =>
-            `<option value="${status}"${state.rowStatus === status ? ' selected' : ''}>${status}</option>`).join('')}
-        </select>
-        <button class="btn btn-outline btn-xs" id="dqReloadRows" type="button">Reload</button>
-        <button class="btn btn-outline btn-xs" id="dqCloseRows" type="button">Close</button>
+      <div class="modal-body" style="flex: 1; overflow: auto; padding-top: 16px;">
+        ${state.rowsError ? `<div class="error-msg">${esc(state.rowsError)}</div>` : ''}
+        ${state.rowsLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading rows...</span></div>' :
+          rows.length ? `<div class="dq-rows-table-wrap" style="overflow-x: auto;"><table class="dq-rows-table" style="width: 100%; border-collapse: collapse;">
+            <thead><tr>
+              <th style="text-align: left; padding: 8px;">Actions</th>
+              ${sourceColumns.map(column => `<th style="text-align: left; padding: 8px;">${esc(column)}</th>`).join('')}
+              ${evidenceColumns.map(column => `<th style="text-align: left; padding: 8px;">${esc(column)}</th>`).join('')}
+            </tr></thead>
+            <tbody>${rows.map(row => {
+              const id = rowId(row);
+              const edits = state.edits[id] || {};
+              const isReplayClaim = row.__dq_status === 'replaying';
+              return `<tr>
+                <td class="dq-row-action-cell" style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); white-space: nowrap;">
+                  <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : isReplayClaim ? 'Return to released' : 'Save + Release'}</button>
+                  <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" data-disposition="${isReplayClaim ? 'replayed' : 'discarded'}" type="button"${state.rowAction === id ? ' disabled' : ''}>${isReplayClaim ? 'Mark replayed' : 'Discard'}</button>
+                  <input class="dq-cell-input dq-note-input" data-note-row="${esc(id)}" placeholder="Reason (audited)" value="${esc(state.notes[id] ?? '')}" style="margin-left: 4px; padding: 2px 4px; font-size: 11px;">
+                </td>
+                ${sourceColumns.map(column => `<td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}" style="padding: 4px 6px; font-size: 12px; width: 100%; min-width: 100px;"></td>`).join('')}
+                ${evidenceColumns.map(column => `<td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(row[column] ?? '')}</code></td>`).join('')}
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>` :
+          state.rowsError ? '' :
+          `<div class="empty-state empty-state-panel">
+            <h2>No rows</h2>
+            <p>No quarantine rows match the current status filter.</p>
+          </div>`}
       </div>
     </div>
-    ${state.rowsError ? `<div class="error-msg">${esc(state.rowsError)}</div>` : ''}
-    ${state.rowsLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading rows...</span></div>' :
-      rows.length ? `<div class="dq-rows-table-wrap"><table class="dq-rows-table">
-        <thead><tr>
-          <th>Actions</th>
-          ${sourceColumns.map(column => `<th>${esc(column)}</th>`).join('')}
-          ${evidenceColumns.map(column => `<th>${esc(column)}</th>`).join('')}
-        </tr></thead>
-        <tbody>${rows.map(row => {
-          const id = rowId(row);
-          const edits = state.edits[id] || {};
-          const isReplayClaim = row.__dq_status === 'replaying';
-          return `<tr>
-            <td class="dq-row-action-cell">
-              <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : isReplayClaim ? 'Return to released' : 'Save + Release'}</button>
-              <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" data-disposition="${isReplayClaim ? 'replayed' : 'discarded'}" type="button"${state.rowAction === id ? ' disabled' : ''}>${isReplayClaim ? 'Mark replayed' : 'Discard'}</button>
-              <input class="dq-cell-input dq-note-input" data-note-row="${esc(id)}" placeholder="Reason (audited)" value="${esc(state.notes[id] ?? '')}">
-            </td>
-            ${sourceColumns.map(column => `<td><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}"></td>`).join('')}
-            ${evidenceColumns.map(column => `<td><code>${esc(row[column] ?? '')}</code></td>`).join('')}
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>` :
-      // Only an actual empty result is "no rows". When the read failed we have no idea whether
-      // rows exist, and telling a steward nothing matched would read as an all-clear.
-      state.rowsError ? '' :
-      `<div class="empty-state empty-state-panel">
-        <h2>No rows</h2>
-        <p>No quarantine rows match the current status filter.</p>
-      </div>`}
-  </section>`;
+  </div>`;
 }
 
 const TERMINAL_JOB_STATUSES = new Set(['Completed', 'Failed', 'Cancelled']);
@@ -265,7 +273,8 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     trendLoading: false,
     trendError: null,
     rulesError: null,
-    trackedJobs: []
+    trackedJobs: [],
+    allJobs: []
   };
 
   function persistTrackedJobs() {
@@ -350,11 +359,21 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     state.error = null;
     render();
     try {
-      state.items = await dataQualityApi.quarantineQueue({
-        q: state.q,
-        replayable: state.replayable,
-        limit: state.limit
-      });
+      const promises = [
+        dataQualityApi.quarantineQueue({
+          q: state.q,
+          replayable: state.replayable,
+          limit: state.limit
+        })
+      ];
+      if (!state.allJobs.length) {
+        promises.push(dataQualityApi.qualityJobs());
+      }
+      const results = await Promise.all(promises);
+      state.items = results[0];
+      if (results[1]) {
+        state.allJobs = results[1] || [];
+      }
     } catch (err) {
       state.error = err.message || 'Unable to load quarantine queue.';
     } finally {
@@ -454,6 +473,14 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
         </select>
         <button class="btn btn-primary" type="submit">Apply</button>
       </form>
+      <div class="dq-toolbar" style="margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span style="font-size: 13px; font-weight: 600;">Job Quality Lookup:</span>
+        <select id="dqJobLookupSelect" style="flex: 1; max-width: 300px; min-width: 200px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--portal-border,#374151); background:var(--portal-surface,#111827); color:inherit;">
+          <option value="">Select a job to view rules & trend…</option>
+          ${state.allJobs.map(j => `<option value="${esc(j.name)}" ${state.trendJob === j.name ? 'selected' : ''}>${esc(j.displayName || j.name)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-xs" id="dqJobLookupBtn" type="button">View Trend & Rules</button>
+      </div>
       <div class="dq-summary">
         <span>${state.items.length} targets</span>
         <span>${replayableCount} replayable</span>
@@ -474,7 +501,25 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
     </section>`;
 
     host.querySelectorAll('[data-trend-job]').forEach(btn => {
-      btn.addEventListener('click', () => loadTrend(btn.dataset.trendJob));
+      btn.addEventListener('click', () => {
+        const jobName = btn.dataset.trendJob;
+        const select = host.querySelector('#dqJobLookupSelect');
+        if (select) select.value = jobName;
+        loadTrend(jobName);
+      });
+    });
+    host.querySelector('#dqJobLookupSelect')?.addEventListener('change', e => {
+      const jobName = e.target.value;
+      if (jobName) {
+        loadTrend(jobName);
+      }
+    });
+    host.querySelector('#dqJobLookupBtn')?.addEventListener('click', () => {
+      const select = host.querySelector('#dqJobLookupSelect');
+      const jobName = select?.value;
+      if (jobName) {
+        loadTrend(jobName);
+      }
     });
     host.querySelector('#dqTrendClose')?.addEventListener('click', () => {
       state.trendJob = null;

@@ -285,7 +285,9 @@ export const dataQualityApi = {
         const params = new URLSearchParams({ jobName, limit: String(limit) });
         return apiJson(`/api/data-quality/trend?${params.toString()}`);
     },
+    qualityJobs: () => apiJson('/api/data-quality/jobs'),
     qualityRules: (jobName) => apiJson(`/api/data-quality/rules?jobName=${encodeURIComponent(jobName)}`),
+    qualityRulesAll: () => apiJson('/api/data-quality/rules/all'),
     jobStatus: (jobId) => contracted('jobStatus', apiJson(`/api/jobs/${encodeURIComponent(jobId)}`))
 };
 
