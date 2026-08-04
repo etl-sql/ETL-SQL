@@ -32,14 +32,20 @@ public sealed class ReportDraftWorkflowTests
     private const string Revised = "SET REPORT TITLE = 'Revised';";
 
     /// <summary>Approval on, and every capability granted to Admin so the tests exercise the workflow.</summary>
-    private sealed class ApprovalFactory(bool enabled = true) : PortalWebFactory
+    private sealed class ApprovalFactory(bool enabled = true, bool publisherMayApprove = true)
+        : PortalWebFactory
     {
         protected override void CustomizePortalConfig(PortalConfig config)
         {
             config.Studio.Mode = StudioDeploymentMode.SourceControlled;
             config.Studio.RequireApprovalToPublish = enabled;
             config.Studio.RoleCapabilities["Admin"] = [.. StudioCapabilities.All];
-            config.Studio.RoleCapabilities["Publisher"] = [.. StudioCapabilities.All];
+            // Withholding ReportApprove from Publisher is what makes the negative approver row
+            // possible: without it the suite could only ever show that approval works, never that
+            // anything stops it.
+            config.Studio.RoleCapabilities["Publisher"] = publisherMayApprove
+                ? [.. StudioCapabilities.All]
+                : [.. StudioCapabilities.All.Where(c => c != StudioCapabilities.ReportApprove)];
         }
     }
 
@@ -121,6 +127,62 @@ public sealed class ReportDraftWorkflowTests
 
         var publish = await PostRawAsync(client, admin, $"/api/reports/{reportId}/draft/publish", null, edited);
         Assert.Equal(HttpStatusCode.Conflict, publish.StatusCode);
+    }
+
+    // ── The Approver dimension ──────────────────────────────────────────────────────────────────
+
+    [Theory]
+    // Approving is a capability, not a role or an ACL level, so it is the capability that decides.
+    // Both rows matter: the positive one alone would prove approval works without proving anything
+    // stops it, and "can approve" is the authority the whole workflow exists to place deliberately.
+    [InlineData(true, HttpStatusCode.OK)]
+    [InlineData(false, HttpStatusCode.Forbidden)]
+    public async Task ApprovingRequires_TheReportApproveCapability(
+        bool hasCapability, HttpStatusCode expected)
+    {
+        using var factory = new ApprovalFactory(publisherMayApprove: hasCapability);
+        using var client = factory.CreateClient();
+        var admin = await GetAdminTokenAsync(client);
+        var reportId = await PublishReportAsync(client, admin, factory);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var reviewer = await CreateReviewerAsync(client, admin, factory, reportId, suffix);
+
+        var draft = await SaveDraftAsync(client, admin, reportId, Revised);
+        draft = await PostAsync(client, admin, $"/api/reports/{reportId}/draft/submit", null, draft);
+
+        var res = await PostRawAsync(client, reviewer, $"/api/reports/{reportId}/draft/approve",
+            new { reason = "Reviewed the change." }, draft);
+
+        Assert.Equal(expected, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnApprover_CannotPublishWithoutTheSeparatePublishAuthority()
+    {
+        using var factory = new ApprovalFactory();
+        using var client = factory.CreateClient();
+        var admin = await GetAdminTokenAsync(client);
+        var reportId = await PublishReportAsync(client, admin, factory);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var reviewer = await CreateReviewerAsync(client, admin, factory, reportId, suffix);
+
+        var draft = await SaveDraftAsync(client, admin, reportId, Revised);
+        draft = await PostAsync(client, admin, $"/api/reports/{reportId}/draft/submit", null, draft);
+        draft = await PostAsync(client, reviewer, $"/api/reports/{reportId}/draft/approve",
+            new { reason = "Fine." }, draft);
+
+        // Reviewing a change and shipping it are separate acts, which is why ReportApprove and
+        // ReportPublish are separate capabilities: an organization wanting four eyes needs to be
+        // able to give those two to different people. The reviewer holds Author on the report, not
+        // Manage, so publishing is refused.
+        var res = await PostRawAsync(client, reviewer, $"/api/reports/{reportId}/draft/publish", null, draft);
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+
+        // Non-vacuous: the same approved draft publishes for an identity that does hold it.
+        var published = await PostAsync(client, admin, $"/api/reports/{reportId}/draft/publish", null, draft);
+        Assert.Equal("published", published["status"]!.GetValue<string>());
     }
 
     // ── Optimistic concurrency ──────────────────────────────────────────────────────────────────

@@ -284,11 +284,21 @@ documentation reconciliation, then release certification.
       authorized the request and `AuditService` records it on the audit row, its outbox message, and
       the outbox payload, so reviewing a Studio mutation does not mean inferring authority from the
       route.
-- [ ] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
-      **Viewer/Publisher/Admin and all four ACL levels including Author are covered** by
+- [x] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
+      Viewer, Publisher, Admin and all four ACL levels including `Author` are covered by
       `AuthorizationMatrixTests`, written as data so a widened grant fails a `denied` row and a
-      narrowed one fails an `allowed` row. Approver rows are pending because the role does not
-      exist yet; it lands with the draft → approval → publish workflow below.
+      narrowed one fails an `allowed` row.
+
+      **Approver is a capability rather than a role**, so its rows live with the workflow they
+      govern, in `ReportDraftWorkflowTests`: approving requires `ReportApprove` (asserted both ways —
+      the positive row alone would prove approval works without proving anything stops it), and an
+      approver cannot publish, because reviewing a change and shipping it are separate authorities
+      an organization needs to be able to give to different people.
+
+      Writing it recorded two properties of the model: authorization is **two-dimensional** (a role
+      decides the class of operation, an ACL decides the resources), and folder `Manage` is authority
+      over the reports in a folder, not over the folder itself — without which the strongest grant
+      would be self-propagating.
 
       Writing it established two things worth recording. Portal authorization is
       **two-dimensional**: a role decides which *class* of operation you may perform, an ACL decides
@@ -568,8 +578,8 @@ documentation reconciliation, then release certification.
       sandbox stage is `overflow: auto`, so a component wider than it scrolls inside its own
       container, which is correct; the check flagged six components for doing the right thing.
       Page-level overflow is asserted where it reaches users, on the shipped pages.
-- [ ] Exclude generated review/build output from the container context and document a small seeded
-      acceptance profile. **Exclusion done**: `tests/` (~14 GB of fixtures and corpora) and
+- [x] Exclude generated review/build output from the container context and document a small seeded
+      acceptance profile. **Exclusion**: `tests/` (~14 GB of fixtures and corpora) and
       `artifacts/` were being packed and shipped to the Docker daemon on every build although no
       Dockerfile copies them. `ContainerBuildContextTests` guards both directions — nothing a
       Dockerfile copies may be excluded (that breaks the image build, and only for whoever builds a

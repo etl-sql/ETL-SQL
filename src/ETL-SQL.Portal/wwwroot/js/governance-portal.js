@@ -792,12 +792,13 @@ export function createGovernancePortal(opts = {}) {
     };
 
     return `
-      <div class="modal-overlay" style="display: flex; z-index: 10000;" role="dialog" aria-modal="true">
+      <div class="modal-overlay" style="display: flex; z-index: 10000;" role="dialog" aria-modal="true"
+          aria-labelledby="govTrendModalTitle">
         <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column; background: var(--portal-surface, #111827); color: var(--portal-text, #f9fafb);">
           <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
             <div>
               <span class="library-kicker">Data Quality Rules & Trend</span>
-              <h2 class="modal-title" style="margin: 4px 0 0 0;">${esc(jobName)}</h2>
+              <h2 class="modal-title" id="govTrendModalTitle" style="margin: 4px 0 0 0;">${esc(jobName)}</h2>
               <p class="modal-subtitle" style="margin: 4px 0 0 0;">Rules coverage, metrics on failure rates, and execution outcomes.</p>
             </div>
             <button class="btn btn-outline" id="govDqTrendCloseBtn" type="button">Close</button>

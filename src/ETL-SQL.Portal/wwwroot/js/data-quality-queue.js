@@ -98,12 +98,13 @@ function renderSparkline(runs) {
 function renderTrendPanel(state) {
   if (!state.trendJob) return '';
   const trend = state.trend;
-  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true">
+  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true"
+      aria-labelledby="dqTrendModalTitle">
     <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
       <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
         <div>
           <span class="library-kicker">Quality trend</span>
-          <h2 class="modal-title" style="margin: 4px 0 0 0;">${esc(state.trendJob)}</h2>
+          <h2 class="modal-title" id="dqTrendModalTitle" style="margin: 4px 0 0 0;">${esc(state.trendJob)}</h2>
           <p class="modal-subtitle" style="margin: 4px 0 0 0;">Quarantine and warn outcomes recorded on each completed run.</p>
         </div>
         <button class="btn btn-outline" id="dqTrendClose" type="button">Close</button>
@@ -175,12 +176,13 @@ function renderRowsPanel(state) {
   const rows = response?.rows || [];
   const sourceColumns = columns.filter(column => !isEvidenceColumn(column));
   const evidenceColumns = columns.filter(column => isEvidenceColumn(column));
-  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true">
+  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true"
+      aria-labelledby="dqRowsModalTitle">
     <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
       <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
         <div>
           <span class="library-kicker">${esc(target.jobName)} · Section ${esc(target.sectionLabel || 'Unlabeled')}</span>
-          <h2 class="modal-title" style="margin: 4px 0 0 0;">${esc(target.quarantineTarget)}</h2>
+          <h2 class="modal-title" id="dqRowsModalTitle" style="margin: 4px 0 0 0;">${esc(target.quarantineTarget)}</h2>
           <p class="modal-subtitle" style="margin: 4px 0 0 0;">${rows.length} row${rows.length === 1 ? '' : 's'} loaded${response?.capped ? ' · capped' : ''}</p>
         </div>
         <div class="dq-row-actions" style="display: flex; gap: 8px; align-items: center;">
