@@ -235,20 +235,27 @@ documentation reconciliation, then release certification.
 
 #### Studio authorization and controlled publishing
 
-- [ ] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
-      folder.
-      **Blocked on a deliberate ordering hazard, and the safety net for it now exists.**
-      `FolderPermission` is an ordered enum (`Read=0, Execute=1, Manage=2`) compared with `>=` in
-      about 40 places, and its values are stored as integers in every ACL row. Inserting `Author`
-      between `Execute` and `Manage` renumbers `Manage` and silently reinterprets every stored
-      grant. Appending `Author = 3` keeps storage stable but makes it satisfy every `>= Manage`
-      check — handing the new, weaker grant *more* authority than Manage, which is the opposite of
-      the requirement and would ship as a privilege escalation by omission.
+- [x] Add an `Author` resource grant that cannot alter ACLs, move/delete reports, or administer a
+      folder. An Author may rewrite a report's script, content and metadata and run it; they may not
+      move it, delete it, publish a new report into the folder, create share links or embed tokens,
+      or touch any ACL.
 
-      The fix is to separate storage value from authority order: append `Author = 3`, add a rank
-      function that places it between Execute and Manage, and convert all ~40 ordinal comparisons to
-      use it. `AuthorizationMatrixTests` is the guard that makes that conversion checkable — it was
-      written first and mutation-verified to catch exactly this class of widening.
+      The hazard this had to get past: `FolderPermission` values are stored as integers in every ACL
+      row, so `Author` had to be **appended** as 3 rather than inserted between `Execute` and
+      `Manage` — inserting would have renumbered `Manage` and silently reinterpreted every grant
+      already in force. That makes declaration order a lie about authority, and the ~40
+      `>= FolderPermission.Manage` comparisons would each have handed `Author` everything `Manage`
+      has. Worse, four integer `Max` operations picking the strongest of several grants would have
+      chosen `Author` over `Manage` and *downgraded* anyone holding both.
+
+      Fixed by separating storage value from authority order: `FolderPermissions.Rank()` places
+      Author between Execute and Manage, `AtLeast()` replaces every ordinal comparison, and
+      `Max()` replaces every integer max. Done in two phases — a behaviour-preserving conversion
+      verified against the full suite first, then the deliberate grants one gate at a time.
+      `FolderPermissionOrderingTests` pins the stored values and fails the build if any production
+      file compares permissions ordinally again, since writing `>=` here is the natural thing to do
+      and silently escalates.
+
 - [x] Implement deny-by-default, group/service-account-assignable Studio capabilities. All nine are
       defined, deny-by-default, and enforced by the `RequireStudioCapability` filter on every gated
       route (`SourcePush` is checked inline in `ReportsController`). Capabilities are now assignable
@@ -278,10 +285,10 @@ documentation reconciliation, then release certification.
       the outbox payload, so reviewing a Studio mutation does not mean inferring authority from the
       route.
 - [ ] Add a Viewer/Author/Publisher/Approver/Admin authorization matrix test suite.
-      **Viewer/Publisher/Admin and all three ACL levels are covered** by
+      **Viewer/Publisher/Admin and all four ACL levels including Author are covered** by
       `AuthorizationMatrixTests`, written as data so a widened grant fails a `denied` row and a
-      narrowed one fails an `allowed` row. Author and Approver rows are pending because neither
-      grant exists yet — they land with the two items around this one.
+      narrowed one fails an `allowed` row. Approver rows are pending because the role does not
+      exist yet; it lands with the draft → approval → publish workflow below.
 
       Writing it established two things worth recording. Portal authorization is
       **two-dimensional**: a role decides which *class* of operation you may perform, an ACL decides

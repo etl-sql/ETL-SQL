@@ -54,7 +54,7 @@ public sealed partial class StudioController(
         foreach (var report in reports)
         {
             var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
-            if (permission is null || permission < FolderPermission.Manage)
+            if (!permission.AtLeast(FolderPermission.Author))
                 continue;
             visible.Add(ToDto(report));
         }

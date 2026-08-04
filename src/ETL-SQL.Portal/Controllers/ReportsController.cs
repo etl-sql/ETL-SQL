@@ -87,7 +87,7 @@ public class ReportsController : ControllerBase
     {
         if (IsAdmin) return true;
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
-        return permission >= FolderPermission.Manage;
+        return permission.AtLeast(FolderPermission.Manage);
     }
 
     private async Task<bool> CreatorCanResolveAsync(
@@ -127,8 +127,8 @@ public class ReportsController : ControllerBase
                     || (acl.GroupId.HasValue && groupSet.Contains(acl.GroupId.Value))))
             .Select(acl => (FolderPermission?)acl.Permission)
             .MaxAsync(ct);
-        return folderPermission >= FolderPermission.Read
-            || reportPermission >= FolderPermission.Read;
+        return folderPermission.AtLeast(FolderPermission.Read)
+            || reportPermission.AtLeast(FolderPermission.Read);
     }
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
@@ -319,7 +319,7 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> Publish([FromBody] PublishReportRequest req)
     {
         var perm = await GetEffectivePermissionAsync(req.FolderId);
-        if (perm is null || perm < FolderPermission.Manage)
+        if (!perm.AtLeast(FolderPermission.Manage))
             return Forbid();
 
         if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
@@ -714,7 +714,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Author)) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -730,10 +730,16 @@ public class ReportsController : ControllerBase
         if (req.Domain is not null) report.Domain = req.Domain;
         if (req.Steward is not null) report.Steward = req.Steward;
         if (req.Certification is not null) report.Certification = req.Certification;
-        if (req.FolderId.HasValue)
+        if (req.FolderId.HasValue && req.FolderId.Value != report.FolderId)
         {
+            // A move changes what two folders contain, so it takes Manage on both ends. The
+            // source check is explicit because the gate above no longer implies it: an Author may
+            // rewrite this report entirely, and still not take it out of the folder it lives in.
+            if (!perm.AtLeast(FolderPermission.Manage))
+                return Forbid();
+
             var targetPerm = await GetEffectivePermissionAsync(req.FolderId.Value);
-            if (targetPerm is null || targetPerm < FolderPermission.Manage)
+            if (!targetPerm.AtLeast(FolderPermission.Manage))
                 return Forbid();
             report.FolderId = req.FolderId.Value;
         }
@@ -849,7 +855,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
 
         var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
         if (expiresAt <= DateTime.UtcNow)
@@ -886,7 +892,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || (perm < FolderPermission.Manage && !IsAdmin)) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage) && !IsAdmin) return Forbid();
 
         var links = await db.ReportShareLinks
             .Include(l => l.Report).ThenInclude(r => r.Folder)
@@ -908,7 +914,7 @@ public class ReportsController : ControllerBase
         if (link is null) return NoContent();
 
         var perm = await GetEffectiveReportPermissionAsync(link.Report);
-        if (perm is null || (perm < FolderPermission.Manage && link.CreatedBy != CurrentUserId)) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage) && link.CreatedBy != CurrentUserId) return Forbid();
 
         if (link.RevokedAt is null)
         {
@@ -957,7 +963,7 @@ public class ReportsController : ControllerBase
         var report = await db.Reports.Include(r => r.Folder).FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
         var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
         if (expiresAt <= DateTime.UtcNow)
             return BadRequest(new { error = "Embed token expiration must be in the future." });
@@ -987,7 +993,7 @@ public class ReportsController : ControllerBase
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
 
         var tokens = await db.ReportEmbedTokens
             .Include(t => t.Report).ThenInclude(r => r.Folder)
@@ -1003,7 +1009,7 @@ public class ReportsController : ControllerBase
         var embed = await db.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
         if (embed is null) return NoContent();
         var perm = await GetEffectiveReportPermissionAsync(embed.Report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
         if (embed.RevokedAt is null)
         {
             embed.RevokedAt = DateTime.UtcNow;
@@ -1217,7 +1223,7 @@ public class ReportsController : ControllerBase
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.VisualName))
             return BadRequest(new { error = "Alert name and visualName are required." });
         if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
@@ -1517,7 +1523,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -1581,7 +1587,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Author)) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);
         if (scriptKey is null)
@@ -1631,7 +1637,7 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
 
         var scriptKey = ToScriptKey(report.ScriptPath);
         if (scriptKey is null)

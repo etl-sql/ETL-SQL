@@ -147,7 +147,7 @@ public class SubscriptionsController(
         if (report is null) return NotFound(new { error = "Report not found" });
         // COMPAT_BREAK: 0.10
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
-        if (permission is null || permission < FolderPermission.Read)
+        if (!permission.AtLeast(FolderPermission.Read))
             return Forbid();
 
         if (!Enum.TryParse<SubscriptionFormat>(req.Format, true, out var format))

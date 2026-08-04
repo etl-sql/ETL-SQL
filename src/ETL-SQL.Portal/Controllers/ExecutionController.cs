@@ -54,7 +54,7 @@ public class ExecutionController(
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
@@ -96,7 +96,7 @@ public class ExecutionController(
 
         // Editors (Manage) can preview-as their own reports; admins can run-as on any report.
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (!IsAdmin && (perm is null || perm < FolderPermission.Manage)) return Forbid();
+        if (!IsAdmin && !perm.AtLeast(FolderPermission.Manage)) return Forbid();
 
         var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
         if (target is null) return NotFound(new { error = "Target user not found." });
@@ -317,7 +317,7 @@ public class ExecutionController(
         if (report is null) return NotFound();
 
         var perm = await GetEffectiveReportPermissionAsync(report);
-        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
@@ -353,7 +353,7 @@ public class ExecutionController(
         if (perm is null)
             return StatusCode(StatusCodes.Status403Forbidden, new { status = "Denied", message = "Permission denied." });
 
-        if (perm.Value >= FolderPermission.Execute)
+        if (perm.Value.AtLeast(FolderPermission.Execute))
         {
             if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
                 return Forbid();

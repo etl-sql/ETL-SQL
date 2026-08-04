@@ -151,7 +151,7 @@ public sealed class PortalAlertEvaluationService(
         var permission = await folderPermissions.GetEffectivePermissionAsync(
             alert.Report.FolderId, groupIds, owner.Id);
 
-        return permission is null || permission < FolderPermission.Read
+        return !permission.AtLeast(FolderPermission.Read)
             ? "alert owner no longer has read permission on the report"
             : null;
     }

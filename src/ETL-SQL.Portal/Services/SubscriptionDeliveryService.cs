@@ -480,7 +480,7 @@ public class SubscriptionDeliveryService(
             .Select(ug => ug.GroupId)
             .ToListAsync(ct));
         var permission = await folderPermissions.GetEffectivePermissionAsync(sub.Report.FolderId, groupIds, owner.Id);
-        if (permission is null || permission < FolderPermission.Read)
+        if (!permission.AtLeast(FolderPermission.Read))
             return "Subscription owner no longer has read permission on the report.";
 
         return null;

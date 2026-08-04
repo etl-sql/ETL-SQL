@@ -68,7 +68,11 @@ public class FolderPermissionService(PortalDbContext db)
             .Select(a => a.Permission)
             .ToListAsync();
 
-        FolderPermission? directPerm = reportPerms.Count > 0 ? (FolderPermission)reportPerms.Max(p => (int)p) : null;
+        // Ranked, not cast to int: Author is stored as 3 and Manage as 2, so an integer max
+        // would pick Author over Manage and quietly *downgrade* someone holding both.
+        FolderPermission? directPerm = reportPerms.Count > 0
+            ? reportPerms.Aggregate(FolderPermissions.Max)
+            : null;
 
         // Report authorship upgrades an existing grant to Manage — it never substitutes for one.
         // Treating authorship as standing permission would mean revoking a user's group membership
@@ -79,7 +83,7 @@ public class FolderPermissionService(PortalDbContext db)
 
         if (!folderPerm.HasValue) return directPerm;
         if (!directPerm.HasValue) return folderPerm;
-        return (FolderPermission)Math.Max((int)folderPerm.Value, (int)directPerm.Value);
+        return FolderPermissions.Max(folderPerm.Value, directPerm.Value);
     }
 
     /// <summary>
@@ -101,7 +105,7 @@ public class FolderPermissionService(PortalDbContext db)
             .Select(a => a.Permission)
             .ToListAsync();
         if (reportPerms.Count > 0)
-            sources.Add($"Report ACL ({(FolderPermission)reportPerms.Max(p => (int)p)})");
+            sources.Add($"Report ACL ({reportPerms.Aggregate(FolderPermissions.Max)})");
 
         if (report.CreatedBy == userId)
         {
@@ -128,8 +132,8 @@ public class FolderPermissionService(PortalDbContext db)
             .Select(a => a.Permission)
             .ToListAsync();
 
-        if (!perms.Any()) return null;
-        return (FolderPermission)perms.Max(p => (int)p);
+        if (perms.Count == 0) return null;
+        return perms.Aggregate(FolderPermissions.Max);
     }
 
     /// <summary>Resolves the effective permission for many folders with a single ACL query
@@ -144,14 +148,16 @@ public class FolderPermissionService(PortalDbContext db)
         var ids = result.Keys.ToList();
         if (groupIds.Count > 0)
         {
+            // Still one round-trip. The max is taken in memory because the authority ladder is
+            // not the enum's integer order, and expressing it as a SQL CASE would put a second copy
+            // of that ladder somewhere it can drift from FolderPermissions.Rank.
             var rows = await db.FolderAcls
                 .Where(a => ids.Contains(a.FolderId) && groupIds.Contains(a.GroupId))
-                .GroupBy(a => a.FolderId)
-                .Select(g => new { FolderId = g.Key, Max = g.Max(a => (int)a.Permission) })
+                .Select(a => new { a.FolderId, a.Permission })
                 .ToListAsync();
 
-            foreach (var row in rows)
-                result[row.FolderId] = (FolderPermission)row.Max;
+            foreach (var group in rows.GroupBy(r => r.FolderId))
+                result[group.Key] = group.Select(r => r.Permission).Aggregate(FolderPermissions.Max);
         }
 
         if (userId is not null)

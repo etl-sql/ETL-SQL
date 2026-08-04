@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.Portal.Data;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -27,9 +28,13 @@ public sealed class AuthorizationMatrixTests
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // The wire values, which are storage rather than authority order: Author is stored as 3 but
+    // ranks between Execute and Manage. Using the raw numbers here is deliberate — it keeps the
+    // test honest about what actually travels over the API.
     private const int Read = 0;
     private const int Execute = 1;
     private const int Manage = 2;
+    private const int Author = 3;
 
     /// <summary>The operations the matrix covers, named by what a person would say they are doing.</summary>
     public enum Operation
@@ -72,6 +77,16 @@ public sealed class AuthorizationMatrixTests
         { Execute, Operation.MoveReport, false },
         { Execute, Operation.DeleteReport, false },
 
+        // ── Author: may rewrite the report, may not relocate or remove it ───────────────────────
+        { Author, Operation.ViewReport, true },
+        { Author, Operation.RunReport, true },
+        { Author, Operation.EditReportDefinition, true },
+        // The two that make Author a distinct grant rather than a weaker Manage. Moving a report
+        // changes what two folders contain and removing it changes what one contains; neither is
+        // an act on the report's content, which is all an Author was given authority over.
+        { Author, Operation.MoveReport, false },
+        { Author, Operation.DeleteReport, false },
+
         // ── Manage: administers the reports in the folder ───────────────────────────────────────
         { Manage, Operation.ViewReport, true },
         { Manage, Operation.RunReport, true },
@@ -109,6 +124,26 @@ public sealed class AuthorizationMatrixTests
                 + $"{(int)response.StatusCode} {response.StatusCode}: "
                 + await response.Content.ReadAsStringAsync());
         }
+    }
+
+    [Fact]
+    public async Task AuthorGrant_RanksBetweenExecuteAndManage_DespiteBeingStoredAbove()
+    {
+        // The regression this exists for: FolderPermission.Author is persisted as 3 and Manage as
+        // 2, so any surviving ordinal comparison or integer max would hand Author everything Manage
+        // has — and would pick Author over Manage for someone holding both, downgrading them.
+        Assert.True(FolderPermission.Author.AtLeast(FolderPermission.Execute));
+        Assert.False(FolderPermission.Author.AtLeast(FolderPermission.Manage));
+        Assert.True(FolderPermission.Manage.AtLeast(FolderPermission.Author));
+        Assert.Equal(FolderPermission.Manage,
+            FolderPermissions.Max(FolderPermission.Author, FolderPermission.Manage));
+
+        // Stated as a value, so renumbering the enum fails here rather than silently reinterpreting
+        // every ACL row already in the database.
+        Assert.Equal(0, (int)FolderPermission.Read);
+        Assert.Equal(1, (int)FolderPermission.Execute);
+        Assert.Equal(2, (int)FolderPermission.Manage);
+        Assert.Equal(3, (int)FolderPermission.Author);
     }
 
     [Theory]

@@ -125,8 +125,8 @@ public sealed class AccessSimulationService(
             effective?.ToString(),
             sources,
             CanView: effective is not null,
-            CanExecute: effective >= FolderPermission.Execute,
-            CanManage: effective >= FolderPermission.Manage,
+            CanExecute: effective.AtLeast(FolderPermission.Execute),
+            CanManage: effective.AtLeast(FolderPermission.Manage),
             RowLevelSecurity: await BuildRowLevelSecurityAsync(report, user, isAdmin, ct));
     }
 

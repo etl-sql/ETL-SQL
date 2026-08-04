@@ -319,7 +319,7 @@ namespace ETL_SQL.Portal.Services
                     .Where(a => a.FolderId == folder.Id && groupIds.Contains(a.GroupId))
                     .Select(a => (FolderPermission?)a.Permission)
                     .MaxAsync();
-                if (permission is null || permission < FolderPermission.Manage)
+                if (!permission.AtLeast(FolderPermission.Manage))
                     return null;
             }
 

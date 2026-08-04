@@ -22,7 +22,20 @@ Each folder can have one or more ACL entries, each granting a group a permission
 | :--- | :--- |
 | `Read` | See the folder and its reports; view snapshots |
 | `Execute` | Run reports and build new snapshots |
-| `Manage` | Publish, update, and delete reports within the folder |
+| `Author` | Everything `Execute` allows, plus editing a report's script, content, and metadata |
+| `Manage` | Everything `Author` allows, plus publishing new reports, moving them, deleting them, and sharing them |
+
+`Author` exists for the person who maintains a report without administering the folder it lives in.
+An Author may rewrite a report entirely; they may **not** move it to another folder, delete it,
+create share links or embed tokens, or publish a new report into the folder. Moving a report changes
+what two folders contain and deleting one changes what a folder contains — neither is an act on the
+report's content, which is the only thing an Author was given authority over.
+
+> [!IMPORTANT]
+> Holding `Manage` on a folder is authority over the **reports in it**, not over the folder itself.
+> Reading or changing a folder's ACL, creating a subfolder, and deleting a folder are reserved to the
+> `Admin` role. Without that split the strongest grant would be self-propagating: whoever held it
+> could hand it out, so the set of people with access could only ever grow.
 
 ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins **and its owner**: the user who created a folder (or received it through ownership transfer) always holds effective `Manage` on it, without an ACL entry. Ownership moves only through the explicit transfer on user deletion (§4.7); revoking a group ACL never locks an owner out of their own folder.
 

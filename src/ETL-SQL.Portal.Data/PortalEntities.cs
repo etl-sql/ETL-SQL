@@ -106,7 +106,62 @@ public class Folder : IVersionedEntity
     public ICollection<Report> Reports { get; set; } = [];
 }
 
-public enum FolderPermission { Read, Execute, Manage }
+/// <summary>
+/// A grant on a folder or a report.
+///
+/// <para><b>The numeric values are storage, not authority order.</b> These are persisted as integers
+/// in every ACL row, so <c>Author</c> had to be appended rather than inserted in its rightful place
+/// between <c>Execute</c> and <c>Manage</c> — inserting it would have renumbered <c>Manage</c> and
+/// silently reinterpreted every grant already in the database.</para>
+///
+/// <para>That makes the declaration order a lie about authority, and comparing these values with
+/// <c>&gt;=</c> gives <c>Author</c> everything <c>Manage</c> has. Use
+/// <see cref="FolderPermissions.AtLeast(FolderPermission, FolderPermission)"/>, which ranks them
+/// correctly. The ordinal comparison is the trap; the extension method is the way through it.</para>
+/// </summary>
+public enum FolderPermission
+{
+    Read = 0,
+    Execute = 1,
+    Manage = 2,
+
+    /// <summary>
+    /// May change a report's content and metadata, and run it. May <b>not</b> move or delete it,
+    /// alter any ACL, or administer the folder — authoring is not administration.
+    /// </summary>
+    Author = 3,
+}
+
+/// <summary>
+/// Authority comparison for <see cref="FolderPermission"/>.
+/// </summary>
+public static class FolderPermissions
+{
+    /// <summary>
+    /// Where a grant sits in the authority ladder, independent of the integer it is stored as.
+    /// Read &lt; Execute &lt; Author &lt; Manage.
+    /// </summary>
+    public static int Rank(this FolderPermission permission) => permission switch
+    {
+        FolderPermission.Read => 0,
+        FolderPermission.Execute => 1,
+        FolderPermission.Author => 2,
+        FolderPermission.Manage => 3,
+        _ => 0,
+    };
+
+    /// <summary>True when <paramref name="held"/> confers at least <paramref name="required"/>.</summary>
+    public static bool AtLeast(this FolderPermission held, FolderPermission required) =>
+        held.Rank() >= required.Rank();
+
+    /// <summary>Null is no grant, which is never enough.</summary>
+    public static bool AtLeast(this FolderPermission? held, FolderPermission required) =>
+        held is { } value && value.AtLeast(required);
+
+    /// <summary>The stronger of two grants, ranked rather than compared ordinally.</summary>
+    public static FolderPermission Max(FolderPermission left, FolderPermission right) =>
+        left.Rank() >= right.Rank() ? left : right;
+}
 
 public class FolderAcl
 {
