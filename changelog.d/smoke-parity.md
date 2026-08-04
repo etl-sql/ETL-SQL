@@ -18,6 +18,9 @@
   including **skips** — as JSON. Recording skips is what lets a comparison notice that one target
   checked less, which is the failure mode the parity run exists to catch.
 
+  Verified end to end: **7 local checks against 7 container checks, same checks and same outcomes**,
+  including a report that actually executes on both targets.
+
 ### Documentation
 
 - Publishing a report by script path requires `Portal:Studio:Mode=SourceControlled` **and** the
