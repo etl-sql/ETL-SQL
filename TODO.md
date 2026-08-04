@@ -298,7 +298,7 @@ documentation reconciliation, then release certification.
       would be self-propagating: whoever held it could hand it out, and the set of people with
       access could only ever grow. That boundary was previously discoverable only by reading ~40
       enum comparisons plus scattered `[Authorize(Roles=…)]` attributes; it is now asserted.
-- [ ] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
+- [x] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
       branches, and separation of duties.
       **Draft → review → publish is done**, opt-in behind `Portal:Studio:RequireApprovalToPublish`
       (default off, so an upgrade never interposes a review step into a workflow people depend on).
@@ -314,10 +314,19 @@ documentation reconciliation, then release certification.
       between. New `ReportApprove` capability, separate from `ReportPublish` so reviewing and
       shipping can go to different people.
 
-      **Remaining: protected branches and commit/push.** Source-control commit and push already have
-      their own capabilities (`SourceCommit`, `SourcePush`) but no branch protection — nothing yet
-      says which branches a Portal-originated commit may target, or that a push to a protected
-      branch needs an approved draft behind it.
+      **Protected branches are done too**, and they are what makes the review worth having.
+      `Portal:SourceControl:ProtectedBranches` (empty by default, exact names or a trailing `*`)
+      names branches a Portal-originated commit may not land on without an approved draft behind it.
+      Protecting a branch without a review path only blocks people; providing a review path without
+      protecting anything only asks nicely.
+
+      The reviewer is written into a `Reviewed-by:` commit trailer alongside the script hash, so the
+      review outlives the Portal's database — someone auditing the branch later reads it from
+      `git log` rather than needing the Portal to answer. Provenance is matched on the *published
+      hash*, not on recency, so a draft that was approved but never published cannot lend its
+      approval to whatever happens to be on disk. Refused commits are audited as
+      `COMMIT_REPORT_SCRIPT_DENIED`: an attempt to put an unreviewed change on a protected branch is
+      exactly the event an operator wants to see, and a bare 409 would leave no trace of it.
 
 #### Enterprise administration coverage
 

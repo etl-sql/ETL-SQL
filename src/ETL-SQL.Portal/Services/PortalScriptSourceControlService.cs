@@ -13,6 +13,24 @@ namespace ETL_SQL.Portal.Services;
 public sealed record ScriptSourceControlCommit(string? Revision, bool Committed);
 
 /// <summary>
+/// What a caller knows about the review behind a commit.
+/// </summary>
+/// <param name="ApprovedByUserName">
+/// The reviewer, when the change came through an approved draft. Null means unreviewed — which is
+/// fine on an ordinary branch and refused on a protected one.
+/// </param>
+public sealed record CommitProvenance(string? ApprovedByUserName, string? ScriptHash)
+{
+    /// <summary>An unreviewed change. The default, and the shape every existing caller has.</summary>
+    public static readonly CommitProvenance Unreviewed = new(null, null);
+
+    public bool IsReviewed => !string.IsNullOrWhiteSpace(ApprovedByUserName);
+}
+
+/// <summary>Raised when a commit would land on a protected branch without a review behind it.</summary>
+public sealed class ProtectedBranchException(string message) : InvalidOperationException(message);
+
+/// <summary>
 /// Optional local-git write-back for source-controlled portal scripts.
 /// </summary>
 public sealed partial class PortalScriptSourceControlService(PortalConfig config)
@@ -30,9 +48,45 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
         return result.ExitCode == 0 ? result.Stdout.Trim() : null;
     }
 
+    /// <summary>Branch the repository currently has checked out, or null when detached/unavailable.</summary>
+    public async Task<string?> GetCurrentBranchAsync(CancellationToken ct = default)
+    {
+        if (!IsEnabled) return null;
+        var result = await RunGitAsync(["rev-parse", "--abbrev-ref", "HEAD"], ct);
+        if (result.ExitCode != 0) return null;
+        var branch = result.Stdout.Trim();
+        return branch is "HEAD" or "" ? null : branch;
+    }
+
+    /// <summary>
+    /// True when <paramref name="branch"/> matches a configured protected pattern. A trailing
+    /// <c>*</c> matches a prefix; everything else is an exact, case-insensitive name.
+    /// </summary>
+    public bool IsProtectedBranch(string? branch)
+    {
+        if (string.IsNullOrWhiteSpace(branch)) return false;
+        foreach (var pattern in config.SourceControl.ProtectedBranches ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            var trimmed = pattern.Trim();
+            var matched = trimmed.EndsWith('*')
+                ? branch.StartsWith(trimmed[..^1], StringComparison.OrdinalIgnoreCase)
+                : string.Equals(branch, trimmed, StringComparison.OrdinalIgnoreCase);
+            if (matched) return true;
+        }
+        return false;
+    }
+
     public async Task<ScriptSourceControlCommit> CommitScriptAsync(
         string scriptKey,
         ClaimsPrincipal user,
+        CancellationToken ct = default)
+        => await CommitScriptAsync(scriptKey, user, CommitProvenance.Unreviewed, ct);
+
+    public async Task<ScriptSourceControlCommit> CommitScriptAsync(
+        string scriptKey,
+        ClaimsPrincipal user,
+        CommitProvenance provenance,
         CancellationToken ct = default)
     {
         if (!IsEnabled)
@@ -40,6 +94,17 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
 
         return await WithRepositoryLockAsync(async () =>
         {
+            // Checked inside the repository lock: the branch could change between reading it and
+            // committing, and a protection that is checked outside the lock protects nothing.
+            var branch = await GetCurrentBranchAsync(ct);
+            if (IsProtectedBranch(branch) && !provenance.IsReviewed)
+            {
+                throw new ProtectedBranchException(
+                    $"'{branch}' is a protected branch, so a change reaching it has to have been "
+                    + "read by someone other than its author. Submit the script as a draft and have "
+                    + "it approved, or commit to an unprotected branch.");
+            }
+
             var relPath = ResolveRepositoryRelativeScriptPath(scriptKey);
             var add = await RunGitAsync(["add", "--", relPath], ct);
             add.EnsureSuccess("stage script");
@@ -50,7 +115,15 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
             if (diff.ExitCode != 1)
                 diff.EnsureSuccess("check staged script changes");
 
+            // The reviewer goes in a trailer so the review survives outside the Portal. Anyone
+            // reading `git log` on the protected branch can see who approved each change without
+            // having the Portal's database in front of them.
             var message = $"Update portal report script {scriptKey}";
+            if (provenance.IsReviewed)
+                message += $"{Environment.NewLine}{Environment.NewLine}Reviewed-by: {provenance.ApprovedByUserName}";
+            if (!string.IsNullOrWhiteSpace(provenance.ScriptHash))
+                message += $"{Environment.NewLine}Script-hash: {provenance.ScriptHash}";
+
             var commit = await RunGitAsync(["commit", "-m", message, "--", relPath], ct, BuildIdentityEnvironment(user));
             commit.EnsureSuccess("commit script");
 

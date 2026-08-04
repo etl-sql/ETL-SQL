@@ -111,6 +111,18 @@ public class PortalStudioConfig
 /// </summary>
 public class PortalSourceControlConfig
 {
+    /// <summary>
+    /// Branches a Portal-originated commit may not land on without an approved draft behind it.
+    /// Supports a trailing <c>*</c> (<c>release/*</c>). Empty by default, so nothing is protected
+    /// until an operator says so.
+    ///
+    /// <para>This is what draft approval is <em>for</em>. Protecting a branch without a review path
+    /// only blocks people; providing a review path without protecting anything only asks nicely.
+    /// The two together mean a change reaching a protected branch has been read by someone other
+    /// than its author.</para>
+    /// </summary>
+    public string[] ProtectedBranches { get; set; } = [];
+
     public bool Enabled { get; set; }
     public string Provider { get; set; } = "None";
     public string RepositoryRoot { get; set; } = "";

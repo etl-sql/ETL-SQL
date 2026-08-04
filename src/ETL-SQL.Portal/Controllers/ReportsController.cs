@@ -1643,10 +1643,40 @@ public class ReportsController : ControllerBase
         if (scriptKey is null)
             return Forbid();
 
-        var result = await sourceControl.CommitScriptAsync(scriptKey, User, cancellationToken);
+        // The review behind the script currently on disk, if it came through the draft workflow.
+        // Matched on the published hash rather than on recency: a draft that was approved but never
+        // published must not lend its approval to whatever happens to be on disk now.
+        var reviewed = await db.ReportScriptDrafts.AsNoTracking()
+            .Where(d => d.ReportId == id
+                && d.Status == ReportScriptDraft.PublishedStatus
+                && d.ScriptHash == report.PublishedScriptHash
+                && d.ApprovedByUserName != null)
+            .OrderByDescending(d => d.PublishedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var provenance = reviewed is null
+            ? CommitProvenance.Unreviewed
+            : new CommitProvenance(reviewed.ApprovedByUserName, reviewed.ScriptHash);
+
+        ScriptSourceControlCommit result;
+        try
+        {
+            result = await sourceControl.CommitScriptAsync(scriptKey, User, provenance, cancellationToken);
+        }
+        catch (ProtectedBranchException ex)
+        {
+            // Audited as a refusal. An attempt to put an unreviewed change on a protected branch is
+            // exactly the event an operator wants to see, and a plain 409 leaves no trace of it.
+            audit.Stage(CurrentUserId, "COMMIT_REPORT_SCRIPT_DENIED", "Report", id.ToString(),
+                $"{report.Name}; reason=protected-branch");
+            await db.SaveChangesAsync(cancellationToken);
+            return Conflict(new { error = ex.Message });
+        }
+
         var detail = result.Revision is null
             ? report.Name
-            : $"{report.Name}; sourceRevision={result.Revision}; committed={result.Committed}";
+            : $"{report.Name}; sourceRevision={result.Revision}; committed={result.Committed}"
+                + $"; reviewedBy={provenance.ApprovedByUserName ?? "(unreviewed)"}";
         audit.Stage(CurrentUserId, "COMMIT_REPORT_SCRIPT", "Report", id.ToString(), detail);
         await db.SaveChangesAsync(cancellationToken);
 

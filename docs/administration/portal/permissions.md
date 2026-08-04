@@ -39,6 +39,33 @@ report's content, which is the only thing an Author was given authority over.
 
 ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins **and its owner**: the user who created a folder (or received it through ownership transfer) always holds effective `Manage` on it, without an ACL entry. Ownership moves only through the explicit transfer on user deletion (§4.7); revoking a group ACL never locks an owner out of their own folder.
 
+### 5.3 Protected Branches and Review
+
+When the Portal writes scripts back to git (`Portal:SourceControl`), name the branches that must not
+receive an unreviewed change:
+
+```jsonc
+"Portal": {
+  "SourceControl": { "ProtectedBranches": [ "main", "release/*" ] },
+  "Studio": { "RequireApprovalToPublish": true }
+}
+```
+
+A pattern is an exact branch name, or a prefix when it ends in `*`. Both settings are empty/off by
+default, and they are meant to be turned on together: protecting a branch without a review path only
+blocks people, and providing a review path without protecting anything only asks nicely.
+
+With both on, a change reaching a protected branch has been read by someone other than its author.
+The reviewer's name is written into a `Reviewed-by:` commit trailer with the script hash, so the
+review is visible in `git log` without the Portal's database. A refused commit is audited as
+`COMMIT_REPORT_SCRIPT_DENIED`.
+
+> [!NOTE]
+> Approval is checked against the **published script hash**, not the most recent draft. A draft that
+> was approved but never published cannot lend its approval to whatever is on disk now.
+
+---
+
 > [!TIP]
 > Create an **Everyone** group, add all users to it, and grant it `Read` on public folders rather than individually managing each user.
 
