@@ -110,8 +110,8 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
     $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine"; Reason = "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane." })
-    $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane." })
-    $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "The critical Portal journey — first-run sign-in, user, folder, publish, run — still works in a real browser, not just through controllers." })
+    $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the release-acceptance journeys: the role/permission authorization matrix (every grant against every operation, both directions), departmental environment isolation across two deployments, policy authority and distribution, module gating, Studio capabilities, and the browser API contract checked against the same file the browser validates with." })
+    $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey (first-run sign-in, user, folder, publish, run); Viewer/Publisher/Steward/Operator role journeys, asserting that surfaces a role cannot use are absent rather than merely guarded; accessibility and responsive checks at 1440px and 390px (computed accessible names, no page overflow at phone width or 200% text, closed dialogs unreachable, both colour schemes, reduced motion, forced colours); accessibility-tree snapshots of critical surfaces; and every UI-sandbox story mounting cleanly." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
     $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
     $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release." })
@@ -135,6 +135,7 @@ function Get-PlannedPreReleasePhases {
 
     if ($EffectiveIncludeDockerIntegration) {
         $phases.Add([ordered]@{ Phase = "Docker integration lane"; Command = ".\scripts\test-lane.ps1 -Lane integration"; Reason = "External connector boundaries pass against local containers." })
+        $phases.Add([ordered]@{ Phase = "Local/container smoke parity"; Command = ".\scripts\Invoke-SmokeParity.ps1"; Reason = "The same acceptance profile runs against a locally-hosted Portal and the production image, compared check by check. A container that quietly checks less than the local run would otherwise ship looking green -- which is the failure this catches, and it is invisible to any check that only asks whether each side passed." })
     }
 
     if ($EffectiveBuildInstallers) {

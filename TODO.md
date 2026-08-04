@@ -591,8 +591,20 @@ documentation reconciliation, then release certification.
       people reading output.
 - [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
       diagrams, threat model, and verification runbooks against final source.
-- [ ] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
-      isolation, role/module/capability, and policy journeys.
+- [x] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
+      isolation, role/module/capability, and policy journeys. All seven are now gate phases in
+      `Test-PreRelease.ps1`, and each phase's stated reason names what it actually covers rather
+      than describing the lane in the abstract — a gate whose phases you have to go and infer from
+      test filters is one nobody can review.
+
+      - **Browser, accessibility, responsive** — the browser lane: the critical journey, four
+        non-Admin role journeys, accessibility and responsive checks at 1440px and 390px,
+        accessibility-tree snapshots, and every sandbox story mounting.
+      - **Departmental isolation, role/module/capability, policy** — the Portal lane, which already
+        carried `EnvironmentIsolationTests`, `AuthorizationMatrixTests`, policy authority and
+        distribution, module gating and Studio capabilities; the phase now says so.
+      - **Local/Docker** — a new `Invoke-SmokeParity.ps1` phase under `-IncludeDockerIntegration`,
+        since it needs a container runtime.
 
 ### Portal — Authorship Is Not Permission
 
