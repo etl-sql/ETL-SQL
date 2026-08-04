@@ -204,3 +204,4 @@ samples/output/*.enc
 /portal_manifest.json
 /release-validation-*.log
 
+smoke-parity/

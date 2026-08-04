@@ -53,7 +53,12 @@ param(
     # over HTTP.
     [string]$ScriptRootPath,
 
-    [switch]$SmokeOnly
+    [switch]$SmokeOnly,
+
+    # Writes every check and its outcome as JSON. Parity between two targets is a comparison of
+    # these files, not two independent green runs -- a run that silently checks *less* would
+    # otherwise pass while proving less, which is the failure this whole exercise exists to catch.
+    [string]$ResultsPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,14 +66,22 @@ $BaseUrl = $BaseUrl.TrimEnd('/')
 
 $script:Failures = @()
 $script:Checks = 0
+$script:Results = [System.Collections.Generic.List[object]]::new()
 
 function Write-Step($message) { Write-Host "  $message" -ForegroundColor Cyan }
+
+function Record-Skip {
+    param([string]$Description, [string]$Reason)
+    $script:Results.Add([pscustomobject]@{ check = $Description; outcome = "skip"; reason = $Reason })
+    Write-Host "  SKIP  $Description -- $Reason" -ForegroundColor Yellow
+}
 
 function Assert-That {
     param([string]$Description, [scriptblock]$Condition)
     $script:Checks++
     $ok = $false
     try { $ok = [bool](& $Condition) } catch { $ok = $false }
+    $script:Results.Add([pscustomobject]@{ check = $Description; outcome = if ($ok) { "pass" } else { "fail" } })
     if ($ok) {
         Write-Host "  PASS  $Description" -ForegroundColor Green
     }
@@ -211,7 +224,9 @@ if ($folder) {
     $report = $reports | Where-Object { $_.name -eq $reportName } | Select-Object -First 1
 
     if (-not $report) {
-        Write-Host "  SKIP  no seeded report to run (see the seeding note above)" -ForegroundColor Yellow
+        Record-Skip "seeded report is listed" "no report was seeded"
+        Record-Skip "seeded report starts a job" "no report was seeded"
+        Record-Skip "seeded report completes" "no report was seeded"
     }
     else {
         Assert-That "seeded report is listed" { $true }
@@ -237,6 +252,16 @@ Assert-That "role users are present" {
     $names = $users.items | ForEach-Object { $_.username }
     @("$Prefix-viewer", "$Prefix-publisher", "$Prefix-datasteward", "$Prefix-orchestratormanager") |
         Where-Object { $names -notcontains $_ } | Measure-Object | Select-Object -ExpandProperty Count | ForEach-Object { $_ -eq 0 }
+}
+
+if ($ResultsPath) {
+    $directory = Split-Path -Parent $ResultsPath
+    if ($directory -and -not (Test-Path $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    [pscustomobject]@{
+        baseUrl = $BaseUrl
+        checks  = $script:Results
+    } | ConvertTo-Json -Depth 6 | Set-Content -Path $ResultsPath
+    Write-Step "results written to $ResultsPath"
 }
 
 Write-Host ""

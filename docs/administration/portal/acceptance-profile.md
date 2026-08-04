@@ -70,6 +70,44 @@ Publishing a report requires the `.rptsql` file to already exist under the Porta
 
 ---
 
+## Publishing a report needs two settings people miss
+
+The profile's report is published by **script path**, which goes through
+`RequireStudioCapability(ReportPublish, SourceControlled)`. In any other Studio mode that filter
+answers **404**, so the report is silently not seeded and three checks disappear from the run —
+which looks like a pass:
+
+```
+Portal__Studio__Mode=SourceControlled
+Portal__Studio__RoleCapabilities__Admin__0=StudioAccess
+Portal__Studio__RoleCapabilities__Admin__1=ReportPublish
+```
+
+Without them the profile still exits 0, having checked less. That is precisely why smoke **parity**
+compares the two targets check by check rather than trusting two green runs — see
+`scripts/Invoke-SmokeParity.ps1`.
+
+---
+
+## Smoke parity: local versus the container image
+
+```powershell
+pwsh -File scripts/Invoke-SmokeParity.ps1
+```
+
+Starts a local Portal, builds and starts the production image, runs the *same* acceptance profile
+against both, and compares the results check by check. Any check present in one run and absent from
+the other — or with a different outcome — is a parity failure **even when both runs exit zero**,
+because one target proved less than the other.
+
+Both targets are configured identically, including the Studio settings above and a bind-mounted
+script root, so a difference in the results is a difference in the product rather than in the
+harness. The local side is pinned to `ASPNETCORE_ENVIRONMENT=Production`, because
+`appsettings.Development.json` overrides environment variables and would otherwise have the two
+sides reading different configuration.
+
+---
+
 ## First-run configuration
 
 Against an empty database the Portal refuses to start without a first-run administrator. Set both

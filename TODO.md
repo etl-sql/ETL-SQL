@@ -534,6 +534,21 @@ documentation reconciliation, then release certification.
       attached to any of them, and the state banners were anonymous bold runs rather than headings.
       Both fixed.
 - [ ] Run identical smoke suites against `dotnet run` and the production Docker image.
+      **Harness built and the local half verified end to end** (7/7 checks including a report that
+      actually executes). `scripts/Invoke-SmokeParity.ps1` starts a local Portal, builds and starts
+      the production image, runs the *same* `Invoke-AcceptanceProfile.ps1` against both, and compares
+      per-check JSON results.
+
+      The comparison is the point: parity is a **comparison, not two green runs**. A container run
+      that silently skips checks the local run performed would otherwise report success while proving
+      less, so any check present in one side and absent from the other — or with a different
+      outcome — fails even when both runs exit zero. Both targets get identical configuration and a
+      bind-mounted script root, and the local side is pinned to `ASPNETCORE_ENVIRONMENT=Production`
+      because `appsettings.Development.json` overrides environment variables.
+
+      **Not yet verified: the container half.** The image build takes long enough that I have not
+      observed a full local-vs-container comparison complete. Run
+      `pwsh -File scripts/Invoke-SmokeParity.ps1` once and confirm before treating this as done.
 - [x] Fail on console errors, unhandled promises, broken Markdown, demo fallback, or horizontal
       overflow. `BrowserSession` now records `console.error` alongside thrown exceptions — the two
       catch different failures, since a console error usually stops nothing, which is exactly why it
