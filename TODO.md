@@ -609,7 +609,7 @@ documentation reconciliation, then release certification.
       `-ScriptRootPath` is reachable and **skipped rather than failed** when it is not — a check that
       fails for something the script said it could not set up is noise, and noise is what stops
       people reading output.
-- [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
+- [x] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
       diagrams, threat model, and verification runbooks against final source.
       **Portal architecture, API inventory and policy matrices are reconciled and now guarded.**
       `ArchitectureDocReconciliationTests` checks the mechanically checkable claims against source:
@@ -648,7 +648,28 @@ documentation reconciliation, then release certification.
       than storing a typo, so one missing from the reference is one nobody can grant deliberately
       and nothing reports.
 
-      **Remaining: HA diagrams, threat model, and verification runbooks.**
+      **HA reconciled, and it found an operational trap rather than stale prose.** Three of the six
+      `/healthz` finding codes were undocumented, and `Portal:Topology:*` — the five settings that
+      decide whether `/healthz` returns 200 — was absent from the configuration reference entirely.
+      The trap: `ExpectedMode: Auto` infers `HighAvailability` from PostgreSQL *or* a configured
+      `Portal:Storage:KeyRingPath` and never infers `Departmental`, so a single-node or departmental
+      deployment that merely moved its key ring is classified HA, `RequirePostgresForHa` applies, and
+      the load balancer stops routing to a node that is otherwise working. Asserted against the real
+      endpoint rather than argued. A topology diagram now carries the ETL-SQL/infrastructure
+      responsibility split the document previously described only in prose.
+
+      **Threat model reconciled.** The security review packet's scope and trust boundaries predated
+      this release's Portal authority surfaces — Studio capabilities, the draft review path and
+      protected branches, and the disclosure surfaces. All are now in the boundary table with the
+      evidence that constrains them, and the packet's read-only fleet non-approval is **enforced**:
+      `FleetAggregation_ExposesNoMutatingRoutes` fails the build if a mutating route appears. A
+      boundary stated only in a document lasts until the first convenient `POST`.
+
+      **Verification runbooks reconciled and guarded.** `HaAndSecurityDocReconciliationTests` checks
+      that every test named in the Automated Coverage Map still exists and every `ha-soak`
+      subcommand a runbook says to type is defined by the CLI — a coverage map naming a deleted test
+      claims a certification nobody performed. The production-readiness checklist gained the
+      `ExpectedMode` step as **Required**, since that trap fires precisely at go-live.
 - [x] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
       isolation, role/module/capability, and policy journeys. All seven are now gate phases in
       `Test-PreRelease.ps1`, and each phase's stated reason names what it actually covers rather

@@ -19,11 +19,20 @@ The Portal constrains filesystem access to configured roots. Set these to servic
 | `Portal:Topology:ExpectedMode` | Readiness policy mode: `Auto`, `Standalone`, `Departmental`, or `HighAvailability` | `Auto` |
 | `Portal:Topology:MinLivePortalNodes` | Minimum live Portal heartbeats required by `/healthz` in HA mode | `1` |
 | `Portal:Topology:MinLiveOrchestratorNodes` | Minimum live Orchestrator heartbeats required by `/healthz` in HA mode | `0` |
+| `Portal:Topology:RequirePostgresForHa` | In HA mode, withhold readiness unless Portal and Orchestrator state are PostgreSQL | `true` |
+| `Portal:Topology:RequireSharedKeyRingForHa` | In HA mode, withhold readiness unless `Portal:Storage:KeyRingPath` is set | `true` |
 | `Orchestrator:DatabasePath` | Orchestrator SQLite database | `%LocalAppData%/ETL-SQL/etlsql.db` |
 | `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 
 The portal rejects script, snapshot, map, and dataset paths that resolve outside their configured roots.
+
+> **Set `Portal:Topology:ExpectedMode` explicitly on anything but a plain single-node install.** The
+> `Auto` default infers `HighAvailability` from PostgreSQL **or** a configured
+> `Portal:Storage:KeyRingPath`, and never infers `Departmental`. With the two `Require*ForHa`
+> defaults above, a departmental or single-node deployment that simply moved its key ring off the
+> default path is classified as HA, `/healthz` returns 503 with `ha-requires-portal-postgres`, and
+> the load balancer stops routing to a node that is otherwise working.
 
 ### 6.1 Practical High Availability Configuration
 

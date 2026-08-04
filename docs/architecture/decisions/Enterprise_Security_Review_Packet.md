@@ -19,6 +19,10 @@ security expectations:
 - Portal and Orchestrator HA ownership, leases, readiness, audit delivery, and shared storage.
 - Backup, restore, clone safety, re-enrollment, key coverage, and recovery reporting.
 - Read-only fleet aggregation and any proposed future remote fleet mutation or upgrade capability.
+- Portal authoring authority: Studio capabilities, the draft review path, protected branches, and
+  the separation of duties between authoring, approving, and publishing.
+- Portal disclosure surfaces: support bundle, configuration export, access simulator, and the
+  administrative posture endpoints — each returns a description of the deployment to a caller.
 
 ## Trust Boundaries
 
@@ -29,7 +33,9 @@ security expectations:
 | Portal HA | Portal nodes, shared artifact root, shared database, shared key ring | Load balancer, DNS, PostgreSQL failover, file/object storage | Topology readiness checks and HA failure certification. |
 | Orchestrator HA | Scheduler leadership, leases, job execution, audit/outbox delivery | PostgreSQL availability, service supervision, external connectors | Lease/fencing tests and recovery drill evidence. |
 | Backup and restore | Archive metadata, catalog data, artifact references, key backups | Offline media, immutable retention, operator custody | Restore validation report and clone-safety operator actions. |
-| Fleet aggregation | Read-only status polling | Remote mutation, upgrade, restart, policy push, secret rotation | Fleet containment tests and separate threat model for any mutation proposal. |
+| Fleet aggregation | Read-only status polling | Remote mutation, upgrade, restart, policy push, secret rotation | Fleet containment tests and separate threat model for any mutation proposal. `HaAndSecurityDocReconciliationTests.FleetAggregation_ExposesNoMutatingRoutes` fails the build if a mutating route is added to a fleet controller, so the non-approval below is enforced rather than stated. |
+| Portal authoring | Studio capabilities, draft content, approval record, commit trailer | Git server authorization, branch protection on the remote, reviewer identity outside the Portal | `AuthorizationMatrixTests`, `ReportDraftWorkflowTests`. Separation of duties is absolute — an author cannot approve their own draft **including as Admin** — and a service account's capabilities are capped by its owner's at token issue. |
+| Portal disclosure | Counts, versions, states, redacted configuration, effective-permission explanations | Report and dataset **content**, secret values, key material | Support-bundle and access-simulator tests assert the JWT secret, dataset at-rest key, report names, and simulated report rows are absent from the whole response. Every disclosure route is audited. |
 
 ## Required Review Decisions
 
@@ -42,7 +48,16 @@ Record the decision, reviewer, and evidence link for each item before closing th
 - Scope and storage of service account credentials used by Portal, Orchestrator, fleet readers, and
   restore drills.
 - HA readiness behavior when PostgreSQL, shared storage, load balancer affinity, key ring, or JWT
-  configuration is inconsistent.
+  configuration is inconsistent. Note that `Portal:Topology:ExpectedMode=Auto` infers
+  `HighAvailability` from a configured key ring alone, so an under-configured node fails closed and
+  is removed from traffic — see
+  [HA Topology Failure Certification](HA_Topology_Failure_Certification.md#how-expectedmode-auto-resolves--and-why-it-can-take-a-healthy-node-out-of-rotation).
+- Whether `Portal:Studio:RequireApprovalToPublish` and `Portal:SourceControl:ProtectedBranches` are
+  required for this deployment. Both default to off/empty so an upgrade never interposes a review
+  step; a review path without a protected branch only asks nicely, and a protected branch without a
+  review path only blocks people.
+- Who may call the disclosure surfaces, and whether the review-hash acknowledgement on support
+  bundles and configuration exports is treated as binding or advisory.
 - Documentation claims around application-level policy enforcement versus host-level containment.
 
 ## High-Severity Finding Register

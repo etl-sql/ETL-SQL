@@ -56,6 +56,13 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "SessionAffinityCookieName":    "ETLSQL_PORTAL_AFFINITY",
       "SessionAffinityCookieMinutes": 480
     },
+    "Topology": {
+      "ExpectedMode":              "Auto",
+      "MinLivePortalNodes":        1,
+      "MinLiveOrchestratorNodes":  0,
+      "RequirePostgresForHa":      true,
+      "RequireSharedKeyRingForHa": true
+    },
     "Jwt": {
       "Secret":            "",
       "ExpiryMinutes":     60,
@@ -191,6 +198,11 @@ catalog report and optimistic-concurrency version.
 | `LoadBalancer.SessionAffinityEnabled` | `true` | Emits a sticky-session cookie for load balancers. Keep enabled for multi-node deployments because interactive report sessions are process-local. |
 | `LoadBalancer.SessionAffinityCookieName` | `ETLSQL_PORTAL_AFFINITY` | Cookie name load balancers should use for Portal node affinity. |
 | `LoadBalancer.SessionAffinityCookieMinutes` | `480` | Sticky-session cookie lifetime in minutes. |
+| `Topology.ExpectedMode` | `Auto` | Readiness policy for `/healthz`: `Auto`, `Standalone`, `Departmental`, or `HighAvailability`. **`Auto` infers `HighAvailability` from PostgreSQL *or* a configured `Storage.KeyRingPath`, and never infers `Departmental`.** A single-node install that merely moved its key ring off the default path is therefore treated as HA and, with the defaults below, `/healthz` returns 503 until it is given PostgreSQL. Set this explicitly on anything that is not a plain single-node install. |
+| `Topology.MinLivePortalNodes` | `1` | Live Portal heartbeats required before an HA node reports ready. Keep at `1` while bootstrapping the first node, then raise it. Values below `1` are clamped to `1`. |
+| `Topology.MinLiveOrchestratorNodes` | `0` | Live Orchestrator heartbeats required before an HA node reports ready. `0` never withholds readiness for Orchestrator availability. |
+| `Topology.RequirePostgresForHa` | `true` | In HA mode, refuse readiness unless both the Portal and Orchestrator stores are PostgreSQL. Findings: `ha-requires-portal-postgres`, `ha-requires-orchestrator-postgres`. |
+| `Topology.RequireSharedKeyRingForHa` | `true` | In HA mode, refuse readiness unless `Storage.KeyRingPath` is set. An unset path means each node protects data with its own key ring, so a cookie or secret written by one node is unreadable on the next. Finding: `ha-requires-shared-key-ring`. |
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
