@@ -591,6 +591,23 @@ documentation reconciliation, then release certification.
       people reading output.
 - [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
       diagrams, threat model, and verification runbooks against final source.
+      **Portal architecture, API inventory and policy matrices are reconciled and now guarded.**
+      `ArchitectureDocReconciliationTests` checks the mechanically checkable claims against source:
+      every seeded Identity role, every persisted entity, every named authorization policy, and every
+      API area is documented. Only checkable claims are asserted — a test that pretended to verify
+      prose about intent would be vacuous or would block every honest rewording.
+
+      It found more than a reading pass had: `Portal.md` claimed **three** seeded roles when there
+      are **eight**, five of them security-relevant including every governance role; 11 API areas
+      were entirely absent (branding, OIDC, service accounts and tokens, both policy-authority
+      surfaces, configuration promotion, Studio, designer, docs, fleet); and 3 entities were missing.
+      Also corrected: the two-axis authorization model, that folder `Manage` is authority over the
+      reports in a folder rather than over the folder, and that `FolderPermission` must never be
+      compared ordinally.
+
+      **Remaining: isolation, administration, HA diagrams, threat model, and verification
+      runbooks** — those are prose-and-diagram documents where drift is a reading exercise rather
+      than something a test can settle.
 - [x] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
       isolation, role/module/capability, and policy journeys. All seven are now gate phases in
       `Test-PreRelease.ps1`, and each phase's stated reason names what it actually covers rather

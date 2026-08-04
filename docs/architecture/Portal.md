@@ -57,6 +57,25 @@ PortalExecutionJob (durable portal execution/refresh polling state)
 PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted execution)
 PortalSharedConnection  (governed connection catalog: SHARED:alias; Target/OptionsJson encrypted at rest)
 AdminServiceRun         (per-run ledger for the native admin background services)
+ServiceAccount          (scoped machine identities, capped by their owner's authority)
+PolicyVersionEntity / PolicyMachineEntity   (enterprise policy authority + machine registry)
+SharedConnectionAcl / SharedConnectionUsage (per-connection use grants and consumers)
+GroupStudioCapability   (deny-by-default Studio capabilities granted to a group)
+DatasetUserAcl          (per-user dataset grant; a sibling table because the rolling-expand
+                         migration contract forbids relaxing DatasetAcl.UserId to nullable)
+AlertNotification       (delivery ledger for report alerts)
+SubscriptionDelivery    (at-most-once subscription delivery ledger, keyed by trigger + recipient)
+AuditOutboxMessage      (durable remote-audit outbox; fail-closed when delivery is required)
+ReportAccessRequest     (access requests and their approval decisions)
+
+Governance workflow state — decisions and derived state, never the asset metadata itself, which
+stays in .etlsql/.rptsql sources and the lineage catalog:
+GovernanceSettings / GovernanceResolutionCategory / GovernanceGlossaryTerm
+GovernanceFinding ──< GovernanceFindingDecision
+GovernanceAssetBadge / GovernanceAssetReview / GovernanceScan
+
+Authoring workflow:
+ReportScriptDraft ──< ReportScriptDraftDecision   (draft → review → publish; opt-in)
 ```
 
 ### Key Design Decisions
@@ -117,7 +136,35 @@ var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
 
 ### Role-Based Authorization
 
-Three ASP.NET Identity roles — `Admin`, `Publisher`, `Viewer` — are seeded on first run. Controllers use `[Authorize(Roles = "...")]` attributes. Folder-level ACLs are checked inline in controller actions via `GetEffectivePermissionAsync()`, which walks the `FolderAcl` table for groups the current user belongs to.
+**Eight** ASP.NET Identity roles are seeded on first run:
+
+| Role | Purpose |
+| :--- | :--- |
+| `Admin` | Full administration |
+| `Publisher` | Create folders, publish reports, manage subscriptions |
+| `Viewer` | Browse, run, and export accessible reports |
+| `OrchestratorManager` | Scheduled jobs and execution history; no Admin panel |
+| `FleetReader` | Scoped cross-environment fleet status reads |
+| `GovernanceViewer` | Read the governance dashboard |
+| `DataSteward` | Governance decisions and the data-quality quarantine queue |
+| `GovernanceManager` | Governance configuration: thresholds, checks, glossary |
+
+
+Authorization has **two independent axes**, and they are not interchangeable: a **role** decides
+which class of operation a caller may perform at all, and an **ACL** decides which resources they
+may perform it on. Controllers use `[Authorize(Roles = …)]` and named policies
+(`GovernanceRead`/`GovernanceDecide`/`GovernanceConfigure`, `DataQualityStewardAccess`,
+`OrchestratorAccess`); folder and report ACLs are resolved through `FolderPermissionService`.
+
+Notably, `Manage` on a folder is authority over the **reports in it**, not over the folder itself —
+reading or re-granting a folder ACL, creating a subfolder, and deleting a folder are Admin-role
+acts. Without that split the strongest ACL grant would be self-propagating.
+
+`FolderPermission` is `Read` < `Execute` < `Author` < `Manage` **by authority**, which is not its
+declaration order: `Author` is stored as `3` and `Manage` as `2`, because inserting `Author` in its
+rightful place would have renumbered `Manage` and silently reinterpreted every ACL row already in
+the database. Always compare with `FolderPermissions.AtLeast()`/`Rank()`; a bare `>=` grants `Author`
+everything `Manage` has. `FolderPermissionOrderingTests` fails the build on any ordinal comparison.
 
 Report-opening, catalog, execution, refresh, and saved-view paths use effective report permission,
 which layers report-level ACLs over folder ACLs. Access-request approval defaults to report-scoped
@@ -475,6 +522,69 @@ Entries hold `SECRET:name` references, never credential values; detail responses
 | GET | `/api/catalog/search` | Any | Search reports/catalog content |
 | GET | `/api/catalog/recent` | Any | Recently viewed or updated reports |
 | GET | `/api/catalog/favorites` | Any | Current user's favorites |
+
+### Governance
+
+Three authority tiers, because these are three different authorities: reading is deliberately wide
+(a steward blind to other stewards' work cannot cover for them), deciding is steward judgement, and
+configuring changes what "governed" means estate-wide. Every mutation is audited.
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/governance/dashboard` | GovernanceRead | Estate posture with explained scores; `?scope=mine` filters to the caller |
+| GET | `/api/governance/findings` | GovernanceRead | Findings with their decision trail |
+| GET | `/api/governance/scans` | GovernanceRead | Scan history — distinguishes "no findings" from "never scanned" |
+| GET | `/api/governance/settings` | GovernanceRead | Thresholds, enabled checks, policy level |
+| GET | `/api/governance/categories` | GovernanceRead | Suppression categories |
+| GET | `/api/governance/glossary` | GovernanceRead | Glossary terms |
+| POST | `/api/governance/findings/{id}/decide` | GovernanceDecide | Ignore, accept risk, or reopen. Reason and asset version are both required |
+| POST | `/api/governance/assets/review` | GovernanceDecide | Mark an asset reviewed at a version |
+| POST/DELETE | `/api/governance/assets/badges` | GovernanceDecide | Steward-assigned badges |
+| POST | `/api/governance/scan` | GovernanceConfigure | Recompute findings across the estate |
+| PUT | `/api/governance/settings` | GovernanceConfigure | Thresholds and enabled checks; audit records the value **before** as well as after |
+| POST/DELETE | `/api/governance/categories[/{value}]` | GovernanceConfigure | Manage suppression categories (delete disables, so historical decisions keep a reason they can cite) |
+| POST/DELETE | `/api/governance/glossary[/{term}]` | GovernanceConfigure | Manage glossary terms |
+
+### Report Drafts (draft → review → publish)
+
+Opt-in behind `Portal:Studio:RequireApprovalToPublish` (default **off**). Every mutation takes
+`If-Match` with the draft's version. **An author can never approve their own draft**, whatever
+capabilities or roles they hold, including Admin.
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/reports/{id}/draft` | Author | The open draft, with its decision trail |
+| PUT | `/api/reports/{id}/draft` | Author + `ScriptSave` | Create or update the draft. Editing revokes any approval or review in progress |
+| POST | `/api/reports/{id}/draft/submit` | Author | Submit for review |
+| POST | `/api/reports/{id}/draft/approve` | Author + `ReportApprove` | Approve — refused for the draft's own author |
+| POST | `/api/reports/{id}/draft/reject` | Author + `ReportApprove` | Reject; a reason is required |
+| POST | `/api/reports/{id}/draft/publish` | Manage + `ReportPublish` | Publish an approved draft; refused if the live script moved past the draft's base |
+
+### Data Quality
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/data-quality/quarantine` | DataQualityStewardAccess | Quarantine queue with per-target readability and reasons |
+| GET | `/api/data-quality/quarantine/rows` | DataQualityStewardAccess **+ a grant on the target's shared connection** | Raw quarantined rows; gated by `Portal:DataQuality:AllowConnectionPreview` (default off) and audited as `READ_QUARANTINE_ROWS` |
+
+### Other API areas
+
+Surfaces with their own controllers, listed so the inventory is complete; each is covered in depth
+by the administration guides rather than restated here.
+
+| Prefix | Auth | Area |
+| :--- | :--- | :--- |
+| `/api/branding` | Public | Deployment branding for the login page and shell |
+| `/api/auth/oidc` | Public | OIDC federation — the enterprise identity path |
+| `/api/auth/service-token` | Public (client credentials) | Service-account token issue |
+| `/api/admin/service-accounts` | Admin | Scoped machine identities, capped by their owner's authority |
+| `/api/admin/policy-authority` | Admin | Enterprise policy publish, activate, canary, roll back, impact |
+| `/api/policy-authority` | Machine | Policy distribution to enrolled machines |
+| `/api/admin/configuration` | Admin | Configuration export and promotion between environments |
+| `/api/studio` | Studio capabilities | Authoring surface; `GET /api/studio/session` is a **probe** reachable by any authenticated user |
+| `/api/designer` | Designer module | Report designer parse/generate/schema |
+| `/api/docs` | Any | Embedded documentation, served from the `docs/` copied into the image |
+| `/api/fleet` | FleetReader | Read-only cross-environment status; visibility, never authority |
 
 ### Orchestrator Proxy
 
