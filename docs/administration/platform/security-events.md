@@ -35,6 +35,17 @@ Standalone hosts use the OS local-application-data directory by default. Contain
 may set `ETLSQL_SECURITY_EVENT_OUTBOX_PATH` to an absolute path on a persistent writable volume. This override is
 ignored for enrolled machines; their outbox remains beside the protected enrollment state.
 
+> [!IMPORTANT]
+> **The default path is machine-wide**, shared by every ETL-SQL process on the host. That is fine for a single
+> deployment and wrong for two: co-located Portal and Orchestrator processes contend for one SQLite file, and two
+> departmental environments on one machine write their security events into a single queue — a cross-environment
+> leak of exactly the records isolation exists to keep apart. Set
+> `ETLSQL_SECURITY_EVENT_OUTBOX_PATH` per environment whenever more than one deployment shares a host; the
+> departmental environment plan (`GET /api/admin/environments/plan`) now lists it as a required isolated resource.
+>
+> The contention is observable: it was found because two test processes starting back to back could not both open
+> the file, and the second failed to start at all.
+
 Each request contains enrollment headers, an `Idempotency-Key` for the batch, schema header
 `X-ETL-SQL-Security-Event-Schema: 1`, and this JSON envelope:
 

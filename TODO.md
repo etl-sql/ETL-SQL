@@ -625,9 +625,20 @@ documentation reconciliation, then release certification.
       reports in a folder rather than over the folder, and that `FolderPermission` must never be
       compared ordinally.
 
-      **Remaining: isolation, administration, HA diagrams, threat model, and verification
-      runbooks** — those are prose-and-diagram documents where drift is a reading exercise rather
-      than something a test can settle.
+      **Isolation reconciled, and it found a real hole rather than just stale prose.** The
+      departmental isolation contract listed the Portal database, Orchestrator database, artifact
+      root and Data Protection key ring as resources that must never be shared — but not the
+      **security-event outbox**, whose default is a machine-wide path under `LocalApplicationData`
+      shared by every ETL-SQL process on the host. Two environments on one machine were writing
+      security events into a single queue: a cross-environment leak of exactly the records isolation
+      exists to keep apart, and the one resource whose default is *wrong* rather than merely unset.
+
+      It is now a planned isolated resource in `GET /api/admin/environments/plan`, reported in the
+      current-environment evidence, documented in both `Departmental_Isolation.md` and
+      `security-events.md`, and pinned by a test. Found empirically: it was what made the browser
+      lane fail whenever two test processes started back to back.
+
+      **Remaining: administration, HA diagrams, threat model, and verification runbooks.**
 - [x] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental
       isolation, role/module/capability, and policy journeys. All seven are now gate phases in
       `Test-PreRelease.ps1`, and each phase's stated reason names what it actually covers rather

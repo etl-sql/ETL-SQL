@@ -60,6 +60,17 @@ public sealed partial class EnvironmentPlanService(PortalDbContext db, PortalCon
                     $"/srv/etl-sql/{env}/data/.portal-keys",
                     "Dedicated shared path per environment",
                     "A shared key ring lets one environment decrypt another's protected state."),
+                // The security-event outbox defaults to a MACHINE-WIDE path under
+                // LocalApplicationData, shared by every ETL-SQL process on the host. Two
+                // environments on one machine would therefore write their security events into one
+                // another's queue — a cross-environment leak of exactly the records isolation
+                // exists to keep apart, and one nothing else in this plan would catch.
+                new("SecurityEventOutbox", $"{env}-security-events",
+                    $"/srv/etl-sql/{env}/data/security-events.db "
+                    + "(set ETLSQL_SECURITY_EVENT_OUTBOX_PATH; the default is machine-wide)",
+                    "Dedicated path per environment",
+                    "The default location is shared by every process on the host, so leaving it "
+                    + "unset puts two environments' security events in one queue."),
                 new("ServiceIdentity", $"etlsql-{env}",
                     $"OS account 'etlsql-{env}'",
                     $"Dedicated account or gMSA 'etlsql-{env}'",
@@ -207,6 +218,19 @@ public sealed partial class EnvironmentPlanService(PortalDbContext db, PortalCon
             new("KeyRing", DescribePath(config.Storage.KeyRingPath ?? "(default: beside the portal database)"),
                 config.Storage.KeyRingPath is null ? null : PathMentionsEnvironment(config.Storage.KeyRingPath, env),
                 "A shared key ring lets one environment decrypt another's protected state."),
+            new("SecurityEventOutbox",
+                Environment.GetEnvironmentVariable(
+                    ETL_SQL.Core.Governance.SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable)
+                    is { Length: > 0 } configured
+                    ? DescribePath(configured)
+                    : "(default: machine-wide under LocalApplicationData)",
+                Environment.GetEnvironmentVariable(
+                    ETL_SQL.Core.Governance.SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable)
+                    is { Length: > 0 } path
+                    ? PathMentionsEnvironment(path, env)
+                    : false,
+                "Left unset the outbox is shared by every ETL-SQL process on this host, so two "
+                + "environments would write security events into one queue."),
             new("JwtSecret", config.Jwt.Secret is { Length: > 0 } ? "configured" : "not configured",
                 null,
                 "Uniqueness cannot be checked from inside one environment; compare across environments "

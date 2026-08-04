@@ -108,6 +108,31 @@ public sealed class EnvironmentIsolationTests
     }
 
     [Fact]
+    public async Task ThePlan_NamesTheSecurityEventOutbox_BecauseItsDefaultIsMachineWide()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        var plan = await PlanAsync(client, adminToken, "finance", 5200);
+        var resources = plan["resources"]!.AsArray();
+
+        // The outbox defaults to a machine-wide path under LocalApplicationData, shared by every
+        // ETL-SQL process on the host. A plan that lists databases, artifact roots and key rings but
+        // omits this one reads as complete while leaving two environments writing security events
+        // into a single queue — a leak of exactly the records isolation exists to keep apart, and
+        // the one resource here whose default is *wrong* rather than merely unset.
+        var outbox = Assert.Single(resources,
+            r => r!["kind"]!.GetValue<string>() == "SecurityEventOutbox")!.AsObject();
+
+        Assert.Contains("ETLSQL_SECURITY_EVENT_OUTBOX_PATH",
+            outbox["singleNodeValue"]!.GetValue<string>());
+        Assert.Contains("machine-wide", outbox["singleNodeValue"]!.GetValue<string>());
+        Assert.Contains("shared by every process",
+            outbox["isolationRequirement"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task CurrentEnvironmentEvidence_AdmitsWhatItCannotSee()
     {
         using var factory = new PortalWebFactory();
