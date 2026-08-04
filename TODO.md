@@ -562,7 +562,20 @@ documentation reconciliation, then release certification.
       Dockerfile copies may be excluded (that breaks the image build, and only for whoever builds a
       container next), and the large directories nothing copies stay excluded. `docs/` and
       `snippets/` are deliberately *not* excluded; both images copy them for the embedded runtime
-      help. **The seeded acceptance profile is the remaining work.**
+      help.
+
+      **The seeded acceptance profile is done**: `scripts/Invoke-AcceptanceProfile.ps1` seeds a
+      folder, a self-contained report, and one user per role entirely over the public HTTP API, then
+      runs smoke checks. Going through the API is what makes `dotnet run` and the container image
+      comparable — the same checks against both, rather than two scripts that happen to share a
+      name. It is idempotent, handles the forced first-run password change, and exits 0/1/2 for
+      pass/fail/unreachable. Documented at `docs/administration/portal/acceptance-profile.md`.
+
+      Verified live against a running Portal. The one step it cannot do over HTTP is put the
+      `.rptsql` file under the Portal's script root, so that is written directly when
+      `-ScriptRootPath` is reachable and **skipped rather than failed** when it is not — a check that
+      fails for something the script said it could not set up is noise, and noise is what stops
+      people reading output.
 - [ ] Reconcile Portal architecture, isolation, administration, API inventory, policy matrices, HA
       diagrams, threat model, and verification runbooks against final source.
 - [ ] Add release acceptance for browser, accessibility, responsive, local/Docker, departmental

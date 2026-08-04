@@ -13,6 +13,7 @@
 | [Groups and Folder Permissions](permissions.md) | ## 5. Groups & Folder Permissions |
 | [Configuration Reference](portal-config-reference.md) | ## 2. Configuration Reference |
 | [Production Readiness Checklist](production-readiness.md) | ## 14. Production Readiness Checklist |
+| [Seeded Acceptance Profile](acceptance-profile.md) | Small reproducible dataset for checking a deployment, local or containerised |
 | [Publishing Reports](publishing.md) | ## 6. Publishing Reports |
 | [Quick Start](quick-start.md) | ## 12. Quick Start: Required Steps |
 | [Extended Admin Scripting](scripting.md) | ## 9. Extended Admin Scripting |
