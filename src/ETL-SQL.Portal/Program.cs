@@ -105,6 +105,7 @@ builder.Services.AddSingleton<StudioAuthorizationService>();
 builder.Services.AddScoped<StudioCapabilityStore>();
 builder.Services.AddScoped<AccessSimulationService>();
 builder.Services.AddScoped<GovernanceService>();
+builder.Services.AddScoped<ReportDraftWorkflowService>();
 builder.Services.AddScoped<IdentityDiagnosticsService>();
 builder.Services.AddScoped<AuditCollectorHealthService>();
 builder.Services.AddScoped<OperationsPostureService>();

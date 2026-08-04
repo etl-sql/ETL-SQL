@@ -300,6 +300,24 @@ documentation reconciliation, then release certification.
       enum comparisons plus scattered `[Authorize(Roles=…)]` attributes; it is now asserted.
 - [ ] Add draft → review/approval → publish/commit/push with optimistic concurrency, protected
       branches, and separation of duties.
+      **Draft → review → publish is done**, opt-in behind `Portal:Studio:RequireApprovalToPublish`
+      (default off, so an upgrade never interposes a review step into a workflow people depend on).
+      A draft holds the proposed script in the database rather than the artifact store — a draft is
+      not yet a script, and nothing should execute, serve, or list it beside real ones.
+
+      Separation of duties is absolute: an author can never approve their own draft, whatever
+      capabilities or roles they hold, **including Admin**. A four-eyes control the most privileged
+      account can bypass fails exactly when it is needed, since the account that gets compromised or
+      leaned on is the privileged one. Editing a draft revokes any approval or pending review, so a
+      reviewer's name can never end up attached to content they did not see, and an approval against
+      a base the live script has moved past is refused rather than silently discarding the change in
+      between. New `ReportApprove` capability, separate from `ReportPublish` so reviewing and
+      shipping can go to different people.
+
+      **Remaining: protected branches and commit/push.** Source-control commit and push already have
+      their own capabilities (`SourceCommit`, `SourcePush`) but no branch protection — nothing yet
+      says which branches a Portal-originated commit may target, or that a push to a protected
+      branch needs an approved draft behind it.
 
 #### Enterprise administration coverage
 

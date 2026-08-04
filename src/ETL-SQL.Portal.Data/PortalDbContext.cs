@@ -57,6 +57,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<GovernanceFinding> GovernanceFindings => Set<GovernanceFinding>();
     public DbSet<GovernanceFindingDecision> GovernanceFindingDecisions => Set<GovernanceFindingDecision>();
     public DbSet<GovernanceScan> GovernanceScans => Set<GovernanceScan>();
+    public DbSet<ReportScriptDraft> ReportScriptDrafts => Set<ReportScriptDraft>();
+    public DbSet<ReportScriptDraftDecision> ReportScriptDraftDecisions => Set<ReportScriptDraftDecision>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -338,6 +340,28 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => x.StartedAtUtc);
             e.Property(x => x.Trigger).HasMaxLength(32);
             e.Property(x => x.Status).HasMaxLength(32);
+        });
+
+        builder.Entity<ReportScriptDraft>(e =>
+        {
+            // One live draft per report. A second concurrent draft would mean two people editing
+            // toward two different next versions with no way to say which one publishing meant.
+            e.HasIndex(x => new { x.ReportId, x.Status });
+            e.HasOne(x => x.Report).WithMany().HasForeignKey(x => x.ReportId);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.ScriptHash).HasMaxLength(128);
+            e.Property(x => x.BaseScriptHash).HasMaxLength(128);
+            e.Property(x => x.AuthorUserName).HasMaxLength(256);
+            e.Property(x => x.ApprovedByUserName).HasMaxLength(256);
+        });
+
+        builder.Entity<ReportScriptDraftDecision>(e =>
+        {
+            e.HasIndex(x => new { x.DraftId, x.DecidedAtUtc });
+            e.HasOne(x => x.Draft).WithMany(d => d.Decisions).HasForeignKey(x => x.DraftId);
+            e.Property(x => x.Decision).HasMaxLength(32);
+            e.Property(x => x.ScriptHash).HasMaxLength(128);
+            e.Property(x => x.DecidedByUserName).HasMaxLength(256);
         });
 
         builder.Entity<SubscriptionDelivery>(e =>

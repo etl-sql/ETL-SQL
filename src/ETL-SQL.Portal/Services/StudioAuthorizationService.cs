@@ -14,10 +14,17 @@ public static class StudioCapabilities
     public const string SourceCommit = nameof(SourceCommit);
     public const string SourcePush = nameof(SourcePush);
 
+    /// <summary>
+    /// Approving another author's draft for publication. Separate from <see cref="ReportPublish"/>
+    /// because reviewing a change and shipping it are different acts — an organization that wants
+    /// four eyes on a change needs to be able to give those two to different people.
+    /// </summary>
+    public const string ReportApprove = nameof(ReportApprove);
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         StudioAccess, ScriptRead, ScriptPreview, ScriptRun, ScriptSave, ReportPublish,
-        ScriptIngress, SourceCommit, SourcePush
+        ScriptIngress, SourceCommit, SourcePush, ReportApprove
     };
 }
 

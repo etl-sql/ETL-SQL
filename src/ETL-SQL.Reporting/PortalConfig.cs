@@ -93,6 +93,14 @@ public enum StudioDeploymentMode
 /// </summary>
 public class PortalStudioConfig
 {
+    /// <summary>
+    /// When true, saving a script produces a <b>draft</b> that must be approved by someone other
+    /// than its author before it can be published. Default <b>false</b>, so an upgrade never
+    /// silently interposes a review step into a workflow people depend on — and so an organization
+    /// that has not decided who reviews cannot end up with changes stuck behind nobody.
+    /// </summary>
+    public bool RequireApprovalToPublish { get; set; } = false;
+
     public StudioDeploymentMode Mode { get; set; } = StudioDeploymentMode.CatalogOnly;
     public Dictionary<string, List<string>> RoleCapabilities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

@@ -1736,6 +1736,114 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("ReportJobLinks");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ApprovedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ApprovedByUserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("AuthorUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AuthorUserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("BaseScriptHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScriptHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ScriptText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId", "Status");
+
+                    b.ToTable("ReportScriptDrafts");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraftDecision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DecidedByUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DecidedByUserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("DraftId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ScriptHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId", "DecidedAtUtc");
+
+                    b.ToTable("ReportScriptDraftDecisions");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>
                 {
                     b.Property<int>("Id")
@@ -2509,6 +2617,28 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Report");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraft", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraftDecision", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.ReportScriptDraft", "Draft")
+                        .WithMany("Decisions")
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "Creator")
@@ -2769,6 +2899,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAlert", b =>
                 {
                     b.Navigation("Notifications");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraft", b =>
+                {
+                    b.Navigation("Decisions");
                 });
 #pragma warning restore 612, 618
         }
