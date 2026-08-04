@@ -327,8 +327,11 @@ function renderDesigner(stage, ctx) {
     window.__vscodeSave = async function(script) { console.log('vscode.save', script.length); };
   </script>
   <script type="module">
-    import { renderDesigner } from '/src/etl-sql-vscode/media/designer/designer.js';
-    renderDesigner(document.getElementById('designerRoot'), {
+    // createDesigner is what the module exports. This said renderDesigner, which does not exist,
+    // so the fixture threw on import and rendered nothing -- and nobody noticed, because it is one
+    // fixture among twenty that only a person clicking through would ever open.
+    import { createDesigner } from '/src/etl-sql-vscode/media/designer/designer.js';
+    createDesigner(document.getElementById('designerRoot'), {
       authFetch: window.__vscodeFetch,
       onSaveScript: window.__vscodeSave,
       onCancel: () => console.log('vscode.cancel')

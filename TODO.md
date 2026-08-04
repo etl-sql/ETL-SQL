@@ -533,7 +533,21 @@ documentation reconciliation, then release certification.
       survives review. Horizontal overflow is asserted at 390px and at 200% text, ignoring content
       that scrolls inside its own container. Demo fallback is guarded at the source by
       `GovernanceNoDemoDataTests`.
-- [ ] Reuse representative UI sandbox stories as automated fixtures.
+- [x] Reuse representative UI sandbox stories as automated fixtures. `SandboxStoryTests` serves the
+      repository root and drives **every** story and fixture through Chromium, asserting each mounts
+      without throwing, logs nothing, and renders something. The sandbox already imports the
+      canonical component sources, so this exercises the files the Portal ships without a Portal, a
+      database, or a login — and it had only ever been run by a person clicking through, which meant
+      a broken fixture stayed broken until someone happened to open it.
+
+      It found one immediately: the VS Code designer webview imported `renderDesigner`, which the
+      module does not export (it is `createDesigner`), so that fixture threw on import and rendered
+      nothing. Fixed.
+
+      Assertions are deliberately shallow. A narrow-viewport check was tried and removed — the
+      sandbox stage is `overflow: auto`, so a component wider than it scrolls inside its own
+      container, which is correct; the check flagged six components for doing the right thing.
+      Page-level overflow is asserted where it reaches users, on the shipped pages.
 - [ ] Exclude generated review/build output from the container context and document a small seeded
       acceptance profile. **Exclusion done**: `tests/` (~14 GB of fixtures and corpora) and
       `artifacts/` were being packed and shipped to the Docker daemon on every build although no
