@@ -158,6 +158,14 @@ public interface ITelemetryContext
     bool IsProfiling { get; set; }
     long QueueWaitMs { get; set; }
     long LockWaitMs { get; set; }
+
+    /// <summary>
+    /// Stopwatch ticks spent in data-quality rule evaluation and capture. Accumulated only while
+    /// <see cref="IsProfiling"/> is set — which defaults to true, so this is normally being
+    /// collected; turning profiling off removes the per-row timing work.
+    /// </summary>
+    long DataQualityValidationTicks { get; set; }
+
     List<ExecutionMetrics> ProfileMetrics { get; }
     Common.ExecutionTree ExecutionTree { get; }
     IReadOnlyList<PlanDecision> PlanDecisions { get; }

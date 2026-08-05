@@ -22,6 +22,20 @@ public class ExecutionMetricsReporter(IExecutionContext context)
     private long _startRows;
     private long _lastQueueWaitMs;
     private long _lastLockWaitMs;
+    private long _lastDqValidationTicks;
+    private long _lastDqRowsValidated;
+    private long _lastDqRowsQuarantined;
+    private long _lastDqRowsWarned;
+    private long _lastSpillReadBytes;
+    private int _lastSpillExtentCount;
+    private int _lastPartitionPassCount;
+    private long _lastAggregateGroupsCount;
+    private int _lastSortSpillCount;
+    private TimeSpan _lastCpuTime;
+
+    // Cached: Process.GetCurrentProcess() allocates, and this is read twice per statement.
+    private static readonly System.Diagnostics.Process CurrentProcess =
+        System.Diagnostics.Process.GetCurrentProcess();
 
     public List<ExecutionMetrics> ProfileMetrics => _context.Telemetry.ProfileMetrics;
 
@@ -40,6 +54,26 @@ public class ExecutionMetricsReporter(IExecutionContext context)
         _startRows = _context.Telemetry.RowsProcessed;
         _lastQueueWaitMs = _context.Telemetry.QueueWaitMs;
         _lastLockWaitMs = _context.Telemetry.LockWaitMs;
+        _lastDqValidationTicks = _context.Telemetry.DataQualityValidationTicks;
+        _lastDqRowsValidated = _context.DataQuality.RowsValidated;
+        _lastDqRowsQuarantined = _context.DataQuality.RowsQuarantined;
+        _lastDqRowsWarned = _context.DataQuality.RowsWarned;
+        _lastSpillReadBytes = _context.Telemetry.SpillReadBytes;
+        _lastSpillExtentCount = _context.Telemetry.SpillExtentCount;
+        _lastPartitionPassCount = _context.Telemetry.PartitionPassCount;
+        _lastAggregateGroupsCount = _context.Telemetry.AggregateGroupsCount;
+        _lastSortSpillCount = _context.Telemetry.SortSpillCount;
+        _lastCpuTime = SafeCpuTime();
+    }
+
+    /// <summary>
+    /// Process CPU time, or <see cref="TimeSpan.Zero"/> where the platform refuses it. A profiling
+    /// counter must never be the reason a statement fails.
+    /// </summary>
+    private static TimeSpan SafeCpuTime()
+    {
+        try { return CurrentProcess.TotalProcessorTime; }
+        catch { return TimeSpan.Zero; }
     }
 
     /// <summary>
@@ -70,7 +104,21 @@ public class ExecutionMetricsReporter(IExecutionContext context)
             PartitionsCount = _context.Telemetry.PartitionsCount - _lastPartitionsCount,
             RecursiveDepth = _context.EngineContext.CurrentRecursiveDepth,
             QueueWaitMs = _context.Telemetry.QueueWaitMs - _lastQueueWaitMs,
-            LockWaitMs = _context.Telemetry.LockWaitMs - _lastLockWaitMs
+            LockWaitMs = _context.Telemetry.LockWaitMs - _lastLockWaitMs,
+            DataQualityRowsValidated = _context.DataQuality.RowsValidated - _lastDqRowsValidated,
+            DataQualityRowsQuarantined = _context.DataQuality.RowsQuarantined - _lastDqRowsQuarantined,
+            DataQualityRowsWarned = _context.DataQuality.RowsWarned - _lastDqRowsWarned,
+            DataQualityValidationMs =
+                (_context.Telemetry.DataQualityValidationTicks - _lastDqValidationTicks)
+                    * 1000 / Stopwatch.Frequency,
+            SpillReadBytes = _context.Telemetry.SpillReadBytes - _lastSpillReadBytes,
+            SpillExtentCount = _context.Telemetry.SpillExtentCount - _lastSpillExtentCount,
+            PartitionPassCount = _context.Telemetry.PartitionPassCount - _lastPartitionPassCount,
+            AggregateGroupsCount = _context.Telemetry.AggregateGroupsCount - _lastAggregateGroupsCount,
+            // A ratio, not a counter — the current value is the statement's own, not a running sum.
+            AggregateExpansionRatio = _context.Telemetry.AggregateExpansionRatio,
+            SortSpillCount = _context.Telemetry.SortSpillCount - _lastSortSpillCount,
+            CpuTimeMs = (long)(SafeCpuTime() - _lastCpuTime).TotalMilliseconds
         });
     }
 

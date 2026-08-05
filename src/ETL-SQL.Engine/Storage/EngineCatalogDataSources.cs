@@ -378,7 +378,16 @@ public sealed class ProfileDataSource : IDataSource
         "timestamp", "statement", "rows_processed", "index_used", "duration_ms", "memory_kb",
         "spilled_bytes", "subquery_hits", "subquery_misses", "subquery_spilled_bytes", "partitions",
         "queue_wait_ms", "lock_wait_ms", "plan_decisions", "plan_accepted", "plan_fallbacks",
-        "plan_rejected", "plan_degraded", "plan_fallback_summary"
+        "plan_rejected", "plan_degraded", "plan_fallback_summary",
+        // What the data-quality rules on this statement cost. The run-level tallies in
+        // eng.data_quality_status say what the rules found; these say what they cost here, which is
+        // the question when a load has slowed and rules are what changed.
+        "dq_rows_validated", "dq_rows_quarantined", "dq_rows_warned", "dq_validation_ms",
+        // Large-dataset execution. These counters existed since the spill/partition work but never
+        // reached the profile, so the surface an operator profiles with described the pre-spill
+        // engine: it reported bytes written and never bytes read back, partitions and never passes.
+        "spill_read_bytes", "spill_extents", "partition_passes",
+        "aggregate_groups", "aggregate_expansion_ratio", "sort_spills", "cpu_time_ms"
     ];
 
     public ProfileDataSource(IExecutionContext context)
@@ -429,7 +438,18 @@ public sealed class ProfileDataSource : IDataSource
                 ["plan_fallbacks"] = planFallbacks,
                 ["plan_rejected"] = planRejected,
                 ["plan_degraded"] = planDegraded,
-                ["plan_fallback_summary"] = planFallbackSummary
+                ["plan_fallback_summary"] = planFallbackSummary,
+                ["dq_rows_validated"] = metric.DataQualityRowsValidated,
+                ["dq_rows_quarantined"] = metric.DataQualityRowsQuarantined,
+                ["dq_rows_warned"] = metric.DataQualityRowsWarned,
+                ["dq_validation_ms"] = metric.DataQualityValidationMs,
+                ["spill_read_bytes"] = metric.SpillReadBytes,
+                ["spill_extents"] = metric.SpillExtentCount,
+                ["partition_passes"] = metric.PartitionPassCount,
+                ["aggregate_groups"] = metric.AggregateGroupsCount,
+                ["aggregate_expansion_ratio"] = metric.AggregateExpansionRatio,
+                ["sort_spills"] = metric.SortSpillCount,
+                ["cpu_time_ms"] = metric.CpuTimeMs
             });
 
             if (rows.Count >= batchSize)

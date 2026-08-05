@@ -92,6 +92,12 @@ public class ExecutionTelemetryManager : ITelemetryContext
     public long QueueWaitMs { get; set; } = 0;
     public long LockWaitMs { get; set; } = 0;
 
+    /// <summary>
+    /// Stopwatch ticks spent in data-quality rule evaluation and capture. Accumulated only while
+    /// profiling is on — the row pipeline should not pay for a measurement nobody asked for.
+    /// </summary>
+    public long DataQualityValidationTicks { get; set; } = 0;
+
     public List<ExecutionMetrics> ProfileMetrics { get; } = new();
 
     public ETL_SQL.Core.Common.ExecutionTree ExecutionTree { get; } = new();
@@ -140,6 +146,7 @@ public class ExecutionTelemetryManager : ITelemetryContext
         FetchStatus = 0;
         QueueWaitMs = 0;
         LockWaitMs = 0;
+        DataQualityValidationTicks = 0;
         ProfileMetrics.Clear();
         ExecutionTree.Clear();
         lock (_planDecisionLock)

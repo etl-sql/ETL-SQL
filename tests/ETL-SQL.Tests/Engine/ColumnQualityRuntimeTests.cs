@@ -1242,6 +1242,78 @@ namespace ETL_SQL.Tests.Engine
                 d.Code == "DATAQUALITY" && d.Severity == DiagnosticSeverity.Error);
         }
 
+        // ── Profiling: what the rules cost ─────────────────────────────────
+
+        /// <summary>
+        /// `SET PROFILE ON` must report the cost of the rules, not only what they found. The
+        /// run-level tallies answer "what failed"; an operator whose load has slowed down and whose
+        /// rules are the thing that changed needs "what did this statement spend".
+        /// </summary>
+        [Fact]
+        public async Task Profiling_AttributesDataQualityCost_ToTheStatementCarryingTheRules()
+        {
+            var eval = NewEvaluator();
+            eval.Telemetry.IsProfiling = true;
+            await Seed(eval, "(1, 'a'), (NULL, 'b'), (NULL, 'c')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src ON FAILURE WARN;");
+
+            var ruleStatement = Assert.Single(
+                eval.Telemetry.ProfileMetrics, m => m.DataQualityRowsValidated > 0);
+
+            Assert.Equal(3, ruleStatement.DataQualityRowsValidated);
+            Assert.Equal(2, ruleStatement.DataQualityRowsWarned);
+            Assert.Equal(0, ruleStatement.DataQualityRowsQuarantined);
+        }
+
+        /// <summary>
+        /// The cost belongs to the statement that carried the rules. Attributing it to the run, or
+        /// smearing it across every statement, would make the number useless for finding which load
+        /// got slower.
+        /// </summary>
+        [Fact]
+        public async Task Profiling_ReportsZeroDataQualityCost_ForStatementsWithoutRules()
+        {
+            var eval = NewEvaluator();
+            eval.Telemetry.IsProfiling = true;
+            await Seed(eval, "(1, 'a'), (2, 'b')");
+
+            await Run(eval, "SELECT Id, Name INTO #plain FROM #src;");
+
+            Assert.All(eval.Telemetry.ProfileMetrics, m =>
+            {
+                Assert.Equal(0, m.DataQualityRowsValidated);
+                Assert.Equal(0, m.DataQualityRowsWarned);
+                Assert.Equal(0, m.DataQualityValidationMs);
+            });
+        }
+
+        /// <summary>
+        /// `SET PROFILE OFF` removes the per-row timing work entirely.
+        ///
+        /// <para>Worth pinning because <c>IsProfiling</c> defaults to <b>true</b> — so the two
+        /// timestamp reads per row are the normal case, not the exception, and turning profiling
+        /// off is the only way to avoid them. Anyone tightening the row pipeline needs to know the
+        /// switch exists and actually works.</para>
+        /// </summary>
+        [Fact]
+        public async Task ValidationTiming_IsNotAccumulated_WhenProfilingIsOff()
+        {
+            var eval = NewEvaluator();
+            eval.Telemetry.IsProfiling = false;
+            await Seed(eval, "(1, 'a'), (NULL, 'b')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src ON FAILURE WARN;");
+
+            Assert.Equal(0, eval.Telemetry.DataQualityValidationTicks);
+            // The rules still ran — this is about the measurement, not the enforcement.
+            Assert.Equal(2, eval.DataQuality.RowsValidated);
+        }
+
         // ── Harness ────────────────────────────────────────────────────────
 
         private static Evaluator NewEvaluator() =>

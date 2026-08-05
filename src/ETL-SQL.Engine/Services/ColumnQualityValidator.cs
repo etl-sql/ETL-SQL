@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
@@ -328,6 +329,25 @@ public sealed class ColumnQualityValidator
         => await TryAcceptRowAsync(input, projected, rowOrdinal: null, cancellationToken);
 
     public async Task<bool> TryAcceptRowAsync(Row input, Row projected, long? rowOrdinal, CancellationToken cancellationToken = default)
+    {
+        // Timed only while profiling — and note that IsProfiling defaults to true, so these two
+        // timestamp reads per row are the normal case rather than the exception. They are cheap
+        // (tens of nanoseconds each) but not free; `SET PROFILE OFF` removes them, which is the
+        // lever to reach for if the row pipeline is ever measured down to that level.
+        var profiling = _context.Telemetry.IsProfiling;
+        var startTicks = profiling ? Stopwatch.GetTimestamp() : 0L;
+        try
+        {
+            return await ValidateRowAsync(input, projected, rowOrdinal, cancellationToken);
+        }
+        finally
+        {
+            if (profiling)
+                _context.Telemetry.DataQualityValidationTicks += Stopwatch.GetTimestamp() - startTicks;
+        }
+    }
+
+    private async Task<bool> ValidateRowAsync(Row input, Row projected, long? rowOrdinal, CancellationToken cancellationToken)
     {
         _context.DataQuality.RecordRowValidated();
         var failure = await EvaluateRowAsync(input, projected, rowOrdinal, cancellationToken);
