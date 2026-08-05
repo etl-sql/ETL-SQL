@@ -888,7 +888,13 @@ projection already served at `/api/data-quality/{status,failures}`. And a cross-
 already exists: `/api/history` returns all jobs when `jobName` is omitted
 (`JobApiEndpoints.cs:347`), so the triage inbox needs no new backend read.
 
-#### P0 — Triage inbox (rendering only, no backend work)
+#### P0 — Triage inbox — SHIPPED on `feat/orchestrator-triage-inbox` (2026-08-05)
+
+All items below are complete except the lineage blast radius, which is deferred with a reason. The
+board reads shared state directly, groups failures into incidents, surfaces missed runs, and offers
+bulk re-run. Covered by `OperationsTriageTests` (10) and `RunFailureSignatureTests` (12), plus a
+headless render check for escaping and a UI-sandbox story (`triage-board`) with fixtures for the
+busy morning, the quiet one, and a clipped history read.
 
 **Authorization handoff.** The inbox inherits the Portal's existing coarse gate — the whole
 orchestrator surface sits behind one `OrchestratorAccess` policy (`RequireRole("Admin",
@@ -904,21 +910,25 @@ before the flight recorder lands.
       means the board still answers when the Orchestrator *service* is unreachable — which is
       precisely when someone is triaging. Mutations still go through the proxy.
       `OperationsTriageService` + `GET /api/orchestrator/triage`.
-- [ ] Add a cross-job triage view to `orchestrator.html` over the existing `/api/history` feed:
-      chronological failed runs across all jobs with the error inline, replacing one drill-down per
-      job. Today the only cross-job affordance is the "Failed Today" chip, which filters the *job
-      list* rather than listing the failures.
-- [ ] Group failures by normalized error signature so one bad source at 03:00 renders as
-      "27 jobs · connection refused · source_db", not 27 rows. SQL Agent does not do this; it is the
-      cheapest place to be clearly better rather than at parity.
-- [ ] Surface missed runs, not only failed ones — a job that never fired writes no history row and is
-      invisible in any failure-driven view. `ReconcileStaleRunningAsync` (`IJobHistoryStore.cs:239`)
-      covers stuck `RUNNING` rows but not "was due at 02:00, no row exists"; that is a `NextRun`
-      comparison against the job catalog and belongs in the same inbox.
-- [ ] Add multi-select bulk re-run from the inbox. SQL Agent makes an operator re-run one at a time.
-- [ ] Link a failed run to its downstream blast radius from the lineage catalog ("this job failed →
-      these 12 tables are now stale"). SSISDB structurally cannot answer this; with the script-hash
-      diff below it is the core of the "better, not equal" claim.
+- [x] Add a cross-job triage view to `orchestrator.html`, placed above the schedule because "what
+      broke" outranks "what is scheduled". Rendering is a canonical pure-function module
+      (`wwwroot/js/triage-ui.js`) so the sandbox can drive it from fixtures.
+- [x] Group failures by normalized error signature. `RunFailureSignature` strips ids, timestamps,
+      quoted values, paths, and numbers. It deliberately errs toward **under**-grouping: merging two
+      distinct outages hides the second one, and that is the only failure mode an operator cannot
+      recover from by reading more closely.
+- [x] Surface missed runs, with a grace window so ordinary lateness under load is not reported —
+      a list that cries wolf gets ignored. Disabled jobs are excluded.
+- [x] Add multi-select bulk re-run, reporting per-job outcomes rather than one opaque result,
+      capped at 50 so a mis-click cannot enqueue the estate, and audited per job.
+- [ ] **Deferred — bigger than a link.** Link a failed run to its downstream blast radius ("this job
+      failed → these 12 tables are now stale"). The analysis already exists and already accepts a
+      job: `LineageImpactService.AnalyzeAsync(kind: "job", direction: "downstream")`, served at
+      `GET /api/catalog/impact`. What is missing is an entry point — the impact view in
+      `wwwroot/js/lineage-catalog.js` holds its target in local state and reads no URL parameters,
+      so there is nothing to deep-link *to*. Add deep-link support to that view first, then the
+      board links into it. Still the core of the "better, not equal" claim against SSISDB, which
+      structurally cannot answer this.
 
 #### P1 — Flight recorder (persist what is already measured)
 
