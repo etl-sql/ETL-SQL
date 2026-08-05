@@ -4,17 +4,32 @@
 <!-- GrantPortalDatasetPermissionStatement -->
 <!-- RevokePortalDatasetPermissionStatement -->
 
-## 5. Groups & Folder Permissions
+## By deployment profile
+
+| Profile | What applies |
+| :--- | :--- |
+| **Solo / Workstation** | **N/A.** One trusted operator, no Portal, and nobody to grant anything to. |
+| **Team / SME** | The whole of this page. This is the smallest profile where permissions mean anything, and where the two-axis model starts to matter: a **role** decides the class of operation, an **ACL** decides which resources. |
+| **Enterprise / Corporate** | As Team, with groups sourced from the directory, so removing someone from a group revokes their reports, saved views and share links. Grants made to a user *personally* deliberately survive losing a group. |
+| **SaaS / Departmental** | As Enterprise, **defined separately per environment**. A resource id from one environment is meaningless in another and a token minted in one is refused by the other, so grants never span environments — but you must create them in each. |
+
+Two facts worth knowing before you design a permission scheme:
+
+- **ACLs bind to groups, not roles.** `DataSteward` is a role; granting a folder to "data stewards"
+  means creating a *group* and adding them to it.
+- **Admins bypass folder ACLs entirely.** Granting the Admin group access to a folder is a no-op.
+
+## Groups & Folder Permissions
 
 Folder visibility is controlled through **groups** and **ACLs** (access control lists).
 
-### 5.1 Groups
+### Groups
 
 A group is a named collection of users. Open **Admin → Groups** to create groups and add members.
 
 Use the group search box to locate groups by name, description, or directory mapping. The member panel is also server-paged: search active users when adding members, select multiple matches to add them together, or select current members to remove them together. **Delete Selected** rejects groups that still have members or ACL entries; remove those references first or use the administrative API with an explicit cascade decision.
 
-### 5.2 Folder ACLs
+### Folder ACLs
 
 Each folder can have one or more ACL entries, each granting a group a permission level:
 
@@ -37,9 +52,9 @@ report's content, which is the only thing an Author was given authority over.
 > `Admin` role. Without that split the strongest grant would be self-propagating: whoever held it
 > could hand it out, so the set of people with access could only ever grow.
 
-ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins **and its owner**: the user who created a folder (or received it through ownership transfer) always holds effective `Manage` on it, without an ACL entry. Ownership moves only through the explicit transfer on user deletion (§4.7); revoking a group ACL never locks an owner out of their own folder.
+ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins **and its owner**: the user who created a folder (or received it through ownership transfer) always holds effective `Manage` on it, without an ACL entry. Ownership moves only through the explicit transfer on user deletion (see [User Management](users.md)); revoking a group ACL never locks an owner out of their own folder.
 
-### 5.3 Protected Branches and Review
+### Protected Branches and Review
 
 When the Portal writes scripts back to git (`Portal:SourceControl`), name the branches that must not
 receive an unreviewed change:

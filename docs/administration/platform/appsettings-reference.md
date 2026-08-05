@@ -8,7 +8,7 @@ Additionally, many of these settings can be overridden ad-hoc for a single scrip
 
 ---
 
-## 1. Logging
+## Logging
 
 Configures standard logging levels, directories, retention policies, and size limits for application, script, and test outputs.
 
@@ -29,7 +29,7 @@ Configures standard logging levels, directories, retention policies, and size li
 
 ---
 
-## 2. Security
+## Security
 
 Configures the zero-trust execution sandbox limits, folder restrictions, allowed environment variables, limits on external calls, and file-spill security.
 
@@ -54,7 +54,7 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 
 ---
 
-## 3. Engine
+## Engine
 
 Controls parsing, query optimization, memory allocations, caching thresholds, and script execution policies.
 
@@ -95,7 +95,7 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 
 ---
 
-## 4. Orchestration & Scheduler
+## Orchestration & Scheduler
 
 Configures concurrency limits, memory floors, and polling intervals for job execution.
 
@@ -119,7 +119,7 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 
 ---
 
-## 5. Jobs
+## Jobs
 
 Controls task execution parameters and process boundaries.
 
@@ -136,7 +136,7 @@ Controls task execution parameters and process boundaries.
 
 ---
 
-## 6. Report Player & Session
+## Report Player & Session
 
 Settings for direct HTML report generation and session lifecycle.
 
@@ -151,7 +151,7 @@ Settings for direct HTML report generation and session lifecycle.
 
 ---
 
-## 7. Connectors
+## Connectors
 
 Defines default settings, delays, timeouts, and credentials for remote systems.
 
@@ -169,7 +169,7 @@ Defines default settings, delays, timeouts, and credentials for remote systems.
 
 ---
 
-## 8. Orchestrator
+## Orchestrator
 
 Configuration details for the background runner service.
 
@@ -185,7 +185,7 @@ Configuration details for the background runner service.
 
 ---
 
-## 9. Snippets
+## Snippets
 
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -193,7 +193,7 @@ Configuration details for the background runner service.
 
 ---
 
-## 10. Portal
+## Portal
 
 Configuration settings for the Portal UI server, shared storage, and active integrations.
 
@@ -332,7 +332,7 @@ Defines authentication configuration. Supported providers: `Local`, `Oidc` (Open
 
 ---
 
-## 11. Lineage
+## Lineage
 
 Controls telemetry endpoints and catalog metadata parsing rules.
 
@@ -345,7 +345,7 @@ Controls telemetry endpoints and catalog metadata parsing rules.
 
 ---
 
-## 12. ConnectionStrings
+## ConnectionStrings
 
 Standard ASP.NET Core connection configurations.
 

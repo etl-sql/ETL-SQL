@@ -1,7 +1,5 @@
 # Extended Admin Scripting
 
-## 9. Extended Admin Scripting
-
 The Portal connector supports script-first administration inside a remote block:
 
 ```sql
@@ -19,7 +17,7 @@ END;
 
 Result-producing commands can write to a temp table with `INTO #table` and also update `@@RESULT` / `@@RESULTSETS`.
 
-### 9.0 Configuration Export (Script-First Reconstruction)
+## Configuration Export (Script-First Reconstruction)
 
 ```sql
 EXECUTE portal BEGIN
@@ -45,8 +43,8 @@ capability tokens. Each credential is a `${...}` placeholder you replace before 
 - `ENC:...` — an encrypted literal, unlocked by `USE PASSWORD = ...` at import.
 - `'...'` — a plaintext literal (least preferred; avoid committing).
 
-An unsubstituted `${...}` placeholder is rejected at import before it reaches the portal (see §9.0
-import behavior), so a forgotten secret fails closed rather than provisioning an empty credential.
+An unsubstituted `${...}` placeholder is rejected at import before it reaches the portal, so a
+forgotten secret fails closed rather than provisioning an empty credential.
 
 Notes:
 
@@ -64,7 +62,7 @@ Notes:
   `GET /api/admin/configuration/export?orchestratorAlias=orch`. Without an alias, refresh jobs are
   listed as manual follow-up rather than binding the export to a source environment.
 
-#### Importing (replaying the bootstrap)
+### Importing (replaying the bootstrap)
 
 The bootstrap is replayed by running it as a normal script through an admin `PORTAL`
 connection — substitute the `${...}` placeholders, then:
@@ -91,7 +89,7 @@ Import behavior:
   (create / update / skip) and performs the same reference and secret validation as a real apply — without
   writing anything — so you can confirm a clean import before committing to it.
 
-### 9.1 Report Operations
+## Report Operations
 
 ```sql
 EXECUTE portal BEGIN
@@ -110,7 +108,7 @@ END;
 
 Name lookups are case-insensitive. If multiple reports share the same name, the connector raises an ambiguity error instead of choosing one.
 
-### 9.2 Sharing, Embedding, Saved Views, and Alerts
+## Sharing, Embedding, Saved Views, and Alerts
 
 ```sql
 EXECUTE portal BEGIN
@@ -136,7 +134,7 @@ EXECUTE portal BEGIN
 END;
 ```
 
-### 9.3 Catalog, Permissions, Metrics, and Sessions
+## Catalog, Permissions, Metrics, and Sessions
 
 ```sql
 EXECUTE portal BEGIN
@@ -157,7 +155,7 @@ END;
 `REVOKE TOKENS` revoke refresh tokens and rotate the user's security stamp, so already-issued access
 tokens are rejected on their next request.
 
-### 9.4 Service Control
+## Service Control
 
 ```sql
 EXECUTE portal BEGIN

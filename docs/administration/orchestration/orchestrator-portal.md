@@ -1,14 +1,12 @@
 # Orchestrator Management Portal
 
-## 14. Orchestrator Management Portal
-
 The **Orchestrator Management Portal** is a browser-based dashboard embedded in the ETL-SQL Portal that gives administrators full visibility and control over scheduled jobs without needing the CLI or a SQLite viewer.
 
-### 14.1 Prerequisites
+## Prerequisites
 
 The management portal is hosted inside the Portal (`ETL-SQL-Portal`). The Orchestrator Service (`ETL-SQL-Service`) must be running and reachable from the machine that runs the portal. The two services communicate over HTTP using a shared API key.
 
-### 14.2 Enabling the API Key
+## Enabling the API Key
 
 By default the Orchestrator's management endpoints are open (no authentication). For production, set a shared secret on both sides.
 
@@ -51,7 +49,7 @@ Portal__Orchestrator__ApiKey=your-shared-secret
 *Option B — Admin UI (applied immediately, no restart needed):*
 Log in as Admin, navigate to **Admin → Settings → Orchestrator Connection**, enter the URL and API key, and click **Save**. Settings are written to a `portal-orchestrator.json` sidecar file and take effect on the very next request. UI-saved settings take precedence over environment variables.
 
-### 14.3 Script Root
+## Script Root
 
 The portal's **Create Job** modal lets users pick a script file from a browser rather than typing a raw path. The Orchestrator Service exposes the file browser under a configured root directory:
 
@@ -65,7 +63,7 @@ The portal's **Create Job** modal lets users pick a script file from a browser r
 
 If `ScriptRoot` is not set it defaults to the Orchestrator's working directory. The file browser only surfaces `.etlsql` files and prevents path traversal outside the root.
 
-### 14.4 Granting Portal Access
+## Granting Portal Access
 
 Two roles can access the Orchestrator tab in the portal:
 
@@ -76,7 +74,7 @@ Two roles can access the Orchestrator tab in the portal:
 
 Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Portal Administrator's Guide](../portal/README.md#orchestrator-manager-role) for role assignment instructions.
 
-### 14.5 Dashboard Features
+## Dashboard Features
 
 Navigate to the Orchestrator tab in the portal after logging in with an eligible role.
 
@@ -109,7 +107,7 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 > [!NOTE]
 > Jobs created through the portal store the selected script target in the Orchestrator catalog. If the `.etlsql` file on disk is edited later, update the job through the portal or with `ALTER JOB <name> SET TARGET = '...'` / `CREATE OR REPLACE JOB <name> FOR SCRIPT '...'`.
 
-### 14.6 Service Control
+## Service Control
 
 When the Orchestrator is **online**, two service-control buttons appear next to the Online chip:
 
@@ -118,7 +116,7 @@ When the Orchestrator is **online**, two service-control buttons appear next to 
 
 When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button also appears that uses the Windows `ServiceController` API to start the local service. On separate-server deployments, start the service manually on its host.
 
-### 14.7 Metrics and Scraping
+## Metrics and Scraping
 
 The Orchestrator Service exposes three unauthenticated operations endpoints:
 
@@ -215,7 +213,7 @@ Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET C
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
 job logs, and external monitoring traces can be joined during incident review.
 
-### 14.8 Differences from `DROP JOB`
+## Differences from `DROP JOB`
 
 | Action | Effect |
 | :--- | :--- |

@@ -1,7 +1,5 @@
 # Configuration Reference
 
-## 2. Configuration Reference
-
 All settings live under the `"Portal"` key in `appsettings.json`. Every key can be overridden with an environment variable using the double-underscore separator: `Portal__Jwt__Secret`.
 
 ```json
@@ -159,7 +157,7 @@ reporting node (`Reporting=true`, `Designer=false`, `Scheduling=false`, `Operati
 `ConnectionCatalog=false`, `SecretStore=false`). Security, identity, audit, database migration, and
 node heartbeat services remain active in both profiles.
 
-### Studio deployment modes and capabilities
+## Studio deployment modes and capabilities
 
 - **`Disabled`** — The Studio entry page and every authoring endpoint return 404.
 - **`CatalogOnly`** — Catalog-backed read, preview, run, and save endpoints may be granted. External
@@ -248,7 +246,7 @@ catalog report and optimistic-concurrency version.
 
 ---
 
-### 2.1 HA Configuration Summary
+## HA Configuration Summary
 
 For a load-balanced Portal fleet:
 
@@ -264,5 +262,5 @@ For a load-balanced Portal fleet:
   shared snapshot storage, or the node-registry/lease store is unavailable.
 
 The full HA setup and SQLite-to-PostgreSQL migration procedure is in
-[Administration: Practical High Availability Configuration](../platform/state-and-ha.md#61-practical-high-availability-configuration)
-and [§11.5](../platform/operator-cli.md#115-migrating-from-sqlite-to-postgresql--etl-sql-admin-migrate-database).
+[Practical High Availability Configuration](../platform/state-and-ha.md#practical-high-availability-configuration)
+and [Migrating from SQLite to PostgreSQL](../platform/operator-cli.md#migrating-from-sqlite-to-postgresql--etl-sql-admin-migrate-database).

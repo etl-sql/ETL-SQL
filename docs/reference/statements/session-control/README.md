@@ -4,11 +4,11 @@
 
 | Page | Description |
 | :--- | :--- |
-| [ANALYZE](analyze.md) | Collects statistics about a temp table or result set, including row count, column cardinality, null ratios, and min/max values. |
+| [EXPLAIN ANALYZE](analyze.md) | Executes a query and returns its annotated execution plan with observed runtime metrics. |
 | [ASSERT JOB](assert-job.md) | Asserts on the **run's own metrics** — how many rows it processed, what fraction was quarantined, |
 | [ASSERT](assert.md) | Validates a condition at runtime and halts execution with an error if it is false. Used for data quality checks and script contracts. |
 | [CLEAR SESSION](clear.md) | Cleans up session state: temp files, recovery manifests, encrypted session data, and disk-spill artifacts. |
-| [CONFIG](config.md) | Query redacted active connection configuration through `eng.connection_config`. |
+| [CONFIG](config.md) | <!-- ShowConnectionConfigStatement --> |
 | [EXPLAIN](explain.md) | Shows the execution plan for a SELECT or DML statement without running it. |
 | [GENERATE](generate.md) | Creates synthetic or mock data rows and loads them into a #temp table. Useful for testing, seeding, and load simulation. |
 | [HELP](help.md) | Displays documentation for a keyword, function, connector, or option directly in the REPL or output pane. |

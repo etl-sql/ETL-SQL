@@ -8,7 +8,7 @@
 | [bulk-insert](bulk-insert.md) | BULK INSERT loads a flat file directly into a connection table in high-throughput batches, bypassing the #temp table staging step. |
 | [COMPRESS / DECOMPRESS](compress-file.md) | Compresses or decompresses files and directories using ZIP or GZIP format. |
 | [CONVERT FILE ENCODING](convert-file-encoding.md) | Performs stream-based transcoding from one encoding standard to another. |
-| [COPY](copy-file.md) | Copies a file or directory from one location to another, including across connections (local, SFTP, S3). |
+| [COPY](copy-file.md) | Copies a local file or directory from one sandboxed location to another. |
 | [PGP_KEY_PAIR](create-pgp-key-pair.md) | Generates an OpenPGP key pair (RSA) and writes the private and public key files to the specified path. |
 | [SSH_KEY_PAIR](create-ssh-key-pair.md) | Generates an RSA or ECDSA SSH key pair and writes the private and public key files to the specified path. |
 | [DIRECTORY Operations](directory.md) | File-system directory management commands. These operate on the local or UNC file system without requiring a CREATE CONNECTION. |

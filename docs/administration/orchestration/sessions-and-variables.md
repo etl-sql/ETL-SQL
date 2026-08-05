@@ -1,10 +1,12 @@
 # Sessions and Variable Injection
 
-## 4. Session Persistence
+How execution sessions persist state between runs, and how variables flow into and out of a job.
+
+## Session Persistence
 
 Sessions let connections and variables defined in one run survive into the next. This is most useful when you split your pipeline across multiple scripts or F5 runs.
 
-### 4.1 How sessions work
+### How sessions work
 
 When you pass `--session <id>`:
 1. At **start** of a run: the engine loads the saved state (connections + variables) for `<id>` into the evaluator.
@@ -12,7 +14,7 @@ When you pass `--session <id>`:
 
 Session state is stored in an encrypted file on disk (keyed to your `--pass` password if provided).
 
-### 4.2 Usage pattern
+### Usage pattern
 
 ```bash
 # Step 1: Set up long-lived connections once
@@ -28,13 +30,13 @@ ETL-SQL run 03_load.etlsql --session nightly --pass MyKey
 ETL-SQL session clear nightly
 ```
 
-### 4.3 Stale session cleanup
+### Stale session cleanup
 
 Sessions that have not been used for 7 days are automatically removed on the next `run` invocation. You can clear one manually at any time with `ETL-SQL session clear <id>`.
 
 ---
 
-## 5. Variable Injection
+## Variable Injection
 
 You can pass variables from the CLI into your script using `--var`:
 

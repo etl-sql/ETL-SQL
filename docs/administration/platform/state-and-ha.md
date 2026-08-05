@@ -1,6 +1,17 @@
 # Portal State, Data Roots, and High Availability
 
-## 6. Portal State and Data Roots
+Where the Portal keeps its state, which directories it is allowed to touch, and what a multi-node high-availability deployment requires.
+
+## By deployment profile
+
+| Profile | What applies |
+| :--- | :--- |
+| **Solo / Workstation** | **N/A.** A workstation has no Portal state and no availability contract. |
+| **Team / SME** | The data-roots table below. High availability is **out of profile** — the supported Team default is a single node. If you need HA, you are running the Enterprise profile. **Set `Portal:Topology:ExpectedMode` explicitly**, especially on PostgreSQL: see the warning below. |
+| **Enterprise / Corporate** | Everything here. Shared PostgreSQL, shared artifact roots, one shared key ring, and an **identical** JWT secret, dataset at-rest key and Orchestrator key on every node. A node with its own key ring serves traffic and then fails unpredictably per request. |
+| **SaaS / Departmental** | As Enterprise, with a **separate set of all of it per environment**. No database, artifact root, key ring or outbox path may be shared; see [departmental isolation](../../architecture/decisions/Departmental_Isolation.md). |
+
+## Portal State and Data Roots
 
 The Portal constrains filesystem access to configured roots. Set these to service-owned directories rather than broad user folders:
 
@@ -34,7 +45,7 @@ The portal rejects script, snapshot, map, and dataset paths that resolve outside
 > default path is classified as HA, `/healthz` returns 503 with `ha-requires-portal-postgres`, and
 > the load balancer stops routing to a node that is otherwise working.
 
-### 6.1 Practical High Availability Configuration
+### Practical High Availability Configuration
 
 For a load-balanced HA deployment, every Portal and Orchestrator node must point at the same
 PostgreSQL database deployment. Every Portal node must also point at the same shared artifact roots and
@@ -121,7 +132,7 @@ For the supported standalone, departmental, and HA topologies; readiness respons
 certification matrix; and responsibility boundary between ETL-SQL and infrastructure, see
 [`docs/architecture/decisions/HA_Topology_Failure_Certification.md`](../../architecture/decisions/HA_Topology_Failure_Certification.md).
 
-### 6.2 Containerized HA Clustering (Docker Compose)
+### Containerized HA Clustering (Docker Compose)
 
 For container-native deployments (such as Docker engines, overlay networks, or Swarm environments), ETL-SQL provides a clustered, multi-node Compose template under [`deploy/docker/`](../../../deploy/docker) designed to run an active-active clustered environment with dynamic scaling.
 

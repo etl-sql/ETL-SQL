@@ -1,10 +1,8 @@
 # Resource Controls
 
-## 7. Resource Controls
-
 Use resource settings to keep one report or job from consuming the whole host.
 
-### Orchestrator Lockbox Bundles
+## Orchestrator Lockbox Bundles
 
 Published Orchestrator bundles are stored in the configured Orchestrator database as immutable versions.
 Back up the database together with any configured lockbox key material.
@@ -16,7 +14,7 @@ Back up the database together with any configured lockbox key material.
 
 Do not delete bundle versions referenced by active or historical jobs unless the retirement is deliberate and audited. `EXPORT SCRIPT` can recover script text and folder structure from a published bundle, but it will not reveal decrypted secrets.
 
-### Portal Report Execution
+## Portal Report Execution
 
 ```json
 "Portal": {
@@ -42,7 +40,7 @@ In load-balanced Portal deployments, configure sticky sessions on the cookie nam
 `SessionAffinityCookieName`. Interactive report sessions are held in the node-local session cache,
 so requests for a live session should continue routing to the same Portal process.
 
-### Orchestrator Job Execution
+## Orchestrator Job Execution
 
 ```json
 "Jobs": {
@@ -54,7 +52,7 @@ so requests for a live session should continue routing to the same Portal proces
 
 Use process spawning for production isolation. In-process execution is useful for development and fallback scenarios, but it gives jobs less isolation from the service process.
 
-### Engine Defaults
+## Engine Defaults
 
 Scripts can override some engine behavior, but administrators can set defaults in `appsettings.json`:
 
@@ -66,7 +64,7 @@ Scripts can override some engine behavior, but administrators can set defaults i
 }
 ```
 
-### Lineage and OpenLineage Configuration
+## Lineage and OpenLineage Configuration
 
 Lineage tracking and automatic exports to OpenLineage endpoints or files can be configured in the `Lineage` block:
 
@@ -92,8 +90,7 @@ Lineage tracking and automatic exports to OpenLineage endpoints or files can be 
 >
 > Only SQL Server, PostgreSQL, and MySQL connectors currently expose a catalog provider; other connectors are unaffected.
 
-
-### User Snippet Templates
+## User Snippet Templates
 
 To deploy team-standard snippet templates that appear in the TUI and VS Code autocomplete alongside the built-in `$trigger` templates, configure a shared directory:
 
@@ -121,4 +118,3 @@ CREATE CONNECTION «ConnName» AS MSSQL(
 User snippets with the same trigger as a built-in override the built-in. The directory is loaded once at startup; restart the application to pick up changes. The path can be a UNC share for team-wide deployment (`\\fileserver\etlsql\snippets`). See [Getting Started](../../guides/getting-started.md) for the full authoring reference.
 
 ---
-

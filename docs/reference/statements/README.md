@@ -1,21 +1,12 @@
-# Statements
+# STATEMENTS Reference
 
-Statement reference pages define the executable language surface.
+[« Back to parent](../README.md)
 
-## Statement Groups
-
-- [DDL](ddl/create.md) - `CREATE`, `ALTER`, `DROP`, schema expectations, and connection tests.
-- [DML](dml/select.md) - `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, and table expansion.
-- [Query Syntax](query-syntax/with.md) - CTEs, predicates, joins, pivots, windows, modifiers, and advanced clauses.
-- [Set Operations](query-syntax/set-operations.md) - `UNION`, `INTERSECT`, and `EXCEPT`.
-- [Expressions and Operators](expressions-and-operators.md) - operators, precedence, and expression syntax.
-- [Execution Blocks](execution-blocks.md) - `RUN SCRIPT`, `EXEC`, and execution blocks.
-- [Procedures and Functions](procedures.md) - procedures and user-defined functions.
-- [Containerized Test Databases](use-docker.md) - `USE DOCKER` for ephemeral test databases.
-- [Data Prep Helpers](data-prep.md) - `GENERATE CALENDAR`, `FILL_DATES`, and `COMPARE DATASETS`.
-- [Session Control](session-control/help.md) - `HELP`, `LINT`, `EXPLAIN`, lineage, transactions, assertions, and diagnostics.
-- [Lifecycle Capability Matrix](lifecycle-matrix.md) - supported `CREATE`, `CREATE OR ALTER`, `CREATE OR REPLACE`, `ALTER`, `DROP`, and `DROP IF EXISTS` forms by object kind.
-
-Use the [Syntax Index](../../syntax-index.md) when you need to find the focused page for a command, clause, option, or visual type.
-
-Use [Statement Reference Template](../../templates/statement-reference-template.md) for new statement pages.
+| Page | Description |
+| :--- | :--- |
+| [Data Prep Helpers](data-prep.md) | Built-in helpers create inspectable `#temp` tables for common reporting and ETL prep work. |
+| [Execution Blocks](execution-blocks.md) | <!-- ExecuteRemoteBlockStatement --> |
+| [Expressions and Operators](expressions-and-operators.md) | ### 14.1 Arithmetic Operators |
+| [Lifecycle Capability Matrix](lifecycle-matrix.md) | ETL-SQL uses one object-lifecycle vocabulary where an object has stable identity: |
+| [Procedures and Functions](procedures.md) | ### 12.1 `CREATE PROCEDURE` |
+| [Containerized Test Databases (USE DOCKER)](use-docker.md) | <!-- DockerActionStatement --> |

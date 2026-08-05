@@ -1,14 +1,12 @@
 # Governance Core
 
-### 4.4 Governance Core
-
 Governance Core centralizes three production controls:
 
 - **Plaintext secrets policy enforcement** — the central linter detects and blocks plaintext secret persistence when forbidden by policy.
 - **Named secret references** — connector passwords and sensitive connection-string fields can use `SECRET:name` instead of raw secret values.
 - **Durable audit forwarding** — Portal security and mutation audit rows are staged in a transactional outbox and can be forwarded to an HTTPS collector, with optional fail-closed behavior.
 
-#### Named secret providers
+### Named secret providers
 
 Configure the secret provider in `appsettings.json` or with environment variables under `Governance:Secrets:*`.
 The older `Secrets:*` prefix remains accepted as a compatibility fallback, but new deployments should use
@@ -42,7 +40,7 @@ Governance__Secrets__VaultEndpoint=https://vault.example.com/etl-sql/secrets
 Governance__Secrets__VaultBearerToken=ENC:ENCRYPTED_TOKEN
 ```
 
-#### Managing OS secret store secrets from the CLI
+### Managing OS secret store secrets from the CLI
 
 With `Governance:Secrets:Provider=OsSecretStore` configured, administrators manage named secrets
 without touching secret files directly:
@@ -63,7 +61,7 @@ the CLI warns when it is used. Values are encrypted machine-scoped before they r
 these commands on the machine that will resolve the secrets. `set-secret` on a disabled secret
 re-enables it. Secret values are never echoed, logged, or included in error messages.
 
-#### Shared connections (connection catalog)
+### Shared connections (connection catalog)
 
 An administrator can catalog a connection once — the SSRS shared data source model — so users
 reference it without knowing the credentials. Configure the catalog with
@@ -118,4 +116,3 @@ published reports, subscription job scripts, and orchestrator scheduled jobs who
 reference the alias or secret name, catalog entries that reference a secret, and — for shared
 connections — the recorded per-consumer usage (which user resolved the entry, when, and how many
 times), captured automatically at `SHARED:alias` resolution.
-

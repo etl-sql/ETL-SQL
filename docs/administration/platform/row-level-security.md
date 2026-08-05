@@ -1,7 +1,5 @@
 # Row-Level Security
 
-### 4.x Row-Level Security (report data filtering)
-
 Folder and dataset permissions control **which reports a user can open** — the coarse-grained gate.
 Row-level security (RLS) is the finer layer: it lets a report author filter the *rows* a viewer sees
 based on the viewer's identity, so one report can serve every user their own slice of the data.
@@ -51,4 +49,3 @@ the target (`EXECUTE_REPORT_AS`). Impersonated runs are never cached.
 > Full design and threat model: `docs/architecture/decisions/RowLevelSecurity.md`.
 
 ---
-

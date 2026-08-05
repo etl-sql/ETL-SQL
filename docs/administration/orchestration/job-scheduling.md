@@ -1,12 +1,19 @@
 # Job Scheduling
 
-## 3. Job Scheduling
-
 Jobs are declared in `.etlsql` scripts with `CREATE JOB`, linked to named cron schedules, and executed
 by the Orchestrator. Single-node deployments use SQLite by default; HA deployments use shared
 PostgreSQL state. No operating-system cron or Windows Task Scheduler entry is required.
 
-### 3.0 Live Files vs Published Bundles
+## By deployment profile
+
+| Profile | How work is scheduled |
+| :--- | :--- |
+| **Solo / Workstation** | Either the OS scheduler calling `etl-sql run`, or a local SQLite Orchestrator if you have several inter-dependent recurring jobs. Both are supported; the OS scheduler is simpler and keeps running when nothing else is. |
+| **Team / SME** | The shared Orchestrator with durable schedules, retry policies and job history. This is the point at which "what ran last night, and did it work?" needs an answer that is not a log file. |
+| **Enterprise / Corporate** | As Team, with **lease-fenced distributed scheduling**: several schedulers may be live, and a database-backed lease guarantees one winner per due job. Do not replace this with a process-local lock. |
+| **SaaS / Departmental** | As Enterprise, with a **separate Orchestrator store per environment**. A shared schedule store means one department's job pressure becomes another's outage. |
+
+## Live Files vs Published Bundles
 
 Orchestrator jobs support two script management models:
 
@@ -17,7 +24,7 @@ Orchestrator jobs support two script management models:
 
 Unversioned published paths such as `orch://finance-load/main.etlsql` resolve to the latest published version for manual runs. When used in `CREATE JOB` or `ALTER JOB`, the Orchestrator resolves the latest version once and stores the pinned path, for example `orch://finance-load@3/main.etlsql`.
 
-### 3.0.1 Publishing Scripts
+## Publishing Scripts
 
 ```sql
 PUBLISH BUNDLE 'finance-load'
@@ -37,7 +44,7 @@ RUN SCRIPT @folder + '\load.etlsql';    -- publish-time failure
 
 Use live file mode for scripts that intentionally choose sub-scripts at runtime.
 
-### 3.0.2 Passwords And Secrets
+## Passwords And Secrets
 
 Publish-time passwords unlock existing `ENC:` values. Published copies are stored without `USE PASSWORD` statements, and secrets are re-encrypted for the Orchestrator lockbox. Source files are not modified.
 
@@ -45,7 +52,7 @@ Publish-time passwords unlock existing `ENC:` values. Published copies are store
 
 File encryption/decryption operations in published scripts must use explicit encrypted passwords or key references. They cannot rely on an implicit session password fallback.
 
-### 3.0.3 Export And Recovery
+## Export And Recovery
 
 ```sql
 EXPORT SCRIPT 'orch://finance-load@3/main.etlsql'
@@ -54,7 +61,7 @@ TO 'C:\Recovered\finance-load';
 
 `EXPORT SCRIPT` recovers the bundled script files and relative folder structure. It does not decrypt or reveal secrets; recovered scripts may require secrets to be re-entered before use.
 
-### 3.0.4 Bundle Inspection
+## Bundle Inspection
 
 ```sql
 SELECT * FROM eng.bundles;
@@ -64,7 +71,7 @@ SELECT * FROM eng.bundle_dependencies WHERE bundle_name = 'finance-load' AND ver
 VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
 ```
 
-### 3.1 `CREATE JOB` — Schedule a Job
+## `CREATE JOB` — Schedule a Job
 
 ```sql
 CREATE SCHEDULE EveryThirtyMinutes
@@ -101,7 +108,7 @@ Cron and time zone belong to `CREATE SCHEDULE`. This lets several jobs share one
 one job run on several independent schedules. Cron is minute-granularity; seconds schedules are not
 supported.
 
-### 3.2 Retry Policies & Resilience
+## Retry Policies & Resilience
 
 Jobs can be configured with a retry policy to handle transient failures (e.g., network glitches, database timeouts).
 
@@ -116,7 +123,7 @@ The scheduler employs an exponential backoff strategy. The delay doubles with ea
 **Session Persistence:**
 Retries automatically preserve the `SessionId` from the first attempt. This ensures that any persisted state (connections, variables, `#temp` tables) remains available to the retried script if the environment is configured for session persistence.
 
-### 3.3 `eng.jobs` — List Registered Jobs
+## `eng.jobs` — List Registered Jobs
 
 Displays all registered jobs with their schedule, last run time, and next scheduled run.
 
@@ -130,7 +137,7 @@ SELECT * FROM #job_list WHERE IsEnabled = 1;
 
 **Result columns:** `Name`, `Interval`, `Unit`, `AtTime`, `LastRun`, `NextRun`, `IsEnabled`
 
-### 3.4 `eng.job_history` — View Execution History
+## `eng.job_history` — View Execution History
 
 Returns the execution log for all jobs or a specific job.
 
@@ -176,7 +183,7 @@ also what `ASSERT JOB … WITHIN … OF HISTORICAL` reads to build its baseline 
 restarted or the job was killed; reconciled from a stale `RUNNING` row). A failure digest should treat
 everything except `SUCCESS` and `RUNNING` as a problem.
 
-### 3.5 `eng.host_metrics` — Host Utilization (Capacity Planning)
+## `eng.host_metrics` — Host Utilization (Capacity Planning)
 
 Returns the host-utilization time series — per node, the last 24 hours of memory-load %, CPU %, and
 free disk on the state and spill volumes. This is the signal for *"am I outgrowing this server"*,
@@ -201,7 +208,7 @@ GROUP BY NodeId;
 **Result columns:** `NodeId`, `CapturedAt`, `MemoryLoadPercent`, `ProcessCpuPercent`, `HostCpuPercent`
 (null until a whole-host CPU probe is enabled), `StateDiskFreeMB`, `SpillDiskFreeMB`
 
-### 3.4 `DROP JOB` — Unschedule a Job
+## `DROP JOB` — Unschedule a Job
 
 Removes a job definition and its full history from the store.
 
@@ -213,7 +220,7 @@ DROP JOB NightlyArchive;
 > [!CAUTION]
 > `DROP JOB` permanently deletes the job and all its history entries. There is no undo. If you just want to pause a job temporarily, update it through the Portal or call `PUT /api/scheduled-jobs/{name}` with `IsEnabled = false`.
 
-### 3.5 Cancelling a Running Job
+## Cancelling a Running Job
 
 To request cancellation of a currently-executing scheduled job, use the Orchestrator REST API:
 
@@ -231,7 +238,7 @@ curl -X DELETE http://localhost:5001/jobs/{id} \
 
 From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).
 
-### 3.6 Paging Scheduled Jobs and History
+## Paging Scheduled Jobs and History
 
 The management APIs bound catalog responses so large installations do not materialize every job or
 history row in one request. Job pages are ordered by name and accept `limit` (1–1,000, default 100)
@@ -248,4 +255,3 @@ they use the `(IsEnabled, NextRun)` index. Portal completion polling uses bounde
 completion-time pages internally.
 
 ---
-

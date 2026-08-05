@@ -23,7 +23,7 @@ The Portal provides an interactive self-service access request workflow when use
 
 ## API Endpoints
 
-### 1. Fetch Access Metadata
+### Fetch Access Metadata
 `GET /api/reports/{id}/access-info`
 
 Returns safe metadata for rendering the access request UI:
@@ -39,7 +39,7 @@ Returns safe metadata for rendering the access request UI:
 }
 ```
 
-### 2. Submit Access Request
+### Submit Access Request
 `POST /api/reports/{id}/request-access`
 
 **Request Body:**

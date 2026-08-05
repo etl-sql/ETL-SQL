@@ -1,10 +1,12 @@
 # SMTP Connections and Subscriptions
 
-## 7. SMTP Connections
+Configuring SMTP so the Portal can deliver report subscriptions, and managing those subscriptions.
+
+## SMTP Connections
 
 SMTP connections are named governed connection-catalog entries used by subscriptions to send email. Open **Admin → Connections** and choose connector type `SMTP`.
 
-### 7.1 Creating a Connection
+### Creating a Connection
 
 | Field | Description |
 | :--- | :--- |
@@ -16,7 +18,7 @@ SMTP connections are named governed connection-catalog entries used by subscript
 | **From Address** | The `From:` address on outgoing emails |
 | **Use SSL** | Whether to use SSL/TLS |
 
-### 7.2 Security Note
+### Security Note
 
 SMTP credentials are **not** stored on the connection. The connection holds a `SECRET:name`
 reference into the portal secret store, so configuring an authenticated relay is two steps: store
@@ -24,7 +26,7 @@ the password as a secret, then reference it by name. Moving the portal to a new 
 re-provisioning the *secret store*; the connection definitions themselves carry no credential and
 promote between environments unchanged.
 
-### 7.3 Scripted Management
+### Scripted Management
 
 SMTP connections can also be managed from an ETL-SQL script inside an `EXECUTE portal` block (Admin role required), which keeps mail configuration reproducible alongside the rest of a portal bootstrap script. SMTP is an ordinary connector and uses the ordinary connector grammar:
 
@@ -55,11 +57,11 @@ No SMTP secret is persisted in the script, the script's execution history, or th
 
 ---
 
-## 8. Subscriptions
+## Subscriptions
 
 Subscriptions are owned by individual users but visible and manageable by Admins in **Admin → Subscriptions**.
 
-### 8.1 Subscription Formats
+### Subscription Formats
 
 | Format | What is delivered |
 | :--- | :--- |
@@ -68,7 +70,7 @@ Subscriptions are owned by individual users but visible and manageable by Admins
 | `CSV` | Raw data table as a CSV attachment |
 | `Markdown` | Report content as a Markdown text attachment |
 
-### 8.2 Schedules
+### Schedules
 
 | Schedule | Behaviour |
 | :--- | :--- |
@@ -82,7 +84,7 @@ The scheduled job itself is a **credential-free trigger**: the generated `.etlsq
 
 Because delivery happens in the portal, the **portal process must be running** for subscription email to be sent — the Orchestrator alone only fires the trigger.
 
-### 8.3 Delivery Semantics
+### Delivery Semantics
 
 Subscription delivery is **at-most-once per recipient and scheduler trigger**. Recipient addresses
 are normalized and deduplicated, then each recipient is claimed independently in a durable delivery
@@ -96,7 +98,7 @@ An invalid or SMTP-rejected address fails only its recipient row; valid recipien
 and audit details use a recipient fingerprint rather than the address. Authorized delivery history
 retains the normalized address for diagnosis.
 
-### 8.4 Delivery Failures
+### Delivery Failures
 
 Each subscription tracks a `FailCount`, incremented by the portal's delivery executor when an export or send fails (with sanitized error detail in the audit log and the delivery ledger). A delivery that is **denied** — the owner was disabled or lost read permission on the report's folder — is recorded as `SUBSCRIPTION_DELIVERY_DENIED` in the audit log and is *not* counted or retried as a transient failure. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration, permissions, or report script before re-enabling.
 
@@ -108,7 +110,7 @@ The Admin subscription table shows active/paused state, the last successful deli
 
 Use the search box and status filter to isolate subscriptions by report, name, recipient, active/paused state, or delivery failure. Select rows on the current page to pause or resume multiple subscriptions together. Selection is page-local and is cleared when the filter or page changes.
 
-### 8.5 Scripted Subscription Management
+### Scripted Subscription Management
 
 Administrators can create and modify subscriptions using ETL-SQL script syntax. This is useful for bulk setup, deployment automation, or version-controlling subscription configuration alongside report scripts.
 

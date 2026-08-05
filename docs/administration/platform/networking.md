@@ -1,6 +1,8 @@
 # HTTPS and Network Configuration
 
-## 5. HTTPS & Network Configuration
+HTTPS, reverse proxies, ports, and the network boundaries each service expects.
+
+## HTTPS & Network Configuration
 
 Both the Orchestrator and Portal use Kestrel. The production templates define these defaults:
 

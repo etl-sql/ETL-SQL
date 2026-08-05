@@ -1,6 +1,20 @@
 # Backup, Monitoring, and Health
 
-## 8. Backup & Maintenance
+Backing up ETL-SQL state, proving the backup restores, and wiring health and failure signals into your own monitoring.
+
+## By deployment profile
+
+| Profile | What you do |
+| :--- | :--- |
+| **Solo / Workstation** | Schedule `etl-sql admin backup` with the OS scheduler and **test the restore**. There is no service to monitor and nothing to page you, so a restore drill is the whole of your recovery assurance. |
+| **Team / SME** | As Solo, plus external liveness monitoring of `GET /healthz` from *another* host, and job-failure alerting. A check running inside the Orchestrator cannot report that its own host is down. |
+| **Enterprise / Corporate** | Back up PostgreSQL **and** the shared artifact roots as one coordinated recovery set — HA state is no longer two SQLite files. Add the Portal operational digest and the remote audit outbox. |
+| **SaaS / Departmental** | As Enterprise, **per environment**, and prove the restore of one environment cannot read or write another's data. A shared backup target reintroduces the coupling isolation exists to prevent. |
+
+Custody never moves into the Portal at any size: the Portal *reports* backup freshness and
+restore-drill evidence; the backup and the restore happen on the host.
+
+## Backup & Maintenance
 
 ### Databases
 
@@ -17,18 +31,18 @@ roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for y
 
 ### Scheduling backups and restore drills
 
-`etl-sql admin backup` (§11.3) is a one-shot command, not a scheduled service — **you schedule it**:
+[`etl-sql admin backup`](operator-cli.md#backup-and-restore--etl-sql-admin-backup--restore) is a one-shot command, not a scheduled service — **you schedule it**:
 
 - **Schedule it externally** with the OS scheduler (Windows Task Scheduler / cron), not as an internal
   job, so a backup still runs when the orchestrator itself is down. Capture the command's exit code and
-  alert on non-zero (wire it into the job-failure alerting in §9.1).
+  alert on non-zero (wire it into job-failure alerting — see [Operational Checks](#operational-checks)).
 - **Test the restore.** An unverified backup is a hope, not a recovery plan. Periodically restore into a
   scratch directory with `etl-sql admin restore --validate --report recovery-report.json` (it validates
-  integrity, key versions, and version compatibility before writing anything — see §11.3) and confirm
+  integrity, key versions, and version compatibility before writing anything — see [backup and restore](operator-cli.md#backup-and-restore--etl-sql-admin-backup--restore)) and confirm
   the Portal starts and a report renders. Schedule this drill on a cadence that matches your recovery
   objectives.
 - Restored clones must not silently reuse machine identity or credentials in another environment —
-  re-enroll and rotate as covered in §11.3.
+  re-enroll and rotate as covered in [backup and restore](operator-cli.md#backup-and-restore--etl-sql-admin-backup--restore).
 
 For supported RPO/RTO targets, restore-drill evidence, cross-environment clone safety, and regional
 failure procedures, see [`docs/architecture/decisions/Disaster_Recovery_Objectives.md`](../../architecture/decisions/Disaster_Recovery_Objectives.md).
@@ -67,7 +81,7 @@ The Windows MSI uninstaller and the Linux `.deb` purge step still remove this sa
 
 ---
 
-## 9. Operational Checks
+## Operational Checks
 
 After installation or upgrade:
 
@@ -80,7 +94,7 @@ After installation or upgrade:
 
 For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [Portal Admin Guide](../portal/README.md).
 
-### 9.1 External monitoring and alerting
+### External monitoring and alerting
 
 ETL-SQL exposes health and history for you to monitor, but **it does not page you** — wire the signals
 into your own monitoring stack.
@@ -132,9 +146,9 @@ OS-level monitoring remains a good independent cross-check.
 
 ---
 
-## 10. Environment Validation with `etl-sql doctor`
+## Environment Validation with `etl-sql doctor`
 
-The `etl-sql doctor` command is a built-in health check that validates the most common setup problems before you begin using the environment. It is also available as **`etl-sql admin doctor`** — the same check under the `admin` command group, alongside `admin support-bundle` (§11.2). The top-level `etl-sql doctor` spelling is retained for backward compatibility and IDE integration; both accept the same `--profile`, `--strict`, and `--json` options.
+The `etl-sql doctor` command is a built-in health check that validates the most common setup problems before you begin using the environment. It is also available as **`etl-sql admin doctor`** — the same check under the `admin` command group, alongside [`admin support-bundle`](operator-cli.md#support-archives--etl-sql-admin-support-bundle). The top-level `etl-sql doctor` spelling is retained for backward compatibility and IDE integration; both accept the same `--profile`, `--strict`, and `--json` options.
 
 ### Quick check (default)
 
@@ -187,6 +201,6 @@ etl-sql doctor --profile full --strict --json
 - Run `etl-sql doctor` as the first step of any new host setup or post-upgrade verification.
 - Add `etl-sql doctor --strict` to the service startup validation in your CI/CD pipeline.
 - Use `etl-sql doctor --json` to feed a monitoring system that alerts on WARN/FAIL status.
-- See the [Production Readiness Checklist](../portal/production-readiness.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
+- See the [Production Readiness Checklist](../portal/production-readiness.md) in the portal admin guide for the full go-live gate.
 
 ---

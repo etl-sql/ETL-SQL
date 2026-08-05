@@ -1,12 +1,14 @@
 # Deployment and First-Run Setup
 
-## 1. Deployment
+Deploying the Portal as a managed service and completing first-run setup.
+
+## Deployment
 
 The Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses **SQLite** by
 default for single-node deployments and **PostgreSQL** for load-balanced HA deployments. It serves
 both the REST API and the static web UI from the same process.
 
-### 1.1 Prerequisites
+### Prerequisites
 
 - .NET 10 Runtime
 - Write access to the directories configured for the database, report scripts, and snapshots
@@ -14,7 +16,7 @@ both the REST API and the static web UI from the same process.
 - (Optional) ETL-SQL Orchestrator Service running on the same host or reachable through its HTTP API,
   for background dataset refresh and scheduled report/subscription work
 
-### 1.2 Windows (NSSM)
+### Windows (NSSM)
 
 ```powershell
 nssm install ETL-SQL-Portal "dotnet" "ETL-SQL-Portal.dll"
@@ -25,7 +27,7 @@ nssm set ETL-SQL-Portal AppEnvironmentExtra "ASPNETCORE_ENVIRONMENT=Production"
 nssm start ETL-SQL-Portal
 ```
 
-### 1.3 Linux (systemd)
+### Linux (systemd)
 
 ```ini
 [Unit]
@@ -43,14 +45,13 @@ User=etlportal
 WantedBy=multi-user.target
 ```
 
-### 1.4 Reverse Proxy (Recommended for Production)
+### Reverse Proxy (Recommended for Production)
 
 The portal listens on HTTP by default. Put it behind **nginx** or **IIS ARR** and terminate TLS at the proxy. Set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` so the app sees the correct client IP in audit logs.
 
 ---
 
-
-## 3. First-Run Setup
+## First-Run Setup
 
 On first start the portal:
 

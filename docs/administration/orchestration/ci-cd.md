@@ -1,8 +1,8 @@
 # CI/CD Integration
 
-## 8. CI/CD Integration
+Running ETL-SQL from pipelines and schedulers — shell, GitHub Actions, Azure Pipelines, Task Scheduler and cron — and choosing between them.
 
-### 8.1 Shell / PowerShell
+## Shell / PowerShell
 
 ```powershell
 # Run a script and check the exit code
@@ -17,7 +17,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-### 8.2 GitHub Actions / Azure Pipelines
+## GitHub Actions / Azure Pipelines
 
 ```yaml
 - name: Run ETL pipeline
@@ -40,7 +40,7 @@ Use `--pass $ETL_MASTER_PASSWORD` if your scripts use `ENC:` strings:
       --silent
 ```
 
-### 8.3 Windows Task Scheduler
+## Windows Task Scheduler
 
 For simple scheduled jobs without needing the in-engine scheduler:
 
@@ -48,7 +48,7 @@ For simple scheduled jobs without needing the in-engine scheduler:
 2. **Arguments:** `run "C:\ETL\Scripts\nightly.etlsql" --log "C:\ETL\Logs\" --silent`
 3. **Set a trigger:** Daily at 02:00
 
-For pipelines that need the **in-engine scheduler** (multiple inter-dependent recurring jobs), prefer using `CREATE JOB` statements and running the engine continuously as a Windows Service or daemon. See §9 below.
+For pipelines that need the **in-engine scheduler** (multiple inter-dependent recurring jobs), prefer using `CREATE JOB` statements and running the engine continuously as a Windows Service or daemon. See [Production Installation](../platform/installation.md#production-installation) for running the engine as a Windows Service or systemd unit.
 
 **Using `schtasks.exe` from the command line:**
 
@@ -76,7 +76,7 @@ schtasks /Delete /TN "ETL-SQL Nightly" /F
 > [!NOTE]
 > `/RU SYSTEM` runs the task as the Local System account. Replace with a specific service account (`/RU DOMAIN\svcETL /RP password`) if your scripts connect to network resources or need domain credentials.
 
-### 8.4 Linux / macOS Cron Jobs
+## Linux / macOS Cron Jobs
 
 On Linux and macOS, use `crontab` to schedule ETL-SQL scripts as standard cron jobs.
 
@@ -151,18 +151,17 @@ crontab -l
 crontab -r
 ```
 
-### 8.5 Choosing the right scheduling approach
+## Choosing the right scheduling approach
 
 | Approach | Platform | Best for |
 |----------|----------|----------|
 | `CREATE JOB` (in-engine) | Both | Multiple inter-dependent recurring jobs, jobs that need ETL-SQL context, history tracking via `eng.job_history` |
 | Windows Task Scheduler / `schtasks` | Windows | Single one-off scripts, OS-managed scheduling, no need to keep the engine running 24/7 |
 | Linux crontab | Linux/macOS | Single scripts on a fixed schedule, minimal infrastructure, containerized environments |
-| Windows Service (§9.1) + `CREATE JOB` | Windows | Production servers running `CREATE JOB` continuously with automatic restart |
-| systemd service (§9.2) + `CREATE JOB` | Linux/macOS | Production servers running `CREATE JOB` continuously with automatic restart |
+| Windows Service + `CREATE JOB` | Windows | Production servers running `CREATE JOB` continuously with automatic restart |
+| systemd service + `CREATE JOB` | Linux/macOS | Production servers running `CREATE JOB` continuously with automatic restart |
 
 > [!TIP]
 > **Rule of thumb:** If you have more than two or three recurring pipelines that share data or depend on each other, use `CREATE JOB` with the in-engine scheduler. For a single nightly script with no dependencies, OS-level scheduling (Task Scheduler or cron) is simpler and requires no long-running process.
-
 
 ---

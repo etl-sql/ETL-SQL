@@ -1,6 +1,17 @@
 # Central Security Events and SIEM Delivery
 
-Security events are separate from diagnostic logs and transactional governance audit records. They carry the
+Security events are separate from diagnostic logs and governance audit records: a dedicated versioned contract with a durable local outbox and optional SIEM delivery.
+
+## By deployment profile
+
+| Profile | What you do |
+| :--- | :--- |
+| **Solo / Workstation** | Events are written to the local outbox and stay there. Useful as evidence after the fact; there is nothing to deliver them to. |
+| **Team / SME** | Optionally point the outbox at a collector. Delivery failure is visible but does not block work. |
+| **Enterprise / Corporate** | Deliver to the SIEM, and decide deliberately whether mutations should **fail closed** when the collector is unhealthy. `GET /api/admin/audit/collector` reports what would happen to the next mutation rather than leaving you to infer it. |
+| **SaaS / Departmental** | As Enterprise, **with a distinct outbox path per environment**. This is the one isolated resource whose default is actively wrong: `LocalApplicationData` is machine-wide, so two environments on one host write security events into a single queue — a cross-environment leak of exactly the records isolation exists to keep apart. Set it explicitly per environment. |
+
+They carry the
 same correlation, job, script, policy, tenant, and node identifiers when those values are available, but use a
 dedicated versioned contract and durable local outbox. A policy denial is decided and enforced before reporting;
 an unavailable event sink cannot turn a denial into an allow. Remote delivery affects execution only when an

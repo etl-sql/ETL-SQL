@@ -1,6 +1,20 @@
 # Installation and Deployment
 
-## 1. Deployment Components
+Installing ETL-SQL as workstation tooling, as managed services, or as a multi-node cluster.
+
+## By deployment profile
+
+| Profile | What you install |
+| :--- | :--- |
+| **Solo / Workstation** | The CLI only. Skip every service section — no Portal, no Orchestrator service, no reverse proxy. The OS account is your security boundary. |
+| **Team / SME** | CLI plus the Portal and Orchestrator as managed services (Windows Service or systemd) on one host, behind TLS. |
+| **Enterprise / Corporate** | As Team, across multiple nodes: shared PostgreSQL, shared artifact roots, a shared Data Protection key ring, and a load balancer with session affinity. See [state and high availability](state-and-ha.md). |
+| **SaaS / Departmental** | As Enterprise, **installed once per environment** with a distinct port base, service account, data root and key set per environment. Generate the requirement list with `GET /api/admin/environments/plan` rather than deriving it by hand. |
+
+New here? [Administration by deployment profile](../by-profile.md) gives each profile an ordered
+path through these documents.
+
+## Deployment Components
 
 ETL-SQL can be deployed as workstation tooling, server services, or both.
 
@@ -19,7 +33,7 @@ shared or split the services.
 
 ---
 
-## 2. Production Installation
+## Production Installation
 
 ### Windows
 
@@ -70,7 +84,7 @@ ETL-SQL provides pre-configured Docker Compose configurations to run containeriz
    If you have the source tree cloned locally and need to test code modifications inside the containers, copy [`deploy/docker/docker-compose.override.example.yml`](../../../deploy/docker/docker-compose.override.example.yml) to `docker-compose.override.yml`. When Docker Compose finds this file alongside the main compose config, it automatically overrides the registry images and compiles the local C# code via multi-stage builds.
 
 4. **High Availability Scaling**:
-   For multi-node active-active load-balanced clusters, use the HA-specific docker compose template located at [deploy/docker/docker-compose.ha.yml](../../../deploy/docker/docker-compose.ha.yml). This setup supports variable container scaling behind a sticky HAProxy load balancer. See [Section 6.2 Containerized HA Clustering (Docker Compose)](state-and-ha.md#62-containerized-ha-clustering-docker-compose) below for detailed instructions.
+   For multi-node active-active load-balanced clusters, use the HA-specific docker compose template located at [deploy/docker/docker-compose.ha.yml](../../../deploy/docker/docker-compose.ha.yml). This setup supports variable container scaling behind a sticky HAProxy load balancer. See [Containerized HA Clustering (Docker Compose)](state-and-ha.md#containerized-ha-clustering-docker-compose) for detailed instructions.
 
 ### First-Run Checklist
 

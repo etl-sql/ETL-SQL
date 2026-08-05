@@ -1,6 +1,8 @@
 # Health Monitoring and Audit Log
 
-## 10. Health Monitoring
+The Portal health endpoints, and the audit log of who viewed, exported, published and changed what.
+
+## Health Monitoring
 
 `GET /health` returns a JSON document with the overall portal status and the state of each subsystem.
 
@@ -48,11 +50,11 @@ systems can handle deduplication, severity routing, recovery notifications, and 
 
 ---
 
-## 10. Audit Log
+## Audit Log
 
 Every significant action is written to the audit log. Open **Admin → Audit Log** to browse or search.
 
-### 10.1 Logged Events
+### Logged Events
 
 | Action | Trigger |
 | :--- | :--- |
@@ -76,7 +78,7 @@ Every significant action is written to the audit log. Open **Admin → Audit Log
 | `REFRESH_TOKEN_REUSE` | A revoked refresh token was replayed (theft signal); all of the user's sessions were invalidated |
 | `UPDATE_ORCHESTRATOR_SETTINGS` | Admin changed the Orchestrator URL or API key via the Settings tab |
 
-### 10.2 Exporting the Audit Log
+### Exporting the Audit Log
 
 Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV file. You can also filter by action type and user before exporting. The export includes each row's **correlation id** — the HTTP request trace identifier or the background operation id (e.g. `delivery-<id>` for subscription deliveries) — so every event can be tied back to the operation that produced it.
 
@@ -89,7 +91,7 @@ EXECUTE prod_portal BEGIN
 END;
 ```
 
-### 10.3 Audit Guarantees, Retention, and the Tamper-Evidence Boundary
+### Audit Guarantees, Retention, and the Tamper-Evidence Boundary
 
 - **Mutations and their audit rows commit together.** Security-sensitive changes (user role/active/password/token changes, user deletion and ownership transfer, group membership, folder and dataset ACLs, dataset metadata/move/delete, SMTP definitions, share-link/embed-token revocation, subscription delivery outcomes) write their audit row in the same database transaction as the change itself: the operation cannot succeed without its durable audit event, and a rejected or conflicted operation leaves no audit row behind. Informational events (views, exports, logins, denials) remain independent best-effort records.
 - **Retention is opt-in.** By default every audit row is kept forever. Set `Portal:Audit:RetentionDays` to enable a daily sweep that deletes rows older than the window (`Portal:Audit:PurgeIntervalSeconds` tunes the cadence). Export or forward rows you must keep **before** enabling retention.

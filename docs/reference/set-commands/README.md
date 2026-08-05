@@ -5,7 +5,7 @@
 | Page | Description |
 | :--- | :--- |
 | [SET ALLOW_FILE_OPERATIONS](set-allow-file-operations.md) | Overrides the runaway file-operation protection limit for the current session. |
-| [SET ALLOW_FILE_TYPE_ACCESS](set-allow-file-type-access.md) | Controls whether file extensions outside the global whitelist are permitted, or adds a specific extension to the session whitelist. |
+| [SET ALLOW_FILE_TYPE_ACCESS](set-allow-file-type-access.md) | <!-- SetSecurityOverrideStatement --> |
 | [SET ALLOW_PLAINTEXT_SECRETS](set-allow-plaintext-secrets.md) | Unsafe local-development escape hatch. Controls whether plaintext secrets may remain in saved source files. |
 | [SET ALLOW_RECURSIVE_LAYERS](set-allow-recursive-layers.md) | Overrides the directory recursion depth limit for the current session. |
 | [SET BATCHSIZE](set-batchsize.md) | Sets the number of rows per remote fetch batch for `SELECT ... FROM connection`. |
@@ -23,13 +23,13 @@
 | [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITI... |
 | [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results through `eng.profile`. |
 | [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Sets the execution duration cap in milliseconds for regex evaluations to prevent denial-of-service from catastrophic backtracking. |
-| [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether sensitive variable values are unmasked in `eng.variables`. This is display-only. |
-| [SET SPILL_COMPRESSION](set-spill-compression.md) | Controls whether data buffers spilled to disk are compressed. |
+| [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `eng.variables` output. This is a display-only setting and does not affect sav... |
+| [SET SPILL_COMPRESSION](set-spill-compression.md) | <!-- SetSpillOptionStatement --> |
 | [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest. |
 | [SET TEMP_TABLE_SPILL_THRESHOLD](set-temp-table-spill-threshold.md) | Sets the row count before a `#temp` table spills its data to disk. |
 | [SET @variable](set-variable.md) | Assigns a value to a declared or implicitly declared session variable. |
 | [SET WEEK_START_DAY](set-week-start-day.md) | Sets the first day of the week for RELDATE week-boundary expressions (`W`, `W-1`, `WE`, etc.). |
 | [SET WHAT_IF](set-what-if.md) | Enables or disables dry-run mode. When enabled, side-effecting operations (INSERT, UPDATE, DELETE, MERGE, file writes, SEND EMAIL, Docker) are logg... |
 | [SET WINDOW_SPILL_THRESHOLD](set-window-spill-threshold.md) | Sets the row count before window function operations spill intermediate results to disk. |
-| [SET WITH_PROMPT](set-with-prompt.md) | Controls whether SET operations marked with `WITH_PROMPT` prompt for confirmation before applying. |
-| [SET](set.md) | Assigns a value to a session variable or changes an engine execution option. All options are session-scoped and reset when the session ends. |
+| [SET WITH_PROMPT](set-with-prompt.md) | Marks a named variable set so activating it prompts for confirmation. |
+| [SET](set.md) | <!-- SetThresholdStatement --> |

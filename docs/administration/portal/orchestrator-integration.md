@@ -1,10 +1,8 @@
 # Orchestrator Management
 
-## 13. Orchestrator Management
-
 The portal includes a built-in **Orchestrator** tab that provides a web interface for managing ETL-SQL scheduled jobs. Access is controlled by the `OrchestratorAccess` policy: **Admin** or **OrchestratorManager** role.
 
-### 13.1 Connecting to the Orchestrator Service
+## Connecting to the Orchestrator Service
 
 The portal communicates with the Orchestrator Service over HTTP. Configure the connection in one of two ways:
 
@@ -35,7 +33,7 @@ To verify the connection, click **Test Connection** — the button calls the `/a
 > [!TIP]
 > If you change the URL or key without saving, **Test Connection** still tests the previously saved settings. Save first, then test.
 
-#### API Key
+### API Key
 
 The API key is sent as an `X-Orchestrator-Key` header on every request the portal makes to the Orchestrator. The Orchestrator must be configured with the same key:
 
@@ -52,7 +50,7 @@ the snapshot manifest and CSV export are available.
 
 The portal never echoes the stored API key back to the browser — the **Admin → Settings** page shows only whether a key is set (`HasApiKey: true/false`). To change the key, type a new value and save. To clear it, check **Clear API key** and save.
 
-### 13.2 What the Orchestrator Tab Shows
+## What the Orchestrator Tab Shows
 
 After connecting, the Orchestrator tab displays:
 
@@ -63,7 +61,7 @@ After connecting, the Orchestrator tab displays:
 | **Jobs table** | All registered jobs including disabled ones. Columns: Name, Schedule, Status, Last Run, Next Run, Actions. |
 | **Job detail panel** | Slides in from the right when you click a job or Gantt bar: schedule info, script content (read-only), duration trend sparkline, and a history table showing the last 20 executions. |
 
-### 13.3 Job Actions
+## Job Actions
 
 | Action | What it does |
 | :--- | :--- |
@@ -76,7 +74,7 @@ After connecting, the Orchestrator tab displays:
 > [!CAUTION]
 > Use **Disable** to pause a job temporarily. Use **Delete** only to retire a job permanently.
 
-### 13.4 Creating a Job
+## Creating a Job
 
 Click **New Job** to open the Create Job modal.
 
@@ -93,7 +91,7 @@ Click **New Job** to open the Create Job modal.
 > [!NOTE]
 > The job stores the script content at creation time. If the `.etlsql` file changes on disk later, the stored copy is not updated automatically. Re-create or re-save the job to pick up the change.
 
-### 13.5 Service Control
+## Service Control
 
 When the Orchestrator is online, two buttons appear next to the status chip:
 
@@ -105,7 +103,7 @@ When the Orchestrator is offline:
 - If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button appears that uses the Windows `ServiceController` API to start the local service.
 - On separate-server deployments the portal displays: *"Orchestrator is offline — start the service on its host machine."*
 
-### 13.6 Performance Metrics
+## Performance Metrics
 
 The job detail panel's history table includes per-execution performance data:
 
@@ -119,7 +117,7 @@ The job detail panel's history table includes per-execution performance data:
 > [!NOTE]
 > RAM and CPU columns are only populated for completed runs. A currently-running job shows elapsed wall-clock time only — live resource counters are not available.
 
-### 13.7 Configuration Reference
+## Configuration Reference
 
 | Key | Location | Description |
 | :--- | :--- | :--- |
@@ -133,4 +131,3 @@ The job detail panel's history table includes per-execution performance data:
 | `Orchestrator:ScriptRoot` | Orchestrator `appsettings.json` / env var | Root directory for the script file browser exposed to the portal |
 
 ---
-

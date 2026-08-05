@@ -1,10 +1,8 @@
 # Operator CLI Commands
 
-## 11. Operator CLI Commands
-
 These commands replace manual operator runbooks with supported, repeatable CLI workflows.
 
-### 11.1 First-time onboarding — `etl-sql init`
+## First-time onboarding — `etl-sql init`
 
 Scaffolds a starter workspace so a new operator can run something immediately without reading the
 full documentation first:
@@ -29,7 +27,7 @@ It writes two files:
 it reports which files were created and which were skipped. After scaffolding it prints the next
 steps (run the script, run `admin doctor`, read the User Manual).
 
-### 11.2 Support archives — `etl-sql admin support-bundle`
+## Support archives — `etl-sql admin support-bundle`
 
 Collects a single redacted archive an administrator can hand to support:
 
@@ -63,7 +61,7 @@ private data. Non-secret configuration knobs (timeouts, limits, key *versions*, 
 visible for diagnostics. Empty secret fields are kept as empty so you can see whether a value was
 configured. Always review a bundle before sharing it.
 
-### 11.3 Backup and restore — `etl-sql admin backup` / `restore`
+## Backup and restore — `etl-sql admin backup` / `restore`
 
 `etl-sql admin backup` packages the deployment into **two split-custody archives** so a single leaked
 artifact can neither read nor decrypt the data:
@@ -110,15 +108,15 @@ that the backup was **not** produced by a newer release than the restoring binar
 reconstructs the on-disk layout and re-injects the secrets into the restored `appsettings.json`; on the
 next portal start, pending migrations apply automatically. Dataset caches referenced by **absolute**
 path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
-[§6.5](../portal/publishing.md#versioned-upgrades-and-rollback).
+[versioned upgrades and rollback](../portal/publishing.md#versioned-upgrades-and-rollback).
 The optional `--report` path writes a machine-readable recovery report containing the backup id,
 validation status, achieved RPO/data-loss window, missing dependencies, and required operator actions.
 
-This is the auditable, supported alternative to the manual file-copy backup in §8 for single-node
+This is the auditable, supported alternative to the manual file-copy backup in [Backup & Maintenance](backup-and-monitoring.md#backup--maintenance) for single-node
 deployments. In HA deployments, back up PostgreSQL with your database backup tooling and snapshot the
 shared artifact roots/key ring as one coordinated recovery set.
 
-### 11.4 Upgrading in place
+## Upgrading in place
 
 ETL-SQL applies pending database schema migrations automatically on startup — the Portal runs EF Core
 migrations against the configured Portal database, and the Orchestrator store adds any missing columns
@@ -133,14 +131,14 @@ This upgrade path is gated before every release tag by the **"N→N+1 upgrade-pa
 `scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over
 populated data, and asserts continuity.
 
-#### Promotion preflight
+### Promotion preflight
 
 Before moving artifacts or state between deployment profiles, run `etl-sql admin promotion
 preflight`. It produces a versioned, secret-safe inventory without changing the source or target.
 See [Deployment promotion](deployment-promotion.md) for classifications, failure behavior, and a
 complete example.
 
-### 11.5 Migrating from SQLite to PostgreSQL — `etl-sql admin migrate-database`
+## Migrating from SQLite to PostgreSQL — `etl-sql admin migrate-database`
 
 SQLite is the default, single-node store. To run multiple Portal/Orchestrator nodes behind a load
 balancer they must share **PostgreSQL**; `etl-sql admin migrate-database` copies your existing
@@ -178,7 +176,7 @@ Once the migration succeeds, switch each `Provider` from `Sqlite` to `Postgres` 
 After cutover, configure every Portal node with the same shared artifact roots and key-ring path,
 configure load-balancer affinity, and verify `GET /healthz` on each node before sending user traffic.
 
-### 11.6 PostgreSQL HA soak operations — `etl-sql admin ha-soak`
+## PostgreSQL HA soak operations — `etl-sql admin ha-soak`
 
 The HA soak workflows are native admin CLI commands so operators do not need PowerShell or knowledge
 of the repository's script layout. Capture the command transcript when running long soaks so failures

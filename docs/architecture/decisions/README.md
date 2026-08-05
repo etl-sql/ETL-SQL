@@ -6,6 +6,7 @@
 | :--- | :--- |
 | [Adaptive Execution Controller (v0.15.0 Phase 2) — Design](AdaptiveExecutionController.md) | **Status:** DRAFT for review — no implementation yet. |
 | [Alerting and Service Objectives](Alerting_Service_Objectives.md) | This guide defines baseline service indicators, starter objectives, alert routing, and runbook |
+| [Authorship Is Not Permission](AuthorshipIsNotPermission.md) | **Status:** decided and implemented for reports (v0.17.0) and datasets (v0.18.0). |
 | [Billion-Row Operator Certification (v0.15.0 Phase 4) — Design](BillionRowOperatorCertification.md) | **Status:** Candidate implementation complete for the v0.15.0 Phase 4 scope; 1B operator-run |
 | [Portal and Orchestrator Capacity Planning](Capacity_Planning.md) | Use this guide to turn an expected user base and job schedule into a starter server plan for |
 | [Portal and Orchestrator Capacity Testing](Capacity_Testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
@@ -19,18 +20,19 @@
 | [Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design](ExecutionTransparencyAndFallbacks.md) | **Status:** Phase 5 implementation complete for the current v0.15 native/pushdown/external surfaces; |
 | [HA Topology and Failure Certification](HA_Topology_Failure_Certification.md) | This guide defines the supported Portal and Orchestrator deployment topologies, the readiness |
 | [Host Utilization Time Series & Capacity Reporting — Implementation Plan](HostUtilizationAndCapacityPlanning.md) | > **Status:** ✅ **COMPLETE** (drafted 2026-07-02, finished 2026-07-03). All six sequencing steps have |
-| [Job, Schedule, and Alerting Refactor — Design Specification](job_schedule_notification.md) | Design specification for unifying report and script scheduling under a first-class peer JOB, SCHEDULE, and NOTIFICATION many-to-many model. |
 | [Performance Regression Quality (v0.15.0 Phase 3) — Design](PerformanceRegressionQuality.md) | **Status:** Implemented for v0.15.0 Phase 3. |
 | [Design Strategy: First-Class Web Script Editing in the Portal](PortalEditorStrategy.md) | As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant |
 | [Row-Level Security via Injected Identity — Reference Specification](RowLevelSecurity.md) | > **Status:** ✅ **COMPLETE** (shipped in v0.14.0). |
 | [SME Secret Management and Administration Hardening (v0.15.0 Phase 7) - Design](SMESecretManagementAdministrationHardening.md) | **Status:** Draft for implementation planning. |
 | [Design Spec: Smart Snippets and Schema-Aware Code Generation](SmartSnippetsSpec.md) | This document outlines the design and workflow for **Smart Snippets** in ETL-SQL. It details how slash commands (like `/merge` and `/upsert`) can i... |
 | [Design Spec: Unified Notebook & Script Execution (Virtual Cells and Checkpoints)](UnifiedNotebookScriptExecution.md) | This document specifies the design for unifying the `.etlnb` (ETL-SQL Notebook) execution controller with plain-text `.etlsql` and `.rptsql` script... |
+| [Design Spec: Job, Schedule, and Alerting Refactor](job_schedule_notification.md) | This document outlines the architectural changes for establishing a unified, many-to-many scheduling |
 | [v0.13.0 Code Review — Bugs & Security](v0.13.0-code-review.md) | **Reviewer:** Claude (Opus 4.8) · **Date:** 2026-06-28 · **Base:** `v0.12.0..HEAD` |
 | [v0.13.0 Performance Results](v0.13.0-performance-results.md) | Generated 2026-06-27 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX. |
 | [Flaky Tests — noted during v0.15.0 release, fix in v0.16.0](v0.15.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.15.0 release. Policy: **don't fight a flaky test |
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |
 | [v0.17.0 Code Review & Security Pass](v0.17.0-code-review.md) | **Reviewed:** 2026-07-26 · **Range:** `v0.16.0..HEAD` (191 commits, 268 files, +52k/-2.9k in `src`) |
 | [Flaky Tests — noted during v0.17.0 release, fix in v0.18.0](v0.17.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.17.0 release. Policy is unchanged from |
-| [Flaky Tests — noted during v0.18.0 development, fix in v0.19.0](v0.18.0-flaky-tests.md) | Tracking note for flaky tests hit while building v0.18.0. Same policy: stabilize the minimum to ship, record, fix in a dedicated pass. |
 | [v0.17.0 Performance Results — Scale Certification](v0.17.0-performance-results.md) | **Status:** Decision record. **There is no v0.17.0 performance regression.** Both certification |
+| [v0.18.0 Deployment Profile Review](v0.18.0-deployment-profile-review.md) | The release review that |
+| [Flaky Tests — noted during v0.18.0 development, fix in v0.19.0](v0.18.0-flaky-tests.md) | Tracking note for flaky tests hit while building v0.18.0. Policy unchanged from |

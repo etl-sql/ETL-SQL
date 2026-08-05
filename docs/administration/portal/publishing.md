@@ -1,6 +1,15 @@
 # Publishing Reports
 
-## 6. Publishing Reports
+Registering a `.rptsql` script as a named report in a folder, and the review and versioning controls around doing so.
+
+## By deployment profile
+
+| Profile | How a report reaches its audience |
+| :--- | :--- |
+| **Solo / Workstation** | **N/A — but you still get reports.** Run the same `.rptsql` with the CLI or the Report Player. Nothing on this page is a prerequisite for using reports; it is a prerequisite for *sharing* them. |
+| **Team / SME** | Publish into a folder, and grant the folder to a group. Optionally require review before publish (`Portal:Studio:RequireApprovalToPublish`, default off). |
+| **Enterprise / Corporate** | As Team, plus protected branches and separation of duties — an author can never approve their own draft, whatever roles they hold, **including Admin**. The reviewer is written into a `Reviewed-by:` commit trailer so the review outlives the Portal database. |
+| **SaaS / Departmental** | As Enterprise, **per environment**. Catalogs never merge: a report id from one environment is meaningless in another, so promotion between them is an explicit export/import, not a shared folder. |
 
 Publishing registers a `.rptsql` script file as a named report in a folder.
 
@@ -42,7 +51,7 @@ report metadata and the column lineage of every `CREATE DATASET` in the script. 
 return `400 organization_metadata_policy` before the report catalog changes. An unverifiable active
 policy fails closed. See [Authoritative Organization Policy](../platform/organization-policy.md).
 
-### 6.1 Script hash pinning
+## Script hash pinning
 
 When a report is published, the portal computes a SHA-256 hash of the `.rptsql` file and stores it as `PublishedScriptHash` in the database. This hash is the "known-good" fingerprint for that version of the report.
 
@@ -56,7 +65,7 @@ Use `SELECT * FROM eng.report_history('Report Name')` or `GET /api/reports/{id}/
 SELECT * INTO #report_history FROM eng.report_history('Monthly Sales');
 ```
 
-### 6.2 Updating a Report
+## Updating a Report
 
 Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh. If you intentionally changed the script, re-publish the report (via `PUT /api/reports/{id}` or by deleting and re-publishing) to reset the pinned hash.
 
@@ -66,11 +75,11 @@ Before publishing or replacing a report script, the portal validates that the fi
 VALIDATE REPORT SCRIPT 'sales/daily.rptsql' INTO #validation;
 ```
 
-### 6.3 Deleting a Report
+## Deleting a Report
 
 Soft-delete via the report's **Delete** button. The record is marked `IsDeleted = true` and hidden from users; snapshots are retained on disk. Hard deletion requires removing the database record and snapshot files manually.
 
-### 6.4 Dataset Permissions
+## Dataset Permissions
 
 Cross-report shared datasets allow reports to consume cached, shared data with automated background refreshes. Dataset permissions are independent of folder ACLs.
 
@@ -124,7 +133,7 @@ DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
 Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files. Portal registry commands use string-literal catalog names plus `IN FOLDER` so they cannot be confused with engine `#temp` tables or report dataset declarations.
 
-### 6.5 Dataset At-Rest Key Lifecycle
+## Dataset At-Rest Key Lifecycle
 
 Production portals require `Portal:Dataset:AtRestKey`, a base64 value decoding to at least 32 bytes.
 Generate it with a cryptographically secure random generator, store it in the portal's secret manager,
@@ -165,11 +174,11 @@ subscriptions, audit history, and dataset metadata — verified by the automated
 > storage reconciliation will treat the moved file as an orphan. Everything else restores to a clean
 > location without path constraints.
 
-#### Versioned Upgrades and Rollback
+### Versioned Upgrades and Rollback
 
 A backup/restore drill proves recovery into a *clean* location; upgrading a *live* deployment to a new
 release is a separate operation. On startup the portal runs any pending EF Core schema migrations
-against the configured Portal database (§2 startup sequence), and the Orchestrator store adds any
+against the configured Portal database on startup, and the Orchestrator store adds any
 missing columns in place when it initializes. Both are forward-only: an in-place upgrade preserves
 authentication, folder permissions, durable execution jobs, subscriptions, datasets and their at-rest
 key version, and audit history. New columns are added nullable/with defaults, so pre-upgrade rows
@@ -235,7 +244,7 @@ After the response reports no failures and every dataset row records `v2`, take 
 backups have expired or their recovery procedure retains that key separately. Rotation audit entries
 record versions and counts only, never key material.
 
-#### Interrupted Rotation
+### Interrupted Rotation
 
 Rotation is resumable per dataset. If the request is cancelled, the process stops, or one dataset fails:
 
@@ -249,7 +258,7 @@ Rotation is resumable per dataset. If the request is cancelled, the process stop
    skipped; incomplete datasets are retried.
 6. Retire the previous key only after every catalog row reports the target version and reads succeed.
 
-#### Dataset Orphan Reconciliation
+### Dataset Orphan Reconciliation
 
 The portal runs dataset storage reconciliation automatically during startup, before serving requests.
 It is intentionally limited to the top level of `DatasetRootPath`:
@@ -271,7 +280,7 @@ Operator procedure:
 5. Start the portal and inspect `DatasetStorageMaintenance` log entries for each removed row or file.
 6. Query `eng.tables` and exercise representative reads after reconciliation.
 
-### 6.6 Effective Permissions
+## Effective Permissions
 
 Admins can inspect resolved portal access without mentally joining users, groups, folders, reports, and ACL rows:
 
@@ -289,7 +298,7 @@ SELECT * INTO #report_effective FROM eng.effective_permissions('REPORT', 'Monthl
 SELECT * INTO #folder_effective FROM eng.effective_permissions('FOLDER', '/Finance');
 ```
 
-### 6.7 Usage Metrics
+## Usage Metrics
 
 Admins can inspect operational usage with `SELECT * FROM eng.usage_metrics(30)` or `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
 
@@ -359,7 +368,7 @@ Every Portal HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's 
 identifier. Portal request logs are scoped with that correlation id and the active trace id, and audit
 rows use the same value when a controller does not pass a more specific operation id.
 
-### 6.8 Report Dependencies
+## Report Dependencies
 
 Use `SELECT * FROM eng.report_dependencies('Report Name')` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
 
@@ -369,7 +378,7 @@ SELECT * INTO #dependencies FROM eng.report_dependencies('Monthly Sales');
 
 Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through `eng.lineage`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
 
-### 6.9 Catalog Search
+## Catalog Search
 
 Use `SELECT * FROM eng.catalog_search('<term>')` or `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
@@ -389,7 +398,7 @@ UNFAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
 SELECT * INTO #favorites FROM eng.favorites('john.doe');
 ```
 
-### 6.10 Share Links
+## Share Links
 
 Share links and embed tokens are anonymous bearer capabilities. Keep their URLs secret. Resolution does
 not require a portal login, but the portal rechecks the creator on every request: the creator must still
@@ -421,7 +430,7 @@ SELECT * INTO #shares FROM eng.share_links('Monthly Sales');
 REVOKE SHARE LINK 'External Review' FOR REPORT 'Monthly Sales';
 ```
 
-### 6.11 Embed Tokens
+## Embed Tokens
 
 Embed tokens are scoped report tokens intended for trusted internal applications. They are created by users with manage permission on the report and resolve through `GET /api/embed/{token}`. They do not grant portal administration rights and can be expired or revoked independently.
 
@@ -434,7 +443,7 @@ SELECT * INTO #embed_tokens FROM eng.embed_tokens('Monthly Sales');
 REVOKE EMBED TOKEN 'Finance Intranet' FOR REPORT 'Monthly Sales';
 ```
 
-### 6.12 Saved Views
+## Saved Views
 
 Saved views store a user's report parameter/filter state so common slices can be reopened without re-entering parameters. They are per-user by default; admins should treat shared curated variants as separate reports or publish-time defaults rather than hidden shared state.
 
@@ -448,7 +457,7 @@ SELECT * INTO #views FROM eng.saved_views('Monthly Sales');
 DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 ```
 
-### 6.13 Alerts
+## Alerts
 
 Alerts store threshold definitions for KPI-style visuals such as cards and gauges. Alert ownership follows
 the creating user; admins can see all alerts. Alert delivery is modeled as a link to a named
@@ -471,7 +480,7 @@ SELECT * INTO #alerts FROM eng.alerts('Monthly Sales');
 DROP ALERT IF EXISTS RevenueFloor;
 ```
 
-### 6.14 Environment Promotion Pattern
+## Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 
@@ -516,4 +525,3 @@ Promotion is a normal script replay with a different active set and explicit por
 The copy-pasteable sample lives at `samples/portal_deployment/portal_promotion.etlsql`. Keep promotion scripts in source control next to the report scripts they publish so folder grants, refresh jobs, and publish paths are reviewed together.
 
 ---
-

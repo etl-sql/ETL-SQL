@@ -12,7 +12,6 @@
 | [ETL-SQL Engine Architecture Separation Plan](Engine_Upgrade_Strategy.md) | > [!IMPORTANT] |
 | [ETL-SQL Enterprise Platform Strategy](Enterprise_Platform_Strategy.md) | **Status:** Active product strategy |
 | [Fuzzy Matching Strategy](FuzzyMatching_Strategy.md) | **Status:** Phases 1–4 shipped; Phase 5 deferred |
-| [ETL-SQL Goals](../../../GOALS.md) | ## Vision |
 | [Portal Governance Dashboard Strategy](Governance_Dashboard_Strategy.md) | **Status:** Candidate roadmap work |
 | [Large Dataset Handling](LargeDatasets.md) | > [!NOTE] |
 | [Lineage & Data Governance Strategy](Lineage_Strategy.md) | > [!IMPORTANT] |

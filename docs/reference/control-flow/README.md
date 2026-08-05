@@ -16,6 +16,6 @@
 | [RUN SCRIPT](run.md) | Executes another ETL-SQL script file, optionally passing parameters in or out. |
 | [THROW / RAISEERROR](throw.md) | Raises a runtime error, terminating execution or transferring control to the nearest CATCH block. |
 | [try-catch](try-catch.md) | TRY/CATCH provides structured error handling. If any statement inside the TRY block throws, execution jumps to the CATCH block. |
-| [WAIT UNTIL](wait-until.md) | Polls a scalar condition until it becomes true, then continues script execution. |
-| [WAITFOR](waitfor.md) | Suspends script execution for a duration, until a specific time, or until a condition becomes true. |
+| [WAIT UNTIL](wait-until.md) | Polls a scalar condition until it becomes true, then continues script execution. Use this for readiness checks where the script should pause until ... |
+| [WAITFOR](waitfor.md) | Suspends script execution for a duration or until a specific wall-clock time. Use `WAIT UNTIL` for condition polling. |
 | [while](while.md) | WHILE repeats a block as long as a condition remains TRUE. The condition is evaluated before each iteration — if FALSE on entry, the block never runs. |

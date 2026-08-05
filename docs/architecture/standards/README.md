@@ -6,8 +6,8 @@
 | :--- | :--- |
 | [Breaking Change Standards](Breaking_Change_Standards.md) | This document establishes the official protocol and safety guidelines for introducing any breaking changes to the **ETL-SQL** engine. |
 | [Connector Certification Matrix](Connector_Certification_Matrix.md) | **ETL-SQL 0.8.0 — Last reviewed: 2026-05-29** |
-| [Deployment Profile Standards](Deployment_Profile_Standards.md) | Four-profile capability/evidence matrix, portability review, smallest-safe forms, and deployment overlays. |
 | [ETL-SQL Connectors Engineering Standards](Connectors_Standards.md) | **Applies to ETL-SQL 0.7.0 — Established with the IConnector / IDataSource / IDatabaseSource architecture** |
+| [ETL-SQL Deployment Profile Standards](Deployment_Profile_Standards.md) | This standard defines the current support and evidence contract for Solo / Workstation, Team / SME, Enterprise / Corporate, and SaaS / Multi-Organi... |
 | [Engine Coding Standards](Engine_Coding_Standards.md) | This document establishes the official coding standards and architectural principles for developers contributing to the C# source code of the **ETL... |
 | [ETL-SQL Help and Snippet Formatting Standards](Help_and_Snippet_Standards.md) | This document defines the formatting and style standards for editor help files (markdown-based tooltips) and autocomplete snippets within the ETL-S... |
 | [Language Syntax Standards](Language_Syntax_Standards.md) | This document establishes the official consistency rules and design patterns for adding or modifying language syntax (keywords, statements, options... |

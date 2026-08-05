@@ -1,6 +1,8 @@
 # Quick Start
 
-## 12. Quick Start: Required Steps
+The shortest path to a working Portal: the steps you cannot skip, in order.
+
+## Quick Start: Required Steps
 
 To get the Portal running in under 5 minutes:
 

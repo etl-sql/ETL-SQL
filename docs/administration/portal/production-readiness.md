@@ -1,10 +1,8 @@
 # Production Readiness Checklist
 
-## 14. Production Readiness Checklist
-
 Use this checklist before promoting the Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, security exposure, or service failure if skipped. Items marked **Recommended** reduce operational risk.
 
-### Security
+## Security
 
 - [ ] **Required** — Set `Portal__FirstRun__AdminPassword` before first startup, change the initial `admin` password after first login, then remove that bootstrap value from configuration.
 - [ ] **Required** — Replace the default JWT secret. Set `Portal__Jwt__Secret` in environment variables or `appsettings.json` to a randomly generated 256-bit value. Run `etl-sql config setup-jwt --update` to generate one.
@@ -14,14 +12,14 @@ Use this checklist before promoting the Portal to a production or customer-facin
 - [ ] **Recommended** — Verify that connector secrets in report scripts use `ENC:` encryption with a master password, not plaintext connection strings.
 - [ ] **Recommended** — Review folder-level permissions. Users should not have access to reports or datasets outside their role.
 
-### Data and Storage
+## Data and Storage
 
 - [ ] **Required** — Confirm `Portal:DatabasePath` points to a persistent location that survives service restarts and OS reboots (not a temp directory or container ephemeral layer).
 - [ ] **Required** — Confirm `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, `Portal:MapRootPath`, and `Portal:ScriptRootPath` are writable and on volumes with sufficient capacity.
 - [ ] **Recommended** — Schedule regular backups of the Portal database, Orchestrator database, Data Protection key ring, and snapshot/script/dataset/map roots. For HA, back up PostgreSQL and shared storage as one coordinated recovery set.
 - [ ] **Recommended** — Set `Portal:MaxSnapshotAgeDays` to automatically clean up expired snapshots.
 
-### Reliability
+## Reliability
 
 - [ ] **Required** — For single-node SQLite deployments, run one active Portal process per portal database. For HA deployments, configure every Portal node to use the same PostgreSQL database and shared artifact storage roots; startup singleton work is coordinated through the database-backed cluster lock.
 - [ ] **Required** — For load-balanced HA deployments, configure sticky sessions using the portal affinity cookie (`ETLSQL_PORTAL_AFFINITY` by default). Interactive report sessions are cached in memory on the node that created them.
@@ -32,14 +30,14 @@ Use this checklist before promoting the Portal to a production or customer-facin
 - [ ] **Recommended** — If the Orchestrator is deployed separately, confirm `Portal:Orchestrator:ApiUrl` and both `ApiKey` values match. Verify the connection via the Admin → Orchestrator page.
 - [ ] **Recommended** — Configure SMTP for subscriptions. Test an outbound email from Admin → Connections before creating live subscriptions.
 
-### Observability
+## Observability
 
 - [ ] **Recommended** — Enable structured logging (`Logging:LogLevel:Default` = `Information` minimum). Direct logs to a persistent file or log aggregator.
 - [ ] **Recommended** — Enable the audit log (`Portal:EnableAuditLog = true`) so report view, export, and subscription events are recorded.
 - [ ] **Recommended** — Set up monitoring alerts on `/health` and `/healthz` with a recovery window of ≤ 5 minutes.
 - [ ] **Recommended** — Review the Report History page after first production use to confirm snapshot refresh and subscription delivery are completing without errors.
 
-### Operational Handoff
+## Operational Handoff
 
 - [ ] **Recommended** — Document the deployment: service name, host, port, backup schedule, and escalation path.
 - [ ] **Recommended** — Identify who holds the admin credentials and the JWT secret, and ensure they are stored in a secrets manager (not in a shared document).
