@@ -1059,6 +1059,129 @@ granularity and identity, both of which the triage inbox depends on:
 - [ ] Confirm no matrix cell moves backward, and record the review outcome the way
       [v0.18.0](docs/architecture/decisions/v0.18.0-deployment-profile-review.md) did.
 
+### Platform — Admin CLI for Identity and Access
+
+**Target operator:** an administrator on a headless server with SSH and no browser, or a runbook /
+CI pipeline that must provision users and groups reproducibly. Today neither can. Secrets and
+connections have a full CLI surface (`admin set-secret`, `admin list-connections`,
+`admin verify-connection`, …, `CliOrchestrator.cs:881-954`); **users, groups, and group membership
+have none at all** — they exist only in `AdminController.cs` (~60 endpoints) behind the Portal web
+UI. This track closes that gap in the CLI, where the work is scriptable and reviewable in a diff.
+An admin TUI was considered and deliberately deferred: see the note at the end.
+
+**The prerequisite that sizes this track: the admin API is closed to non-interactive clients by
+design, and opening it is the security-sensitive part.**
+`ServiceAccountScopeMiddleware.cs:29-31` returns a `null` required scope for `/api/admin`,
+`/api/auth`, and `/api/oidc`, and line 17 turns `null` into a flat `403`. Service accounts are
+therefore categorically barred from every admin route — that is a deliberate posture, not an
+oversight. The vocabulary in `ServiceAccountSecurity.cs:10-16` has only `portal.read`,
+`reports.execute`, and `orchestrator.execute`; there is no admin/write scope to grant. So this is
+not "add CLI verbs over an existing API" — it is *carving a narrow, tested hole in an intentional
+deny*, and the verb surface is the easy half. Under OIDC there is no interactive-password fallback
+either, so a scoped service identity is the only workable path.
+
+#### Prerequisite — a scoped non-interactive admin identity
+
+- [ ] Add an `admin.identity` scope (users, groups, membership, sessions) distinct from any broader
+      admin capability. Do **not** add a blanket `admin.*`. Backup/restore, migration, promotion,
+      service restart/shutdown, and at-rest key rotation stay unreachable by token.
+- [ ] Replace the blanket `/api/admin` deny with a route-level allowlist so that *only* the
+      identity routes become reachable, and every other `/api/admin/**` path continues to return
+      `403` for service identities. Default-deny must survive: a new admin controller added later
+      must be unreachable until someone opts it in.
+- [ ] Require **both** the `Admin` role and the `admin.identity` scope. A scope must never
+      substitute for the role, and holding the role must not imply the scope.
+- [ ] Negative tests are the deliverable here, not the positive ones: a token without the scope,
+      a token with the scope against a non-identity admin route, a revoked/expired/disabled
+      account, and a token whose owner lost the `Admin` role after issue.
+- [ ] Audit every mutation with the service identity as actor, distinguishable from a human of the
+      same name in the audit log.
+- [ ] Decide and document whether a service account may create or elevate *another* admin — the
+      privilege-escalation question. Recommendation: deny role elevation to `Admin` by token, and
+      require an interactive human for that one operation.
+
+#### Verb surface
+
+Nested under `admin` (`admin user list`), following the `admin ha-soak <verb>` precedent rather
+than the flat `admin set-secret` style — the identity family is ~25 verbs and flat naming stops
+scanning cleanly. Record the inconsistency in the CLI reference so it reads as a decision.
+
+- [ ] **Auth/bootstrap.** `admin portal-whoami` — resolve credentials, print the identity, roles,
+      and scopes, print no secret. Mirrors the `verify-secret` "prove it resolves without echoing
+      it" idiom and is the first thing to run when a runbook fails. Credentials come from
+      `--portal-url` plus env or a `SECRET:name` reference resolved through the existing machine
+      secret store; **never** from argv.
+- [ ] **Users.** `user list` (`--filter`, `--role`, `--include-inactive`), `user show`,
+      `user create` (`--username --email --role`, optional `--first-name --last-name --provider`,
+      `--password-stdin`), `user update`, `user enable` / `user disable`, `user delete`,
+      `user reset-password`, `user revoke-tokens`.
+- [ ] **Effective permissions.** `user permissions --username` over
+      `permissions/effective/user/{id}`, and `access-simulate --username --report` over the access
+      simulator. Read-only, no new API needed, and the highest-value verb in the set: it answers
+      "why can this person see this" without a browser.
+- [ ] **Groups.** `group list`, `group show`, `group create`, `group update`, `group delete`
+      (`--cascade`), `group members`, `group add-member`, `group remove-member` (repeatable
+      `--username` maps to the bulk endpoints), `group capabilities` / `group set-capabilities`
+      over `groups/{id}/studio-capabilities`.
+- [ ] **Sessions.** `session list`, `session disconnect --username`.
+- [ ] **Service accounts.** `service-account list|create|update|revoke` over
+      `api/admin/service-accounts`. Sequencing trap: this is how the CLI's *own* credential is
+      minted, so the first one must be creatable interactively in the Portal — do not build a
+      bootstrap that requires a token to mint the first token.
+
+#### Cross-cutting behaviour the verbs must get right
+
+- [ ] **Name→ID resolution.** The API is ID-keyed; operators and runbooks have names. Resolve
+      `--username`/`--name` via the catalog endpoints, and give not-found and ambiguous-match
+      distinct, documented exit codes rather than a generic failure.
+- [ ] **Optimistic concurrency.** `UserDto`/`GroupDto` carry `Version` and the bulk endpoints take
+      `VersionedResourceRequest` (`AdminModels.cs:35`). Read-then-write must carry the version
+      through; add `--if-version` for callers that want to fail on drift. Last-writer-wins is the
+      wrong default for an admin tool.
+- [ ] **Idempotence for runbooks.** `--if-not-exists` on create and `--if-exists` on delete, so a
+      re-run is a no-op rather than an error. This is the property that makes the CLI worth having
+      over the web UI; without it the tool is just a slower browser.
+- [ ] **`--json` on every read verb**, with a shape stable enough to pipe. Human-readable table by
+      default, matching `admin list-connections`.
+- [ ] **Documented exit codes** — distinct values for auth failure, scope denied, not found,
+      conflict/version drift, and validation error. Scripts branch on these.
+- [ ] **No secrets on argv, ever.** `--password-stdin` only, consistent with `SecretAdminService`'s
+      never-echo discipline.
+- [ ] **No `ETL-SQL.Portal` project reference from `ETL-SQL.App`.** HTTP only, via a client in the
+      App tier modelled on `src/ETL-SQL.TUI/UI/PortalClient.cs`. Keeping it over the wire is what
+      makes the CLI work against a *remote* Portal from a jump box, which is the whole point. Add
+      an architecture-boundary test so the reference cannot be added later by accident.
+
+#### Disambiguate the two secret and connection stores (do this first)
+
+- [ ] `admin set-secret` writes the machine-local `Governance:Secrets` provider
+      (`SecretAdminService.cs`); the Portal Admin tab writes `PortalSecretStoreService`
+      (`SecretsAdminController.cs`) — an encrypted, audited, RBAC'd store in the catalog DB. They
+      are different stores with overlapping names. An operator who runs `admin set-secret`
+      expecting to change what the Admin tab shows silently edits the wrong one. The `set-secret`
+      help text says "(machine scope)"; nothing else does, and no `list` verb shows which store it
+      read.
+- [ ] Make the scope explicit and symmetric across the secret and connection verbs — a `--scope
+      machine|portal` selector or separate verb families, decided once and applied to both. Do this
+      **before** the identity verbs land, so the new surface inherits a coherent model instead of
+      the ambiguity.
+- [ ] Same audit for shared connections: `ConnectionAdminService` vs `ConnectionsAdminController`.
+
+#### Admin TUI — considered, deferred, and the condition for revisiting
+
+A terminal admin UI mirroring the Portal's Admin and Orchestrator tabs was evaluated and set aside.
+Mirroring ~60 endpoints makes every future admin feature a three-place change, and this repo already
+has a recurring defect shape where a Portal control exists, looks implemented, and is never asserted
+end to end — a TUI mirror is fertile ground for exactly that. The deciding argument, though, is that
+a TUI is not scriptable, and the operators asking for this want runbooks and CI, not keystrokes.
+
+Revisit only as a thin read-mostly browser over the verbs above, once they exist and are stable —
+scoped to discovery (`user permissions`, `access-simulate`, `group members`), where not knowing the
+ID to type makes the CLI genuinely awkward. Mutations stay in the CLI. Note that a TUI speaking HTTP
+is exactly as unavailable as the browser when the Portal is down, so it is a convenience tool, not a
+break-glass one; anything claiming break-glass needs direct store access and is a different,
+more dangerous design that must be justified separately.
+
 ### Platform — SaaS Profile Red Cells
 
 Every SaaS cell in the
