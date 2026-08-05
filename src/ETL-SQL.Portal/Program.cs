@@ -396,6 +396,7 @@ builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ScriptDagProjectionService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.OperationsTriageService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DesignerSnapshotService>();
 builder.Services.AddHttpClient<ETL_SQL.Portal.Services.AuditOutboxTransportService>(client =>
 {

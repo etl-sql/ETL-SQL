@@ -12,8 +12,12 @@ namespace ETL_SQL.Portal.Controllers;
 public class OrchestratorController(
     OrchestratorProxyService proxy,
     AuditService audit,
-    ScriptDagProjectionService scriptDag) : ControllerBase
+    ScriptDagProjectionService scriptDag,
+    OperationsTriageService triage) : ControllerBase
 {
+    /// <summary>Upper bound on one bulk re-run, so a mis-click cannot enqueue the whole estate.</summary>
+    private const int MaxRerunBatch = 50;
+
     // ── Status & metrics ──────────────────────────────────────────────────────
 
     [HttpGet("status")]
@@ -111,6 +115,70 @@ public class OrchestratorController(
             return StatusCode((int)resp.StatusCode, body);
         }
         return Accepted();
+    }
+
+    // ── Operations triage ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Cross-job triage board: failures grouped into incidents, in-flight runs, and enabled jobs
+    /// whose occurrence passed unclaimed. Reads shared state directly, so it still answers when the
+    /// Orchestrator service itself is unreachable.
+    /// </summary>
+    [HttpGet("triage")]
+    public async Task<IActionResult> GetTriage(
+        [FromQuery] int lookbackHours = 24,
+        [FromQuery] int graceMinutes = OperationsTriageService.DefaultGraceMinutes,
+        CancellationToken cancellationToken = default)
+    {
+        var board = await triage.BuildAsync(lookbackHours, graceMinutes, cancellationToken);
+        return Ok(board);
+    }
+
+    /// <summary>
+    /// Re-runs several failed jobs in one action. Each trigger is reported individually: a bulk
+    /// re-run where one job is missing should still start the rest, and the operator needs to know
+    /// which ones did not go.
+    /// </summary>
+    [HttpPost("jobs/rerun")]
+    public async Task<IActionResult> RerunJobs([FromBody] TriageRerunRequest req)
+    {
+        var names = (req?.JobNames ?? [])
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (names.Count == 0)
+            return BadRequest(new { Error = "At least one job name is required." });
+        if (names.Count > MaxRerunBatch)
+            return BadRequest(new { Error = $"At most {MaxRerunBatch} jobs may be re-run in one request." });
+
+        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int? userId = uid is not null && int.TryParse(uid, out var id) ? id : null;
+
+        var results = new List<TriageRerunResultDto>(names.Count);
+        foreach (var name in names)
+        {
+            using var resp = await proxy.TriggerJobAsync(name);
+            if (resp is null)
+            {
+                results.Add(new TriageRerunResultDto(name, false, "Orchestrator service unavailable."));
+                continue;
+            }
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                results.Add(new TriageRerunResultDto(name, false, body));
+                continue;
+            }
+
+            // Attributed per job, not once per batch: the audit trail has to answer "who re-ran this
+            // job" for each job independently of how it was grouped in the UI.
+            await audit.LogAsync(userId, "JobRerunFromTriage", "Job", name, null);
+            results.Add(new TriageRerunResultDto(name, true, null));
+        }
+
+        return Ok(new TriageRerunResponseDto(names.Count, results.Count(r => r.Triggered), results));
     }
 
     [HttpPost("jobs/{name}/kill")]
