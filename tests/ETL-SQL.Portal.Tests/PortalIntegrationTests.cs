@@ -1165,6 +1165,121 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             body.DispositionStatement);
     }
 
+    /// <summary>
+    /// The job id a disposition or replay returns must be resolvable through the status route the
+    /// Portal actually polls.
+    ///
+    /// <para>There are two unrelated job namespaces here. <c>GET /api/jobs/{id}</c> is served by
+    /// <c>ExecutionController</c> over <c>PortalExecutionJobs</c> — report executions. Data-quality
+    /// submissions go to <c>IJobChannel</c>, whose ids live somewhere else entirely. The client
+    /// polls the first with an id from the second, so it never resolves: the poll 404s, the client
+    /// records "status temporarily unavailable" and retries every second for as long as the tab is
+    /// open, and the submission never reaches a terminal state on screen.</para>
+    /// </summary>
+    [Fact]
+    public async Task DataQuality_SubmittedJobId_IsResolvableThroughTheStatusRouteThePortalPolls()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_tracked",
+            "dq:quarantine-manifest:q_tracked",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_tracked", "loads/replay.etlsql", "sec", "#src", "q_tracked",
+                true, null, ["Id"], "schema-tracked", DateTimeOffset.UtcNow)));
+
+        var submitted = await AuthPost(token, "/api/data-quality/quarantine/replay", new
+        {
+            quarantineTarget = "q_tracked",
+            jobName = "nightly_tracked"
+        });
+        Assert.Equal(HttpStatusCode.Accepted, submitted.StatusCode);
+        var body = await submitted.Content.ReadFromJsonAsync<ReplayQuarantineResponse>(_json);
+        Assert.False(string.IsNullOrWhiteSpace(body!.JobId));
+
+        var status = await AuthGet(token, $"/api/data-quality/jobs/{body.JobId}");
+
+        Assert.True(status.StatusCode == HttpStatusCode.OK,
+            $"Polling the submitted job id returned {status.StatusCode}. The client polls this on a "
+            + "one-second loop and treats a failure as transient, so an unresolvable id means the "
+            + "submission is tracked forever and never reported as finished.");
+
+        // The namespace the client used to poll. Pinned so the two are never confused again: a
+        // report-execution id and a data-quality submission id are different things, and looking
+        // one up in the other's table is a 404 that reads as a transient outage.
+        var wrongNamespace = await AuthGet(token, $"/api/jobs/{body.JobId}");
+        Assert.Equal(HttpStatusCode.NotFound, wrongNamespace.StatusCode);
+    }
+
+    /// <summary>
+    /// A submission whose job the service no longer knows about must report <c>Unknown</c>, not
+    /// <c>Failed</c>.
+    ///
+    /// <para>The in-process channel keeps job state in memory and answers "Job not found." once the
+    /// process has restarted. Passing that through would tell a steward their replay failed when it
+    /// may have completed — and the obvious response to a failed replay is to run it again, which
+    /// re-runs a production load that already ran.</para>
+    /// </summary>
+    [Fact]
+    public async Task DataQuality_SubmissionStatus_ReportsUnknownRatherThanFailedForAForgottenJob()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+
+        // A submission recorded durably whose job id the channel has never heard of — exactly the
+        // state a restart leaves behind.
+        await store.SetJobStateAsync(
+            "nightly_forgotten",
+            "dq:quarantine-submission:replay:q_forgotten",
+            JsonSerializer.Serialize(new QuarantineSubmissionRecord(
+                "deadbeef", "Replay", "nightly_forgotten", "q_forgotten",
+                DateTimeOffset.UtcNow.AddMinutes(-30), 1, "Running",
+                DateTimeOffset.UtcNow.AddMinutes(-30))));
+
+        var res = await AuthGet(token, "/api/data-quality/jobs/deadbeef");
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var status = await res.Content.ReadFromJsonAsync<QuarantineSubmissionStatusDto>(_json);
+        Assert.Equal("Unknown", status!.Status);
+        Assert.True(status.IsTerminal, "Unknown is terminal: more polling cannot produce an answer.");
+        Assert.Null(status.Error);
+        Assert.False(string.IsNullOrWhiteSpace(status.UnknownReason));
+    }
+
+    /// <summary>
+    /// The durable record is what makes a submission visible to anyone but the browser that made
+    /// it — a second steward looking at the same target, or the same steward tomorrow.
+    /// </summary>
+    [Fact]
+    public async Task DataQuality_Replay_RecordsTheSubmissionDurably()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        await store.SetJobStateAsync(
+            "nightly_durable",
+            "dq:quarantine-manifest:q_durable",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(
+                "nightly_durable", "loads/replay.etlsql", "sec", "#src", "q_durable",
+                true, null, ["Id"], "schema-durable", DateTimeOffset.UtcNow)));
+
+        var res = await AuthPost(token, "/api/data-quality/quarantine/replay", new
+        {
+            quarantineTarget = "q_durable",
+            jobName = "nightly_durable"
+        });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+        var submitted = await res.Content.ReadFromJsonAsync<ReplayQuarantineResponse>(_json);
+
+        var saved = await store.GetJobStateAsync(
+            "nightly_durable", "dq:quarantine-submission:replay:q_durable");
+        Assert.False(string.IsNullOrWhiteSpace(saved));
+
+        var record = JsonSerializer.Deserialize<QuarantineSubmissionRecord>(saved!, _json);
+        Assert.Equal(submitted!.JobId, record!.JobId);
+        Assert.Equal("Replay", record.Kind);
+        Assert.Equal("q_durable", record.QuarantineTarget);
+    }
+
     [Fact]
     public async Task DataQuality_UpdateDisposition_RejectsReleaseForNonReplayableManifest()
     {

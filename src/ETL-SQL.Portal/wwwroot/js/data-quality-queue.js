@@ -258,7 +258,11 @@ function renderRowsPanel(state) {
   </div>`;
 }
 
-const TERMINAL_JOB_STATUSES = new Set(['Completed', 'Failed', 'Cancelled']);
+// `Unknown` is terminal here even though the job may well have finished. It means the service that
+// was running the job no longer has a record of it — usually a restart — so no amount of further
+// polling will produce an answer, and a spinner that never resolves is a worse report than saying
+// we cannot tell.
+const TERMINAL_JOB_STATUSES = new Set(['Completed', 'Failed', 'Cancelled', 'Unknown']);
 const TRACKED_JOBS_KEY = 'etlsql_dq_tracked_jobs';
 
 function renderTrackedJobs(jobs) {
@@ -268,10 +272,14 @@ function renderTrackedJobs(jobs) {
     <div class="dq-job-list">${jobs.map(job => {
       const terminal = TERMINAL_JOB_STATUSES.has(job.status);
       const failed = job.status === 'Failed' || job.status === 'Cancelled';
+      // Unknown is not success and not failure. Styling it as either would state an outcome
+      // nobody observed.
+      const unknown = job.status === 'Unknown';
+      const note = job.unknownReason || job.error || job.trackingError;
       return `<article class="dq-job-row">
-        <span class="dq-status ${terminal && !failed ? 'dq-status-ready' : failed ? 'dq-status-blocked' : ''}">${esc(job.status)}</span>
+        <span class="dq-status ${unknown ? '' : terminal && !failed ? 'dq-status-ready' : failed ? 'dq-status-blocked' : ''}">${esc(job.status)}</span>
         <div><strong>${esc(job.kind)}</strong><small>${esc(job.target)} · <code>${esc(job.jobId)}</code></small></div>
-        <div><time>${esc(formatDate(job.completedAt || job.startedAt || job.createdAt))}</time>${job.error || job.trackingError ? `<small class="dq-row-warning">${esc(job.error || job.trackingError)}</small>` : ''}</div>
+        <div><time>${esc(formatDate(job.statusUpdatedAtUtc || job.completedAt || job.startedAt || job.createdAt))}</time>${note ? `<small class="dq-row-warning">${esc(note)}</small>` : ''}</div>
       </article>`;
     }).join('')}</div>
   </section>`;

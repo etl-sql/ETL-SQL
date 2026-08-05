@@ -34,6 +34,18 @@ public sealed class DataQualityController(
             : null;
 
     private const string QuarantineManifestPrefix = "dq:quarantine-manifest:";
+
+    /// <summary>
+    /// One durable record per (kind, target). Bounded on purpose: the audit log is the history of
+    /// who submitted what, while this answers the operational question — is something in flight
+    /// against this target right now, and how did the last one end.
+    /// </summary>
+    private const string QuarantineSubmissionPrefix = "dq:quarantine-submission:";
+
+    private static readonly HashSet<string> TerminalJobStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Completed", "Failed", "Cancelled", "Unknown"
+    };
     private static readonly HashSet<string> AllowedRowStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "all",
@@ -509,6 +521,10 @@ public sealed class DataQualityController(
                 }
             }, cancellationToken);
 
+            await RecordSubmissionAsync(new QuarantineSubmissionRecord(
+                jobId, "Replay", manifest.JobName, manifest.QuarantineTarget,
+                DateTimeOffset.UtcNow, CurrentUserId, "Submitted", DateTimeOffset.UtcNow));
+
             // Replay re-runs a production load, so record who triggered it.
             await audit.LogAsync(
                 CurrentUserId,
@@ -528,6 +544,85 @@ public sealed class DataQualityController(
             return StatusCode(503, new { error = "Unable to submit quarantine replay job." });
         }
     }
+
+    /// <summary>
+    /// Status of a submitted replay or disposition.
+    ///
+    /// <para>Deliberately its own route. <c>GET /api/jobs/{id}</c> is the report-execution
+    /// namespace, backed by <c>PortalExecutionJobs</c>; these ids come from <c>IJobChannel</c> and
+    /// were never in that table, so polling there answered 404 forever — which the client read as a
+    /// transient outage and retried every second for the life of the tab.</para>
+    ///
+    /// <para>Reconciles as it reads: a non-terminal record is refreshed from the channel and the
+    /// outcome written back, so the answer survives the browser that asked for it.</para>
+    /// </summary>
+    [HttpGet("jobs/{jobId}")]
+    public async Task<IActionResult> GetSubmissionStatus(string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return BadRequest(new { error = "JobId is required." });
+
+        var record = await FindSubmissionAsync(jobId.Trim());
+        if (record is null)
+            return NotFound(new { error = "No data-quality submission was recorded for this job id." });
+
+        if (TerminalJobStatuses.Contains(record.Status))
+            return Ok(ToStatusDto(record));
+
+        string status;
+        string? error = null;
+        string? unknownReason = null;
+        try
+        {
+            var live = await jobChannel.GetStatusAsync(record.JobId, cancellationToken);
+            status = live.Status.ToString();
+            error = live.ErrorMessage;
+
+            // An in-process channel holds job state in memory and reports "not found" as a failure
+            // once the process has restarted. Reporting that verbatim would tell a steward their
+            // replay failed when it may have completed — so a not-found answer for a job we know we
+            // submitted is Unknown, which is the truth.
+            if (string.Equals(error, "Job not found.", StringComparison.OrdinalIgnoreCase))
+            {
+                status = "Unknown";
+                error = null;
+                unknownReason = "The service that was running this job no longer has a record of it, "
+                    + "usually because it restarted. Check the job history for the outcome.";
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            // Reachability is not an outcome. Leave the record alone and say so, rather than
+            // recording a terminal state we did not observe.
+            logger.LogWarning(ex, "Could not reach the job channel for data-quality job {JobId}.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(record.JobId));
+            return Ok(ToStatusDto(record) with
+            {
+                UnknownReason = "The job service is unreachable; this is the last status recorded."
+            });
+        }
+
+        var updated = record with
+        {
+            Status = status,
+            Error = error,
+            StatusUpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        if (!string.Equals(updated.Status, record.Status, StringComparison.OrdinalIgnoreCase))
+            await RecordSubmissionAsync(updated);
+
+        return Ok(ToStatusDto(updated) with { UnknownReason = unknownReason });
+    }
+
+    private static QuarantineSubmissionStatusDto ToStatusDto(QuarantineSubmissionRecord record) =>
+        new(record.JobId,
+            record.Kind,
+            record.QuarantineTarget,
+            record.Status,
+            TerminalJobStatuses.Contains(record.Status),
+            record.SubmittedAtUtc,
+            record.StatusUpdatedAtUtc,
+            record.Error);
 
     [HttpPost("quarantine/disposition")]
     public async Task<IActionResult> UpdateQuarantineDisposition(
@@ -580,6 +675,11 @@ public sealed class DataQualityController(
                     ["Disposition"] = disposition
                 }
             }, cancellationToken);
+
+            await RecordSubmissionAsync(new QuarantineSubmissionRecord(
+                jobId, "Disposition", manifest.JobName, manifest.QuarantineTarget,
+                DateTimeOffset.UtcNow, CurrentUserId, "Submitted", DateTimeOffset.UtcNow,
+                Disposition: disposition, RowCount: request.RowIds.Count));
 
             // Audit the decision, not just the mechanics: who released or discarded which rows,
             // and why. "Why did we drop these 400 rows, and who decided?" is the question an audit
@@ -771,6 +871,52 @@ public sealed class DataQualityController(
         }
 
         return !lastWasDot;
+    }
+
+    private static string SubmissionKey(string kind, string target) =>
+        $"{QuarantineSubmissionPrefix}{kind.ToLowerInvariant()}:{target}";
+
+    /// <summary>
+    /// Records the submission durably before the steward's browser is the only thing that knows
+    /// about it. Best-effort: a job that ran is a fact whether or not we managed to note it, so a
+    /// write failure is logged and never turns a successful submission into an error response.
+    /// </summary>
+    private async Task RecordSubmissionAsync(QuarantineSubmissionRecord record)
+    {
+        try
+        {
+            await jobHistory.SetJobStateAsync(
+                record.JobName,
+                SubmissionKey(record.Kind, record.QuarantineTarget),
+                JsonSerializer.Serialize(record));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Could not record the data-quality submission for {Target}; the job was still submitted.",
+                ETL_SQL.Core.Common.LogSanitizer.Clean(record.QuarantineTarget));
+        }
+    }
+
+    private async Task<QuarantineSubmissionRecord?> FindSubmissionAsync(string jobId)
+    {
+        var states = await jobHistory.GetJobStatesAsync(null, 5000);
+        foreach (var state in states)
+        {
+            if (!state.StateKey.StartsWith(QuarantineSubmissionPrefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var record = TryReadSubmission(state.StateValue);
+            if (record is not null && string.Equals(record.JobId, jobId, StringComparison.Ordinal))
+                return record;
+        }
+        return null;
+    }
+
+    private static QuarantineSubmissionRecord? TryReadSubmission(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        try { return JsonSerializer.Deserialize<QuarantineSubmissionRecord>(value); }
+        catch (JsonException) { return null; }
     }
 
     private static bool TryBuildDispositionStatement(

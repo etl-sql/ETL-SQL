@@ -219,7 +219,7 @@ function viewOnlyTargetError(target, from = manifests) {
     { status: 409 });
 }
 
-function mockApi(trendKey, queueManifests = manifests) {
+function mockApi(trendKey, queueManifests = manifests, unknownJobStatus = false) {
   return {
     quarantineQueue: async () => queueManifests,
     quarantineRows: async ({ quarantineTarget, status }) => {
@@ -242,11 +242,22 @@ function mockApi(trendKey, queueManifests = manifests) {
       { targetTable: 'clean_users', targetColumn: 'Email', ruleTag: '@expect', rule: 'MATCHES ^[^@]+@[^@]+$', action: 'QUARANTINE', sourceFile: 'loads/users.etlsql', line: 18 },
       { targetTable: 'clean_users', targetColumn: 'Age', ruleTag: '@fail', rule: '>= 0', action: 'WARN', sourceFile: 'loads/users.etlsql', line: 19 },
     ],
-    jobStatus: async jobId => ({
-      jobId, status: 'Completed', createdAt: '2026-08-02T14:30:00Z',
-      startedAt: '2026-08-02T14:30:01Z', completedAt: '2026-08-02T14:30:03Z',
-      rowsProcessed: 17, peakMemoryBytes: 4096, cpuTimeSeconds: 0.2
-    }),
+    // The data-quality submission shape, not the report-execution one. They are different
+    // namespaces and the client used to poll the wrong one.
+    jobStatus: async jobId => (
+      unknownJobStatus
+        ? {
+          jobId, kind: 'Replay', quarantineTarget: 'warehouse.quarantine_users',
+          status: 'Unknown', isTerminal: true,
+          submittedAtUtc: '2026-08-02T14:30:00Z', statusUpdatedAtUtc: '2026-08-02T14:30:05Z',
+          unknownReason: 'The service that was running this job no longer has a record of it, '
+            + 'usually because it restarted. Check the job history for the outcome.'
+        }
+        : {
+          jobId, kind: 'Replay', quarantineTarget: 'warehouse.quarantine_users',
+          status: 'Completed', isTerminal: true,
+          submittedAtUtc: '2026-08-02T14:30:00Z', statusUpdatedAtUtc: '2026-08-02T14:30:03Z'
+        }),
   };
 }
 
@@ -266,6 +277,7 @@ export default {
     { id: 'trend', label: 'Quality trend (degrading)' },
     { id: 'trend-empty', label: 'Quality trend (no runs)' },
     { id: 'job-status', label: 'Tracked replay completion' },
+    { id: 'job-status-unknown', label: 'Tracked replay (outcome unknown)' },
   ],
   async mount(stage, fixtureId, ctx) {
     stage.classList.add('portal-page');
@@ -274,15 +286,21 @@ export default {
 
     const trendKey = fixtureId === 'trend-empty' ? 'empty' : 'degrading';
     const shown = fixtureId === 'preview-off' ? previewOffManifests : manifests;
-    const queue = createDataQualityQueue({ host, dataQualityApi: mockApi(trendKey, shown) });
+    const queue = createDataQualityQueue({
+      host,
+      dataQualityApi: mockApi(trendKey, shown, fixtureId === 'job-status-unknown')
+    });
     queue.show();
     await settle();
 
-    if (fixtureId === 'job-status') {
+    if (fixtureId === 'job-status' || fixtureId === 'job-status-unknown') {
       host.querySelector('[data-replay-target="warehouse.quarantine_users"]')?.click();
       await settle();
       await settle();
-      ctx.stat('Replay submission connected to Completed execution status');
+      ctx.stat(fixtureId === 'job-status-unknown'
+        // The state a restart leaves behind: not success, not failure, and not a spinner.
+        ? 'Replay submission whose outcome the service can no longer report'
+        : 'Replay submission connected to Completed execution status');
     } else if (fixtureId === 'trend' || fixtureId === 'trend-empty') {
       // Open the trend panel for the first manifest so the fixture lands on it directly.
       host.querySelector('[data-trend-job]')?.click();

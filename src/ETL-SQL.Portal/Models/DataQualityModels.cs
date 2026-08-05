@@ -52,6 +52,47 @@ public sealed record QuarantineDispositionResponse(
     string JobId,
     string DispositionStatement);
 
+/// <summary>
+/// A durable record of one data-quality submission (a replay or a disposition), written when the
+/// job is handed to the channel and updated when its outcome is observed.
+///
+/// <para>It exists because the outcome was otherwise known only to the browser that submitted it.
+/// A steward who closed the tab never learned whether the replay landed, and a second steward
+/// looking at the same quarantine target could not tell that one was already in flight — so the
+/// obvious next step was to submit another replay of the same production load.</para>
+/// </summary>
+/// <param name="Status">
+/// Channel status, or <c>Unknown</c> when the submission outlived the process that was running it.
+/// Deliberately not <c>Failed</c>: an in-process channel keeps job state in memory and answers
+/// "not found" after a restart, and reporting that as failure would tell a steward their replay
+/// did not happen when it may well have completed.
+/// </param>
+public sealed record QuarantineSubmissionRecord(
+    string JobId,
+    string Kind,
+    string JobName,
+    string QuarantineTarget,
+    DateTimeOffset SubmittedAtUtc,
+    int? SubmittedByUserId,
+    string Status,
+    DateTimeOffset StatusUpdatedAtUtc,
+    string? Disposition = null,
+    int? RowCount = null,
+    string? Error = null);
+
+/// <summary>Status of one submitted data-quality job, as the steward's view polls it.</summary>
+public sealed record QuarantineSubmissionStatusDto(
+    string JobId,
+    string Kind,
+    string QuarantineTarget,
+    string Status,
+    bool IsTerminal,
+    DateTimeOffset SubmittedAtUtc,
+    DateTimeOffset StatusUpdatedAtUtc,
+    string? Error = null,
+    /// <summary>Why the status cannot be determined, when it cannot. Never invented detail.</summary>
+    string? UnknownReason = null);
+
 /// <summary>One completed run's data-quality outcome, for the steward trend view.</summary>
 public sealed record DataQualityRunDto(
     long HistoryId,

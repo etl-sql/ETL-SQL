@@ -288,7 +288,12 @@ export const dataQualityApi = {
     qualityJobs: () => apiJson('/api/data-quality/jobs'),
     qualityRules: (jobName) => apiJson(`/api/data-quality/rules?jobName=${encodeURIComponent(jobName)}`),
     qualityRulesAll: () => apiJson('/api/data-quality/rules/all'),
-    jobStatus: (jobId) => contracted('jobStatus', apiJson(`/api/jobs/${encodeURIComponent(jobId)}`))
+    // Data-quality submissions are IJobChannel jobs, not report executions. `/api/jobs/{id}` is the
+    // report-execution namespace and never held these ids, so polling it answered 404 forever —
+    // which the client read as a transient outage and retried every second for the life of the tab.
+    jobStatus: (jobId) => contracted(
+        'dataQualitySubmissionStatus',
+        apiJson(`/api/data-quality/jobs/${encodeURIComponent(jobId)}`))
 };
 
 // ── Datasets ───────────────────────────────────────────────────────────────────

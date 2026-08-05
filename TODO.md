@@ -824,8 +824,24 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 
 ### Portal — Data Quality Follow-through
 
-- [ ] Track disposition and replay jobs to a terminal state, or at minimum link each submission to
-      durable job history.
+- [x] Track disposition and replay jobs to a terminal state, or at minimum link each submission to
+      durable job history. **The tracking existed and had never worked.** The client polled
+      `GET /api/jobs/{id}` — the *report-execution* namespace, backed by `PortalExecutionJobs` —
+      with an id from `IJobChannel`, which was never in that table. Every poll answered 404, the
+      client treated it as a transient outage, and it retried once a second for the life of the
+      tab. No disposition or replay ever reached a terminal state on screen.
+
+      Fixed with `GET /api/data-quality/jobs/{jobId}` on the right namespace, and both submissions
+      are now recorded durably in job state (`dq:quarantine-submission:<kind>:<target>`) rather than
+      only in the submitting browser's storage. The record is what makes a submission visible to a
+      second steward looking at the same target — who previously could not tell a replay was
+      already in flight, and whose obvious next move was to replay the same production load again.
+
+      A forgotten job reports **`Unknown`, never `Failed`**. The in-process channel keeps job state
+      in memory and answers "Job not found." after a restart; passing that through would tell a
+      steward their replay failed when it may have completed, and the natural response to a failed
+      replay is to run it again. `Unknown` is terminal — more polling cannot produce an answer, and
+      a spinner that never resolves is a worse report than saying we cannot tell.
 - [x] Replace `ParseRuleFailures` display-string parsing with structured per-column run metrics.
       The structured path was already built and already primary — the engine writes per-rule rows
       from all three execution paths (`EngineRunner`, `SchedulerService` for both the spawned and

@@ -154,10 +154,20 @@ retried. Review the target for partial side effects, then explicitly return them
 retry or mark them `replayed`. The Portal queue exposes both recovery choices.
 
 The Portal does not treat HTTP `202 Accepted` as completion. Every replay and row-disposition
-submission is retained in the browser session and followed through the durable execution ledger
-until it reaches `Completed`, `Failed`, or `Cancelled`. The submitted-work panel shows the job ID,
-current state, timestamps, and sanitized terminal error. Queue or row evidence refreshes after the
-terminal result, so a successful submission cannot be mistaken for a successful mutation.
+submission is recorded durably against the quarantine target in orchestrator job state and followed
+to a terminal result through `GET /api/data-quality/jobs/{jobId}`. The submitted-work panel shows
+the job ID, current state, timestamps, and sanitized terminal error. Queue or row evidence refreshes
+after the terminal result, so a successful submission cannot be mistaken for a successful mutation.
+
+Because the record is durable rather than browser-local, a submission stays visible after the tab is
+closed and to a second steward looking at the same target — which is what stops two people replaying
+the same production load because neither could see the other's job.
+
+Terminal states are `Completed`, `Failed`, `Cancelled`, and `Unknown`. **`Unknown` is not failure.**
+It means the service that was running the job no longer has a record of it, normally because it
+restarted; the job may well have completed. Treating that as a failure would invite a second replay
+of a load that already ran, so the Portal reports it as unknown, stops polling — no further polling
+can produce an answer — and points at the job history for the outcome.
 
 Opening **Trend** also shows the rules protecting the job's output columns—including rules that
 have never failed—with their `@expect`/`@fail` tag, action, script source, and line. Failure trends

@@ -70,6 +70,16 @@ const contracts = {
       "peakMemoryBytes": "number",
       "cpuTimeSeconds": "number"
     }
+  },
+  "dataQualitySubmissionStatus": {
+    "kind": "object",
+    "fields": {
+      "jobId": "string",
+      "kind": "string",
+      "quarantineTarget": "string",
+      "status": "string",
+      "isTerminal": "boolean"
+    }
   }
 };
 
