@@ -1,9 +1,24 @@
 name: MSI In-Place Upgrade
 
+# This job downloads a ~900 MB previous release, installs WiX and builds an installer before it can
+# assert anything — roughly 26 minutes. Running that for a documentation change buys nothing, so the
+# push trigger is scoped to the files that can actually change upgrade behaviour. Tags always run it
+# in full, because a release must be certified whatever the diff looked like.
+#
+# If this ever becomes a required status check, add a companion job that always succeeds on the
+# filtered-out paths: a path-filtered workflow reports "skipped" rather than "success", and a
+# required check that never reports will block every unrelated pull request.
 on:
   push:
     branches:
       - 'release/**'
+    paths:
+      - 'src/ETL-SQL.Installer/**'
+      - 'scripts/Test-MsiUpgrade.ps1'
+      - 'scripts/MsiUpgrade.Helpers.ps1'
+      - 'scripts/build-msi.ps1'
+      - '.github/workflows/msi-upgrade.yml'
+      - 'Directory.Build.props'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -71,6 +86,20 @@ jobs:
         env:
           ETL_SQL_VERSION: ${{ steps.versions.outputs.current_version }}
         run: .\scripts\build-msi.ps1
+
+      # Split from the certification below so the log says which half failed. The static contract
+      # needs no elevation and no install, and it is where the gate's first real run went wrong —
+      # keeping it as its own step means that class of failure is named rather than buried in the
+      # output of an install sequence that never started.
+      - name: Check the static upgrade contract
+        shell: pwsh
+        env:
+          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+        run: |
+          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
+          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
+          $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
+          .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
 
       - name: Certify in-place upgrade
         shell: pwsh

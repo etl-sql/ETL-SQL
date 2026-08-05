@@ -7,13 +7,26 @@
     it, and proves there is exactly one uninstall entry at the new version. It then verifies the
     sentinel, executes ETL-SQL.exe --version, uninstalls the product, and proves no entry remains.
 
-    The machine must start with no ETL-SQL MSI installed. The script requires an elevated Windows
-    session and always requests a non-restarting silent install.
+    The machine must start with no ETL-SQL MSI installed. The install sequence requires an elevated
+    Windows session and always requests a non-restarting silent install.
+
+    Use -StaticChecksOnly to run just the contract checks — same UpgradeCode, ascending
+    ProductVersion. Those need neither elevation nor an install, so they run anywhere in about a
+    second. Prefer that while working on this script: the full sequence only runs on an ephemeral
+    CI runner, so the alternative feedback loop is a push and roughly 26 minutes.
 
 .EXAMPLE
+    # Full certification. Elevated, mutates the machine — intended for a disposable runner.
     .\scripts\Test-MsiUpgrade.ps1 `
       -PreviousMsi .\ETL-SQL-v0.17.0-x64-Setup.msi `
       -CurrentMsi .\ETL-SQL-v0.18.0-x64-Setup.msi
+
+.EXAMPLE
+    # Contract only. No elevation, installs nothing, safe on your own workstation.
+    .\scripts\Test-MsiUpgrade.ps1 `
+      -PreviousMsi .\ETL-SQL-v0.17.0-x64-Setup.msi `
+      -CurrentMsi .\ETL-SQL-v0.18.0-x64-Setup.msi `
+      -StaticChecksOnly
 #>
 [CmdletBinding()]
 param(
@@ -23,40 +36,20 @@ param(
     [Parameter(Mandatory)]
     [string]$CurrentMsi,
 
-    [string]$OutDir = './release-validation/msi-upgrade'
+    [string]$OutDir = './release-validation/msi-upgrade',
+
+    <#
+        Runs only the checks that need neither elevation nor an install: same UpgradeCode,
+        ascending ProductVersion. Use it locally, and as a fast CI step so a mistake in the static
+        contract is found in seconds rather than after the download-and-build that the install
+        sequence requires.
+    #>
+    [switch]$StaticChecksOnly
 )
 
 $ErrorActionPreference = 'Stop'
 
-function Get-MsiProperty {
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Name
-    )
-
-    $installer = New-Object -ComObject WindowsInstaller.Installer
-    $database = $null
-    $view = $null
-    try {
-        $database = $installer.OpenDatabase($Path, 0)
-        $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$Name'")
-        # [void] on both COM calls, and .Trim() on the result. Without the [void] these emit to the
-        # pipeline and the function returns Object[] ('', '{GUID}', '') rather than a string — at
-        # which point `-ne` stops being a comparison and becomes an array *filter*, so the
-        # UpgradeCode check was true for identical codes and this gate could never pass.
-        [void]$view.Execute()
-        $record = $view.Fetch()
-        if ($null -eq $record) { throw "MSI '$Path' does not define property '$Name'." }
-        return ([string]$record.StringData(1)).Trim()
-    } finally {
-        if ($null -ne $view) { try { [void]$view.Close() } catch { } }
-        foreach ($comObject in @($view, $database, $installer)) {
-            if ($null -ne $comObject -and [Runtime.InteropServices.Marshal]::IsComObject($comObject)) {
-                [void][Runtime.InteropServices.Marshal]::ReleaseComObject($comObject)
-            }
-        }
-    }
-}
+. (Join-Path $PSScriptRoot 'MsiUpgrade.Helpers.ps1')
 
 function Get-EtlSqlUninstallEntries {
     $roots = @(
@@ -94,11 +87,6 @@ function Invoke-MsiExec {
 }
 
 if (-not $IsWindows) { throw 'MSI upgrade certification runs on Windows only.' }
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = [Security.Principal.WindowsPrincipal]::new($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'MSI upgrade certification requires an elevated Administrator session.'
-}
 
 $previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path
 $currentPath = (Resolve-Path -LiteralPath $CurrentMsi).Path
@@ -106,15 +94,24 @@ if ([IO.Path]::GetExtension($previousPath) -ne '.msi' -or [IO.Path]::GetExtensio
     throw 'PreviousMsi and CurrentMsi must both be .msi files.'
 }
 
-$previousVersionText = Get-MsiProperty $previousPath 'ProductVersion'
-$currentVersionText = Get-MsiProperty $currentPath 'ProductVersion'
-$previousUpgradeCode = Get-MsiProperty $previousPath 'UpgradeCode'
-$currentUpgradeCode = Get-MsiProperty $currentPath 'UpgradeCode'
-if ($previousUpgradeCode -ne $currentUpgradeCode) {
-    throw "UpgradeCode changed: previous=$previousUpgradeCode current=$currentUpgradeCode"
+# The static contract first, and before the elevation check, so `-StaticChecksOnly` needs no
+# administrator and a broken contract fails immediately rather than after an install.
+$contract = Test-MsiUpgradeContract -PreviousMsi $previousPath -CurrentMsi $currentPath
+$previousVersionText = $contract.PreviousVersion
+$currentVersionText = $contract.CurrentVersion
+
+Write-Host ("Static contract OK: UpgradeCode {0}, {1} -> {2}" -f
+    $contract.UpgradeCode, $previousVersionText, $currentVersionText) -ForegroundColor Green
+
+if ($StaticChecksOnly) {
+    Write-Host 'StaticChecksOnly: skipping the install sequence.' -ForegroundColor Yellow
+    return
 }
-if ([version]$currentVersionText -le [version]$previousVersionText) {
-    throw "Current MSI version $currentVersionText must be greater than previous $previousVersionText."
+
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'MSI upgrade certification requires an elevated Administrator session.'
 }
 
 $outputRoot = [IO.Path]::GetFullPath($OutDir)

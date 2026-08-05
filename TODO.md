@@ -128,7 +128,29 @@ v0.18.0 branch push.
       Already gone.
 - [ ] **Make it a required status check.** The only part still outstanding, and it is a repository
       setting rather than code — verify in branch protection once the run on `release/v0.18.0` has
-      gone green at least once.
+      gone green at least once. **When doing so, add a companion always-succeeds job**: the push
+      trigger is now path-filtered, and a path-filtered workflow reports *skipped* rather than
+      *success*, so a required check that never reports blocks every unrelated pull request.
+
+**First real run, and what it changed (2026-08-05).** The gate failed on itself: `Get-MsiProperty`
+returned `Object[]` because two COM calls leaked to the pipeline, and PowerShell's `-ne` against an
+array is a filter rather than a comparison — so it reported "UpgradeCode changed" while printing the
+same GUID twice, and could never have passed. Finding a pure-logic bug cost 26 minutes of download
+and build.
+
+Three changes so that cannot repeat, and so the next mistake is cheaper:
+
+- Non-elevated logic moved to `scripts/MsiUpgrade.Helpers.ps1`, which is side-effect free on load.
+- `-StaticChecksOnly` runs the contract (same UpgradeCode, ascending version) with no elevation and
+  no install, in about a second, on any machine. The workflow runs it as its own step before the
+  install sequence so the log says which half failed.
+- `MsiUpgradeHelperTests` pins the guard that catches the whole class — a multi-value read now
+  throws instead of silently becoming an array filter. Mutation-verified.
+- The push trigger is path-filtered to the installer, its scripts and `Directory.Build.props`. A
+  documentation change no longer pays 26 minutes.
+
+The elevated half still has no local path on Windows Home — Windows Sandbox and Hyper-V are not
+available there — which is the reason for pushing everything testable out of it.
 
 Static checks are a useful cheap complement but are **not** a substitute: identical `UpgradeCode`,
 ascending `ProductVersion`, and an unchanged `MajorUpgrade` element rule out the most common cause
