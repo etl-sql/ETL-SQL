@@ -967,8 +967,24 @@ pipeline** — the columnar fast-path gates deliberately exclude rule-carrying s
 developer reading `Engine.md` to understand dispatch and fast paths cannot see a constraint that
 governs both.
 
-- [ ] Add the four missing subsystems to `Engine.md`, or split them into their own architecture
-      pages and link them. Prefer whichever keeps `Engine.md` readable; it is already 719 lines.
+- [x] Add the four missing subsystems to `Engine.md`, or split them into their own architecture
+      pages and link them. **Extended rather than split**, because the document is organised by
+      mechanism and these are mechanisms — and because splitting would put the fast-path
+      *disqualifiers* in a different file from the fast paths, which is the specific confusion that
+      prompted this. The new sections explain how the pieces fit and link out to
+      `DataQualityRules.md` and `RowLevelSecurity.md` for detail rather than restating it.
+
+      **Checking the source corrected the claim that started this.** I had recorded that "the
+      columnar fast-path gates exclude rule-carrying statements". They do not. Three
+      `!HasDataQualityRules(...)` guards protect **SQL pushdown** — work sent to a remote database
+      never reaches `ColumnQualityValidator` — while the native columnar `SELECT … INTO` is guarded
+      separately on `!DataQuality.TracksNullCounts`, because a columnar batch copy does not visit
+      the values null-counting needs. Same principle, two different mechanisms, and the imprecise
+      version would have been repeated into the document had it not been checked.
+
+      Also documented while there: the `RecordPlanDecision` / `PlanDecisionReasonCodes` telemetry
+      that records *why* a fast path was declined, and that administrators bypass `HAS_GROUP` /
+      `HAS_ROLE` by default.
 - [ ] Consider extending `ArchitectureDocReconciliationTests` with a coverage check for
       engine subsystems, the way it already guards Portal roles, entities, policies and API areas.
       A count-based check would be crude, but "the `Quality` namespace exists and no architecture

@@ -505,6 +505,82 @@ LintStatementHandler.Execute(LintStatement, IExecutionContext)
 
 ---
 
+## Data-Quality Rules in the Row Pipeline
+
+Column rules are declared as tag comments (`/* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */`) and
+enforced by the engine, not by any host. A CLI run on a workstation enforces them exactly as the
+Portal does. Full rule and clause syntax lives in
+[DataQualityRules.md](decisions/DataQualityRules.md); this section covers only where they sit in
+execution.
+
+| Piece | Role |
+| :--- | :--- |
+| `ETL_SQL.Core.Quality.ColumnRuleParser` | Parses the tag comments into `ColumnRule` values |
+| `ColumnQualityValidator` | Created per statement by `SelectExecutionEngine`; evaluates rules row by row |
+| `QuarantineWriter` | Writes failing rows, pre-projection, with the `__dq_*` evidence columns |
+| `IExecutionContext.DataQuality` (`DataQualityReport`) | Per-run tallies, per-(column, rule) failure aggregation, and the column metrics persisted to run history |
+
+Two consequences worth holding onto, because they explain behaviour elsewhere in this document:
+
+- **Rules force local execution.** A rule-carrying statement is excluded from SQL pushdown, because
+  a pushed-down query never passes through the validator. See [Columnar plans and what disqualifies
+  them](#columnar-plans-and-what-disqualifies-them).
+- **The quarantined row is the row as it was read**, before projection — every source column, not
+  just the selected ones. That is what makes replay possible, and it is why the capture happens in
+  the row pipeline rather than at the sink.
+
+Failure counts and per-column metrics leave the engine through `DataQualityReport.ToHistoryPayload()`
+into job history, which is what `eng.data_quality_status`, `eng.data_quality_failures` and the
+Portal's steward views read.
+
+---
+
+## Row-Level Security
+
+Row-level security is an engine feature, not a Portal one: the filtering happens in expression
+evaluation, so the same script filters identically under the CLI, the Report Player and the Portal.
+Design detail is in [RowLevelSecurity.md](decisions/RowLevelSecurity.md).
+
+The engine contributes three things:
+
+- **An injected identity.** The host supplies the executing identity; the engine exposes it to
+  scripts rather than resolving it itself. With no identity present the identity functions return
+  empty or `FALSE` — they fail closed rather than defaulting to "allow".
+- **Identity functions** registered in `StandardFunctions.System.cs`: `HAS_GROUP('name')`,
+  `HAS_ROLE('name')`, and the table-valued `USER_GROUPS()` for
+  `WHERE col IN (SELECT Value FROM USER_GROUPS())`. **Administrators bypass these by default** — a
+  filter written with them does not restrict an admin, which is deliberate and is exactly what an
+  impersonation or preview-as feature exists to work around when you need to see what someone else
+  would see.
+- **A static scan**, `ETL_SQL.Core.Governance.RowLevelSecurityScan`, which reports whether a script
+  references identity at all and which tokens it uses. Callers use it to decide that a result is
+  identity-dependent — which is how an identity-sensitive report avoids persisting a shared
+  snapshot, and why such results are not reusable across users. See
+  [Subquery Caching](#subquery-caching) for the general caching model this constrains.
+
+---
+
+## Secrets and Policy at the Engine Boundary
+
+Two governance concerns are enforced inside the engine rather than around it, so a script cannot
+escape them by choosing a different host.
+
+**`SECRET:` references.** `ConnectionSecretResolver` resolves a `SECRET:name` field value through the
+configured `ISecretProvider` at connection time. The reference — never the value — is what appears in
+the script, so a script is safe to commit and to promote between environments. Resolution is
+restricted to a designated set of connector fields: a `SECRET:` reference on a field outside that set
+is refused rather than passed through as a literal, which would otherwise ship a credential-shaped
+string to a connector.
+
+**Organization policy.** Where a machine is enrolled, signed policy is validated and enforced before
+execution — required metadata tags, protected-data rules and connector egress boundaries. Policy
+retrieval and enforcement live in `ETL_SQL.Core.Governance`; a denial is decided and enforced before
+it is reported, so an unreachable event sink can never turn a denial into an allow. See
+[Organization policy](../administration/platform/organization-policy.md) for the operator view and
+[security events](../administration/platform/security-events.md) for what is emitted.
+
+---
+
 ## Scale & Large Dataset Handling
 
 ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale and profiling targets see [`docs/architecture/roadmaps/LargeDatasets.md`](roadmaps/LargeDatasets.md).
@@ -541,6 +617,45 @@ Activates when ORDER BY, window functions, GROUP BY, or GROUPING SETS are presen
 ```
 
 Operators marked `BLOCKING` must buffer the full intermediate result. Operators marked `STREAMING` pass rows through without accumulating them. `EXPLAIN` / `EXPLAIN ANALYZE` labels each operator with its mode.
+
+### Columnar plans and what disqualifies them
+
+Ahead of both paths, `SelectStatementHandler` tries a family of columnar plans that move batches
+between a source and sink without materialising `Row` objects at all:
+
+| Plan | Shape it accepts |
+| :--- | :--- |
+| `ColumnarJoinSelectPlan` | join where every source opens as a replayable columnar input |
+| `ColumnarSortSelectPlan` | sort over a replayable columnar source |
+| `ColumnarGroupedAggregatePlan` | single-key grouped aggregate |
+| `ColumnarCompositeGroupedAggregatePlan` | composite-key grouped aggregate |
+| `ColumnarAggregatePlan` | ungrouped aggregate |
+
+Each exposes `TryCreate(...)` and declines by returning `false`, so selection is a sequence of
+attempts rather than a single predicate. `TryNativeSelectInto` is the `SELECT … INTO` equivalent and
+additionally requires the destination to implement `IColumnarDataSink` and the source
+`IColumnarDataSource`.
+
+**Two engine features deliberately disqualify these fast paths, and the reason is the same in both
+cases: the fast path skips the per-row pipeline where the feature lives.**
+
+- **Data-quality rules disqualify SQL pushdown.** Three sites in `SelectStatementHandler` guard on
+  `!HasDataQualityRules(...)` — the early raw-statement pushdown, the streaming pushdown for
+  `SELECT … INTO`, and the streaming pushdown path. Rules are evaluated row by row by
+  `ColumnQualityValidator`; work pushed to a remote database never passes through that validator, so
+  a statement carrying `@expect` is kept local. See [Data-quality rules in the row
+  pipeline](#data-quality-rules-in-the-row-pipeline).
+- **Null-count metric tracking disqualifies the native columnar `SELECT … INTO`.** That path is
+  guarded on `!context.DataQuality.TracksNullCounts`, because counting nulls per column requires
+  visiting values the columnar batch copy does not inspect.
+
+These are correctness constraints, not tuning. Removing a guard to recover throughput silently stops
+enforcing the feature it protects.
+
+**Why a fast path was not taken** is recorded rather than left to inference: `RecordPlanDecision`
+writes an outcome (`Accepted`, `Fallback`, …) with a reason code from `PlanDecisionReasonCodes`
+against a stage name such as `select.join` or `select.grouped-aggregate`. Read those decisions before
+concluding a query is slow for a reason you have guessed at.
 
 ### Logical query optimizer (v0.8+)
 
