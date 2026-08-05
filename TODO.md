@@ -102,7 +102,13 @@ It is manual because a `perMachine` MSI needs elevation and nobody wants to muta
 workstation. **Both reasons vanish on a GitHub-hosted `windows-latest` runner**: it executes as an
 administrator, so `msiexec /qn` needs no UAC, and it is ephemeral, so installs leave nothing behind.
 
-- [ ] Add `scripts/Test-MsiUpgrade.ps1 -PreviousMsi <path> -CurrentMsi <path>` asserting the full
+**Already built — verified against the repository 2026-08-05, not from memory.** `scripts/Test-MsiUpgrade.ps1`
+exists and asserts the whole sequence below; `.github/workflows/msi-upgrade.yml` runs it on
+`release/**` pushes and `v*` tags; and the manual step is already gone from
+[release-checklist.md](docs/releases/release-checklist.md). The first real run fired on the
+v0.18.0 branch push.
+
+- [x] Add `scripts/Test-MsiUpgrade.ps1 -PreviousMsi <path> -CurrentMsi <path>` asserting the full
       sequence, not just the registry:
       1. install previous → exactly **1** uninstall entry at the previous version
       2. write a sentinel file into `InstallLocation`
@@ -111,14 +117,18 @@ administrator, so `msiexec /qn` needs no UAC, and it is ephemeral, so installs l
       5. sentinel survived → config/data preserved
       6. installed `ETL-SQL.exe --version` reports the new version
       7. uninstall → 0 entries
-- [ ] Steps 5–6 matter: a registry-only assertion passes while files are clobbered or
+- [x] Steps 5–6 matter: a registry-only assertion passes while files are clobbered or
       `RemoveExistingProducts` is mis-scheduled, which is precisely what "preserves config/data" in
       the checklist is asking about.
-- [ ] Add a CI job gated to `release/**` pushes and tags (not every PR — the previous release MSI is
+- [x] Add a CI job gated to `release/**` pushes and tags (not every PR — the previous release MSI is
       ~900 MB). Resolve the previous tag with `gh release list`, download with
       `gh release download <tag> --pattern '*-x64-Setup.msi'`, and cache it keyed on the tag.
-- [ ] Once green, make it a required status check and delete the manual step from
-      [release-checklist.md](docs/releases/release-checklist.md) Phase 4.
+      `.github/workflows/msi-upgrade.yml`, triggered on `release/**` and `v*`.
+- [x] Delete the manual step from [release-checklist.md](docs/releases/release-checklist.md) Phase 4.
+      Already gone.
+- [ ] **Make it a required status check.** The only part still outstanding, and it is a repository
+      setting rather than code — verify in branch protection once the run on `release/v0.18.0` has
+      gone green at least once.
 
 Static checks are a useful cheap complement but are **not** a substitute: identical `UpgradeCode`,
 ascending `ProductVersion`, and an unchanged `MajorUpgrade` element rule out the most common cause
