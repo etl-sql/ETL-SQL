@@ -997,18 +997,22 @@ governs both.
       test does not infer coverage — it forces a decision, the same shape as
       `AuthorshipPermissionBoundaryTests`.
 
-      **It found two real gaps while being written**, both now pinned by set equality so they
-      cannot grow quietly:
-  - [ ] `ETL-SQL.Core/Observability` — `ObservabilityConventions` defines the correlation and trace
-        tags every log scope and audit record is keyed on. No architecture page describes them;
-        `Engine.md` uses the word only about subquery-cache counters.
-  - [ ] `ETL-SQL.Core/Storage` — `IArtifactStorage` is the seam every host writes scripts,
-        snapshots, datasets and key rings through, and the thing HA requires to be *shared*. It
-        appears in a standards doc and a release note, and in no architecture page.
-
-      Known gaps are recorded rather than failed. Turning today's debt red only invites weakening
-      the inventory to get green, and an inventory that launders omissions into approvals is worse
-      than none.
+      **It found two real gaps while being written, and both are now closed** — by writing the
+      pages, not by relaxing the inventory. The known-gap list is empty, and the test that pins it
+      stays, so a future gap has to be added deliberately:
+  - [x] `ETL-SQL.Core/Storage` — `IArtifactStorage`, the seam every host writes scripts, snapshots,
+        datasets and key rings through. Now documented with the `ArtifactArea` set (including that
+        `Keys` is treated as secret: owner-only writes, no local-copy leasing), the provider list,
+        and the two decorators — `GuardedArtifactStorage` for the security guardrails and
+        `FencedArtifactStorage` for database-backed write-epoch fencing. The last is why HA needs
+        artifact roots genuinely *shared* rather than merely identical: fencing is coordinated
+        through the database, so two nodes writing to separate directories never contend for the
+        same epoch.
+  - [x] `ETL-SQL.Core/Observability` — `ObservabilityConventions` and the instrumenting decorators.
+        Documented with the reason the constants exist: keeping free-form names, paths, SQL text,
+        parameter values and connection strings out of telemetry. That is a cost control *and* a
+        disclosure control — a label travels wherever telemetry goes and is not covered by the
+        redaction applied to logs and support bundles.
 
 Docs verified current and needing no action: `Orchestrator.md` (HA, leases, fencing and heartbeats
 all covered), `Lineage.md`, `Connectors.md`, `Reporting.md`, `Portal.md` (reconciled and guarded

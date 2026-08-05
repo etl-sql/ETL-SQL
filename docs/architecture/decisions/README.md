@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [Adaptive Execution Controller (v0.15.0 Phase 2) — Design](AdaptiveExecutionController.md) | **Status:** DRAFT for review — no implementation yet. |
+| [Adaptive Execution Controller (v0.15.0 Phase 2) — Design](AdaptiveExecutionController.md) | **Status:** Slice A implemented — advice is computed and recorded, and **no execution pipeline |
 | [Alerting and Service Objectives](Alerting_Service_Objectives.md) | This guide defines baseline service indicators, starter objectives, alert routing, and runbook |
 | [Authorship Is Not Permission](AuthorshipIsNotPermission.md) | **Status:** decided and implemented for reports (v0.17.0) and datasets (v0.18.0). |
 | [Billion-Row Operator Certification (v0.15.0 Phase 4) — Design](BillionRowOperatorCertification.md) | **Status:** Candidate implementation complete for the v0.15.0 Phase 4 scope; 1B operator-run |

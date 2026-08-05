@@ -78,17 +78,12 @@ public sealed class EngineSubsystemCoverageTests
             "Statement AST nodes."),
         ["ETL-SQL.Core/Metadata"] = new("LanguageServer.md", "IMetadataManager",
             "Schema metadata used by completion and validation."),
-        ["ETL-SQL.Core/Observability"] = new(null, null,
-            "GAP: ObservabilityConventions defines the correlation/trace tags every log scope and "
-            + "audit record is keyed on, and no architecture page describes them. Engine.md uses the "
-            + "word 'Observability' only about subquery-cache counters.", IsKnownGap: true),
+        ["ETL-SQL.Core/Observability"] = new("Engine.md", "ObservabilityConventions",
+            "Shared low-cardinality tag and metric names, and the instrumenting decorators."),
         ["ETL-SQL.Core/Spill"] = new("Engine.md", "SpillStore",
             "Spill contracts shared with the engine."),
-        ["ETL-SQL.Core/Storage"] = new(null, null,
-            "GAP: IArtifactStorage is the seam every host writes scripts, snapshots, datasets and "
-            + "key rings through — and the thing HA requires to be shared — yet no architecture "
-            + "page mentions it. It appears only in a standards doc and a release note.",
-            IsKnownGap: true),
+        ["ETL-SQL.Core/Storage"] = new("Engine.md", "FencedArtifactStorage",
+            "Artifact areas, providers, and the guard/fence decorators HA depends on."),
         ["ETL-SQL.Core/Data"] = new("Engine.md", "IDataSource",
             "Data source and sink contracts."),
         ["ETL-SQL.Core/Interfaces"] = new("Engine.md", "IExecutionContext",
@@ -162,11 +157,10 @@ public sealed class EngineSubsystemCoverageTests
     [Fact]
     public void KnownDocumentationGaps_HaveNotGrown()
     {
-        string[] expected =
-        [
-            "ETL-SQL.Core/Observability",
-            "ETL-SQL.Core/Storage",
-        ];
+        // Empty, and that is the point of keeping the test: the two gaps this list was created
+        // with — Core/Observability and Core/Storage — were closed by writing the pages rather
+        // than by relaxing anything. A new entry here should be rare and deliberate.
+        string[] expected = [];
 
         var actual = Inventory
             .Where(entry => entry.Value.IsKnownGap)

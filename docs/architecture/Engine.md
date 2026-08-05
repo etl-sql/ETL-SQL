@@ -560,6 +560,72 @@ The engine contributes three things:
 
 ---
 
+## Artifact Storage
+
+Every durable file a host writes — scripts, snapshots, datasets, maps, key material — goes through
+`ETL_SQL.Core.Storage.IArtifactStorage` rather than `System.IO` directly. That indirection is what
+lets a single-node install use local directories and a high-availability cluster use a shared UNC
+share without any caller knowing which.
+
+Writes are addressed by **area**, not by path. `ArtifactArea` is the whole set:
+
+| Area | Holds | Single-node default |
+| :--- | :--- | :--- |
+| `Scripts` | Published report and ETL scripts | `Portal:ScriptRootPath` |
+| `Snapshots` | Rendered report snapshots | `Portal:SnapshotDirectory` |
+| `Datasets` | Cached dataset materializations, encrypted at rest | `Portal:DatasetRootPath` |
+| `Maps` | Lookup and map files | `Portal:MapRootPath` |
+| `Keys` | Data Protection key ring and dataset at-rest keys | `Portal:Storage:KeyRingPath` |
+
+`Keys` is not just another area: providers treat it as secret — owner-only permissions on write, and
+no local-copy leasing. A caller cannot obtain a working copy of key material on disk the way it can
+for a snapshot.
+
+**Providers and decorators.** `ArtifactStorageFactory` composes a provider with the guarantees a
+deployment needs, so those guarantees live at one boundary instead of at every call site:
+
+- `LocalArtifactStorage` / `FileSystemArtifactStorage` — single node.
+- `SmbArtifactStorage` — the shared UNC provider HA requires.
+- `InMemoryArtifactStorage` — tests.
+- `GuardedArtifactStorage` — enforces the deployment's security guardrails (extension policy and
+  area-aware rules) at the storage boundary, reusing `SecurityService`'s lists rather than keeping a
+  second copy.
+- `FencedArtifactStorage` — database-backed **write-epoch fencing**. On shared storage without
+  native fencing (SMB/UNC), a writer must atomically claim the artifact's write epoch through
+  `IWriteEpochStore` before a create, replace, move destination or delete. A token older than the
+  latest writer's is refused with `FencedWriteException` and *the byte write never happens*. This is
+  what stops a stale node — one that has lost its lease but not yet noticed — from overwriting a
+  newer node's work.
+
+This is why [state and high availability](../administration/platform/state-and-ha.md) requires the
+artifact roots to be genuinely shared rather than merely identical: the fencing is coordinated
+through the database, and two nodes writing to separate directories are not contending for the same
+epoch at all.
+
+---
+
+## Observability Conventions
+
+`ETL_SQL.Core.Observability.ObservabilityConventions` holds the tag and metric names used across
+metrics, traces and scrape labels. Its value is that the names are **shared and deliberately
+low-cardinality**: `etlsql.job.id`, `etlsql.report.id`, `etlsql.dataset.id`, `etlsql.node`,
+`etlsql.environment`, `etlsql.component`, `etlsql.connector.type`, `etlsql.policy.version`,
+`etlsql.status` and so on.
+
+The constants exist to keep free-form names, file paths, SQL text, parameter values and connection
+strings *out* of telemetry. That is both a cost control — high-cardinality labels are what make a
+metrics backend expensive — and a disclosure control, since a label is exported to wherever
+telemetry goes and is not covered by the redaction applied to logs and support bundles.
+
+`InstrumentedConnector` and `InstrumentedDatasetRegistry` are decorators that apply these
+conventions around the real implementations, so a connector author gets consistent telemetry without
+writing any, and `BackgroundServiceObservability` does the same for hosted services.
+
+Use the constants rather than string literals. A hand-written tag name is how two spellings of the
+same dimension end up in a dashboard.
+
+---
+
 ## Adaptive Execution — observing, not yet acting
 
 `ETL_SQL.Core.Adaptive` computes bounded runtime setpoint *advice* from measured resource signals.
