@@ -51,6 +51,25 @@ hand in Phase 2 and cleared. Meanwhile the one finding raised purely from readin
 out to be wrong on both premises, and its proposed fix measured as a no-op. For permission and
 revocation logic, a red test is far stronger evidence than a careful read.
 
+### `Set-Version.ps1` does not bump the Portal's asset cache-busters
+
+Every Portal page requests its JS and CSS as `/js/api.js?v=0.17.0` — **70 occurrences across eight
+pages**, hand-maintained. `Set-Version.ps1` updates 25 files and the Portal `wwwroot` is not among
+them, so `scripts/Set-Version.ps1 -Version 0.18.0` leaves all 70 at `0.17.0`.
+
+The failure is on **upgrade**, not on install, which is why it survives testing. The HTML documents
+are not themselves versioned, so a browser fetches the new `index.html` — and that new page then
+asks for `api.js?v=0.17.0`, a URL the browser already has cached from the previous release. The
+user runs a 0.18.0 Portal against 0.17.0 JavaScript until they hard-refresh. This release changed
+`api.js`, so that is a live mismatch rather than a theoretical one.
+
+- [ ] Make the cache-buster derive from the assembly version at render time, or have
+      `Set-Version.ps1` rewrite `?v=` across `src/ETL-SQL.Portal/wwwroot`. Deriving it is better —
+      70 hand-maintained copies of a version string is the same class of problem this release kept
+      finding elsewhere.
+- [ ] Add a test that fails when any `?v=` in `wwwroot` disagrees with `VersionPrefix`. Without it
+      the fix is one more step someone has to remember at release time.
+
 ### Close CodeQL alert 323 — unescaped telemetry in the lineage tree
 
 Open High `js/xss` accepted for v0.17.0 and left **open** rather than dismissed, because it is a real
