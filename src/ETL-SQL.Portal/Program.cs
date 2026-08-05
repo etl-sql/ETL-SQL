@@ -755,10 +755,34 @@ app.Use(async (context, next) =>
     }
 });
 
+// Cache policy, split by what the response actually is.
+//
+// Documents and API responses stay `no-store`: they carry catalog contents, identity and report
+// data, and none of it should sit in a browser cache or an intermediary.
+//
+// Static assets under the asset roots are different. They are the Portal's own JavaScript, CSS,
+// images and map data — no user data in any of them — and `no-store` meant every page navigation
+// re-downloaded roughly 3.4 MB, about 1.9 MB of it vendored libraries that had not changed since
+// install. They now get `no-cache`, which is not "do not cache": it permits storage and requires
+// revalidation on every request, so the browser sends its ETag and gets a 304 instead of the file.
+// Staleness risk is nil — an upgraded Portal returns a new ETag and the browser refetches — which
+// is also why the `?v=` strings on the asset URLs do nothing and never did.
+string[] assetRoots = ["/js/", "/css/", "/designer/", "/img/", "/maps/"];
 app.Use(async (context, next) =>
 {
-    context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    context.Response.Headers.Append("Pragma", "no-cache");
+    var path = context.Request.Path.Value ?? string.Empty;
+    var isAsset = assetRoots.Any(root => path.StartsWith(root, StringComparison.OrdinalIgnoreCase));
+
+    if (isAsset)
+    {
+        context.Response.Headers.Append("Cache-Control", "no-cache, must-revalidate");
+    }
+    else
+    {
+        context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        context.Response.Headers.Append("Pragma", "no-cache");
+    }
+
     await next();
 });
 // Fail-closed audit policy (P1.12): a blocked mutation surfaces as 503 Service Unavailable so the

@@ -51,24 +51,34 @@ hand in Phase 2 and cleared. Meanwhile the one finding raised purely from readin
 out to be wrong on both premises, and its proposed fix measured as a no-op. For permission and
 revocation logic, a red test is far stronger evidence than a careful read.
 
-### `Set-Version.ps1` does not bump the Portal's asset cache-busters
+### Portal asset caching — the `?v=` cache-busters were inert, and nothing was cacheable
 
-Every Portal page requests its JS and CSS as `/js/api.js?v=0.17.0` — **70 occurrences across eight
-pages**, hand-maintained. `Set-Version.ps1` updates 25 files and the Portal `wwwroot` is not among
-them, so `scripts/Set-Version.ps1 -Version 0.18.0` leaves all 70 at `0.17.0`.
+**The stale-JavaScript hazard originally recorded here does not exist, and the correction matters
+more than the original claim.** I asserted that an upgraded Portal would serve `api.js?v=0.17.0`
+from the browser's cache and run 0.18.0 against 0.17.0 JavaScript. Checking the response headers
+rather than reasoning from the URLs showed the opposite: a middleware appended
+`Cache-Control: no-store, no-cache, must-revalidate, max-age=0` to **every** response, static assets
+included. A browser forbidden to store a response cannot serve a stale one, so there was never
+anything for a cache-buster to bust — the 71 hand-maintained `?v=` strings had no effect at all.
 
-The failure is on **upgrade**, not on install, which is why it survives testing. The HTML documents
-are not themselves versioned, so a browser fetches the new `index.html` — and that new page then
-asks for `api.js?v=0.17.0`, a URL the browser already has cached from the previous release. The
-user runs a 0.18.0 Portal against 0.17.0 JavaScript until they hard-refresh. This release changed
-`api.js`, so that is a live mismatch rather than a theoretical one.
+The real finding was the other way round: `no-store` on the asset roots meant **every page
+navigation re-downloaded about 3.4 MB**, roughly 1.9 MB of it vendored libraries (`echarts`,
+`tabulator`, `arrow`, `chart`) that had not changed since install.
 
-- [ ] Make the cache-buster derive from the assembly version at render time, or have
-      `Set-Version.ps1` rewrite `?v=` across `src/ETL-SQL.Portal/wwwroot`. Deriving it is better —
-      70 hand-maintained copies of a version string is the same class of problem this release kept
-      finding elsewhere.
-- [ ] Add a test that fails when any `?v=` in `wwwroot` disagrees with `VersionPrefix`. Without it
-      the fix is one more step someone has to remember at release time.
+- [x] Split the cache policy by what a response is. Documents and API responses stay `no-store` —
+      they carry catalog, identity and report data. The asset roots (`/js/`, `/css/`, `/designer/`,
+      `/img/`, `/maps/`) get `no-cache, must-revalidate`, which permits storage and requires
+      revalidation, so a request costs a 304 rather than the file. Staleness risk is nil: an
+      upgraded Portal returns a new ETag and the browser refetches.
+- [x] Remove the 71 inert `?v=` strings. They implied a mechanism that was not there, which is the
+      same shape as the other defects this release turned up.
+- [x] `StaticAssetCachingTests` pins **both** halves, because each is a mistake someone could make
+      in good faith: widening `no-store` back over the assets to be safe, or relaxing the documents
+      to make the app feel faster. It asserts a real conditional request returns `304`.
+
+`Set-Version.ps1` therefore does not need to touch `wwwroot`, and no version-agreement test is
+needed. If long-lived caching is ever introduced, that decision brings back the need for
+fingerprinting — derive it then rather than hand-maintaining copies.
 
 ### Close CodeQL alert 323 — unescaped telemetry in the lineage tree
 
@@ -906,3 +916,6 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 - [x] Governance sidebar has Overview, Quarantine Queue, Lineage Search, Stewardship, Audit Evidence.  Lineage Search, Stewardship, Audit Evidence all point to the same place just different top selector.  These are redundant simplify it down to just Lineage Search.
 - [x] Governance Overview includes Overview, Workqueue, Exceptions, Glossary, and Settings.  These should not all exist under the Overview.  I feel like we have two menu's going that should be combined into one.  The sidebar should have Overview, Workqueue, Exceptions, Glossary, Quarantine Queue, Lineage Search, and Settings.  The Overview page should not have a separate menu options.
 - [x] We have the Quarantine Queue but there is supposed to be a lot more available so the user can see metrics on failure rate of data quality they also should be able to look up jobs and what rules (@expect tags) are applied to each job.  All of that is missing.  See this document: C:\Users\chuck\scratch\ETL-SQL\docs\architecture\decisions\DataQualityRules.md
+
+## Profile
+- [ ] Basic performance is automatically captured but the more detailed performance metrics captured with SET PROFILE ON; needs some enhancements.  We need to make sure that the the Data Quality work is being captured so the user knows the cost of the rule.
