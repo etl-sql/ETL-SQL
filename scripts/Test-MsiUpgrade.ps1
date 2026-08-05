@@ -40,12 +40,16 @@ function Get-MsiProperty {
     try {
         $database = $installer.OpenDatabase($Path, 0)
         $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$Name'")
-        $view.Execute()
+        # [void] on both COM calls, and .Trim() on the result. Without the [void] these emit to the
+        # pipeline and the function returns Object[] ('', '{GUID}', '') rather than a string — at
+        # which point `-ne` stops being a comparison and becomes an array *filter*, so the
+        # UpgradeCode check was true for identical codes and this gate could never pass.
+        [void]$view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) { throw "MSI '$Path' does not define property '$Name'." }
-        return [string]$record.StringData(1)
+        return ([string]$record.StringData(1)).Trim()
     } finally {
-        if ($null -ne $view) { try { $view.Close() } catch { } }
+        if ($null -ne $view) { try { [void]$view.Close() } catch { } }
         foreach ($comObject in @($view, $database, $installer)) {
             if ($null -ne $comObject -and [Runtime.InteropServices.Marshal]::IsComObject($comObject)) {
                 [void][Runtime.InteropServices.Marshal]::ReleaseComObject($comObject)
