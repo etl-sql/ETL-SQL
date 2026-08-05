@@ -2,12 +2,19 @@
 
 This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing dashboards, changing scripts, or making schema-impacting changes.
 
+> **Applies to:** every deployment profile. Lineage is persisted by whatever runs the script, including the CLI on a workstation — a Portal is not required to use this guide.
+
 ## Prerequisites
 
-- Portal or Orchestrator must persist lineage through the configured `ILineageCatalogStore`.
+- **Lineage must be persisted, which happens automatically** — whatever runs the script writes it
+  through the configured `ILineageCatalogStore`, including a plain `etl-sql run` on a workstation.
+  You do not need to deploy a Portal or an Orchestrator service to use this guide; running scripts
+  is enough to populate `eng.protected_data`, `eng.stewardship_score` and the rest.
 - Scripts should use durable stewardship tags such as `@owner`, `@steward`, `@contact`, `@domain`, `@classification`, `@quality`, `@pii`, `@phi`, `@pci`, `@sensitive`, and `@freshness`.
 - Organization-specific tags should use `org_`, `x_`, or `custom_` prefixes.
-- Report publishers need at least read access to the relevant Portal folders to see report and subscription impact.
+- Report publishers need at least read access to the relevant Portal folders to see report and
+  subscription impact — **where a Portal is deployed**. The script, dataset and column impact below
+  is available without one.
 
 ## Script-First Metadata
 

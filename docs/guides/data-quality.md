@@ -8,6 +8,8 @@ themselves and deciding what happens when a row breaks one.
 For the full rule and clause syntax, see the
 [Data Quality Rules reference](../reference/statements/dml/data-quality-rules.md).
 
+> **Applies to:** every deployment profile. Rules, quarantine and `ASSERT JOB` are engine features and need no Portal — see [running unattended without Portal](#running-unattended-without-portal). Team and above add durable history; Enterprise adds the Portal steward queue.
+
 ## Workspace policy
 
 Place `etlsql-policy.json` at the workspace root to share local-first stewardship and quality

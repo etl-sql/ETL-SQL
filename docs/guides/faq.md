@@ -4,6 +4,8 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 ---
 
+> **Applies to:** every deployment profile. Portal-specific answers say so.
+
 ## General
 
 **Q: What is ETL-SQL?**
@@ -83,7 +85,6 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > CREATE CONNECTION firebird_src AS ODBC()
 >     WITH(CONNECTION_STRING='Driver={Firebird/InterBase(r) driver};Dbname=localhost:C:\Data\mydb.fdb;User=SYSDBA;Password=<password>;');
 > ```
-
 
 **Q: Does ETL-SQL support PIVOT and UNPIVOT?**
 > Yes, the engine fully supports rotating rows into columns (PIVOT) and columns into rows (UNPIVOT) in engine-side queries against `#temp` tables:
@@ -274,7 +275,6 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > The engine relies on an encrypted **Spill-to-Disk** architecture managed by the [MemoryArbiter](../../src/ETL-SQL.Engine/Engines/MemoryGovernor.cs) and [SpillStore](../../src/ETL-SQL.Engine/Spill/SpillStore.cs). 
 > When active query pipelines (like large sort, join, or aggregation operations) exceed their allocated memory grant, the engine writes intermediate data chunks to encrypted, compressed files on disk (AES-GCM + GZip). Once writing is complete, the engine merges the spilled files in a single pass. This prevents Out of Memory (OOM) crashes and guarantees job completion.
 
-
 **Q: Why did `PUBLISH BUNDLE` fail on `RUN SCRIPT @path`?**
 > Published bundles must know every sub-script at publish time so the Orchestrator can version and store the full dependency graph. Dynamic script paths cannot be packaged safely. Use live mode for those jobs:
 >
@@ -343,7 +343,6 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 ---
 
 ## Reporting (.rptsql)
-
 
 **Q: What's the difference between `.etlsql` and `.rptsql`?**
 > `.etlsql` files are data pipeline scripts — they move, transform, and load data. `.rptsql` files are Report-SQL scripts — they define dashboards using `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, and `CREATE NAVIGATION`. The Report-SQL language is a superset of ETL-SQL syntax.

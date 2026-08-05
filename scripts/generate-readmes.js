@@ -50,14 +50,33 @@ function extractMetadata(filePath) {
   
   // Try to find first description paragraph
   let foundTitle = false;
+  let inFence = false;
   for (let line of lines) {
     line = line.trim();
+    // Track fenced blocks. Without this the first *line inside* a code block becomes the page
+    // description, which is how one guide came to describe itself as
+    // "ETL-SQL run nightly_load.etlsql --log".
+    if (line.startsWith('```')) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
     if (line.startsWith('# ')) {
       foundTitle = true;
       continue;
     }
-    // Skip empty lines, separators, tables, code blocks, or metadata comments
-    if (line === '' || line.startsWith('---') || line.startsWith('|') || line.startsWith('`') || line.startsWith('/*') || line.startsWith('//')) {
+    // Skip anything that is not prose about the page.
+    //
+    // `<!--` matters: several pages carry an AST-name marker (`<!-- SearchPortalCatalogStatement -->`)
+    // directly under the title, and those were being published as the page's description in the
+    // generated index. `#` matters because a page whose title is followed straight by a section
+    // heading was described by that heading — "## 8. Backup & Maintenance" — which told a reader
+    // nothing and went stale the moment the heading was renumbered. `>` keeps callouts such as the
+    // "Applies to" profile banner out of the description slot.
+    if (line === ''
+      || line.startsWith('---') || line.startsWith('|') || line.startsWith('`')
+      || line.startsWith('/*') || line.startsWith('//')
+      || line.startsWith('<!--') || line.startsWith('#') || line.startsWith('>')) {
       continue;
     }
     // Clean and truncate

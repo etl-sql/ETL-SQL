@@ -7,6 +7,8 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
 
 ---
 
+> **Applies to:** every deployment profile. The same `.rptsql` runs under the CLI, the Report Player, the Orchestrator and the Portal without modification.
+
 ## How it works — architecture overview
 
 ```
@@ -73,7 +75,6 @@ CREATE VISUAL KpiCard AS CARD (SOURCE = #kpi, MAPPINGS(VALUE = Value, LABEL = La
 ```
 
 Temp tables are reusable across multiple visuals, debuggable with a plain `SELECT`, and consistent with the rest of ETL-SQL.
-
 
 ---
 
@@ -359,7 +360,6 @@ SET REPORT CSS = '
 ```
 
 ---
-
 
 ## Report Objects
 

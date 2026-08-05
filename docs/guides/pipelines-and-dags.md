@@ -6,7 +6,9 @@ Published Orchestrator bundles require literal `RUN SCRIPT 'child.etlsql'` depen
 
 ---
 
-## 1. Modularizing with `RUN SCRIPT`
+> **Applies to:** every deployment profile. The control flow is identical everywhere; only *how the pipeline is triggered* changes — OS scheduler on Solo, durable schedules on Team and up. See [job scheduling](../administration/orchestration/job-scheduling.md).
+
+## Modularizing with `RUN SCRIPT`
 
 Don't build monolithic scripts. Break your pipeline into logical modules (Extract, Transform, Load) and coordinate them from a master script.
 
@@ -36,7 +38,7 @@ DECLARE @Status STRING OUTPUT = 'Success'; -- updates parent variable
 
 ---
 
-## 2. Parallel Execution
+## Parallel Execution
 
 The `PARALLEL` block allows you to run independent branches concurrently. This is essential for high-throughput batch windows.
 
@@ -58,7 +60,7 @@ Parallel branches share session variables but should write to separate `#temp` t
 
 ---
 
-## 3. Dependency Management (DAGs)
+## Dependency Management (DAGs)
 
 In a DAG, "Task B" can only start after "Task A" completes. You can achieve this using standard procedural logic and file-dependency checks.
 
@@ -105,7 +107,7 @@ DELETE FILE 'C:\ETL\Trigger\dump_ready.txt';
 
 ---
 
-## 4. Error Handling & Resilience
+## Error Handling & Resilience
 
 Wrap your pipeline steps in `TRY...CATCH` to handle failures gracefully.
 
@@ -139,7 +141,7 @@ ALTER JOB NightlyETL ADD SCHEDULE NightlyAtTwo;
 
 ---
 
-## 5. Full DAG Example
+## Full DAG Example
 
 ```sql
 -- Master Orchestrator
@@ -170,7 +172,7 @@ END CATCH
 
 ---
 
-## 6. Visualizing the DAG
+## Visualizing the DAG
 
 When running complex nested scripts, use the `--progress` flag in the CLI:
 

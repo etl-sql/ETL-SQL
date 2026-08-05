@@ -31,7 +31,7 @@ Quality and governance work fully without a Portal: see the
 
 ## Team / SME
 
-A shared service for one organisation, normally a single node. This is the smallest profile where
+A shared service for one organization, normally a single node. This is the smallest profile where
 a **second person** exists — which is where permissions, revocation and review start to mean
 something.
 

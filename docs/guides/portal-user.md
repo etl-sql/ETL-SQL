@@ -4,6 +4,8 @@ The Portal is a web application that lets you browse, run, and subscribe to repo
 
 ---
 
+> **Applies to:** Team, Enterprise and SaaS — this guide describes the Portal. On Solo / Workstation, run and view the same reports with the CLI or the Report Player instead.
+
 ## Contents
 
 1. [Logging In](#1-logging-in)
@@ -19,7 +21,7 @@ The Portal is a web application that lets you browse, run, and subscribe to repo
 
 ---
 
-## 1. Logging In
+## Logging In
 
 Navigate to the portal URL provided by your administrator (for example, `http://yourserver:5000` for the default HTTP port). You will be redirected to the login page.
 
@@ -28,13 +30,13 @@ Enter your **username** and **password**, then click **Sign In**.
 > [!NOTE]
 > If your administrator created your account, you will be required to set a new password before you can access any reports. The portal will redirect you to the change-password form automatically.
 
-### 1.1 Session Tokens
+### Session Tokens
 
 Once logged in, the portal issues a short-lived access token (default: 60 minutes) and a longer-lived refresh token (default: 7 days). The refresh token silently re-authenticates you in the background, so you are unlikely to be asked to log in again within a week of normal use.
 
 ---
 
-## 2. Navigating the Portal
+## Navigating the Portal
 
 The portal has two main areas accessible from the top navigation:
 
@@ -45,7 +47,7 @@ The portal has two main areas accessible from the top navigation:
 
 ---
 
-## 3. Browsing Folders & Reports
+## Browsing Folders & Reports
 
 The Reports page shows a **folder tree** in the left sidebar. Click a folder to expand it and see its sub-folders and reports.
 
@@ -56,39 +58,39 @@ Click a report name to open it.
 
 ---
 
-## 4. Running a Report
+## Running a Report
 
 When you open a report, the portal loads the most recent **snapshot** — a pre-built result set stored on the server. If no snapshot exists yet, the report panel shows a **Run** button.
 
-### 4.1 Using the Run Button
+### Using the Run Button
 
 Click **Run** (or **Refresh**) to execute the report's underlying ETL-SQL script now. Execution happens asynchronously; a progress indicator appears while the job runs. When complete, the snapshot is updated and the result is displayed.
 
 > [!IMPORTANT]
 > Running a report re-executes the script against live data sources. On large datasets this can take several minutes. Your administrator can set per-report execution timeouts.
 
-### 4.2 Report Parameters
+### Report Parameters
 
 If a report declares parameters, an input form appears above the result panel. Fill in the values and click **Run** — the parameter values are passed to the script at execution time.
 
 ---
 
-## 5. Viewing & Exporting Results
+## Viewing & Exporting Results
 
 A report can contain multiple **visuals** — charts, tables, KPI cards, and text blocks. They are arranged by the page and container layout defined in the Report-SQL script.
 
-### 5.1 Charts
+### Charts
 
 Interactive ECharts visualisations. Hover over data points for tooltips. Use the chart toolbar (top-right of each chart) to:
 
 - Download the chart as a PNG image
 - Switch between chart view and the underlying data table
 
-### 5.2 Tables
+### Tables
 
 Paginated data tables. Click a column header to sort. Use the search box above the table to filter rows client-side.
 
-### 5.3 Exporting
+### Exporting
 
 Use the **Export** menu on any report to download the full result:
 
@@ -99,7 +101,7 @@ Use the **Export** menu on any report to download the full result:
 
 ---
 
-## 6. Subscribing to a Report
+## Subscribing to a Report
 
 A subscription delivers a report to your email inbox on a schedule.
 
@@ -124,7 +126,7 @@ A subscription delivers a report to your email inbox on a schedule.
 > [!TIP]
 > Your administrator must configure an SMTP connection before subscriptions with attachments can be delivered. If the SMTP connection is missing, choose the **Link** format as a fallback.
 
-### 6.1 Report Parameters
+### Report Parameters
 
 Some reports are written with **INPUT parameters** — values that control what data is included each time the report runs (e.g. date range, region filter). When you subscribe, you can set a value for each parameter that will be used every time your subscription fires.
 
@@ -162,7 +164,7 @@ An empty field means **no value** (`NULL`) is passed for that parameter. Most re
 
 ---
 
-## 7. Managing Your Subscriptions
+## Managing Your Subscriptions
 
 Open **My Subscriptions** from the user menu (top-right). The list shows all subscriptions you own, with their schedule, next run time, and last delivery status. A compact parameter summary is shown for each subscription (e.g. `@start=D-1  @end=D  @region=—`), where `—` indicates a null/unset value.
 
@@ -171,13 +173,13 @@ Open **My Subscriptions** from the user menu (top-right). The list shows all sub
 - **Delete** — removes the subscription and cancels any pending scheduled job.
 - **History** — shows the last delivery attempts with timestamps and any error messages.
 
-### 7.1 Editing Parameters
+### Editing Parameters
 
 Click **Edit Parameters** (or the parameter summary text) on any subscription row. The same per-type controls used in the Subscribe form appear, pre-populated with your saved values. Make your changes and click **Save**. The updated values are used on the next scheduled run — there is no need to recreate the subscription.
 
 ---
 
-## 8. Changing Your Password
+## Changing Your Password
 
 1. Click your username in the top-right corner and choose **Change Password**.
 2. Enter your current password, then your new password twice.

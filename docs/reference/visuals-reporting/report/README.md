@@ -13,5 +13,5 @@
 | [NAVIGATION](navigation.md) | Creates a menu or tab strip that links multiple report pages, providing user navigation between views. |
 | [PAGE](page.md) | Defines a report page as a CSS grid layout. Visuals, containers, and buttons are mapped into named grid slots. The page mode is required. |
 | [STYLE](style.md) | Defines a reusable visual theme that can be referenced by pages and visuals to apply consistent formatting. |
-| [CREATE THEME](theme.md) | ## CREATE THEME |
+| [CREATE THEME](theme.md) | Defines a custom ECharts color theme that can be applied to any visual or page with `STYLE (THEME = themeName)`. Themes are saved as JSON files to ... |
 | [VISUAL](visual.md) | Visuals are the building blocks of reports. Each visual binds a data source to a chart or control. |

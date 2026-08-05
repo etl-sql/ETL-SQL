@@ -5,6 +5,8 @@ Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" t
 > [!TIP]
 > **Looking for exact syntax?** Use the [Syntax Index](../syntax-index.md) (keyword map) or the [Task Index](../task-index.md) ("how do I…" locator). For connector options and auth, see [Data Connectors](../reference/connectors/README.md). For errors and gotchas, see the [FAQ](faq.md).
 
+> **Applies to:** every deployment profile. The language is identical from a workstation to SaaS — larger profiles add operational boundaries around your scripts, never new syntax.
+
 ## What Makes ETL-SQL Different
 
 ETL-SQL is script-first data orchestration. Pipelines, reports, schedules, validation, and governance metadata live in plain-text `.etlsql` and `.rptsql` files that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code, notebooks, Portal, Orchestrator, or CI/CD.
@@ -79,7 +81,7 @@ After this works, change only one thing at a time: swap `MOCKDB` for a real conn
 
 ---
 
-## 1. The Pipeline Mental Model
+## The Pipeline Mental Model
 
 The most important concept to master is **Context Awareness**. In standard SQL, your query runs against a single engine. In ETL-SQL, you are the **Conductor** of an orchestra of engines.
 
@@ -110,7 +112,7 @@ Two consequences worth internalizing early:
 
 ---
 
-## 2. Your First Connection
+## Your First Connection
 
 Every data source is a named **connection**. Create one before querying it.
 
@@ -150,7 +152,7 @@ Use VS Code for inline diagnostics, quick fixes, and report preview; use the CLI
 
 ---
 
-## 3. Variables & State Management
+## Variables & State Management
 
 Variables are the engine's memory. Prefix all variable names with `@`.
 
@@ -174,7 +176,7 @@ A few concepts you will reach for quickly — each has a focused reference page:
 
 ---
 
-## 4. The #Temp Table Workspace
+## The #Temp Table Workspace
 
 Temporary tables (prefixed with `#`) are **in-memory engine-side staging areas** — the core of every multi-step pipeline.
 
@@ -202,7 +204,7 @@ You can define a `#temp` table explicitly (`CREATE TABLE #Summary (...)`), build
 
 ---
 
-## 5. Core SELECT Patterns
+## Core SELECT Patterns
 
 ETL-SQL's query surface is broad — full clause order, `TOP`/`LIMIT`/pagination, `ROLLUP`, CTEs, `PIVOT`, `QUALIFY`, `ASOF JOIN`, and more. Rather than restate it here, the atomic detail lives in the [Query Syntax reference](../reference/statements/query-syntax/README.md) (see [select modifiers](../reference/statements/query-syntax/select-modifiers.md) for row limiting/pagination and [WITH](../reference/statements/query-syntax/with.md) for CTEs). Two patterns matter most for *pipeline* thinking:
 

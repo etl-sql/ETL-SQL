@@ -13,7 +13,7 @@
 | [Language Syntax Standards](Language_Syntax_Standards.md) | This document establishes the official consistency rules and design patterns for adding or modifying language syntax (keywords, statements, options... |
 | [ETL-SQL Presentation Layer Standards](Presentation_Standards.md) | **Applies to ETL-SQL 0.7.0 — Established with the ScriptOutput / IOutputSink architecture** |
 | [Report Runtime Asset Standards](Report_Runtime_Asset_Standards.md) | This document establishes the official development rules and synchronization protocols for shared frontend browser assets (JavaScript, CSS, themes,... |
-| [ETL-SQL SLT Coverage Reference](SLT_Coverage.md) | ## What is the SLT? |
+| [ETL-SQL SLT Coverage Reference](SLT_Coverage.md) | The **SQLite Logic Test** (SLT) suite was created by D. Richard Hipp as a cross-engine SQL correctness test. It encodes thousands of SQL queries wi... |
 | [Script Composition Standards](Script_Composition_Standards.md) | This document establishes the official design patterns, file layouts, and composition standards for writing **ETL-SQL** and **Report-SQL (`.rptsql`... |
 | [Source Boundary Standards](Source_Boundary_Standards.md) | This document establishes the official project layering, namespace boundaries, and component ownership constraints for the **ETL-SQL** codebase. Al... |
 | [Third-Party Dependency Standards](Third_Party_Dependency_Standards.md) | This document establishes the official licensing requirements, evaluation criteria, and inventory guidelines for adding or updating third-party lib... |

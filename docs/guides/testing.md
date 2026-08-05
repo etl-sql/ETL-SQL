@@ -7,6 +7,8 @@ For enterprise security review and full-suite release evidence, use
 [Enterprise Security Review Packet](../architecture/decisions/Enterprise_Security_Review_Packet.md) and
 [Enterprise Release Evidence Checklist](../architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
 
+> **Applies to:** contributors to this repository, not deployments. For validating *your own* pipelines, see [validating data quality](data-quality.md).
+
 ## Current Release-Confidence Status
 
 The testing foundation now has three complementary layers:

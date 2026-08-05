@@ -4,7 +4,9 @@ The **Visual Report Builder & Dashboard Designer** is the integrated WYSIWYG aut
 
 ---
 
-## 1. Overview & Core Concept
+> **Applies to:** authoring on any profile. The designer runs in VS Code without a Portal, and inside Portal Studio where one is deployed.
+
+## Overview & Core Concept
 
 ETL-SQL combines **script-first pipeline reproducibility** with **WYSIWYG visual design**:
 
@@ -30,9 +32,9 @@ ETL-SQL combines **script-first pipeline reproducibility** with **WYSIWYG visual
 
 ---
 
-## 2. Four-Zone Interface Layout
+## Four-Zone Interface Layout
 
-### 2.1 Top Bar & Navigation
+### Top Bar & Navigation
 The top bar provides global controls for report governance, theme testing, split-screen script editing, preview execution, and source control:
 
 - **Report Title Input:** Edit the report title directly.
@@ -43,7 +45,7 @@ The top bar provides global controls for report governance, theme testing, split
 - **Preview Toggle:** Compiles `.rptsql` into an interactive live report preview using sample/live datasets.
 - **Save & Commit:** Saves the report manifest and surfaces a `Commit` action for Git repository check-ins.
 
-### 2.2 Left Sidebar
+### Left Sidebar
 - **Visual Palette:** Drag or click to append visual cards organized by category:
   - *Charts:* `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `FUNNEL`, `GAUGE`, `WATERFALL`, `BUBBLE`, `RADAR`, `CANDLESTICK`, `MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `GANTT`, `TABLE`, `CARD`.
   - *Filter Controls:* `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `TEXTBOX`, `NUMBERBOX`, `CHECKBOX`.
@@ -51,7 +53,7 @@ The top bar provides global controls for report governance, theme testing, split
 - **Datasets & Column Explorer:** Lists attached dataset queries (`#name`). Click `▸` to expand dataset columns as draggable pills (`📄 colName`).
 - **On This Page (Component Tree):** Displays a hierarchical tree view of root cards and nested container children.
 
-### 2.3 12-Column Grid Canvas
+### 12-Column Grid Canvas
 The canvas renders a 12-column CSS grid where cards can be moved, resized, grouped, and aligned:
 - **Card Badges:** Displays visual type (`BAR`, `SANKEY`), container type (`📁 BOX`), and security flags (`🔒 RLS`, `⚡ Sampled`).
 - **Card Controls:**
@@ -61,7 +63,7 @@ The canvas renders a 12-column CSS grid where cards can be moved, resized, group
   - `✕` *(Remove Visual):* Deletes the visual card.
 - **Alignment Toolbar:** Appears when 2 or more cards are multi-selected (Left, Top, Equal Width, Equal Height).
 
-### 2.4 Properties Panel
+### Properties Panel
 Configures selected visual details:
 - **Properties:** Name, type, container group, title, dataset binding, width, and height.
 - **Mappings & Role Validation:** Column assignment text fields with `<datalist>` auto-suggestions and mandatory role validation badges (`* Required` vs `✓ Required` vs `Optional`).
@@ -71,7 +73,7 @@ Configures selected visual details:
 
 ---
 
-## 3. Ergonomics & Keyboard Shortcuts
+## Ergonomics & Keyboard Shortcuts
 
 The designer includes complete keyboard navigation and clipboard operations:
 
@@ -91,7 +93,7 @@ The designer includes complete keyboard navigation and clipboard operations:
 
 ---
 
-## 4. Drag-and-Drop Column Mapping
+## Drag-and-Drop Column Mapping
 
 Connecting dataset fields to visual roles is fast and interactive:
 
@@ -102,7 +104,7 @@ Connecting dataset fields to visual roles is fast and interactive:
 
 ---
 
-## 5. Container & Structural Layout Patterns
+## Container & Structural Layout Patterns
 
 Containers group visuals into organized dashboards (`BOX`, `SCROLL`, `DRAWER`, `SIDEBAR`, `TABS`, `ACCORDION`, `MODAL`, `POPOVER`):
 
@@ -119,7 +121,7 @@ When a card is nested inside a `TABS` or `ACCORDION` container, a **Tab / Sectio
 
 ---
 
-## 6. Bi-Directional Split Script Authoring
+## Bi-Directional Split Script Authoring
 
 Click **Split Script** (`Ctrl+Shift+S`) to open the CodeMirror editor alongside the visual canvas:
 
@@ -131,7 +133,7 @@ Click **Split Script** (`Ctrl+Shift+S`) to open the CodeMirror editor alongside 
 
 ---
 
-## 7. Related References
+## Related References
 
 - [Report-SQL Scripting Guide](report-sql.md) — Detailed statement syntax for `.rptsql` files
 - [Portal User Guide](portal-user.md) — Running, filtering, and subscribing to published reports

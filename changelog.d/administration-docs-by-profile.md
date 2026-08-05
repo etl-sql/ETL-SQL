@@ -8,7 +8,7 @@
 
   - **All orphaned numbering removed** across 28 files, along with the duplicate `# Title` /
     `## Title` pairs the numbers were hiding, and the resulting heading-level skips.
-  - **New [`docs/administration/by-profile.md`](docs/administration/by-profile.md)** gives Solo,
+  - **New `docs/administration/by-profile.md`** gives Solo,
     Team, Enterprise and SaaS each an ordered path through the same task-oriented pages. The docs
     stay organised by task — a fact still lives in exactly one place — and this is the other axis.
   - **A `## By deployment profile` band on the eleven pages where behaviour genuinely differs**,

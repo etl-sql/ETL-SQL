@@ -1,8 +1,13 @@
 # Logging and Performance Tuning
 
-## 6. Logging
+Where ETL-SQL writes its logs, how to turn up detail when something is wrong, and the levers that
+change how a slow script uses memory and disk.
 
-### 6.1 Enable log files
+> **Applies to:** every deployment profile. Log destinations differ by how you host, but the tuning levers are the same.
+
+## Logging
+
+### Enable log files
 
 ```bash
 # Log to the default directory (logs/scripts/)
@@ -15,7 +20,7 @@ ETL-SQL run nightly_load.etlsql --log C:\ETL\Logs\
 ETL-SQL run nightly_load.etlsql --log C:\ETL\Logs\nightly-$(date +%Y%m%d).log
 ```
 
-### 6.2 Log configuration (`appsettings.json`)
+### Log configuration (`appsettings.json`)
 
 Log retention and size limits are controlled in `appsettings.json` next to the executable:
 
@@ -35,9 +40,9 @@ Log files are named after the script file with a date suffix (e.g., `nightly_loa
 
 ---
 
-## 7. Performance Tuning
+## Performance Tuning
 
-### 7.1 Batch size
+### Batch size
 
 The `--batch-size` option controls how many rows are buffered in memory at one time. The default of 10,000 is suitable for most workloads. Tune this based on available RAM and row width:
 
@@ -49,7 +54,7 @@ ETL-SQL run big_transform.etlsql --batch-size 2000
 ETL-SQL run csv_import.etlsql --batch-size 50000
 ```
 
-### 7.2 Performance metrics
+### Performance metrics
 
 Use `--perf` to get a post-execution breakdown:
 
@@ -64,7 +69,7 @@ Output includes:
 - Approximate RAM peak (MB)
 - Disk-spill volume if the aggregate engine overflowed
 
-### 7.3 Per-statement profiling
+### Per-statement profiling
 
 Use `SET PROFILING ON` inside your script to capture timings at the individual statement level:
 

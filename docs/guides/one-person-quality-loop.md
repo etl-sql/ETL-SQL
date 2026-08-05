@@ -10,7 +10,9 @@ The runnable files are in [`samples/quality-loop`](../../samples/quality-loop/):
 - [`data_quality_health.rptsql`](../../samples/08_Reporting/data_quality_health.rptsql) — counts-only run status, failures, trends, and freshness.
 - [`stewardship_scorecard.rptsql`](../../samples/08_Reporting/stewardship_scorecard.rptsql) — transparent component totals and source-located gaps.
 
-## 1. Run and enforce the pipeline
+> **Applies to:** Solo / Workstation, and useful as the Team starting point. Everything here runs without a Portal.
+
+## Run and enforce the pipeline
 
 From the repository or workspace root:
 
@@ -34,7 +36,7 @@ SELECT * FROM eng.stewardship_score WHERE scope_type = 'GLOBAL';
 SELECT * FROM eng.stewardship_gaps WHERE scope_type = 'GLOBAL';
 ```
 
-## 2. Scan a source schema before writing tags
+## Scan a source schema before writing tags
 
 ```powershell
 etl-sql scan data/customers.parquet --pii --json
@@ -48,7 +50,7 @@ etl-sql scan SHARED:warehouse --pii --table sales.customers --json
 
 The scanner accepts no raw connection string and reads schema names rather than row values.
 
-## 3. Add local scheduling and history
+## Add local scheduling and history
 
 Run the default single-node Orchestrator with SQLite, then register the source-controlled job:
 
@@ -58,7 +60,7 @@ etl-sql run samples/quality-loop/register_schedule.etlsql
 
 Successful and failed runs populate `eng.job_history`, `eng.data_quality_status`, and the lineage catalog used by the stewardship report. Historical assertions skip themselves until enough completed baselines exist, preventing a first-run alert storm.
 
-## 4. Open the reports
+## Open the reports
 
 Report Player uses the same scripts and `eng.*` contracts:
 
@@ -69,7 +71,7 @@ etl-sql serve samples/08_Reporting/stewardship_scorecard.rptsql
 
 The scripts also run on a local Orchestrator schedule and may be published to Portal unchanged. Portal adds access control and collaboration; it does not recalculate a more favorable score in browser state.
 
-## 5. Optionally notify on failure and recovery
+## Optionally notify on failure and recovery
 
 Notifications are not required for enforcement. To enable them, save an SMTP or WEBHOOK connection whose credential is a `SECRET:name` reference, create a notification, and add `ON FAILURE NOTIFY <name>` to `ASSERT JOB`. Under Orchestrator, the first failure notifies, repeated failures are suppressed until the re-notify window, and the first passing run sends recovery.
 

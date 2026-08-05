@@ -6,6 +6,8 @@ For current syntax, prefer [Getting Started](getting-started.md), the [Syntax In
 
 ---
 
+> **Applies to:** every deployment profile. Script-level changes affect everyone; the Portal and Orchestrator sections apply only where you run them.
+
 ## Upgrade Checklist
 
 1. Run the script through the current linter.

@@ -6,12 +6,12 @@
 | :--- | :--- |
 | [favorite](favorite.md) | FAVORITE marks portal reports as favorites. |
 | [Portal Service Administration](portal-admin.md) | Issue service-level control commands to the portal process inside an `EXECUTE portal` block. |
-| [Portal Report Alerts](portal-alert.md) | <!-- CreatePortalAlertStatement --> |
+| [Portal Report Alerts](portal-alert.md) | Create portal alert definitions through a `PORTAL` connection. |
 | [Portal Dataset Management](portal-dataset.md) | Manage named cached datasets registered in the portal inside an `EXECUTE portal` block. |
 | [Portal Folder Management](portal-folder.md) | Create, rename, move, and remove folders in the portal navigation tree inside an `EXECUTE portal` block. |
 | [Portal Group Management](portal-group.md) | Create and manage user groups to simplify folder permission assignments inside an `EXECUTE portal` block. |
 | [Portal Permission Management (GRANT / REVOKE)](portal-permissions.md) | Grant and revoke folder access for users and groups inside an `EXECUTE portal` block. |
-| [Portal Refresh Jobs](portal-refreshjob.md) | ## Syntax |
+| [Portal Refresh Jobs](portal-refreshjob.md) | - The old `CREATE REFRESH JOB FOR REPORT ... SCHEDULE ... AT ...` form is rejected with a diagnostic naming this replacement. |
 | [Portal Report Management](portal-report.md) | Publish, update, validate, refresh, and remove reports in the portal inside an `EXECUTE portal` block. |
 | [Portal Saved Views](portal-savedview.md) | Create and manage named parameter snapshots for portal reports inside an `EXECUTE portal` block. |
 | [Portal Share Links and Embed Tokens](portal-share.md) | Create and revoke unauthenticated share links and embed tokens for portal reports inside an `EXECUTE portal` block. |

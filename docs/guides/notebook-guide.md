@@ -1,6 +1,8 @@
-﻿# ETL-SQL Notebooks (.etlnb)
+# ETL-SQL Notebooks (.etlnb)
 
 ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code.
+
+> **Applies to:** authoring on any profile. Notebooks are a VS Code authoring surface and need no Portal.
 
 ## Key Features
 
@@ -16,16 +18,16 @@ ETL-SQL Notebooks provide a stateful, iterative environment for writing and runn
 
 When running in a notebook, the engine operates in **Interactive Mode**. This introduces several behaviors designed for rapid iteration:
 
-### 1. Idempotent Authoring
+### Idempotent Authoring
 In standard scripts, creating a connection or dataset that already exists can fail. In Interactive Mode, authoring operations are friendlier for repeated cell execution:
 - **CREATE CONNECTION**: If the connection exists, it is updated.
 - **CREATE DATASET**: Re-running a cell can update the dataset definition.
 - **CREATE VISUAL**: Re-running a cell replaces the visual definition with the same name.
 
-### 2. Immediate Output
+### Immediate Output
 In a standard script, `CREATE VISUAL` registers a definition for a later report page or export. In a notebook, the extension also emits the visual manifest to the cell output so you can inspect the resolved definition immediately.
 
-### 3. Transaction Safety
+### Transaction Safety
 If a cell execution fails or is cancelled inside a `BEGIN TRANSACTION`, use the **ETL-SQL: Rollback All Transactions** command from the command palette to clear any dangling transaction state in the active REPL session.
 
 ---

@@ -3,6 +3,8 @@
 
 The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows non-technical business consumers and developers to discover reports, datasets, and folders across the enterprise.
 
+> **Applies to:** Team, Enterprise and SaaS — catalog search is a Portal feature. On Solo / Workstation, discover scripts with the file system and `eng.*` catalog views.
+
 ## Features & Capabilities
 
 - **Fuzzy Token Matching** — Tokenizes multi-word queries (`"Q3 Sales"`) and matches title components regardless of word order or casing.
@@ -18,7 +20,7 @@ The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows
 
 ## Usage Options
 
-### 1. Web Portal API
+### Web Portal API
 `GET /api/catalog/search?q={query}&limit=50`
 
 ```json
@@ -37,7 +39,7 @@ The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows
 ]
 ```
 
-### 2. ETL-SQL Engine Command
+### ETL-SQL Engine Command
 `SELECT * [INTO #table] FROM portal.eng.catalog_search('<query>');`
 
 ```sql
@@ -47,7 +49,7 @@ EXECUTE portal BEGIN
 END;
 ```
 
-### 3. Business Consumer Home Endpoint
+### Business Consumer Home Endpoint
 `GET /api/catalog/consumer-home?limit=10`
 
 Returns a composite view with four curated categories:

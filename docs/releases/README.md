@@ -4,7 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
-| [ETL-SQL vx.y.z](TEMPLATE.md) | <!-- ============================================================ |
+| [ETL-SQL vx.y.z](TEMPLATE.md) | ETL-SQL Release Notes Template |
 | [ETL-SQL Release Checklist](release-checklist.md) | A physical, copy-pasteable checklist for cutting a release. It wraps the real scripts under |
 | [ETL-SQL v0.1.0 *(Unofficial)*](v0.1.0.md) | **Released:** 2026-03-13 |
 | [ETL-SQL v0.10.0](v0.10.0.md) | **Released:** 2026-06-08 |
