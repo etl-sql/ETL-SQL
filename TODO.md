@@ -506,6 +506,11 @@ documentation reconciliation, then release certification.
 
       - **Dialog behaviour** — `js/dialog-a11y.js`: focus entry, Tab containment, focus restore,
         Escape. Adopted where there was none.
+      - **Adopted in the admin panels** (v0.18.0) after a sweep for surfaces that render a failure
+        as an emptiness. Two were found and both were access-control surfaces: folder permissions
+        left the *previous* folder's grants on screen under the new folder's name when the load
+        failed, and group membership rendered a failed read as "No members". Covered by
+        `AdminPanelFailureStateTests`.
       - **States and status chips** — `js/portal-states.js`: loading, denied, failed, empty, and
         `statusChip`, extracted from the governance module's pattern. Guarded by
         `PortalStateVocabularyTests`, which asserts the vocabulary is complete, each state emits a

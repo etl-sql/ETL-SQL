@@ -547,10 +547,12 @@ import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.17
 import { createOperationsAdmin } from '/js/operations-admin.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
+import { failedState, loadingState, installPortalStateStyles } from '/js/portal-states.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
 initTheme();
+installPortalStateStyles();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 try {
@@ -912,6 +914,7 @@ async function handleGroupAction(btn) {
 
 async function loadMembers(groupId) {
   const $wrap = document.getElementById('memberTableWrap');
+  $wrap.innerHTML = loadingState('Loading members…');
   try {
     const result = await adminApi.memberCatalog(groupId, catalogQuery({
       q: document.getElementById('memberFilter').value.trim(),
@@ -946,7 +949,14 @@ async function loadMembers(groupId) {
       document.getElementById('membersRemoveBtn').disabled = ids.length === 0;
     });
     renderCatalogPager(document.getElementById('memberPager'), result, page => { memberPage = page; loadMembers(groupId); });
-  } catch {}
+  } catch (err) {
+    // "No members" and "we could not read the membership" lead to opposite actions — one invites
+    // deleting the group or granting its access elsewhere.
+    $wrap.innerHTML = failedState({
+      title: 'Group members could not be loaded.',
+      body: err?.message || 'The membership service could not be reached.'
+    });
+  }
 }
 
 document.getElementById('memberFilter').addEventListener('input', () => {
@@ -1090,6 +1100,10 @@ async function handleFolderAction(btn) {
 
 async function loadAcl(folderId) {
   const $wrap = document.getElementById('aclTableWrap');
+  // Cleared before the request, not after it. The heading is already showing the folder that was
+  // just clicked, so leaving the previous folder's rows in place would present one folder's
+  // access-control list as another's — and the Revoke buttons would still carry the old group ids.
+  $wrap.innerHTML = loadingState('Loading permissions…');
   try {
     const acls = await foldersApi.listAcl(folderId);
     const rows = acls.map(a => `
@@ -1113,7 +1127,15 @@ async function loadAcl(folderId) {
         loadAcl(folderId);
       });
     });
-  } catch {}
+  } catch (err) {
+    // "No permissions set" and "we could not read the permissions" lead an administrator to
+    // opposite conclusions about whether a folder is protected, so this never falls back to the
+    // empty rendering.
+    $wrap.innerHTML = failedState({
+      title: 'Folder permissions could not be loaded.',
+      body: err?.message || 'The permissions service could not be reached.'
+    });
+  }
 }
 
 document.getElementById('newFolderBtn').addEventListener('click', () => {
