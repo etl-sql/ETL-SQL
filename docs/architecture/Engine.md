@@ -81,7 +81,10 @@ The shared kernel. Nothing depends on this except what it pulls in from NuGet.
 - **Analysis contracts used by runtime** — shared parser diagnostics, metadata abstractions, and AST/data contracts consumed by the `ETL-SQL.Analysis` project.
 - **Common utilities** — `ILogger` facade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
 - **InMemoryDataSource** — the in-process table implementation used for `#temp` tables and MOCKDB.
-- **Crypto / security** — `ICryptoService`, `ISecurityService`, DPAPI-backed key management.
+- **Crypto / security** — `CryptoUtils` (the `ENC:` prefix and machine-bound protection),
+  `SecretRedactor` (keeps secret values out of logs, diagnostics and support bundles),
+  `ISecretLifecycleProvider` and `SECRET:name` resolution, and `IEnterpriseEnrollmentProtector`
+  for OS-protected enrollment state.
 
 ### ETL-SQL.Engine
 All runtime logic that evaluates a parsed `Script`.

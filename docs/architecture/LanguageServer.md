@@ -297,7 +297,9 @@ The language server can connect to these sources to fetch live schema:
 
 To add a new LSP capability:
 
-1. Create a handler class implementing the OmniSharp interface (e.g., `ICodeActionHandler`)
+1. Create a handler class implementing the OmniSharp interface (e.g., `ICompletionHandler`,
+   `IDefinitionHandler`, `IDocumentSymbolHandler`, or `IDocumentFormattingHandler` — the ones this
+   server already implements)
 2. Inject `DocumentStateStore` and/or `IMetadataManager` via constructor
 3. Register with `.WithHandler<MyHandler>()` in `Program.cs`
 

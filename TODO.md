@@ -912,6 +912,50 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
       refresh are not blocked by session cost; if either is slow the cause is the target read or the
       row cap.
 
+## Architecture documentation staleness audit (2026-08-05)
+
+Checked mechanically rather than by reading: every `src/…` path and every backticked type name in
+`docs/architecture/*.md` was resolved against the tree, then each doc was checked for coverage of
+the subsystems added in v0.14–v0.18.
+
+**The wrong-statement rate is low.** Of ~16 flagged type references, all but three were false
+positives — role names, framework types, TypeScript classes, and test-only types. The three real
+ones are fixed: `ICryptoService`/`ISecurityService` in `Engine.md` and `ICodeActionHandler` in
+`LanguageServer.md` named interfaces that no longer exist. Every cited source path resolves.
+
+**The staleness is omission, not error** — and it is concentrated in `Engine.md`, which documents
+the v0.10-era engine accurately and has not grown with it. Mention counts:
+
+| Subsystem | `Engine.md` | Status |
+| :--- | ---: | :--- |
+| External spill engines | 69 | Well covered |
+| Lineage capture | 6 | Covered |
+| Adaptive execution / memory grants | 1 | Barely mentioned |
+| **Data quality rules** (`@expect`, quarantine) | **0** | v0.17.0 engine subsystem, absent |
+| **Columnar fast-path plans** (`Columnar*Plan`) | **0** | A whole execution-strategy family, absent |
+| **Row-level security** (identity vars, `HAS_GROUP`) | **0** | v0.14.0 engine feature, absent |
+| **`SECRET:` resolution / organization policy** | **0** | Engine-boundary enforcement, absent |
+
+Each was confirmed engine-level, not Portal-only: `src/ETL-SQL.Core/Quality/`,
+`src/ETL-SQL.Engine/Engines/Columnar*Plan.cs`, RLS functions in `StandardFunctions.System.cs` and
+the declare/set handlers.
+
+Why it matters more than a wrong type name: the data-quality rules **pin execution to the local row
+pipeline** — the columnar fast-path gates deliberately exclude rule-carrying statements — so a
+developer reading `Engine.md` to understand dispatch and fast paths cannot see a constraint that
+governs both.
+
+- [ ] Add the four missing subsystems to `Engine.md`, or split them into their own architecture
+      pages and link them. Prefer whichever keeps `Engine.md` readable; it is already 719 lines.
+- [ ] Consider extending `ArchitectureDocReconciliationTests` with a coverage check for
+      engine subsystems, the way it already guards Portal roles, entities, policies and API areas.
+      A count-based check would be crude, but "the `Quality` namespace exists and no architecture
+      page mentions it" is exactly the class of drift that produced this list.
+
+Docs verified current and needing no action: `Orchestrator.md` (HA, leases, fencing and heartbeats
+all covered), `Lineage.md`, `Connectors.md`, `Reporting.md`, `Portal.md` (reconciled and guarded
+this release).
+
 ## Documentation
 
 - [x] Make sure everything above is documented. We may want to follow our 4 path process. How would
