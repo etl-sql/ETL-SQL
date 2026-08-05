@@ -137,12 +137,15 @@ public sealed class DataQualityController(
             ? latestRate.Value - priorRated.Average(r => r.QuarantineRate!.Value)
             : null;
 
+        // Grouped including CountsOnly, so a legacy run's counts are never folded into a structured
+        // row: the two agree on column and rule and are silent about everything else, and summing
+        // them would attribute failures to a target table the legacy run never named.
         var topFailures = runs
             .SelectMany(r => r.RuleFailures)
-            .GroupBy(f => (f.TargetTable, f.Column, f.Rule, f.Action, f.Owner))
+            .GroupBy(f => (f.TargetTable, f.Column, f.Rule, f.Action, f.Owner, f.CountsOnly))
             .Select(g => new DataQualityRuleFailureDto(
                 g.Key.Column, g.Key.Rule, g.Sum(f => f.Count),
-                g.Key.TargetTable, g.Key.Action, g.Key.Owner))
+                g.Key.TargetTable, g.Key.Action, g.Key.Owner, g.Key.CountsOnly))
             .OrderByDescending(f => f.Count)
             .ThenBy(f => f.Column, StringComparer.OrdinalIgnoreCase)
             .Take(20)
@@ -341,7 +344,8 @@ public sealed class DataQualityController(
             failures.Add(new DataQualityRuleFailureDto(
                 entry[..colon],
                 entry[(colon + 1)..equals],
-                count));
+                count,
+                CountsOnly: true));
         }
         return failures;
     }

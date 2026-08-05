@@ -1318,6 +1318,85 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal("DataSteward", top.Owner);
     }
 
+    /// <summary>
+    /// A run recorded before structured per-rule capture has only the compact
+    /// <c>column:rule=count</c> string, which cannot express the target table, the action or the
+    /// owner. Such a row is reported as counts-only and is never merged with a structured row that
+    /// happens to share a column and rule.
+    ///
+    /// <para>Merging them would attribute a legacy run's failures to a target table that run never
+    /// named — a plausible-looking number for a specific table, assembled from a source that did
+    /// not know which table it was.</para>
+    /// </summary>
+    [Fact]
+    public async Task DataQuality_Trend_KeepsLegacyCountsSeparateFromStructuredFailures()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        var job = $"legacy_mix_{Guid.NewGuid():N}"[..24];
+
+        // Run 1: legacy — the display string only, no structured rows.
+        var legacy = await store.LogJobStartAsync(job);
+        await store.LogJobEndAsync(legacy, "SUCCESS", rowsProcessed: 1000,
+            rowsQuarantined: 40, rowsWarned: 0, dataQualityFailures: "Email:NOT NULL=40");
+        await Task.Delay(5);
+
+        // Run 2: structured — same column and rule, now with the fields the string cannot carry.
+        var structured = await store.LogJobStartAsync(job);
+        await store.LogJobEndAsync(structured, "SUCCESS", rowsProcessed: 1000,
+            rowsQuarantined: 25, rowsWarned: 0, dataQualityFailures: "Email:NOT NULL=25");
+        await store.SaveJobDataQualityFailuresAsync(structured, [
+            new DataQualityRuleFailureMetric(
+                "warehouse.Customers", "Email", "NOT NULL", "QUARANTINE", 25, "DataSteward")
+        ]);
+
+        var res = await AuthGet(token, $"/api/data-quality/trend?jobName={job}");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var trend = await res.Content.ReadFromJsonAsync<DataQualityTrendDto>(_json);
+
+        Assert.Equal(2, trend!.RunCount);
+        Assert.Equal(2, trend.TopRuleFailures.Count);
+
+        var full = Assert.Single(trend.TopRuleFailures, f => !f.CountsOnly);
+        Assert.Equal(25, full.Count);
+        Assert.Equal("warehouse.Customers", full.TargetTable);
+        Assert.Equal("QUARANTINE", full.Action);
+        Assert.Equal("DataSteward", full.Owner);
+
+        var countsOnly = Assert.Single(trend.TopRuleFailures, f => f.CountsOnly);
+        Assert.Equal(40, countsOnly.Count);
+        Assert.Equal("Email", countsOnly.Column);
+        Assert.Equal("NOT NULL", countsOnly.Rule);
+        // Unavailable, not empty. The client renders these differently for exactly this reason.
+        Assert.Null(countsOnly.TargetTable);
+        Assert.Null(countsOnly.Action);
+        Assert.Null(countsOnly.Owner);
+    }
+
+    /// <summary>A run with structured rows must never also report the parsed string alongside them.</summary>
+    [Fact]
+    public async Task DataQuality_Trend_DoesNotDoubleCountAStructuredRunsDisplayString()
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        var job = $"nodouble_{Guid.NewGuid():N}"[..22];
+
+        var id = await store.LogJobStartAsync(job);
+        await store.LogJobEndAsync(id, "SUCCESS", rowsProcessed: 500,
+            rowsQuarantined: 12, rowsWarned: 0, dataQualityFailures: "Email:NOT NULL=12");
+        await store.SaveJobDataQualityFailuresAsync(id, [
+            new DataQualityRuleFailureMetric(
+                "warehouse.Customers", "Email", "NOT NULL", "QUARANTINE", 12, "DataSteward")
+        ]);
+
+        var res = await AuthGet(token, $"/api/data-quality/trend?jobName={job}");
+        var trend = await res.Content.ReadFromJsonAsync<DataQualityTrendDto>(_json);
+
+        var failure = Assert.Single(trend!.TopRuleFailures);
+        Assert.Equal(12, failure.Count);
+        Assert.False(failure.CountsOnly);
+    }
+
     [Fact]
     public async Task DataQuality_Rules_ListsProtectionsThatHaveNotFailed()
     {

@@ -142,9 +142,23 @@ const trends = {
     averageQuarantineRate: 0.0435,
     latestQuarantineRate: 0.2,
     quarantineRateDelta: 0.188,
+    // Two structured rows plus one counts-only row from a run recorded before per-rule capture.
+    // The two `Email` rows are the case worth having a fixture for: same column, different target
+    // tables, which used to render as two indistinguishable rows with different numbers.
     topRuleFailures: [
-      { column: 'Email', rule: 'MATCHES ^[^@]+@[^@]+$', count: 240 },
-      { column: 'Age', rule: '>= 0', count: 20 },
+      {
+        column: 'Email', rule: 'MATCHES ^[^@]+@[^@]+$', count: 240,
+        targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward'
+      },
+      {
+        column: 'Email', rule: 'MATCHES ^[^@]+@[^@]+$', count: 31,
+        targetTable: 'warehouse.Leads', action: 'WARN', owner: 'GrowthTeam'
+      },
+      {
+        column: 'Age', rule: '>= 0', count: 20,
+        targetTable: 'warehouse.Customers', action: 'WARN', owner: 'DataSteward'
+      },
+      { column: 'Email', rule: 'NOT NULL', count: 88, countsOnly: true },
     ],
     runs: degradingRuns,
   },

@@ -1385,6 +1385,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dq-trend-worse { color: var(--portal-danger, #c0392b); font-size: .8em; font-weight: 600; }
 .dq-trend-better { color: var(--portal-success, #1e8449); font-size: .8em; font-weight: 600; }
 .dq-trend-subhead { margin: 16px 0 6px; font-size: .95em; }
+/* A field the run never recorded, distinct from one recorded as empty. Carries its own title text
+   rather than relying on the muted colour, which conveys nothing in forced-colours mode. */
+.dq-unrecorded { color: var(--portal-muted); }
 .dq-spark {
   display: flex;
   align-items: flex-end;

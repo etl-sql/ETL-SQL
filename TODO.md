@@ -826,7 +826,23 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
 
 - [ ] Track disposition and replay jobs to a terminal state, or at minimum link each submission to
       durable job history.
-- [ ] Replace `ParseRuleFailures` display-string parsing with structured per-column run metrics.
+- [x] Replace `ParseRuleFailures` display-string parsing with structured per-column run metrics.
+      The structured path was already built and already primary — the engine writes per-rule rows
+      from all three execution paths (`EngineRunner`, `SchedulerService` for both the spawned and
+      warm runners) and the trend endpoint reads them. What remained was that the Portal **threw
+      the structured fields away at the last step**: `TargetTable`, `Action` and `Owner` were
+      queried, grouped and serialised, and the browser rendered only column, rule and count.
+
+      That was not merely missing detail. Two columns with the same name in different target
+      tables — `Email` in `warehouse.Customers` and in `warehouse.Leads` — rendered as two
+      identical-looking rows with different numbers and no way to tell which was which.
+
+      `ParseRuleFailures` stays, because history recorded before per-rule capture has only the
+      compact string and pruning is not automatic. It is now marked: those rows carry `CountsOnly`,
+      are never merged with structured rows (summing them would attribute a legacy run's failures
+      to a target table it never named), and render as *unavailable* rather than blank — an empty
+      Owner cell otherwise reads as "nobody owns this rule", which is a different and more alarming
+      claim than "this run did not record it".
 - [x] Add a read-only Portal API and panel showing which rules protect each target/column.
       `GET /api/data-quality/rules?jobName=` plus the rule inventory in the data-quality queue panel.
 - [x] Add `eng.data_quality_rules` and make it queryable through Portal `eng.*` access. The engine
