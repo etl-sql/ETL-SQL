@@ -560,6 +560,26 @@ The engine contributes three things:
 
 ---
 
+## Adaptive Execution — observing, not yet acting
+
+`ETL_SQL.Core.Adaptive` computes bounded runtime setpoint *advice* from measured resource signals.
+`AdaptiveExecutionController` holds the state machine, `ResourceSignalSampler` supplies the signals,
+and `Evaluator` owns an `AdaptiveAdvisor` per execution and exposes it.
+
+**Nothing in the execution pipelines reads that advice yet.** No handler, engine or service consumes
+the advisor, so today the subsystem records what it *would* do without changing how anything runs.
+That is by design — the controller's contract is that pipelines opt in at safe boundaries — but it
+means the presence of nine files under `Adaptive/` should not be read as adaptive behaviour being
+live. Design and staging in
+[AdaptiveExecutionController.md](decisions/AdaptiveExecutionController.md).
+
+The static tuning inputs described under [Scale & Large Dataset
+Handling](#scale--large-dataset-handling) — `Engine:BatchSize`, `MaxParallelDegree`,
+`OperatorMemoryGrantMB`, the external-engine thresholds — remain the values that actually govern a
+run.
+
+---
+
 ## Secrets and Policy at the Engine Boundary
 
 Two governance concerns are enforced inside the engine rather than around it, so a script cannot

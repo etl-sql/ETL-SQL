@@ -1,0 +1,218 @@
+namespace ETL_SQL.Tests.Docs;
+
+/// <summary>
+/// Every engine subsystem is either documented in an architecture page or explicitly recorded as
+/// not needing one.
+///
+/// <para>The failure this prevents is <b>omission</b>, which is what architecture documentation
+/// actually suffers from. A wrong type name is caught the moment someone follows it; a subsystem
+/// nobody wrote down is invisible — `Engine.md` described the external spill engines 69 times and
+/// data-quality rules, the columnar plan family, row-level security and adaptive execution zero
+/// times, for three releases, without anything noticing.</para>
+///
+/// <para><b>Why an inventory rather than a text search.</b> Matching directory names against the
+/// prose was tried and is useless in both directions: `Data`, `Common` and `Services` match
+/// incidental English everywhere, while `Planning` reads as undocumented even though its types are
+/// described by name. So this does not try to infer coverage. It forces a decision — a new
+/// subsystem fails the build until someone says where it is documented, or why it does not need to
+/// be. That is the same shape as <c>AuthorshipPermissionBoundaryTests</c>, and for the same
+/// reason.</para>
+/// </summary>
+public sealed class EngineSubsystemCoverageTests
+{
+    /// <param name="Document">The architecture page that covers it, or null.</param>
+    /// <param name="Marker">Text that page must still contain, proving the claim holds.</param>
+    /// <param name="IsKnownGap">
+    /// True when the subsystem is genuinely undocumented. Distinct from "no architecture surface":
+    /// one is a decision, the other is a debt. Conflating them would let this inventory launder
+    /// omissions into approvals, which is the opposite of its purpose.
+    /// </param>
+    private sealed record Coverage(string? Document, string? Marker, string Reason, bool IsKnownGap = false);
+
+    /// <summary>
+    /// Keyed by "<c>project/directory</c>". <c>Document</c> null means either no architecture
+    /// surface or a known gap — <c>Reason</c> must say which and why.
+    /// </summary>
+    private static readonly Dictionary<string, Coverage> Inventory = new(StringComparer.Ordinal)
+    {
+        // ── ETL-SQL.Engine ────────────────────────────────────────────────────────────────────
+        ["ETL-SQL.Engine/Engines"] = new("Engine.md", "ColumnarJoinSelectPlan",
+            "Execution strategies, columnar plans and the external spill engines."),
+        ["ETL-SQL.Engine/Handlers"] = new("Engine.md", "IStatementHandler",
+            "One handler per statement type; the dispatch loop is documented in full."),
+        ["ETL-SQL.Engine/Functions"] = new("ExpressionEvaluation.md", "function",
+            "Function registry and evaluation semantics."),
+        ["ETL-SQL.Engine/Governance"] = new("Engine.md", "organization policy",
+            "Policy enforcement at the engine boundary."),
+        ["ETL-SQL.Engine/Lineage"] = new("Lineage.md", "lineage",
+            "Lineage capture has its own architecture page."),
+        ["ETL-SQL.Engine/Planning"] = new("Engine.md", "PlanDecisionReasonCodes",
+            "Plan decisions and the reason codes explaining a declined fast path."),
+        ["ETL-SQL.Engine/Scheduling"] = new("Orchestrator.md", "schedul",
+            "Job scheduling is owned by the Orchestrator page."),
+        ["ETL-SQL.Engine/Services"] = new("Engine.md", "ColumnQualityValidator",
+            "Row-pipeline services: quality validation, quarantine writing, secret resolution."),
+        ["ETL-SQL.Engine/Spill"] = new("Engine.md", "SpillStore",
+            "Encrypted spill I/O."),
+        ["ETL-SQL.Engine/Storage"] = new("Engine.md", "InMemoryDataSource",
+            "Engine-side table storage."),
+        ["ETL-SQL.Engine/Extensions"] = new(null, null,
+            "Language-level extension methods with no architectural surface of their own."),
+
+        // ── ETL-SQL.Core ──────────────────────────────────────────────────────────────────────
+        ["ETL-SQL.Core/Adaptive"] = new("Engine.md", "AdaptiveExecutionController",
+            "Bounded setpoint advice; documented including that no pipeline consumes it yet."),
+        ["ETL-SQL.Core/Parser"] = new("ParserLexer.md", "Lexer",
+            "Tokenizer, parser and AST."),
+        ["ETL-SQL.Core/Quality"] = new("Engine.md", "ColumnRuleParser",
+            "Data-quality rules in the row pipeline."),
+        ["ETL-SQL.Core/Governance"] = new("Engine.md", "RowLevelSecurityScan",
+            "Row-level security scanning, secret providers, enrollment protection."),
+        ["ETL-SQL.Core/Planning"] = new("Engine.md", "PlanDecisionReasonCodes",
+            "Plan decision records shared with the engine."),
+        ["ETL-SQL.Core/Execution"] = new("Engine.md", "IExecutionContext",
+            "Execution context contracts."),
+        ["ETL-SQL.Core/Formatting"] = new("LanguageServer.md", "FormattingProvider",
+            "AST serialization behind the LSP formatting path."),
+        ["ETL-SQL.Core/Statements"] = new("ParserLexer.md", "Statement",
+            "Statement AST nodes."),
+        ["ETL-SQL.Core/Metadata"] = new("LanguageServer.md", "IMetadataManager",
+            "Schema metadata used by completion and validation."),
+        ["ETL-SQL.Core/Observability"] = new(null, null,
+            "GAP: ObservabilityConventions defines the correlation/trace tags every log scope and "
+            + "audit record is keyed on, and no architecture page describes them. Engine.md uses the "
+            + "word 'Observability' only about subquery-cache counters.", IsKnownGap: true),
+        ["ETL-SQL.Core/Spill"] = new("Engine.md", "SpillStore",
+            "Spill contracts shared with the engine."),
+        ["ETL-SQL.Core/Storage"] = new(null, null,
+            "GAP: IArtifactStorage is the seam every host writes scripts, snapshots, datasets and "
+            + "key rings through — and the thing HA requires to be shared — yet no architecture "
+            + "page mentions it. It appears only in a standards doc and a release note.",
+            IsKnownGap: true),
+        ["ETL-SQL.Core/Data"] = new("Engine.md", "IDataSource",
+            "Data source and sink contracts."),
+        ["ETL-SQL.Core/Interfaces"] = new("Engine.md", "IExecutionContext",
+            "The context interfaces the evaluator implements."),
+        ["ETL-SQL.Core/Analysis"] = new("Engine.md", "Linting",
+            "Analysis contracts behind the linting pipeline."),
+        ["ETL-SQL.Core/Diagnostics"] = new("Engine.md", "EXPLAIN",
+            "Diagnostic output including EXPLAIN."),
+        ["ETL-SQL.Core/Security"] = new("Engine.md", "SecretRedactor",
+            "Redaction and crypto utilities."),
+        ["ETL-SQL.Core/Services"] = new(null, null,
+            "Assorted internal helpers with no single architectural story."),
+        ["ETL-SQL.Core/Common"] = new(null, null,
+            "Shared primitives (logging facade, exceptions, string helpers); described where used."),
+        ["ETL-SQL.Core/Functions"] = new("ExpressionEvaluation.md", "function",
+            "Function contracts shared with the engine registry."),
+    };
+
+    [Fact]
+    public void EveryEngineSubsystem_IsInTheCoverageInventory()
+    {
+        var onDisk = DiscoverSubsystems();
+
+        var undeclared = onDisk.Except(Inventory.Keys, StringComparer.Ordinal).OrderBy(x => x).ToList();
+        var stale = Inventory.Keys.Except(onDisk, StringComparer.Ordinal).OrderBy(x => x).ToList();
+
+        Assert.True(undeclared.Count == 0,
+            "These engine subsystems exist in source and are not in the coverage inventory:\n  "
+            + string.Join("\n  ", undeclared)
+            + "\n\nSay which architecture page documents each, or record why none is needed. A "
+            + "subsystem nobody wrote down is the failure mode this exists for — it is invisible "
+            + "rather than wrong, so nothing else will report it.");
+
+        Assert.True(stale.Count == 0,
+            "These inventory entries no longer exist in source:\n  " + string.Join("\n  ", stale)
+            + "\n\nRemove them, so the inventory keeps describing the code that is actually there.");
+    }
+
+    [Fact]
+    public void EveryDocumentedSubsystem_IsStillMentionedByItsPage()
+    {
+        var root = RepoRoot();
+        var missing = new List<string>();
+
+        foreach (var (subsystem, coverage) in Inventory.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            if (coverage.Document is null || coverage.Marker is null) continue;
+
+            var path = Path.Combine(root, "docs", "architecture", coverage.Document);
+            Assert.True(File.Exists(path), $"{subsystem} names a document that does not exist: {coverage.Document}");
+
+            var text = File.ReadAllText(path);
+            if (!text.Contains(coverage.Marker, StringComparison.OrdinalIgnoreCase))
+                missing.Add($"{subsystem} -> {coverage.Document} no longer mentions '{coverage.Marker}'");
+        }
+
+        Assert.True(missing.Count == 0,
+            "Coverage claimed in the inventory is no longer true:\n  " + string.Join("\n  ", missing)
+            + "\n\nEither the page dropped the subsystem or the marker moved. Both are worth "
+            + "knowing: the inventory is only useful while its claims hold.");
+    }
+
+    /// <summary>
+    /// The known documentation gaps, pinned by set equality so a new one fails the build.
+    ///
+    /// <para>Deliberately not a failing test for the existing two. Turning today's debt red would
+    /// only invite someone to weaken the inventory to get green — and an inventory that launders
+    /// omissions into approvals is worse than none. Pinning the set instead means the debt stays
+    /// visible, shrinks when someone writes the page, and cannot grow quietly.</para>
+    /// </summary>
+    [Fact]
+    public void KnownDocumentationGaps_HaveNotGrown()
+    {
+        string[] expected =
+        [
+            "ETL-SQL.Core/Observability",
+            "ETL-SQL.Core/Storage",
+        ];
+
+        var actual = Inventory
+            .Where(entry => entry.Value.IsKnownGap)
+            .Select(entry => entry.Key)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(expected.OrderBy(x => x, StringComparer.Ordinal).SequenceEqual(actual),
+            "The set of undocumented engine subsystems changed.\n  expected: "
+            + string.Join(", ", expected.OrderBy(x => x, StringComparer.Ordinal))
+            + "\n  actual:   " + string.Join(", ", actual)
+            + "\n\nIf a gap was closed, remove it from both lists. If a new one appeared, write the "
+            + "page rather than adding it here — the list is a record of debt, not a place to put "
+            + "things.");
+    }
+
+    private static List<string> DiscoverSubsystems()
+    {
+        var root = RepoRoot();
+        var subsystems = new List<string>();
+
+        foreach (var project in new[] { "ETL-SQL.Engine", "ETL-SQL.Core" })
+        {
+            var projectDir = Path.Combine(root, "src", project);
+            Assert.True(Directory.Exists(projectDir), $"Project not found: {projectDir}");
+
+            foreach (var dir in Directory.EnumerateDirectories(projectDir))
+            {
+                var name = Path.GetFileName(dir);
+                if (name is "bin" or "obj") continue;
+                // Directories with no C# in them are layout, not subsystems.
+                if (!Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories).Any()) continue;
+                subsystems.Add($"{project}/{name}");
+            }
+        }
+
+        Assert.NotEmpty(subsystems);
+        return subsystems;
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ETL-SQL.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        return dir!.FullName;
+    }
+}

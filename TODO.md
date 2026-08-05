@@ -985,10 +985,30 @@ governs both.
       Also documented while there: the `RecordPlanDecision` / `PlanDecisionReasonCodes` telemetry
       that records *why* a fast path was declined, and that administrators bypass `HAS_GROUP` /
       `HAS_ROLE` by default.
-- [ ] Consider extending `ArchitectureDocReconciliationTests` with a coverage check for
-      engine subsystems, the way it already guards Portal roles, entities, policies and API areas.
-      A count-based check would be crude, but "the `Quality` namespace exists and no architecture
-      page mentions it" is exactly the class of drift that produced this list.
+- [x] Consider extending the reconciliation tests with a coverage check for engine subsystems.
+      `EngineSubsystemCoverageTests` inventories every code-bearing directory under
+      `ETL-SQL.Engine` and `ETL-SQL.Core` and asserts set equality against a declared inventory, so
+      a **new subsystem fails the build until someone says where it is documented or why it needs
+      no page**. Where coverage is claimed, the named page must still contain a marker for it.
+
+      **Not a text search, deliberately.** Matching directory names against the prose was tried and
+      is useless both ways: `Data`, `Common` and `Services` match incidental English everywhere,
+      while `Planning` reads as undocumented even though its types are described by name. So the
+      test does not infer coverage — it forces a decision, the same shape as
+      `AuthorshipPermissionBoundaryTests`.
+
+      **It found two real gaps while being written**, both now pinned by set equality so they
+      cannot grow quietly:
+  - [ ] `ETL-SQL.Core/Observability` — `ObservabilityConventions` defines the correlation and trace
+        tags every log scope and audit record is keyed on. No architecture page describes them;
+        `Engine.md` uses the word only about subquery-cache counters.
+  - [ ] `ETL-SQL.Core/Storage` — `IArtifactStorage` is the seam every host writes scripts,
+        snapshots, datasets and key rings through, and the thing HA requires to be *shared*. It
+        appears in a standards doc and a release note, and in no architecture page.
+
+      Known gaps are recorded rather than failed. Turning today's debt red only invites weakening
+      the inventory to get green, and an inventory that launders omissions into approvals is worse
+      than none.
 
 Docs verified current and needing no action: `Orchestrator.md` (HA, leases, fencing and heartbeats
 all covered), `Lineage.md`, `Connectors.md`, `Reporting.md`, `Portal.md` (reconciled and guarded

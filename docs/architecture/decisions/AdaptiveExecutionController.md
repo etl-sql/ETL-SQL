@@ -1,6 +1,10 @@
 # Adaptive Execution Controller (v0.15.0 Phase 2) — Design
 
-**Status:** DRAFT for review — no implementation yet.
+**Status:** Slice A implemented — advice is computed and recorded, and **no execution pipeline
+consumes it yet**, so the controller does not currently change how anything runs.
+`ETL_SQL.Core.Adaptive` holds the controller, advisor, sampler and setpoints; `Evaluator` owns an
+advisor per execution and exposes it. The remaining work is pipelines opting in at safe boundaries.
+*(Was "DRAFT — no implementation yet"; corrected 2026-08-05 against the source.)*
 **TODO items covered:** v0.15.0 Phase 2 (bounded resource controller; hysteresis/bounds/fairness/
 overrides; deterministic single-worker preservation; scale-down proven as well as scale-up).
 **Completion gate:** "Adaptive execution demonstrates higher utilization when resources are idle
