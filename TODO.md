@@ -903,12 +903,62 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
       row cap.
 
 ## Documentation
-- [ ] Make sure everything above is documented.  We may want to follow our 4 path process.  How would a solo, team, enterprise, and Saas
-      accomplish these items
+
+- [x] Make sure everything above is documented. We may want to follow our 4 path process. How would
+      a solo, team, enterprise, and SaaS accomplish these items.
+      [v0.18.0-deployment-profile-review.md](docs/architecture/decisions/v0.18.0-deployment-profile-review.md)
+      is the release review `Deployment_Profile_Standards.md` already prescribed but that no release
+      had produced. Driven from the 47 changelog fragments — the authoritative list of what shipped —
+      grouped into six capability areas, each answering how every profile accomplishes it and which
+      cells are genuinely **N/A** rather than an unstated Portal prerequisite.
+
+      **The finding is the summary: v0.18.0 is a Portal and Enterprise release.** Most of what it
+      added has no Solo form because Solo has no Portal — which is a legitimate answer on one
+      condition, that the underlying evidence stays reachable without the Portal. It does: every
+      governance and quality surface reads `eng.*`, served identically by the CLI, Report Player and
+      Orchestrator. The review says so where that condition holds and says the opposite where it
+      does not.
+
+      **No cell moved to Green.** The release strengthens evidence behind existing Green cells and
+      adds acceptance lanes that make them re-testable; the SaaS column is unchanged and still Red
+      for every concern touched. Three things the review records that were not written down
+      anywhere: the Portal governance score and `eng.stewardship_score` use different models and
+      will not agree; recovery custody stays on the host in every profile; and the `Auto` topology
+      mode classifies a Team-on-PostgreSQL deployment as HA and holds it out of rotation.
 
 ## Pre-configured reports
-- [ ] We have added a lot of standard reports in /samples  Which is great, we should add a way to install them automatically in portal with
-      a checkbox.  Include reports, the reports are automatically configured and ready to run after install.
+
+- [x] ~~Install the `/samples` reports into the Portal automatically via a checkbox.~~
+      **Investigated and deliberately not built.** Kept rather than deleted so it is not re-proposed.
+
+      Scoping it down to the reports actually worth installing dissolved the item. The candidates
+      were the three admin/steward reports added in v0.17.0–v0.18.0 — `data_quality_health`,
+      `stewardship_scorecard`, `protected_data_audit` — and every one duplicates a Portal surface
+      that already exists and is better at the job:
+
+      - **Protected Data Audit** reads `eng.protected_data` / `protected_data_suggestions` /
+        `missing_tags`. `CatalogController.ProtectedData` calls the same
+        `LineageProtectedData.FromHistory`, and `lineage-catalog.js` already renders both, plus
+        missing tags in the stewardship inventory.
+      - **Data Quality Health** duplicates the Data Quality dashboard and quarantine queue shipped
+        this release.
+      - **Stewardship Scorecard** is worse than duplication: Governance Overview scores assets with
+        a Portal-configurable *deduction* model (`GovernanceScoringSettings`), while
+        `eng.stewardship_score` is a policy-driven weighted *component coverage* from Core
+        `StewardshipScoring`. Two surfaces both labelled "stewardship score", computing different
+        numbers from different rules, with nothing on screen explaining the disagreement.
+
+      The three `samples/admin_operations/*.etlsql` files are not reports at all — zero
+      `CREATE VISUAL`/`CREATE PAGE`/`SET REPORT` — and already ship as running services
+      (`FailureDigestAdminService`, `BackupReportAdminService`, `CapacityReportAdminService`,
+      registered in `Program.cs`) with schedule and history in Admin → Operations.
+
+      **What these reports are actually for is portability**, not Portal novelty: they are written
+      against `eng.*` so the same report answers the same question from the CLI, the Report Player,
+      the Orchestrator and the Portal. That belongs in the four-path documentation below, not in an
+      installer. Two ACL facts found while scoping it are worth keeping: folder ACLs bind to
+      **groups**, not Identity roles, and Admins bypass folder ACLs entirely
+      (`FolderPermissionService`), so an "Administrator" folder ACL would have been a no-op.
 
 ## Portal bugs
 - [x] Why the casing differences in documents?  Also All filter does not look like it has all documents.  Seems like some are missing.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-04 134045.png"

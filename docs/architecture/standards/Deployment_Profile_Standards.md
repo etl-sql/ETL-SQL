@@ -78,6 +78,10 @@ Every feature design or significant change must answer:
 
 A release claim must name the profile and transition it actually proves. Review the matrix for changed cells, link current evidence, and never infer SaaS or HA support from a Solo/Enterprise happy path.
 
+Completed reviews:
+
+- [v0.18.0](../decisions/v0.18.0-deployment-profile-review.md) — Portal and Enterprise weighted; no cell moved to Green, SaaS unchanged and still Red for every concern touched.
+
 ## References
 
 - [Deployment Profile and Portability Strategy](../roadmaps/Deployment_Profile_Strategy.md)
