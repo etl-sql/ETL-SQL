@@ -137,6 +137,29 @@
         Start the service on its host machine. The page will refresh automatically when it comes back online.
       </div>
 
+      <!-- Operations triage — first, because "what broke" outranks "what is scheduled" -->
+      <div class="card orch-triage-card">
+        <div class="card-header">
+          <div>
+            <span class="section-kicker">Operations</span>
+            <h3>Triage</h3>
+          </div>
+          <div class="orch-card-actions">
+            <label class="triage-lookback-label" for="triageLookback">Window</label>
+            <select id="triageLookback" class="form-select form-select-sm">
+              <option value="6">Last 6h</option>
+              <option value="24" selected>Last 24h</option>
+              <option value="72">Last 3d</option>
+              <option value="168">Last 7d</option>
+            </select>
+            <button class="btn btn-sm btn-outline" id="triageRefreshBtn" type="button" title="Reload triage">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="triageBoard">
+          <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading triage…</span></div>
+        </div>
+      </div>
+
       <!-- Gantt chart card -->
       <div class="card orch-gantt-wrap">
         <div class="card-header">
@@ -309,6 +332,7 @@ import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
 import { renderDag, createScriptEditor } from '/designer/designer.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
 import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
+import { renderTriageBoard, selectedJobNames } from '/js/triage-ui.js?v=0.17.0';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
@@ -371,7 +395,89 @@ const api = {
   scriptContent: (path) => apiJson(`${BASE}/scripts/content?path=${encodeURIComponent(path)}`),
   stop:     () => apiFetch(`${BASE}/service/stop`, { method: 'POST' }),
   dag:      (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dag`),
+  triage:   (lookbackHours = 24) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`),
+  rerun:    (jobNames) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames } }),
 };
+
+// ── Operations triage ──────────────────────────────────────────────────────────
+// View state is kept outside the render so a background poll never collapses an incident the
+// operator has open or clears a selection they were about to act on.
+const triageState = { expanded: new Set(), selected: new Set() };
+let triageBoardData = null;
+
+async function loadTriage() {
+  const host = document.getElementById('triageBoard');
+  const lookback = Number(document.getElementById('triageLookback').value) || 24;
+  try {
+    triageBoardData = await api.triage(lookback);
+    if (!triageBoardData) return;
+    host.innerHTML = renderTriageBoard(triageBoardData, triageState);
+  } catch (err) {
+    // The board reads shared state directly, so it can still answer when the Orchestrator service
+    // is offline. A failure here is the Portal's own read failing, and it must say so rather than
+    // rendering an empty board that looks like good news.
+    host.innerHTML = `<div class="orch-offline-banner">
+      <strong>Triage is unavailable.</strong> ${String(err.message || err).slice(0, 300)}
+      <button class="btn btn-sm btn-outline" id="triageRetryBtn" type="button">Retry</button>
+    </div>`;
+    document.getElementById('triageRetryBtn')?.addEventListener('click', () => loadTriage());
+  }
+}
+
+async function rerunJobs(jobNames) {
+  if (jobNames.length === 0) return;
+  const label = jobNames.length === 1 ? jobNames[0] : `${jobNames.length} jobs`;
+  if (!confirm(`Re-run ${label}?`)) return;
+  try {
+    const res = await api.rerun(jobNames);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) { alert(body?.error || 'Re-run failed.'); return; }
+
+    // Per-job outcomes, because a partial failure is the normal case and "some started" is not
+    // something an operator should have to discover by watching the job list.
+    const failed = (body?.results || []).filter(r => !r.triggered);
+    if (failed.length > 0) {
+      alert(`${body.triggered} of ${body.requested} started.\n\nNot started:\n` +
+        failed.map(f => `• ${f.jobName}: ${f.error || 'unknown error'}`).join('\n'));
+    }
+    triageState.selected.clear();
+    await loadTriage();
+    await loadJobs();
+  } catch (err) {
+    alert(`Re-run failed: ${err.message || err}`);
+  }
+}
+
+document.getElementById('triageRefreshBtn').addEventListener('click', () => loadTriage());
+document.getElementById('triageLookback').addEventListener('change', () => {
+  triageState.expanded.clear();
+  triageState.selected.clear();
+  loadTriage();
+});
+
+document.getElementById('triageBoard').addEventListener('click', event => {
+  const toggle = event.target.closest('.triage-incident-toggle');
+  if (toggle) {
+    const index = Number(toggle.dataset.incident);
+    triageState.expanded.has(index) ? triageState.expanded.delete(index) : triageState.expanded.add(index);
+    document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
+    return;
+  }
+  if (event.target.closest('.triage-rerun-selected')) {
+    rerunJobs(selectedJobNames(triageBoardData, triageState.selected));
+    return;
+  }
+  const one = event.target.closest('.triage-rerun-one');
+  if (one) rerunJobs([one.dataset.job]);
+});
+
+document.getElementById('triageBoard').addEventListener('change', event => {
+  const check = event.target.closest('.triage-incident-check');
+  if (!check) return;
+  const index = Number(check.dataset.incident);
+  check.checked ? triageState.selected.add(index) : triageState.selected.delete(index);
+  document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
+});
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let allJobs = [];
@@ -380,6 +486,7 @@ let ganttChart = null;
 let sparklineChart = null;
 let online = false;
 let pollHandle = null;
+let triageHandle = null;
 let jobsFilter = 'all';
 let metricJobNames = new Map();
 let metricHistoryByJob = new Map();
@@ -1195,11 +1302,15 @@ function initModalA11y() {
 async function init() {
   initModalA11y();
   await poll();
+  await loadTriage();
   await loadJobs();
   pollHandle = setInterval(async () => { await poll(); }, 10000);
+  // Slower than the status poll: triage aggregates history and missed schedules, and an operator
+  // reading an incident does not need it moving under them every ten seconds.
+  triageHandle = setInterval(async () => { await loadTriage(); }, 60000);
 }
 
-window.addEventListener('beforeunload', () => clearInterval(pollHandle));
+window.addEventListener('beforeunload', () => { clearInterval(pollHandle); clearInterval(triageHandle); });
 window.addEventListener('resize', () => ganttChart?.resize());
 
 init();

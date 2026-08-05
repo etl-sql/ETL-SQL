@@ -19,8 +19,10 @@ import portalResponsiveShell from './portal-responsive-shell.story.js';
 import portalStudio from './portal-studio.story.js';
 import portalOperations from './portal-operations.story.js';
 import feedback from './feedback.story.js';
+import triageBoard from './triage-board.story.js';
 
 export const stories = [
+  triageBoard,
   portalGovernance,
   dataQualityQueue,
   portalResponsiveShell,

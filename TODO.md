@@ -898,10 +898,12 @@ mean considerably more. See **Orchestrator — Per-Object Authorization** below 
 split this needs; the two tracks do not block each other, but the grant vocabulary must be decided
 before the flight recorder lands.
 
-- [ ] Add a cross-job proxy method and controller action for the `/api/history` feed.
-      `OrchestratorProxyService` currently proxies only per-job history
-      (`OrchestratorProxyService.cs:77`), so the Orchestrator needs no new endpoint but the Portal
-      does. Behind the existing policy.
+- [x] Add the cross-job read. **Changed from the original plan: reads the shared job-history store
+      directly rather than proxying `/api/history`.** That is how every other Portal job-history read
+      already works (failure digest, capacity report, operations posture, lineage impact), and it
+      means the board still answers when the Orchestrator *service* is unreachable — which is
+      precisely when someone is triaging. Mutations still go through the proxy.
+      `OperationsTriageService` + `GET /api/orchestrator/triage`.
 - [ ] Add a cross-job triage view to `orchestrator.html` over the existing `/api/history` feed:
       chronological failed runs across all jobs with the error inline, replacing one drill-down per
       job. Today the only cross-job affordance is the "Failed Today" chip, which filters the *job
