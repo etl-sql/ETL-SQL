@@ -74,7 +74,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
   in the governed connection catalog, which enforces reference-only credentials on write, encrypts
   target and options at rest, and carries per-connection use ACLs, ownership, an audit trail and a
-  usage ledger. The Portal no longer materialises the plaintext: subscription and admin-notification
+  usage ledger. The Portal no longer materializes the plaintext: subscription and admin-notification
   delivery scripts carry the reference and the engine resolves it when the connection opens, so the
   credential is never written into script text that could reach logs, execution history, or error
   detail. This is a hardening of an exposure that previously required active scrubbing — no exploit

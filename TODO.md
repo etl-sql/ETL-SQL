@@ -871,10 +871,26 @@ tenants. Until then, retain v0.18.0 actor attribution as attribution—not autho
       the same seven columns, so one SELECT reads the same shape beside the engine or against the
       Portal. The job name is required — rules bind to the statement that declares them, so there is
       no catalog-wide answer.
-- [ ] Measure preview-session startup and define an optimization threshold before enabling polling or
-      dashboard refresh.
-- [ ] If the threshold is exceeded, add a bounded reusable/read-only preview path without weakening
-      parsing, linting, policy, RLS, timeout, row-cap, or redaction guarantees.
+- [x] Measure preview-session startup and define an optimization threshold before enabling polling or
+      dashboard refresh. **Measured: ~0.8 ms median, ~1.2 ms p95** (`QuarantinePreviewStartupMeasurement`,
+      25 timed iterations after warm-up, three consecutive runs agreeing to 0.1 ms). Threshold set at
+      a **250 ms median / 500 ms p95** — the point at which per-poll overhead becomes a visible
+      fraction of a one-second poll interval. Recorded in
+      [DataQualityRules.md](docs/architecture/decisions/DataQualityRules.md).
+
+      The measurement is deliberately scoped to session construct → execute → dispose and excludes
+      the target's connector read, because that read is what a preview mostly costs and is *not*
+      what a reusable session would change. The harness reports rather than gates: scale
+      certification here has produced a 56% warm/cold spread on one commit, wide enough to swamp any
+      threshold worth setting, so it asserts only an order-of-magnitude structural ceiling.
+- [x] If the threshold is exceeded, add a bounded reusable/read-only preview path without weakening
+      parsing, linting, policy, RLS, timeout, row-cap, or redaction guarantees. **Not exceeded —
+      roughly 300× under it — so this is deliberately not built.** It would buy about a millisecond
+      per request while requiring every one of those guarantees to be re-established across a shared
+      session; that is a large correctness surface for a negligible gain, and those guarantees are
+      the whole reason the preview may read raw quarantined rows at all. Polling and dashboard
+      refresh are not blocked by session cost; if either is slow the cause is the target read or the
+      row cap.
 
 ## Documentation
 - [ ] Make sure everything above is documented.  We may want to follow our 4 path process.  How would a solo, team, enterprise, and Saas

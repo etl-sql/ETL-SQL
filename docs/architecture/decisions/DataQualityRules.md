@@ -501,6 +501,41 @@ recorded trigger so the decision is evidence-based rather than speculative.
 | Spill-aware UNIQUE key map | Shipped in v0.17.0 scale hardening | Projected key records spill into hash partitions and reduce partition-by-partition; only duplicated groups remain in the validation lookup. |
 | Single-pass UNIQUE batching | Shipped in v0.17.0 scale hardening | One pre-pass collects all unique keys for all UNIQUE rule occurrences simultaneously instead of one pass per column. |
 | Connector-side retention | Operators ask why `WITH (RETENTION = …)` does not prune a durable quarantine table outside SQLite | Targets can opt in through `IDataQualityRetentionPruner`; SQLite issues a bounded connector-side delete on `__dq_ts`. Additional durable connectors remain demand-triggered. |
+| Reusable quarantine-preview session | **Measured and declined for v0.18.0** — preview-session startup is ~0.8 ms. Revisit if it exceeds a 250 ms median or 500 ms p95. See below. | A bounded read-only session reused across previews, which would have to re-establish parsing, linting, policy, RLS, timeout, row-cap and redaction guarantees that a single-shot session gets for free. |
+
+### Quarantine preview session startup — measured, not estimated
+
+`GET /api/data-quality/quarantine/rows` builds a fresh `ExecutionSession` per request. The open
+question was whether that per-request cost is small enough for the steward queue to poll the preview
+or refresh a dashboard from it, or whether a bounded reusable session has to come first.
+
+Measured by `QuarantinePreviewStartupMeasurement` (Portal DI, 5 warm-up then 25 timed iterations,
+three consecutive runs on one machine):
+
+| Run | min | median | p95 | max |
+| :--- | ---: | ---: | ---: | ---: |
+| 1 | 0.7 ms | 0.7 ms | 1.2 ms | 13.5 ms |
+| 2 | 0.7 ms | 0.8 ms | 1.2 ms | 14.5 ms |
+| 3 | 0.8 ms | 0.8 ms | 1.1 ms | 13.5 ms |
+
+**Scope of the number, stated so it is not over-read.** This is session construct → execute a
+trivial statement → dispose. It deliberately excludes the quarantine target's own connector read,
+because that is what a preview mostly costs and it is *not* what a reusable session would change.
+The `max` column is the first timed iteration each run — JIT and first-allocation tail, not steady
+state.
+
+**Threshold.** Revisit when preview-session startup exceeds a **250 ms median or 500 ms p95** —
+the point at which per-poll overhead becomes a visible fraction of a one-second poll interval and a
+reusable session starts to earn the correctness risk it carries.
+
+**Decision: do not build the reusable preview path.** The measurement is roughly 300× under that
+threshold, so the optimisation would buy about a millisecond per request while requiring every one
+of the parsing, linting, policy, RLS, timeout, row-cap and redaction guarantees to be re-established
+across a shared session. That is a large correctness surface bought with a negligible gain, and the
+guarantees are the whole reason the preview is allowed to read raw quarantined rows at all.
+
+**Polling and dashboard refresh are therefore not blocked by session cost.** If either turns out to
+be too slow, the cause will be the target read or the row cap, and that is where to look — not here.
 
 ---
 
