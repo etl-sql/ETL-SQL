@@ -172,9 +172,13 @@ Remaining work:
 
 - [x] **Run scale certification before the long test lanes**, or quiesce the machine first. The
       release gate now orders scale certification ahead of thermally noisy long-running lanes.
-- [ ] **Add a same-worktree A/B mode** for comparing two commits, so version comparisons cannot be
+- [x] **Add a same-worktree A/B mode** for comparing two commits, so version comparisons cannot be
       contaminated by comparing two directories in different thermal states — the exact error that
-      produced the v0.17.0 false alarm.
+      produced the v0.17.0 false alarm. **Already built**: `scripts/Test-ScaleCommitComparison.ps1`
+      resolves two refs, alternates detached checkouts in one working directory, rebuilds and
+      discards a warm-up per arm, and restores the original checkout in a `finally`. Verified with
+      `-PlanOnly`, which reports a properly counterbalanced sequence (`A,B,B,A,A,B`) rather than
+      naive alternation — the ordering detail that actually defeats thermal drift.
 - [ ] Investigate performance improvements when data-quality allocation is active. Focus on reducing
       per-row allocation and GC pause time without weakening `@expect`/`@fail` behavior, quarantine
       routing, or lineage/tag capture.
@@ -830,12 +834,275 @@ documentation reconciliation, then release certification.
 Trigger this track when a second client is introduced or an Orchestrator is shared across teams or
 tenants. Until then, retain v0.18.0 actor attribution as attribution—not authorization.
 
+**Interaction with Operations Triage and Run Flight Recorder (above).** Neither track blocks the
+other, but the flight recorder changes what a single coarse grant is worth, so one decision here has
+ordering pressure: **define the ACL vocabulary with a read grant distinct from a manage grant.**
+Today `OrchestratorAccess` (`Program.cs:298`) means see-the-tab *and* trigger/kill/stop-service in
+one role. Once statement-level history is persisted, that same grant also means "read the statement
+text of every job in the estate" — an analyst who should see why the nightly load failed does not
+therefore need kill and service-stop. If per-object ACLs ship with manage semantics only, adding a
+read grant afterwards is a migration rather than a definition.
+
 - [ ] Federate a verifiable caller identity from Portal/OIDC; do not trust an identity header.
-- [ ] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant vocabulary.
+- [ ] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant
+      vocabulary, with **read** and **manage** as separate grants (see the interaction note above).
+- [ ] Decide authority for a parameter-overridden trigger — an override can widen a data scope, so
+      "may this principal trigger job X" and "may they override its variables" are two questions.
+      Triage P2 is safe under `OrchestratorAccess` for a single-team Team deployment; a shared or
+      multi-team Orchestrator needs this first.
+- [ ] Preserve the clicking principal across the Portal→Orchestrator proxy boundary. The Portal
+      proxies with the shared key, so a bulk re-run of 27 jobs from the triage inbox currently audits
+      as the service rather than the human who clicked — the Portal knows the actor and drops it.
+      Worth capturing at the Portal edge even before federated identity exists.
 - [ ] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
 - [ ] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
 - [ ] Add negative tests proving a reachable Orchestrator does not imply authority over another
       principal's objects.
+
+### Orchestrator — Operations Triage and Run Flight Recorder
+
+**Target operator:** a BI team running ~200 scheduled jobs across the day, whose reference points are
+SQL Agent's Job Activity Monitor (triage and re-run) and the SSISDB execution reports (post-mortem).
+Today they can answer *"what is running"* but not *"what broke, why, and can I safely re-run it"*
+without one drill-down per job.
+
+**The finding that sizes this track: almost none of it is new instrumentation.** The engine already
+measures per statement — `ExecutionMetrics` in `src/ETL-SQL.Core/Profiling.cs` carries statement
+text, duration, rows, CPU ms, spill read/write bytes, extent and partition-pass counts, aggregate
+cardinality, and per-statement data-quality cost — profiling defaults to on
+(`EvaluatorOptions.cs:70`), and `eng.profile` already projects it. It is in-memory only, so it dies
+with the job process. Checkpoint/resume also already ships: top-level section labels save session
+state (`SectionLabelStatementHandler.cs:27-41`), the evaluator resumes from
+`@_LAST_CHECKPOINT_LABEL` and validates the label still exists (`Evaluator.cs:1062-1084`), and the
+CLI exposes `--session`, `--var`, and `--resume` (`CliOrchestrator.cs:87-101`). The Orchestrator
+simply never passes any of it: `TriggerJobAsync` takes a bare name (`SchedulerService.cs:277`) and
+`BuildArguments` emits `run <script> --json [--session <id>]` and nothing else
+(`ProcessJobExecutor.cs:435-441`). This track is persistence, plumbing, and rendering over
+capabilities that already exist.
+
+Two claims that look true and are not, recorded so they are not re-derived: job history is *not*
+limited to status/error/rows — `JobHistoryEntry` (`IJobHistoryStore.cs:109`) also carries peak
+memory, CPU seconds, script hash at run time, hash-matched, quarantined/warned rows, and a compact
+failure summary, with normalized `JobDataQualityFailure` rows and a `JobDataQualityStatus`
+projection already served at `/api/data-quality/{status,failures}`. And a cross-job history feed
+already exists: `/api/history` returns all jobs when `jobName` is omitted
+(`JobApiEndpoints.cs:347`), so the triage inbox needs no new backend read.
+
+#### P0 — Triage inbox (rendering only, no backend work)
+
+**Authorization handoff.** The inbox inherits the Portal's existing coarse gate — the whole
+orchestrator surface sits behind one `OrchestratorAccess` policy (`RequireRole("Admin",
+"OrchestratorManager")`, `Program.cs:298`) applied at the controller (`OrchestratorController.cs:11`),
+so read and mutate share a grant. This track creates no new hole, but it makes that single grant
+mean considerably more. See **Orchestrator — Per-Object Authorization** below for the read/manage
+split this needs; the two tracks do not block each other, but the grant vocabulary must be decided
+before the flight recorder lands.
+
+- [ ] Add a cross-job proxy method and controller action for the `/api/history` feed.
+      `OrchestratorProxyService` currently proxies only per-job history
+      (`OrchestratorProxyService.cs:77`), so the Orchestrator needs no new endpoint but the Portal
+      does. Behind the existing policy.
+- [ ] Add a cross-job triage view to `orchestrator.html` over the existing `/api/history` feed:
+      chronological failed runs across all jobs with the error inline, replacing one drill-down per
+      job. Today the only cross-job affordance is the "Failed Today" chip, which filters the *job
+      list* rather than listing the failures.
+- [ ] Group failures by normalized error signature so one bad source at 03:00 renders as
+      "27 jobs · connection refused · source_db", not 27 rows. SQL Agent does not do this; it is the
+      cheapest place to be clearly better rather than at parity.
+- [ ] Surface missed runs, not only failed ones — a job that never fired writes no history row and is
+      invisible in any failure-driven view. `ReconcileStaleRunningAsync` (`IJobHistoryStore.cs:239`)
+      covers stuck `RUNNING` rows but not "was due at 02:00, no row exists"; that is a `NextRun`
+      comparison against the job catalog and belongs in the same inbox.
+- [ ] Add multi-select bulk re-run from the inbox. SQL Agent makes an operator re-run one at a time.
+- [ ] Link a failed run to its downstream blast radius from the lineage catalog ("this job failed →
+      these 12 tables are now stale"). SSISDB structurally cannot answer this; with the script-hash
+      diff below it is the core of the "better, not equal" claim.
+
+#### P1 — Flight recorder (persist what is already measured)
+
+**Transport decided: extend the `--json` envelope. Do not let the child write to the store.**
+The envelope already carries structured, unbounded-cardinality metric arrays —
+`dataQualityColumnMetrics` and `dataQualityRuleFailures` (`ProcessJobExecutor.cs:322-340`,
+`WarmRunnerResponse` at `:727-740`) — parsed with explicit version tolerance ("absent on older
+runners → defaults"). Statement metrics are the same pattern, only larger, so this is the
+established contract rather than a new one. A direct store write was rejected on two grounds: it
+would put state-store credentials (Postgres, at Enterprise) into every spawned job process, widening
+the credential surface considerably; and it would couple the child to the *schema* rather than to a
+message, which is the worse coupling during a rolling upgrade because schema changes are exactly
+what migrations gate. Today the scheduler is the only writer of job history, and that is worth
+keeping. The envelope's failure mode is also benign: no envelope means the flight recorder is
+missing for that run, while the run's own result stays correct.
+
+Known long-term costs of that choice, recorded so they are not rediscovered:
+
+- [ ] Persist per-run statement metrics to a child table keyed on the job-history id, written by the
+      scheduler alongside `LogJobEndAsync`.
+- [ ] **Define the statement payload once, as a shared contract type consumed by both the one-shot
+      envelope and `WarmRunnerResponse`.** This is the recurring tax and the main thing to get right:
+      there are three execution paths — in-process `ScriptExecutorAdapter` (the default, since
+      `UseProcessSpawning` is `false`), the one-shot `--json` process, and the warm runner with its
+      own stdin/stdout line protocol — and the latter two carry the payload separately today. Every
+      field added to the envelope currently has to be written twice; one shared type makes that once.
+- [ ] Respect the single-line envelope constraint: `ParseResult` scans stdout backwards for one line
+      beginning with `{` and parses that line as a complete document (`ProcessJobExecutor.cs:256-265`).
+      There is no chunking or streaming, so a 500-statement script serializes onto one very long
+      line. Cap the payload — all failed statements plus the top N by duration — rather than
+      shipping every statement.
+- [ ] Account for scheduler memory: the child's entire stdout accumulates in a `StringBuilder` inside
+      the *Orchestrator* process (`ProcessJobExecutor.cs:158-162`), per concurrent job, and the
+      scheduler is the one process that must not run out of memory. Statement text is the bulk of the
+      payload, so the normalization required for redaction below also largely removes this problem —
+      do both in the same change.
+- [ ] Guard the `ArgumentsTemplate` escape hatch. An operator template that omits `--json` produces
+      no envelope, and the fallback path returns success with zero rows — so the flight recorder
+      would go silently missing on exactly the customised deployments least likely to notice. Warn at
+      startup when a template omits it.
+- [ ] Redact or normalize statement text before persisting it. **This is a security requirement, not
+      a nicety.** `ExecutionMetrics.Sql` is raw statement text and may contain inline literals and
+      credentials. The data-quality design deliberately committed to counts-only, never sample values
+      (`IJobHistoryStore.cs:125`, `JobDataQualityFailure`); persisting raw SQL into a shared store
+      breaks that invariant for a *different* principal than the one who ran the script. `eng.profile`
+      exposing the same text in-process is not precedent — that is the author reading their own run.
+- [ ] Name the persisted table's columns to match `eng.profile` so the same query shape works whether
+      an operator is reading the live session or durable history.
+- [ ] Bound growth before shipping: 200 jobs/day × dozens of statements compounds quickly. Follow the
+      existing pattern (`PruneHistoryAsync` / `RollUpJobHistoryAsync`, `IJobHistoryStore.cs:230-252`)
+      and prefer retaining statement detail for failed runs plus a sampled slice of successes — that
+      removes most of the volume while still answering every triage question.
+- [ ] Join the run drill-down across all three sources now available: statement timeline, the
+      normalized data-quality failures, and `ScriptHashAtRunTime`/`HashMatched` — the last of which
+      tells an operator *the script changed between the good run and the bad one*, which SSISDB
+      cannot do.
+
+#### P2 — Recovery controls
+
+- [ ] Thread variable overrides through `/api/scheduled-jobs/{name}/trigger` → `TriggerJobAsync` →
+      `BuildArguments` as `--var`, turning a backfill from "edit the job, run it, remember to edit it
+      back" into a form. Overrides must also apply on the `ArgumentsTemplate` branch, which currently
+      bypasses the default argument builder.
+- [ ] Treat a parameter-overridden trigger as a privileged, audited mutation — an override can widen
+      a data scope — and redact override values that resolve to secrets before they reach history.
+- [ ] Expose resume as **"Resume from checkpoint `<label>`"**, passing `--resume` with the run's
+      session id, disabled with a stated reason when the run was not a persistent session or never
+      reached a label. Be explicit in the UI that this is opt-in on script authoring and will not
+      retroactively cover existing jobs.
+- [ ] **Do not implement resume-at-statement-index.** It is unsound here: statements share the
+      evaluator's variable scope, derived/temp result sets, connection state, and open transactions,
+      so restarting at an arbitrary index either fails on an unbound variable or silently runs
+      against a half-built intermediate. SQL Agent can start at step 3 because its steps are
+      independent processes. The author-declared checkpoint label is the only safe unit, and it is
+      the one the engine already implements.
+
+#### Deployment-profile portability review
+
+Required by [Deployment_Profile_Standards.md](docs/architecture/standards/Deployment_Profile_Standards.md#feature-design-portability-review).
+Smallest safe profile is **Solo**, and the capability must not become Portal-only.
+
+- [ ] **Solo.** The smallest safe form already exists as `eng.profile` (live, in-session) — so the
+      durable table must be reachable as an `eng.*` read model, not only through the Portal inbox,
+      or Solo silently loses a capability that Team gains. Precedent: `eng.job_history`,
+      `eng.data_quality_status`, and `eng.data_quality_failures` are all already exposed this way
+      (`EngineCatalogDataSources.cs`).
+
+**Decided: a bare CLI run stays live-only and records nothing.** That is the point of the profile —
+developing against real data should not accumulate a run history, and only production execution is
+worth retaining. `eng.profile` remains the Solo answer.
+
+#### Recording an unattended run without adopting the Orchestrator service
+
+The gap this leaves is the operator who runs on a schedule (Windows Task Scheduler / cron) but does
+not want the Orchestrator service. **The mechanism already exists and should not be rebuilt:**
+`Engine:AuditAdHocRuns` (`src/appsettings.json:67`, default `false`) makes a standalone CLI run write
+through `IJobHistoryStore.LogJobStartAsync` / `LogJobEndAsync` (`EngineRunner.cs:342-385, 711-844`)
+and also populates the lineage catalog, covered by `AdHocAuditingTests`. What is wrong with it is
+granularity and identity, both of which the triage inbox depends on:
+
+- [ ] Add a per-invocation override (`--record` / `--no-record`) for the recording decision.
+      `Engine:AuditAdHocRuns` is a machine-wide boolean in `appsettings.json`, but a single install
+      serves both interactive development and the scheduled invocation. Today an operator who wants
+      their 02:00 task recorded also silently starts recording every exploratory run they make — the
+      exact outcome the Solo decision above rejects.
+- [ ] Add `--job-name` so an unattended run has a stable identity. The ad-hoc path derives the job
+      name from `Path.GetFileName(scriptFile)` (`EngineRunner.cs:377`), so the same script under two
+      schedules, or same-named scripts in different folders, collapse into one history identity and
+      the inbox cannot tell them apart. Default to the current behaviour when the flag is absent.
+- [ ] Fix `docs/administration/platform/appsettings-reference.md:85`, which describes
+      `Engine:AuditAdHocRuns` as sending runs "to the audit server". It writes to the local job
+      history store and lineage catalog; no server is involved.
+- [ ] **Team.** The reference case for this track; no profile change expected. The 200-job shop above
+      *is* the Team profile, and Scheduling/Observability are already Green here.
+- [ ] **Enterprise.** Statement metrics must be written to the shared store, not node-local, or the
+      inbox returns different results per node behind the load balancer; the new table needs both
+      `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect`. Retention/roll-up must be
+      leader-elected via the existing lease/`ClusterLock` machinery rather than running concurrently
+      on every node. Parameter-override triggers must reach the audit outbox.
+- [ ] **SaaS.** Observability is **Red** — tenant telemetry and support-access separation are not
+      certified — and this track makes that cell *harder*, because a cross-job triage inbox is by
+      definition a cross-scope aggregation, exactly the shape that leaks when scope is not
+      server-derived. Persisted statement text compounds it: a platform operator triaging a tenant's
+      failure would be reading tenant SQL, which is the controlled-support-access overlay. Do not
+      claim this feature for SaaS until the inbox scope is server-derived and a negative
+      cross-tenant test lands in the SaaS certification lane.
+- [ ] Confirm no matrix cell moves backward, and record the review outcome the way
+      [v0.18.0](docs/architecture/decisions/v0.18.0-deployment-profile-review.md) did.
+
+### Platform — SaaS Profile Red Cells
+
+Every SaaS cell in the
+[capability matrix](docs/architecture/standards/Deployment_Profile_Standards.md#capability-matrix)
+is **Red** except Reports (**Yellow**) and Tenant isolation (**Green — implementation**, negative
+tests in the certification lane, not a release claim). This section makes those cells plannable
+instead of a single undifferentiated "SaaS is not certified".
+
+**Read the Red honestly.** It does not mean the code is absent — much of the implementation exists
+and the isolation lane already carries negative database, artifact, cache, queue, audit, PII,
+lineage/quality, path, and quota tests. Red means *no current commit-bound evidence that tenant
+identity is enforced end to end for that concern*. The work is therefore mostly proof and boundary
+closure, not greenfield build. Per
+[§8](docs/architecture/roadmaps/Deployment_Profile_Strategy.md#8-saas-is-a-distinct-trust-boundary),
+tenant context must be **server-derived from authenticated authority** and never trusted from a
+caller's unverified resource identifier — most of these items reduce to auditing one code path
+against that single rule.
+
+Ordering below is by dependency, not by value: identity carries tenant context, so nothing else can
+be proven before it.
+
+#### P0 — The boundary everything else depends on
+
+- [ ] Identity: establish platform/tenant identity separation and delegated administration, and prove
+      platform administration is separately audited and cannot implicitly impersonate a tenant user.
+- [ ] Prove tenant context is server-derived at every entry point — a negative test per surface that
+      a caller-supplied tenant/resource identifier cannot widen scope.
+- [ ] Policy: tenant-specific policy authority with platform/tenant separation, so one tenant's
+      policy cannot be authored or overridden from platform scope.
+
+#### P1 — Data-plane isolation
+
+- [ ] Connections and secrets: tenant/provider/key separation plus export proof (no cross-tenant key
+      reuse, no raw secret export across the boundary).
+- [ ] Scheduling and Execution: tenant-scoped queues, schedules, leases, quotas, and failure
+      containment, including noisy-neighbour behaviour under load.
+- [ ] Quality and stewardship: tenant-isolated lineage, scan, quality evidence, cache, and outbox.
+- [ ] Audit: tenant-complete audit plus separately audited platform access.
+- [ ] Backup and recovery: tenant-scoped backup, export, and restore isolation — including that a
+      restore cannot reintroduce another tenant's rows.
+
+#### P2 — Operations and topology
+
+- [ ] Observability: tenant telemetry and support-access separation. **This is the cell the
+      Operations Triage track above collides with** — a cross-job triage inbox is a cross-scope
+      aggregation, and persisted statement text means a platform operator triaging a tenant failure
+      is reading tenant SQL. Sequence the two together rather than independently.
+- [ ] High availability: tenant-aware fleet rollout and noisy-neighbour containment.
+- [ ] Authoring: controlled tenant ingress and a certified tenant authoring boundary.
+- [ ] Reports (currently Yellow): tenant catalog and embed isolation.
+- [ ] Move Tenant isolation from implementation-Green to claim-Green by attaching clean commit-bound
+      evidence from the SaaS certification lane.
+
+Each item is complete only when the matrix cell is updated with a **current linked evidence**
+reference and the release review records the change, the way
+[v0.18.0](docs/architecture/decisions/v0.18.0-deployment-profile-review.md) did. Do not infer SaaS
+support from an Enterprise happy path.
 
 ### Portal — Governance Dashboard
 
@@ -1084,4 +1351,38 @@ this release).
 - [x] We have the Quarantine Queue but there is supposed to be a lot more available so the user can see metrics on failure rate of data quality they also should be able to look up jobs and what rules (@expect tags) are applied to each job.  All of that is missing.  See this document: C:\Users\chuck\scratch\ETL-SQL\docs\architecture\decisions\DataQualityRules.md
 
 ## Profile
-- [ ] Basic performance is automatically captured but the more detailed performance metrics captured with SET PROFILE ON; needs some enhancements.  We need to make sure that the the Data Quality work is being captured so the user knows the cost of the rule.
+
+- [x] Basic performance is automatically captured but the more detailed performance metrics captured
+      with SET PROFILE ON; needs some enhancements. We need to make sure that the Data Quality work
+      is being captured so the user knows the cost of the rule.
+
+      **The profile had drifted well behind the engine, not only on data quality.** Comparing every
+      counter on `ITelemetryContext` against the columns `eng.profile` actually exposes found seven
+      live counters that never reached it — all from the spill/partition work:
+
+      | Added | Why it matters |
+      | :--- | :--- |
+      | `spill_read_bytes` | `spilled_bytes` said the engine wrote to disk; nothing said it had to read it back, which is the half that costs time on the critical path |
+      | `spill_extents` | High against modest bytes is fragmentation, not volume — points at batch sizing rather than memory |
+      | `partition_passes` | Above 1 means the data did not fit the budget; the single most useful "raise a threshold" signal |
+      | `aggregate_groups` | The cardinality that drives aggregate memory |
+      | `aggregate_expansion_ratio` | Output rows over input rows |
+      | `sort_spills` | Sorts that went to disk |
+      | `cpu_time_ms` | Separates *slow because it was working* from *slow because it was waiting* — high duration with low CPU is I/O, a lock or a remote database, and no engine tuning will help it |
+
+      Plus the four data-quality columns that prompted this: `dq_rows_validated`,
+      `dq_rows_quarantined`, `dq_rows_warned`, `dq_validation_ms`. Cost is attributed to the
+      statement carrying the rules; every other statement reports zero, so the overhead is read
+      directly rather than inferred from a run total.
+
+      Two things worth knowing about the timing: it is gated on `IsProfiling`, which **defaults to
+      true**, so the two timestamp reads per row are the normal case — `SET PROFILE OFF` is the
+      lever that removes them. And `SHOW PROFILE` is retired in favour of `SELECT * FROM
+      eng.profile`; its handler still exists but the parser rejects the statement, so it is
+      unreachable.
+
+- [ ] **`SubquerySpillCount` is declared, reset and exported — and never incremented.** It sits on
+      `ITelemetryContext`, is cleared in `ExecutionTelemetryManager.Clear()`, and is written into
+      the report manifest by `ManifestBuilder` as `subquerySpillCount`, where it is therefore always
+      `0`. Either wire it where subquery spilling happens or remove it; a manifest field that always
+      reads zero is worse than an absent one, because it looks like an answer.
