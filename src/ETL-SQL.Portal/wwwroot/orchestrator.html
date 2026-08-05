@@ -304,10 +304,11 @@
 <script src="/js/echarts.min.js?v=0.17.0"></script>
 <script src="/js/feedback.js?v=0.17.0"></script>
 <script type="module">
-import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
+import { auth, authApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
 import { renderDag, createScriptEditor } from '/designer/designer.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
@@ -319,11 +320,12 @@ try {
   const identity = getSessionIdentity(auth.getToken());
   renderSessionIdentity(identity, document.getElementById('topbarUser'));
   isAdmin = hasRole(identity, 'Admin');
-  if (isAdmin) document.getElementById('adminNav').style.display = '';
+  // A role check that decides whether this *page* is reachable at all, not a nav entry.
   const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
   if (!canOrch) window.location.href = '/index.html';
 } catch { window.location.href = '/login.html'; }
-studioApi.session().then(() => { document.getElementById('studioNav').style.display = ''; }).catch(() => {});
+
+applyNavigationSafely();
 
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 document.getElementById('refreshJobsBtn').addEventListener('click', () => loadJobs());

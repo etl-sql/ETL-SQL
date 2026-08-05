@@ -27,6 +27,41 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
     public sealed record RoleExpectation(
         string Role, bool SeesAdminNav, bool SeesOrchestratorNav, bool SeesGovernanceNav);
 
+    /// <summary>
+    /// Studio is offered to exactly the roles granted the <c>StudioAccess</c> capability.
+    ///
+    /// <para>The shipped configuration grants the Studio capabilities to <c>Admin</c> and
+    /// <c>Publisher</c> and to nobody else, so those two see the entry point and the other three
+    /// must not.</para>
+    ///
+    /// <para>Worth asserting because the obvious client-side rule is wrong in a way that looks
+    /// right. The Studio session probe was deliberately opened to every authenticated user, so that
+    /// asking "what may I do in Studio?" would stop being an error for the roles that may do
+    /// nothing. Pages that revealed the entry when the probe merely <em>succeeded</em> therefore
+    /// revealed it to everybody: the probe answering is not the same as the answer being yes.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Viewer", false)]
+    [InlineData("Publisher", true)]
+    [InlineData("DataSteward", false)]
+    [InlineData("OrchestratorManager", false)]
+    public async Task StudioIsOffered_OnlyToRolesHoldingStudioAccess(string role, bool seesStudio)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await CreateAndSignInAsync(page, role);
+
+        // Waits for the navigation answer to be applied rather than for a fixed delay. An absence
+        // assertion made too early passes because nothing has been revealed yet, which is a green
+        // test that proves nothing — and under a loaded full-lane run the positive case loses the
+        // same race and fails instead.
+        await page.WaitForSelectorAsync("body[data-nav-applied='true']",
+            new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached, Timeout = 20_000 });
+        await AssertNavAsync(page, "#studioNav", seesStudio, role, "Studio");
+
+        Assert.Empty(session.PageErrors);
+    }
+
     /// <remarks>
     /// Governance is expected for every role. Its lineage and stewardship views are open to any
     /// authenticated user — a report consumer tracing where a number came from is the point of them —
@@ -57,6 +92,10 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
         var user = await CreateAndSignInAsync(page, role);
 
         await Expect(page.Locator("#navReports")).ToBeVisibleAsync();
+        // Every gated entry is revealed by one applied answer, so wait for that rather than
+        // sampling the DOM while it is still the markup default.
+        await page.WaitForSelectorAsync("body[data-nav-applied='true']",
+            new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached, Timeout = 20_000 });
         await AssertNavAsync(page, "#navAdmin, [href='/admin.html']", seesAdmin, role, "Admin");
         await AssertNavAsync(page, "#navOrchestrator, [href='/orchestrator.html']",
             seesOrchestrator, role, "Orchestrator");
@@ -89,10 +128,15 @@ public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
 
         await AssertNavAsync(page, "#govNavOverview", canOverview, role, "Governance Overview");
         await AssertNavAsync(page, "#govNavQuarantine", canQuarantine, role, "Quarantine Queue");
+        // Stewardship and Audit Evidence were removed from the sidebar when the three redundant
+        // entries that all opened Lineage Search with a different top selector were collapsed into
+        // it. This asserted Stewardship was present and had been failing since; a nav item that no
+        // longer exists is not a coverage gap, so the assertion goes rather than the entry coming
+        // back.
+        await AssertNavAsync(page, "#govNavStewardship", false, role, "Stewardship");
         await AssertNavAsync(page, "#govNavAudit", false, role, "Audit Evidence");
-        // The two that are genuinely open, so the section is not empty for a report consumer.
+        // The one that is genuinely open, so the section is not empty for a report consumer.
         await AssertNavAsync(page, "#govNavLineage", true, role, "Lineage Search");
-        await AssertNavAsync(page, "#govNavStewardship", true, role, "Stewardship");
 
         Assert.Empty(session.PageErrors);
     }

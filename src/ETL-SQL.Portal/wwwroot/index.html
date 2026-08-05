@@ -309,6 +309,7 @@ import { createDataQualityQueue } from '/js/data-quality-queue.js?v=0.17.0';
 import { createGovernancePortal } from '/js/governance-portal.js?v=0.17.0';
 import { renderDag } from '/designer/designer.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -389,9 +390,6 @@ async function init() {
     const identity = getSessionIdentity(auth.getToken());
     renderSessionIdentity(identity, document.getElementById('topbarUser'));
     isAdmin = hasRole(identity, 'Admin');
-    if (isAdmin) document.getElementById('adminNav').style.display = '';
-    const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
-    if (canOrch) document.getElementById('orchestratorNav').style.display = '';
 
     // Governance itself stays visible to everyone: Lineage Search is open to any
     // authenticated user, and tracing where a number came from is exactly what a report consumer
@@ -415,10 +413,14 @@ async function init() {
       hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
     canQuarantine = hasRole(identity, 'Admin', 'DataSteward');
   } catch {}
+  // The top-level entries — Admin, Orchestrator, Docs, Studio — come from one server answer.
+  await applyNavigationSafely();
+
   try {
+    // Still asked separately: this decides whether *this page* offers authoring actions, which is
+    // a different question from whether the Studio entry point is offered at all.
     const studio = await studioApi.session();
     canDesign = studio.capabilities.includes('ScriptRead') && studio.capabilities.includes('ScriptSave');
-    document.getElementById('studioNav').style.display = '';
   } catch { canDesign = false; }
 
   document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());

@@ -546,6 +546,7 @@ import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.17.0';
 import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.17.0';
 import { createOperationsAdmin } from '/js/operations-admin.js?v=0.17.0';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -557,13 +558,15 @@ try {
   renderSessionIdentity(identity, document.getElementById('topbarUser'));
   const isAdmin = hasRole(identity, 'Admin');
   if (!isAdmin) window.location.href = '/index.html';
-  const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager');
-  if (canOrch) document.getElementById('orchestratorNav').style.display = '';
 } catch { window.location.href = '/login.html'; }
+
+applyNavigationSafely();
+
 let studioSession = null;
 const studioSessionReady = studioApi.session().then(session => {
   studioSession = session;
-  document.getElementById('studioNav').style.display = '';
+  // Not the nav entry — that is the shared navigation's answer. This is whether *this page's*
+  // publish action opens Studio, which is a different question with a different rule.
   if (session.mode === 'CatalogOnly') document.getElementById('openPublishBtn').textContent = 'Open Studio';
   return session;
 }).catch(() => {

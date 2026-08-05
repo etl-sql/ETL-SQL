@@ -402,6 +402,12 @@ export const catalogApi = {
 
 // ── Studio ───────────────────────────────────────────────────────────────────
 
+// Which top-level destinations to offer this caller. Computed on the server because two of them
+// (Docs, Studio) depend on module and capability state no token claim carries.
+export const navigationApi = {
+    destinations: () => apiJson('/api/portal/navigation')
+};
+
 export const studioApi = {
     session: () => apiJson('/api/studio/session'),
     reports: () => apiJson('/api/studio/reports'),

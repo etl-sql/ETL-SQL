@@ -155,6 +155,11 @@ etlsql.db
 # More general scratch/diagnostic captures
 *.txt
 !Docs/QUICKSTART.txt
+# Accessibility-tree snapshot baselines. These are reviewed artifacts, not captures: updating one
+# is meant to be a decision someone sees in a diff. The blanket *.txt above had been swallowing
+# them, so a baseline could go stale and no reviewer could tell — which is exactly what happened
+# when the governance sidebar was reworked and its baseline kept describing the old menu.
+!tests/ETL-SQL.Portal.BrowserTests/Snapshots/*.snapshot.txt
 *.cs.scratch
 *.etlsql.scratch
 

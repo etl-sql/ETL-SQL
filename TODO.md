@@ -495,10 +495,28 @@ documentation reconciliation, then release certification.
         Adopted in `connections-admin.js`, which previously rendered one message for both a 403 and
         an unreachable service — telling the reader the wrong thing half the time.
 
-      Still per-page: headers, identity, module gating, themes, spacing, icons. The three inline
-      focus traps in `index.html`, `admin.html` and `orchestrator.html` also still duplicate
-      `dialog-a11y.js`; they work, so replacing them needs per-page browser coverage of their
-      dialogs first rather than a blind swap.
+      - **Module gating** — `GET /api/portal/navigation` plus `js/portal-nav.js`. The server
+        computes which top-level entry points to offer a caller; the shell applies the answer and
+        never derives one. This found two live defects rather than just duplication, both of the
+        "offers what it cannot deliver" class: **Studio was offered to every signed-in user**
+        (pages revealed it whenever the capability *probe* succeeded, and that probe had been
+        deliberately opened to everyone, so the roles holding no Studio capability saw a link to a
+        403), and the **Docs link was offered where `/docs.html` 404s**, because whether the
+        Documentation module is enabled is a server fact no token claim carries. A third copy of
+        the rule, in `docs.html`, gated Orchestrator on a role name that does not exist.
+
+      A recount while doing this: **identity, themes, spacing and icons were already shared** —
+      `session-identity.js` on every page, `branding.js` owning the theme toggle and storage key,
+      and the radius/shadow/colour tokens plus the `sidebar-nav-icon-*` set in `portal.css`. The
+      TODO listed them as outstanding; they were not.
+
+      Still per-page: **headers**. The `<header class="topbar">` block is copy-pasted across six
+      pages. Its *gating* is now shared and guarded by `PortalNavigationVocabularyTests`, which is
+      where the drift actually was; templating the markup itself would move it out of static HTML
+      for a smaller benefit. The three inline focus traps in `index.html`, `admin.html` and
+      `orchestrator.html` also still duplicate `dialog-a11y.js` (as does the drawer's own trap in
+      `branding.js`); they work, so replacing them needs per-page browser coverage of their dialogs
+      first rather than a blind swap.
 - [x] Make every dialog/drawer semantic, named, modal where appropriate, focus-trapped, and absent
       from the accessibility tree when closed. `PortalDialogAccessibilityTests` enforces
       `role="dialog"`, `aria-modal`, and an accessible name on every overlay across every page and

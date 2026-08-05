@@ -1,0 +1,17 @@
+- text: Governance Data & Catalog
+- link "Overview":
+  - /url: "#governance/overview"
+- link "Workqueue":
+  - /url: "#governance/workqueue"
+- link "Exceptions":
+  - /url: "#governance/exceptions"
+- link "Glossary":
+  - /url: "#governance/glossary"
+- link "✅ Quarantine Queue":
+  - /url: "#governance/quarantine"
+- link "📊 Data Quality":
+  - /url: "#governance/quality"
+- link "🔗 Lineage Search":
+  - /url: "#governance/lineage"
+- link "Settings":
+  - /url: "#governance/settings"

@@ -15,7 +15,7 @@
       <a href="/index.html">Reports</a>
       <a href="/index.html#governance">Governance</a>
       <a href="/studio.html" class="active">Studio</a>
-      <a href="/docs.html">Docs</a>
+      <a href="/docs.html" id="docsNav">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
     </nav>
@@ -85,7 +85,8 @@
 <script type="module">
 import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
-import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 import { installDialogAccessibility } from '/js/dialog-a11y.js?v=0.17.0';
 
 // Studio's dialogs had no focus management at all: opening one left the keyboard user behind it,
@@ -162,8 +163,7 @@ async function init() {
   try {
     const identity = getSessionIdentity(auth.getToken());
     renderSessionIdentity(identity, document.getElementById('topbarUser'));
-    if (hasRole(identity, 'Admin')) document.getElementById('adminNav').style.display = '';
-    if (hasRole(identity, 'Admin', 'OrchestratorManager')) document.getElementById('orchestratorNav').style.display = '';
+    applyNavigationSafely();
     const [session, reportRows, folderRows] = await Promise.all([
       studioApi.session(), studioApi.reports(), studioApi.folders()
     ]);

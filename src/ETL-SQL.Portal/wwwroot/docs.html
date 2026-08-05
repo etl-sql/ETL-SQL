@@ -113,9 +113,10 @@
 </div>
 
 <script type="module">
-  import { auth, studioApi } from '/js/api.js?v=0.17.0';
+  import { auth } from '/js/api.js?v=0.17.0';
   import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
-  import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+  import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+  import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 
   initTheme();
   applyPortalBranding();
@@ -130,15 +131,7 @@
       logoutBtn.addEventListener('click', () => auth.logout());
     }
 
-    const isAdmin = hasRole(identity, 'Admin');
-    const isOrch = hasRole(identity, 'Admin', 'Orchestrator', 'OrchestratorManager');
-
-    const adminNav = document.getElementById('adminNav');
-    if (adminNav) adminNav.style.display = isAdmin ? 'inline-block' : 'none';
-
-    const orchNav = document.getElementById('orchestratorNav');
-    if (orchNav) orchNav.style.display = isOrch ? 'inline-block' : 'none';
-    studioApi.session().then(() => { document.getElementById('studioNav').style.display = ''; }).catch(() => {});
+    applyNavigationSafely();
   }
 </script>
 <script type="module" src="/js/docs.js?v=0.17.0"></script>

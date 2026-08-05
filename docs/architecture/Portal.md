@@ -575,6 +575,7 @@ by the administration guides rather than restated here.
 | Prefix | Auth | Area |
 | :--- | :--- | :--- |
 | `/api/branding` | Public | Deployment branding for the login page and shell |
+| `/api/portal/navigation` | Any | Which top-level entry points to offer **this** caller. The shell applies the answer; it does not compute one. Two destinations cannot be decided from a token claim — Docs depends on the Documentation module, Studio on the `StudioAccess` capability — so pages that guessed offered a Docs link that 404s and a Studio link to everyone |
 | `/api/auth/oidc` | Public | OIDC federation — the enterprise identity path |
 | `/api/auth/service-token` | Public (client credentials) | Service-account token issue |
 | `/api/admin/service-accounts` | Admin | Scoped machine identities, capped by their owner's authority |

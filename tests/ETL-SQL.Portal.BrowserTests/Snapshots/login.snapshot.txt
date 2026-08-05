@@ -1,0 +1,10 @@
+- heading "ETL-SQL Portal" [level=1]
+- paragraph: Octocolee — an ETL-SQL engine
+- paragraph: Sign in to your account
+- text: Username
+- textbox "Username"
+- text: Password
+- textbox "Password"
+- button "Sign In"
+- link "Third-party notices":
+  - /url: /third-party-notices

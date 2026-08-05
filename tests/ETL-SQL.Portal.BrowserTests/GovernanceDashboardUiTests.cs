@@ -53,7 +53,10 @@ public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync(
             new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
 
-        await page.ClickAsync("[data-gov-tab='workqueue']");
+        // Reached from the Governance sidebar. It used to be an in-page tab strip, until the two
+        // competing menus were collapsed into one; this still clicked the tab, which no longer
+        // renders, so it had been timing out rather than testing anything.
+        await page.ClickAsync("#govNavWorkqueue");
         var body = page.Locator(".gov-body");
 
         // Either the estate has assets and every score is explained, or it is genuinely empty and

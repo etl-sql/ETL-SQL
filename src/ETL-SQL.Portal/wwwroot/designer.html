@@ -22,7 +22,7 @@
       <a href="/index.html">Reports</a>
       <a href="/index.html#governance">Governance</a>
       <a href="/studio.html" class="active">Studio</a>
-      <a href="/docs.html">Docs</a>
+      <a href="/docs.html" id="docsNav">Docs</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
     </nav>
@@ -40,7 +40,8 @@
 <script type="module">
 import { auth, authApi, studioApi } from '/js/api.js?v=0.17.0';
 import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
-import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
 import { createDesigner } from '/designer/designer.js?v=0.17.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
@@ -56,11 +57,7 @@ if (logoutBtn) {
   logoutBtn.addEventListener('click', () => authApi.logout());
 }
 
-const adminNav = document.getElementById('adminNav');
-if (adminNav) adminNav.style.display = hasRole(identity, 'Admin') ? 'inline-block' : 'none';
-
-const orchNav = document.getElementById('orchestratorNav');
-if (orchNav) orchNav.style.display = hasRole(identity, 'Admin', 'OrchestratorManager') ? 'inline-block' : 'none';
+applyNavigationSafely();
 
 const params     = new URLSearchParams(window.location.search);
 const reportId   = params.get('id')       ? parseInt(params.get('id'), 10)       : null;

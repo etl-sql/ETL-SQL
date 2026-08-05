@@ -1,0 +1,2 @@
+- heading "You do not have access to governance data." [level=2]
+- paragraph: Viewing the estate's governance posture needs the GovernanceViewer, DataSteward, or GovernanceManager role. This is not an empty estate — it is a view you cannot see.

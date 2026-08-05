@@ -1,0 +1,8 @@
+- heading "This estate has never been scanned." [level=2]
+- paragraph: The tiles below show no findings because none have been computed — not because none exist. Run a scan to establish the current posture.
+- list "Governance summary":
+  - 'listitem "Governed assets: 0/0. 0% at or above 80"'
+  - 'listitem "Below threshold: 0. Need follow-up"'
+  - 'listitem "Open findings: 0. Awaiting a steward"'
+  - 'listitem "Accepted risk: 0. Suppressed with a reason"'
+  - 'listitem "Ignored: 0. Declared false positives"'
