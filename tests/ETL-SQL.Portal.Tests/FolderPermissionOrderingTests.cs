@@ -90,6 +90,54 @@ public sealed class FolderPermissionOrderingTests
             + string.Join("\n  ", offenders));
     }
 
+    /// <summary>
+    /// The same rule where both sides are variables, which the check above cannot see.
+    ///
+    /// <para>This is not hypothetical tightening. <c>FolderPermissionService.HasPermissionAsync</c>
+    /// shipped with <c>effective.Value &gt;= required</c> — no literal anywhere on the line, so the
+    /// literal-matching check read it as clean — and it let an <c>Author</c> grant publish a new
+    /// report into a folder, the one act Author is defined not to permit. A guard that only catches
+    /// the obvious spelling of a mistake is worth less than it appears, because the obvious spelling
+    /// is the one people already avoid.</para>
+    /// </summary>
+    [Fact]
+    public void NoProductionCode_ComparesPermissionVariablesOrdinally()
+    {
+        var root = Path.Combine(RepoRoot(), "src");
+        // The small, stable vocabulary these comparisons are actually written in.
+        const string Names = @"(effective|required|permission|perm|held|granted|existing|current|best)\w*";
+        var offenders = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+                continue;
+
+            var text = File.ReadAllText(file);
+            // Only files that deal in folder permissions at all; DatasetPermission is a separate
+            // enum whose storage order *is* its authority order, so `>=` is correct there.
+            if (!text.Contains("FolderPermission", StringComparison.Ordinal)) continue;
+
+            var lines = text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
+                if (!Regex.IsMatch(line, $@"\b{Names}(\.Value)?\s*(>=|<=|<|>)\s*\b{Names}",
+                        RegexOptions.IgnoreCase))
+                    continue;
+
+                offenders.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {line.Trim()}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "These compare permission values ordinally through variables. Storage order is not "
+            + "authority order, so the comparison is wrong even with no literal in sight. Use "
+            + "AtLeast():\n  " + string.Join("\n  ", offenders));
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

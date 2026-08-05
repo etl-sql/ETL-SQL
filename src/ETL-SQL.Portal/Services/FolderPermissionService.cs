@@ -42,7 +42,12 @@ public class FolderPermissionService(PortalDbContext db)
         if (IsAdmin(user)) return true;
 
         var effective = await GetEffectivePermissionAsync(folderId, user);
-        return effective.HasValue && effective.Value >= required;
+        // AtLeast(), never `>=`. Author is *stored* as 3 and Manage as 2 — Author was appended so
+        // that adding it would not renumber every ACL row already in force — while its authority
+        // ranks below Manage. An ordinal compare here read the storage value and handed every
+        // Author grant the whole of Manage, including publishing a new report into the folder,
+        // which is the one thing Author is defined not to permit.
+        return effective.AtLeast(required);
     }
 
     public async Task<FolderPermission?> GetEffectiveReportPermissionAsync(Report report, ClaimsPrincipal user) =>
