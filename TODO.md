@@ -890,9 +890,9 @@ already exists: `/api/history` returns all jobs when `jobName` is omitted
 
 #### P0 — Triage inbox — SHIPPED on `feat/orchestrator-triage-inbox` (2026-08-05)
 
-All items below are complete except the lineage blast radius, which is deferred with a reason. The
-board reads shared state directly, groups failures into incidents, surfaces missed runs, and offers
-bulk re-run. Covered by `OperationsTriageTests` (10) and `RunFailureSignatureTests` (12), plus a
+All items below are complete. The board reads shared state directly, groups failures into
+incidents, surfaces missed runs, offers bulk re-run, and links each job to its downstream blast
+radius. Covered by `OperationsTriageTests` (10) and `RunFailureSignatureTests` (12), plus a
 headless render check for escaping and a UI-sandbox story (`triage-board`) with fixtures for the
 busy morning, the quiet one, and a clipped history read.
 
@@ -921,14 +921,15 @@ before the flight recorder lands.
       a list that cries wolf gets ignored. Disabled jobs are excluded.
 - [x] Add multi-select bulk re-run, reporting per-job outcomes rather than one opaque result,
       capped at 50 so a mis-click cannot enqueue the estate, and audited per job.
-- [ ] **Deferred — bigger than a link.** Link a failed run to its downstream blast radius ("this job
-      failed → these 12 tables are now stale"). The analysis already exists and already accepts a
-      job: `LineageImpactService.AnalyzeAsync(kind: "job", direction: "downstream")`, served at
-      `GET /api/catalog/impact`. What is missing is an entry point — the impact view in
-      `wwwroot/js/lineage-catalog.js` holds its target in local state and reads no URL parameters,
-      so there is nothing to deep-link *to*. Add deep-link support to that view first, then the
-      board links into it. Still the core of the "better, not equal" claim against SSISDB, which
-      structurally cannot answer this.
+- [x] Link a failed run to its downstream blast radius ("this job failed → these tables are now
+      stale") — the core of the "better, not equal" claim, since SSISDB structurally cannot answer
+      it. Needed a new entry point first: the impact view held its target in local state and read no
+      URL parameters, so `createLineageCatalog` now exposes `showImpact({kind, name, ...})` and
+      `index.html` applies a deep link from the query string. **Query string, not the hash** — the
+      governance hash router lowercases the whole route and would corrupt a case-sensitive target
+      name. The link is applied once and stripped, so later mode changes do not snap back to it.
+      Present on failed runs and on missed runs, because a job that never ran leaves downstream
+      tables just as stale as one that failed.
 
 #### P1 — Flight recorder (persist what is already measured)
 

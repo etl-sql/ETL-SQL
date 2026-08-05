@@ -550,6 +550,37 @@ function initModalA11y() {
   });
 }
 
+// Deep link into impact analysis, used by the Orchestrator triage board to answer "this job failed
+// — what is downstream of it". Parameters ride in the query string rather than the hash because the
+// hash router lowercases the whole route, which would corrupt a case-sensitive target name.
+//
+// Applied once and then stripped from the URL: leaving them there would make every later mode
+// change inside governance snap back to the linked target.
+let impactDeepLinkConsumed = false;
+
+function applyImpactDeepLink() {
+  if (impactDeepLinkConsumed || !lineageCatalog) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const name = params.get('impactName');
+  if (!name) return;
+
+  impactDeepLinkConsumed = true;
+  lineageCatalog.showImpact({
+    kind: params.get('impactKind') || 'table',
+    name,
+    column: params.get('impactColumn') || '',
+    direction: params.get('impactDirection') || 'downstream',
+    depth: params.get('impactDepth'),
+  });
+
+  const url = new URL(window.location.href);
+  for (const key of ['impactKind', 'impactName', 'impactColumn', 'impactDirection', 'impactDepth']) {
+    url.searchParams.delete(key);
+  }
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 function setReportHash(hash) {
   const next = `#${hash}`;
   if (window.location.hash !== next) history.replaceState(history.state, '', next);
@@ -570,6 +601,7 @@ function openReportHashView() {
   } else if (mainView === 'governance' || mainView === 'lineage') {
     let mode = defaultGovernanceMode();
     if (subView === 'lineage') mode = 'lineage';
+    if (subView === 'impact') mode = 'impact';
     if (subView === 'overview') {
       mode = canGovernanceOverview ? 'overview' : 'lineage';
       if (!canGovernanceOverview) setReportHash('governance/lineage');
@@ -1146,6 +1178,7 @@ function showGovernanceCatalog(mode = 'lineage') {
       });
     }
     lineageCatalog.setMode(mode === 'lineage' ? 'history' : mode);
+    applyImpactDeepLink();
   } else {
     if (lineageCatalog) { lineageCatalog.dispose(); lineageCatalog = null; }
     if (!dataQualityQueue) {

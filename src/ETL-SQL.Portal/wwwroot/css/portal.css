@@ -1230,6 +1230,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .triage-incident-jobs { padding: 0 10px 8px 34px; display: flex; flex-wrap: wrap; gap: 4px; }
 .triage-more { font-size: .75em; color: var(--portal-muted); align-self: center; }
 .triage-incident-runs { padding: 0 10px 10px; overflow-x: auto; }
+.triage-impact-link {
+  font-size: .78em; white-space: nowrap; color: var(--portal-accent); text-decoration: none;
+}
+.triage-impact-link:hover { text-decoration: underline; }
 
 @media (max-width: 720px) {
   .triage-incident-head { flex-wrap: wrap; }

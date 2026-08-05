@@ -25,6 +25,12 @@ const memoryStorage = (() => {
   return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) };
 })();
 
+// What an incoming deep link is allowed to select. Deliberately the impact form's own options
+// rather than everything the server will accept: a kind this view cannot render leaves the control
+// showing nothing, so the vocabulary the user can see is the vocabulary a link may set.
+const IMPACT_KINDS = new Set(['table', 'column', 'job', 'script', 'dataset', 'report', 'owner', 'steward']);
+const IMPACT_DIRECTIONS = new Set(['upstream', 'downstream', 'both']);
+
 /**
  * Build a lineage catalog explorer bound to a host element.
  *
@@ -1025,6 +1031,27 @@ export function createLineageCatalog(opts = {}) {
         state.mode = m;
       }
       render();
+    },
+    /**
+     * Opens impact mode already pointed at a target, so another surface can hand off to it — the
+     * triage board asking "this job failed, what is downstream of it" is the motivating case.
+     * Without this the impact target lived only in local state and there was nothing to link to.
+     *
+     * Unknown or missing fields fall back to the current state rather than throwing, because the
+     * caller is a URL and a URL is user-editable.
+     */
+    showImpact({ kind, name, column, direction, depth } = {}) {
+      if (!name) return false;
+      state.mode = 'impact';
+      if (IMPACT_KINDS.has(kind)) state.impactKind = kind;
+      state.impactName = String(name);
+      state.impactColumn = column ? String(column) : '';
+      if (IMPACT_DIRECTIONS.has(direction)) state.impactDirection = direction;
+      const parsedDepth = Number(depth);
+      if (Number.isFinite(parsedDepth)) state.impactDepth = Math.min(8, Math.max(1, Math.trunc(parsedDepth)));
+      onModeChange(state.mode);
+      render();
+      return true;
     },
     dispose() { if (dagInstance) { dagInstance.dispose(); dagInstance = null; } },
     state,

@@ -59,6 +59,23 @@ export function renderSummary(board) {
     </div>`;
 }
 
+/**
+ * Deep link into the lineage catalog's impact view for one job. This is the answer SSISDB
+ * structurally cannot give: a failed load is not just a red row, it is a set of tables downstream
+ * consumers are about to read as if they were fresh.
+ *
+ * Parameters ride in the query string, not the hash — the governance hash router lowercases the
+ * whole route and would corrupt a case-sensitive name.
+ */
+export function impactUrl(jobName) {
+  const params = new URLSearchParams({
+    impactKind: 'job',
+    impactName: String(jobName ?? ''),
+    impactDirection: 'downstream',
+  });
+  return `/index.html?${params.toString()}#governance/impact`;
+}
+
 function renderRunRow(run) {
   const dq = run.dataQualityFailures
     ? `<span class="badge badge-warning" title="Per-rule failure counts">${esc(run.dataQualityFailures)}</span>`
@@ -76,6 +93,10 @@ function renderRunRow(run) {
       <td>${fmtDuration(run.startTime, run.endTime)}</td>
       <td>${Number(run.rowsProcessed ?? 0).toLocaleString()}</td>
       <td>${dq}${drift}</td>
+      <td>
+        <a class="triage-impact-link" href="${esc(impactUrl(run.jobName))}"
+           title="What is downstream of this job">Impact →</a>
+      </td>
     </tr>`;
 }
 
@@ -109,7 +130,7 @@ export function renderIncident(incident, { expanded = false, selected = false, i
       ${expanded ? `
       <div class="triage-incident-runs">
         <table class="data-table">
-          <thead><tr><th>Job</th><th>Status</th><th>Started</th><th>Duration</th><th>Rows</th><th>Quality</th></tr></thead>
+          <thead><tr><th>Job</th><th>Status</th><th>Started</th><th>Duration</th><th>Rows</th><th>Quality</th><th>Downstream</th></tr></thead>
           <tbody>${(incident.runs || []).map(renderRunRow).join('')}</tbody>
         </table>
       </div>` : ''}
@@ -126,6 +147,8 @@ export function renderMissed(missed) {
       <td>${m.lastRun ? fmtDateTime(m.lastRun) : 'never'}</td>
       <td>
         <button class="btn-link triage-rerun-one" type="button" data-job="${esc(m.jobName)}">Run now</button>
+        <a class="triage-impact-link" href="${esc(impactUrl(m.jobName))}"
+           title="What is downstream of this job">Impact →</a>
       </td>
     </tr>`).join('');
 
