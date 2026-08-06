@@ -1527,7 +1527,7 @@ this release).
       eng.profile`; its handler still exists but the parser rejects the statement, so it is
       unreachable.
 
-- [ ] **`SubquerySpillCount` is declared, reset and exported — and never incremented.** It sits on
+- [x] **`SubquerySpillCount` is declared, reset and exported — and never incremented.** It sits on
       `ITelemetryContext`, is cleared in `ExecutionTelemetryManager.Clear()`, and is written into
       the report manifest by `ManifestBuilder` as `subquerySpillCount`, where it is therefore always
       `0`. Either wire it where subquery spilling happens or remove it; a manifest field that always

@@ -886,6 +886,7 @@ public class ExpressionEvaluator
                     }
                     else if (rowCount > _context.SubquerySpillThresholdRows)
                     {
+                        _context.Telemetry.SubquerySpillCount++;
                         spillStore = new InMemoryDataSource();
                         spillStore.SetSchema(new[] { new ColumnDefinition("Value", "VARIANT", false) });
 

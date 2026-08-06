@@ -104,6 +104,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.True((bool)result!);
             Assert.Equal(1, _evaluator.Telemetry.SubqueryCacheMisses);
             Assert.Equal(0, _evaluator.Telemetry.SubqueryCacheHits);
+            Assert.Equal(1, _evaluator.Telemetry.SubquerySpillCount);
 
             // Verify it used StreamData (spilled) because 500 > 100
             var key = new SubqueryCacheKey(selectSubq, new CompoundKey(new object[0]), SubqueryResultType.Stream);
