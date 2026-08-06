@@ -500,4 +500,38 @@ To address the "last mile" problem where custom scripts (Python, PowerShell, Bas
    - The engine serializes query rows to JSON lines, feeds them to the script's `stdin`, and reads the script's `stdout` JSON lines as a live SQL data stream.
 3. **Multi-Tenant Sandbox Containment**:
    - *Solo/Enterprise Profiles*: Spawns the process locally under the permissions of the host service runner.
-   - *SaaS Profile*: Spawns the process strictly within the tenant's container sandbox, leveraging OS limits (cgroups) and network namespaces to prevent remote execution leaks to the SaaS host.
+   - **SaaS Profile**: Spawns the process strictly within the tenant's container sandbox, leveraging OS limits (cgroups) and network namespaces to prevent remote execution leaks to the SaaS host.
+
+### Reporting — Paginated PDF Export Engine
+
+To support traditional enterprise reporting requirements (similar to SSRS or Crystal Reports), the visualization system needs a layout-aware PDF generation engine.
+
+#### Core Design & Parameters:
+1. **Physical Page-Breaking and Layout Rules**:
+   - Translate responsive 12-column grid CSS layouts (`STRUCTURE`) into fixed A4/Letter pages on PDF export.
+   - Introduce card properties like `PAGE_BREAK = BEFORE | AFTER` to control printable pagination boundaries.
+2. **Repeating Table Headers & Footers**:
+   - The PDF exporter must automatically repeat `TABLE` headers at the top of every physical page during multiline grid overflow.
+   - Support system placeholders in report footers (e.g. `Page X of Y`, runtime timestamp).
+
+### Reporting — Inline Row Detail Subreports
+
+To enable hierarchical and nested data visualization inside tables without forcing users to navigate to separate pages or visuals.
+
+#### Core Design & Parameters:
+1. **The `ROW_DETAIL` Mapping Clause**:
+   - Expand the `TABLE` mapping syntax to support a collapsible child container:
+     ```sql
+     CREATE VISUAL CustomerTable AS TABLE (
+       SOURCE = #customers,
+       MAPPINGS (
+         CustomerID, Name, Email,
+         ROW_DETAIL (
+           TARGET = OrderSubTable,
+           KEY = CustomerID
+         )
+       )
+     );
+     ```
+2. **Interactive Row Expansion**:
+   - The Table UI renders a toggle icon (`▸`) at the start of each row. Clicking it expands the row vertically to embed the `TARGET` visual, pre-filtered by the row's `KEY` context.
