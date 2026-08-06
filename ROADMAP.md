@@ -422,3 +422,20 @@ To transition the ETL-SQL platform from a logical Enterprise farm into a hardene
 3. **Hybrid SaaS Execution Model**:
    - The ETL-SQL script compilation, scheduling, and orchestrator coordinates inside the SaaS cloud container.
    - Queries targeting local files or private databases are dynamically proxied down to the local gateway daemon, allowing combined cloud and on-premises execution within a single script.
+
+### SaaS Multi-Tenancy — Containerized Data Plane (Compute Isolation)
+
+To secure CPU, memory, and disk IO resources in a shared multi-tenant SaaS fleet, the core script execution engine is decoupled from the web control plane via containerized sandboxing.
+
+#### Core Architecture & Components:
+1. **Execution Provider Abstraction (`IEngineExecutionProvider`)**:
+   - Introduces a pluggable query runner abstraction.
+   - *Solo / Team Profiles*: Defaults to the `InProcessEngineExecutionProvider`, running directly within the local process with zero dependencies.
+   - *SaaS / Enterprise Profiles*: Leverages the `ContainerizedEngineExecutionProvider` to execute queries inside isolated OS container tasks.
+
+2. **Pre-Warmed Keep-Alive Container Pools (Interactive Runs)**:
+   - To avoid the 1-3 second container startup latency ("cold start") when a developer runs a query in the Portal Web Editor, the Portal manages a pool of pre-warmed tenant-assigned containers.
+   - Interactive queries execute instantly. The assigned container automatically spins down after 15 minutes of inactivity to conserve host resources.
+
+3. **Ephemeral Job Containers (Scheduled Tasks)**:
+   - For scheduled nightly pipelines run by the Orchestrator, the system provisions a fresh, isolated container task, executes the script to completion, and immediately tears it down. This ensures complete state isolation and guarantees that a memory or disk-spill leak from one tenant cannot impact another.
