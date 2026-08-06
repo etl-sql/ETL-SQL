@@ -140,6 +140,18 @@ public class SessionStateManager : ISessionStateManager
             await store.SaveTempTablesAsync(savedTables);
             PurgeUnreferencedSpillChunks(sessionId, savedTables);
 
+            // Write job name file if running as an Orchestrator job
+            var sessionDir = GetSessionDirectory(sessionId);
+            var jobNameFile = Path.Combine(sessionDir, "job.name");
+            if (!string.IsNullOrEmpty(evaluator.JobName))
+            {
+                await File.WriteAllTextAsync(jobNameFile, evaluator.JobName);
+            }
+            else if (File.Exists(jobNameFile))
+            {
+                File.Delete(jobNameFile);
+            }
+
             _logger.Info("[SESSION] Session {SessionId} persisted successfully (SQLite + Meta-Chunks)", sessionId);
         }
         finally
@@ -318,7 +330,9 @@ public class SessionStateManager : ISessionStateManager
         {
             if (!Directory.Exists(SessionRoot)) return;
 
-            var cutoff = DateTime.Now.AddHours(-_ttlHours);
+            var interactiveCutoff = DateTime.Now.AddHours(-_ttlHours);
+            var retentionDays = int.TryParse(_configuration["Session:StaleSessionRetentionDays"], out var srd) ? srd : 7;
+            var orchestratorCutoff = DateTime.Now.AddDays(-retentionDays);
             var sessionDirs = Directory.GetDirectories(SessionRoot);
             int reapCount = 0;
 
@@ -326,6 +340,10 @@ public class SessionStateManager : ISessionStateManager
             {
                 var sessionId = Path.GetFileName(dir);
                 if (IsSessionInUse(sessionId)) continue;
+
+                // Determine if this is an Orchestrator job session by checking if 'job.name' file exists
+                bool isOrchestratorSession = File.Exists(Path.Combine(dir, "job.name"));
+                var cutoff = isOrchestratorSession ? orchestratorCutoff : interactiveCutoff;
 
                 var dbPath = GetSessionDbPath(sessionId);
                 if (File.Exists(dbPath))
@@ -366,7 +384,7 @@ public class SessionStateManager : ISessionStateManager
 
             if (reapCount > 0)
             {
-                _logger.Info("[SESSION] Reaped {Count} stale persistent sessions (TTL: {TTL}h).", reapCount, _ttlHours);
+                _logger.Info("[SESSION] Reaped {Count} stale persistent sessions (TTL: {TTL}h, Job Retention: {Retention}d).", reapCount, _ttlHours, retentionDays);
             }
         }
         catch (Exception ex)

@@ -59,6 +59,7 @@ public interface IQueryContext
     IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause);
     IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks);
     IAsyncEnumerable<DataTable> AlignColumns(IAsyncEnumerable<DataTable> batches, List<string> targetCols);
+    IAsyncEnumerable<DataTable> Buffer(IAsyncEnumerable<DataTable> batches);
     ForClause? GetForClause(Statement stmt);
     TableReference? GetIntoTable(Statement stmt);
 }

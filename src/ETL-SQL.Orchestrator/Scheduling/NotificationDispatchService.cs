@@ -51,9 +51,21 @@ public sealed class NotificationDispatchService(
             var title = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
                 ? $"Job succeeded: {job.Name}"
                 : $"Job failed: {job.Name}";
-            var text = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
-                ? $"Job '{job.Name}' completed successfully."
-                : $"Job '{job.Name}' failed. {SecretRedactor.Redact(result?.ErrorMessage)}".Trim();
+            
+            string text;
+            if (finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase))
+            {
+                text = $"Job '{job.Name}' completed successfully.";
+            }
+            else
+            {
+                var errorMsg = SecretRedactor.Redact(result?.ErrorMessage);
+                text = $"Job '{job.Name}' failed. {errorMsg}".Trim();
+                if (!string.IsNullOrEmpty(result?.SessionId))
+                {
+                    text += $" Resume ID: {result.SessionId}";
+                }
+            }
 
             await DispatchNotificationAsync(
                 new NotificationDispatchPayload(

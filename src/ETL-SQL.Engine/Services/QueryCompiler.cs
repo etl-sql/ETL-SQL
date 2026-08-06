@@ -38,6 +38,24 @@ public class QueryCompiler(Evaluator evaluator)
                 _currentParams[pName] = val;
                 return pName;
             }
+
+            var name = id.Name.ToUpperInvariant();
+            if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
+            {
+                if (name == "SYSDATE") return "GETDATE()";
+                if (name == "NOW") return "GETDATE()";
+            }
+            else if (d.Equals("POSTGRES", StringComparison.OrdinalIgnoreCase))
+            {
+                if (name == "SYSDATE") return "NOW()";
+                if (name == "GETDATE") return "NOW()";
+            }
+            else if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (name == "NOW") return "SYSDATE";
+                if (name == "GETDATE") return "SYSDATE";
+            }
+
             return id.Name;
         }
         if (e is LiteralExpression lit)
@@ -68,6 +86,72 @@ public class QueryCompiler(Evaluator evaluator)
         }
         if (e is FunctionCallExpression f)
         {
+            var funcName = f.FunctionName.ToUpperInvariant();
+
+            // Dialect-specific function rewriting
+            if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcName == "SYSDATE")
+                {
+                    return "GETDATE()";
+                }
+                if (funcName == "NOW")
+                {
+                    return "GETDATE()";
+                }
+                if (funcName == "TRUNC" && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"CAST({arg} AS DATE)";
+                }
+                if (funcName == "TRUNC" && f.Arguments.Count == 2)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    var part = f.Arguments[1] is LiteralExpression litVal && litVal.Value != null ? (litVal.Value.ToString() ?? "") : "";
+                    if (part.Equals("MM", StringComparison.OrdinalIgnoreCase) || part.Equals("MONTH", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return $"DATEADD(month, DATEDIFF(month, 0, {arg}), 0)";
+                    }
+                    if (part.Equals("YY", StringComparison.OrdinalIgnoreCase) || part.Equals("YEAR", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return $"DATEADD(year, DATEDIFF(year, 0, {arg}), 0)";
+                    }
+                }
+            }
+            else if (d.Equals("POSTGRES", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcName == "SYSDATE")
+                {
+                    return "NOW()";
+                }
+                if (funcName == "GETDATE")
+                {
+                    return "NOW()";
+                }
+                if (funcName == "TRUNC" && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"DATE_TRUNC('day', {arg})";
+                }
+                if (funcName == "TRUNC" && f.Arguments.Count == 2)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    var part = f.Arguments[1] is LiteralExpression litVal2 && litVal2.Value != null ? (litVal2.Value.ToString() ?? "day") : "day";
+                    return $"DATE_TRUNC('{part}', {arg})";
+                }
+            }
+            else if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (funcName == "NOW")
+                {
+                    return "SYSDATE";
+                }
+                if (funcName == "GETDATE")
+                {
+                    return "SYSDATE";
+                }
+            }
+
             if (f.FunctionName.Equals("CAST", StringComparison.OrdinalIgnoreCase) ||
                 f.FunctionName.Equals("TRY_CAST", StringComparison.OrdinalIgnoreCase))
             {

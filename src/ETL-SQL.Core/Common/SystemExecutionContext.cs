@@ -265,6 +265,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => throw new NotSupportedException();
     public IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause) => throw new NotSupportedException();
     public IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks) => chunks;
+    public IAsyncEnumerable<DataTable> Buffer(IAsyncEnumerable<DataTable> batches) => batches;
     public ForClause? GetForClause(Statement stmt) => null;
     public TableReference? GetIntoTable(Statement stmt) => null;
 

@@ -1543,6 +1543,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public IAsyncEnumerable<DataTable> AlignColumns(IAsyncEnumerable<DataTable> batches, List<string> targetCols)
         => _batchPipelineHelper.AlignColumns(batches, targetCols);
 
+    public IAsyncEnumerable<DataTable> Buffer(IAsyncEnumerable<DataTable> batches)
+        => _batchPipelineHelper.Buffer(batches, CancellationToken);
+
     public ForClause? GetForClause(Statement stmt)
     {
         if (stmt is SelectStatement sel) return sel.ForClause;

@@ -103,4 +103,46 @@ internal sealed class BatchPipelineHelper
         }
         return newRow;
     }
+
+    /// <summary>
+    /// Decouples reading from writing using an asynchronous bounded channel.
+    /// Runs the source enumeration in a background thread and yields batches.
+    /// </summary>
+    public async IAsyncEnumerable<DataTable> Buffer(
+        IAsyncEnumerable<DataTable> source,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        // Buffer up to 4 batches (e.g. 40,000 rows by default) to allow background reading
+        var channel = System.Threading.Channels.Channel.CreateBounded<DataTable>(
+            new System.Threading.Channels.BoundedChannelOptions(4)
+            {
+                SingleWriter = true,
+                SingleReader = true,
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
+            });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var batch in source.WithCancellation(ct))
+                {
+                    await channel.Writer.WriteAsync(batch, ct);
+                }
+                channel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.Complete(ex);
+            }
+        }, ct);
+
+        while (await channel.Reader.WaitToReadAsync(ct))
+        {
+            while (channel.Reader.TryRead(out var batch))
+            {
+                yield return batch;
+            }
+        }
+    }
 }

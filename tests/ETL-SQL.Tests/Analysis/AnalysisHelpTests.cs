@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Analysis
             await evaluator.Evaluate(Parse("HELP CONFIG;"));
             output = string.Join("\n", evaluator.Messages);
             Assert.Contains("HELP: CONFIG", output);
-            Assert.Contains("inspect the configuration options", output);
+            Assert.Contains("redacted configuration options", output);
             Assert.Contains("redacted", output);
 
             evaluator.Messages.Clear();

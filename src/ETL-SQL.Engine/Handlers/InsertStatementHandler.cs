@@ -240,7 +240,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
                     context.SecurityService.ValidateWriteAccess(destination.Path);
                 }
 
-                await destination.WriteBatches(CountBatches(boundBatches), append: true);
+                await destination.WriteBatches(context.Buffer(CountBatches(boundBatches)), append: true);
             }
 
             if (context.IsWhatIf)

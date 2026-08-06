@@ -217,19 +217,18 @@ GROUP BY SalesMonth;
 -- 2. Define Visuals
 CREATE VISUAL RegionalSlicer AS SLICER (
     SOURCE = #regions,
-    COLUMN = RegionName,
+    MAPPINGS (VALUE = RegionName),
     DEFAULT = 'All',
-    LABEL = 'Select Region'
-)
-ACTIONS (
-    ON_CHANGE = SET_PARAMETER(@selectedRegion, RegionName)
+    TITLE = 'Select Region',
+    ACTIONS (
+        ON_CHANGE = SET_PARAMETER(@selectedRegion, RegionName)
+    )
 );
 
 CREATE VISUAL RevenueChart AS LINE (
     SOURCE = #revenue_data,
-    X = SalesMonth,
-    Y = TotalRevenue,
-    LABEL = 'Revenue Trend ($)'
+    MAPPINGS (X = SalesMonth, Y = TotalRevenue),
+    TITLE = 'Revenue Trend ($)'
 )
 STYLE (
     COLOR = '#2563eb'
@@ -237,9 +236,8 @@ STYLE (
 
 CREATE VISUAL OrdersChart AS BAR (
     SOURCE = #revenue_data,
-    X = SalesMonth,
-    Y = TotalOrders,
-    LABEL = 'Monthly Order Count'
+    MAPPINGS (X = SalesMonth, Y = TotalOrders),
+    TITLE = 'Monthly Order Count'
 )
 STYLE (
     COLOR = '#10b981'
@@ -249,9 +247,9 @@ STYLE (
 SET REPORT TITLE = 'Executive Sales Overview';
 SET REPORT DESCRIPTION = 'Real-time sales performance metrics filtered by region.';
 
-CREATE PAGE SalesOverview AS (
+CREATE PAGE SalesOverview AS DASHBOARD (
     STRUCTURE = 'S S / A B',
-    MAP = (
+    MAP (
         'S' = RegionalSlicer,
         'A' = RevenueChart,
         'B' = OrdersChart
