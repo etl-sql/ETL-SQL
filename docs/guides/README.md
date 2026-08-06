@@ -7,6 +7,7 @@
 | [Catalog Search & Discovery Guide](catalog-search.md) | The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows non-technical business consumers and developers to discover report... |
 | [Validating Data Quality](data-quality.md) | Schema checks tell you the *shape* of your data is right. They say nothing about whether the values |
 | [Data Stewardship and Impact Analysis](data-stewardship-impact.md) | This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing das... |
+| [ETL-SQL Pipeline & Report-SQL Best Practices Guide](etl-sql-best-practices.md) | Recommended patterns, security rules, and boilerplate templates for script authors and dashboard designers. |
 | [ETL-SQL FAQ & Troubleshooting Guide](faq.md) | Common questions, gotchas, and their solutions. If you're stuck, start here. |
 | [ETL-SQL User Manual: Thinking in Pipelines](getting-started.md) | Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" to "Multi-Context Data Flow." It is a **narrative onboarding** — the... |
 | [Logging and Performance Tuning](logging-and-performance.md) | Where ETL-SQL writes its logs, how to turn up detail when something is wrong, and the levers that |

@@ -1479,6 +1479,12 @@ this release).
       **groups**, not Identity roles, and Admins bypass folder ACLs entirely
       (`FolderPermissionService`), so an "Administrator" folder ACL would have been a no-op.
 
+## Engine & Orchestrator bugs
+
+- [ ] **Session TTL Conflict**: Inactive sessions from interactive development (VS Code, TUI, Workstation Editor) should be reaped in 24 hours, but persistent sessions for Orchestrator jobs must remain for 7 days (governed by `Session:StaleSessionRetentionDays`). Currently, the engine's startup sweep (`SessionStateManager.cs`) reaps all sessions older than 24 hours (governed by `Session:PersistentSessionTTLHours`), overriding the 7-day retention period for Orchestrator jobs. Fix the cleanup sweep to identify and preserve Orchestrator session state for the full 7-day period.
+- [ ] **Missing Resume ID in Alerts**: When an Orchestrator job fails, the Email (SMTP) and Teams (Webhook) alerts sent by `NotificationDispatchService.cs` contain the error message but miss the resume identifier (`SessionId`). Update `DispatchJobNotificationsAsync` to format the `SessionId` (available on the execution result) into the alert body/text, giving operators the exact ID needed to resume the run.
+
+
 ## Portal bugs
 - [x] Why the casing differences in documents?  Also All filter does not look like it has all documents.  Seems like some are missing.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-04 134045.png"
 - [x] Studio has a great front page but once you click into code editor or the report visual designer the main toolbar goes away and you can't navigate out.  Can these two pages fit better within the overall page so you have the exiting navigation buttons.
