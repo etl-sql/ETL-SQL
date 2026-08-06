@@ -196,9 +196,12 @@ INSERT INTO dest_db.dbo.Customers SELECT * FROM #stage;
 
 Why stage in `#temp` tables?
 
-1. **Decoupling** — stage data from a slow legacy source before joining it with a modern cloud source.
-2. **Safety** — validate and clean before executing destructive `MERGE` or `DELETE` operations.
-3. **Engine-only functions** — apply `REGEX`, `HASHBYTES`, window functions, or `GETDATE()` to data from a source that doesn't natively support them.
+1. **Decoupling Connection Hold Time** — Close your connection to a busy source database immediately after the quick extraction step, then perform your downstream load/merge logic independently.
+2. **Checkpoint & Resume** — Support recovery by staging data at label boundaries, enabling you to resume a failed load without re-extracting from the source.
+3. **Multi-Pass Updates** — Perform multiple sequential operations (such as indexing, secondary updates, or complex multi-statement checks) on the local workspace before inserting.
+
+> [!NOTE]
+> **Staged vs. Direct Streaming:** You do **not** need a `#temp` table to apply engine-only functions (like `REGEX`, `HASHBYTES`, or date functions) or enforce data-quality rules (`@expect`). You can stream data directly from source to target in a single statement (e.g. `INSERT INTO dest SELECT HASHBYTES('SHA2_256', email) FROM src`), which runs in a single high-performance pass without local storage overhead. Choose `#temp` when you need connection isolation, recovery checkpoints, or multi-pass staging.
 
 You can define a `#temp` table explicitly (`CREATE TABLE #Summary (...)`), build it with `SELECT ... INTO`, and reshape it with `ALTER TABLE`; it is auto-dropped at session end. Full DDL is in the [Statement Reference](../reference/statements/README.md).
 
