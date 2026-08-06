@@ -474,6 +474,9 @@ To secure the portability guarantee across diverse runtime environments and enab
 3. **Change-Control Governance (RFC Process)**:
    - Introduce a structured RFC (Request for Comments) process for language syntax extensions.
    - Proposals for new keywords, functions, or connection options must demonstrate cross-dialect compatibility, translation mappings for remote SQL pushdown, and EBNF syntax updates before approval, protecting the language core from syntax bloat.
+4. **EBNF-to-Grammar-Tree Verification Tests**:
+   - Create an automated parser verification test that parses the static `grammar.ebnf` specification file.
+   - Run a comparison against the C# `GrammarStateEngine` to assert that every valid token combination in the EBNF specification maps to a valid state path in the C# execution grammar tree, preventing implementation drift.
 
 ### Connectors — Transactional File Staging
 
