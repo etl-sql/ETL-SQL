@@ -142,6 +142,10 @@ public class QueryCompiler(Evaluator evaluator)
             }
             else if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
             {
+                if (funcName == "SYSDATE")
+                {
+                    return "SYSDATE";
+                }
                 if (funcName == "NOW")
                 {
                     return "SYSDATE";
