@@ -1541,3 +1541,11 @@ this release).
 - [ ] **Portal ETL IDE Data Preview & Schema Browser**: Add support for interactive schema inspection and row previews of intermediate `#temp` tables and source connections in the Portal Web Editor, allowing developers to debug ETL scripts in real time.
 - [ ] **SaaS Multi-Tenant Identity (Multi-IdP)**: Support registration of tenant-specific OIDC Identity Providers (e.g., Okta, Azure AD, Ping Identity) dynamically resolved by tenant domain or issuer claims, rather than using a single platform-wide OIDC configuration.
 - [ ] **Usage Metering & Billing Collector**: Instrument the engine's telemetry manager to log row-transit, data size, connector type, and execution CPU usage per tenant id, writing these to a durable billing log for billing ingestion.
+
+## SaaS Multi-Tenancy & Portal ETL IDE (Round 2 Gaps)
+
+- [ ] **Tenant-Aware Fair-Share Scheduling**: Implement tenant-partitioned execution queues or weighted round-robin scheduling in the Orchestrator to prevent a single tenant's massive job load from causing head-of-line blocking or starvation for other tenants.
+- [ ] **Internal Network Egress Fencing**: Secure network connections established by tenant scripts by executing remote connector queries in isolated sandbox networks (e.g. secure VPC boundaries, dynamic proxy routing) to block port scans or connections to the internal SaaS hosting subnet.
+- [ ] **Tenant-Isolated Lineage Graphs**: Partition the metadata search and lineage graph indexing engine to ensure that lineage tracking data, table names, and database schemas cannot be leaked or queried across tenant boundary boundaries.
+- [ ] **Zero-Loss Tenant Migration Utility**: Build an administrative command-line utility to export and import a tenant's complete configuration, active jobs, reports, history, and workspace files as a single encrypted bundle for easy onboarding or migration to on-premises deployments.
+- [ ] **Portal Script Concurrent Editing Locks**: Implement collaborative file mutexes and session-lease locking in the Portal script editor to warn other workspace developers when a script is actively being edited, preventing silent code overwrites on save.
