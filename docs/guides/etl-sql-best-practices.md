@@ -19,9 +19,16 @@ ETL-SQL is an **orchestration conductor**, not a traditional database. Data flow
      Database Source (e.g. Postgres)   Target File (e.g. CSV/Excel)
 ```
 
-### The Staged Ingestion Rule
-* **Never write directly from one remote connection to another.** 
-* **Always stage data in an engine-side `#temp` table first.** This is where lineage tagging, regex sanitization, `HASHBYTES` masking, and data-quality rules occur before the data is committed.
+### Ingestion Patterns: Staged vs. Direct Streaming
+
+ETL-SQL supports two primary ingestion patterns. Selecting the correct pattern depends on your dataset size, connection constraints, and recovery requirements.
+
+| Ingestion Pattern | How it Works | Pros | Cons | Best Used When... |
+| :--- | :--- | :--- | :--- | :--- |
+| **Staged Ingestion** (Scenario A) | Extract to `#temp` first, then insert/merge into destination in a separate statement. | • Isolates the source system (minimized connection hold time).<br>• Fully supports checkpoint-resume recovery.<br>• Allows multi-pass updates and indexes on staged data. | • I/O double-tax (data is written locally, then read back).<br>• Higher disk space usage. | • Source database is busy and connections must be closed quickly.<br>• Loading takes a long time, and you want rollback/resume capabilities. |
+| **Direct Streaming** (Scenario B) | Stream directly from source to destination in a single statement (e.g., `INSERT INTO dest SELECT FROM src`). | • High performance (zero local write/read I/O overhead).<br>• Low local disk/memory footprint. | • Both source and target connections must remain open concurrently.<br>• No checkpoint-resume possible; failures require full restarts. | • Working with very large datasets where I/O double-tax is prohibitive.<br>• Source and target databases can handle prolonged concurrent connections. |
+
+*Note: Lineage tracking, data-quality rules (`@expect`), and inline transformations (like regex or `HASHBYTES`) are fully supported in **both** patterns. The engine processes them on each 10k batch as it streams.*
 
 ---
 
