@@ -439,3 +439,23 @@ To secure CPU, memory, and disk IO resources in a shared multi-tenant SaaS fleet
 
 3. **Ephemeral Job Containers (Scheduled Tasks)**:
    - For scheduled nightly pipelines run by the Orchestrator, the system provisions a fresh, isolated container task, executes the script to completion, and immediately tears it down. This ensures complete state isolation and guarantees that a memory or disk-spill leak from one tenant cannot impact another.
+
+### SaaS Multi-Tenancy — Tenant Portability & Migration (Export/Import)
+
+To guarantee customer agency, facilitate seamless onboarding, and eliminate SaaS vendor lock-in, the platform includes a zero-loss tenant migration utility.
+
+#### Core Architecture & Components:
+1. **The Portal Tenant Packaging Engine**:
+   - An administrative service that gathers all tenant-owned metadata, definitions, and assets, including:
+     - All `.etlsql` and `.rptsql` scripts.
+     - Scheduled job definitions, frequencies, and dependency rules.
+     - Connector schemas, connection options, and parameters (excluding raw secrets or passwords, which are encrypted or parameterized).
+     - Execution lineage data, history graphs, and quarantine schema definitions.
+2. **`etl-sql admin tenant export` / `import`**:
+   - A command-line utility command that compresses the packaged tenant assets into a single encrypted, signed zip bundle.
+   - This bundle can be imported directly into:
+     - Another tenant workspace in a different SaaS cluster.
+     - A private corporate on-premises **Enterprise** environment.
+     - A developer's local workstation running in **Solo** mode.
+3. **Data Upgrades during Migration**:
+   - The import processor verifies the version manifest of the import file and automatically transforms the metadata database schemas if importing into a newer version of the platform.
