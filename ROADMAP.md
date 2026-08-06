@@ -474,3 +474,30 @@ To secure the portability guarantee across diverse runtime environments and enab
 3. **Change-Control Governance (RFC Process)**:
    - Introduce a structured RFC (Request for Comments) process for language syntax extensions.
    - Proposals for new keywords, functions, or connection options must demonstrate cross-dialect compatibility, translation mappings for remote SQL pushdown, and EBNF syntax updates before approval, protecting the language core from syntax bloat.
+
+### Connectors — Transactional File Staging
+
+To prevent downstream systems from consuming half-written or dirty data on execution failure, file-based and network transfer connectors (e.g. `FLATFILE`, `SFTP`) will support native transactional staging boundaries.
+
+#### Core Design & Parameters:
+1. **`TRANSACTIONAL=TRUE` Configuration Option**:
+   - Enable transactional staging on connection creation.
+   - The engine writes target data blocks to temporary `.tmp` files (or in a hidden `.staging/` directory at the destination) during the active execution stream.
+2. **Atomic Commits & Automatic Cleanups**:
+   - If the script execution completes successfully, the engine issues a fast atomic rename (e.g. `file.csv.tmp` -> `file.csv`) to expose the complete file.
+   - If the script fails during any phase (e.g., in a `load:` block), the engine automatically cleans up and deletes the staged files, leaving the production directory in its original clean state.
+
+### Connectors — External Command Pipe (CMD Connector)
+
+To address the "last mile" problem where custom scripts (Python, PowerShell, Bash, binary executables) are required for legacy data formats or proprietary processing, we introduce the `CMD` connector.
+
+#### Core Design & Parameters:
+1. **The `CMD` Connection Schema**:
+   - Create an external handler: `CREATE CONNECTION py_cleaner AS CMD(EXEC='python sanitize.py', FORMAT='JSON')`.
+   - The process communicates via streaming standard inputs (`stdin`) and standard outputs (`stdout`).
+2. **Streaming Execution Flow**:
+   - Developers can pipe tabular data directly into the external process: `SELECT * FROM py_cleaner.Execute(SELECT raw_payload FROM #data)`.
+   - The engine serializes query rows to JSON lines, feeds them to the script's `stdin`, and reads the script's `stdout` JSON lines as a live SQL data stream.
+3. **Multi-Tenant Sandbox Containment**:
+   - *Solo/Enterprise Profiles*: Spawns the process locally under the permissions of the host service runner.
+   - *SaaS Profile*: Spawns the process strictly within the tenant's container sandbox, leveraging OS limits (cgroups) and network namespaces to prevent remote execution leaks to the SaaS host.
