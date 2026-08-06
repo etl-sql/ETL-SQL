@@ -1532,3 +1532,12 @@ this release).
       the report manifest by `ManifestBuilder` as `subquerySpillCount`, where it is therefore always
       `0`. Either wire it where subquery spilling happens or remove it; a manifest field that always
       reads zero is worse than an absent one, because it looks like an answer.
+
+## SaaS Multi-Tenancy & Portal ETL IDE (Round 1 Gaps)
+
+- [ ] **Tenant-Scoped Encryption Keys (BYOK)**: Refactor `DatasetAtRestKeyValidator.cs` and credential decryption in the engine to support tenant-isolated encryption keys backed by external KMS provider secrets, replacing the single global master key.
+- [ ] **Chrooted Virtual Filesystem Isolation**: Build a secure path abstraction layer for all file/directory connectors and operations (e.g. `FLATFILE`, `DIRECTORY`, `SEND FILE`) to enforce tenant-scoped root directories (chroot) and prevent directory traversal or access outside the tenant container.
+- [ ] **Noisy-Neighbor CPU/Memory Containment**: Implement CPU/memory/IO limits per tenant session, leveraging cgroups or containerized execution runners for ad-hoc and scheduled query execution, preventing a single query from starving shared Portal or Orchestrator nodes.
+- [ ] **Portal ETL IDE Data Preview & Schema Browser**: Add support for interactive schema inspection and row previews of intermediate `#temp` tables and source connections in the Portal Web Editor, allowing developers to debug ETL scripts in real time.
+- [ ] **SaaS Multi-Tenant Identity (Multi-IdP)**: Support registration of tenant-specific OIDC Identity Providers (e.g., Okta, Azure AD, Ping Identity) dynamically resolved by tenant domain or issuer claims, rather than using a single platform-wide OIDC configuration.
+- [ ] **Usage Metering & Billing Collector**: Instrument the engine's telemetry manager to log row-transit, data size, connector type, and execution CPU usage per tenant id, writing these to a durable billing log for billing ingestion.
