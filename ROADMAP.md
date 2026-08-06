@@ -403,3 +403,22 @@ each affects day-to-day use.
 4. **Every preview spins a full engine.** Each request lexes, parses, lints, and evaluates through a
    new `ExecutionSession`. Acceptable at current volume; worth revisiting before any endpoint like
    this becomes a polled or dashboard-refreshed surface.
+
+### SaaS Multi-Tenancy — Secure Outbound Data Gateway
+
+To transition the ETL-SQL platform from a logical Enterprise farm into a hardened, multi-tenant SaaS service, we must introduce secure, outbound-only connectivity for on-premises client networks. This eliminates the need for complex, slow-to-configure site-to-site VPNs or insecure inbound firewall exceptions.
+
+#### Core Architecture & Components:
+1. **The Outbound Gateway Daemon (`etl-sql-gateway.exe`)**:
+   - A dedicated, lightweight Windows Service and Linux systemd daemon that installs inside the client's private network.
+   - It maintains a persistent outbound-only WebSocket or gRPC tunnel over standard HTTPS (Port 443) back to the SaaS Orchestrator.
+   - It performs no local script evaluation or compilation (highly restricted security footprint), acting purely as a query and file-stream conduit.
+
+2. **The `ROUTE='GATEWAY:name'` Parameter**:
+   - Introduces the `ROUTE` parameter to all connection definitions (e.g. `FLATFILE`, `MSSQL`, `POSTGRES`).
+   - *Local Dev (Solo Profile)*: The local engine detects the gateway route but bypasses it to resolve UNC paths and database addresses natively, ensuring zero-friction local development.
+   - *SaaS Profile (Cloud Container)*: The engine query planner intercepts the connection, matches the gateway name to the active tenant's open tunnel, and streams all read/write database queries or file blocks through the secure WebSocket conduit.
+
+3. **Hybrid SaaS Execution Model**:
+   - The ETL-SQL script compilation, scheduling, and orchestrator coordinates inside the SaaS cloud container.
+   - Queries targeting local files or private databases are dynamically proxied down to the local gateway daemon, allowing combined cloud and on-premises execution within a single script.
