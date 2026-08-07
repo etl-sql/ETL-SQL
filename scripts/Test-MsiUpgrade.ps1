@@ -194,7 +194,7 @@ try {
         previousVersion = $previousVersionText
         currentMsi = $currentPath
         currentVersion = $currentVersionText
-        upgradeCode = $currentUpgradeCode
+        upgradeCode = $contract.UpgradeCode
         assertions = @(
             'one previous uninstall entry', 'sentinel written to InstallLocation',
             'one current uninstall entry', 'sentinel preserved', 'installed CLI reports current version',

@@ -62,7 +62,13 @@ try {
             # Map URL path to a file under the repo root, blocking traversal.
             $rel = [System.Uri]::UnescapeDataString($req.Url.AbsolutePath.TrimStart('/'))
             if ([string]::IsNullOrWhiteSpace($rel)) { $rel = 'tools/ui-sandbox/index.html' }
-            $full = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $rel))
+            
+            # Map '/maps/*' requests to the shared maps directory in ReportRuntime
+            if ($rel.StartsWith('maps/', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $full = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot ("src/ETL-SQL.ReportRuntime/Resources/Shared/" + $rel)))
+            } else {
+                $full = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $rel))
+            }
 
             if (-not $full.StartsWith($RepoRoot, [System.StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path $full -PathType Leaf)) {
                 $res.StatusCode = 404

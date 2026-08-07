@@ -48,6 +48,17 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
             ServeUnknownFileTypes = true,
         });
 
+        var mapsPath = Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "maps");
+        if (Directory.Exists(mapsPath))
+        {
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(mapsPath),
+                RequestPath = "/maps",
+                ServeUnknownFileTypes = true,
+            });
+        }
+
         host = app;
         await app.StartAsync();
         baseUrl = app.Urls.First().TrimEnd('/');
