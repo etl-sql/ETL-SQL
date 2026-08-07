@@ -530,7 +530,7 @@ END CATCH
 
             var jobName1 = "OutageJob";
             var badScript = @"
-CREATE CONNECTION mail_conn AS SMTP(HOST = 'localhost', PORT = 9999, USE_SSL = FALSE);
+CREATE CONNECTION mail_conn AS SMTP(HOST = 'localhost', PORT = 9999, USE_SSL = FALSE, TIMEOUT_SECONDS = 2);
 SELECT 'recipient@example.com' AS [To], 'sender@example.com' AS [From], 'Scheduler Notification' AS [Subject], 'Job succeeded' AS [Body]
 INTO mail_conn.Email;
 ";

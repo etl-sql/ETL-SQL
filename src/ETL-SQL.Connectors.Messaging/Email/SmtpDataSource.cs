@@ -164,6 +164,9 @@ namespace ETL_SQL.Connectors.Email
             }
 
             using var client = new SmtpClient();
+            int timeoutSeconds = _options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var tVal) ? tVal : 10;
+            client.Timeout = timeoutSeconds * 1000;
+
             string host = _options.TryGetValue("HOST", out var h) ? h : "localhost";
             int port = _options.TryGetValue("PORT", out var p) && int.TryParse(p, out var pt) ? pt : 587; // Security: Default to 587 (STARTTLS) instead of 25 (plaintext)
             bool useSsl = _options.TryGetValue("USE_SSL", out var ssl) && bool.TryParse(ssl, out var s) && s;

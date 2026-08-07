@@ -30,7 +30,8 @@ namespace ETL_SQL.Connectors.Email
             { "USERNAME", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
             { "USE_SSL", new[] { "TRUE", "FALSE" } },
-            { "DEFAULT_FROM", Array.Empty<string>() }
+            { "DEFAULT_FROM", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new()
