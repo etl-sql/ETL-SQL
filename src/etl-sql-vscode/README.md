@@ -250,7 +250,7 @@ After a script runs, lineage is queryable with `LINEAGE` and tag metadata is que
 
 Vendor file specs usually arrive as PDFs, spreadsheets, Word docs, or sample files. The extension can turn those specs into an ETL-SQL starter pipeline with schema definitions, validation gates, quarantine scaffolding, and governance tags.
 
-Configure `etlsql.ai.*`, then right-click a PDF, Excel, CSV, Word, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. The same workflow is available headlessly through the `gen-script` CLI flow. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Spec_Driven_Development.md) for provider setup, supported file types, and the JSON contract format.
+Configure `etlsql.ai.*`, then right-click a PDF, Excel, CSV, Word, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. The same workflow is available headlessly through the `gen-script` CLI flow. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) for provider setup, supported file types, and the JSON contract format.
 
 ---
 
@@ -344,11 +344,11 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 
 | Resource | Description |
 | :--- | :--- |
-| [User Manual](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/User_Manual.md) | Core paradigms, connections, variables, control flow, and debugging |
+| [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
 | [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl-recipes.md) | 20 production-grade, copy-pasteable ETL recipes |
 | [Report-SQL Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/report-sql.md) | Visuals, filters, dashboards, drill-downs, and hosting |
 | [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
-| [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Spec_Driven_Development.md) | Full guide to the AI spec extraction + `gen-script` workflow |
+| [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) | Full guide to the AI spec extraction + `gen-script` workflow |
 | [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/administration.md) | Every connector, its options, and authentication patterns |
 | [Grammar Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Complete language syntax reference |
 | [Notebook Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense |

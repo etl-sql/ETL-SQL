@@ -55,10 +55,10 @@ export class WelcomeView {
                         await this._createNewFile('.etlnb');
                         return;
                     case 'openDocs':
-                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../Docs/User_Manual.md'));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../docs/guides/getting-started.md'));
                         return;
                     case 'openCookbook':
-                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../Docs/Cookbook.md'));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../docs/cookbooks/etl-recipes.md'));
                         return;
                     case 'openSamples':
                         vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../samples'));
