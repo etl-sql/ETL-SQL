@@ -93,6 +93,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
             {
                 var before = session.PageErrors.Count;
                 var consoleBefore = session.ConsoleErrors.Count;
+                var failedReqsBefore = session.FailedRequests.Count;
 
                 // Clicking through the shell rather than calling mount() directly: the shell's
                 // dispose/re-mount path is part of what breaks, and a story that leaks between
@@ -115,7 +116,10 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
                 var logged = session.ConsoleErrors.Skip(consoleBefore).ToList();
                 if (logged.Count > 0)
-                    failures.Add($"{label} logged: {string.Join(" | ", logged)}");
+                {
+                    var failedReqs = session.FailedRequests.Skip(failedReqsBefore).ToList();
+                    failures.Add($"{label} logged: {string.Join(" | ", logged)}" + (failedReqs.Count > 0 ? $" (Failed requests: {string.Join(", ", failedReqs)})" : ""));
+                }
 
                 if (await page.Locator("#stage *").CountAsync() == 0)
                     failures.Add($"{label} mounted nothing into the stage.");

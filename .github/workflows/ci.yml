@@ -237,6 +237,11 @@ jobs:
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
+      - name: Install LDAP client library (Linux only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libldap-2.5-0
+
       - name: Run Docker Integration Tests
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild

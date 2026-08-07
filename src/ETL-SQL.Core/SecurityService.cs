@@ -88,10 +88,10 @@ public partial class SecurityService
 
             // Fallback for Linux/macOS/Docker where the process name is often "dotnet"
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            return assemblies.Any(a => 
+            return assemblies.Any(a =>
                 a.FullName != null && (
-                    a.FullName.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) || 
-                    a.FullName.StartsWith("Microsoft.TestPlatform", StringComparison.OrdinalIgnoreCase) || 
+                    a.FullName.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) ||
+                    a.FullName.StartsWith("Microsoft.TestPlatform", StringComparison.OrdinalIgnoreCase) ||
                     a.FullName.StartsWith("Microsoft.VisualStudio.TestPlatform", StringComparison.OrdinalIgnoreCase)
                 ));
         }
