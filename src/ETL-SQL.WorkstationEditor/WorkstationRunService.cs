@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Orchestrator.Execution;
 
@@ -94,6 +95,9 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
         // the same redaction as error messages before reaching the browser — the workspace
         // security model requires that no resolved secret leaves the process in a response.
         // Capped because GetFullLineage() is unbounded while the result grid is capped at RowLimit.
+        var connections = session.LastEvaluator?.Connections
+            ?? new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
+
         var lineageList = session.LastEvaluator?.LineageTracker?.GetFullLineage()?
             .Take(MaxLineageEntries)
             .Select(e => new LineageEntryDto(
@@ -103,7 +107,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 e.SourceColumns != null ? string.Join(", ", e.SourceColumns) : string.Empty,
                 Redact(e.Description),
                 e.TransformationKind.ToString(),
-                Redact(e.TransformationExpression)))
+                Redact(e.TransformationExpression),
+                BuildSourceLabels(e.SourceTables, connections)))
             .ToList();
 
         AppendHistory(historyUri, script, success: true, result.ExecutionTimeMs, rowCount);
@@ -124,6 +129,42 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
 
     private static string? Redact(string? value) =>
         string.IsNullOrEmpty(value) ? value : SecretRedactor.Redact(value);
+
+    /// <summary>
+    /// Builds a list of human-readable physical source identifiers, one per source table name.
+    /// For FLATFILE sources this is "CSV: &lt;path&gt;"; for SQL sources it is
+    /// "&lt;TYPE&gt;: &lt;database/path&gt;". Connection strings, passwords, and ENC: values
+    /// are never included — only the connector type and the credential-free Path property.
+    /// Returns null when no connections can be resolved.
+    /// </summary>
+    private static IReadOnlyList<string>? BuildSourceLabels(
+        IReadOnlyList<string>? sourceTables,
+        IDictionary<string, IDataSource> connections)
+    {
+        if (sourceTables == null || sourceTables.Count == 0) return null;
+
+        var labels = new List<string>(sourceTables.Count);
+        bool anyResolved = false;
+        foreach (var src in sourceTables)
+        {
+            // Source table names may be qualified: "pats.FILE" -> connection name is "pats"
+            var connAlias = src.Split('.')[0];
+            if (connections.TryGetValue(connAlias, out var ds))
+            {
+                anyResolved = true;
+                var type = ds.ConnectorType?.ToUpperInvariant() ?? "SOURCE";
+                var path = ds.Path;
+                labels.Add(string.IsNullOrEmpty(path)
+                    ? type
+                    : $"{type}: {path}");
+            }
+            else
+            {
+                labels.Add(src); // keep the alias as fallback
+            }
+        }
+        return anyResolved ? labels : null;
+    }
 
     /// <summary>
     /// Appends a one-line JSON record of the run to a local history file.
@@ -230,7 +271,13 @@ public sealed record LineageEntryDto(
     string SourceColumns,
     string? Description = null,
     string? TransformationKind = null,
-    string? TransformationExpression = null);
+    string? TransformationExpression = null,
+    /// <summary>
+    /// Human-readable physical identifiers for each source table, e.g.
+    /// "FLATFILE: C:\tmp\patients.csv" or "MSSQL: hospital". Never contains
+    /// raw connection strings or ENC: values. Null when none could be resolved.
+    /// </summary>
+    IReadOnlyList<string>? SourceLabels = null);
 
 public sealed record RunResponse(
     bool Success,

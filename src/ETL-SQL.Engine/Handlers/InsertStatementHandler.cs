@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -67,6 +68,13 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
                 // Merge existing metadata tags from the SelectColumn (e.g. from /* @d: ... */)
                 foreach (var m in sourceCol.Metadata) inherited[m.Key] = m.Value;
 
+                // Classify the expression so the lineage hover shows the transformation
+                // kind (Cast, FunctionCall, etc.) and expression text — matching what the
+                // static LineageAnalyzer records for SELECT INTO.
+                var kind = LineageAnalyzer.ClassifyExpression(sourceCol.Expression);
+                var exprSql = kind != TransformationKind.PassThrough ? sourceCol.Expression.ToSql() : null;
+                var fns = LineageAnalyzer.CollectFunctions(sourceCol.Expression);
+
                 context.LineageTracker.Record(
                     connName,
                     resolvedSources,
@@ -76,7 +84,10 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
                     metadata: inherited,
                     derivedFromDescriptions: derived ?? sourceCol.DerivedFromDescriptions,
                     line: stmt.Line,
-                    column: stmt.Column);
+                    column: stmt.Column,
+                    transformationKind: kind,
+                    transformationExpression: exprSql,
+                    functionsApplied: fns.Count > 0 ? fns : null);
             }
         }
         else
