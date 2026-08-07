@@ -420,8 +420,11 @@ public class LanguageService : ILanguageService
         {
             if (string.IsNullOrEmpty(context.Prefix) || context.Prefix == "*")
             {
+                var distinctTables = context.Aliases.Values.Distinct().ToList();
+                var tableCount = distinctTables.Count;
                 var allCols = new List<string>();
-                foreach (var info in context.Aliases.Values.Distinct())
+
+                foreach (var info in distinctTables)
                 {
                     var cols = await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri);
                     string? prefixAlias = context.Prefix == "*" ? "" : null;
@@ -431,22 +434,22 @@ public class LanguageService : ILanguageService
                         string prefix = "";
                         if (string.IsNullOrEmpty(prefixAlias))
                         {
-                            // If multiple tables are involved in the statement, we must use prefixes to avoid ambiguity
-                            if (context.Aliases.Count > 1)
+                            if (info.HasExplicitAlias)
                             {
-                                if (info.HasExplicitAlias)
+                                prefix = info.Alias!;
+                            }
+                            else if (tableCount > 1)
+                            {
+                                var lastPart = info.TableName.Split('.').Last();
+                                if (lastPart.Equals("FILE", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(info.ConnectionName))
                                 {
-                                    prefix = info.Alias!;
+                                    prefix = info.ConnectionName;
                                 }
                                 else
                                 {
-                                    // Use base table name (strip connection if present)
-                                    prefix = info.BaseTableName ?? info.TableName;
+                                    prefix = lastPart;
                                 }
                             }
-                            // Single table: use full qualified name if table is a connection-qualified reference (e.g. m.Users → m.Users.col)
-                            else if (info.ConnectionName != null)
-                                prefix = info.TableName;
                         }
                         else
                         {

@@ -49,6 +49,11 @@ namespace ETL_SQL.Connectors.MockDb
                     Col("PreciseTime", "DATETIME2"),
                     Col("LastLoginOffset", "DATETIMEOFFSET")
                 ],
+                ["FILE"] =
+                [
+                    Col("patient_id", "INT", primaryKey: true),
+                    Col("name", "VARCHAR")
+                ],
                 ["Products"] =
                 [
                     Col("ProductID", "INT", primaryKey: true),

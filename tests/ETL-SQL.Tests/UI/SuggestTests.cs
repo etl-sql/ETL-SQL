@@ -254,6 +254,57 @@ namespace ETL_SQL.Tests.UI
             Assert.True(!suggestions.Any(s => s.Text == "DATABASE"), "Should NOT suggest DATABASE after '='");
         }
 
+        [Fact]
+        public async Task TestColumnExpansionRules()
+        {
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "MSSQL");
+            var connections = new Dictionary<string, IDataSource> { { "hospital", ds } };
 
+            // 1. One table, no alias -> just column names (no prefix)
+            {
+                string script = "SELECT * FROM hospital.dbo.Products";
+                var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("", script, connections);
+                var expandSug = suggestions.FirstOrDefault(s => s.Type == SuggestionType.Column && s.Text.Contains(","));
+                Assert.NotNull(expandSug);
+                // Columns should NOT be prefixed with hospital.dbo.Products.
+                Assert.Contains("ProductID", expandSug!.Text);
+                Assert.DoesNotContain("hospital.dbo.Products.ProductID", expandSug.Text);
+            }
+
+            // 2. One or more tables with alias -> alias + column name
+            {
+                string script = "SELECT * FROM hospital.dbo.Products p";
+                var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("", script, connections);
+                var expandSug = suggestions.FirstOrDefault(s => s.Type == SuggestionType.Column && s.Text.Contains(","));
+                Assert.NotNull(expandSug);
+                Assert.Contains("p.ProductID", expandSug!.Text);
+            }
+
+            // 3. More than one table, no alias -> TableName + column name
+            {
+                string script = "SELECT * FROM hospital.dbo.Products JOIN hospital.dbo.Sales ON ...";
+                var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("", script, connections);
+                var expandSug = suggestions.FirstOrDefault(s => s.Type == SuggestionType.Column && s.Text.Contains(","));
+                Assert.NotNull(expandSug);
+                // Prefix should be just the unqualified table name
+                Assert.Contains("Products.ProductID", expandSug!.Text);
+                Assert.Contains("Sales.SaleID", expandSug.Text);
+            }
+
+            // 4. Flatfiles since table name is FILE -> handle FILE table name by using connection name as prefix
+            {
+                var flatfileDs = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "FLATFILE");
+                var flatfileConns = new Dictionary<string, IDataSource> {
+                    { "my_flatfile", flatfileDs },
+                    { "other_flatfile", flatfileDs }
+                };
+                string script = "SELECT * FROM my_flatfile.FILE JOIN other_flatfile.FILE ON ...";
+                var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("", script, flatfileConns);
+                var expandSug = suggestions.FirstOrDefault(s => s.Type == SuggestionType.Column && s.Text.Contains(","));
+                Assert.NotNull(expandSug);
+                Assert.Contains("my_flatfile.patient_id", expandSug!.Text);
+                Assert.Contains("other_flatfile.patient_id", expandSug.Text);
+            }
+        }
     }
 }
