@@ -20,6 +20,35 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [showFilters, setShowFilters] = useState(false);
 
+  // Per-column date format decision: a column is "date-only" only when EVERY Date
+  // value in that column has a zero time component. If even one value has a
+  // non-midnight time the whole column renders as datetime, keeping midnight rows
+  // consistent with their neighbours.
+  const dateOnlyCols = useMemo(() => {
+    const result = new Set<string>();
+    for (const col of columns) {
+      let hasDate = false;
+      let hasTime = false;
+      for (const row of rows) {
+        const v = row[col];
+        if (v instanceof Date) {
+          hasDate = true;
+          if (v.getHours() !== 0 || v.getMinutes() !== 0 || v.getSeconds() !== 0 || v.getMilliseconds() !== 0) {
+            hasTime = true;
+            break; // one non-midnight value is enough — whole column is datetime
+          }
+        }
+      }
+      if (hasDate && !hasTime) result.add(col);
+    }
+    return result;
+  }, [rows, columns]);
+
+  const formatDate = (val: Date, colName: string): string =>
+    dateOnlyCols.has(colName)
+      ? val.toISOString().slice(0, 10)                          // YYYY-MM-DD
+      : val.toISOString().replace('T', ' ').replace('Z', '');   // YYYY-MM-DD HH:mm:ss.sss
+
   const tableColumns = useMemo(
     () =>
       columns.map((col) =>
@@ -31,17 +60,15 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
               return <span className="opacity-30 italic text-[10px] tracking-tighter">NULL</span>;
             }
             if (val instanceof Date) {
-              return val.getHours() === 0 && val.getMinutes() === 0 && val.getSeconds() === 0 && val.getMilliseconds() === 0
-                ? val.toISOString().slice(0, 10)   // date only: YYYY-MM-DD
-                : val.toISOString().replace('T', ' ').replace('Z', ''); // datetime: YYYY-MM-DD HH:mm:ss.sss
+              return formatDate(val, col);
             }
             return typeof val === 'object' ? JSON.stringify(val) : val;
-
           },
           footer: col,
         })
       ),
-    [columns, columnHelper]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- formatDate is stable per render; dateOnlyCols included via closure
+    [columns, columnHelper, dateOnlyCols]
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table v8 not yet compatible with React Compiler
@@ -56,14 +83,12 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
     getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const csvEscape = (val: unknown): string => {
+  const csvEscape = (val: unknown, col: string): string => {
     let s: string;
     if (val == null) {
       s = '';
     } else if (val instanceof Date) {
-      s = val.getHours() === 0 && val.getMinutes() === 0 && val.getSeconds() === 0 && val.getMilliseconds() === 0
-        ? val.toISOString().slice(0, 10)
-        : val.toISOString().replace('T', ' ').replace('Z', '');
+      s = formatDate(val, col);
     } else {
       s = String(val);
     }
@@ -73,8 +98,8 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
 
   const exportToCSV = () => {
     const lines = [
-      columns.map(csvEscape).join(','),
-      ...rows.map(row => columns.map(col => csvEscape(row[col])).join(','))
+      columns.map((c) => csvEscape(c, c)).join(','),
+      ...rows.map(row => columns.map(col => csvEscape(row[col], col)).join(','))
     ].join('\r\n');
 
     const blob = new Blob([lines], { type: 'text/csv' });
