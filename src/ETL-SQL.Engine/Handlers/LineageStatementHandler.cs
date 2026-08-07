@@ -74,7 +74,7 @@ public class LineageStatementHandler : IStatementHandler
 
         if (!string.IsNullOrEmpty(stmt.IntoTable))
         {
-            var table = await BuildLineageTable(entries);
+            var table = await BuildLineageTable(entries, context.Connections);
             if (!context.Connections.ContainsKey(stmt.IntoTable))
             {
                 context.Connections[stmt.IntoTable] = new InMemoryDataSource();
@@ -172,13 +172,15 @@ public class LineageStatementHandler : IStatementHandler
         _logger.WriteLine(new string('-', 80) + "\n");
     }
 
-    private static async Task<DataTable> BuildLineageTable(IEnumerable<LineageEntry> entries)
+    private static async Task<DataTable> BuildLineageTable(
+        IEnumerable<LineageEntry> entries,
+        IDictionary<string, IDataSource>? connections = null)
     {
         var table = new DataTable();
         table.SetColumns(new[]
         {
             "Timestamp", "Operation", "TargetTable", "TargetColumn",
-            "SourceTables", "SourceColumns", "Description", "Metadata",
+            "SourceTables", "SourcePhysicalPaths", "SourceColumns", "Description", "Metadata",
             "DerivedFromDescriptions", "SourceFile", "Line", "Column",
             "TransformationKind", "TransformationExpression", "FunctionsApplied"
         });
@@ -191,6 +193,7 @@ public class LineageStatementHandler : IStatementHandler
             row["TargetTable"] = entry.TargetTable;
             row["TargetColumn"] = entry.TargetColumn;
             row["SourceTables"] = string.Join(", ", entry.SourceTables);
+            row["SourcePhysicalPaths"] = ResolvePhysicalPaths(entry.SourceTables, connections);
             row["SourceColumns"] = string.Join(", ", entry.SourceColumns);
             row["Description"] = entry.Description;
             row["Metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
@@ -205,5 +208,40 @@ public class LineageStatementHandler : IStatementHandler
         }
 
         return table;
+    }
+
+    /// <summary>
+    /// Resolves each source table alias to a human-readable physical identifier by looking up
+    /// the live connection. For FLATFILE sources this is the file path; for SQL sources it is
+    /// the database name extracted from the connection string. Raw connection strings, passwords,
+    /// and ENC: values are never exposed — only the credential-free Path property.
+    /// Returns null when no connections map is available or no sources can be resolved.
+    /// </summary>
+    private static string? ResolvePhysicalPaths(
+        IReadOnlyList<string> sourceTables,
+        IDictionary<string, IDataSource>? connections)
+    {
+        if (connections == null || sourceTables.Count == 0) return null;
+        var labels = new List<string>(sourceTables.Count);
+        bool anyResolved = false;
+        foreach (var src in sourceTables)
+        {
+            // Source may be qualified: "pats.FILE" — the connection alias is the first segment
+            var alias = src.Split('.')[0];
+            if (connections.TryGetValue(alias, out var ds))
+            {
+                anyResolved = true;
+                var type = ds.ConnectorType?.ToUpperInvariant() ?? "SOURCE";
+                var path = ds.Path;
+                labels.Add(string.IsNullOrEmpty(path) || path.Equals(type, StringComparison.OrdinalIgnoreCase)
+                    ? type
+                    : $"{type}: {path}");
+            }
+            else
+            {
+                labels.Add(src);
+            }
+        }
+        return anyResolved ? string.Join(", ", labels) : null;
     }
 }

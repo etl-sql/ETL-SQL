@@ -48,7 +48,25 @@ namespace ETL_SQL.Connectors.SqlServer
         }
 
         public string ConnectionString => _connectionString;
-        public string Path => "MSSQL";
+        /// <summary>
+        /// Returns the database name from the connection string (e.g. "EDW"), or the server name,
+        /// or "MSSQL" as a fallback. Never exposes passwords or the full connection string.
+        /// Used for lineage display so source labels are meaningful ("MSSQL: EDW" not just "MSSQL").
+        /// </summary>
+        public string Path
+        {
+            get
+            {
+                try
+                {
+                    var builder = new SqlConnectionStringBuilder(_connectionString);
+                    if (!string.IsNullOrEmpty(builder.InitialCatalog)) return builder.InitialCatalog;
+                    if (!string.IsNullOrEmpty(builder.DataSource)) return builder.DataSource;
+                }
+                catch { /* malformed or ENC: not yet decrypted — fall through */ }
+                return "MSSQL";
+            }
+        }
         public string Dialect => "MSSQL";
         public bool SupportsSqlPushdown => true;
         public string ConnectorType => "MSSQL";
