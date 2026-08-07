@@ -25,6 +25,7 @@ Returns `NULL` when `string` is `NULL`.
 
 - `LEN` and `LENGTH` are interchangeable aliases.
 - For byte-level length, use [`DATALENGTH`](datalength.md) instead.
+- **Dialect Translation**: In pushdown queries, the engine transpiles `LEN` to `LENGTH` for **Postgres** and **Oracle** targets, and `LENGTH` to `LEN` for **MSSQL** targets.
 
 ## Examples
 

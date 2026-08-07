@@ -28,6 +28,7 @@ Returns `NULL` when any required argument is `NULL`.
 - Positions are **1-indexed** (first character = 1), matching SQL Server convention.
 - `SUBSTR` is a direct alias for `SUBSTRING`.
 - If `start + length` exceeds the string length, characters up to the end are returned without error.
+- **Dialect Translation**: In pushdown queries, the engine transpiles `SUBSTRING` to `SUBSTR` for **Oracle** targets.
 
 ## Examples
 

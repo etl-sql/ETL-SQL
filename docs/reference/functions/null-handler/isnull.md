@@ -27,6 +27,7 @@ Returns `replacement` when `value` is `NULL`.
 
 - `NVL` (Oracle style) and `IFNULL` (MySQL style) are aliases for `ISNULL`.
 - For more than two alternatives, use [`COALESCE`](coalesce.md).
+- **Dialect Translation**: In pushdown queries, the engine transpiles `ISNULL` to `COALESCE` for **Postgres** and **Oracle** targets.
 
 ## Examples
 

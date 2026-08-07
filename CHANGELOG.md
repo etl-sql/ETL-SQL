@@ -88,6 +88,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added Dialect-Aware function transpilation rewrites for common SQL functions:
+  - `ISNULL(val, default)` transpiled to `COALESCE(val, default)` on Postgres and Oracle targets.
+  - `YEAR(val)`, `MONTH(val)`, and `DAY(val)` transpiled to `EXTRACT(YEAR/MONTH/DAY FROM val)` on Postgres and Oracle targets.
+  - `LEN(val)` transpiled to `LENGTH(val)` on Postgres and Oracle targets, and `LENGTH(val)` to `LEN(val)` on MSSQL targets.
+  - `SUBSTRING(val, start, len)` transpiled to `SUBSTR(val, start, len)` on Oracle targets.
+  - `SYSDATE` function call transpiled to bare `SYSDATE` (without parentheses) on Oracle targets.
+- Created `DialectTranslationMatrixTests` to define a regression-preventing compile translation test matrix for Postgres, MSSQL, and Oracle targets.
+
 - Improved the shared visual Designer with searchable grouped visual discovery, clearer neutral
   palette hierarchy, labelled authoring actions, actionable dataset/page/canvas empty states, and
   responsive laptop/tablet layouts that retain both canvas and inspector access.

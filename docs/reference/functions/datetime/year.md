@@ -20,6 +20,10 @@ Returns an `INT` year value.
 
 Returns `NULL` when `date` is `NULL`.
 
+## Remarks
+
+- **Dialect Translation**: In pushdown queries, the engine transpiles `YEAR`, `MONTH`, and `DAY` to `EXTRACT(YEAR/MONTH/DAY FROM date)` for **Postgres** and **Oracle** targets.
+
 ## Examples
 
 ```sql
