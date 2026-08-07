@@ -31,6 +31,13 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
 
 
         string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
+        // Lineage target must be the fully-qualified table name ("hospital.dbo.Patient") so the
+        // tracker can chain it to the final SELECT whose source column is recorded as
+        // "hospital.dbo.Patient.*". connName is kept as-is for connection lookup and guards.
+        string lineageTarget = stmt.TargetTable.ConnectionName != null
+            ? stmt.TargetTable.ConnectionName + "." + stmt.TargetTable.TableName
+            : stmt.TargetTable.TableName;
+
         if (context.VarContext.TryGetView(connName, out _))
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an INSERT target.");
 
@@ -76,7 +83,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
                 var fns = LineageAnalyzer.CollectFunctions(sourceCol.Expression);
 
                 context.LineageTracker.Record(
-                    connName,
+                    lineageTarget,
                     resolvedSources,
                     "INSERT",
                     targetColumn: targetCol,
@@ -92,7 +99,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         }
         else
         {
-            context.LineageTracker.Record(connName, stmt.GetSourceTables(), "INSERT", line: stmt.Line, column: stmt.Column);
+            context.LineageTracker.Record(lineageTarget, stmt.GetSourceTables(), "INSERT", line: stmt.Line, column: stmt.Column);
         }
 
         var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
