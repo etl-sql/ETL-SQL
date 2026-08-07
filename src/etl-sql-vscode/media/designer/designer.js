@@ -1741,64 +1741,28 @@ export function createScriptResultsPanel(container) {
 
     function renderLineageBar() {
         if (!activeLineageColumn) return '';
-
-        // Walk all entries for this column, building an ordered hop chain:
-        //   earliest source → ... intermediate hops ... → RESULTSET
-        // Prefer physical label (sourceLabels) over raw alias (sourceTables).
-        const col = String(activeLineageColumn).toLowerCase();
-        const colMatches = lineageData.filter(e =>
-            String(e.targetColumn || e.TargetColumn || '').toLowerCase() === col
+        // A column name appears once per hop (m.Users.UserID -> #staging.UserID -> RESULTSET.UserID).
+        // The grid shows the final result set, so prefer that entry; a plain find() would report
+        // the first intermediate hop instead of the lineage of the column actually clicked.
+        const columnMatches = lineageData.filter(e =>
+            String(e.targetColumn || e.TargetColumn || '').toLowerCase() === String(activeLineageColumn).toLowerCase()
         );
-
-        // Sort hops: RESULTSET (the final SELECT) last, INSERT before that, etc.
-        const ranked = [...colMatches].sort((a, b) => {
-            const tgtA = String(a.targetTable || a.TargetTable || '').toUpperCase();
-            const tgtB = String(b.targetTable || b.TargetTable || '').toUpperCase();
-            if (tgtA === 'RESULTSET') return 1;
-            if (tgtB === 'RESULTSET') return -1;
-            return 0;
-        });
-
+        const match = columnMatches.find(e =>
+            String(e.targetTable || e.TargetTable || '').toUpperCase() === 'RESULTSET'
+        ) ?? columnMatches[0];
         let pathStr = '';
-        if (ranked.length === 0) {
-            pathStr = `<em>no lineage recorded for ${escape(activeLineageColumn)}</em>`;
+        if (match) {
+            const srcT = match.sourceTables || match.SourceTables || 'source';
+            const srcC = match.sourceColumns || match.SourceColumns || activeLineageColumn;
+            const tgtT = match.targetTable || match.TargetTable || 'result';
+            const kind = match.transformationKind || match.TransformationKind ? ` [${match.transformationKind || match.TransformationKind}]` : '';
+            const desc = match.description || match.Description ? ` — ${match.description || match.Description}` : '';
+            pathStr = `${escape(srcT)}.${escape(srcC)} ➔ ${escape(tgtT)}.${escape(activeLineageColumn)}${escape(kind)}${escape(desc)}`;
         } else {
-            // Build chain segments from each hop
-            const segments = [];
-            for (const hop of ranked) {
-                const srcLabels = hop.sourceLabels || hop.SourceLabels;
-                const srcTables = hop.sourceTables || hop.SourceTables || '';
-                // Prefer physical label; fall back to raw alias string
-                const srcDisplay = Array.isArray(srcLabels) && srcLabels.length > 0
-                    ? srcLabels.join(', ')
-                    : srcTables;
-                const srcC = hop.sourceColumns || hop.SourceColumns || activeLineageColumn;
-                const tgtT = hop.targetTable || hop.TargetTable || 'result';
-                const kind  = hop.transformationKind || hop.TransformationKind || '';
-                const expr  = hop.transformationExpression || hop.TransformationExpression || '';
-                const desc  = hop.description || hop.Description || '';
-
-                // First segment shows "source.column"
-                if (segments.length === 0) {
-                    segments.push(`<span title="${escape(srcDisplay)}">${escape(srcDisplay)}</span>.<strong>${escape(srcC)}</strong>`);
-                }
-
-                // Transformation badge (only when non-pass-through)
-                const isPassThrough = !kind || kind === 'PassThrough' || kind === 'Unknown';
-                if (!isPassThrough) {
-                    const badge = expr ? `${kind}: ${expr}` : kind;
-                    segments.push(`<span style="color:var(--portal-accent,#58a6ff);padding:0 4px;" title="${escape(expr || kind)}">⟹ [${escape(badge)}]</span>`);
-                } else {
-                    segments.push('➔');
-                }
-
-                // Target segment
-                const tgtDisplay = tgtT === 'RESULTSET' ? 'result' : tgtT;
-                segments.push(`<span title="${escape(tgtT)}">${escape(tgtDisplay)}</span>.<strong>${escape(activeLineageColumn)}</strong>`);
-
-                if (desc) segments.push(`<em style="color:var(--portal-text-muted,#9da7b1);"> — ${escape(desc)}</em>`);
-            }
-            pathStr = segments.join(' ');
+            // Say so rather than drawing a plausible-looking path. A guessed
+            // source.db ➔ #staging ➔ result chain reads as recorded lineage and would be
+            // trusted as such — the whole point of the panel is that it reflects the run.
+            pathStr = `<em>no lineage recorded for ${escape(activeLineageColumn)}</em>`;
         }
         return `
             <div class="etlsql-lineage-bar" style="background:var(--portal-accent-soft, rgba(88,166,255,0.15)); border:1px solid var(--portal-border, #30363d); padding:4px 10px; font-size:11px; display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; border-radius:4px;">

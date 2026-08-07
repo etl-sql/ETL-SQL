@@ -291,5 +291,15 @@ namespace ETL_SQL.Tests.Core
                               "FROM pats;";
             Assert.Equal(expected, formatted);
         }
+
+        [Fact]
+        public void TestFunctionCallParameterListFormatting()
+        {
+            string sql = "CREATE TABLE Patient (patient_id bigint IDENTITY(1,1) PRIMARY KEY);";
+            var options = new FormatterOptions();
+            string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
+
+            Assert.Contains("IDENTITY(1, 1)", formatted);
+        }
     }
 }

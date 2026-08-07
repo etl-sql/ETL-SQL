@@ -578,7 +578,21 @@ public static class SqlFormatter
                     string inner = text.Substring(i + 1, j - i - 2).Trim();
                     bool startsWithOneZero = Regex.IsMatch(inner, @"^1\s*=\s*0\b", RegexOptions.IgnoreCase);
 
-                    string formattedInner = FormatInnerParentheses(inner, options, currentIndentLevel);
+                    // Get preceding word (skip trailing whitespace)
+                    int prevIdx = i - 1;
+                    while (prevIdx >= 0 && char.IsWhiteSpace(text[prevIdx]))
+                    {
+                        prevIdx--;
+                    }
+                    var wordSb = new StringBuilder();
+                    while (prevIdx >= 0 && (char.IsLetterOrDigit(text[prevIdx]) || text[prevIdx] == '_'))
+                    {
+                        wordSb.Insert(0, text[prevIdx]);
+                        prevIdx--;
+                    }
+                    string precedingWord = wordSb.ToString();
+
+                    string formattedInner = FormatInnerParentheses(inner, options, currentIndentLevel, precedingWord);
 
                     string baseIndent = new string(' ', currentIndentLevel * options.IndentSize);
 
@@ -612,7 +626,7 @@ public static class SqlFormatter
 
     private static readonly string[] SubqueryKeywords = { "SELECT", "DECLARE", "INSERT", "UPDATE", "DELETE", "MERGE", "WITH" };
 
-    private static string FormatInnerParentheses(string inner, FormatterOptions options, int currentIndentLevel)
+    private static string FormatInnerParentheses(string inner, FormatterOptions options, int currentIndentLevel, string precedingWord = "")
     {
         if (string.IsNullOrWhiteSpace(inner)) return inner;
 
@@ -636,6 +650,20 @@ public static class SqlFormatter
         if (isWindow && options.BreakoutWindowFunctions)
         {
             return FormatWindowClause(inner, options, currentIndentLevel + 1);
+        }
+
+        // Check if preceding word is a function that shouldn't be split
+        string[] noSplitFunctions = { 
+            "IDENTITY", "DATEADD", "DATEDIFF", "DATEPART", "CONVERT", "CAST", "SUBSTRING", 
+            "COALESCE", "NULLIF", "ISNULL", "ABS", "ROUND", "UPPER", "LOWER", "TRIM", 
+            "LTRIM", "RTRIM", "CHARINDEX", "REPLACE", "LEFT", "RIGHT", "LEN", 
+            "FORMAT", "TRY_CAST", "TRY_CONVERT", "HASHBYTES", "REGEX", "GETDATE", "NOW" 
+        };
+        if (!string.IsNullOrEmpty(precedingWord) && noSplitFunctions.Contains(precedingWord.ToUpper()))
+        {
+            var partsNoSplit = SplitByCommaOutsideParens(inner);
+            var formattedParts = partsNoSplit.Select(p => FormatParentheses(p.Trim(), options, currentIndentLevel)).ToList();
+            return string.Join(", ", formattedParts);
         }
 
         // Check if it's a parameter list (contains commas outside nested parens)
