@@ -18,7 +18,7 @@ Aliases: `CSV`, `TSV`
 | `ESCAPE_CHAR` | Character used to escape delimiters within fields (e.g. `'\\'`) | No |
 | `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (default: `UTF8`) | No |
 | `CULTURE` | Locale for date/number parsing (e.g. `en-US`, `de-DE`) | No |
-| `NULL_AS` | How nulls are represented: `NULL`, `EMPTY`, `BACKSLASH_N` | No |
+| `NULL_AS` | How nulls are represented. **No default** — when omitted, blank and other field values pass through unchanged. Single token: `NULL` · `EMPTY` · `BACKSLASH_N`. Multi-value list: `NULL_AS=['NULL','EMPTY']` (see [NULL_AS defaults and multi-value syntax](#null_as-defaults-and-multi-value-syntax)). | No |
 | `DATE_FORMAT` | Custom date parsing pattern (e.g. `'yyyy-MM-dd'`) | No |
 | `START_AT` | 1-based line number to start reading | No |
 | `END_AT` | 1-based line number to stop reading | No |
@@ -51,6 +51,52 @@ connector emits a diagnostic with ignored extra-column count, null-filled missin
 affected row count. Use `EXPECT SCHEMA` after loading into `#temp` when the downstream contract must be
 asserted against the accepted temp-table shape.
 
+## NULL_AS defaults and multi-value syntax
+
+`NULL_AS` has **no default**. When the option is omitted, every field in the file — including blank
+fields — is read as a string. This is intentional so that files storing empty strings are not silently
+converted to `NULL` without an explicit opt-in.
+
+### Recommended defaults
+
+| Scenario | Recommended setting |
+| :--- | :--- |
+| Standard CSV where blank means null | `NULL_AS='EMPTY'` |
+| Files that write the literal word `NULL` for missing values | `NULL_AS='NULL'` |
+| Unix/Postgres-style exports that use `\n` | `NULL_AS='BACKSLASH_N'` |
+| Files that may use either convention | `NULL_AS=['EMPTY','NULL']` |
+
+### Single-value syntax
+
+```sql
+CREATE CONNECTION src AS FLATFILE(PATH='C:\Data\sales.csv', NULL_AS='EMPTY');
+```
+
+The three named tokens resolve as follows:
+
+- **`EMPTY`** — a blank field (after `TRIM` is applied) is treated as `NULL`
+- **`NULL`** — the literal four-character string `NULL` is treated as `NULL`
+- **`BACKSLASH_N`** — the two-character sequence `\n` (backslash + n) is treated as `NULL`
+- Any other quoted value is matched verbatim (e.g. `NULL_AS='N/A'`)
+
+### Multi-value bracket syntax
+
+Pass a comma-separated list inside `[` `]` brackets to match **any** of several sentinel values on
+read. Tokens inside the list follow the same aliases as the single-value form.
+
+```sql
+-- Treat blank fields AND the word NULL as database null
+CREATE CONNECTION src AS FLATFILE(PATH='C:\Data\legacy.csv', NULL_AS=['EMPTY','NULL']);
+
+-- Treat blank, the word NULL, and N/A as null
+CREATE CONNECTION src AS FLATFILE(PATH='C:\Data\mixed.csv', NULL_AS=['EMPTY','NULL','N/A']);
+```
+
+> [!IMPORTANT]
+> **Write-side behaviour**: when writing a `NULL` value to a file, only the **first** value in the
+> list is emitted. In `NULL_AS=['EMPTY','NULL']` the engine writes a blank field for every null.
+> Choose the first element to be the sentinel you want to produce on output.
+
 ## Examples
 
 ```sql
@@ -65,6 +111,9 @@ CREATE CONNECTION eu_data AS FLATFILE(PATH='C:\Data\german_sales.csv', DELIMITER
 
 -- Skip header and first 2 data rows, stop at row 1000
 CREATE CONNECTION paged AS FLATFILE(PATH='C:\Data\big.csv', HEADER=ON, START_AT=3, END_AT=1000);
+
+-- Treat blank OR the word NULL as database null; write blanks for null on output
+CREATE CONNECTION nullable_csv AS FLATFILE(PATH='C:\Data\source.csv', NULL_AS=['EMPTY','NULL']);
 ```
 
 ## Fixed-width layouts (`FORMAT = 'FIXED'`)

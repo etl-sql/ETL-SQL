@@ -31,7 +31,8 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly string? _headerFile;
         private readonly string _rowDelimiter;
         private readonly char? _escapeChar;
-        private readonly string? _nullAs;
+        private readonly string[]? _nullAsValues;  // one or more sentinel strings that map to null on read
+        private readonly string? _nullAsWriteValue;  // the sentinel written for null values on write (first element)
         private readonly string? _dateFormat;
         private readonly bool _strictSchema;
         private readonly IEnumerable<ColumnDefinition>? _templateSchema;
@@ -148,13 +149,8 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (options.TryGetValue("NULL_AS", out var nullas))
                 {
-                    _nullAs = nullas.ToUpperInvariant() switch
-                    {
-                        "EMPTY" => "",
-                        "BACKSLASH_N" => "\\n",
-                        "NULL" => "NULL",
-                        _ => nullas
-                    };
+                    _nullAsValues = ParseNullAsValues(nullas);
+                    _nullAsWriteValue = _nullAsValues.Length > 0 ? _nullAsValues[0] : null;
                 }
 
                 if (options.TryGetValue("DATE_FORMAT", out var df))
@@ -334,6 +330,65 @@ namespace ETL_SQL.Connectors.FlatFile
         };
 
         private static bool IsIntegerType(string typeName) => _integerTypeNames.Contains(typeName);
+
+        /// <summary>
+        /// Parses the raw NULL_AS option value into an array of resolved sentinel strings.
+        /// Supports a single token (<c>NULL_AS='EMPTY'</c>) and a bracket-delimited list
+        /// (<c>NULL_AS=['NULL','EMPTY']</c>). Each token is resolved through the standard
+        /// keyword aliases before being stored:
+        /// <list type="bullet">
+        ///   <item><c>EMPTY</c> → <c>""</c> (empty string)</item>
+        ///   <item><c>BACKSLASH_N</c> → <c>\n</c> (the two-char literal backslash-n)</item>
+        ///   <item><c>NULL</c> → <c>"NULL"</c> (the word NULL)</item>
+        ///   <item>Any other value → used verbatim</item>
+        /// </list>
+        /// The first element in the returned array is used as the write-side sentinel.
+        /// </summary>
+        private static string[] ParseNullAsValues(string raw)
+        {
+            var trimmed = raw.Trim();
+
+            // Bracket-list syntax: ['NULL','EMPTY'] or [NULL, EMPTY]
+            if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+            {
+                var inner = trimmed.Substring(1, trimmed.Length - 2);
+                var tokens = inner.Split(',');
+                return tokens
+                    .Select(t => ResolveNullAsSentinel(t.Trim().Trim('\'', '"')))
+                    .Where(v => v != null)
+                    .ToArray()!;
+            }
+
+            // Single token
+            var single = ResolveNullAsSentinel(trimmed.Trim('\'', '"'));
+            return single != null ? new[] { single } : Array.Empty<string>();
+        }
+
+        private static string? ResolveNullAsSentinel(string token) =>
+            token.ToUpperInvariant() switch
+            {
+                "EMPTY" => "",
+                "BACKSLASH_N" => "\\n",
+                "NULL" => "NULL",
+                "" => null,   // skip truly empty tokens (e.g. trailing comma)
+                _ => token
+            };
+
+        /// <summary>
+        /// Returns true when <paramref name="val"/> matches any of the configured null sentinels.
+        /// An empty-string sentinel matches both an empty string and a whitespace-only value that
+        /// has already been trimmed to empty.
+        /// </summary>
+        private static bool IsNullSentinel(string val, string[] sentinels)
+        {
+            foreach (var s in sentinels)
+            {
+                if (s == "" && string.IsNullOrEmpty(val)) return true;
+                if (val.Equals(s, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
 
         private string[] SplitFixedWidthLine(string line)
         {
@@ -763,7 +818,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 {
                     string val = _trim ? values[srcIdx].Trim() : values[srcIdx];
 
-                    if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
+                    if (_nullAsValues != null && IsNullSentinel(val, _nullAsValues))
                     {
                         row[i] = null;
                     }
@@ -940,7 +995,15 @@ namespace ETL_SQL.Connectors.FlatFile
                             {
                                 var values = new List<string>();
                                 foreach (var col in batch.ColumnNames)
-                                    values.Add(FormatField(row[col]?.ToString() ?? ""));
+                                {
+                                    var cellVal = row[col];
+                                    string fieldStr;
+                                    if ((cellVal == null || cellVal == DBNull.Value) && _nullAsWriteValue != null)
+                                        fieldStr = _nullAsWriteValue;
+                                    else
+                                        fieldStr = cellVal?.ToString() ?? "";
+                                    values.Add(FormatField(fieldStr));
+                                }
                                 line = string.Join(_delimiter.ToString(), values);
                             }
                             await writer.WriteLineAsync(line.AsMemory(), effectiveCancellationToken).ConfigureAwait(false);

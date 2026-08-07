@@ -83,7 +83,9 @@ namespace ETL_SQL.Connectors.FlatFile
             "  TEXT_QUALIFIER: DOUBLEQUOTE | SINGLEQUOTE\n" +
             "  ESCAPE_CHAR: Character used to escape delimiters within fields (e.g. '\\')\n" +
             "  ROW_DELIMITER: LF | CR | CRLF\n" +
-            "  NULL_AS: NULL | EMPTY | BACKSLASH_N\n" +
+            "  NULL_AS: NULL | EMPTY | BACKSLASH_N  (no default — omit to preserve raw strings)\n" +
+            "           Pass multiple sentinels as a bracket list: NULL_AS=['NULL','EMPTY']\n" +
+            "           The first value in the list is written for nulls on output.\n" +
             "  DATE_FORMAT: Date parsing format string (e.g. 'yyyy-MM-dd')\n" +
             "  STRICT_SCHEMA: ON | OFF (Enforces column counts)\n" +
             "  START_AT: <n> (Start reading at line n)\n" +
