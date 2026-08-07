@@ -239,8 +239,8 @@ jobs:
 
       - name: Install LDAP client library (Linux only)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libldap-2.5-0
+          sudo apt-get update || true
+          sudo apt-get install -y libldap-2.5-0 || sudo apt-get install -y libldap2-dev || sudo apt-get install -y libldap-dev || true
 
       - name: Run Docker Integration Tests
         shell: pwsh
