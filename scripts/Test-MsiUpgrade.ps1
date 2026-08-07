@@ -60,7 +60,10 @@ function Get-EtlSqlUninstallEntries {
     return @($roots | ForEach-Object {
         Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
     } | Where-Object {
-        $_.DisplayName -eq 'ETL-SQL' -and $_.Publisher -eq 'Charles Clemens'
+        $null -ne $_.PSObject.Properties['DisplayName'] -and
+        $null -ne $_.PSObject.Properties['Publisher'] -and
+        $_.DisplayName -eq 'ETL-SQL' -and
+        $_.Publisher -eq 'Charles Clemens'
     } | Sort-Object PSPath -Unique)
 }
 
