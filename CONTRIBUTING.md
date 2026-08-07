@@ -280,9 +280,19 @@ Before opening a PR, verify:
 - [ ] All new AST nodes are `record` types
 - [ ] Connector exceptions are caught and re-thrown as `ExecutionException`
 - [ ] Documentation updated per Section 6 above
-- [ ] `changelog.d/<feature>.md` added, or `CHANGELOG.md` updated directly for release-only edits
+- [ ] If syntax, keywords, or functions were added/modified, they meet the **Syntax Addition Checklist** (see below)
 - [ ] Every commit includes a valid DCO `Signed-off-by` line
 - [ ] PR description explains *why* the change is needed, not just *what* it does
+
+### Syntax Addition Checklist
+
+For contributions that introduce or modify language syntax, keywords, or functions:
+
+- [ ] **Cross-Dialect Compatibility**: Verify that the new syntax or function signature does not conflict with existing keywords or operator precedence in supported dialects (e.g., Postgres, Oracle, MSSQL).
+- [ ] **Pushdown Translation**: Provide AST-to-dialect translation mappings in `QueryCompiler` to compile the expression or function down to provider-specific SQL where supported.
+- [ ] **Autocomplete & Diagnostics**: Register the new tokens or state transitions in `DefaultGrammar.cs` to ensure IDE autocompletion and compiler linting align with the execution parser.
+- [ ] **EBNF Reference**: Update the canonical `grammar.ebnf` specification to reflect the updated language syntax.
+- [ ] **SqlLogicTests (SLT)**: Add regression test cases under `tests/slt_data/` covering the execution behavior and error boundaries of the new syntax.
 
 ---
 

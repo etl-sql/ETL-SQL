@@ -460,23 +460,26 @@ To guarantee customer agency, facilitate seamless onboarding, and eliminate SaaS
 3. **Data Upgrades during Migration**:
    - The import processor verifies the version manifest of the import file and automatically transforms the metadata database schemas if importing into a newer version of the platform.
 
-### Language — Dialect Standardization and Open-Source Governance
+### Language — Dialect Standardization and Drift Prevention
 
-To secure the portability guarantee across diverse runtime environments and enable compliant third-party implementations (e.g., in Rust or Go), the ETL-SQL language dialect is formalized into a tool-driven, open-source standard.
+To secure the portability guarantee across diverse runtime environments and prevent divergence between the runtime execution, editor, and documentation tooling, the ETL-SQL language dialect is formalized into a tool-verified standard.
 
-#### Pillars of Standardization:
+#### Pillars of Standardization & Verification:
 1. **Canonical Grammar Specification (EBNF)**:
-   - Define and publish a machine-readable EBNF (Extended Backus-Naur Form) or ANTLR grammar file in the repository.
-   - This file serves as the single source of truth for lexicographical parsing, preventing implementation drift and simplifying parser generator integration for other programming languages.
-2. **Conformance Test Suite (SqlLogicTests)**:
-   - Establish and expand a shared suite of SqlLogicTests (SLT) asserting exact execution, mathematical offsets, standard library function results, and query boundaries.
-   - A runtime parser/compiler is deemed compliant only when it successfully passes the complete SLT suite.
-3. **Change-Control Governance (RFC Process)**:
-   - Introduce a structured RFC (Request for Comments) process for language syntax extensions.
-   - Proposals for new keywords, functions, or connection options must demonstrate cross-dialect compatibility, translation mappings for remote SQL pushdown, and EBNF syntax updates before approval, protecting the language core from syntax bloat.
-4. **EBNF-to-Grammar-Tree Verification Tests**:
-   - Create an automated parser verification test that parses the static `grammar.ebnf` specification file.
-   - Run a comparison against the C# `GrammarStateEngine` to assert that every valid token combination in the EBNF specification maps to a valid state path in the C# execution grammar tree, preventing implementation drift.
+   - Define and publish a machine-readable EBNF (Extended Backus-Naur Form) grammar file in the repository.
+   - This file serves as the logical reference for lexicographical parsing, preventing documentation drift and providing a design blueprint for parser-related IDE and validation services.
+2. **Conformance & Regression Test Suite (SqlLogicTests)**:
+   - Expand and maintain the shared suite of SqlLogicTests (SLT) in `tests/slt_data/` asserting exact execution correctness, mathematical offsets, standard library function returns, and query boundaries.
+   - This serves as the ultimate regression net to ensure engine modifications do not break existing scripts or introduce silent dialect drift.
+3. **Syntax Addition Checklist**:
+   - Rather than establishing a high-ceremony RFC process, new language extensions (keywords, functions, or connector options) must validate against a strict checklist in `CONTRIBUTING.md`.
+   - Additions must explicitly address cross-dialect compatibility, translation mappings for remote SQL pushdown, and updates to autocomplete / linting state.
+4. **EBNF-to-Parser Validation Fuzzing**:
+   - Instead of verifying EBNF against the autocomplete-focused `GrammarStateEngine`, implement a validation runner that parses and generates queries from the EBNF specification.
+   - Assert that the actual execution parser (`Parser.cs`) accepts valid sequences and rejects invalid ones, creating a tool-enforced guard against compiler-to-spec drift.
+5. **Centralized Dialect Translation Engine**:
+   - Refactor dialect-specific SQL rewrite logic out of the main compiler (`QueryCompiler.cs`) and separate connector classes.
+   - Introduce a structured `ISqlDialectTranslator` or `SqlDialect` registration system, allowing each database provider to modularly define its function overrides (e.g. `LEN` vs `LENGTH`, `GETDATE` vs `SYSDATE`) in a central, testable abstraction.
 
 ### Connectors — Transactional File Staging
 
