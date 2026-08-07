@@ -466,7 +466,7 @@ namespace ETL_SQL.LSP
         protected override TextDocumentSyncRegistrationOptions CreateRegistrationOptions(TextSynchronizationCapability capability, ClientCapabilities clientCapabilities)
             => new TextDocumentSyncRegistrationOptions
             {
-                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
+                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql"),
                 Change = TextDocumentSyncKind.Full,
                 Save = new SaveOptions { IncludeText = true }
             };

@@ -259,7 +259,7 @@ namespace ETL_SQL.LSP
         public SignatureHelpRegistrationOptions GetRegistrationOptions(SignatureHelpCapability capability, ClientCapabilities clientCapabilities)
             => new SignatureHelpRegistrationOptions
             {
-                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
+                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql"),
                 TriggerCharacters = new Container<string>("(", ",")
             };
     }

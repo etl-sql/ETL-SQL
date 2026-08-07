@@ -65,6 +65,6 @@ namespace ETL_SQL.LSP
         }
 
         public DefinitionRegistrationOptions GetRegistrationOptions(DefinitionCapability capability, ClientCapabilities clientCapabilities)
-            => new DefinitionRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql") };
+            => new DefinitionRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql") };
     }
 }

@@ -103,6 +103,6 @@ namespace ETL_SQL.LSP
         }
 
         public DocumentSymbolRegistrationOptions GetRegistrationOptions(DocumentSymbolCapability capability, ClientCapabilities clientCapabilities)
-            => new DocumentSymbolRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql") };
+            => new DocumentSymbolRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql") };
     }
 }

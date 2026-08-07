@@ -219,7 +219,7 @@ namespace ETL_SQL.LSP
         public CompletionRegistrationOptions GetRegistrationOptions(CompletionCapability capability, ClientCapabilities clientCapabilities)
             => new CompletionRegistrationOptions
             {
-                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
+                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql"),
                 ResolveProvider = false,
                 TriggerCharacters = new Container<string>(" ", ".", "*", "$")
             };

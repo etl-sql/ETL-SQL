@@ -90,7 +90,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
             ];
 
             const activeEditor = vscode.window.activeTextEditor;
-            if (activeEditor && activeEditor.document.languageId === 'etlsql') {
+            if (activeEditor && (activeEditor.document.languageId === 'etlsql' || activeEditor.document.languageId === 'rptsql')) {
                 all.push(new CategoryItem('Temporary Tables', 'TEMP', {}, vscode.TreeItemCollapsibleState.Collapsed, activeEditor.document.uri.toString()));
                 if (this.variables.length > 0) {
                     all.push(new CategoryItem('Script Variables', 'VARIABLES', {}, vscode.TreeItemCollapsibleState.Collapsed));

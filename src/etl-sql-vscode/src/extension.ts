@@ -162,7 +162,7 @@ export async function activate(context: vscode.ExtensionContext) {
     let lastActiveUri: string | undefined = vscode.window.activeTextEditor?.document.uri.toString();
 
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (editor && (editor.document.languageId === 'etlsql' || editor.document.fileName.endsWith('.rptsql'))) {
+        if (editor && (editor.document.languageId === 'etlsql' || editor.document.languageId === 'rptsql')) {
             const currentUri = editor.document.uri.toString();
             if (currentUri !== lastActiveUri) {
                 // Clear UI on script switch — reset history so prior script's runs don't bleed in.
@@ -177,14 +177,14 @@ export async function activate(context: vscode.ExtensionContext) {
             sidebarProvider.postMessage({ type: 'activeEditorChanged', uri: currentUri });
 
             // Pre-warm the REPL process so first execution has no startup lag.
-            if (editor.document.languageId === 'etlsql') {
+            if (editor.document.languageId === 'etlsql' || editor.document.languageId === 'rptsql') {
                 void warmupRepl(context, editor.document);
             }
         }
     }));
 
     // Also warm up if an etlsql file is already open when the extension activates.
-    if (vscode.window.activeTextEditor?.document.languageId === 'etlsql') {
+    if (vscode.window.activeTextEditor && (vscode.window.activeTextEditor.document.languageId === 'etlsql' || vscode.window.activeTextEditor.document.languageId === 'rptsql')) {
         void warmupRepl(context, vscode.window.activeTextEditor.document);
     }
 
@@ -369,7 +369,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.refreshConnections', () => {
         const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor && activeEditor.document.languageId === 'etlsql' && client) {
+        if (activeEditor && (activeEditor.document.languageId === 'etlsql' || activeEditor.document.languageId === 'rptsql') && client) {
             client.sendNotification('etlsql/refreshMetadata', { uri: activeEditor.document.uri.toString() });
         }
         connectionsProvider.refresh();
@@ -419,7 +419,7 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => {
-        if (doc.languageId === 'etlsql' || doc.uri.fsPath.endsWith('.rptsql')) {
+        if (doc.languageId === 'etlsql' || doc.languageId === 'rptsql') {
             connectionsProvider.removeScriptConnections(doc.uri.toString());
             if (lastActiveUri === doc.uri.toString()) {
                 lastActiveUri = undefined;
@@ -429,7 +429,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Auto-open Report Preview if configured
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(doc => {
-        if (doc.uri.fsPath.endsWith('.rptsql')) {
+        if (doc.languageId === 'rptsql') {
             const config = vscode.workspace.getConfiguration('etlsql');
             if (config.get<boolean>('report.autoOpenPreview') === true) {
                 vscode.commands.executeCommand('etlsql.previewReport');
@@ -564,7 +564,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }));
 
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
-        if (document.languageId !== 'etlsql') {
+        if (document.languageId !== 'etlsql' && document.languageId !== 'rptsql') {
             return;
         }
         const text = document.getText();

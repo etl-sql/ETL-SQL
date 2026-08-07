@@ -187,6 +187,6 @@ namespace ETL_SQL.LSP
         }
 
         public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)
-            => new HoverRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql") };
+            => new HoverRegistrationOptions { DocumentSelector = TextDocumentSelector.ForLanguage("etlsql", "rptsql") };
     }
 }

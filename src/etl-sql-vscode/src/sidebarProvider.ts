@@ -24,7 +24,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         
         // Listen for active editor changes to refresh temp tables/variables in sidebar
         vscode.window.onDidChangeActiveTextEditor(e => {
-            if (e && e.document.languageId === 'etlsql') {
+            if (e && (e.document.languageId === 'etlsql' || e.document.languageId === 'rptsql')) {
                 this.postMessage({ type: 'activeEditorChanged', uri: e.document.uri.toString() });
             }
         });
@@ -58,7 +58,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     });
                     
                     // Also trigger active editor change if one exists
-                    if (vscode.window.activeTextEditor?.document.languageId === 'etlsql') {
+                    if (vscode.window.activeTextEditor && (vscode.window.activeTextEditor.document.languageId === 'etlsql' || vscode.window.activeTextEditor.document.languageId === 'rptsql')) {
                         this.postMessage({ 
                             type: 'activeEditorChanged', 
                             uri: vscode.window.activeTextEditor.document.uri.toString() 

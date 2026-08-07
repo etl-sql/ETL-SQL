@@ -1611,4 +1611,54 @@ this release).
   - [ ] **VS Code setting need to be grouped**  We have AI, formatting, and paths.  It would be easier for a user to read if these were grouped together.
   - [ ] **Hide report preview, launch, report designer unless the script is an rptsql**  We have two extension for a reason so an etlsql is not expected to contain reporting elements.  We'll need to add an option to VS Code for that extension currently only ETL-SQL points to .etlsql we'll need ETL-SQL Report.  Then on our welcome screen when they click create etlsql it opens as etlsql.  Notebook is the same etlnb, and Report (the change) should open up as an rptsql.
   - [ ] **Add a format button** I used to be able to use shortcut keys to format but vs code must have overwritten them.  Either way let's add a format button next to the run button so users can click to format their code or if a selection is highlighted it only formats the highlighted selection.
-  
+  - [ ] **On save when plaintext password VS Code asks to add the security feature, then sets the password but does not save**  It encrypts the plaintext connection and shows it as encrypted but doesn't save the file.  If you exit without saving it saves it as a plaintext.  The workflow of adding the password and switching to the encrypted connection string should save the file with that encrypted connection string automatically.
+ - [ ] **Tags not being passed along to the final table**  Using this query
+ ```sql
+ DROP CONNECTION IF EXISTS hospital;
+CREATE CONNECTION hospital AS MSSQL('ENC:Aic23Mtsl64L0DIRFyErg99XTCE9ULhB+601tKD9wTSKFmFoNgvswkqZ73T7Txz9fZSwRncM0nIyqbfapQ2E24vKOOJjcgGDHJP9FQec8ten2RaDQEygHj8LHLr17J0lOqYritLgiBaGTs4pRXGnkSpNBxfDJfk+pZe4IeuRxpQet16HVzvn3J/qNHhE0JVCICIeRQ==');
+
+EXECUTE hospital
+BEGIN
+    DROP TABLE IF EXISTS Patient;
+    CREATE TABLE Patient (
+        patient_id bigint IDENTITY(1,1) PRIMARY KEY NOT NULL
+        ,name varchar(100) NOT NULL
+        ,date_of_birth date NULL
+        ,date_of_death date NULL
+        ,gender varchar(10) NULL
+        ,created_at datetime NOT NULL DEFAULT GETDATE()
+        ,updated_at datetime NOT NULL DEFAULT GETDATE()
+    );
+END 
+
+DROP CONNECTION IF EXISTS pats;
+CREATE CONNECTION pats AS FLATFILE(PATH="C:\tmp\patients.csv", TEXT_QUALIFIER='"', DELIMITER=',', HEADER=TRUE, NULL_AS=EMPTY);
+
+import:
+INSERT INTO hospital.dbo.Patient (name, date_of_birth, date_of_death, gender)
+SELECT 
+    name /* @d: patient name formatted as last name, first name; @pii: true; */
+    ,CAST(date_of_birth AS date) AS date_of_birth /* @d: patient date of birth; @pii: true; */
+    ,CAST(date_of_death AS date)
+    , gender /* @d: patient gender MALE/FEMALE/OTHER;  @expect: "IN ('MALE','FEMALE','OTHER')"; @fail: 'QUARANTINE'; */
+FROM pats.FILE
+ON FAILURE QUARANTINE  TO quarantine_gender WITH (RETENTION = '30 DAYS')
+;
+
+check:
+SELECT 
+    patient_id /* @d:internal id to the patient table, idenitity column; */
+    ,name      
+    ,date_of_birth 
+    ,date_of_death
+    ,gender 
+    ,created_at
+    ,updated_at
+FROM hospital.dbo.Patient
+;
+
+-- export lineage
+EXPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE TO 'C:\tmp\hospital.Patient.openlineage.jsonl';
+```
+
+I would expect hovering over name in the SELECT...FROM hospital.dbo.Patient would should patient name formatted as last name, first name; PII but it shows nothing.  Likely same as lineage where the INSERT is breaking the association.

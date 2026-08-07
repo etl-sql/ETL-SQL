@@ -51,6 +51,7 @@
   ],
   "activationEvents": [
     "onLanguage:etlsql",
+    "onLanguage:rptsql",
     "onNotebook:etl-sql-notebook",
     "onView:etlsql-sidebar",
     "onView:etlsql-results-view",
@@ -118,7 +119,17 @@
           "etlsql"
         ],
         "extensions": [
-          ".etlsql",
+          ".etlsql"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "rptsql",
+        "aliases": [
+          "ETL-SQL Report",
+          "rptsql"
+        ],
+        "extensions": [
           ".rptsql"
         ],
         "configuration": "./language-configuration.json"
@@ -129,11 +140,20 @@
         "language": "etlsql",
         "scopeName": "source.etlsql",
         "path": "./syntaxes/etlsql.tmLanguage.json"
+      },
+      {
+        "language": "rptsql",
+        "scopeName": "source.etlsql",
+        "path": "./syntaxes/etlsql.tmLanguage.json"
       }
     ],
     "snippets": [
       {
         "language": "etlsql",
+        "path": "./snippets/etlsql.json"
+      },
+      {
+        "language": "rptsql",
         "path": "./snippets/etlsql.json"
       }
     ],
@@ -373,12 +393,12 @@
       {
         "command": "etlsql.runScript",
         "key": "f5",
-        "when": "resourceLangId == etlsql && !editorHasSelection"
+        "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && !editorHasSelection"
       },
       {
         "command": "etlsql.runSelection",
         "key": "f5",
-        "when": "resourceLangId == etlsql && editorHasSelection"
+        "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && editorHasSelection"
       }
     ],
     "menus": {
@@ -386,74 +406,74 @@
         {
           "command": "etlsql.runScript",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && !etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && !etlsql.isRunning"
         },
         {
           "command": "etlsql.stopScript",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && etlsql.isRunning"
         },
         {
           "command": "etlsql.runSelection",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && editorHasSelection && !etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && editorHasSelection && !etlsql.isRunning"
         },
         {
           "command": "etlsql.browseFile",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql"
+          "when": "resourceLangId == etlsql || resourceLangId == rptsql"
         },
         {
           "command": "etlsql.previewReport",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == rptsql"
         },
         {
           "command": "etlsql.openReportDesigner",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == rptsql"
         },
         {
           "command": "etlsql.format",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql"
+          "when": "resourceLangId == etlsql || resourceLangId == rptsql"
         }
       ],
       "editor/title": [
         {
           "command": "etlsql.runScript",
           "group": "navigation@10",
-          "when": "resourceLangId == etlsql && !etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && !etlsql.isRunning"
         },
         {
           "command": "etlsql.stopScript",
           "group": "navigation@10",
-          "when": "resourceLangId == etlsql && etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && etlsql.isRunning"
         },
         {
           "command": "etlsql.runSelection",
           "group": "navigation@11",
-          "when": "resourceLangId == etlsql && editorHasSelection && !etlsql.isRunning"
+          "when": "(resourceLangId == etlsql || resourceLangId == rptsql) && editorHasSelection && !etlsql.isRunning"
         },
         {
           "command": "etlsql.format",
           "group": "navigation@11.5",
-          "when": "resourceLangId == etlsql"
+          "when": "resourceLangId == etlsql || resourceLangId == rptsql"
         },
         {
           "command": "etlsql.previewReport",
           "group": "navigation@12",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == rptsql"
         },
         {
           "command": "etlsql.openReportDesigner",
           "group": "navigation@13",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == rptsql"
         },
         {
           "submenu": "etlsql.launchMenu",
           "group": "navigation@14",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == rptsql"
         },
         {
           "command": "etlsql.exportNotebook",

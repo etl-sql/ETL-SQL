@@ -1159,21 +1159,7 @@ public static class SqlFormatter
 
                     if (Regex.IsMatch(commentInner, @"@[a-zA-Z0-9_]"))
                     {
-                        var lines = commentInner.Split(new[] { '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries);
-                        var formattedLines = new List<string>();
-                        foreach (var line in lines)
-                        {
-                            var trimmedLine = line.Trim();
-                            if (string.IsNullOrEmpty(trimmedLine)) continue;
-                            if (trimmedLine.StartsWith("@"))
-                            {
-                                formattedLines.Add(trimmedLine + ";");
-                            }
-                            else
-                            {
-                                formattedLines.Add(trimmedLine);
-                            }
-                        }
+                        var formattedLines = ParseMetadataTags(commentInner);
 
                         if (formattedLines.Count > 0)
                         {
@@ -1213,5 +1199,99 @@ public static class SqlFormatter
         }
 
         return sb.ToString();
+    }
+
+    private static List<string> ParseMetadataTags(string innerText)
+    {
+        var tags = new List<string>();
+        var currentTag = new StringBuilder();
+        bool inSingleQuote = false;
+        bool inDoubleQuote = false;
+
+        for (int j = 0; j < innerText.Length; j++)
+        {
+            char c = innerText[j];
+            if (c == '\'' && (j == 0 || innerText[j - 1] != '\\') && !inDoubleQuote)
+            {
+                inSingleQuote = !inSingleQuote;
+                currentTag.Append(c);
+            }
+            else if (c == '"' && (j == 0 || innerText[j - 1] != '\\') && !inSingleQuote)
+            {
+                inDoubleQuote = !inDoubleQuote;
+                currentTag.Append(c);
+            }
+            else if (!inSingleQuote && !inDoubleQuote)
+            {
+                if (c == ';')
+                {
+                    var tagText = currentTag.ToString().Trim();
+                    if (!string.IsNullOrEmpty(tagText))
+                    {
+                        tags.Add(tagText);
+                    }
+                    currentTag.Clear();
+                }
+                else if (c == '@' && currentTag.Length > 0 && currentTag.ToString().Trim().StartsWith("@"))
+                {
+                    var tagText = currentTag.ToString().Trim();
+                    if (!string.IsNullOrEmpty(tagText))
+                    {
+                        tags.Add(tagText);
+                    }
+                    currentTag.Clear();
+                    currentTag.Append(c);
+                }
+                else if (c == '\n' || c == '\r')
+                {
+                    currentTag.Append(' ');
+                }
+                else
+                {
+                    currentTag.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '\n' || c == '\r')
+                {
+                    currentTag.Append(' ');
+                }
+                else
+                {
+                    currentTag.Append(c);
+                }
+            }
+        }
+
+        var finalTag = currentTag.ToString().Trim();
+        if (!string.IsNullOrEmpty(finalTag))
+        {
+            tags.Add(finalTag);
+        }
+
+        var result = new List<string>();
+        foreach (var tag in tags)
+        {
+            var normalized = Regex.Replace(tag, @"\s+", " ");
+            if (normalized.Contains("IN (") || normalized.Contains("IN("))
+            {
+                normalized = Regex.Replace(normalized, @"IN\s*\(\s*;\s*", "IN (", RegexOptions.IgnoreCase);
+                normalized = Regex.Replace(normalized, @"\s*,\s*", ", ");
+                normalized = Regex.Replace(normalized, @"\(\s+", "(");
+                normalized = Regex.Replace(normalized, @"\s+\)", ")");
+            }
+
+            if (!normalized.StartsWith("@"))
+            {
+                result.Add(normalized);
+            }
+            else
+            {
+                result.Add(normalized + ";");
+            }
+        }
+
+        return result;
     }
 }
