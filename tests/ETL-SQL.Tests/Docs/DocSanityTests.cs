@@ -899,5 +899,47 @@ namespace ETL_SQL.Tests.Docs
                 string.Join("\n", stale) +
                 "\n\nRemove these from FunctionsWithoutOwnReferencePage.");
         }
+
+        [Fact]
+        public void VsCodeExtensionDocsAndVersion_AreCorrectAndSynchronized()
+        {
+            // 1. Resolve current version from Directory.Build.props
+            var buildPropsPath = RepoFile("Directory.Build.props");
+            Assert.True(File.Exists(buildPropsPath), $"Missing Directory.Build.props");
+            var buildProps = File.ReadAllText(buildPropsPath);
+            var versionMatch = Regex.Match(buildProps, @"<VersionPrefix>(\d+\.\d+\.\d+)</VersionPrefix>");
+            Assert.True(versionMatch.Success, "Could not parse version from Directory.Build.props");
+            var currentVersion = versionMatch.Groups[1].Value;
+
+            // 2. Verify version in VS Code package.json
+            var packageJsonPath = RepoFile("src/etl-sql-vscode/package.json");
+            Assert.True(File.Exists(packageJsonPath), $"Missing VS Code package.json");
+            var packageJson = File.ReadAllText(packageJsonPath);
+            Assert.Contains($"\"version\": \"{currentVersion}\"", packageJson);
+
+            // 3. Verify version badge in VS Code README.md
+            var readmePath = RepoFile("src/etl-sql-vscode/README.md");
+            Assert.True(File.Exists(readmePath), $"Missing VS Code README.md");
+            var readme = File.ReadAllText(readmePath);
+            Assert.Contains($"ETL--SQL-v{currentVersion}-5C6BC0", readme);
+
+            // 4. Verify WelcomeView.ts uses correct restructured documentation links
+            var welcomeViewPath = RepoFile("src/etl-sql-vscode/src/WelcomeView.ts");
+            Assert.True(File.Exists(welcomeViewPath), $"Missing WelcomeView.ts");
+            var welcomeView = File.ReadAllText(welcomeViewPath);
+            
+            // Should point to getting-started.md and etl-recipes.md
+            Assert.Contains("docs/guides/getting-started.md", welcomeView);
+            Assert.Contains("docs/cookbooks/etl-recipes.md", welcomeView);
+            
+            // Should not reference legacy path casing or retired files
+            Assert.DoesNotContain("Docs/User_Manual.md", welcomeView);
+            Assert.DoesNotContain("Docs/Cookbook.md", welcomeView);
+
+            // 5. Verify README.md link paths casing and names
+            Assert.DoesNotContain("Docs/", readme);
+            Assert.DoesNotContain("User_Manual.md", readme);
+            Assert.DoesNotContain("Spec_Driven_Development.md", readme);
+        }
     }
 }
