@@ -836,20 +836,109 @@ public static class SqlFormatter
         var result = new List<string>();
         var current = new StringBuilder();
         int depth = 0;
+        bool inSingleLineComment = false;
+        bool inMultiLineComment = false;
+        bool inString = false;
+        char stringChar = '\0';
 
-        foreach (char c in input)
+        int i = 0;
+        while (i < input.Length)
         {
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
+            char c = input[i];
+
+            if (inSingleLineComment)
+            {
+                current.Append(c);
+                if (c == '\n') inSingleLineComment = false;
+                i++;
+                continue;
+            }
+            if (inMultiLineComment)
+            {
+                current.Append(c);
+                if (c == '*' && i + 1 < input.Length && input[i + 1] == '/')
+                {
+                    inMultiLineComment = false;
+                    current.Append('/');
+                    i += 2;
+                }
+                else
+                {
+                    i++;
+                }
+                continue;
+            }
+            if (inString)
+            {
+                current.Append(c);
+                if (c == stringChar)
+                {
+                    if (c == '\'' && i + 1 < input.Length && input[i + 1] == '\'')
+                    {
+                        current.Append('\'');
+                        i += 2;
+                    }
+                    else
+                    {
+                        inString = false;
+                        i++;
+                    }
+                }
+                else
+                {
+                    i++;
+                }
+                continue;
+            }
+
+            if (c == '-' && i + 1 < input.Length && input[i + 1] == '-')
+            {
+                inSingleLineComment = true;
+                current.Append("--");
+                i += 2;
+                continue;
+            }
+            if (c == '/' && i + 1 < input.Length && input[i + 1] == '*')
+            {
+                inMultiLineComment = true;
+                current.Append("/*");
+                i += 2;
+                continue;
+            }
+            if (c == '\'' || c == '"')
+            {
+                inString = true;
+                stringChar = c;
+                current.Append(c);
+                i++;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+                current.Append(c);
+                i++;
+                continue;
+            }
+            if (c == ')')
+            {
+                depth = Math.Max(0, depth - 1);
+                current.Append(c);
+                i++;
+                continue;
+            }
 
             if (c == ',' && depth == 0)
             {
                 result.Add(current.ToString());
                 current.Clear();
+                i++;
             }
             else
             {
                 current.Append(c);
+                i++;
             }
         }
 
