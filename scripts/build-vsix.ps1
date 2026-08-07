@@ -1,7 +1,7 @@
 # ETL_SQL VSIX Build Script
 # Usage: ./build-vsix.ps1
 
-$Version = "0.17.0"
+$Version = "0.18.0"
 $ExtensionDir = Join-Path $PSScriptRoot "..\src\etl-sql-vscode"
 $ReleaseRoot = Join-Path $PSScriptRoot "..\release\vsix"
 

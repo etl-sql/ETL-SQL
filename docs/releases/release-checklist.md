@@ -12,7 +12,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
 > `-DryRun` first, and `-Force` to continue a partial release.
 
-Replace `x.y.z` with the target version (current target: **0.17.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
 
 ---
 

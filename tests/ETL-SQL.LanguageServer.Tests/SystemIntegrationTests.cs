@@ -443,5 +443,37 @@ SET @normal = 'still-visible';
             Assert.Contains(list, i => i.Label == "m.Users");
             Assert.Contains(list, i => i.Label == "m.Products");
         }
+
+        private class MockConfiguration : Microsoft.Extensions.Configuration.IConfiguration
+        {
+            public string this[string key]
+            {
+                get { return key == "Linting:AvoidSelectStar:Enabled" ? "true" : null; }
+                set { }
+            }
+            public Microsoft.Extensions.Configuration.IConfigurationSection GetSection(string key) { return null; }
+            public System.Collections.Generic.IEnumerable<Microsoft.Extensions.Configuration.IConfigurationSection> GetChildren() { return null; }
+            public Microsoft.Extensions.Primitives.IChangeToken GetReloadToken() { return null; }
+        }
+
+        [Fact]
+        public void Lsp_Linter_AvoidSelectStar_RespectsConfiguration()
+        {
+            var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new MockConfiguration());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
+            
+            var storeEnabled = new DocumentStateStore();
+            var handlerEnabled = new TextDocumentHandler(loggerFactory, metadataManager, storeEnabled, serviceProvider);
+            Assert.True(handlerEnabled.GetLinter().HasRuleOfType(typeof(ETL_SQL.Analysis.Linting.Rules.AvoidSelectStarRule)));
+
+            var storeDisabled = new DocumentStateStore();
+            var handlerDisabled = new TextDocumentHandler(loggerFactory, metadataManager, storeDisabled);
+            Assert.False(handlerDisabled.GetLinter().HasRuleOfType(typeof(ETL_SQL.Analysis.Linting.Rules.AvoidSelectStarRule)));
+        }
     }
 }

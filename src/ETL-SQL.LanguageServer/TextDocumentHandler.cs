@@ -56,19 +56,18 @@ namespace ETL_SQL.LSP
         /// <summary>Debounce for slow path: deep lint rules. Fires only after the user pauses typing.</summary>
         private const int LintDebounceMs = 1500;
 
-        public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store, Common.ILogger? engineLogger = null)
+        public TextDocumentHandler(
+            ILoggerFactory loggerFactory,
+            IMetadataManager metadata,
+            DocumentStateStore store,
+            IServiceProvider? serviceProvider = null,
+            Common.ILogger? engineLogger = null)
         {
             _logger = loggerFactory.CreateLogger<TextDocumentHandler>();
             _engineLogger = engineLogger ?? Common.NullLogger.Instance;
             _metadata = metadata;
             _store = store;
-            _linter = new Linter();
-            foreach (var type in typeof(ILintRule).Assembly.GetTypes()
-                .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
-            {
-                if (Activator.CreateInstance(type) is ILintRule rule)
-                    _linter.AddRule(rule);
-            }
+            _linter = LinterFactory.CreateWithAllRules(serviceProvider);
             _logger.LogInformation("TextDocumentHandler initialized.");
         }
 
@@ -78,6 +77,8 @@ namespace ETL_SQL.LSP
             _logger.LogInformation("TextDocumentHandler bound to LanguageServer.");
             return Task.CompletedTask;
         }
+
+        public Linter GetLinter() => _linter;
 
         public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri)
             => new TextDocumentAttributes(uri, "etlsql");

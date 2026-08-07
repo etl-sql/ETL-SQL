@@ -11,7 +11,7 @@
 | [ETL-SQL FAQ & Troubleshooting Guide](faq.md) | Common questions, gotchas, and their solutions. If you're stuck, start here. |
 | [ETL-SQL User Manual: Thinking in Pipelines](getting-started.md) | Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" to "Multi-Context Data Flow." It is a **narrative onboarding** — the... |
 | [Logging and Performance Tuning](logging-and-performance.md) | Where ETL-SQL writes its logs, how to turn up detail when something is wrong, and the levers that |
-| [ETL-SQL Migration Guide (v0.17.0)](migration-guide.md) | ETL-SQL v0.17.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for... |
+| [ETL-SQL Migration Guide (v0.18.0)](migration-guide.md) | ETL-SQL v0.18.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for... |
 | [ETL-SQL Notebooks (.etlnb)](notebook-guide.md) | ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code. |
 | [One-person quality loop](one-person-quality-loop.md) | This workflow gives one operator a source-controlled pipeline, policy, non-zero quality gate, local schedule, durable history, and two reports with... |
 | [Orchestrating Pipelines & DAGs](pipelines-and-dags.md) | ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or d... |
