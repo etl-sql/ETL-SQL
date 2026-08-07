@@ -30,7 +30,13 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
             if (val === null || val === undefined) {
               return <span className="opacity-30 italic text-[10px] tracking-tighter">NULL</span>;
             }
+            if (val instanceof Date) {
+              return val.getHours() === 0 && val.getMinutes() === 0 && val.getSeconds() === 0 && val.getMilliseconds() === 0
+                ? val.toISOString().slice(0, 10)   // date only: YYYY-MM-DD
+                : val.toISOString().replace('T', ' ').replace('Z', ''); // datetime: YYYY-MM-DD HH:mm:ss.sss
+            }
             return typeof val === 'object' ? JSON.stringify(val) : val;
+
           },
           footer: col,
         })
@@ -51,7 +57,16 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
   });
 
   const csvEscape = (val: unknown): string => {
-    const s = val == null ? '' : String(val);
+    let s: string;
+    if (val == null) {
+      s = '';
+    } else if (val instanceof Date) {
+      s = val.getHours() === 0 && val.getMinutes() === 0 && val.getSeconds() === 0 && val.getMilliseconds() === 0
+        ? val.toISOString().slice(0, 10)
+        : val.toISOString().replace('T', ' ').replace('Z', '');
+    } else {
+      s = String(val);
+    }
     return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')
       ? `"${s.replace(/"/g, '""')}"` : s;
   };
