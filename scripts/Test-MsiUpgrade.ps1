@@ -141,8 +141,12 @@ try {
         throw "Previous uninstall entry reports $($previousEntry.DisplayVersion), expected $previousVersionText."
     }
     $installLocation = [string]$previousEntry.InstallLocation
-    if ([string]::IsNullOrWhiteSpace($installLocation) -or -not (Test-Path -LiteralPath $installLocation)) {
-        throw 'Previous uninstall entry has no usable InstallLocation.'
+    if ([string]::IsNullOrWhiteSpace($installLocation)) {
+        # Fallback for legacy MSIs (e.g. 0.17.0) which did not publish ARPINSTALLLOCATION
+        $installLocation = "C:\Program Files\ETL-SQL"
+    }
+    if (-not (Test-Path -LiteralPath $installLocation)) {
+        throw "Previous uninstall entry has no usable InstallLocation (resolved to '$installLocation')."
     }
 
     $sentinelPath = Join-Path $installLocation ("msi-upgrade-sentinel-{0}.txt" -f [guid]::NewGuid())
