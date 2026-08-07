@@ -51,7 +51,7 @@ public sealed class NotificationDispatchService(
             var title = finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase)
                 ? $"Job succeeded: {job.Name}"
                 : $"Job failed: {job.Name}";
-            
+
             string text;
             if (finalStatus.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase))
             {

@@ -18,7 +18,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestBufferPipelining()
         {
             var helper = new BatchPipelineHelper();
-            
+
             async IAsyncEnumerable<DataTable> SampleSource()
             {
                 for (int i = 0; i < 3; i++)
