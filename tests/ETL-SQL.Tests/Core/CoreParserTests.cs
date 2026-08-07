@@ -452,5 +452,31 @@ TRIGGER JOB JobC AT remote_conn;
             var parser = new Parser(tokens);
             return parser.Parse();
         }
+
+        [Fact]
+        public void TestParseCreateTableWithIdentitySeedIncrement()
+        {
+            var source = @"
+            CREATE TABLE Patient (
+                patient_id bigint IDENTITY(1,1) PRIMARY KEY NOT NULL
+                ,name varchar(100) NOT NULL
+            );";
+            var script = Parse(source);
+            Assert.Single(script.Statements);
+            Assert.IsType<CreateTableStatement>(script.Statements[0]);
+
+            var create = (CreateTableStatement)script.Statements[0];
+            Assert.Equal("Patient", create.TargetTable.TableName);
+            Assert.Equal(2, create.Columns.Count);
+
+            var colId = create.Columns[0];
+            Assert.Equal("patient_id", colId.ColumnName);
+            Assert.True(colId.IsPrimaryKey);
+            Assert.False(colId.IsNullable);
+
+            var colName = create.Columns[1];
+            Assert.Equal("name", colName.ColumnName);
+            Assert.False(colName.IsNullable);
+        }
     }
 }

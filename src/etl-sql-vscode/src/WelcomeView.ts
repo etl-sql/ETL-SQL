@@ -74,17 +74,13 @@ export class WelcomeView {
     }
 
     private async _createNewFile(extension: string) {
-        const newFile = await vscode.workspace.openTextDocument({
-            content: '',
-            language: extension === '.etlnb' ? undefined : 'etlsql'
-        });
-        
-        // For notebooks, we need to handle it differently because it's not a standard text document
         if (extension === '.etlnb') {
             const uri = vscode.Uri.parse(`untitled:untitled-${Math.floor(Math.random() * 10000)}${extension}`);
             await vscode.commands.executeCommand('vscode.openWith', uri, 'etl-sql-notebook');
         } else {
-            await vscode.window.showTextDocument(newFile);
+            const uri = vscode.Uri.parse(`untitled:untitled-${Math.floor(Math.random() * 10000)}${extension}`);
+            const newDoc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(newDoc);
         }
     }
 

@@ -340,6 +340,18 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', () => {
         ReplManager.getInstance().cancel();
     }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.format', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+        if (editor.selection && !editor.selection.isEmpty) {
+            await vscode.commands.executeCommand('editor.action.formatSelection');
+        } else {
+            await vscode.commands.executeCommand('editor.action.formatDocument');
+        }
+    }));
     
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.rollbackTransactions', () => {
         ReplManager.getInstance().rollback();

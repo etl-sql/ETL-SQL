@@ -1620,7 +1620,18 @@ public class DataParser : ParserComponent
 
                 while (true)
                 {
-                    if (Match(TokenType.IDENTITY)) { }
+                    if (Match(TokenType.IDENTITY))
+                    {
+                        if (Match(TokenType.LPAREN))
+                        {
+                            ParseExpression();
+                            if (Match(TokenType.COMMA))
+                            {
+                                ParseExpression();
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' after IDENTITY parameters");
+                        }
+                    }
                     else if (Match(TokenType.PRIMARY)) { Consume(TokenType.KEY, "Expected KEY after PRIMARY"); colDef.IsPrimaryKey = true; }
                     else if (Match(TokenType.UNIQUE)) { colDef.IsUnique = true; }
                     else if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); colDef.IsNullable = false; }

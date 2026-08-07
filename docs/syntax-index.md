@@ -767,7 +767,7 @@ CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 ```
 | Option | Context | Description |
 | :--- | :--- | :--- |
-| `IDENTITY` | Column | Auto-incrementing integer |
+| `IDENTITY` | Column | Auto-incrementing integer; supports optional seed/increment parameters as `IDENTITY(seed, increment)` |
 | `PRIMARY KEY` | Column/Table | Unique identifier constraint |
 | `UNIQUE` | Column/Table | Unique value constraint |
 | `NOT NULL` / `NULL` | Column | Nullability constraint |

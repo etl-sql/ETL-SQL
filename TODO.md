@@ -1556,3 +1556,59 @@ this release).
 - [ ] **Tenant-Isolated Lineage Graphs**: Partition the metadata search and lineage graph indexing engine to ensure that lineage tracking data, table names, and database schemas cannot be leaked or queried across tenant boundary boundaries.
 - [ ] **Zero-Loss Tenant Migration Utility**: Build an administrative command-line utility to export and import a tenant's complete configuration, active jobs, reports, history, and workspace files as a single encrypted bundle for easy onboarding or migration to on-premises deployments.
 - [ ] **Portal Script Concurrent Editing Locks**: Implement collaborative file mutexes and session-lease locking in the Portal script editor to warn other workspace developers when a script is actively being edited, preventing silent code overwrites on save.
+
+## Bugs
+- [ ] **Lineage is not working correctly**  Using this query: 
+```sql
+  DROP CONNECTION IF EXISTS hospital;
+  CREATE CONNECTION hospital AS
+  MSSQL('ENC:ArFsBrabRZQUUiaV/Aw6a1XNHcXrNolQfWGGxr3kACamZ5c8Qros/oHIUSpysb/f2NlhnpUvb6zpfwrP/0ObQiktuIVG0yElAygnEkAJwnUSjYkcOppeHIkAFffLMprq3jm4YSOszSP02BZWHgbzqueW8QPX4QKR/eYoAJ7
+  l7+mR3vI16g2EFN/wpND220nYXGfNFA==');
+
+  EXECUTE hospital
+  BEGIN
+      DROP TABLE IF EXISTS Patient;
+      CREATE TABLE Patient (
+          patient_id bigint IDENTITY(1,1) PRIMARY KEY NOT NULL
+          ,name varchar(100) NOT NULL
+          ,date_of_birth date NULL
+          ,date_of_death date NULL
+          ,gender varchar(10) NULL
+          ,created_at datetime NOT NULL DEFAULT GETDATE()
+          ,updated_at datetime NOT NULL DEFAULT GETDATE()
+      );
+  END
+
+  DROP CONNECTION IF EXISTS pats;
+  CREATE CONNECTION pats AS FLATFILE(PATH="C:\tmp\patients.csv", TEXT_QUALIFIER='"', DELIMITER=',', HEADER=TRUE, NULL_AS=EMPTY);
+  INSERT INTO hospital.dbo.Patient (name, date_of_birth, date_of_death, gender)
+  SELECT name, CAST(date_of_birth AS date), CAST(date_of_death AS date), gender FROM pats.FILE;
+
+  SELECT
+  patient_id, name, date_of_birth, date_of_death, gender, created_at, updated_at
+  FROM hospital.dbo.Patient;  
+
+  EXPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE TO 'C:\tmp\hospital.Patient.openlineage.jsonl';
+
+  ```
+  When I hover over any column in the last select other than patient_id (which is correct) I should get the source being the csv file.  
+  Example 
+  date_of_birth: pats.name - C:\tmp\patients.csv -> Cast to date -> MSSQL EDW.dbo.Patient.date_of_birth  
+  name: pats.name - C:\tmp\patients.csv -> MSSQL EDW.dbo.Patient.Name
+  I don't want to reveal any credentials but the database, file, etc should be identifiable
+  enough that we know where they came from.  The output should start at the end and work backwards.
+
+  We saved this lineage above and later pulled in EDW.dbo.Patient.name into another script.  So step 1 import lineage, step 2 write Patient.name out to a different csv file.  C:\tmp\output.csv  The lineage should show name: output.name - C:\tmp\patients.csv -> MSSQL EDW.dbo.Patient.Name -> output.name C:\tmp\output.csv
+
+  Let's write out the second script to test a full lineage I can't seem to find the syntax to IMPORT LINEAGE
+  ```sql
+  IMPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE FROM 'C:\tmp\hospital.Patient.openlineage.jsonl';
+  ```
+  - [ ] **Lineage syntax needs help**  I see in the syntax index that LINEAGE_NAMESPACE and LINEAGE_IMPORT_CATALOG exist but there is no documentation on how to use them.  There should be multiple ways to export lineage one being OPENLINEAGE, then markdown as a mermaid chart, and maybe more its been a while since we worked on this.
+  - [ ] **Import lineage** As listed above we should be able to IMPORT LINEAGE from a file.  But we also need a way to import from a database and if I remember correctly we also save lineage to the ETL-SQL database so that may be a third area we could import it from.
+  - [ ] **VS Code METADATA EXPLORER not showing flatfile columns**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 153915.png"  Shows both FILE and DUAL.  FILE has nothing below it, DUAL and dummy?  I would expect to see these column: "name","date_of_birth","date_of_death","gender" without " surrounding them.
+  - [ ] **VS Code METADATA EXPLORER not show column types**  For databases where column type is accessible it should show that information.  Currently just shows column names.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 154200.png"  I would expect: date_of_birth::date   But when the column is dragged and dropped into a script (which works great) it should only show the column name and not the type.
+  - [ ] **VS Code setting need to be grouped**  We have AI, formatting, and paths.  It would be easier for a user to read if these were grouped together.
+  - [ ] **Hide report preview, launch, report designer unless the script is an rptsql**  We have two extension for a reason so an etlsql is not expected to contain reporting elements.  We'll need to add an option to VS Code for that extension currently only ETL-SQL points to .etlsql we'll need ETL-SQL Report.  Then on our welcome screen when they click create etlsql it opens as etlsql.  Notebook is the same etlnb, and Report (the change) should open up as an rptsql.
+  - [ ] **Add a format button** I used to be able to use shortcut keys to format but vs code must have overwritten them.  Either way let's add a format button next to the run button so users can click to format their code or if a selection is highlighted it only formats the highlighted selection.
+  
