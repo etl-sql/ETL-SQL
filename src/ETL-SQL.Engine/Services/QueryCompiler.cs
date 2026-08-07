@@ -99,6 +99,11 @@ public class QueryCompiler(Evaluator evaluator)
                 {
                     return "GETDATE()";
                 }
+                if (funcName == "LENGTH" && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"LEN({arg})";
+                }
                 if (funcName == "TRUNC" && f.Arguments.Count == 1)
                 {
                     var arg = CompileExpressionInternal(f.Arguments[0], d);
@@ -128,6 +133,22 @@ public class QueryCompiler(Evaluator evaluator)
                 {
                     return "NOW()";
                 }
+                if (funcName == "ISNULL" && f.Arguments.Count == 2)
+                {
+                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
+                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
+                    return $"COALESCE({arg1}, {arg2})";
+                }
+                if (funcName == "LEN" && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"LENGTH({arg})";
+                }
+                if ((funcName == "YEAR" || funcName == "MONTH" || funcName == "DAY") && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"EXTRACT({funcName} FROM {arg})";
+                }
                 if (funcName == "TRUNC" && f.Arguments.Count == 1)
                 {
                     var arg = CompileExpressionInternal(f.Arguments[0], d);
@@ -153,6 +174,29 @@ public class QueryCompiler(Evaluator evaluator)
                 if (funcName == "GETDATE")
                 {
                     return "SYSDATE";
+                }
+                if (funcName == "ISNULL" && f.Arguments.Count == 2)
+                {
+                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
+                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
+                    return $"COALESCE({arg1}, {arg2})";
+                }
+                if (funcName == "LEN" && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"LENGTH({arg})";
+                }
+                if ((funcName == "YEAR" || funcName == "MONTH" || funcName == "DAY") && f.Arguments.Count == 1)
+                {
+                    var arg = CompileExpressionInternal(f.Arguments[0], d);
+                    return $"EXTRACT({funcName} FROM {arg})";
+                }
+                if (funcName == "SUBSTRING" && f.Arguments.Count == 3)
+                {
+                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
+                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
+                    var arg3 = CompileExpressionInternal(f.Arguments[2], d);
+                    return $"SUBSTR({arg1}, {arg2}, {arg3})";
                 }
             }
 

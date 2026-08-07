@@ -38,6 +38,17 @@ namespace ETL_SQL.Tests.Engine
         [InlineData("SELECT CAST(c1 AS VARCHAR) FROM t1;", "SELECT CAST(c1 AS VARCHAR) FROM [t1]", "SELECT CAST(c1 AS VARCHAR) FROM t1", "SELECT CAST(c1 AS VARCHAR) FROM T1")]
         [InlineData("SELECT TRY_CAST(c1 AS INT) FROM t1;", "SELECT TRY_CAST(c1 AS INT) FROM [t1]", "SELECT TRY_CAST(c1 AS INT) FROM t1", "SELECT TRY_CAST(c1 AS INT) FROM T1")]
         [InlineData("SELECT UPPER(c1) FROM t1;", "SELECT UPPER(c1) FROM [t1]", "SELECT UPPER(c1) FROM t1", "SELECT UPPER(c1) FROM T1")]
+        // A. Null Handling
+        [InlineData("SELECT ISNULL(c1, 'N/A') FROM t1;", "SELECT ISNULL(c1, @p0) FROM [t1]", "SELECT COALESCE(c1, @p0) FROM t1", "SELECT COALESCE(c1, @p0) FROM T1")]
+        // B. Date Part Extractors
+        [InlineData("SELECT YEAR(c1) FROM t1;", "SELECT YEAR(c1) FROM [t1]", "SELECT EXTRACT(YEAR FROM c1) FROM t1", "SELECT EXTRACT(YEAR FROM c1) FROM T1")]
+        [InlineData("SELECT MONTH(c1) FROM t1;", "SELECT MONTH(c1) FROM [t1]", "SELECT EXTRACT(MONTH FROM c1) FROM t1", "SELECT EXTRACT(MONTH FROM c1) FROM T1")]
+        [InlineData("SELECT DAY(c1) FROM t1;", "SELECT DAY(c1) FROM [t1]", "SELECT EXTRACT(DAY FROM c1) FROM t1", "SELECT EXTRACT(DAY FROM c1) FROM T1")]
+        // C. String Length
+        [InlineData("SELECT LEN(c1) FROM t1;", "SELECT LEN(c1) FROM [t1]", "SELECT LENGTH(c1) FROM t1", "SELECT LENGTH(c1) FROM T1")]
+        [InlineData("SELECT LENGTH(c1) FROM t1;", "SELECT LEN(c1) FROM [t1]", "SELECT LENGTH(c1) FROM t1", "SELECT LENGTH(c1) FROM T1")]
+        // D. Substrings
+        [InlineData("SELECT SUBSTRING(c1, 1, 3) FROM t1;", "SELECT SUBSTRING(c1, @p0, @p1) FROM [t1]", "SELECT SUBSTRING(c1, @p0, @p1) FROM t1", "SELECT SUBSTR(c1, @p0, @p1) FROM T1")]
         public void VerifyDialectFunctionRewriting(string inputSql, string expectedMssql, string expectedPostgres, string expectedOracle)
         {
             var mssqlResult = Compile(inputSql, "MSSQL");
