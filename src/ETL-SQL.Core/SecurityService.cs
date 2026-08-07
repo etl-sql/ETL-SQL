@@ -80,8 +80,20 @@ public partial class SecurityService
         try
         {
             var procName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-            return string.Equals(procName, "testhost", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(procName, "vstest.console", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(procName, "testhost", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(procName, "vstest.console", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Fallback for Linux/macOS/Docker where the process name is often "dotnet"
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            return assemblies.Any(a => 
+                a.FullName != null && (
+                    a.FullName.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) || 
+                    a.FullName.StartsWith("Microsoft.TestPlatform", StringComparison.OrdinalIgnoreCase) || 
+                    a.FullName.StartsWith("Microsoft.VisualStudio.TestPlatform", StringComparison.OrdinalIgnoreCase)
+                ));
         }
         catch { return false; }
     }

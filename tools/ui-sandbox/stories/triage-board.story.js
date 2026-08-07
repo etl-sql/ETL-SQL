@@ -112,36 +112,27 @@ export default {
   description:
     'Cross-job operations triage: failures grouped into incidents, missed runs, and in-flight work. ' +
     'Fixtures cover the busy morning, the quiet one, and a clipped history read.',
-  render(root) {
+  fixtures: [
+    { id: 'busy', label: 'Busy morning' },
+    { id: 'quiet', label: 'Nothing to triage' },
+    { id: 'truncated', label: 'History clipped' }
+  ],
+  async mount(stage, fixtureId, ctx) {
     const state = { expanded: new Set([0]), selected: new Set() };
-    let current = board;
+    let current = { busy: board, quiet: quietBoard, truncated: truncatedBoard }[fixtureId] || board;
 
-    root.innerHTML = `
-      <div class="story-toolbar">
-        <button data-board="busy">Busy morning</button>
-        <button data-board="quiet">Nothing to triage</button>
-        <button data-board="truncated">History clipped</button>
-      </div>
+    stage.innerHTML = `
       <div id="triage-host"></div>
       <pre id="triage-log" class="story-log"></pre>`;
 
-    const host = root.querySelector('#triage-host');
-    const log = root.querySelector('#triage-log');
+    const host = stage.querySelector('#triage-host');
+    const log = stage.querySelector('#triage-log');
 
     const draw = () => { host.innerHTML = renderTriageBoard(current, state); };
 
-    root.querySelectorAll('[data-board]').forEach(button => {
-      button.addEventListener('click', () => {
-        current = { busy: board, quiet: quietBoard, truncated: truncatedBoard }[button.dataset.board];
-        state.expanded = new Set();
-        state.selected = new Set();
-        draw();
-      });
-    });
-
     // Event wiring lives with the host page in production too; the sandbox stands in for it so the
     // expand/select behaviour is exercised without a portal, a catalog, or an Orchestrator.
-    host.addEventListener('click', event => {
+    const onClick = event => {
       const toggle = event.target.closest('.triage-incident-toggle');
       if (toggle) {
         const i = Number(toggle.dataset.incident);
@@ -160,17 +151,27 @@ export default {
         log.textContent = `POST /api/orchestrator/jobs/rerun\n` +
           JSON.stringify({ jobNames: [one.dataset.job] }, null, 2);
       }
-    });
+    };
 
-    host.addEventListener('change', event => {
+    const onChange = event => {
       const check = event.target.closest('.triage-incident-check');
       if (!check) return;
       const i = Number(check.dataset.incident);
       check.checked ? state.selected.add(i) : state.selected.delete(i);
       draw();
-    });
+    };
+
+    host.addEventListener('click', onClick);
+    host.addEventListener('change', onChange);
 
     draw();
+
+    return {
+      dispose() {
+        host.removeEventListener('click', onClick);
+        host.removeEventListener('change', onChange);
+      }
+    };
   },
 };
 

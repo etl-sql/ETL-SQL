@@ -927,11 +927,11 @@ namespace ETL_SQL.Tests.Docs
             var welcomeViewPath = RepoFile("src/etl-sql-vscode/src/WelcomeView.ts");
             Assert.True(File.Exists(welcomeViewPath), $"Missing WelcomeView.ts");
             var welcomeView = File.ReadAllText(welcomeViewPath);
-            
+
             // Should point to getting-started.md and etl-recipes.md
             Assert.Contains("docs/guides/getting-started.md", welcomeView);
             Assert.Contains("docs/cookbooks/etl-recipes.md", welcomeView);
-            
+
             // Should not reference legacy path casing or retired files
             Assert.DoesNotContain("Docs/User_Manual.md", welcomeView);
             Assert.DoesNotContain("Docs/Cookbook.md", welcomeView);

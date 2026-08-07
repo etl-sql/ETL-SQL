@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin — ETL-SQL Portal</title>
-  <link rel="stylesheet" href="/css/portal.css?v=0.17.0">
-  <link rel="stylesheet" href="/designer/designer.css?v=0.17.0">
+  <link rel="stylesheet" href="/css/portal.css?v=0.18.0">
+  <link rel="stylesheet" href="/designer/designer.css?v=0.18.0">
 
 </head>
 <body>
@@ -531,23 +531,23 @@
 
 <!-- Dataset lineage + viewer modals are created by js/datasets-admin.js -->
 
-<script src="/js/echarts.min.js?v=0.17.0"></script>
-<script src="/js/feedback.js?v=0.17.0"></script>
+<script src="/js/echarts.min.js?v=0.18.0"></script>
+<script src="/js/feedback.js?v=0.18.0"></script>
 <script type="module">
-import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi, studioApi } from '/js/api.js?v=0.17.0';
-import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js?v=0.17.0';
-import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.17.0';
-import { bindSelection, catalogQuery, headerSelectionCell, renderCatalogPager, selectedIds, selectionCell } from '/js/admin-catalog-ui.js?v=0.17.0';
-import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.17.0';
-import { renderDag } from '/designer/designer.js?v=0.17.0';
-import { createDatasetsAdmin } from '/js/datasets-admin.js?v=0.17.0';
-import { createSecretsAdmin } from '/js/secrets-admin.js?v=0.17.0';
-import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.17.0';
-import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.17.0';
-import { createOperationsAdmin } from '/js/operations-admin.js?v=0.17.0';
-import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.17.0';
-import { applyNavigationSafely } from '/js/portal-nav.js?v=0.17.0';
-import { failedState, loadingState, installPortalStateStyles } from '/js/portal-states.js?v=0.17.0';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi, studioApi } from '/js/api.js?v=0.18.0';
+import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js?v=0.18.0';
+import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.18.0';
+import { bindSelection, catalogQuery, headerSelectionCell, renderCatalogPager, selectedIds, selectionCell } from '/js/admin-catalog-ui.js?v=0.18.0';
+import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.18.0';
+import { renderDag } from '/designer/designer.js?v=0.18.0';
+import { createDatasetsAdmin } from '/js/datasets-admin.js?v=0.18.0';
+import { createSecretsAdmin } from '/js/secrets-admin.js?v=0.18.0';
+import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.18.0';
+import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.18.0';
+import { createOperationsAdmin } from '/js/operations-admin.js?v=0.18.0';
+import { getSessionIdentity, hasRole, renderSessionIdentity } from '/js/session-identity.js?v=0.18.0';
+import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
+import { failedState, loadingState, installPortalStateStyles } from '/js/portal-states.js?v=0.18.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();

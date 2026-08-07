@@ -466,7 +466,7 @@ SET @normal = 'still-visible';
             var loggerFactory = serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
-            
+
             var storeEnabled = new DocumentStateStore();
             var handlerEnabled = new TextDocumentHandler(loggerFactory, metadataManager, storeEnabled, serviceProvider);
             Assert.True(handlerEnabled.GetLinter().HasRuleOfType(typeof(ETL_SQL.Analysis.Linting.Rules.AvoidSelectStarRule)));
