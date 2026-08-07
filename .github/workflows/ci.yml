@@ -159,6 +159,19 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore VS Code UI dependencies
+        working-directory: src/etl-sql-vscode/ui
+        run: npm ci
+
+      - name: Build VS Code UI package
+        working-directory: src/etl-sql-vscode/ui
+        run: npm run build
+
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
       - name: Cache Playwright browsers
@@ -240,7 +253,12 @@ jobs:
       - name: Install LDAP client library (Linux only)
         run: |
           sudo apt-get update || true
-          sudo apt-get install -y libldap-2.5-0 || sudo apt-get install -y libldap2-dev || sudo apt-get install -y libldap-dev || true
+          sudo apt-get install -y libldap-dev || sudo apt-get install -y libldap2-dev || true
+          LDAP_SO=$(find /usr/lib -name "libldap.so" | head -n 1)
+          if [ -n "$LDAP_SO" ]; then
+            sudo ln -s "$LDAP_SO" /usr/lib/x86_64-linux-gnu/libldap-2.5.so.0 || true
+            sudo ln -s "$LDAP_SO" /usr/lib/libldap-2.5.so.0 || true
+          fi
 
       - name: Run Docker Integration Tests
         shell: pwsh
