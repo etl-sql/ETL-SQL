@@ -31,11 +31,14 @@ namespace ETL_SQL.Tests.Engine
         [Trait("Category", "Integration")]
         public async Task REPL_Should_Emit_Variables_And_Export_CSV()
         {
+            var isRelease = AppContext.BaseDirectory.Contains("Release", StringComparison.OrdinalIgnoreCase);
+            var config = isRelease ? "Release" : "Debug";
+
             // Start the engine in REPL mode
             var startInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"run --no-build --project \"{_projectPath}\" -- ui repl",
+                Arguments = $"run -c {config} --no-build --project \"{_projectPath}\" -- ui repl",
                 UseShellExecute = false,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
