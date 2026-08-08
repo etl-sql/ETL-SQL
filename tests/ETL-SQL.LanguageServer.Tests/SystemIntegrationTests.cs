@@ -151,8 +151,30 @@ SET @normal = 'still-visible';
             Assert.NotNull(expandItem);
             _output.WriteLine($"Expand columns (no alias) InsertText: {expandItem.InsertText}");
 
-            // Should expand WITHOUT alias prefix if not aliased and only 1 table.
-            Assert.Contains("m.Users.UserID", expandItem.InsertText);
+            // One table, no alias — bare column names. The prefix must never include the connection
+            // name ("m."): a connector-qualified column does not survive pushdown to the remote server.
+            Assert.Contains("UserID, UserName, Email", expandItem.InsertText);
+            Assert.DoesNotContain("m.Users.", expandItem.InsertText);
+
+            // 5. Two tables, neither aliased: qualify by table name only, never by connection name.
+            //    Bare columns would be ambiguous across the join; "m.Users.UserID" would not push down.
+            script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT * FROM m.Users JOIN m.Orders ON m.Users.UserID = m.Orders.UserID;";
+            await handler.AnalyzeAsync(uri, script);
+
+            completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(1, 8), // After *
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = " " }
+            };
+            list = await completionProvider.Handle(completionParams, CancellationToken.None);
+
+            expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
+            Assert.NotNull(expandItem);
+            _output.WriteLine($"Expand columns (two unaliased tables) InsertText: {expandItem.InsertText}");
+
+            Assert.Contains("Users.UserID", expandItem.InsertText);
+            Assert.DoesNotContain("m.Users.", expandItem.InsertText);
         }
         [Fact]
         public async Task Variable_Completion_Should_Include_Loop_Variables()

@@ -266,7 +266,10 @@ public sealed class WorkstationEditorTests
         var result = await response.Content.ReadFromJsonAsync<CompleteResponse>();
         Assert.NotNull(result);
         var expansion = Assert.Single(result!.Items, item => item.Label == "Expand columns");
-        Assert.Contains("m.Users.UserID", expansion.InsertText);
+        // One table, no alias — bare column names. A connector-qualified prefix ("m.Users.") would
+        // not survive pushdown to the remote server, so its absence is the point of the assertion.
+        Assert.Contains("UserID, UserName, Email", expansion.InsertText);
+        Assert.DoesNotContain("m.Users.", expansion.InsertText);
         Assert.Equal("SELECT ".Length, expansion.StartColumn);
         Assert.Equal("SELECT *".Length, expansion.EndColumn);
     }
