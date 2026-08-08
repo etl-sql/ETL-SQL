@@ -102,6 +102,19 @@ namespace ETL_SQL.App
         {
             Description = "Resume execution of a persistent session from the last successfully completed checkpoint."
         };
+        private static readonly Option<bool> RecordOption = new("--record", Array.Empty<string>())
+        {
+            Description = "Record this run in the job history and lineage catalog, overriding Engine:AuditAdHocRuns."
+        };
+        private static readonly Option<bool> NoRecordOption = new("--no-record", Array.Empty<string>())
+        {
+            Description = "Do not record this run, overriding Engine:AuditAdHocRuns."
+        };
+        private static readonly Option<string?> JobNameOption = new("--job-name", Array.Empty<string>())
+        {
+            Description = "Identity to record this run under. Defaults to the script's file name.",
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<bool> UpdateJwtOption = new("--update", Array.Empty<string>())
         {
             Description = "Update the local appsettings.json file with the new secret."
@@ -544,7 +557,8 @@ namespace ETL_SQL.App
                 RunScriptArg,
                 BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption,
                 JsonOption, QualitySummaryOption, OutputJsonOption, PageOption, SessionOption,
-                VarOption, ProgressOption, ResumeOption
+                VarOption, ProgressOption, ResumeOption,
+                RecordOption, NoRecordOption, JobNameOption
             };
             runCommand.SetAction(context => Dispatch(context, "run", handler));
 
@@ -1065,6 +1079,16 @@ namespace ETL_SQL.App
             {
                 var input = res.GetValue(RunScriptArg);
                 cliContext.ScriptFile = string.IsNullOrWhiteSpace(input) ? null : new FileInfo(input.Trim('"', '\'', ' '));
+
+                // Only an explicitly supplied flag overrides configuration; absent means "leave
+                // Engine:AuditAdHocRuns in charge". --no-record wins if both are given, because the
+                // safe reading of a contradictory command line is to record less, not more.
+                bool record = TryGetBool(res, RecordOption);
+                bool noRecord = TryGetBool(res, NoRecordOption);
+                cliContext.RecordRun = noRecord ? false : record ? true : null;
+
+                var jobName = TryGetString(res, JobNameOption);
+                cliContext.JobName = string.IsNullOrWhiteSpace(jobName) ? null : jobName.Trim();
             }
             else if (commandName == "encrypt")
             {

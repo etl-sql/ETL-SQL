@@ -33,6 +33,65 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_RecordFlagOverridesConfiguration()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql", "--record");
+            Assert.True(ctx.RecordRun);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_NoRecordFlagOverridesConfiguration()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql", "--no-record");
+            Assert.False(ctx.RecordRun);
+        }
+
+        /// <summary>Absent means "leave Engine:AuditAdHocRuns in charge", not "do not record".</summary>
+        [Fact]
+        public async Task CliOrchestrator_AbsentRecordFlagsLeaveTheDecisionUnset()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql");
+            Assert.Null(ctx.RecordRun);
+        }
+
+        /// <summary>The safe reading of a contradictory command line is to record less, not more.</summary>
+        [Fact]
+        public async Task CliOrchestrator_NoRecordWinsOverRecord()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql", "--record", "--no-record");
+            Assert.False(ctx.RecordRun);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesJobName()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql", "--job-name", "nightly-load-eu");
+            Assert.Equal("nightly-load-eu", ctx.JobName);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AbsentJobNameKeepsTheFileNameDefault()
+        {
+            var ctx = await ParseRunAsync("run", "s.etlsql");
+            Assert.Null(ctx.JobName);
+        }
+
+        private static async Task<CliContext> ParseRunAsync(params string[] args)
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(args).InvokeAsync();
+
+            Assert.NotNull(captured);
+            return captured!;
+        }
+
+        [Fact]
         public async Task CliOrchestrator_ParsesPerfFlag()
         {
             CliContext? capturedContext = null;

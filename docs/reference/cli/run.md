@@ -19,14 +19,17 @@ etl-sql run <script> [options]
 | Option | Description |
 | :--- | :--- |
 | `--batch-size, -b` | The size of data chunks to process in memory. |
+| `--job-name` | Identity to record this run under. Defaults to the script's file name. |
 | `--json` | Output results and messages in structured JSON format. |
 | `--log, -l` | Enable logging. Optional: specify path/directory. |
+| `--no-record` | Do not record this run, overriding Engine:AuditAdHocRuns. |
 | `--output-json` | Write versioned, counts-only run evidence to the specified JSON file. |
 | `--page, -pa` | Pause and page between multiple result sets in the console. |
 | `--perf, -p` | Display performance metrics after execution. |
 | `--preview, -pr` | Preview top N results (e.g. 20, 100, *) |
 | `--progress, -g` | Display real-time graphical execution progress. |
 | `--quality-summary` | Print a counts-only data-quality summary after execution. |
+| `--record` | Record this run in the job history and lineage catalog, overriding Engine:AuditAdHocRuns. |
 | `--resume` | Resume execution of a persistent session from the last successfully completed checkpoint. |
 | `--session` | Enable session persistence with the specified session ID. |
 | `--silent, -s` | Remove all console messages. |

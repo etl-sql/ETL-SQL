@@ -37,6 +37,21 @@ public class CliContext
     public string SessionId { get; set; } = System.Guid.NewGuid().ToString("N");
     public bool Resume { get; set; }
     public bool UpdateConfig { get; set; }
+
+    /// <summary>
+    /// Per-invocation override for whether this run is written to the job history and lineage
+    /// catalog. <c>Engine:AuditAdHocRuns</c> is machine-wide, but one install serves both
+    /// interactive development and a scheduled task — recording the 02:00 job should not mean
+    /// recording every exploratory run. Null leaves the configured setting in charge.
+    /// </summary>
+    public bool? RecordRun { get; set; }
+
+    /// <summary>
+    /// Stable identity for an unattended run. Without it the job name is the script's file name, so
+    /// the same script under two schedules — or same-named scripts in different folders — collapse
+    /// into one history identity that triage cannot tell apart. Null keeps the file-name default.
+    /// </summary>
+    public string? JobName { get; set; }
     public Dictionary<string, object?> Variables { get; } = new(System.StringComparer.OrdinalIgnoreCase);
 
     // serve command

@@ -239,6 +239,136 @@ namespace ETL_SQL.Tests.Orchestration
             );
         }
 
+        /// <summary>
+        /// One install serves both interactive development and a scheduled task. Turning on the
+        /// machine-wide setting so the 02:00 job is recorded must not start recording every
+        /// exploratory run the same operator makes.
+        /// </summary>
+        [Fact]
+        public async Task NoRecordSuppressesRecordingEvenWhenTheSettingIsOn()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: true);
+            Program.ServiceProvider = provider;
+
+            var store = provider.GetRequiredService<IJobHistoryStore>();
+            await store.InitializeAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, "PRINT 'exploratory';");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true,
+                RecordRun = false
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(await store.GetHistoryAsync(Path.GetFileName(_tempScriptPath)));
+        }
+
+        /// <summary>The mirror case: record a scheduled run without turning recording on machine-wide.</summary>
+        [Fact]
+        public async Task RecordForcesRecordingEvenWhenTheSettingIsOff()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: false);
+            Program.ServiceProvider = provider;
+
+            var store = provider.GetRequiredService<IJobHistoryStore>();
+            await store.InitializeAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, "PRINT 'scheduled';");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true,
+                RecordRun = true
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Single(await store.GetHistoryAsync(Path.GetFileName(_tempScriptPath)));
+        }
+
+        [Fact]
+        public async Task AbsentFlagLeavesTheConfiguredSettingInCharge()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: true);
+            Program.ServiceProvider = provider;
+
+            var store = provider.GetRequiredService<IJobHistoryStore>();
+            await store.InitializeAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, "PRINT 'default';");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true,
+                RecordRun = null
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Single(await store.GetHistoryAsync(Path.GetFileName(_tempScriptPath)));
+        }
+
+        /// <summary>
+        /// Two schedules of the same script otherwise collapse into one history identity, which is
+        /// exactly what the triage inbox needs to tell apart.
+        /// </summary>
+        [Fact]
+        public async Task JobNameGivesAnUnattendedRunItsOwnIdentity()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: true);
+            Program.ServiceProvider = provider;
+
+            var store = provider.GetRequiredService<IJobHistoryStore>();
+            await store.InitializeAsync();
+            await File.WriteAllTextAsync(_tempScriptPath, "PRINT 'nightly';");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true,
+                JobName = "nightly-load-eu"
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Single(await store.GetHistoryAsync("nightly-load-eu"));
+            Assert.Empty(await store.GetHistoryAsync(Path.GetFileName(_tempScriptPath)));
+        }
+
+        /// <summary>
+        /// The run's lineage and its history entry must file under the same name, or the catalog and
+        /// the inbox disagree about what ran.
+        /// </summary>
+        [Fact]
+        public async Task LineageIsFiledUnderTheSameJobNameAsTheHistoryEntry()
+        {
+            var provider = CreateTestServiceProvider(auditAdHoc: true, lineageEnabled: true);
+            Program.ServiceProvider = provider;
+
+            var store = provider.GetRequiredService<IJobHistoryStore>();
+            await store.InitializeAsync();
+            await File.WriteAllTextAsync(_tempScriptPath,
+                "SELECT 1 AS amount INTO #orders; CREATE DATASET &daily_sales AS (SELECT amount FROM #orders);");
+
+            var exitCode = await EngineRunner.Run(new CliContext
+            {
+                Command = "run",
+                ScriptFile = new FileInfo(_tempScriptPath),
+                IsSilentMode = true,
+                JobName = "nightly-load-eu"
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Single(await store.GetHistoryAsync("nightly-load-eu"));
+
+            var lineageStore = provider.GetRequiredService<ILineageCatalogStore>();
+            Assert.NotEmpty(await lineageStore.GetHistoryForJobAsync("nightly-load-eu"));
+            Assert.Empty(await lineageStore.GetHistoryForJobAsync(Path.GetFileName(_tempScriptPath)));
+        }
+
         [Fact]
         public async Task WorkstationAutomation_MissingRequiredMetadataReturnsNonZero()
         {

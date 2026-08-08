@@ -82,7 +82,7 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:MaxVisualsPerScript` | integer | `100` | — | Maximum live visual definitions in one report script. Replacing a visual does not consume additional capacity; `0` disables the ceiling. |
 | `Engine:TelemetryEnabled` | boolean | `true` | `SET TELEMETRY = ON\|OFF` | Transmits anonymous execution metrics to help refine optimization. |
 | `Engine:LineageEnabled` | boolean | `true` | `SET LINEAGE = ON\|OFF` | Automatically parses sources/targets to construct lineage maps. |
-| `Engine:AuditAdHocRuns` | boolean | `false` | — | When true, every script launched via local CLI is sent to the audit server. |
+| `Engine:AuditAdHocRuns` | boolean | `false` | `--record` / `--no-record` | When true, a script run from the local CLI is recorded in the **local** job history store and lineage catalog. Nothing is sent to a server. This is machine-wide; use `--record`/`--no-record` on `run` to decide per invocation, and `--job-name` to give a scheduled run a stable identity. |
 | `Engine:ConnectionPreviewLimit` | integer | `10` | `SET CONNECTION_PREVIEW_LIMIT = n` | Rows previewed when validating connector definitions. Set to `0` to skip schema/data access during declaration and keep connections lazy until first use. |
 | `Engine:DefaultHistoryLimit` | integer | `100` | — | Script run histories preserved in database storage. |
 | `Engine:StartOfWeek` | string | `Monday` | `SET WEEK_START_DAY = 'day'` | Start day used by date calculations (e.g. `DATEPART(WEEK, ...)`). |

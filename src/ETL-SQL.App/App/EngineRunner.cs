@@ -339,7 +339,9 @@ namespace ETL_SQL.App
                 }
 
                 var engineConfig = Program.ServiceProvider.GetRequiredService<IConfiguration>();
-                bool auditAdHoc = engineConfig.GetValue<bool>("Engine:AuditAdHocRuns");
+                // --record / --no-record decide for this invocation; the machine-wide setting only
+                // applies when neither was given.
+                bool auditAdHoc = ctx.RecordRun ?? engineConfig.GetValue<bool>("Engine:AuditAdHocRuns");
                 long auditHistoryId = -1L;
                 string? runTimeHash = null;
                 IJobHistoryStore? historyStore = null;
@@ -374,7 +376,9 @@ namespace ETL_SQL.App
                         {
                             try
                             {
-                                var jobName = Path.GetFileName(ctx.ScriptFile.FullName);
+                                // --job-name gives a scheduled run a stable identity; without it two
+                                // schedules of the same script share one history identity.
+                                var jobName = ctx.JobName ?? Path.GetFileName(ctx.ScriptFile.FullName);
                                 auditHistoryId = await historyStore.LogJobStartAsync(jobName);
                             }
                             catch (Exception ex)
@@ -741,7 +745,9 @@ namespace ETL_SQL.App
                                 var lineageCatalog = Program.ServiceProvider.GetService<ILineageCatalogStore>();
                                 if (lineageCatalog != null)
                                 {
-                                    var jobName = Path.GetFileName(ctx.ScriptFile.FullName);
+                                    // Must match the name the job history was written under, or a
+                                    // run's lineage and its history entry file under two identities.
+                                    var jobName = ctx.JobName ?? Path.GetFileName(ctx.ScriptFile.FullName);
                                     await lineageCatalog.SaveLineageAsync(lineage, jobName, ctx.ScriptFile.FullName, DateTime.UtcNow);
                                 }
                             }

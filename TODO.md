@@ -1030,18 +1030,28 @@ through `IJobHistoryStore.LogJobStartAsync` / `LogJobEndAsync` (`EngineRunner.cs
 and also populates the lineage catalog, covered by `AdHocAuditingTests`. What is wrong with it is
 granularity and identity, both of which the triage inbox depends on:
 
-- [ ] Add a per-invocation override (`--record` / `--no-record`) for the recording decision.
+- [x] Add a per-invocation override (`--record` / `--no-record`) for the recording decision.
       `Engine:AuditAdHocRuns` is a machine-wide boolean in `appsettings.json`, but a single install
       serves both interactive development and the scheduled invocation. Today an operator who wants
       their 02:00 task recorded also silently starts recording every exploratory run they make — the
       exact outcome the Solo decision above rejects.
-- [ ] Add `--job-name` so an unattended run has a stable identity. The ad-hoc path derives the job
+- [x] Add `--job-name` so an unattended run has a stable identity. The ad-hoc path derives the job
       name from `Path.GetFileName(scriptFile)` (`EngineRunner.cs:377`), so the same script under two
       schedules, or same-named scripts in different folders, collapse into one history identity and
       the inbox cannot tell them apart. Default to the current behaviour when the flag is absent.
-- [ ] Fix `docs/administration/platform/appsettings-reference.md:85`, which describes
+- [x] Fix `docs/administration/platform/appsettings-reference.md:85`, which describes
       `Engine:AuditAdHocRuns` as sending runs "to the audit server". It writes to the local job
       history store and lineage catalog; no server is involved.
+**Shipped (v0.18.0).** `--record` / `--no-record` override `Engine:AuditAdHocRuns` per invocation;
+absent means the configured setting still decides, so existing behaviour is unchanged. `--no-record`
+wins over `--record`, because the safe reading of a contradictory command line is to record less.
+`--job-name` gives an unattended run a stable identity, defaulting to the script file name.
+
+One thing the item did not mention: the lineage catalog derived the job name *independently* of the
+job history (`EngineRunner.cs`, two separate `Path.GetFileName` calls), so `--job-name` alone would
+have filed a run's lineage and its history entry under two different identities. Both now use the
+same name, covered by a test asserting the catalog and the inbox agree.
+
 - [ ] **Team.** The reference case for this track; no profile change expected. The 200-job shop above
       *is* the Team profile, and Scheduling/Observability are already Green here.
 - [ ] **Enterprise.** Statement metrics must be written to the shared store, not node-local, or the
