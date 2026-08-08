@@ -6,7 +6,7 @@ Newest durable lineage targets missing required stewardship tags.
 SELECT * FROM eng.missing_tags LIMIT 100;
 ```
 
-Columns: `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`, `RunAt`, `JobName`, `ScriptPath`.
+Columns: `target_table`, `target_column`, `missing_tags`, `present_tags`, `run_at`, `job_name`, `script_path`.
 
 ## References
 

@@ -46,6 +46,20 @@ namespace ETL_SQL.Connectors.MySql
 
         public string ConnectionString => _connectionString;
         public string Path => "MYSQL";
+
+        /// <summary>Server and database for lineage labelling. Credentials are never read out.</summary>
+        public (string? Server, string? Database) GetLineageLocation()
+        {
+            try
+            {
+                var builder = new MySqlConnectionStringBuilder(_connectionString);
+                return (
+                    string.IsNullOrEmpty(builder.Server) ? null : builder.Server,
+                    string.IsNullOrEmpty(builder.Database) ? null : builder.Database);
+            }
+            catch { return (null, null); }
+        }
+
         public string Dialect => "MYSQL";
         public bool SupportsSqlPushdown => true;
         public Dictionary<string, string>? Options => _options;

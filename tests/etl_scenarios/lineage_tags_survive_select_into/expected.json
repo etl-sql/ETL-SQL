@@ -20,7 +20,7 @@
     {
       "targetTable": "#PublishedCustomer",
       "targetColumn": "CustomerId",
-      "operation": "SELECT",
+      "operation": "SELECT INTO",
       "sourceTables": [ "#StagedCustomer" ],
       "sourceColumns": [ "CustomerId" ],
       "metadata": {
@@ -30,7 +30,7 @@
     {
       "targetTable": "#PublishedCustomer",
       "targetColumn": "EmailNormalized",
-      "operation": "SELECT",
+      "operation": "SELECT INTO",
       "sourceTables": [ "#StagedCustomer" ],
       "sourceColumns": [ "Email" ],
       "metadata": {

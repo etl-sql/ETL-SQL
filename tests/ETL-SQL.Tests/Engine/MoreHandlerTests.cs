@@ -605,10 +605,10 @@ namespace ETL_SQL.Tests.Engine
         public async Task EngTagsScriptScope_ProducesResult()
         {
             var eval = Eval();
-            await eval.Evaluate(Parse("/* @owner: Platform */ SELECT TagName, TagValue FROM eng.tags WHERE Scope = 'script';"));
+            await eval.Evaluate(Parse("/* @owner: Platform */ SELECT tag_name, tag_value FROM eng.tags WHERE scope = 'script';"));
             Assert.NotNull(eval.LastResult);
             Assert.Contains(eval.LastResult!.Rows, r =>
-                r["TagName"]?.ToString() == "owner" && r["TagValue"]?.ToString() == "Platform");
+                r["tag_name"]?.ToString() == "owner" && r["tag_value"]?.ToString() == "Platform");
         }
 
         // ── USE PASSWORD ──────────────────────────────────────────────────────

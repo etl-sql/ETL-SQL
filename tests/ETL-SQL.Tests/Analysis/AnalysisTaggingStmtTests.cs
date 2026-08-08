@@ -28,12 +28,12 @@ namespace ETL_SQL.Tests.Analysis.Statements
             // Simulate a table creation or tag application
             eval.LineageTracker.Record("MyTable", new List<string>(), "CREATE", null, null, metadata);
 
-            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'MyTable' AND Scope = 'table';");
+            var script = TestHelpers.Parse("SELECT tag_name, tag_value FROM eng.tags WHERE target_table = 'MyTable' AND scope = 'table';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
-            var resultKeys = eval.LastResult!.Rows.Select(r => r["TagName"]?.ToString()).ToList();
-            var resultVals = eval.LastResult!.Rows.Select(r => r["TagValue"]?.ToString()).ToList();
+            var resultKeys = eval.LastResult!.Rows.Select(r => r["tag_name"]?.ToString()).ToList();
+            var resultVals = eval.LastResult!.Rows.Select(r => r["tag_value"]?.ToString()).ToList();
 
             Assert.Contains("owner", resultKeys);
             Assert.Contains("admin", resultVals);
@@ -47,13 +47,13 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var metadata = new Dictionary<string, string> { { "d", "User ID" } };
             eval.LineageTracker.Record("MyTable", new List<string>(), "CREATE", "UserId", null, metadata);
 
-            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'MyTable' AND TargetColumn = 'UserId';");
+            var script = TestHelpers.Parse("SELECT tag_name, tag_value FROM eng.tags WHERE target_table = 'MyTable' AND target_column = 'UserId';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
             Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("d", eval.LastResult.Rows[0]["TagName"]?.ToString());
-            Assert.Equal("User ID", eval.LastResult.Rows[0]["TagValue"]?.ToString());
+            Assert.Equal("d", eval.LastResult.Rows[0]["tag_name"]?.ToString());
+            Assert.Equal("User ID", eval.LastResult.Rows[0]["tag_value"]?.ToString());
         }
 
         [Fact]
@@ -64,13 +64,13 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var metadata = new Dictionary<string, string> { { "owner", "admin" }, { "sensitivity", "high" } };
             eval.LineageTracker.Record("TargetTable", new List<string>(), "UPDATE", null, null, metadata);
 
-            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'TargetTable' AND TagName = 'owner';");
+            var script = TestHelpers.Parse("SELECT tag_name, tag_value FROM eng.tags WHERE target_table = 'TargetTable' AND tag_name = 'owner';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
             Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("owner", eval.LastResult.Rows[0]["TagName"]?.ToString());
-            Assert.Equal("admin", eval.LastResult.Rows[0]["TagValue"]?.ToString());
+            Assert.Equal("owner", eval.LastResult.Rows[0]["tag_name"]?.ToString());
+            Assert.Equal("admin", eval.LastResult.Rows[0]["tag_value"]?.ToString());
         }
 
         [Fact]
@@ -81,13 +81,13 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var metadata = new Dictionary<string, string> { { "d", "Email Address" }, { "pii", "true" } };
             eval.LineageTracker.Record("Users", new List<string>(), "INSERT", "Email", null, metadata);
 
-            var script = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = 'Users' AND TargetColumn = 'Email' AND TagName = 'pii';");
+            var script = TestHelpers.Parse("SELECT tag_name, tag_value FROM eng.tags WHERE target_table = 'Users' AND target_column = 'Email' AND tag_name = 'pii';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
             Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("pii", eval.LastResult.Rows[0]["TagName"]?.ToString());
-            Assert.Equal("true", eval.LastResult.Rows[0]["TagValue"]?.ToString());
+            Assert.Equal("pii", eval.LastResult.Rows[0]["tag_name"]?.ToString());
+            Assert.Equal("true", eval.LastResult.Rows[0]["tag_value"]?.ToString());
         }
 
         [Fact]
@@ -99,14 +99,14 @@ namespace ETL_SQL.Tests.Analysis.Statements
             eval.LineageTracker.Record("TempSource", new List<string>(), "CREATE", null, null, metadata);
 
             var script = TestHelpers.Parse(@"
-                SELECT TagName, TagValue INTO #MyTags FROM eng.tags WHERE TargetTable = 'TempSource';
+                SELECT tag_name, tag_value INTO #MyTags FROM eng.tags WHERE target_table = 'TempSource';
                 SELECT * FROM #MyTags;
             ");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
             Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("author", eval.LastResult.Rows[0]["TagName"]?.ToString());
+            Assert.Equal("author", eval.LastResult.Rows[0]["tag_name"]?.ToString());
         }
 
         // ── Retired SHOW tag forms / -- @tag support ─────────────────────────
@@ -131,11 +131,11 @@ namespace ETL_SQL.Tests.Analysis.Statements
         {
             var eval = NewEval();
             // Script-header tags (block comment) feed into GlobalMetadata via script.Metadata
-            var script = TestHelpers.Parse("/* @owner: DataEngineering; @version: 2.1; */\nSELECT TagName, TagValue FROM eng.tags WHERE Scope = 'script';");
+            var script = TestHelpers.Parse("/* @owner: DataEngineering; @version: 2.1; */\nSELECT tag_name, tag_value FROM eng.tags WHERE scope = 'script';");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
-            var tags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            var tags = eval.LastResult!.Rows.ToDictionary(r => r["tag_name"]!.ToString()!, r => r["tag_value"]!.ToString()!);
             Assert.True(tags.ContainsKey("owner"));
             Assert.Equal("DataEngineering", tags["owner"]);
         }
@@ -145,11 +145,11 @@ namespace ETL_SQL.Tests.Analysis.Statements
         {
             var eval = NewEval();
             // Use -- @tag header syntax (new Lexer support) to populate script metadata
-            var script = TestHelpers.Parse("-- @pipeline: DailySales\nSELECT TagName, TagValue INTO #tags FROM eng.tags WHERE Scope = 'script';\nSELECT * FROM #tags;");
+            var script = TestHelpers.Parse("-- @pipeline: DailySales\nSELECT tag_name, tag_value INTO #tags FROM eng.tags WHERE scope = 'script';\nSELECT * FROM #tags;");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
-            Assert.Contains(eval.LastResult!.Rows, r => r["TagName"]?.ToString() == "pipeline" && r["TagValue"]?.ToString() == "DailySales");
+            Assert.Contains(eval.LastResult!.Rows, r => r["tag_name"]?.ToString() == "pipeline" && r["tag_value"]?.ToString() == "DailySales");
         }
 
         [Fact]
@@ -190,21 +190,21 @@ namespace ETL_SQL.Tests.Analysis.Statements
                     Id INT NOT NULL PRIMARY KEY /*@d: The unique ID; @owner: sales*/,
                     Name VARCHAR(100)           /*@pii: true*/
                 );
-                SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#tagged_table' AND TargetColumn = 'Id';
+                SELECT tag_name, tag_value FROM eng.tags WHERE target_table = '#tagged_table' AND target_column = 'Id';
             ");
             await eval.Evaluate(script);
 
             Assert.NotNull(eval.LastResult);
-            var idTags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            var idTags = eval.LastResult!.Rows.ToDictionary(r => r["tag_name"]!.ToString()!, r => r["tag_value"]!.ToString()!);
             Assert.Contains("d", idTags.Keys);
             Assert.Equal("The unique ID", idTags["d"]);
             Assert.Contains("owner", idTags.Keys);
             Assert.Equal("sales", idTags["owner"]);
 
-            var showNameTags = TestHelpers.Parse("SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#tagged_table' AND TargetColumn = 'Name';");
+            var showNameTags = TestHelpers.Parse("SELECT tag_name, tag_value FROM eng.tags WHERE target_table = '#tagged_table' AND target_column = 'Name';");
             await eval.Evaluate(showNameTags);
             Assert.NotNull(eval.LastResult);
-            var nameTags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            var nameTags = eval.LastResult!.Rows.ToDictionary(r => r["tag_name"]!.ToString()!, r => r["tag_value"]!.ToString()!);
             Assert.Contains("pii", nameTags.Keys);
             Assert.Equal("true", nameTags["pii"]);
         }

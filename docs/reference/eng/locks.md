@@ -3,10 +3,10 @@
 Active engine and job-throttle lock records for concurrency diagnostics.
 
 ```sql
-SELECT * FROM eng.locks ORDER BY AcquiredAt;
+SELECT * FROM eng.locks ORDER BY acquired_at;
 ```
 
-Columns: `Id`, `ProcessId`, `JobName`, `AcquiredAt`, `MachineName`.
+Columns: `id`, `process_id`, `job_name`, `acquired_at`, `machine_name`.
 
 ## References
 

@@ -3,10 +3,10 @@
 Current-session table and column lineage events, including sources, transformations, locations, and metadata.
 
 ```sql
-SELECT * FROM eng.lineage WHERE TargetTable = '#orders';
+SELECT * FROM eng.lineage WHERE target_table = '#orders';
 ```
 
-Columns: `Timestamp`, `Operation`, `TargetTable`, `TargetColumn`, `SourceTables`, `SourceColumns`, `Description`, `Metadata`, `DerivedFromDescriptions`, `SourceFile`, `Line`, `Column`, `TransformationKind`, `TransformationExpression`, `FunctionsApplied`.
+Columns: `timestamp`, `operation`, `target_table`, `target_column`, `source_tables`, `source_columns`, `description`, `metadata`, `derived_from_descriptions`, `source_file`, `line`, `column`, `transformation_kind`, `transformation_expression`, `functions_applied`.
 
 ## References
 

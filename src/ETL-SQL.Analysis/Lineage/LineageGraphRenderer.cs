@@ -34,7 +34,7 @@ public class LineageGraphRenderer
 
         foreach (var tableGroup in groupedByTable)
         {
-            sb.AppendLine(FormatGroupHeader(tableGroup.Key));
+            sb.AppendLine(FormatGroupHeader(tableGroup.First().TargetTableDisplay));
 
             var columns = tableGroup.Where(e => e.TargetColumn != null).GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase);
             if (targetColumn != null) columns = columns.Where(g => g.Key.Equals(targetColumn, StringComparison.OrdinalIgnoreCase));
@@ -77,9 +77,10 @@ public class LineageGraphRenderer
 
         foreach (var entry in entries)
         {
+            // Node identity stays logical (stable across scripts); only the label is physical.
             string rawNodeId = entry.TargetColumn != null ? $"{entry.TargetTable}_{entry.TargetColumn}" : entry.TargetTable;
             string nodeId = CleanId(rawNodeId);
-            string label = entry.TargetColumn != null ? $"{entry.TargetTable}.{entry.TargetColumn}" : entry.TargetTable;
+            string label = Qualify(entry.TargetTableDisplay, entry.TargetColumn);
 
             if (visited.Add(nodeId))
             {
@@ -92,7 +93,7 @@ public class LineageGraphRenderer
                 string? srcCol = entry.SourceColumns.Count > i ? entry.SourceColumns[i] : null;
                 string rawSrcNodeId = srcCol != null ? $"{srcTable}_{srcCol}" : srcTable;
                 string srcNodeId = CleanId(rawSrcNodeId);
-                string srcLabel = srcCol != null ? $"{srcTable}.{srcCol}" : srcTable;
+                string srcLabel = Qualify(entry.SourceTableDisplay(i), srcCol);
 
                 if (visited.Add(srcNodeId))
                 {
@@ -106,6 +107,19 @@ public class LineageGraphRenderer
     }
 
     private string CleanId(string id) => new string(id.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
+
+    /// <summary>
+    /// Appends a column to a source label. Dot notation is the SQL convention and stays for table
+    /// names, but a file descriptor ("FLATFILE C:\tmp\patients.csv") already contains dots, so
+    /// "....csv.date_of_birth" would read as another path segment — those get brackets instead.
+    /// </summary>
+    private static string Qualify(string sourceDisplay, string? column)
+    {
+        if (string.IsNullOrEmpty(column)) return sourceDisplay;
+        return sourceDisplay.Contains(' ')
+            ? $"{sourceDisplay} [{column}]"
+            : $"{sourceDisplay}.{column}";
+    }
 
     private static string FormatGroupHeader(string tableName) =>
         tableName.StartsWith("report:", StringComparison.OrdinalIgnoreCase)
@@ -145,7 +159,9 @@ public class LineageGraphRenderer
 
             bool isLastSource = i == sourceCount - 1;
             string prefix = isLastSource ? "└── " : "├── ";
-            string label = sourceCol != null ? $"{sourceTable}.{sourceCol}" : sourceTable;
+            // Display the physical identifier ("FLATFILE C:\tmp\patients.csv") but keep walking
+            // the graph by the logical name, which is what the tracker is keyed on.
+            string label = Qualify(entry.SourceTableDisplay(i), sourceCol);
 
             sb.AppendLine($"{indent}{prefix}{label}");
 

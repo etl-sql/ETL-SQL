@@ -52,10 +52,24 @@ public class CreateLineageStatementHandler : IStatementHandler
             }
         }
 
+        // Map each live connection's OpenLineage namespace back to the alias this script uses, so
+        // imported datasets are re-qualified into names the rest of the script will chain to even
+        // when the exporting script called the same database something else.
+        var namespaceAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in context.Connections)
+        {
+            if (kv.Value == null) continue;
+            var ns = OpenLineageExporter.ResolveConnectionNamespace(kv.Key, kv.Value);
+            // Every file connector resolves to the same "file://" namespace, so it identifies no
+            // single connection; file datasets carry their full path as the name instead.
+            if (ns.StartsWith("file://", StringComparison.OrdinalIgnoreCase)) continue;
+            namespaceAliases[ns] = kv.Key;
+        }
+
         List<LineageEntry> entries;
         try
         {
-            entries = OpenLineageImporter.Import(content);
+            entries = OpenLineageImporter.Import(content, namespaceAliases);
         }
         catch (ExecutionException)
         {

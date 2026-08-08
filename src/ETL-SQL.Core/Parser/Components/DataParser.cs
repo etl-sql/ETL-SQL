@@ -1552,6 +1552,34 @@ public class DataParser : ParserComponent
         return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
     }
 
+    /// <summary>
+    /// <c>IMPORT LINEAGE FOR [TABLE] &lt;table&gt; [AS OPENLINEAGE] FROM &lt;file|json&gt;</c> — the
+    /// mirror of <c>EXPORT LINEAGE ... AS OPENLINEAGE TO ...</c> and the spelling to reach for.
+    /// <c>INSERT LINEAGE</c> remains as the original spelling of the same statement.
+    /// TABLE and AS OPENLINEAGE are optional so the statement reads symmetrically with EXPORT.
+    /// </summary>
+    public Statement ParseImportLineage(Token startToken)
+    {
+        Consume(TokenType.FOR, "Expected FOR after IMPORT LINEAGE");
+        Match(TokenType.TABLE);   // optional, for symmetry with INSERT LINEAGE FOR TABLE
+        var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+        if (Match(TokenType.AS))
+        {
+            var fmt = _parser.Current;
+            if (!fmt.Value.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
+                throw new SyntaxException(
+                    $"IMPORT LINEAGE supports AS OPENLINEAGE; '{fmt.Value}' is not an importable format.",
+                    fmt.Line, fmt.Column);
+            Advance();
+        }
+
+        Consume(TokenType.FROM, "Expected FROM after the table name in IMPORT LINEAGE");
+        var source = ParseExpression();
+        Match(TokenType.SEMICOLON);
+        return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
+    }
+
     private Statement ParseCreateTable(Token startToken)
     {
         bool ifNotExists = false;

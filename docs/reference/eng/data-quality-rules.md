@@ -3,10 +3,10 @@
 Data-quality rules captured from `@expect` and `@fail` metadata in the current session.
 
 ```sql
-SELECT * FROM eng.data_quality_rules WHERE Action = 'QUARANTINE';
+SELECT * FROM eng.data_quality_rules WHERE action = 'QUARANTINE';
 ```
 
-Columns: `TargetTable`, `TargetColumn`, `RuleTag`, `Rule`, `Action`, `SourceFile`, `Line`.
+Columns: `target_table`, `target_column`, `rule_tag`, `rule`, `action`, `source_file`, `line`.
 
 ## Over a `PORTAL` connection
 

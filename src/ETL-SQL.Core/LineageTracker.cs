@@ -6,6 +6,27 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Core;
 
+/// <summary>
+/// Credential-free description of where a connection alias physically points. Carries only what is
+/// safe to write into a lineage record, an OpenLineage export, or an IDE hover — never the
+/// connection string, user, or password.
+/// </summary>
+/// <param name="ConnectorType">Connector name as written in the script (<c>MSSQL</c>, <c>FLATFILE</c>).</param>
+/// <param name="Server">Host or instance, when known. Omitted from output under NO_SAVE_CONNECTION.</param>
+/// <param name="Database">Catalog/database name, when known.</param>
+/// <param name="FilePath">Resolved path, for file-backed connectors.</param>
+public readonly record struct LineageSourceDescriptor(
+    string? ConnectorType = null,
+    string? Server = null,
+    string? Database = null,
+    string? FilePath = null)
+{
+    /// <summary>An alias that could not be resolved to anything physical.</summary>
+    public static readonly LineageSourceDescriptor Unknown = new();
+
+    public bool IsUnknown => string.IsNullOrEmpty(ConnectorType);
+}
+
 public class LineageEntry
 {
     public string TargetTable { get; set; } = string.Empty;
@@ -26,6 +47,26 @@ public class LineageEntry
     public string? TransformationExpression { get; set; }
     public IReadOnlyList<string>? FunctionsApplied { get; set; }
 
+    /// <summary>
+    /// Physical identifier for <see cref="TargetTable"/> — the connection alias resolved to
+    /// something that still means something outside the script that produced it
+    /// (<c>FLATFILE C:\tmp\patients.csv</c>, <c>localhost:EDW.dbo.Patient</c>). Null when the
+    /// target is script-local (a <c>#temp</c> table, <c>RESULTSET</c>) or no connection is known.
+    /// The logical <see cref="TargetTable"/> stays the lookup key so lineage survives export,
+    /// import, and cross-script chaining, where the connection map is no longer in scope.
+    /// </summary>
+    public string? TargetTablePhysical { get; set; }
+
+    /// <summary>Physical identifiers for <see cref="SourceTables"/>, positionally aligned. An entry is null when that source has no resolvable connection.</summary>
+    public List<string?> SourceTablesPhysical { get; set; } = new();
+
+    /// <summary>Display form of the target — physical when resolved, else the logical name.</summary>
+    public string TargetTableDisplay => TargetTablePhysical ?? TargetTable;
+
+    /// <summary>Display form of the source at <paramref name="index"/> — physical when resolved, else logical.</summary>
+    public string SourceTableDisplay(int index) =>
+        (index < SourceTablesPhysical.Count ? SourceTablesPhysical[index] : null) ?? SourceTables[index];
+
     public LineageEntry() { }
 
     public LineageEntry(string targetTable, string operation)
@@ -42,6 +83,9 @@ public class LineageEntry
 
 public class LineageTracker : ILineageTracker
 {
+    public Func<string, LineageSourceDescriptor>? ConnectionResolver { get; set; }
+    public bool NoSaveConnection { get; set; }
+
     private readonly List<LineageEntry> _entries = new();
     private readonly Dictionary<string, List<LineageEntry>> _entriesByTable = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<LineageEntry>> _tableWideEntriesByTable = new(StringComparer.OrdinalIgnoreCase);
@@ -69,6 +113,89 @@ public class LineageTracker : ILineageTracker
         _logger = logger;
     }
 
+    private static readonly string[] FileConnectors =
+        { "FLATFILE", "CSV", "EXCEL", "XLSX", "JSON", "XML", "PARQUET", "AVRO", "FIXEDWIDTH" };
+
+    private static readonly string[] SyntheticConnectors =
+        { "MOCK", "MOCKDB", "MOCK_DB", "TEST_COLUMNAR", "INMEMORY", "MEMORY" };
+
+    /// <summary>True when the connector is file-backed, so its physical identity is a path rather than a database.</summary>
+    public static bool IsFileConnector(string? connectorType) =>
+        !string.IsNullOrEmpty(connectorType) && FileConnectors.Contains(connectorType.ToUpperInvariant());
+
+    /// <summary>
+    /// Splits a file descriptor ("FLATFILE C:\tmp\patients.csv") into its path, discarding the
+    /// connector prefix. Returns false for database descriptors, which have no path.
+    /// </summary>
+    public static bool TryGetPhysicalFilePath(string? descriptor, out string path)
+    {
+        path = string.Empty;
+        if (string.IsNullOrEmpty(descriptor)) return false;
+
+        int space = descriptor.IndexOf(' ');
+        if (space <= 0) return false;
+        if (!IsFileConnector(descriptor[..space])) return false;
+
+        path = descriptor[(space + 1)..];
+        return path.Length > 0;
+    }
+
+    /// <summary>
+    /// Resolves a script-local table reference (<c>pats.FILE</c>, <c>hospital.dbo.Patient</c>) to a
+    /// physical identifier that still means something once the script is out of view:
+    /// <c>FLATFILE C:\tmp\patients.csv</c> for file connectors, <c>server:db.schema.table</c> for
+    /// databases. When <paramref name="noSaveConnection"/> is set the server is omitted
+    /// (<c>EDW.dbo.Patient</c>) so lineage can be shared without disclosing where it was read.
+    /// Only credential-free fields are used — never the raw connection string.
+    /// Returns null when the reference is script-local or the connection is unknown, in which case
+    /// callers fall back to the logical name.
+    /// </summary>
+    public static string? ResolvePhysicalDescriptor(
+        string rawTable,
+        Func<string, LineageSourceDescriptor>? resolver,
+        bool noSaveConnection)
+    {
+        if (string.IsNullOrEmpty(rawTable) || resolver == null) return null;
+
+        // Script-local targets have no physical location to resolve.
+        if (rawTable.StartsWith("#") || rawTable.StartsWith("&") ||
+            rawTable.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
+            rawTable.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
+            rawTable.Equals("RESULTSET", StringComparison.OrdinalIgnoreCase) ||
+            rawTable.Equals("VARIABLE", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var parts = rawTable.Split('.', 2);
+        string alias = parts[0];
+        string rest = parts.Length > 1 ? parts[1] : "";
+
+        var info = resolver(alias);
+        if (info.IsUnknown) return null;
+
+        string connector = info.ConnectorType!.ToUpperInvariant();
+        if (SyntheticConnectors.Contains(connector)) return null;
+
+        if (FileConnectors.Contains(connector) || !string.IsNullOrEmpty(info.FilePath))
+        {
+            if (string.IsNullOrEmpty(info.FilePath)) return null;
+            // "pats.FILE" is the whole file; a named sheet/entity keeps its name appended.
+            return string.IsNullOrEmpty(rest) || rest.Equals("FILE", StringComparison.OrdinalIgnoreCase)
+                ? $"{connector} {info.FilePath}"
+                : $"{connector} {info.FilePath}.{rest}";
+        }
+
+        // Without a database name there is nothing more identifying than the alias already was.
+        if (string.IsNullOrEmpty(info.Database)) return null;
+
+        string qualified = string.IsNullOrEmpty(rest) ? info.Database : $"{info.Database}.{rest}";
+        return (!noSaveConnection && !string.IsNullOrEmpty(info.Server))
+            ? $"{info.Server}:{qualified}"
+            : qualified;
+    }
+
+    private string? Physical(string rawTable) =>
+        ResolvePhysicalDescriptor(rawTable, ConnectionResolver, NoSaveConnection);
+
     public void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null, TransformationKind transformationKind = TransformationKind.Unknown, string? transformationExpression = null, IReadOnlyList<string>? functionsApplied = null)
     {
         if (string.IsNullOrEmpty(target)) return;
@@ -86,13 +213,22 @@ public class LineageTracker : ILineageTracker
                 if (transformationKind != TransformationKind.Unknown) existing.TransformationKind = transformationKind;
                 if (transformationExpression != null) existing.TransformationExpression = transformationExpression;
                 if (functionsApplied != null) existing.FunctionsApplied = functionsApplied;
+
+                // Tags merged into an existing entry still have to reach the metadata indexes, or
+                // a column tagged by a second observation of the same statement would be
+                // queryable on the entry but invisible to GetColumnMetadata and tag inheritance.
+                ApplyMetadataFromEntry(existing);
                 return;
             }
+
+            var sourceList = sources.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
             var entry = new LineageEntry(target, operation)
             {
                 TargetColumn = targetColumn,
-                SourceTables = sources.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                TargetTablePhysical = Physical(target),
+                SourceTables = sourceList,
+                SourceTablesPhysical = sourceList.Select(Physical).ToList(),
                 SourceColumns = sourceColumns?.Where(c => !string.IsNullOrEmpty(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>(),
                 Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase),
                 DerivedFromDescriptions = derivedFromDescriptions,
@@ -473,12 +609,69 @@ public class LineageTracker : ILineageTracker
         }
     }
 
+    /// <summary>
+    /// Assigns each entry its distance from a raw source: a write whose inputs nothing else in the
+    /// graph produces is step 1, a write that consumes that write's output is step 2, and so on.
+    /// Ordering by step reads a flow origin-first, which is how someone tracing a column actually
+    /// wants to walk it — timestamp order does not, because static analysis and execution record
+    /// the same flow at different moments.
+    /// Cycles are broken by leaving the entry at its lowest observed step.
+    /// </summary>
+    public static IReadOnlyDictionary<LineageEntry, int> ComputeChainSteps(IEnumerable<LineageEntry> entries)
+    {
+        var all = entries.ToList();
+
+        // Which entries produce a given table, so an entry's inputs can be traced to their writers.
+        var producers = new Dictionary<string, List<LineageEntry>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in all)
+        {
+            if (string.IsNullOrEmpty(e.TargetTable)) continue;
+            if (!producers.TryGetValue(e.TargetTable, out var list))
+                producers[e.TargetTable] = list = new List<LineageEntry>();
+            list.Add(e);
+        }
+
+        var steps = new Dictionary<LineageEntry, int>();
+        var inProgress = new HashSet<LineageEntry>();
+
+        int Depth(LineageEntry entry)
+        {
+            if (steps.TryGetValue(entry, out var known)) return known;
+            if (!inProgress.Add(entry)) return 1;   // cycle — treat as an origin
+
+            int depth = 1;
+            foreach (var source in entry.SourceTables)
+            {
+                if (!producers.TryGetValue(source, out var upstream)) continue;
+                foreach (var producer in upstream)
+                {
+                    // A self-referential write (UPDATE t FROM t) is not a further step.
+                    if (ReferenceEquals(producer, entry)) continue;
+                    if (string.Equals(producer.TargetTable, entry.TargetTable, StringComparison.OrdinalIgnoreCase)) continue;
+                    depth = Math.Max(depth, Depth(producer) + 1);
+                }
+            }
+
+            inProgress.Remove(entry);
+            steps[entry] = depth;
+            return depth;
+        }
+
+        foreach (var e in all) Depth(e);
+        return steps;
+    }
+
     public void LoadState(IEnumerable<LineageEntry> entries)
     {
         if (entries == null) return;
         foreach (var entry in entries)
         {
-            Record(entry.TargetTable, entry.SourceTables, entry.Operation, entry.TargetColumn, entry.SourceColumns, entry.Metadata, entry.DerivedFromDescriptions, entry.Line, entry.Column, entry.EndLine, entry.EndColumn, entry.SourceFile);
+            // Transformation detail has to survive the round trip, or re-imported lineage loses
+            // the very thing that makes a hop worth reading — that a CAST happened here.
+            Record(entry.TargetTable, entry.SourceTables, entry.Operation, entry.TargetColumn,
+                entry.SourceColumns, entry.Metadata, entry.DerivedFromDescriptions,
+                entry.Line, entry.Column, entry.EndLine, entry.EndColumn, entry.SourceFile,
+                entry.TransformationKind, entry.TransformationExpression, entry.FunctionsApplied);
         }
     }
 

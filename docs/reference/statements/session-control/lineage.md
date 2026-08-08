@@ -9,11 +9,11 @@ Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE
 SELECT * FROM eng.lineage;
 
 -- Query lineage for a specific table
-SELECT * FROM eng.lineage WHERE TargetTable = '#target_table';
+SELECT * FROM eng.lineage WHERE target_table = '#target_table';
 
 -- Query lineage for a specific column
 SELECT * FROM eng.lineage
-WHERE TargetTable = '#target_table' AND TargetColumn = 'revenue';
+WHERE target_table = '#target_table' AND target_column = 'revenue';
 
 -- Store lineage rows in a temp table
 SELECT * INTO #lineage FROM eng.lineage;
@@ -21,8 +21,9 @@ SELECT * INTO #lineage FROM eng.lineage;
 
 ## Exporting Lineage
 
-`eng.lineage` returns rows for inspection. Use `EXPORT LINEAGE` for file-writing
-OpenLineage exports:
+`eng.lineage` returns rows for inspection. Use `EXPORT LINEAGE` to write lineage to a file.
+
+### OpenLineage (portable, re-importable)
 
 ```sql
 -- Export the full session lineage
@@ -30,7 +31,119 @@ EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.jsonl';
 
 -- Export lineage for a specific target
 EXPORT LINEAGE FOR #target_table AS OPENLINEAGE TO 'exports/target.openlineage.jsonl';
+EXPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE TO 'exports/patient.openlineage.jsonl';
 ```
+
+The output is [OpenLineage](https://openlineage.io) RunEvents, one JSON object per line (`.jsonl`),
+carrying column-level edges, transformations, and tags. Appending to an existing file is intentional
+— a run log accumulates.
+
+### Markdown with a Mermaid diagram (for reading, not re-importing)
+
+```sql
+EXPORT LINEAGE FOR hospital.dbo.Patient AS MARKDOWN TO 'exports/patient-lineage.md';
+EXPORT LINEAGE FOR hospital.dbo.Patient COLUMN date_of_birth AS MARKDOWN TO 'exports/dob.md';
+
+-- The original spelling, still supported
+LINEAGE(hospital.dbo.Patient) TO 'exports/patient-lineage.md';
+LINEAGE(hospital.dbo.Patient, date_of_birth) TO 'exports/dob-lineage.md';
+```
+
+The file contains a Mermaid graph (renders in GitHub, VS Code, and most Markdown viewers) followed by
+a detailed audit table. `AS MERMAID` is accepted as a synonym for `AS MARKDOWN`.
+
+Use OpenLineage when the lineage needs to be read back by a machine, and Markdown when it needs to
+be read by a person or pasted into a pull request.
+
+## Importing Lineage
+
+Lineage exported by one script can be picked up by another, so a column can be traced past the
+boundary of the script that is running. Without this, a script that reads `EDW.dbo.Patient` can only
+say the data came from `EDW.dbo.Patient`; with it, the trace continues back to the CSV that loaded
+the table last week.
+
+```sql
+-- Canonical spelling: mirrors EXPORT LINEAGE
+IMPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE FROM 'exports/patient.openlineage.jsonl';
+
+-- AS OPENLINEAGE and the file extension are optional
+IMPORT LINEAGE FOR hospital.dbo.Patient FROM 'exports/patient.openlineage.jsonl';
+
+-- The original spelling of the same statement, still supported
+INSERT LINEAGE FOR TABLE hospital.dbo.Patient FROM 'exports/patient.openlineage.jsonl';
+
+-- Inline JSON works too, so lineage can come from a variable
+IMPORT LINEAGE FOR hospital.dbo.Patient FROM @lineage_json;
+```
+
+Imported rows carry the operation `IMPORTED`. They are a **seed**: anything the script records
+afterwards accrues on top, last-writer-wins. `DELETE LINEAGE FOR TABLE <table>` removes only
+imported rows — lineage captured by executing statements is immutable.
+
+### Where imports can come from
+
+| Source | How |
+| :--- | :--- |
+| A file | `IMPORT LINEAGE ... FROM 'path/to/file.openlineage.jsonl'` |
+| Inline JSON / a variable | `IMPORT LINEAGE ... FROM @json_variable` |
+| The durable catalog | Already automatic across runs — query `eng.lineage_history`, or see [`SET LINEAGE_IMPORT_CATALOG`](#set-lineage_import_catalog) for pulling database column comments in |
+
+### Connection aliases do not have to match
+
+An alias like `hospital` is a name local to one script. Export records the portable identity instead
+(`mssql://localhost/EDW`), and import re-attaches whatever alias the *importing* script uses for that
+same server and database. So this works even though the two scripts named the connection differently:
+
+```sql
+-- Script 1
+CREATE CONNECTION hospital AS MSSQL('Server=localhost;Database=EDW;');
+INSERT INTO hospital.dbo.Patient (name) SELECT name FROM pats.FILE;
+EXPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE TO 'C:\tmp\patient.jsonl';
+
+-- Script 2 — same database, different alias
+CREATE CONNECTION warehouse AS MSSQL('Server=localhost;Database=EDW;');
+CREATE CONNECTION outfile AS FLATFILE(PATH='C:\tmp\output.csv');
+IMPORT LINEAGE FOR warehouse.dbo.Patient AS OPENLINEAGE FROM 'C:\tmp\patient.jsonl';
+
+INSERT INTO outfile.FILE (name) SELECT name FROM warehouse.dbo.Patient;
+-- Lineage for outfile now traces: patients.csv -> EDW.dbo.Patient -> output.csv
+```
+
+File datasets are matched on their full path rather than on an alias, because every file connector
+shares the one `file://` namespace.
+
+## Lineage Settings
+
+### `SET LINEAGE_NAMESPACE`
+
+Sets the OpenLineage **job namespace** written into exported RunEvents. Defaults to `etl-sql`. Set it
+to whatever groups your jobs in the collector you export to (Marquez, DataHub, OpenMetadata, …), so
+events from this pipeline land together rather than in a generic bucket.
+
+```sql
+SET LINEAGE_NAMESPACE = 'finance-etl';
+EXPORT LINEAGE AS OPENLINEAGE TO 'exports/run.openlineage.jsonl';
+```
+
+### `SET LINEAGE_IMPORT_CATALOG`
+
+`ON` makes the engine read **column comments from the source database's own catalog** and record
+them as lineage descriptions before dependent lineage is captured — so a comment maintained in SQL
+Server or Postgres shows up as the `@d` description and is inherited by derived columns, without
+being restated in the script. Off by default; best-effort and idempotent per table per session.
+
+```sql
+SET LINEAGE_IMPORT_CATALOG = ON;
+SELECT customer_id, email INTO #c FROM CRM.dbo.Customers;
+-- #c.email inherits the column comment from CRM.dbo.Customers.email
+```
+
+The equivalent configuration key is `Lineage:ImportCatalogMetadata` in `appsettings.json`.
+
+### `SET NO_SAVE_CONNECTION`
+
+`ON` omits the server from physical identifiers in lineage output (`EDW.dbo.Patient` rather than
+`localhost:EDW.dbo.Patient`), so lineage can be shared without disclosing where it was read.
 
 ### Report Nodes
 
@@ -52,39 +165,39 @@ The `eng.lineage` virtual table exposes every recorded lineage event as rows:
 SELECT * FROM eng.lineage;
 
 -- Filter to a specific target
-SELECT * FROM eng.lineage WHERE TargetTable = '#summary';
+SELECT * FROM eng.lineage WHERE target_table = '#summary';
 
 -- Find all PII-carrying columns across the session
-SELECT TargetTable, TargetColumn, Metadata
+SELECT target_table, target_column, Metadata
 FROM eng.lineage
-WHERE JSON_VALUE(Metadata, '$.pii') = 'true';
+WHERE JSON_VALUE(metadata, '$.pii') = 'true';
 
 -- Find all aggregations applied
-SELECT TargetTable, TargetColumn, TransformationKind, FunctionsApplied
+SELECT target_table, target_column, transformation_kind, functions_applied
 FROM eng.lineage
-WHERE TransformationKind = 'Aggregation';
+WHERE transformation_kind = 'Aggregation';
 ```
 
 ### LINEAGE Table Columns
 
 | Column | Description |
 | :--- | :--- |
-| `Timestamp` | When the lineage event was recorded |
-| `Operation` | SELECT, UPDATE COLUMN, MERGE UPDATE, MERGE INSERT, BULK INSERT, etc. |
-| `TargetTable` | Destination table or temp table |
-| `TargetColumn` | Destination column (null for table-level entries) |
-| `SourceTables` | Comma-separated list of source tables |
-| `SourceColumns` | Comma-separated list of source columns |
-| `Description` | Value of the `@d` tag if set |
-| `Metadata` | JSON of all tags on the column |
-| `DerivedFromDescriptions` | `@d` values inherited from source columns |
-| `SourceFile` | Script file name |
-| `Line` / `Column` | Source location |
-| `TransformationKind` | Classification of the expression (see below) |
-| `TransformationExpression` | Raw SQL of the expression (omitted for PassThrough) |
-| `FunctionsApplied` | Comma-separated list of function names in the expression |
+| `timestamp` | When the lineage event was recorded |
+| `operation` | SELECT, UPDATE COLUMN, MERGE UPDATE, MERGE INSERT, BULK INSERT, etc. |
+| `target_table` | Destination table or temp table |
+| `target_column` | Destination column (null for table-level entries) |
+| `source_tables` | Comma-separated list of source tables |
+| `source_columns` | Comma-separated list of source columns |
+| `description` | Value of the `@d` tag if set |
+| `metadata` | JSON of all tags on the column |
+| `derived_from_descriptions` | `@d` values inherited from source columns |
+| `source_file` | Script file name |
+| `line` / `column` | Source location |
+| `transformation_kind` | Classification of the expression (see below) |
+| `transformation_expression` | Raw SQL of the expression (omitted for PassThrough) |
+| `functions_applied` | Comma-separated list of function names in the expression |
 
-### TransformationKind Values
+### transformation_kind Values
 
 | Value | Meaning |
 | :--- | :--- |
@@ -204,7 +317,7 @@ FROM #orders;
 
 1. **Column-level overrides table-level**: column tags win when both exist.
 2. **@pii: true wins**: if any upstream column carries `@pii: true`, the derived column inherits `true` regardless of what the expression sets.
-3. **@d is not overwritten**: if a column has its own `@d` tag, inherited descriptions are stored in `DerivedFromDescriptions` instead.
+3. **@d is not overwritten**: if a column has its own `@d` tag, inherited descriptions are stored in `derived_from_descriptions` instead.
 4. **Tags accumulate through chains**: tags on `#raw.email` flow to `#cleaned.email` which flows to `#report.email`.
 
 ## Script-Level Metadata
@@ -238,18 +351,18 @@ FROM #orders_raw
 GROUP BY customer_id;
 
 -- View the lineage rows
-SELECT * FROM eng.lineage WHERE TargetTable = '#customer_summary';
+SELECT * FROM eng.lineage WHERE target_table = '#customer_summary';
 
 -- Query which columns carry PII
-SELECT TargetTable, TargetColumn
+SELECT target_table, target_column
 FROM eng.lineage
-WHERE JSON_VALUE(Metadata, '$.pii') = 'true';
+WHERE JSON_VALUE(metadata, '$.pii') = 'true';
 
 -- Find what transformations were applied
-SELECT TargetColumn, TransformationKind, FunctionsApplied
+SELECT target_column, transformation_kind, functions_applied
 FROM eng.lineage
-WHERE TargetTable = '#customer_summary'
-  AND TransformationKind <> 'PassThrough';
+WHERE target_table = '#customer_summary'
+  AND transformation_kind <> 'PassThrough';
 ```
 
 ## Durable Stewardship Queries
@@ -267,37 +380,37 @@ SELECT * INTO #missing_stewardship FROM eng.missing_tags LIMIT 100;
 SELECT * INTO #remote_missing FROM prod_orch.eng.missing_tags LIMIT 100;
 ```
 
-The result includes `TargetTable`, `TargetColumn`, `MissingTags`, `PresentTags`, `RunAt`,
-`JobName`, and `ScriptPath`.
+The result includes `target_table`, `target_column`, `missing_tags`, `present_tags`, `run_at`,
+`job_name`, and `script_path`.
 
 ## `eng.tags` Virtual Table
 
-`eng.tags` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of `eng.lineage`.
+`eng.tags` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `metadata` column of `eng.lineage`.
 
 ```sql
 -- Find all PII columns in the session
-SELECT TargetTable, TargetColumn
+SELECT target_table, target_column
 INTO #pii_columns
 FROM eng.tags
-WHERE TagName = 'pii' AND TagValue = 'true';
+WHERE tag_name = 'pii' AND tag_value = 'true';
 
 -- Audit all classification levels
-SELECT DISTINCT TagValue AS classification
+SELECT DISTINCT tag_value AS classification
 INTO #levels
 FROM eng.tags
-WHERE TagName = 'classification'
+WHERE tag_name = 'classification'
 ORDER BY classification;
 
 -- Find columns without an owner tag
-SELECT DISTINCT l.TargetTable, l.TargetColumn
+SELECT DISTINCT l.target_table, l.target_column
 INTO #unowned
 FROM eng.lineage l
-WHERE l.TargetColumn IS NOT NULL
+WHERE l.target_column IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM eng.tags t
-      WHERE t.TargetTable = l.TargetTable
-        AND t.TargetColumn = l.TargetColumn
-        AND t.TagName = 'owner'
+      WHERE t.target_table = l.target_table
+        AND t.target_column = l.target_column
+        AND t.tag_name = 'owner'
   );
 ```
 
@@ -305,14 +418,14 @@ WHERE l.TargetColumn IS NOT NULL
 
 | Column | Description |
 | :--- | :--- |
-| `TargetTable` | Table the tag is on |
-| `TargetColumn` | Column the tag is on (null for table-level tags) |
-| `Operation` | SELECT, TABLE_TAGS, UPDATE COLUMN, etc. |
-| `TagName` | Tag name (e.g. `pii`, `owner`, `classification`) |
-| `TagValue` | Tag value |
-| `Scope` | `column` or `table` |
-| `Line` | Source line number |
-| `SourceFile` | Script file name |
+| `target_table` | Table the tag is on |
+| `target_column` | Column the tag is on (null for table-level tags) |
+| `operation` | SELECT, TABLE_TAGS, UPDATE COLUMN, etc. |
+| `tag_name` | Tag name (e.g. `pii`, `owner`, `classification`) |
+| `tag_value` | Tag value |
+| `scope` | `column` or `table` |
+| `line` | Source line number |
+| `source_file` | Script file name |
 
 ## HAS_TAG() Function
 
@@ -320,11 +433,11 @@ WHERE l.TargetColumn IS NOT NULL
 
 ```sql
 -- Filter lineage to PII-tagged columns
-SELECT TargetTable, TargetColumn, TransformationKind
+SELECT target_table, target_column, transformation_kind
 INTO #pii_transforms
 FROM eng.lineage
-WHERE HAS_TAG(TargetTable, TargetColumn, 'pii', 'true') = 1
-  AND TransformationKind <> 'PassThrough';
+WHERE HAS_TAG(target_table, target_column, 'pii', 'true') = 1
+  AND transformation_kind <> 'PassThrough';
 
 -- Check if a specific column has a tag
 SELECT HAS_TAG('#orders', 'email', 'pii') AS is_pii;  -- returns 1 or 0
@@ -339,34 +452,34 @@ SELECT HAS_TAG('#orders', 'amount', 'unit', 'USD') AS is_usd;
 
 ```sql
 -- Local catalog
-SELECT * FROM eng.lineage_history WHERE TargetTable = 'Orders';
-SELECT * FROM eng.lineage_history WHERE TargetTable = 'Orders' LIMIT 50;
-SELECT * INTO #history FROM eng.lineage_history WHERE TargetTable = 'Orders';
+SELECT * FROM eng.lineage_history WHERE target_table = 'Orders';
+SELECT * FROM eng.lineage_history WHERE target_table = 'Orders' LIMIT 50;
+SELECT * INTO #history FROM eng.lineage_history WHERE target_table = 'Orders';
 
 -- Remote Orchestrator
-SELECT * FROM ProdOrch.eng.lineage_history WHERE TargetTable = 'Orders';
+SELECT * FROM ProdOrch.eng.lineage_history WHERE target_table = 'Orders';
 SELECT * INTO #remote_history FROM ProdOrch.eng.lineage_history
-WHERE TargetTable = 'Orders' LIMIT 50;
+WHERE target_table = 'Orders' LIMIT 50;
 ```
 
-Returns all lineage entries that targeted the named table, most recent run first. Columns: `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`.
+Returns all lineage entries that targeted the named table, most recent run first. Columns: `id`, `run_at`, `job_name`, `target_table`, `target_column`, `source_tables`, `operation`, `tags`, `source_file`, `line`.
 
 ### History for a tag
 
 ```sql
 -- Local catalog
-SELECT * FROM eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') IS NOT NULL;
-SELECT * FROM eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') = 'true';
+SELECT * FROM eng.lineage_history WHERE JSON_VALUE(tags, '$.pii') IS NOT NULL;
+SELECT * FROM eng.lineage_history WHERE JSON_VALUE(tags, '$.pii') = 'true';
 SELECT * INTO #restricted FROM eng.lineage_history
-WHERE JSON_VALUE(Tags, '$.classification') = 'restricted' LIMIT 100;
+WHERE JSON_VALUE(tags, '$.classification') = 'restricted' LIMIT 100;
 
 -- Remote Orchestrator
-SELECT * FROM ProdOrch.eng.lineage_history WHERE JSON_VALUE(Tags, '$.pii') = 'true';
+SELECT * FROM ProdOrch.eng.lineage_history WHERE JSON_VALUE(tags, '$.pii') = 'true';
 SELECT * INTO #remote_restricted FROM ProdOrch.eng.lineage_history
-WHERE JSON_VALUE(Tags, '$.classification') = 'restricted' LIMIT 100;
+WHERE JSON_VALUE(tags, '$.classification') = 'restricted' LIMIT 100;
 ```
 
-Returns all entries whose `Tags` JSON contains the given key, optionally filtered to a specific value.
+Returns all entries whose `tags` JSON contains the given key, optionally filtered to a specific value.
 
 ### Missing stewardship tags
 
@@ -394,9 +507,9 @@ SELECT * INTO #portal_protected FROM ProdPortal.eng.protected_data LIMIT 100;
 SELECT * INTO #portal_review FROM ProdPortal.eng.protected_data_suggestions LIMIT 100;
 ```
 
-Returns protected lineage entries from the local or remote lineage catalog. A row is protected when it has a truthy `@pii`, `@phi`, `@pci`, or `@sensitive` tag, or `@classification` is `confidential` or `restricted`. Result columns include `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `ProtectionTags`, `Owner`, `Steward`, `Contact`, `Domain`, `Classification`, `Quality`, `Tags`, `SourceFile`, and `Line`.
+Returns protected lineage entries from the local or remote lineage catalog. A row is protected when it has a truthy `@pii`, `@phi`, `@pci`, or `@sensitive` tag, or `@classification` is `confidential` or `restricted`. Result columns include `target_table`, `target_column`, `source_tables`, `operation`, `protection_tags`, `owner`, `steward`, `contact`, `domain`, `classification`, `quality`, `tags`, `source_file`, and `line`.
 
-Use `eng.protected_data_suggestions` for non-authoritative review findings. Suggestions come from target/source column names, catalog metadata such as `@format` or `@semantic_type`, and supported sampled-value callers. The table never writes or changes tags. Result columns include `SuggestedTag`, `SuggestedValue`, `Confidence`, `EvidenceKind`, `Evidence`, `Reason`, and `ExistingTags` so a steward can decide whether to add tags in source-controlled scripts.
+Use `eng.protected_data_suggestions` for non-authoritative review findings. Suggestions come from target/source column names, catalog metadata such as `@format` or `@semantic_type`, and supported sampled-value callers. The table never writes or changes tags. Result columns include `suggested_tag`, `suggested_value`, `confidence`, `evidence_kind`, `evidence`, `reason`, and `existing_tags` so a steward can decide whether to add tags in source-controlled scripts.
 
 References:
 - [Specialized Operations](../../../administration/platform/README.md)

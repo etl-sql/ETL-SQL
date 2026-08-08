@@ -52,10 +52,11 @@ namespace ETL_SQL.Tests.Analysis
 
             // 3. Assert
             var entries = _evaluator.LineageTracker.GetLineage("#Target").ToList();
-            Assert.Single(entries);
-            Assert.Equal("INSERT", entries[0].Operation);
-            Assert.Contains("#SourceA", entries[0].SourceTables);
-            Assert.Contains("#SourceB", entries[0].SourceTables);
+            // The statement-level INSERT (no target column) carries both branches of the UNION;
+            // the per-column entries alongside it each carry only their own source.
+            var insertEntry = Assert.Single(entries, e => e.Operation == "INSERT" && e.TargetColumn == null);
+            Assert.Contains("#SourceA", insertEntry.SourceTables);
+            Assert.Contains("#SourceB", insertEntry.SourceTables);
         }
 
         [Fact]
@@ -152,6 +153,59 @@ namespace ETL_SQL.Tests.Analysis
 
             // Output for manual inspection
             Console.WriteLine(graph);
+        }
+
+        [Fact]
+        public async Task TestLineageMultiStepFlowWithTransformation()
+        {
+            var services1 = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator1 = services1.GetRequiredService<Evaluator>();
+
+            // 1st flow: MOCKDB -> FLATFILE (2-step)
+            string script1 = @"
+                CREATE CONNECTION src AS MOCKDB(SERVER='src_serv', DATABASE='src_db');
+                CREATE CONNECTION dest AS FLATFILE(PATH='C:\tmp\dest.csv');
+                INSERT INTO dest.FILE (id, name)
+                SELECT id, name FROM src.Users;
+            ";
+            await evaluator1.Evaluate(new Parser(new Lexer(script1).Tokenize()).Parse());
+
+            var lineage1 = evaluator1.LineageTracker.GetColumnLineage("dest.FILE", "id").ToList();
+            Assert.NotEmpty(lineage1);
+            var entry1 = lineage1.First();
+            Assert.Contains("src.Users", entry1.SourceTables);
+            Assert.Contains("id", entry1.SourceColumns);
+
+            var services2 = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator2 = services2.GetRequiredService<Evaluator>();
+
+            // 2nd flow: MOCKDB -> #intermediate -> FLATFILE (3-step)
+            string script2 = @"
+                CREATE CONNECTION src AS MOCKDB(SERVER='src_serv', DATABASE='src_db');
+                CREATE CONNECTION dest AS FLATFILE(PATH='C:\tmp\dest.csv');
+                CREATE TABLE #intermediate (id INT, name VARCHAR);
+                
+                INSERT INTO #intermediate (id, name)
+                SELECT CAST(id AS INT) AS id, name FROM src.Users;
+                
+                INSERT INTO dest.FILE (id, name)
+                SELECT id, name FROM #intermediate;
+            ";
+            await evaluator2.Evaluate(new Parser(new Lexer(script2).Tokenize()).Parse());
+
+            // Get the complete ancestor lineage for the target column
+            var ancestors = evaluator2.LineageTracker.GetAncestors("dest.FILE", "id").ToList();
+            
+            // Should contain:
+            // 1. dest.FILE (target of second insert, from #intermediate)
+            // 2. #intermediate (target of first insert, from src.Users, with CAST)
+            Assert.True(ancestors.Count >= 2, $"Expected at least 2 ancestor lineage entries, got {ancestors.Count}");
+
+            // The intermediate step should record CAST transformation
+            var intermediateEntry = ancestors.FirstOrDefault(e => e.TargetTable.Equals("#intermediate", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(intermediateEntry);
+            Assert.Equal(TransformationKind.Cast, intermediateEntry.TransformationKind);
+            Assert.Contains("CAST(id, 'INT')", intermediateEntry.TransformationExpression);
         }
     }
 }

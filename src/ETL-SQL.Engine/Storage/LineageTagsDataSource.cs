@@ -19,9 +19,9 @@ namespace ETL_SQL.Engine.Storage
         private readonly ILineageTracker _tracker;
         private readonly List<string> _columns = new()
         {
-            "TargetTable", "TargetColumn", "Operation",
-            "TagName", "TagValue", "Scope",
-            "Line", "SourceFile"
+            "target_table", "target_column", "operation",
+            "tag_name", "tag_value", "scope",
+            "line", "source_file"
         };
 
         public string Path { get; }
@@ -50,14 +50,14 @@ namespace ETL_SQL.Engine.Storage
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["TargetTable"] = null;
-                row["TargetColumn"] = null;
-                row["Operation"] = "SCRIPT_TAGS";
-                row["TagName"] = kv.Key;
-                row["TagValue"] = kv.Value;
-                row["Scope"] = "script";
-                row["Line"] = null;
-                row["SourceFile"] = null;
+                row["target_table"] = null;
+                row["target_column"] = null;
+                row["operation"] = "SCRIPT_TAGS";
+                row["tag_name"] = kv.Key;
+                row["tag_value"] = kv.Value;
+                row["scope"] = "script";
+                row["line"] = null;
+                row["source_file"] = null;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -81,14 +81,14 @@ namespace ETL_SQL.Engine.Storage
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var row = new Row();
-                    row["TargetTable"] = entry.TargetTable;
-                    row["TargetColumn"] = entry.TargetColumn;
-                    row["Operation"] = entry.Operation;
-                    row["TagName"] = kv.Key;
-                    row["TagValue"] = kv.Value;
-                    row["Scope"] = scope;
-                    row["Line"] = entry.Line;
-                    row["SourceFile"] = entry.SourceFile;
+                    row["target_table"] = entry.TargetTable;
+                    row["target_column"] = entry.TargetColumn;
+                    row["operation"] = entry.Operation;
+                    row["tag_name"] = kv.Key;
+                    row["tag_value"] = kv.Value;
+                    row["scope"] = scope;
+                    row["line"] = entry.Line;
+                    row["source_file"] = entry.SourceFile;
                     rows.Add(row);
 
                     if (rows.Count >= batchSize)

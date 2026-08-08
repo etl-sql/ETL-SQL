@@ -20,10 +20,10 @@ namespace ETL_SQL.Engine.Storage
         private readonly string? _targetColumn;
         private readonly List<string> _columns = new()
         {
-            "Timestamp", "Operation", "TargetTable", "TargetColumn",
-            "SourceTables", "SourceColumns", "Description", "Metadata",
-            "DerivedFromDescriptions", "SourceFile", "Line", "Column",
-            "TransformationKind", "TransformationExpression", "FunctionsApplied"
+            "step", "timestamp", "operation", "target_table", "target_physical", "target_column",
+            "source_tables", "source_physical", "source_columns", "description", "metadata",
+            "derived_from_descriptions", "source_file", "line", "column",
+            "transformation_kind", "transformation_expression", "functions_applied"
         };
 
         public string Path => "LINEAGE";
@@ -56,26 +56,57 @@ namespace ETL_SQL.Engine.Storage
                 entries = _tracker.GetFullLineage();
             }
 
+            // One movement can be observed twice — static analysis records it at parse time and the
+            // engine records it again as it executes, at a different source position. Both are
+            // legitimate entries (hover locates the cursor by position), but as a chain to walk
+            // they are the same hop, so collapse them here and keep the better-described one.
+            var deduped = entries
+                .GroupBy(e => (
+                    Target: e.TargetTable.ToLowerInvariant(),
+                    Column: e.TargetColumn?.ToLowerInvariant(),
+                    Operation: e.Operation.ToLowerInvariant(),
+                    Sources: string.Join("|", e.SourceTables).ToLowerInvariant(),
+                    SourceColumns: string.Join("|", e.SourceColumns).ToLowerInvariant()))
+                .Select(g => g
+                    .OrderByDescending(e => e.TargetTablePhysical != null || e.SourceTablesPhysical.Any(p => p != null))
+                    .ThenByDescending(e => e.TransformationKind != ETL_SQL.Core.TransformationKind.Unknown)
+                    .ThenByDescending(e => e.Metadata.Count)
+                    .First())
+                .ToList();
+
+            // Order origin-first so the result reads as a walkable chain rather than as the order
+            // the entries happened to be recorded in.
+            var steps = ETL_SQL.Core.LineageTracker.ComputeChainSteps(deduped);
+            var ordered = deduped
+                .OrderBy(e => steps.TryGetValue(e, out var s) ? s : 1)
+                .ThenBy(e => e.Timestamp)
+                .ToList();
+
             var rows = new List<Row>();
-            foreach (var entry in entries)
+            foreach (var entry in ordered)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["Timestamp"] = entry.Timestamp;
-                row["Operation"] = entry.Operation;
-                row["TargetTable"] = entry.TargetTable;
-                row["TargetColumn"] = entry.TargetColumn;
-                row["SourceTables"] = string.Join(", ", entry.SourceTables);
-                row["SourceColumns"] = string.Join(", ", entry.SourceColumns);
-                row["Description"] = entry.Description;
-                row["Metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
-                row["DerivedFromDescriptions"] = entry.DerivedFromDescriptions;
-                row["SourceFile"] = entry.SourceFile;
-                row["Line"] = entry.Line;
-                row["Column"] = entry.Column;
-                row["TransformationKind"] = entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
-                row["TransformationExpression"] = entry.TransformationExpression;
-                row["FunctionsApplied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
+                row["step"] = (decimal)(steps.TryGetValue(entry, out var step) ? step : 1);
+                row["timestamp"] = entry.Timestamp;
+                row["operation"] = entry.Operation;
+                row["target_table"] = entry.TargetTable;
+                row["target_physical"] = entry.TargetTablePhysical;
+                row["target_column"] = entry.TargetColumn;
+                row["source_tables"] = string.Join(", ", entry.SourceTables);
+                row["source_physical"] = entry.SourceTablesPhysical.Any(p => p != null)
+                    ? string.Join(", ", Enumerable.Range(0, entry.SourceTables.Count).Select(entry.SourceTableDisplay))
+                    : null;
+                row["source_columns"] = string.Join(", ", entry.SourceColumns);
+                row["description"] = entry.Description;
+                row["metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
+                row["derived_from_descriptions"] = entry.DerivedFromDescriptions;
+                row["source_file"] = entry.SourceFile;
+                row["line"] = entry.Line;
+                row["column"] = entry.Column;
+                row["transformation_kind"] = entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
+                row["transformation_expression"] = entry.TransformationExpression;
+                row["functions_applied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)

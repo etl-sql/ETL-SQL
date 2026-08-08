@@ -49,6 +49,20 @@ namespace ETL_SQL.Connectors.Postgres
 
         public string ConnectionString => _connectionString;
         public string Path => "POSTGRES";
+
+        /// <summary>Server and database for lineage labelling. Credentials are never read out.</summary>
+        public (string? Server, string? Database) GetLineageLocation()
+        {
+            try
+            {
+                var builder = new NpgsqlConnectionStringBuilder(_connectionString);
+                return (
+                    string.IsNullOrEmpty(builder.Host) ? null : builder.Host,
+                    string.IsNullOrEmpty(builder.Database) ? null : builder.Database);
+            }
+            catch { return (null, null); }
+        }
+
         public string Dialect => "POSTGRES";
         public bool SupportsSqlPushdown => true;
         public Dictionary<string, string>? Options => _options;

@@ -56,7 +56,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private readonly IEnumerable<IStatementHandler> _handlers;
     private readonly IServiceProvider _serviceProvider = null!;
     private readonly Core.Functions.IFunctionRegistry _functionRegistry;
-    private readonly ILineageTracker _lineageTracker;
+    private readonly ILineageTracker? _lineageTracker;
     private readonly IDockerManager _dockerManager;
     private readonly IConnectorRegistry _connectorRegistry;
     private readonly ISessionStateManager _sessionStateManager;
@@ -295,7 +295,18 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool AllowPlaintextSecrets { get => _options.AllowPlaintextSecrets; set => _options.AllowPlaintextSecrets = value; }
 
     public bool NoSaveSensitive { get => _options.NoSaveSensitive; set => _options.NoSaveSensitive = value; }
-    public bool NoSaveConnection { get => _options.NoSaveConnection; set => _options.NoSaveConnection = value; }
+    public bool NoSaveConnection
+    {
+        get => _options.NoSaveConnection;
+        set
+        {
+            _options.NoSaveConnection = value;
+            if (_lineageTracker != null)
+            {
+                _lineageTracker.NoSaveConnection = value;
+            }
+        }
+    }
     public bool ConnectionEncryption { get => _options.ConnectionEncryption; set => _options.ConnectionEncryption = value; }
 
     /// <summary>Master password for decrypting connection strings.</summary>
@@ -405,7 +416,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public IDockerManager DockerManager => _dockerManager;
 
     /// <summary>Interface for tracking data lineage.</summary>
-    public ILineageTracker LineageTracker => _lineageTracker;
+    public ILineageTracker LineageTracker => _lineageTracker!;
 
     /// <summary>Manager for session persistence and cleanup.</summary>
     public ISessionStateManager SessionStateManager => _sessionStateManager;
@@ -568,6 +579,35 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
         var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
         InitializeThresholds(config);
+
+        if (_lineageTracker != null)
+        {
+            _lineageTracker.ConnectionResolver = alias =>
+            {
+                if (!_connections.TryGetValue(alias, out var ds) || ds == null)
+                    return LineageSourceDescriptor.Unknown;
+
+                var (server, database) = ds.GetLineageLocation();
+
+                // Connectors that cannot parse their own connection string still expose a
+                // credential-free Path — the database name for SQL sources, the file for file
+                // sources. Use it rather than reporting nothing.
+                string? path = ds.Path;
+                bool pathIsPlaceholder = string.IsNullOrEmpty(path)
+                    || path.Equals(ds.ConnectorType, StringComparison.OrdinalIgnoreCase);
+                string? usablePath = pathIsPlaceholder ? null : path;
+
+                bool isFile = Core.LineageTracker.IsFileConnector(ds.ConnectorType);
+                if (!isFile) database ??= usablePath;
+
+                return new LineageSourceDescriptor(
+                    ds.ConnectorType,
+                    server,
+                    database,
+                    FilePath: isFile ? usablePath : null);
+            };
+            _lineageTracker.NoSaveConnection = NoSaveConnection;
+        }
 
         _logger.Info("Evaluator initialized.");
 
@@ -1639,7 +1679,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
         var clonedReportContext = (ReportContext as ReportRegistry)?.Clone() ?? ReportContext;
-        var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, LanguageHelp, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), Telemetry.ExecutionTree, clonedReportContext)
+        var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, LineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, LanguageHelp, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), Telemetry.ExecutionTree, clonedReportContext)
         {
             IsVerbose = IsVerbose,
             RedirectOutput = RedirectOutput,
@@ -1760,7 +1800,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _subqueryCache.Clear();
 
         // 6. Clear Lineage
-        _lineageTracker.Clear();
+        LineageTracker.Clear();
 
         // 7. Reset state indicators
         // SessionId = Guid.NewGuid().ToString("N"); // Preserve session ID identity during reset

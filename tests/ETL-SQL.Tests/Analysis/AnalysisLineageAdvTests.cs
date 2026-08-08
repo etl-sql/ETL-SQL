@@ -73,16 +73,16 @@ namespace ETL_SQL.Tests.Analysis
             await ev.Evaluate(Parse("SELECT Id /* @d: SimpleId; */ INTO #Target FROM #Simple;"));
 
             // Query the lineage
-            var query = "SELECT Operation, TargetTable, TargetColumn, Description FROM LINEAGE(#Target);";
+            var query = "SELECT operation, target_table, target_column, description FROM LINEAGE(#Target);";
             await ev.Evaluate(Parse(query));
 
             var result = ev.LastResult;
             Assert.NotNull(result);
             Assert.True(result.Rows.Count > 0);
 
-            var row = result.Rows.First(r => r["TargetColumn"]?.ToString() == "Id");
-            Assert.Equal("SELECT INTO", row["Operation"]);
-            Assert.Equal("SimpleId", row["Description"]);
+            var row = result.Rows.First(r => r["target_column"]?.ToString() == "Id");
+            Assert.Equal("SELECT INTO", row["operation"]);
+            Assert.Equal("SimpleId", row["description"]);
         }
 
         [Fact]
@@ -144,25 +144,25 @@ namespace ETL_SQL.Tests.Analysis
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
 
-            var script = @"
+            string script = @"
 SELECT
     id   /* @pii: true; @d: Primary key */,
     name /* @sensitive: true */
 INTO #tagged
 FROM (SELECT 1 AS id, 'Alice' AS name) AS x;
 
-SELECT TagName, TagValue
+SELECT tag_name, tag_value
 INTO #result
 FROM LINEAGE_TAGS
-WHERE TargetTable = '#tagged';
+WHERE target_table = '#tagged';
 
 SELECT * FROM #result;
 ";
             await ev.Evaluate(Parse(script));
 
             var rows = ev.LastResult?.Rows ?? new List<Row>();
-            Assert.Contains(rows, r => r["TagName"]?.ToString() == "pii" && r["TagValue"]?.ToString() == "true");
-            Assert.Contains(rows, r => r["TagName"]?.ToString() == "sensitive" && r["TagValue"]?.ToString() == "true");
+            Assert.Contains(rows, r => r["tag_name"]?.ToString() == "pii" && r["tag_value"]?.ToString() == "true");
+            Assert.Contains(rows, r => r["tag_name"]?.ToString() == "sensitive" && r["tag_value"]?.ToString() == "true");
         }
 
         [Fact]
@@ -171,15 +171,15 @@ SELECT * FROM #result;
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
 
-            var script = @"
+            string script = @"
 SELECT id /* @owner: Finance */
 INTO #t
 FROM (SELECT 1 AS id) AS x;
 
-SELECT Scope
+SELECT scope
 INTO #result
 FROM LINEAGE_TAGS
-WHERE TargetTable = '#t' AND TagName = 'owner';
+WHERE target_table = '#t' AND tag_name = 'owner';
 
 SELECT * FROM #result;
 ";
@@ -187,7 +187,7 @@ SELECT * FROM #result;
 
             var rows = ev.LastResult?.Rows ?? new List<Row>();
             Assert.NotEmpty(rows);
-            Assert.All(rows, r => Assert.Equal("column", r["Scope"]?.ToString()));
+            Assert.All(rows, r => Assert.Equal("column", r["scope"]?.ToString()));
         }
 
         [Fact]
@@ -196,16 +196,16 @@ SELECT * FROM #result;
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
 
-            var script = @"
+            string script = @"
 SELECT id /* @owner: Finance; @pii: false */
 INTO #t
 FROM (SELECT 1 AS id) AS x;
 
-SELECT TargetTable, TargetColumn, TagName, TagValue, Scope
+SELECT target_table, target_column, tag_name, tag_value, scope
 INTO #result
 FROM eng.tags
-WHERE TargetTable = '#t'
-ORDER BY TagName;
+WHERE target_table = '#t'
+ORDER BY tag_name;
 
 SELECT * FROM #result;
 ";
@@ -213,12 +213,12 @@ SELECT * FROM #result;
 
             var rows = ev.LastResult?.Rows ?? new List<Row>();
             Assert.Contains(rows, r =>
-                r["TargetTable"]?.ToString() == "#t"
-                && r["TargetColumn"]?.ToString() == "id"
-                && r["TagName"]?.ToString() == "owner"
-                && r["TagValue"]?.ToString() == "Finance"
-                && r["Scope"]?.ToString() == "column");
-            Assert.Contains(rows, r => r["TagName"]?.ToString() == "pii" && r["TagValue"]?.ToString() == "false");
+                r["target_table"]?.ToString() == "#t"
+                && r["target_column"]?.ToString() == "id"
+                && r["tag_name"]?.ToString() == "owner"
+                && r["tag_value"]?.ToString() == "Finance"
+                && r["scope"]?.ToString() == "column");
+            Assert.Contains(rows, r => r["tag_name"]?.ToString() == "pii" && r["tag_value"]?.ToString() == "false");
         }
 
         [Fact]

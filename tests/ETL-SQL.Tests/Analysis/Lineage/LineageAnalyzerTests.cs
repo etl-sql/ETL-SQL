@@ -33,9 +33,9 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             // Assert
             var entries = tracker.GetFullLineage().ToList();
 
-            // Should have 2 entries: 1 for Table Tags, 1 for SELECT
+            // Should have 2 entries: 1 for Table Tags, 1 for the SELECT INTO
             Assert.Contains(entries, e => e.Operation == "TABLE_TAGS" && e.TargetTable == "SourceTable" && e.Metadata.ContainsKey("owner"));
-            Assert.Contains(entries, e => e.Operation == "SELECT" && e.TargetTable == "#Target" && e.TargetColumn == "col1");
+            Assert.Contains(entries, e => e.Operation == "SELECT INTO" && e.TargetTable == "#Target" && e.TargetColumn == "col1");
 
             var colEntry = entries.First(e => e.TargetColumn == "col1");
             Assert.Equal("SourceTable", colEntry.SourceTables.First());

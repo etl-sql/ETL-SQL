@@ -20,7 +20,21 @@ namespace ETL_SQL.Engine.Lineage
     /// </summary>
     public static class OpenLineageImporter
     {
-        public static List<LineageEntry> Import(string content)
+        public static List<LineageEntry> Import(string content) => Import(content, null);
+
+        /// <summary>
+        /// Parses OpenLineage content into lineage entries.
+        /// </summary>
+        /// <param name="content">One RunEvent per line (.jsonl), or a single JSON object.</param>
+        /// <param name="namespaceAliases">
+        /// Maps an OpenLineage dataset namespace ("mssql://localhost/EDW") to the connection alias
+        /// the importing script uses for it. Export strips the alias, because the alias is a
+        /// script-local name and the namespace is the portable identity — so without this map an
+        /// imported "dbo.Patient" would never chain to this script's "hospital.dbo.Patient".
+        /// Re-qualifying on the way in is what lets lineage continue across scripts that name the
+        /// same database differently.
+        /// </param>
+        public static List<LineageEntry> Import(string content, IReadOnlyDictionary<string, string>? namespaceAliases)
         {
             var entries = new List<LineageEntry>();
             if (string.IsNullOrWhiteSpace(content)) return entries;
@@ -42,14 +56,28 @@ namespace ETL_SQL.Engine.Lineage
 
                 using (doc)
                 {
-                    ImportRunEvent(doc.RootElement, entries);
+                    ImportRunEvent(doc.RootElement, entries, namespaceAliases);
                 }
             }
 
             return entries;
         }
 
-        private static void ImportRunEvent(JsonElement root, List<LineageEntry> entries)
+        /// <summary>Re-attaches the importing script's connection alias to a dataset name.</summary>
+        private static string Qualify(string? ns, string name, IReadOnlyDictionary<string, string>? namespaceAliases)
+        {
+            if (namespaceAliases == null || string.IsNullOrEmpty(ns)) return name;
+            // Temp tables and other session-local datasets keep their own names.
+            if (name.StartsWith('#') || name.StartsWith('@')) return name;
+            // A file dataset's name is already its full path — that is its identity, and every file
+            // connector shares the one "file://" namespace, so aliasing would merge unrelated files.
+            if (ns.StartsWith("file://", StringComparison.OrdinalIgnoreCase)) return name;
+            return namespaceAliases.TryGetValue(ns, out var alias) && !string.IsNullOrEmpty(alias)
+                ? $"{alias}.{name}"
+                : name;
+        }
+
+        private static void ImportRunEvent(JsonElement root, List<LineageEntry> entries, IReadOnlyDictionary<string, string>? namespaceAliases)
         {
             if (root.ValueKind != JsonValueKind.Object) return;
             if (!root.TryGetProperty("outputs", out var outputs) || outputs.ValueKind != JsonValueKind.Array) return;
@@ -57,18 +85,21 @@ namespace ETL_SQL.Engine.Lineage
             foreach (var output in outputs.EnumerateArray())
             {
                 if (!output.TryGetProperty("name", out var nameEl)) continue;
-                var table = nameEl.GetString();
-                if (string.IsNullOrEmpty(table)) continue;
+                var rawName = nameEl.GetString();
+                if (string.IsNullOrEmpty(rawName)) continue;
+
+                var ns = output.TryGetProperty("namespace", out var nsEl) ? nsEl.GetString() : null;
+                var table = Qualify(ns, rawName, namespaceAliases);
 
                 if (!output.TryGetProperty("facets", out var facets) || facets.ValueKind != JsonValueKind.Object)
                     continue;
 
-                ImportColumnLineage(table, facets, entries);
+                ImportColumnLineage(table, facets, entries, namespaceAliases);
                 ImportTableTags(table, facets, entries);
             }
         }
 
-        private static void ImportColumnLineage(string table, JsonElement facets, List<LineageEntry> entries)
+        private static void ImportColumnLineage(string table, JsonElement facets, List<LineageEntry> entries, IReadOnlyDictionary<string, string>? namespaceAliases)
         {
             if (!facets.TryGetProperty("columnLineage", out var colLin) || colLin.ValueKind != JsonValueKind.Object) return;
             if (!colLin.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Object) return;
@@ -87,8 +118,9 @@ namespace ETL_SQL.Engine.Lineage
                         var st = inp.TryGetProperty("name", out var n) ? n.GetString() : null;
                         if (string.IsNullOrEmpty(st)) continue;
 
+                        var srcNs = inp.TryGetProperty("namespace", out var snsEl) ? snsEl.GetString() : null;
                         var sc = inp.TryGetProperty("field", out var f) ? f.GetString() : null;
-                        srcTables.Add(st);
+                        srcTables.Add(Qualify(srcNs, st, namespaceAliases));
                         srcColumns.Add(sc ?? string.Empty);
 
                         if (kind == TransformationKind.Unknown

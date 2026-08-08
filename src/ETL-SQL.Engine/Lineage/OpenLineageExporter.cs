@@ -160,6 +160,32 @@ namespace ETL_SQL.Engine.Lineage
             var nsCache = new Dictionary<string, (string ns, string name)>(StringComparer.OrdinalIgnoreCase);
             var outputTables = new Dictionary<string, List<LineageEntry>>(StringComparer.OrdinalIgnoreCase);
 
+            // Physical descriptors the tracker resolved while the connections were open. A file
+            // dataset's identity is its path, and "pats.FILE" would otherwise export as the name
+            // "FILE" — indistinguishable from every other flat file ever exported.
+            var physicalByTable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in entries)
+            {
+                if (entry.TargetTablePhysical != null)
+                    physicalByTable[entry.TargetTable] = entry.TargetTablePhysical;
+                for (int i = 0; i < entry.SourceTables.Count; i++)
+                {
+                    var physical = i < entry.SourceTablesPhysical.Count ? entry.SourceTablesPhysical[i] : null;
+                    if (physical != null) physicalByTable[entry.SourceTables[i]] = physical;
+                }
+            }
+
+            (string ns, string name) Resolve(string table)
+            {
+                var resolved = ResolveNamespace(table, sessionId, connectionNamespaces);
+                if (physicalByTable.TryGetValue(table, out var descriptor)
+                    && LineageTracker.TryGetPhysicalFilePath(descriptor, out var filePath))
+                {
+                    return (resolved.ns, filePath);
+                }
+                return resolved;
+            }
+
             foreach (var entry in entries)
             {
                 if (!outputTables.ContainsKey(entry.TargetTable))
@@ -169,13 +195,13 @@ namespace ETL_SQL.Engine.Lineage
                 foreach (var src in entry.SourceTables)
                 {
                     if (!nsCache.ContainsKey(src))
-                        nsCache[src] = ResolveNamespace(src, sessionId, connectionNamespaces);
+                        nsCache[src] = Resolve(src);
                 }
             }
             foreach (var target in outputTables.Keys)
             {
                 if (!nsCache.ContainsKey(target))
-                    nsCache[target] = ResolveNamespace(target, sessionId, connectionNamespaces);
+                    nsCache[target] = Resolve(target);
             }
 
             // Pure source tables: appear as sources but never as targets

@@ -133,6 +133,14 @@ public interface IDataSource : IAsyncDisposable
     Dictionary<string, string>? Options { get; }
     /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>
     string ConnectorType { get; }
+
+    /// <summary>
+    /// Credential-free server/database pair used to label this connection in lineage
+    /// (<c>localhost:EDW.dbo.Patient</c>). Connectors that can parse their own connection string
+    /// override this; the default reports nothing and lineage falls back to <see cref="Path"/>.
+    /// Never return a user name, password, or the raw connection string.
+    /// </summary>
+    (string? Server, string? Database) GetLineageLocation() => (null, null);
     /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
     Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
     /// <summary>Returns table names and observes cancellation before schema resolution.</summary>

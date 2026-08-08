@@ -231,6 +231,18 @@ public class StatementParser
             return new TestConnectionStatement(alias, into) { Line = testTok.Line, Column = testTok.Column };
         }
 
+        // IMPORT LINEAGE — IMPORT is a soft keyword (not reserved in the lexer), recognized only
+        // when immediately followed by LINEAGE. Reserving it would take away "import:" as a section
+        // label and "import" as a column name, both of which appear in real scripts.
+        if (type == TokenType.IDENTIFIER
+            && _parser.Current.Value.Equals("IMPORT", System.StringComparison.OrdinalIgnoreCase)
+            && _parser.Peek.Type == TokenType.LINEAGE)
+        {
+            var importTok = _parser.Advance();   // IMPORT
+            _parser.Advance();                   // LINEAGE
+            return DataParser.ParseImportLineage(importTok);
+        }
+
         if (_dispatchMap.TryGetValue(type, out var handler))
         {
             _parser.Advance();

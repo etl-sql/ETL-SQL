@@ -20,7 +20,7 @@
     {
       "targetTable": "#ValidOrders",
       "targetColumn": "CustomerId",
-      "operation": "SELECT",
+      "operation": "SELECT INTO",
       "sourceTables": [ "#RawOrders" ],
       "sourceColumns": [ "CustomerId" ],
       "metadata": {
@@ -31,7 +31,7 @@
     {
       "targetTable": "#CustomerSpend",
       "targetColumn": "TotalAmount",
-      "operation": "SELECT",
+      "operation": "SELECT INTO",
       "sourceTables": [ "#ValidOrders" ],
       "sourceColumns": [ "Amount" ],
       "metadata": {

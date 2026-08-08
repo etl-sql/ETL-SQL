@@ -3,7 +3,7 @@
 Durable lineage records identified as PII, PHI, PCI, sensitive, confidential, or restricted.
 
 ```sql
-SELECT * FROM eng.protected_data WHERE Classification = 'restricted';
+SELECT * FROM eng.protected_data WHERE classification = 'restricted';
 ```
 
 Columns include identity, run, target/source, protection, stewardship, tag, and source-location fields.

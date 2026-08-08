@@ -34,9 +34,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         // Lineage target must be the fully-qualified table name ("hospital.dbo.Patient") so the
         // tracker can chain it to the final SELECT whose source column is recorded as
         // "hospital.dbo.Patient.*". connName is kept as-is for connection lookup and guards.
-        string lineageTarget = stmt.TargetTable.ConnectionName != null
-            ? stmt.TargetTable.ConnectionName + "." + stmt.TargetTable.TableName
-            : stmt.TargetTable.TableName;
+        string lineageTarget = stmt.TargetTable.FullyQualifiedName;
 
         if (context.VarContext.TryGetView(connName, out _))
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an INSERT target.");

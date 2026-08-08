@@ -297,7 +297,7 @@ namespace ETL_SQL.Tests.Orchestration
                 entry.JobName == "bundle:sales-load@1" &&
                 entry.ScriptPath == "orch://sales-load@1/main.etlsql" &&
                 entry.SourceFile == "main.etlsql" &&
-                entry.Operation == "SELECT" &&
+                entry.Operation == "SELECT INTO" &&
                 entry.TargetColumn == "OrderId" &&
                 entry.Tags.TryGetValue("bundle_version", out var version) &&
                 version == "1");

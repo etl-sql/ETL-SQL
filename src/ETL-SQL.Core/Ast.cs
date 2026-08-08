@@ -134,6 +134,8 @@ public sealed record TableReference : AstNode
         ColumnAliases = columnAliases;
     }
 
+    public string FullyQualifiedName => (ConnectionName != null ? ConnectionName + "." : "") + (DatabaseName != null ? DatabaseName + "." : "") + (SchemaName != null ? SchemaName + "." : "") + TableName;
+
     public override string ToSql() => AstSerializer.Format(this);
 
     public IEnumerable<string> GetSourceTables()

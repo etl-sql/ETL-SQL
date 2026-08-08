@@ -1558,7 +1558,7 @@ this release).
 - [ ] **Portal Script Concurrent Editing Locks**: Implement collaborative file mutexes and session-lease locking in the Portal script editor to warn other workspace developers when a script is actively being edited, preventing silent code overwrites on save.
 
 ## Bugs
-- [ ] **Lineage is not working correctly**  Using this query: 
+- [x] **Lineage is not working correctly**  Using this query: 
 ```sql
   DROP CONNECTION IF EXISTS hospital;
   CREATE CONNECTION hospital AS
@@ -1604,15 +1604,15 @@ this release).
   ```sql
   IMPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE FROM 'C:\tmp\hospital.Patient.openlineage.jsonl';
   ```
-  - [ ] **Lineage syntax needs help**  I see in the syntax index that LINEAGE_NAMESPACE and LINEAGE_IMPORT_CATALOG exist but there is no documentation on how to use them.  There should be multiple ways to export lineage one being OPENLINEAGE, then markdown as a mermaid chart, and maybe more its been a while since we worked on this.
-  - [ ] **Import lineage** As listed above we should be able to IMPORT LINEAGE from a file.  But we also need a way to import from a database and if I remember correctly we also save lineage to the ETL-SQL database so that may be a third area we could import it from.
+  - [x] **Lineage syntax needs help**  I see in the syntax index that LINEAGE_NAMESPACE and LINEAGE_IMPORT_CATALOG exist but there is no documentation on how to use them.  There should be multiple ways to export lineage one being OPENLINEAGE, then markdown as a mermaid chart, and maybe more its been a while since we worked on this.
+  - [x] **Import lineage** As listed above we should be able to IMPORT LINEAGE from a file.  But we also need a way to import from a database and if I remember correctly we also save lineage to the ETL-SQL database so that may be a third area we could import it from.
   - [ ] **VS Code METADATA EXPLORER not showing flatfile columns**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 153915.png"  Shows both FILE and DUAL.  FILE has nothing below it, DUAL and dummy?  I would expect to see these column: "name","date_of_birth","date_of_death","gender" without " surrounding them.
   - [ ] **VS Code METADATA EXPLORER not show column types**  For databases where column type is accessible it should show that information.  Currently just shows column names.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 154200.png"  I would expect: date_of_birth::date   But when the column is dragged and dropped into a script (which works great) it should only show the column name and not the type.
   - [ ] **VS Code setting need to be grouped**  We have AI, formatting, and paths.  It would be easier for a user to read if these were grouped together.
   - [ ] **Hide report preview, launch, report designer unless the script is an rptsql**  We have two extension for a reason so an etlsql is not expected to contain reporting elements.  We'll need to add an option to VS Code for that extension currently only ETL-SQL points to .etlsql we'll need ETL-SQL Report.  Then on our welcome screen when they click create etlsql it opens as etlsql.  Notebook is the same etlnb, and Report (the change) should open up as an rptsql.
   - [ ] **Add a format button** I used to be able to use shortcut keys to format but vs code must have overwritten them.  Either way let's add a format button next to the run button so users can click to format their code or if a selection is highlighted it only formats the highlighted selection.
   - [ ] **On save when plaintext password VS Code asks to add the security feature, then sets the password but does not save**  It encrypts the plaintext connection and shows it as encrypted but doesn't save the file.  If you exit without saving it saves it as a plaintext.  The workflow of adding the password and switching to the encrypted connection string should save the file with that encrypted connection string automatically.
- - [ ] **Tags not being passed along to the final table**  Using this query
+ - [x] **Tags not being passed along to the final table**  Using this query
  ```sql
  DROP CONNECTION IF EXISTS hospital;
 CREATE CONNECTION hospital AS MSSQL('ENC:Aic23Mtsl64L0DIRFyErg99XTCE9ULhB+601tKD9wTSKFmFoNgvswkqZ73T7Txz9fZSwRncM0nIyqbfapQ2E24vKOOJjcgGDHJP9FQec8ten2RaDQEygHj8LHLr17J0lOqYritLgiBaGTs4pRXGnkSpNBxfDJfk+pZe4IeuRxpQet16HVzvn3J/qNHhE0JVCICIeRQ==');
@@ -1662,3 +1662,58 @@ EXPORT LINEAGE FOR hospital.dbo.Patient AS OPENLINEAGE TO 'C:\tmp\hospital.Patie
 ```
 
 I would expect hovering over name in the SELECT...FROM hospital.dbo.Patient would should patient name formatted as last name, first name; PII but it shows nothing.  Likely same as lineage where the INSERT is breaking the association.
+
+### Resolution (v0.18.0)
+
+**Physical identifiers.** Lineage now carries a credential-free physical descriptor beside every
+logical name: `FLATFILE C:\tmp\patients.csv`, `localhost:EDW.dbo.Patient`, and `EDW.dbo.Patient`
+under `SET NO_SAVE_CONNECTION = ON`. The IDE hover path analyses text statically and never opens a
+connection, so `LineageAnalyzer` builds its resolver from the script's own `CREATE CONNECTION`
+statements; the engine supplies live connections at runtime. Connectors expose their own
+server/database through `IDataSource.GetLineageLocation()` (implemented for MSSQL, Postgres, MySQL;
+others fall back to the database name). An `ENC:` connection string resolves to *nothing* rather
+than to a guess.
+
+**Design call — the logical name stays the key.** An earlier pass rewrote the stored lineage key
+with the enriched name. That made every lookup re-enrich to match, and it broke export/import and
+cross-script chaining, where no connection map exists. Physical descriptors are now a separate
+display field (`target_physical` / `source_physical`); `target_table` remains the logical key.
+
+**Ordering.** `eng.lineage` gained a `step` column — distance from a raw source — and returns rows
+origin-first. Timestamp order could not work: static analysis and execution record the same flow at
+different moments.
+
+**Design call — transformations do not get their own row.** A `CAST` is never a standalone event; it
+happens as part of a write into some target, so it rides on that row. A transformation that really
+is its own step (staged through a `#temp`) still gets its own row, because it has its own target.
+This is the answer to "maybe 2 and 3 can be combined".
+
+**Duplicate rows.** One movement was recorded twice — once by static analysis, once at execution —
+and surfaced as two steps that never happened. `INSERT ... SELECT` column rows are now labelled
+`INSERT` (and `SELECT ... INTO` as `SELECT INTO`) to match what the engine records, and `eng.lineage`
+collapses same-hop duplicates at the projection layer, keeping the better-described entry. Both
+entries survive in the tracker because hover locates the cursor by source position.
+
+**IMPORT LINEAGE.** The feature existed as `INSERT LINEAGE FOR TABLE ... FROM ...` and was
+undocumented. Added `IMPORT LINEAGE FOR <table> [AS OPENLINEAGE] FROM <file|json>` as the spelling
+that mirrors `EXPORT LINEAGE`; `INSERT LINEAGE` still works. `IMPORT` is a **soft keyword**,
+recognized only before `LINEAGE` — reserving it would have taken away `import:` as a section label,
+which appears in the very script in this bug report.
+
+Three round-trip defects had to be fixed for import to be worth anything:
+- Export wrote a file source as the name `FILE`, losing the path. It now writes the full path, per
+  OpenLineage convention.
+- Export strips the connection alias (an alias is script-local), so imported rows never chained.
+  Import now re-attaches the *importing* script's alias by matching the OpenLineage namespace, so
+  two scripts can call the same database different things and lineage still connects.
+- `LoadState` dropped transformation detail, so re-imported lineage lost its `CAST`s.
+
+**Latent bug found.** When two records collided on the tracker's dedup key, merged metadata never
+reached the column-metadata indexes — so a tag applied by a second observation of the same statement
+was invisible to `GetColumnMetadata` and to tag inheritance. Fixed in `LineageTracker.Record`.
+
+**Casing.** All `eng.*` columns are snake_case, including the `LINEAGE(...) INTO` projection, which
+was still PascalCase. Reference docs updated to match.
+
+Not addressed here (still open above): the VS Code metadata-explorer items, settings grouping,
+report-surface gating, format button, and the plaintext-password save flow.

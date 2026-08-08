@@ -1176,7 +1176,7 @@ public sealed class BundleDependenciesDataSource : IDataSource
 public sealed class LocksDataSource : IDataSource
 {
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _configuration;
-    private static readonly string[] Columns = ["Id", "ProcessId", "JobName", "AcquiredAt", "MachineName"];
+    private static readonly string[] Columns = ["id", "process_id", "job_name", "acquired_at", "machine_name"];
 
     public LocksDataSource(Microsoft.Extensions.Configuration.IConfiguration? configuration) => _configuration = configuration;
 
@@ -1226,11 +1226,11 @@ public sealed class LocksDataSource : IDataSource
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["Id"] = reader.GetInt64(0);
-                row["ProcessId"] = reader.GetInt32(1);
-                row["JobName"] = reader.GetString(2);
-                row["AcquiredAt"] = reader.GetString(3);
-                row["MachineName"] = reader.IsDBNull(4) ? "" : reader.GetString(4);
+                row["id"] = reader.GetInt64(0);
+                row["process_id"] = reader.GetInt32(1);
+                row["job_name"] = reader.GetString(2);
+                row["acquired_at"] = reader.GetString(3);
+                row["machine_name"] = reader.IsDBNull(4) ? "" : reader.GetString(4);
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -1265,7 +1265,7 @@ public sealed class LocksDataSource : IDataSource
 public sealed class SessionsDataSource : IDataSource
 {
     private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
-    private static readonly string[] Columns = ["SessionId", "Created", "LastModified", "Size_MB", "TempTables", "Variables", "LastScript", "User", "Machine"];
+    private static readonly string[] Columns = ["session_id", "created", "last_modified", "size_mb", "temp_tables", "variables", "last_script", "user", "machine"];
 
     public SessionsDataSource(ETL_SQL.Core.Execution.ISessionStateManager sessionManager) => _sessionManager = sessionManager;
 
@@ -1284,15 +1284,15 @@ public sealed class SessionsDataSource : IDataSource
         {
             cancellationToken.ThrowIfCancellationRequested();
             var row = new Row();
-            row["SessionId"] = sess.SessionId;
-            row["Created"] = sess.CreatedAt;
-            row["LastModified"] = sess.LastModifiedAt;
-            row["Size_MB"] = sess.SizeMB.HasValue ? (decimal)sess.SizeMB.Value : null;
-            row["TempTables"] = (decimal)sess.TempTableCount;
-            row["Variables"] = (decimal)sess.VariableCount;
-            row["LastScript"] = sess.LastScriptSource ?? "";
-            row["User"] = sess.OwnerUser ?? "";
-            row["Machine"] = sess.OwnerMachine ?? "";
+            row["session_id"] = sess.SessionId;
+            row["created"] = sess.CreatedAt;
+            row["last_modified"] = sess.LastModifiedAt;
+            row["size_mb"] = sess.SizeMB.HasValue ? (decimal)sess.SizeMB.Value : null;
+            row["temp_tables"] = (decimal)sess.TempTableCount;
+            row["variables"] = (decimal)sess.VariableCount;
+            row["last_script"] = sess.LastScriptSource ?? "";
+            row["user"] = sess.OwnerUser ?? "";
+            row["machine"] = sess.OwnerMachine ?? "";
             rows.Add(row);
 
             if (rows.Count >= batchSize)
@@ -1318,7 +1318,7 @@ public sealed class LineageHistoryDataSource : IDataSource
 {
     private readonly ILineageCatalogStore? _catalog;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
-    private static readonly string[] Columns = ["Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "Operation", "Tags", "SourceFile", "Line"];
+    private static readonly string[] Columns = ["id", "run_at", "job_name", "target_table", "target_column", "source_tables", "operation", "tags", "source_file", "line"];
 
     public LineageHistoryDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
     {
@@ -1345,16 +1345,16 @@ public sealed class LineageHistoryDataSource : IDataSource
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["Id"] = e.Id;
-                row["RunAt"] = e.RunAt;
-                row["JobName"] = e.JobName;
-                row["TargetTable"] = e.TargetTable;
-                row["TargetColumn"] = e.TargetColumn;
-                row["SourceTables"] = string.Join(", ", e.SourceTables);
-                row["Operation"] = e.Operation;
-                row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
-                row["SourceFile"] = e.SourceFile;
-                row["Line"] = (decimal)e.Line;
+                row["id"] = e.Id;
+                row["run_at"] = e.RunAt;
+                row["job_name"] = e.JobName;
+                row["target_table"] = e.TargetTable;
+                row["target_column"] = e.TargetColumn;
+                row["source_tables"] = string.Join(", ", e.SourceTables);
+                row["operation"] = e.Operation;
+                row["tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+                row["source_file"] = e.SourceFile;
+                row["line"] = (decimal)e.Line;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -1381,7 +1381,7 @@ public sealed class MissingTagsDataSource : IDataSource
 {
     private readonly ILineageCatalogStore? _catalog;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
-    private static readonly string[] Columns = ["TargetTable", "TargetColumn", "MissingTags", "PresentTags", "RunAt", "JobName", "ScriptPath"];
+    private static readonly string[] Columns = ["target_table", "target_column", "missing_tags", "present_tags", "run_at", "job_name", "script_path"];
 
     public MissingTagsDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
     {
@@ -1410,13 +1410,13 @@ public sealed class MissingTagsDataSource : IDataSource
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["TargetTable"] = e.TargetTable;
-                row["TargetColumn"] = e.TargetColumn;
-                row["MissingTags"] = string.Join(", ", e.MissingTags.Select(t => "@" + t));
-                row["PresentTags"] = System.Text.Json.JsonSerializer.Serialize(e.PresentTags);
-                row["RunAt"] = e.RunAt;
-                row["JobName"] = e.JobName;
-                row["ScriptPath"] = e.ScriptPath;
+                row["target_table"] = e.TargetTable;
+                row["target_column"] = e.TargetColumn;
+                row["missing_tags"] = string.Join(", ", e.MissingTags.Select(t => "@" + t));
+                row["present_tags"] = System.Text.Json.JsonSerializer.Serialize(e.PresentTags);
+                row["run_at"] = e.RunAt;
+                row["job_name"] = e.JobName;
+                row["script_path"] = e.ScriptPath;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -1444,9 +1444,9 @@ public sealed class ProtectedDataDataSource : IDataSource
     private readonly ILineageCatalogStore? _catalog;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
     private static readonly string[] Columns = [
-        "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "Operation",
-        "ProtectionTags", "ProtectionReason", "Owner", "Steward", "Contact", "Domain",
-        "Classification", "Quality", "Tags", "SourceFile", "Line"
+        "id", "run_at", "job_name", "target_table", "target_column", "source_tables", "operation",
+        "protection_tags", "protection_reason", "owner", "steward", "contact", "domain",
+        "classification", "quality", "tags", "source_file", "line"
     ];
 
     public ProtectedDataDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
@@ -1476,24 +1476,24 @@ public sealed class ProtectedDataDataSource : IDataSource
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["Id"] = e.Id;
-                row["RunAt"] = e.RunAt;
-                row["JobName"] = e.JobName;
-                row["TargetTable"] = e.TargetTable;
-                row["TargetColumn"] = e.TargetColumn;
-                row["SourceTables"] = string.Join(", ", e.SourceTables);
-                row["Operation"] = e.Operation;
-                row["ProtectionTags"] = string.Join(", ", e.ProtectionTags);
-                row["ProtectionReason"] = e.ProtectionReason;
-                row["Owner"] = e.Owner;
-                row["Steward"] = e.Steward;
-                row["Contact"] = e.Contact;
-                row["Domain"] = e.Domain;
-                row["Classification"] = e.Classification;
-                row["Quality"] = e.Quality;
-                row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
-                row["SourceFile"] = e.SourceFile;
-                row["Line"] = (decimal)e.Line;
+                row["id"] = e.Id;
+                row["run_at"] = e.RunAt;
+                row["job_name"] = e.JobName;
+                row["target_table"] = e.TargetTable;
+                row["target_column"] = e.TargetColumn;
+                row["source_tables"] = string.Join(", ", e.SourceTables);
+                row["operation"] = e.Operation;
+                row["protection_tags"] = string.Join(", ", e.ProtectionTags);
+                row["protection_reason"] = e.ProtectionReason;
+                row["owner"] = e.Owner;
+                row["steward"] = e.Steward;
+                row["contact"] = e.Contact;
+                row["domain"] = e.Domain;
+                row["classification"] = e.Classification;
+                row["quality"] = e.Quality;
+                row["tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+                row["source_file"] = e.SourceFile;
+                row["line"] = (decimal)e.Line;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -1521,9 +1521,9 @@ public sealed class ProtectedDataSuggestionsDataSource : IDataSource
     private readonly ILineageCatalogStore? _catalog;
     private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
     private static readonly string[] Columns = [
-        "Id", "RunAt", "JobName", "TargetTable", "TargetColumn", "SourceTables", "SourceColumns",
-        "SuggestedTag", "SuggestedValue", "Confidence", "EvidenceKind", "Evidence", "Reason",
-        "ExistingTags", "SourceFile", "Line"
+        "id", "run_at", "job_name", "target_table", "target_column", "source_tables", "source_columns",
+        "suggested_tag", "suggested_value", "confidence", "evidence_kind", "evidence", "reason",
+        "existing_tags", "source_file", "line"
     ];
 
     public ProtectedDataSuggestionsDataSource(ILineageCatalogStore? catalog, Microsoft.Extensions.Configuration.IConfiguration? config)
@@ -1553,22 +1553,22 @@ public sealed class ProtectedDataSuggestionsDataSource : IDataSource
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var row = new Row();
-                row["Id"] = e.Id;
-                row["RunAt"] = e.RunAt;
-                row["JobName"] = e.JobName;
-                row["TargetTable"] = e.TargetTable;
-                row["TargetColumn"] = e.TargetColumn;
-                row["SourceTables"] = string.Join(", ", e.SourceTables);
-                row["SourceColumns"] = string.Join(", ", e.SourceColumns);
-                row["SuggestedTag"] = e.SuggestedTag;
-                row["SuggestedValue"] = e.SuggestedValue;
-                row["Confidence"] = e.Confidence.ToString();
-                row["EvidenceKind"] = e.EvidenceKind;
-                row["Evidence"] = e.Evidence;
-                row["Reason"] = e.Reason;
-                row["ExistingTags"] = System.Text.Json.JsonSerializer.Serialize(e.ExistingTags);
-                row["SourceFile"] = e.SourceFile;
-                row["Line"] = (decimal)e.Line;
+                row["id"] = e.Id;
+                row["run_at"] = e.RunAt;
+                row["job_name"] = e.JobName;
+                row["target_table"] = e.TargetTable;
+                row["target_column"] = e.TargetColumn;
+                row["source_tables"] = string.Join(", ", e.SourceTables);
+                row["source_columns"] = string.Join(", ", e.SourceColumns);
+                row["suggested_tag"] = e.SuggestedTag;
+                row["suggested_value"] = e.SuggestedValue;
+                row["confidence"] = e.Confidence.ToString();
+                row["evidence_kind"] = e.EvidenceKind;
+                row["evidence"] = e.Evidence;
+                row["reason"] = e.Reason;
+                row["existing_tags"] = System.Text.Json.JsonSerializer.Serialize(e.ExistingTags);
+                row["source_file"] = e.SourceFile;
+                row["line"] = (decimal)e.Line;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)
@@ -1595,7 +1595,7 @@ public sealed class DataQualityRulesDataSource : IDataSource
 {
     private readonly Evaluator _evaluator;
     private static readonly string[] Columns = [
-        "TargetTable", "TargetColumn", "RuleTag", "Rule", "Action", "SourceFile", "Line"
+        "target_table", "target_column", "rule_tag", "rule", "action", "source_file", "line"
     ];
 
     public DataQualityRulesDataSource(Evaluator evaluator) => _evaluator = evaluator;
@@ -1637,13 +1637,13 @@ public sealed class DataQualityRulesDataSource : IDataSource
                     if (!seen.Add(key)) continue;
 
                     var row = new Row();
-                    row["TargetTable"] = entry.TargetTable;
-                    row["TargetColumn"] = entry.TargetColumn;
-                    row["RuleTag"] = "@" + binding.ExpectKey;
-                    row["Rule"] = rule.Text;
-                    row["Action"] = binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)");
-                    row["SourceFile"] = entry.SourceFile;
-                    row["Line"] = (decimal)entry.Line;
+                    row["target_table"] = entry.TargetTable;
+                    row["target_column"] = entry.TargetColumn;
+                    row["rule_tag"] = "@" + binding.ExpectKey;
+                    row["rule"] = rule.Text;
+                    row["action"] = binding.Action.ToString().ToUpperInvariant() + (binding.ActionExplicit ? "" : " (default)");
+                    row["source_file"] = entry.SourceFile;
+                    row["line"] = (decimal)entry.Line;
                     rows.Add(row);
 
                     if (rows.Count >= batchSize)

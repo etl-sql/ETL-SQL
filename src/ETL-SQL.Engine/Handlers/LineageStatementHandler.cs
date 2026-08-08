@@ -61,10 +61,7 @@ public class LineageStatementHandler : IStatementHandler
             return;
         }
 
-        string? targetName = stmt.TargetTable == null ? null :
-            stmt.TargetTable.ConnectionName != null
-                ? stmt.TargetTable.ConnectionName + "." + stmt.TargetTable.TableName
-                : stmt.TargetTable.TableName;
+        string? targetName = stmt.TargetTable?.FullyQualifiedName;
 
         var entries = (targetName != null
             ? (stmt.ColumnName != null
@@ -179,31 +176,31 @@ public class LineageStatementHandler : IStatementHandler
         var table = new DataTable();
         table.SetColumns(new[]
         {
-            "Timestamp", "Operation", "TargetTable", "TargetColumn",
-            "SourceTables", "SourcePhysicalPaths", "SourceColumns", "Description", "Metadata",
-            "DerivedFromDescriptions", "SourceFile", "Line", "Column",
-            "TransformationKind", "TransformationExpression", "FunctionsApplied"
+            "timestamp", "operation", "target_table", "target_column",
+            "source_tables", "source_physical_paths", "source_columns", "description", "metadata",
+            "derived_from_descriptions", "source_file", "line", "column",
+            "transformation_kind", "transformation_expression", "functions_applied"
         });
 
         foreach (var entry in entries)
         {
             var row = new Row();
-            row["Timestamp"] = entry.Timestamp;
-            row["Operation"] = entry.Operation;
-            row["TargetTable"] = entry.TargetTable;
-            row["TargetColumn"] = entry.TargetColumn;
-            row["SourceTables"] = string.Join(", ", entry.SourceTables);
-            row["SourcePhysicalPaths"] = ResolvePhysicalPaths(entry.SourceTables, connections);
-            row["SourceColumns"] = string.Join(", ", entry.SourceColumns);
-            row["Description"] = entry.Description;
-            row["Metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
-            row["DerivedFromDescriptions"] = entry.DerivedFromDescriptions;
-            row["SourceFile"] = entry.SourceFile;
-            row["Line"] = entry.Line;
-            row["Column"] = entry.Column;
-            row["TransformationKind"] = entry.TransformationKind == TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
-            row["TransformationExpression"] = entry.TransformationExpression;
-            row["FunctionsApplied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
+            row["timestamp"] = entry.Timestamp;
+            row["operation"] = entry.Operation;
+            row["target_table"] = entry.TargetTableDisplay;
+            row["target_column"] = entry.TargetColumn;
+            row["source_tables"] = string.Join(", ", entry.SourceTables);
+            row["source_physical_paths"] = ResolvePhysicalPaths(entry, connections);
+            row["source_columns"] = string.Join(", ", entry.SourceColumns);
+            row["description"] = entry.Description;
+            row["metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
+            row["derived_from_descriptions"] = entry.DerivedFromDescriptions;
+            row["source_file"] = entry.SourceFile;
+            row["line"] = entry.Line;
+            row["column"] = entry.Column;
+            row["transformation_kind"] = entry.TransformationKind == TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
+            row["transformation_expression"] = entry.TransformationExpression;
+            row["functions_applied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
             await table.AddRowAsync(row);
         }
 
@@ -211,24 +208,35 @@ public class LineageStatementHandler : IStatementHandler
     }
 
     /// <summary>
-    /// Resolves each source table alias to a human-readable physical identifier by looking up
-    /// the live connection. For FLATFILE sources this is the file path; for SQL sources it is
-    /// the database name extracted from the connection string. Raw connection strings, passwords,
-    /// and ENC: values are never exposed — only the credential-free Path property.
-    /// Returns null when no connections map is available or no sources can be resolved.
+    /// Physical identifiers for an entry's sources ("FLATFILE C:\tmp\patients.csv",
+    /// "localhost:EDW.dbo.Patient"). The tracker resolves these when the entry is recorded, while
+    /// the connection is still open, so they survive into exported and re-imported lineage.
+    /// Falls back to the live connection map for entries recorded before a resolver was installed.
+    /// Raw connection strings, passwords, and ENC: values are never exposed.
     /// </summary>
     private static string? ResolvePhysicalPaths(
-        IReadOnlyList<string> sourceTables,
+        LineageEntry entry,
         IDictionary<string, IDataSource>? connections)
     {
-        if (connections == null || sourceTables.Count == 0) return null;
-        var labels = new List<string>(sourceTables.Count);
+        if (entry.SourceTables.Count == 0) return null;
+
+        var labels = new List<string>(entry.SourceTables.Count);
         bool anyResolved = false;
-        foreach (var src in sourceTables)
+
+        for (int i = 0; i < entry.SourceTables.Count; i++)
         {
-            // Source may be qualified: "pats.FILE" — the connection alias is the first segment
+            var physical = i < entry.SourceTablesPhysical.Count ? entry.SourceTablesPhysical[i] : null;
+            if (physical != null)
+            {
+                anyResolved = true;
+                labels.Add(physical);
+                continue;
+            }
+
+            // Source may be qualified: "pats.FILE" — the connection alias is the first segment.
+            var src = entry.SourceTables[i];
             var alias = src.Split('.')[0];
-            if (connections.TryGetValue(alias, out var ds))
+            if (connections != null && connections.TryGetValue(alias, out var ds))
             {
                 anyResolved = true;
                 var type = ds.ConnectorType?.ToUpperInvariant() ?? "SOURCE";

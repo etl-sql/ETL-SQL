@@ -547,14 +547,32 @@ public class ExtensionParser : ParserComponent
         }
 
         Consume(TokenType.AS, "Expected AS after EXPORT LINEAGE");
-        var format = ConsumeIdentifier("Expected export format after AS").Value;
-        if (!format.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
-            throw new SyntaxException("Expected OPENLINEAGE after AS", _parser.Previous.Line, _parser.Previous.Column);
-        Consume(TokenType.TO, "Expected TO after OPENLINEAGE");
+        // MARKDOWN lexes as its own token; OPENLINEAGE is an identifier.
+        var formatToken = _parser.Current;
+        string format;
+        if (formatToken.Type == TokenType.MARKDOWN)
+        {
+            Advance();
+            format = "MARKDOWN";
+        }
+        else
+        {
+            format = ConsumeIdentifier("Expected export format after AS").Value;
+        }
+
+        bool openLineage = format.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase);
+        bool markdown = format.Equals("MARKDOWN", StringComparison.OrdinalIgnoreCase)
+                     || format.Equals("MERMAID", StringComparison.OrdinalIgnoreCase);
+        if (!openLineage && !markdown)
+            throw new SyntaxException(
+                $"EXPORT LINEAGE supports AS OPENLINEAGE (machine-readable) or AS MARKDOWN (a Mermaid diagram plus an audit table); '{format}' is not a known format.",
+                formatToken.Line, formatToken.Column);
+
+        Consume(TokenType.TO, $"Expected TO after {format}");
         var path = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
         Match(TokenType.SEMICOLON);
 
-        return new LineageStatement(targetTable, columnName, path, exportAsOpenLineage: true) { Line = startToken.Line, Column = startToken.Column };
+        return new LineageStatement(targetTable, columnName, path, exportAsOpenLineage: openLineage) { Line = startToken.Line, Column = startToken.Column };
     }
 
     public Statement ParseLint(Token startToken)

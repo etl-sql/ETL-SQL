@@ -442,16 +442,16 @@ namespace ETL_SQL.Tests.Engine
 
             // One row per individual rule, not per tag: 'NOT NULL, >= 0' reads as two protections.
             Assert.Equal(4, rows.Count);
-            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
-                && (string?)r["Rule"] == "NOT NULL" && (string?)r["Action"] == "THROW");
-            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
-                && (string?)r["Rule"] == ">= 0" && (string?)r["Action"] == "THROW");
-            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Id"
-                && (string?)r["Rule"] == "UNIQUE" && (string?)r["RuleTag"] == "@expect_1");
+            Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
+                && (string?)r["rule"] == "NOT NULL" && (string?)r["action"] == "THROW");
+            Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
+                && (string?)r["rule"] == ">= 0" && (string?)r["action"] == "THROW");
+            Assert.Contains(rows, r => (string?)r["target_column"] == "Id"
+                && (string?)r["rule"] == "UNIQUE" && (string?)r["rule_tag"] == "@expect_1");
 
             // A rule with no @fail is WARN, and the listing says so rather than leaving it blank.
-            Assert.Contains(rows, r => (string?)r["TargetColumn"] == "Name"
-                && (string?)r["Action"] == "WARN (default)");
+            Assert.Contains(rows, r => (string?)r["target_column"] == "Name"
+                && (string?)r["action"] == "WARN (default)");
         }
 
         [Fact]
@@ -466,14 +466,14 @@ namespace ETL_SQL.Tests.Engine
                 INTO #clean FROM #src
                 ON FAILURE WARN;");
 
-            await Run(eval, "SELECT * FROM eng.data_quality_rules WHERE TargetTable = '#clean' AND TargetColumn = 'Id';");
+            await Run(eval, "SELECT * FROM eng.data_quality_rules WHERE target_table = '#clean' AND target_column = 'Id';");
             var single = Assert.Single(eval.LastResult!.Rows);
-            Assert.Equal("Id", single["TargetColumn"]);
+            Assert.Equal("Id", single["target_column"]);
 
             await Run(eval, "SELECT * INTO #rules FROM eng.data_quality_rules;");
             var captured = await ReadRows(eval, "#rules");
             Assert.Equal(2, captured.Count);
-            Assert.All(captured, r => Assert.Equal("#clean", r["TargetTable"]));
+            Assert.All(captured, r => Assert.Equal("#clean", r["target_table"]));
         }
 
         [Fact]

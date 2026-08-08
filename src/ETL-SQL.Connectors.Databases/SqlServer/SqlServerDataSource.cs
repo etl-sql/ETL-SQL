@@ -67,6 +67,22 @@ namespace ETL_SQL.Connectors.SqlServer
                 return "MSSQL";
             }
         }
+        /// <summary>
+        /// Server and database for lineage labelling, parsed from the connection string.
+        /// Credentials are never read out of the builder.
+        /// </summary>
+        public (string? Server, string? Database) GetLineageLocation()
+        {
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(_connectionString);
+                return (
+                    string.IsNullOrEmpty(builder.DataSource) ? null : builder.DataSource,
+                    string.IsNullOrEmpty(builder.InitialCatalog) ? null : builder.InitialCatalog);
+            }
+            catch { return (null, null); }   // malformed, or still ENC: — no location to report
+        }
+
         public string Dialect => "MSSQL";
         public bool SupportsSqlPushdown => true;
         public string ConnectorType => "MSSQL";

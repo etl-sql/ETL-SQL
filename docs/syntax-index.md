@@ -51,6 +51,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `VALIDATE BUNDLE` | Orchestration | [Statement Reference](reference/statements/README.md) | [VALIDATE.md](reference/orchestrator-jobs/validate.md) |
 | `EXPORT SCRIPT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `EXPORT LINEAGE` | Lineage | [Lineage](reference/statements/session-control/lineage.md) | [LINEAGE.md](reference/statements/session-control/lineage.md) |
+| `IMPORT LINEAGE` | Lineage | [Lineage](reference/statements/session-control/lineage.md) | [LINEAGE.md](reference/statements/session-control/lineage.md) |
+| `INSERT LINEAGE` | Lineage | [Lineage](reference/statements/session-control/lineage.md) | [LINEAGE.md](reference/statements/session-control/lineage.md) |
+| `DELETE LINEAGE` | Lineage | [Lineage](reference/statements/session-control/lineage.md) | [LINEAGE.md](reference/statements/session-control/lineage.md) |
 | `PARALLEL` | Orchestration | [Statement Reference](reference/statements/README.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
 | `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
 | `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |

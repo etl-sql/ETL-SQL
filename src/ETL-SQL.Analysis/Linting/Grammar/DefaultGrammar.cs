@@ -1247,6 +1247,38 @@ public static class DefaultGrammar
 
         tree.RegisterStartNode("EXPORT", exportNode);
 
+        // IMPORT LINEAGE FOR [TABLE] <name> [AS OPENLINEAGE] FROM <file|json>
+        var importNode = new StateNode("IMPORT");
+        var importLineage = new StateNode("IMPORT_LINEAGE");
+        var importLineageFor = new StateNode("IMPORT_LINEAGE_FOR");
+        var importLineageName = new StateNode("IMPORT_LINEAGE_NAME");
+        var importLineageAs = new StateNode("IMPORT_LINEAGE_AS");
+        var importLineageFormat = new StateNode("IMPORT_LINEAGE_FORMAT");
+        var importFrom = new StateNode("IMPORT_FROM");
+        var importSource = new StateNode("IMPORT_SOURCE");
+
+        tree.RegisterStartNode("IMPORT", importNode);
+        importNode.AddTransitionTo("LINEAGE", importLineage, SuggestionType.Keyword);
+        importLineage.AddTransitionTo("FOR", importLineageFor, SuggestionType.Keyword);
+        importLineageFor.AddTransitionTo("TABLE", importLineageFor, SuggestionType.Keyword);
+        importLineageFor.AddWildcardTransition(importLineageName, "<table_name>");
+
+        importLineageName.AddTransitionTo("AS", importLineageAs, SuggestionType.Keyword);
+        importLineageName.AddTransitionTo("FROM", importFrom, SuggestionType.Keyword);
+        // Multi-part names, after the terminating keywords so they are not swallowed.
+        importLineageName.AddTransition(new StateTransition(
+            t => t.Type == TokenType.DOT
+                 || ((t.Type == TokenType.IDENTIFIER || IsWord(t.Value))
+                     && !t.Value.Equals("AS", StringComparison.OrdinalIgnoreCase)
+                     && !t.Value.Equals("FROM", StringComparison.OrdinalIgnoreCase)),
+            importLineageName,
+            "<name_part>"
+        ));
+
+        importLineageAs.AddWildcardTransition(importLineageFormat, "<format>");
+        importLineageFormat.AddTransitionTo("FROM", importFrom, SuggestionType.Keyword);
+        importFrom.AddWildcardTransition(importSource, "<source_path_or_json>");
+
         // DATASET path
         exportNode.AddTransitionTo("DATASET", exportDataset, SuggestionType.Keyword);
         exportDataset.AddWildcardTransition(datasetName, "<dataset_name>");
@@ -1296,6 +1328,17 @@ public static class DefaultGrammar
 
         exportLineageForName.AddTransitionTo("COLUMN", exportLineageColumn, SuggestionType.Keyword);
         exportLineageForName.AddTransitionTo("AS", exportLineageAs, SuggestionType.Keyword);
+
+        // Multi-part names: hospital.dbo.Patient. Registered after COLUMN/AS so those keywords
+        // still terminate the name rather than being swallowed as another part of it.
+        exportLineageForName.AddTransition(new StateTransition(
+            t => t.Type == TokenType.DOT
+                 || ((t.Type == TokenType.IDENTIFIER || IsWord(t.Value))
+                     && !t.Value.Equals("AS", StringComparison.OrdinalIgnoreCase)
+                     && !t.Value.Equals("COLUMN", StringComparison.OrdinalIgnoreCase)),
+            exportLineageForName,
+            "<name_part>"
+        ));
 
         exportLineageColumn.AddWildcardTransition(exportLineageColName, "<column_name>");
         exportLineageColName.AddTransitionTo("AS", exportLineageAs, SuggestionType.Keyword);

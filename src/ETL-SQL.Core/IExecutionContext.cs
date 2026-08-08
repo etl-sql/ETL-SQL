@@ -512,6 +512,16 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
 
 public interface ILineageTracker
 {
+    /// <summary>
+    /// Resolves a connection alias to its credential-free descriptor so lineage can record where
+    /// data physically came from. Set by the Evaluator at runtime and by
+    /// <c>LineageAnalyzer</c> from the script's own <c>CREATE CONNECTION</c> statements during
+    /// static analysis (the IDE hover path, where no live connections exist).
+    /// </summary>
+    Func<string, LineageSourceDescriptor>? ConnectionResolver { get; set; }
+
+    /// <summary>When set, physical descriptors omit the server so lineage discloses no host.</summary>
+    bool NoSaveConnection { get; set; }
     System.Collections.Concurrent.ConcurrentDictionary<string, string> GlobalMetadata { get; }
     void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null, TransformationKind transformationKind = TransformationKind.Unknown, string? transformationExpression = null, IReadOnlyList<string>? functionsApplied = null);
     IEnumerable<LineageEntry> GetLineage(string tableName);
