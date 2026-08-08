@@ -139,6 +139,43 @@ namespace ETL_SQL.App
             Description = "Target group name.",
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> AdminAssignRoleOption = new("--role", Array.Empty<string>())
+        {
+            Description = "Role to assign to the new user.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminEmailOption = new("--email", Array.Empty<string>())
+        {
+            Description = "Email address for the new user.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminProviderOption = new("--provider", Array.Empty<string>())
+        {
+            Description = "Identity provider for the new user (Local or LDAP).",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminDescriptionOption = new("--description", Array.Empty<string>())
+        {
+            Description = "Description for the new group.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<bool> PasswordStdinOption = new("--password-stdin", Array.Empty<string>())
+        {
+            Description = "Read the password from standard input. Passwords are never accepted as arguments."
+        };
+        private static readonly Option<bool> IfNotExistsOption = new("--if-not-exists", Array.Empty<string>())
+        {
+            Description = "Succeed without changes when the record already exists, so a re-run is a no-op."
+        };
+        private static readonly Option<bool> IfExistsOption = new("--if-exists", Array.Empty<string>())
+        {
+            Description = "Succeed without changes when the record is already absent."
+        };
+        private static readonly Option<long?> IfVersionOption = new("--if-version", Array.Empty<string>())
+        {
+            Description = "Fail unless the record is still at this version. Guards against a concurrent edit.",
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<bool> RecordOption = new("--record", Array.Empty<string>())
         {
             Description = "Record this run in the job history and lineage catalog, overriding Engine:AuditAdHocRuns."
@@ -965,6 +1002,44 @@ namespace ETL_SQL.App
             userPermissionsCommand.SetAction(context => Dispatch(context, "admin-user-permissions", handler));
             userCommand.Add(userPermissionsCommand);
 
+            var userCreateCommand = new Command("create", "Create a Portal user")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminUsernameOption, AdminEmailOption, AdminAssignRoleOption, AdminProviderOption,
+                PasswordStdinOption, IfNotExistsOption
+            };
+            userCreateCommand.SetAction(context => Dispatch(context, "admin-user-create", handler));
+            userCommand.Add(userCreateCommand);
+
+            var userDeleteCommand = new Command("delete", "Delete a Portal user")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminUsernameOption, IfExistsOption, IfVersionOption
+            };
+            userDeleteCommand.SetAction(context => Dispatch(context, "admin-user-delete", handler));
+            userCommand.Add(userDeleteCommand);
+
+            var userEnableCommand = new Command("enable", "Reactivate a Portal user")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption, IfVersionOption
+            };
+            userEnableCommand.SetAction(context => Dispatch(context, "admin-user-enable", handler));
+            userCommand.Add(userEnableCommand);
+
+            var userDisableCommand = new Command("disable", "Deactivate a Portal user")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption, IfVersionOption
+            };
+            userDisableCommand.SetAction(context => Dispatch(context, "admin-user-disable", handler));
+            userCommand.Add(userDisableCommand);
+
+            var userRevokeCommand = new Command("revoke-tokens", "Revoke a user's issued tokens")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption
+            };
+            userRevokeCommand.SetAction(context => Dispatch(context, "admin-user-revoke-tokens", handler));
+            userCommand.Add(userRevokeCommand);
+
             adminCommand.Add(userCommand);
 
             var groupCommand = new Command("group", "Inspect Portal groups");
@@ -983,6 +1058,36 @@ namespace ETL_SQL.App
             groupMembersCommand.SetAction(context => Dispatch(context, "admin-group-members", handler));
             groupCommand.Add(groupMembersCommand);
 
+            var groupCreateCommand = new Command("create", "Create a Portal group")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminGroupNameOption, AdminDescriptionOption, IfNotExistsOption
+            };
+            groupCreateCommand.SetAction(context => Dispatch(context, "admin-group-create", handler));
+            groupCommand.Add(groupCreateCommand);
+
+            var groupDeleteCommand = new Command("delete", "Delete a Portal group")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminGroupNameOption, IfExistsOption, IfVersionOption
+            };
+            groupDeleteCommand.SetAction(context => Dispatch(context, "admin-group-delete", handler));
+            groupCommand.Add(groupDeleteCommand);
+
+            var groupAddMemberCommand = new Command("add-member", "Add a user to a group")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminGroupNameOption, AdminUsernameOption
+            };
+            groupAddMemberCommand.SetAction(context => Dispatch(context, "admin-group-add-member", handler));
+            groupCommand.Add(groupAddMemberCommand);
+
+            var groupRemoveMemberCommand = new Command("remove-member", "Remove a user from a group")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminGroupNameOption, AdminUsernameOption
+            };
+            groupRemoveMemberCommand.SetAction(context => Dispatch(context, "admin-group-remove-member", handler));
+            groupCommand.Add(groupRemoveMemberCommand);
+
             adminCommand.Add(groupCommand);
 
             // Distinct from the root `session` command, which manages ad-hoc execution sessions.
@@ -993,6 +1098,13 @@ namespace ETL_SQL.App
             };
             portalSessionListCommand.SetAction(context => Dispatch(context, "admin-session-list", handler));
             portalSessionCommand.Add(portalSessionListCommand);
+            var portalSessionDisconnectCommand = new Command("disconnect", "Disconnect a user's Portal sessions")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption
+            };
+            portalSessionDisconnectCommand.SetAction(context => Dispatch(context, "admin-session-disconnect", handler));
+            portalSessionCommand.Add(portalSessionDisconnectCommand);
+
             adminCommand.Add(portalSessionCommand);
 
             var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
@@ -1186,10 +1298,17 @@ namespace ETL_SQL.App
                 cliContext.PortalUrl = TryGetString(res, PortalUrlOption);
                 cliContext.PortalClientId = TryGetString(res, PortalClientIdOption);
                 cliContext.AdminFilter = TryGetString(res, AdminFilterOption);
-                cliContext.AdminRole = TryGetString(res, AdminRoleOption);
+                cliContext.AdminRole = TryGetString(res, AdminRoleOption) ?? TryGetString(res, AdminAssignRoleOption);
                 cliContext.IncludeInactive = TryGetBool(res, IncludeInactiveOption);
                 cliContext.AdminUsername = TryGetString(res, AdminUsernameOption);
                 cliContext.AdminGroupName = TryGetString(res, AdminGroupNameOption);
+                cliContext.AdminEmail = TryGetString(res, AdminEmailOption);
+                cliContext.AdminProvider = TryGetString(res, AdminProviderOption);
+                cliContext.AdminDescription = TryGetString(res, AdminDescriptionOption);
+                cliContext.PasswordStdin = TryGetBool(res, PasswordStdinOption);
+                cliContext.IfNotExists = TryGetBool(res, IfNotExistsOption);
+                cliContext.IfExists = TryGetBool(res, IfExistsOption);
+                cliContext.IfVersion = res.GetResult(IfVersionOption) is null ? null : res.GetValue(IfVersionOption);
             }
 
             if (commandName == "run")

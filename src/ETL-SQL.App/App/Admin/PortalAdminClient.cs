@@ -119,6 +119,26 @@ public sealed class PortalAdminClient(HttpClient http, string baseUrl)
         return await SendAsync(request, ct);
     }
 
+    public Task<JsonNode?> PostAsync(string path, object? payload, CancellationToken ct, long? expectedVersion = null) =>
+        SendAsync(Build(HttpMethod.Post, path, payload, expectedVersion), ct);
+
+    public Task<JsonNode?> PutAsync(string path, object? payload, CancellationToken ct, long? expectedVersion = null) =>
+        SendAsync(Build(HttpMethod.Put, path, payload, expectedVersion), ct);
+
+    public Task<JsonNode?> DeleteAsync(string path, CancellationToken ct, long? expectedVersion = null) =>
+        SendAsync(Build(HttpMethod.Delete, path, null, expectedVersion), ct);
+
+    private HttpRequestMessage Build(HttpMethod method, string path, object? payload, long? expectedVersion)
+    {
+        var request = new HttpRequestMessage(method, $"{baseUrl}{path}");
+        if (payload is not null) request.Content = JsonContent.Create(payload, options: Json);
+        // The Portal expects the version it handed out, quoted, in If-Match. Sending it is what
+        // turns a blind overwrite into a detectable conflict.
+        if (expectedVersion is { } version)
+            request.Headers.TryAddWithoutValidation("If-Match", $"\"{version}\"");
+        return request;
+    }
+
     private async Task<JsonNode?> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         if (_token is not null)
@@ -152,6 +172,11 @@ public sealed class PortalAdminClient(HttpClient http, string baseUrl)
             HttpStatusCode.Forbidden => AdminExitCode.ScopeDenied,
             HttpStatusCode.NotFound => AdminExitCode.NotFound,
             HttpStatusCode.Conflict => AdminExitCode.Conflict,
+            // 428 means the caller omitted If-Match. Reported as a conflict because it is the same
+            // "your view of this record is not good enough to write from" problem, and a script
+            // should react the same way: re-read and retry.
+            HttpStatusCode.PreconditionRequired => AdminExitCode.Conflict,
+            HttpStatusCode.PreconditionFailed => AdminExitCode.Conflict,
             HttpStatusCode.BadRequest => AdminExitCode.ValidationError,
             _ => AdminExitCode.ValidationError
         };

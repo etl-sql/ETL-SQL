@@ -43,6 +43,16 @@ public static class IdentityAdminService
                 "admin-group-list" => await GroupListAsync(client, ctx, logger),
                 "admin-group-members" => await GroupMembersAsync(client, ctx, logger),
                 "admin-session-list" => await SessionListAsync(client, ctx, logger),
+                "admin-session-disconnect" => await SessionDisconnectAsync(client, ctx, logger),
+                "admin-user-create" => await UserCreateAsync(client, ctx, logger),
+                "admin-user-delete" => await UserDeleteAsync(client, ctx, logger),
+                "admin-user-enable" => await UserSetActiveAsync(client, ctx, logger, active: true),
+                "admin-user-disable" => await UserSetActiveAsync(client, ctx, logger, active: false),
+                "admin-user-revoke-tokens" => await UserRevokeTokensAsync(client, ctx, logger),
+                "admin-group-create" => await GroupCreateAsync(client, ctx, logger),
+                "admin-group-delete" => await GroupDeleteAsync(client, ctx, logger),
+                "admin-group-add-member" => await GroupMemberChangeAsync(client, ctx, logger, add: true),
+                "admin-group-remove-member" => await GroupMemberChangeAsync(client, ctx, logger, add: false),
                 _ => Fail(logger, AdminExitCode.ValidationError, $"Unknown identity command '{ctx.Command}'.")
             };
         }
@@ -196,6 +206,209 @@ public static class IdentityAdminService
                 session?["lastSeenAt"]?.ToString() ?? "",
                 session?["ipAddress"]?.GetValue<string>() ?? ""
             ]);
+    }
+
+    // ── Mutating verbs ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>--if-not-exists</c> makes a re-run a no-op rather than an error. That property is what
+    /// makes the CLI worth having over the web UI: a provisioning runbook can be run twice, or
+    /// resumed after a partial failure, without a human deciding which steps to skip.
+    /// </summary>
+    private static async Task<int> UserCreateAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        Require(ctx.AdminUsername, "--username");
+
+        if (ctx.IfNotExists && await FindAsync(client, "/api/admin/users", "userName", ctx.AdminUsername) is not null)
+        {
+            logger.WriteLine($"User '{ctx.AdminUsername}' already exists; nothing to do.");
+            return 0;
+        }
+
+        var password = ReadPasswordFromStdin(ctx);
+        var created = await client.PostAsync("/api/admin/users", new
+        {
+            username = ctx.AdminUsername,
+            email = ctx.AdminEmail ?? "",
+            role = ctx.AdminRole ?? "Viewer",
+            password,
+            provider = ctx.AdminProvider
+        }, CancellationToken.None);
+
+        logger.WriteLine($"Created user '{ctx.AdminUsername}' (id {created?["id"]}).", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> UserDeleteAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        Require(ctx.AdminUsername, "--username");
+
+        var user = await FindAsync(client, "/api/admin/users", "userName", ctx.AdminUsername);
+        if (user is null)
+        {
+            if (ctx.IfExists)
+            {
+                logger.WriteLine($"User '{ctx.AdminUsername}' does not exist; nothing to do.");
+                return 0;
+            }
+            throw new AdminCliException(AdminExitCode.NotFound, $"No user named '{ctx.AdminUsername}'.");
+        }
+
+        await client.DeleteAsync($"/api/admin/users/{user["id"]}", CancellationToken.None,
+            VersionFor(ctx, user));
+        logger.WriteLine($"Deleted user '{ctx.AdminUsername}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> UserSetActiveAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger, bool active)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+        if ((user["isActive"]?.GetValue<bool>() ?? false) == active)
+        {
+            logger.WriteLine($"User '{ctx.AdminUsername}' is already {(active ? "enabled" : "disabled")}; nothing to do.");
+            return 0;
+        }
+
+        await client.PutAsync($"/api/admin/users/{user["id"]}", new { isActive = active },
+            CancellationToken.None, VersionFor(ctx, user));
+        logger.WriteLine($"{(active ? "Enabled" : "Disabled")} user '{ctx.AdminUsername}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> UserRevokeTokensAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+        await client.PostAsync($"/api/admin/users/{user["id"]}/revoke-tokens", null, CancellationToken.None);
+        logger.WriteLine($"Revoked tokens for '{ctx.AdminUsername}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> SessionDisconnectAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+        await client.PostAsync($"/api/admin/users/{user["id"]}/disconnect", null, CancellationToken.None);
+        logger.WriteLine($"Disconnected sessions for '{ctx.AdminUsername}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> GroupCreateAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        Require(ctx.AdminGroupName, "--name");
+
+        if (ctx.IfNotExists && await FindAsync(client, "/api/admin/groups", "name", ctx.AdminGroupName) is not null)
+        {
+            logger.WriteLine($"Group '{ctx.AdminGroupName}' already exists; nothing to do.");
+            return 0;
+        }
+
+        var created = await client.PostAsync("/api/admin/groups", new
+        {
+            name = ctx.AdminGroupName,
+            description = ctx.AdminDescription
+        }, CancellationToken.None);
+
+        logger.WriteLine($"Created group '{ctx.AdminGroupName}' (id {created?["id"]}).", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> GroupDeleteAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        Require(ctx.AdminGroupName, "--name");
+
+        var group = await FindAsync(client, "/api/admin/groups", "name", ctx.AdminGroupName);
+        if (group is null)
+        {
+            if (ctx.IfExists)
+            {
+                logger.WriteLine($"Group '{ctx.AdminGroupName}' does not exist; nothing to do.");
+                return 0;
+            }
+            throw new AdminCliException(AdminExitCode.NotFound, $"No group named '{ctx.AdminGroupName}'.");
+        }
+
+        await client.DeleteAsync($"/api/admin/groups/{group["id"]}", CancellationToken.None,
+            VersionFor(ctx, group));
+        logger.WriteLine($"Deleted group '{ctx.AdminGroupName}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> GroupMemberChangeAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger, bool add)
+    {
+        var group = await ResolveGroupAsync(client, ctx);
+        var user = await ResolveUserAsync(client, ctx);
+        var groupId = group["id"]!.GetValue<int>();
+        var userId = user["id"]!.GetValue<int>();
+
+        var members = AsArray(await client.GetAsync($"/api/admin/groups/{groupId}/members", CancellationToken.None));
+        var isMember = members.Any(member => member?["id"]?.GetValue<int>() == userId);
+
+        // Membership changes are naturally idempotent, so they are treated that way unconditionally
+        // rather than behind a flag: adding an existing member is what a re-run does.
+        if (add == isMember)
+        {
+            logger.WriteLine($"'{ctx.AdminUsername}' is already {(add ? "a member of" : "absent from")} '{ctx.AdminGroupName}'; nothing to do.");
+            return 0;
+        }
+
+        if (add)
+            await client.PostAsync($"/api/admin/groups/{groupId}/members", new { userId }, CancellationToken.None);
+        else
+            await client.DeleteAsync($"/api/admin/groups/{groupId}/members/{userId}", CancellationToken.None);
+
+        logger.WriteLine(
+            $"{(add ? "Added" : "Removed")} '{ctx.AdminUsername}' {(add ? "to" : "from")} '{ctx.AdminGroupName}'.",
+            ConsoleColor.Green);
+        return 0;
+    }
+
+    // ── Mutation helpers ─────────────────────────────────────────────────────────
+
+    private static void Require(string? value, string flag)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new AdminCliException(AdminExitCode.ValidationError, $"{flag} is required.");
+    }
+
+    /// <summary>
+    /// The version to send in <c>If-Match</c>. <c>--if-version</c> pins an expected value so the
+    /// write fails on drift; otherwise the version just read is carried through, which is still a
+    /// detectable conflict rather than a blind overwrite.
+    /// </summary>
+    private static long? VersionFor(CliContext ctx, JsonNode record) =>
+        ctx.IfVersion ?? record["version"]?.GetValue<long>();
+
+    /// <summary>Returns the single match, null if absent. Ambiguity is still an error.</summary>
+    private static async Task<JsonObject?> FindAsync(
+        PortalAdminClient client, string path, string nameField, string? requested)
+    {
+        var matches = AsArray(await client.GetAsync(path, CancellationToken.None))
+            .Where(item => string.Equals(item?[nameField]?.GetValue<string>(), requested, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return matches.Count switch
+        {
+            0 => null,
+            1 => matches[0]!.AsObject(),
+            _ => throw new AdminCliException(AdminExitCode.AmbiguousMatch,
+                $"'{requested}' matched {matches.Count} records. Disambiguate by id.")
+        };
+    }
+
+    /// <summary>
+    /// Reads a password from standard input. Never from argv: a command line is readable by every
+    /// process on the host and captured verbatim by CI logs.
+    /// </summary>
+    private static string? ReadPasswordFromStdin(CliContext ctx)
+    {
+        if (!ctx.PasswordStdin) return null;
+
+        var password = Console.In.ReadToEnd()?.TrimEnd('\r', '\n');
+        if (string.IsNullOrEmpty(password))
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--password-stdin was given but standard input was empty.");
+        return password;
     }
 
     // ── Name → id ────────────────────────────────────────────────────────────────

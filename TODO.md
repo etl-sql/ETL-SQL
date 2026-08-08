@@ -1166,7 +1166,7 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
       (`--cascade`), `group members`, `group add-member`, `group remove-member` (repeatable
       `--username` maps to the bulk endpoints), `group capabilities` / `group set-capabilities`
       over `groups/{id}/studio-capabilities`.
-- [ ] **Sessions.** ~~`session list`~~ (shipped), `session disconnect --username` (mutating — still open).
+- [x] **Sessions.** `session list`, `session disconnect --username`.
 - [ ] **Service accounts.** `service-account list|create|update|revoke` over
       `api/admin/service-accounts`. Sequencing trap: this is how the CLI's *own* credential is
       minted, so the first one must be creatable interactively in the Portal — do not build a
@@ -1180,22 +1180,35 @@ id may be a flag because it is an identifier, not a credential. Exit codes are d
 kind and documented in `docs/reference/portal-admin/admin-identity-cli.md`; not-found and
 ambiguous-match are kept apart so a runbook can create the first but must stop on the second.
 
-Still open below: the **mutating** verbs (`user create|update|enable|disable|delete|reset-password|
-revoke-tokens`, `group create|update|delete|add-member|remove-member|capabilities`,
-`session disconnect`, `service-account …`) and the two properties that only matter once they exist —
-optimistic concurrency (`--if-version`) and runbook idempotence (`--if-not-exists` / `--if-exists`).
-`access-simulate` is also still open; `user permissions` covers the common access question.
+**Mutating verbs shipped too (v0.18.0).** `user create|delete|enable|disable|revoke-tokens`,
+`group create|delete|add-member|remove-member`, and `session disconnect`, with both properties that
+make the tool worth having over a browser:
+
+- **Idempotence** — `--if-not-exists` on create, `--if-exists` on delete. Membership changes are
+  idempotent unconditionally, because adding an existing member is exactly what a re-run does.
+- **Optimistic concurrency** — every guarded write sends the version in `If-Match`. The default
+  carries through the version just read, so a concurrent edit is a detectable conflict rather than a
+  silent overwrite; `--if-version` pins an expected value. There is no way to ask for
+  last-writer-wins. A 428 (version omitted) is reported as a conflict, since a script should react
+  the same way: re-read and retry.
+
+Passwords come only from `--password-stdin`; there is no `--password` flag, and a test asserts that
+neither it nor `--client-secret` can be added without failing.
+
+Still open: `user update` beyond enable/disable, `user reset-password`, `group update`,
+`group capabilities` / `set-capabilities`, `service-account …`, and `access-simulate`.
+`user permissions` already covers the common access question.
 
 #### Cross-cutting behaviour the verbs must get right
 
 - [x] **Name→ID resolution.** The API is ID-keyed; operators and runbooks have names. Resolve
       `--username`/`--name` via the catalog endpoints, and give not-found and ambiguous-match
       distinct, documented exit codes rather than a generic failure.
-- [ ] **Optimistic concurrency.** `UserDto`/`GroupDto` carry `Version` and the bulk endpoints take
+- [x] **Optimistic concurrency.** `UserDto`/`GroupDto` carry `Version` and the bulk endpoints take
       `VersionedResourceRequest` (`AdminModels.cs:35`). Read-then-write must carry the version
       through; add `--if-version` for callers that want to fail on drift. Last-writer-wins is the
       wrong default for an admin tool.
-- [ ] **Idempotence for runbooks.** `--if-not-exists` on create and `--if-exists` on delete, so a
+- [x] **Idempotence for runbooks.** `--if-not-exists` on create and `--if-exists` on delete, so a
       re-run is a no-op rather than an error. This is the property that makes the CLI worth having
       over the web UI; without it the tool is just a slower browser.
 - [x] **`--json` on every read verb**, with a shape stable enough to pipe. Human-readable table by

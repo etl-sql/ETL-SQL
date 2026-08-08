@@ -12,6 +12,7 @@ etl-sql admin session <subcommand>
 
 | Subcommand | Description |
 | :--- | :--- |
+| [`disconnect`](admin-session-disconnect.md) | Disconnect a user's Portal sessions |
 | [`list`](admin-session-list.md) | List active Portal sessions |
 
 ## References

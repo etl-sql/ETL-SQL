@@ -85,6 +85,38 @@ etl-sql admin user list --json | jq -r '.[] | select(.isActive) | .userName'
 etl-sql admin group members --name "Finance Analysts" --json
 ```
 
+## Writing safely from a runbook
+
+Two properties make this worth using instead of a browser.
+
+**Idempotence.** `--if-not-exists` on create and `--if-exists` on delete turn a re-run into a no-op
+rather than an error, so a provisioning script can be run twice, or resumed after a partial failure,
+without a human deciding which steps to skip:
+
+```bash
+etl-sql admin group create --name "Finance Analysts" --if-not-exists
+etl-sql admin user create --username jsmith --email jsmith@corp.local \
+    --role Publisher --password-stdin --if-not-exists < /run/secrets/initial-password
+etl-sql admin group add-member --name "Finance Analysts" --username jsmith
+```
+
+Membership changes are idempotent unconditionally — adding an existing member is exactly what a
+re-run does, so it needs no flag.
+
+**Optimistic concurrency.** Every guarded write sends the record's version in `If-Match`. By default
+the CLI carries through the version it just read, so a concurrent edit is a detectable conflict
+(exit 7) rather than a silent overwrite. `--if-version` pins an expected value when the caller wants
+to fail on any drift at all:
+
+```bash
+etl-sql admin user disable --username jsmith --if-version 7
+```
+
+Last-writer-wins is the wrong default for an administration tool, so there is no way to ask for it.
+
+**Passwords are never arguments.** `--password-stdin` is the only way to supply one; there is no
+`--password` flag, and a test asserts there never will be.
+
 ## Answering "why can this person see this"
 
 ```bash

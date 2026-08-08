@@ -68,6 +68,27 @@ public class CliContext
     /// <summary>Target group name for the verbs that take one.</summary>
     public string? AdminGroupName { get; set; }
 
+    /// <summary>Email for <c>admin user create</c>.</summary>
+    public string? AdminEmail { get; set; }
+
+    /// <summary>Identity provider for <c>admin user create</c> (Local, LDAP).</summary>
+    public string? AdminProvider { get; set; }
+
+    /// <summary>Description for <c>admin group create</c>.</summary>
+    public string? AdminDescription { get; set; }
+
+    /// <summary>Read the new password from standard input. The only accepted source — never argv.</summary>
+    public bool PasswordStdin { get; set; }
+
+    /// <summary>Make a create a no-op when the record already exists, so a runbook re-run is safe.</summary>
+    public bool IfNotExists { get; set; }
+
+    /// <summary>Make a delete a no-op when the record is already gone.</summary>
+    public bool IfExists { get; set; }
+
+    /// <summary>Fail the write unless the record is still at this version.</summary>
+    public long? IfVersion { get; set; }
+
     /// <summary>
     /// Stable identity for an unattended run. Without it the job name is the script's file name, so
     /// the same script under two schedules — or same-named scripts in different folders — collapse

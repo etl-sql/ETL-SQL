@@ -12,8 +12,13 @@ etl-sql admin user <subcommand>
 
 | Subcommand | Description |
 | :--- | :--- |
+| [`create`](admin-user-create.md) | Create a Portal user |
+| [`delete`](admin-user-delete.md) | Delete a Portal user |
+| [`disable`](admin-user-disable.md) | Deactivate a Portal user |
+| [`enable`](admin-user-enable.md) | Reactivate a Portal user |
 | [`list`](admin-user-list.md) | List Portal users |
 | [`permissions`](admin-user-permissions.md) | Show a user's effective permissions — answers "why can this person see this" |
+| [`revoke-tokens`](admin-user-revoke-tokens.md) | Revoke a user's issued tokens |
 | [`show`](admin-user-show.md) | Show one Portal user |
 
 ## References

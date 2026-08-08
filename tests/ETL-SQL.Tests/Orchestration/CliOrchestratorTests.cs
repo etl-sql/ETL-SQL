@@ -76,6 +76,102 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Null(ctx.JobName);
         }
 
+        // ── admin identity verbs ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesIdempotenceFlagsForCreateAndDelete()
+        {
+            var create = await ParseRunAsync("admin", "user", "create", "--username", "jsmith", "--if-not-exists");
+            Assert.True(create.IfNotExists);
+            Assert.Equal("jsmith", create.AdminUsername);
+
+            var delete = await ParseRunAsync("admin", "user", "delete", "--username", "jsmith", "--if-exists");
+            Assert.True(delete.IfExists);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesIfVersionForGuardedWrites()
+        {
+            var ctx = await ParseRunAsync("admin", "user", "disable", "--username", "jsmith", "--if-version", "7");
+            Assert.Equal(7L, ctx.IfVersion);
+        }
+
+        /// <summary>Absent means "carry through the version just read", not "overwrite blindly".</summary>
+        [Fact]
+        public async Task CliOrchestrator_AbsentIfVersionLeavesTheExpectationUnset()
+        {
+            var ctx = await ParseRunAsync("admin", "user", "disable", "--username", "jsmith");
+            Assert.Null(ctx.IfVersion);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesPasswordStdinAndNeverAPasswordArgument()
+        {
+            var ctx = await ParseRunAsync("admin", "user", "create", "--username", "jsmith", "--password-stdin");
+            Assert.True(ctx.PasswordStdin);
+        }
+
+        /// <summary>
+        /// A --password flag must not exist. If one is ever added, the secret lands in shell history
+        /// and CI logs, which is the failure this verb family was designed to avoid.
+        /// </summary>
+        [Fact]
+        public async Task CliOrchestrator_RejectsAPasswordOnTheCommandLine()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var parse = root.Parse(new[] { "admin", "user", "create", "--username", "jsmith", "--password", "hunter2" });
+
+            Assert.NotEmpty(parse.Errors);
+            Assert.Null(captured);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_CreateUsesAnAssignRoleNotTheListFilter()
+        {
+            var ctx = await ParseRunAsync("admin", "user", "create", "--username", "jsmith", "--role", "Publisher");
+            Assert.Equal("Publisher", ctx.AdminRole);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesGroupMembershipVerbs()
+        {
+            var add = await ParseRunAsync("admin", "group", "add-member", "--name", "Finance", "--username", "jsmith");
+            Assert.Equal("Finance", add.AdminGroupName);
+            Assert.Equal("jsmith", add.AdminUsername);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesPortalUrlAndClientIdButNoSecret()
+        {
+            var ctx = await ParseRunAsync("admin", "portal-whoami",
+                "--portal-url", "https://portal.example.com", "--client-id", "sa_abc");
+
+            Assert.Equal("https://portal.example.com", ctx.PortalUrl);
+            Assert.Equal("sa_abc", ctx.PortalClientId);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_HasNoClientSecretOption()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var parse = root.Parse(new[] { "admin", "portal-whoami", "--client-secret", "sas_leak" });
+
+            Assert.NotEmpty(parse.Errors);
+            Assert.Null(captured);
+        }
+
         private static async Task<CliContext> ParseRunAsync(params string[] args)
         {
             CliContext? captured = null;
