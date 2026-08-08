@@ -32,6 +32,29 @@ public class AdminController(
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    /// <summary>True when this request is authenticated by a service account token, not a person.</summary>
+    private bool IsServiceIdentity =>
+        User.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType;
+
+    /// <summary>
+    /// Creating or promoting an <c>Admin</c> is the one identity operation that requires a human.
+    /// A service token that could mint admins could grant itself — through a new account — every
+    /// capability the <c>admin.identity</c> scope deliberately withholds (backup, export,
+    /// key rotation, shutdown), which would make the narrow scope meaningless. Demotion is
+    /// deliberately still allowed: revoking an admin during an incident should not need a browser.
+    /// </summary>
+    private IActionResult? DenyIfTokenIsElevatingToAdmin(string? requestedRole)
+    {
+        if (!IsServiceIdentity) return null;
+        if (!string.Equals(requestedRole, "Admin", StringComparison.OrdinalIgnoreCase)) return null;
+
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            error = "admin_elevation_requires_interactive_user",
+            message = "A service account cannot create or promote an Admin. Perform this change as a signed-in administrator."
+        });
+    }
+
     private async Task<UserDto> ToUserDtoAsync(PortalUser user, CancellationToken cancellationToken = default) =>
         (await ToUserDtosAsync([user], cancellationToken)).Single();
 
@@ -198,6 +221,8 @@ public class AdminController(
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
     {
+        if (DenyIfTokenIsElevatingToAdmin(req.Role) is { } denied) return denied;
+
         var provider = req.Provider ?? "Local";
         var user = new PortalUser
         {
@@ -252,6 +277,8 @@ public class AdminController(
     [HttpPut("users/{id:int}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest req)
     {
+        if (DenyIfTokenIsElevatingToAdmin(req.Role) is { } denied) return denied;
+
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);

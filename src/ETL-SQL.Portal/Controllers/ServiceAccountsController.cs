@@ -165,8 +165,15 @@ public sealed class ServiceAccountsController(
 
         var roles = (requestedRoles ?? []).Select(value => value.Trim()).Where(value => value.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
-        if (roles.Contains("Admin", StringComparer.OrdinalIgnoreCase))
-            return ("Service accounts cannot receive the Admin role.", []);
+
+        // The Admin role was previously refused outright, because an Admin-roled token would have
+        // reached all ~60 admin endpoints. It is now permitted solely alongside admin.identity,
+        // which confines the token to the enumerated identity routes in AdminIdentityRoutes —
+        // backup, export, promotion, key rotation and shutdown stay unreachable. Granting Admin
+        // without that scope would restore the unbounded reach and is still refused.
+        if (roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)
+            && !normalizedScopes.Contains(ServiceAccountScopes.AdminIdentity, StringComparer.OrdinalIgnoreCase))
+            return ($"The Admin role may only be granted together with the {ServiceAccountScopes.AdminIdentity} scope.", []);
         var ownerRoles = await users.GetRolesAsync(owner);
         var excessive = roles.Except(ownerRoles, StringComparer.OrdinalIgnoreCase).ToArray();
         return excessive.Length > 0

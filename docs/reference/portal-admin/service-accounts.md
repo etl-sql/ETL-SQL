@@ -6,8 +6,14 @@ resource permissions, while the account's stored role cap and explicit scopes ca
 
 ## Security Contract
 
-- Service accounts cannot receive the `Admin` role or use administration, login, password, OIDC, or
-  other human-only endpoints.
+- Service accounts cannot use login, password, OIDC, or other human-only endpoints.
+- Service accounts cannot receive the `Admin` role **except** together with the `admin.identity`
+  scope, which confines them to the identity-administration routes listed below. Granting `Admin`
+  without that scope is refused, because it would restore unbounded reach across every
+  administration endpoint.
+- No service account can create or promote an `Admin`, whatever its scopes. That one operation
+  requires a signed-in human. Demotion is permitted, so revoking an administrator during an
+  incident does not need a browser.
 - Disabling, expiring, revoking, or rotating an account invalidates already-issued service JWTs.
 - Service JWTs last at most 15 minutes and have no refresh token.
 - The client secret is shown only after creation or rotation. The database stores a salted password
@@ -23,9 +29,35 @@ resource permissions, while the account's stored role cap and explicit scopes ca
 | `portal.read` | Authenticated read-only portal APIs, still subject to roles and resource ACLs |
 | `reports.execute` | Report execution and dataset refresh operations |
 | `orchestrator.execute` | Orchestrator API operations, still subject to the required portal role |
+| `admin.identity` | Identity administration only — users, groups, group membership, sessions, and read-only introspection of one user's effective access |
 
 Scopes do not grant a role or resource permission. A request must pass the scope check and every
 existing authorization check.
+
+### `admin.identity`
+
+Exists so a provisioning runbook or CI pipeline can manage users and groups without a browser. It is
+deliberately not a blanket `admin.*`: backup and restore, configuration export, environment
+promotion, support bundles, audit collection and export, operational metrics, branding and
+orchestrator settings, service restart and shutdown, and dataset at-rest key rotation all remain
+unreachable by any token.
+
+The reachable routes are an **explicit allowlist**, not a prefix rule, so an administration endpoint
+added later is unreachable until someone opts it in on purpose:
+
+| Area | Routes under `/api/admin/` |
+| :--- | :--- |
+| Users | `users`, `users/catalog`, `users/{id}`, `users/bulk-status`, `users/{id}/reset-password`, `users/{id}/revoke-tokens`, `users/{id}/disconnect` |
+| Sessions | `sessions` |
+| Groups | `groups`, `groups/catalog`, `groups/{id}`, `groups/bulk-delete`, `groups/{id}/studio-capabilities` |
+| Membership | `groups/{id}/members`, `groups/{id}/members/catalog`, `groups/{id}/members/bulk-add`, `groups/{id}/members/bulk-remove`, `groups/{id}/members/{userId}` |
+| Introspection (read-only) | `permissions/effective/user/{id}`, `access-simulator/user/{id}` |
+
+An account using this scope must **also** hold the `Admin` role — the scope never substitutes for
+the role. Because the role claim is stamped when the token is issued and a service JWT lives up to
+15 minutes, the owner's `Admin` assignment is re-read from the store on every identity-route
+request: demoting an administrator revokes their automation's access immediately rather than at the
+end of the token's life.
 
 ## Provisioning
 

@@ -10,9 +10,19 @@ public static class ServiceAccountScopes
     public const string PortalRead = "portal.read";
     public const string ReportsExecute = "reports.execute";
     public const string OrchestratorExecute = "orchestrator.execute";
+
+    /// <summary>
+    /// Administration of identity only — users, groups, group membership, sessions, and read-only
+    /// introspection of a user's effective access. Deliberately narrow: there is no blanket
+    /// <c>admin.*</c>, so backup and restore, configuration export, environment promotion, support
+    /// bundles, audit collection, service restart/shutdown, and at-rest key rotation stay
+    /// unreachable by any token. Granting this scope never substitutes for the <c>Admin</c> role.
+    /// </summary>
+    public const string AdminIdentity = "admin.identity";
+
     public static readonly ISet<string> Allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        PortalRead, ReportsExecute, OrchestratorExecute
+        PortalRead, ReportsExecute, OrchestratorExecute, AdminIdentity
     };
 
     public static string Serialize(IEnumerable<string> values) => string.Join(' ', Normalize(values));

@@ -1092,23 +1092,56 @@ either, so a scoped service identity is the only workable path.
 
 #### Prerequisite — a scoped non-interactive admin identity
 
-- [ ] Add an `admin.identity` scope (users, groups, membership, sessions) distinct from any broader
+- [x] Add an `admin.identity` scope (users, groups, membership, sessions) distinct from any broader
       admin capability. Do **not** add a blanket `admin.*`. Backup/restore, migration, promotion,
       service restart/shutdown, and at-rest key rotation stay unreachable by token.
-- [ ] Replace the blanket `/api/admin` deny with a route-level allowlist so that *only* the
+- [x] Replace the blanket `/api/admin` deny with a route-level allowlist so that *only* the
       identity routes become reachable, and every other `/api/admin/**` path continues to return
       `403` for service identities. Default-deny must survive: a new admin controller added later
       must be unreachable until someone opts it in.
-- [ ] Require **both** the `Admin` role and the `admin.identity` scope. A scope must never
+- [x] Require **both** the `Admin` role and the `admin.identity` scope. A scope must never
       substitute for the role, and holding the role must not imply the scope.
-- [ ] Negative tests are the deliverable here, not the positive ones: a token without the scope,
+- [x] Negative tests are the deliverable here, not the positive ones: a token without the scope,
       a token with the scope against a non-identity admin route, a revoked/expired/disabled
       account, and a token whose owner lost the `Admin` role after issue.
-- [ ] Audit every mutation with the service identity as actor, distinguishable from a human of the
+- [x] Audit every mutation with the service identity as actor, distinguishable from a human of the
       same name in the audit log.
-- [ ] Decide and document whether a service account may create or elevate *another* admin — the
+- [x] Decide and document whether a service account may create or elevate *another* admin — the
       privilege-escalation question. Recommendation: deny role elevation to `Admin` by token, and
       require an interactive human for that one operation.
+
+**Prerequisite shipped (v0.18.0).** The scope, the allowlist, the role coupling, the escalation
+denial, and the negative tests are in. The verb surface below is now unblocked.
+
+**The item as written was unsatisfiable, and finding out why was the work.**
+`ServiceAccountsController.Validate` already refused the `Admin` role outright ("Service accounts
+cannot receive the Admin role"), while `AdminController` is `[Authorize(Roles = "Admin")]` — so no
+token could reach any admin route whatever scope it held, and "require **both** the role and the
+scope" could never both hold. Resolved by coupling them: the `Admin` role is now grantable to a
+service account **only** alongside `admin.identity`, which is safe precisely because the allowlist
+confines such a token to identity routes. Granting `Admin` without that scope is still refused.
+
+**`AdminIdentityRoutes` is an enumerated allowlist, not a prefix rule.** A prefix would have silently
+admitted the next endpoint hung off `users/` or `groups/`; tests assert that
+`users/{id}/favorites` and a hypothetical `groups/{id}/some-future-endpoint` are denied, so
+default-deny survives the next person to add a controller. The method is part of the grant.
+
+**A window nobody had written down.** Role claims are stamped at token issue and a service JWT lives
+up to 15 minutes, so demoting an administrator left their automation able to create users for the
+rest of that window — on the one route family that grants access. The owner's `Admin` assignment is
+now re-read from the store on every identity-route request. Ordinary Portal routes keep the cheaper
+claim-only posture. Proven by mutation: disabling the check fails exactly the two tests that cover
+it, and no others.
+
+**Escalation: denied, as recommended.** No service account can create or promote an `Admin`,
+whatever its scopes; the guard runs before any mutation, and a test asserts the user is not created.
+Demotion stays allowed so revoking an administrator during an incident does not need a browser.
+Group membership cannot confer `Admin` — groups carry ACLs and Studio capabilities, not roles — so
+the two `AddToRoleAsync` call sites are the whole escalation surface.
+
+**Audit attribution needed no code.** `AuditService` already resolves `ActorType=ServiceAccount`,
+the service-account id, and effective scopes from the principal. Verified end to end rather than
+assumed.
 
 #### Verb surface
 
@@ -1761,3 +1794,9 @@ was still PascalCase. Reference docs updated to match.
 
 Not addressed here (still open above): the VS Code metadata-explorer items, settings grouping,
 report-surface gating, format button, and the plaintext-password save flow.
+
+- [ ] **Create a working cookbook recipe for Lineage**  It should be two parts, part one should be data
+  from a flat file into a database with some transformations in the middle.  This is an EDW load.  This
+  should also include an export of the Lineage.  Part two would be importing the lineage and taking the 
+  table from EDW and making a report from it.  Everything should work and the lineage on the report should
+  show the flat file source to the EDW to the report and all transformations that happen between.
