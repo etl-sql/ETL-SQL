@@ -1149,7 +1149,7 @@ Nested under `admin` (`admin user list`), following the `admin ha-soak <verb>` p
 than the flat `admin set-secret` style — the identity family is ~25 verbs and flat naming stops
 scanning cleanly. Record the inconsistency in the CLI reference so it reads as a decision.
 
-- [ ] **Auth/bootstrap.** `admin portal-whoami` — resolve credentials, print the identity, roles,
+- [x] **Auth/bootstrap.** `admin portal-whoami` — resolve credentials, print the identity, roles,
       and scopes, print no secret. Mirrors the `verify-secret` "prove it resolves without echoing
       it" idiom and is the first thing to run when a runbook fails. Credentials come from
       `--portal-url` plus env or a `SECRET:name` reference resolved through the existing machine
@@ -1158,7 +1158,7 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
       `user create` (`--username --email --role`, optional `--first-name --last-name --provider`,
       `--password-stdin`), `user update`, `user enable` / `user disable`, `user delete`,
       `user reset-password`, `user revoke-tokens`.
-- [ ] **Effective permissions.** `user permissions --username` over
+- [x] **Effective permissions.** `user permissions --username` over
       `permissions/effective/user/{id}`, and `access-simulate --username --report` over the access
       simulator. Read-only, no new API needed, and the highest-value verb in the set: it answers
       "why can this person see this" without a browser.
@@ -1166,15 +1166,29 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
       (`--cascade`), `group members`, `group add-member`, `group remove-member` (repeatable
       `--username` maps to the bulk endpoints), `group capabilities` / `group set-capabilities`
       over `groups/{id}/studio-capabilities`.
-- [ ] **Sessions.** `session list`, `session disconnect --username`.
+- [ ] **Sessions.** ~~`session list`~~ (shipped), `session disconnect --username` (mutating — still open).
 - [ ] **Service accounts.** `service-account list|create|update|revoke` over
       `api/admin/service-accounts`. Sequencing trap: this is how the CLI's *own* credential is
       minted, so the first one must be creatable interactively in the Portal — do not build a
       bootstrap that requires a token to mint the first token.
 
+**Read verbs and the cross-cutting foundation shipped (v0.18.0).** `admin portal-whoami`,
+`admin user list|show|permissions`, `admin group list|members`, and `admin session list`, over
+`PortalAdminClient` (HTTP, no Portal project reference, asserted by an architecture test).
+Credentials come from the environment or a `SECRET:` reference and **never** from argv; the client
+id may be a flag because it is an identifier, not a credential. Exit codes are distinct per failure
+kind and documented in `docs/reference/portal-admin/admin-identity-cli.md`; not-found and
+ambiguous-match are kept apart so a runbook can create the first but must stop on the second.
+
+Still open below: the **mutating** verbs (`user create|update|enable|disable|delete|reset-password|
+revoke-tokens`, `group create|update|delete|add-member|remove-member|capabilities`,
+`session disconnect`, `service-account …`) and the two properties that only matter once they exist —
+optimistic concurrency (`--if-version`) and runbook idempotence (`--if-not-exists` / `--if-exists`).
+`access-simulate` is also still open; `user permissions` covers the common access question.
+
 #### Cross-cutting behaviour the verbs must get right
 
-- [ ] **Name→ID resolution.** The API is ID-keyed; operators and runbooks have names. Resolve
+- [x] **Name→ID resolution.** The API is ID-keyed; operators and runbooks have names. Resolve
       `--username`/`--name` via the catalog endpoints, and give not-found and ambiguous-match
       distinct, documented exit codes rather than a generic failure.
 - [ ] **Optimistic concurrency.** `UserDto`/`GroupDto` carry `Version` and the bulk endpoints take
@@ -1184,13 +1198,13 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
 - [ ] **Idempotence for runbooks.** `--if-not-exists` on create and `--if-exists` on delete, so a
       re-run is a no-op rather than an error. This is the property that makes the CLI worth having
       over the web UI; without it the tool is just a slower browser.
-- [ ] **`--json` on every read verb**, with a shape stable enough to pipe. Human-readable table by
+- [x] **`--json` on every read verb**, with a shape stable enough to pipe. Human-readable table by
       default, matching `admin list-connections`.
-- [ ] **Documented exit codes** — distinct values for auth failure, scope denied, not found,
+- [x] **Documented exit codes** — distinct values for auth failure, scope denied, not found,
       conflict/version drift, and validation error. Scripts branch on these.
-- [ ] **No secrets on argv, ever.** `--password-stdin` only, consistent with `SecretAdminService`'s
+- [x] **No secrets on argv, ever.** `--password-stdin` only, consistent with `SecretAdminService`'s
       never-echo discipline.
-- [ ] **No `ETL-SQL.Portal` project reference from `ETL-SQL.App`.** HTTP only, via a client in the
+- [x] **No `ETL-SQL.Portal` project reference from `ETL-SQL.App`.** HTTP only, via a client in the
       App tier modelled on `src/ETL-SQL.TUI/UI/PortalClient.cs`. Keeping it over the wire is what
       makes the CLI work against a *remote* Portal from a jump box, which is the whole point. Add
       an architecture-boundary test so the reference cannot be added later by accident.

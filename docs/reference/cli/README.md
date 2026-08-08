@@ -16,6 +16,9 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
 | [`etl-sql admin enable-connection`](admin-enable-connection.md) | Re-enable a disabled shared connection; its stored definition is retained |
 | [`etl-sql admin enable-secret`](admin-enable-secret.md) | Re-enable a disabled secret; the stored value resolves again |
+| [`etl-sql admin group`](admin-group.md) | Inspect Portal groups |
+| [`etl-sql admin group list`](admin-group-list.md) | List Portal groups |
+| [`etl-sql admin group members`](admin-group-members.md) | List the members of a group |
 | [`etl-sql admin ha-soak`](admin-ha-soak.md) | Prepare and collect PostgreSQL HA soak certification artifacts |
 | [`etl-sql admin ha-soak diagnostics`](admin-ha-soak-diagnostics.md) | Export a redacted diagnostics bundle for a topology run |
 | [`etl-sql admin ha-soak evidence`](admin-ha-soak-evidence.md) | Generate the non-secret HA soak evidence checklist |
@@ -30,6 +33,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin ha-soak workload`](admin-ha-soak-workload.md) | Materialize the sustained-load workload config for a topology run |
 | [`etl-sql admin list-connections`](admin-list-connections.md) | List shared connection catalog entries and their status |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
+| [`etl-sql admin portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`etl-sql admin promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
 | [`etl-sql admin promotion export`](admin-promotion-export.md) | Export eligible Orchestrator catalog and governance state |
 | [`etl-sql admin promotion import`](admin-promotion-import.md) | Import an Orchestrator promotion package idempotently |
@@ -38,9 +42,15 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
 | [`etl-sql admin restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`etl-sql admin rotate-secret`](admin-rotate-secret.md) | Replace the value of an existing named secret |
+| [`etl-sql admin session`](admin-session.md) | Inspect Portal sign-in sessions |
+| [`etl-sql admin session list`](admin-session-list.md) | List active Portal sessions |
 | [`etl-sql admin set-connection`](admin-set-connection.md) | Store a shared connection in the catalog for scripts to use as SHARED:alias |
 | [`etl-sql admin set-secret`](admin-set-secret.md) | Encrypt and store a named secret in the configured secret store (machine scope) |
 | [`etl-sql admin support-bundle`](admin-support-bundle.md) | Collect a redacted support archive (config, health, logs, database metrics) |
+| [`etl-sql admin user`](admin-user.md) | Inspect Portal users |
+| [`etl-sql admin user list`](admin-user-list.md) | List Portal users |
+| [`etl-sql admin user permissions`](admin-user-permissions.md) | Show a user's effective permissions — answers "why can this person see this" |
+| [`etl-sql admin user show`](admin-user-show.md) | Show one Portal user |
 | [`etl-sql admin verify-connection`](admin-verify-connection.md) | Prove a shared connection's definition and secret references resolve, without printing values |
 | [`etl-sql admin verify-secret`](admin-verify-secret.md) | Resolve a named secret to prove it is readable, without printing the value |
 | [`etl-sql config`](config.md) | Manage application configuration |

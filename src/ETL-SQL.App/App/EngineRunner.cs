@@ -163,6 +163,14 @@ namespace ETL_SQL.App
                 return await HaSoakAdminService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-portal-whoami"
+                || ctx.Command.StartsWith("admin-user-", StringComparison.Ordinal)
+                || ctx.Command.StartsWith("admin-group-", StringComparison.Ordinal)
+                || ctx.Command.StartsWith("admin-session-", StringComparison.Ordinal))
+            {
+                return await Admin.IdentityAdminService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal) && ctx.Command.EndsWith("-secret", StringComparison.Ordinal))
             {
                 return await SecretAdminService.RunAsync(ctx, logger);

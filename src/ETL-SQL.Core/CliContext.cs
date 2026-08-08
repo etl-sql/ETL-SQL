@@ -46,6 +46,28 @@ public class CliContext
     /// </summary>
     public bool? RecordRun { get; set; }
 
+    // ── admin identity verbs ────────────────────────────────────────────────────
+    /// <summary>Portal base URL for the admin CLI; falls back to ETLSQL_PORTAL_URL.</summary>
+    public string? PortalUrl { get; set; }
+
+    /// <summary>Service-account client id. An identifier, not a secret, so a flag is acceptable.</summary>
+    public string? PortalClientId { get; set; }
+
+    /// <summary>Substring filter for list verbs.</summary>
+    public string? AdminFilter { get; set; }
+
+    /// <summary>Role filter for <c>admin user list</c>.</summary>
+    public string? AdminRole { get; set; }
+
+    /// <summary>Include deactivated users in list output.</summary>
+    public bool IncludeInactive { get; set; }
+
+    /// <summary>Target user name for the verbs that take one.</summary>
+    public string? AdminUsername { get; set; }
+
+    /// <summary>Target group name for the verbs that take one.</summary>
+    public string? AdminGroupName { get; set; }
+
     /// <summary>
     /// Stable identity for an unattended run. Without it the job name is the script's file name, so
     /// the same script under two schedules — or same-named scripts in different folders — collapse

@@ -20,15 +20,19 @@ etl-sql admin <subcommand>
 | [`doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
 | [`enable-connection`](admin-enable-connection.md) | Re-enable a disabled shared connection; its stored definition is retained |
 | [`enable-secret`](admin-enable-secret.md) | Re-enable a disabled secret; the stored value resolves again |
+| [`group`](admin-group.md) | Inspect Portal groups |
 | [`ha-soak`](admin-ha-soak.md) | Prepare and collect PostgreSQL HA soak certification artifacts |
 | [`list-connections`](admin-list-connections.md) | List shared connection catalog entries and their status |
 | [`migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
+| [`portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
 | [`restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
 | [`rotate-secret`](admin-rotate-secret.md) | Replace the value of an existing named secret |
+| [`session`](admin-session.md) | Inspect Portal sign-in sessions |
 | [`set-connection`](admin-set-connection.md) | Store a shared connection in the catalog for scripts to use as SHARED:alias |
 | [`set-secret`](admin-set-secret.md) | Encrypt and store a named secret in the configured secret store (machine scope) |
 | [`support-bundle`](admin-support-bundle.md) | Collect a redacted support archive (config, health, logs, database metrics) |
+| [`user`](admin-user.md) | Inspect Portal users |
 | [`verify-connection`](admin-verify-connection.md) | Prove a shared connection's definition and secret references resolve, without printing values |
 | [`verify-secret`](admin-verify-secret.md) | Resolve a named secret to prove it is readable, without printing the value |
 

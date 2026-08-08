@@ -102,6 +102,43 @@ namespace ETL_SQL.App
         {
             Description = "Resume execution of a persistent session from the last successfully completed checkpoint."
         };
+        // Identity administration. The client id is an identifier, so a flag is fine; the client
+        // SECRET is deliberately absent — it comes only from the environment or a SECRET: reference,
+        // because argv is visible to every process and captured by CI logs.
+        private static readonly Option<string?> PortalUrlOption = new("--portal-url", Array.Empty<string>())
+        {
+            Description = "Portal base URL. Defaults to the ETLSQL_PORTAL_URL environment variable.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> PortalClientIdOption = new("--client-id", Array.Empty<string>())
+        {
+            Description = "Service-account client id. Defaults to ETLSQL_PORTAL_CLIENT_ID.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminFilterOption = new("--filter", Array.Empty<string>())
+        {
+            Description = "Case-insensitive substring filter on the name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminRoleOption = new("--role", Array.Empty<string>())
+        {
+            Description = "Only list users holding this role.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<bool> IncludeInactiveOption = new("--include-inactive", Array.Empty<string>())
+        {
+            Description = "Include deactivated users."
+        };
+        private static readonly Option<string?> AdminUsernameOption = new("--username", Array.Empty<string>())
+        {
+            Description = "Target user name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminGroupNameOption = new("--name", Array.Empty<string>())
+        {
+            Description = "Target group name.",
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<bool> RecordOption = new("--record", Array.Empty<string>())
         {
             Description = "Record this run in the job history and lineage catalog, overriding Engine:AuditAdHocRuns."
@@ -892,6 +929,72 @@ namespace ETL_SQL.App
             haSoakCommand.Add(haSoakDiagnosticsCommand);
             adminCommand.Add(haSoakCommand);
 
+            // Identity administration over the Portal API. Nested under `admin` following the
+            // ha-soak precedent rather than the flat `admin set-secret` style: the identity family
+            // is large enough that flat naming stops scanning cleanly.
+            var whoAmICommand = new Command("portal-whoami",
+                "Resolve Portal credentials and print the identity, roles, and scopes (never a secret)")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption
+            };
+            whoAmICommand.SetAction(context => Dispatch(context, "admin-portal-whoami", handler));
+            adminCommand.Add(whoAmICommand);
+
+            var userCommand = new Command("user", "Inspect Portal users");
+
+            var userListCommand = new Command("list", "List Portal users")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminFilterOption, AdminRoleOption, IncludeInactiveOption
+            };
+            userListCommand.SetAction(context => Dispatch(context, "admin-user-list", handler));
+            userCommand.Add(userListCommand);
+
+            var userShowCommand = new Command("show", "Show one Portal user")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption
+            };
+            userShowCommand.SetAction(context => Dispatch(context, "admin-user-show", handler));
+            userCommand.Add(userShowCommand);
+
+            var userPermissionsCommand = new Command("permissions",
+                "Show a user's effective permissions — answers \"why can this person see this\"")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption
+            };
+            userPermissionsCommand.SetAction(context => Dispatch(context, "admin-user-permissions", handler));
+            userCommand.Add(userPermissionsCommand);
+
+            adminCommand.Add(userCommand);
+
+            var groupCommand = new Command("group", "Inspect Portal groups");
+
+            var groupListCommand = new Command("list", "List Portal groups")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminFilterOption
+            };
+            groupListCommand.SetAction(context => Dispatch(context, "admin-group-list", handler));
+            groupCommand.Add(groupListCommand);
+
+            var groupMembersCommand = new Command("members", "List the members of a group")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminGroupNameOption
+            };
+            groupMembersCommand.SetAction(context => Dispatch(context, "admin-group-members", handler));
+            groupCommand.Add(groupMembersCommand);
+
+            adminCommand.Add(groupCommand);
+
+            // Distinct from the root `session` command, which manages ad-hoc execution sessions.
+            var portalSessionCommand = new Command("session", "Inspect Portal sign-in sessions");
+            var portalSessionListCommand = new Command("list", "List active Portal sessions")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminFilterOption
+            };
+            portalSessionListCommand.SetAction(context => Dispatch(context, "admin-session-list", handler));
+            portalSessionCommand.Add(portalSessionListCommand);
+            adminCommand.Add(portalSessionCommand);
+
             var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
             {
                 SecretNameOption,
@@ -1074,6 +1177,20 @@ namespace ETL_SQL.App
                 EnablePaging = res.GetValue(PageOption),
                 DisplayProgress = res.GetValue(ProgressOption)
             };
+
+            if (commandName.StartsWith("admin-user-", StringComparison.Ordinal)
+                || commandName.StartsWith("admin-group-", StringComparison.Ordinal)
+                || commandName.StartsWith("admin-session-", StringComparison.Ordinal)
+                || commandName == "admin-portal-whoami")
+            {
+                cliContext.PortalUrl = TryGetString(res, PortalUrlOption);
+                cliContext.PortalClientId = TryGetString(res, PortalClientIdOption);
+                cliContext.AdminFilter = TryGetString(res, AdminFilterOption);
+                cliContext.AdminRole = TryGetString(res, AdminRoleOption);
+                cliContext.IncludeInactive = TryGetBool(res, IncludeInactiveOption);
+                cliContext.AdminUsername = TryGetString(res, AdminUsernameOption);
+                cliContext.AdminGroupName = TryGetString(res, AdminGroupNameOption);
+            }
 
             if (commandName == "run")
             {

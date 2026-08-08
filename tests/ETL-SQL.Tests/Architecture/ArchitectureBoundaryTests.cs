@@ -121,6 +121,29 @@ public sealed class ArchitectureBoundaryTests
             + string.Join("\n", resolved.Select(v => $"  {v.Item1} -> {v.Item2}")));
     }
 
+    /// <summary>
+    /// The admin CLI administers the Portal over HTTP and must keep doing so. Adding a project
+    /// reference would make the verbs work only against a Portal whose database is on the same
+    /// host, quietly removing the reason the CLI exists — running against a remote Portal from a
+    /// jump box. The constraint is invisible in the code that would break it, so it is asserted
+    /// here rather than left to review.
+    /// </summary>
+    [Fact]
+    public void App_DoesNotReferencePortal_SoTheAdminCliStaysOverTheWire()
+    {
+        var projects = Projects();
+        Assert.True(projects.TryGetValue("App", out var app), "ETL-SQL.App project was not found.");
+
+        var portalReferences = app!.ProjectReferences
+            .Where(reference => reference.StartsWith("Portal", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(reference => reference)
+            .ToList();
+
+        Assert.True(portalReferences.Count == 0,
+            "ETL-SQL.App must reach the Portal over HTTP, never by project reference. Found:\n"
+            + string.Join("\n", portalReferences.Select(reference => $"  App -> {reference}")));
+    }
+
     [Fact]
     public void BannedPackages_AreAbsent_ExceptPinnedViolations()
     {
