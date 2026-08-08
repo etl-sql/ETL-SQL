@@ -1606,12 +1606,46 @@ this release).
   ```
   - [x] **Lineage syntax needs help**  I see in the syntax index that LINEAGE_NAMESPACE and LINEAGE_IMPORT_CATALOG exist but there is no documentation on how to use them.  There should be multiple ways to export lineage one being OPENLINEAGE, then markdown as a mermaid chart, and maybe more its been a while since we worked on this.
   - [x] **Import lineage** As listed above we should be able to IMPORT LINEAGE from a file.  But we also need a way to import from a database and if I remember correctly we also save lineage to the ETL-SQL database so that may be a third area we could import it from.
-  - [ ] **VS Code METADATA EXPLORER not showing flatfile columns**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 153915.png"  Shows both FILE and DUAL.  FILE has nothing below it, DUAL and dummy?  I would expect to see these column: "name","date_of_birth","date_of_death","gender" without " surrounding them.
-  - [ ] **VS Code METADATA EXPLORER not show column types**  For databases where column type is accessible it should show that information.  Currently just shows column names.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 154200.png"  I would expect: date_of_birth::date   But when the column is dragged and dropped into a script (which works great) it should only show the column name and not the type.
-  - [ ] **VS Code setting need to be grouped**  We have AI, formatting, and paths.  It would be easier for a user to read if these were grouped together.
-  - [ ] **Hide report preview, launch, report designer unless the script is an rptsql**  We have two extension for a reason so an etlsql is not expected to contain reporting elements.  We'll need to add an option to VS Code for that extension currently only ETL-SQL points to .etlsql we'll need ETL-SQL Report.  Then on our welcome screen when they click create etlsql it opens as etlsql.  Notebook is the same etlnb, and Report (the change) should open up as an rptsql.
-  - [ ] **Add a format button** I used to be able to use shortcut keys to format but vs code must have overwritten them.  Either way let's add a format button next to the run button so users can click to format their code or if a selection is highlighted it only formats the highlighted selection.
-  - [ ] **On save when plaintext password VS Code asks to add the security feature, then sets the password but does not save**  It encrypts the plaintext connection and shows it as encrypted but doesn't save the file.  If you exit without saving it saves it as a plaintext.  The workflow of adding the password and switching to the encrypted connection string should save the file with that encrypted connection string automatically.
+  - [x] **VS Code METADATA EXPLORER not showing flatfile columns**  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 153915.png"  Shows both FILE and DUAL.  FILE has nothing below it, DUAL and dummy?  I would expect to see these column: "name","date_of_birth","date_of_death","gender" without " surrounding them.
+  - [x] **VS Code METADATA EXPLORER not show column types**  For databases where column type is accessible it should show that information.  Currently just shows column names.  See screenshot: "C:\Users\chuck\OneDrive\Pictures\Screenshots\Screenshot 2026-08-07 154200.png"  I would expect: date_of_birth::date   But when the column is dragged and dropped into a script (which works great) it should only show the column name and not the type.
+  - [x] **VS Code setting need to be grouped**  We have AI, formatting, and paths.  It would be easier for a user to read if these were grouped together.
+  - [x] **Hide report preview, launch, report designer unless the script is an rptsql**  We have two extension for a reason so an etlsql is not expected to contain reporting elements.  We'll need to add an option to VS Code for that extension currently only ETL-SQL points to .etlsql we'll need ETL-SQL Report.  Then on our welcome screen when they click create etlsql it opens as etlsql.  Notebook is the same etlnb, and Report (the change) should open up as an rptsql.
+  - [x] **Add a format button** I used to be able to use shortcut keys to format but vs code must have overwritten them.  Either way let's add a format button next to the run button so users can click to format their code or if a selection is highlighted it only formats the highlighted selection.
+  - [x] **On save when plaintext password VS Code asks to add the security feature, then sets the password but does not save**  It encrypts the plaintext connection and shows it as encrypted but doesn't save the file.  If you exit without saving it saves it as a plaintext.  The workflow of adding the password and switching to the encrypted connection string should save the file with that encrypted connection string automatically.
+
+### VS Code resolution (v0.18.0)
+
+**Two of these six needed no code.** The format button already existed in `editor/title` beside Run
+(`navigation@11.5`) and already formatted the selection when one was active. Report preview, the
+designer, and the launch submenu were already gated to `resourceLangId == rptsql`; `rptsql` was
+already registered for `.rptsql` under the alias "ETL-SQL Report", and the welcome screen already
+created `.etlsql` / `.rptsql` / `.etlnb`. Verified against the contributed menus and `WelcomeView`,
+not assumed.
+
+**Flatfile columns.** The root cause was not in the explorer. `CREATE CONNECTION x AS
+FLATFILE(PATH='...', ...)` carries no target expression — everything is in the option bag — and the
+language server built its connection string from `TargetExpression` only. The string came out empty,
+the file was never opened, and the table showed with nothing under it. The server now renders the
+option bag the way the engine does (`ConnectionStringBuilder`), using literal values only; an option
+built from a variable is skipped rather than guessed at. Column names were never actually quoted —
+they only looked that way because no columns were read at all.
+
+**DUAL.** Injected into every connection so `SELECT 1 FROM DUAL` completes. It is not a browsable
+object, so `etlsql/getTables` — which only feeds the explorer and sidebar — now filters it.
+Completions read the metadata manager directly and still see it.
+
+**Column types.** `etlsql/getColumns` returns `columnDetails` (name + type) beside the existing
+`columns`. The type is rendered as a dimmed `::type` suffix through the row's existing `detail`
+field rather than being formatted into the label, because the label is what a drag inserts — so
+drag-and-drop still yields just the column name. Sources that cannot report types show none.
+
+**Encrypt-on-save.** `etlsql.secureConnection` rewrote the buffer and never saved, so the editor
+showed `ENC:...` while the file on disk still held the plaintext password. It now saves, and warns
+explicitly if the save fails. Saving re-fires `onDidSaveTextDocument`, and the conditions that
+triggered the prompt (`NO_SAVE_SENSITIVE`, `CONNECTION_ENCRYPTION`) are still true on that pass, so
+a naive fix prompts forever — hence `saveGuard.ts`, a consume-once mark with a TTL so a failed save
+cannot suppress the policy for the rest of the session. Extracted rather than inlined so the loop
+behaviour is covered by tests.
  - [x] **Tags not being passed along to the final table**  Using this query
  ```sql
  DROP CONNECTION IF EXISTS hospital;

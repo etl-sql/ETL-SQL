@@ -380,6 +380,44 @@ namespace ETL_SQL.LSP
             };
         }
 
+        /// <summary>
+        /// Renders a <c>CREATE CONNECTION</c> option bag into the connection string the connector
+        /// expects, mirroring what <c>CreateConnectionStatementHandler</c> does at runtime. Static
+        /// analysis cannot evaluate expressions, so only literal option values are used — an option
+        /// built from a variable is skipped rather than guessed at, and the connection simply stays
+        /// as well-described as the script text allows.
+        /// </summary>
+        private string BuildConnectionStringFromOptions(string? connectionType, Dictionary<string, Expression> options)
+        {
+            if (string.IsNullOrEmpty(connectionType)) return "";
+
+            var literals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, expression) in options)
+            {
+                var value = expression switch
+                {
+                    LiteralExpression lit => lit.Value?.ToString(),
+                    IdentifierExpression id => id.Name,
+                    _ => null
+                };
+                if (value != null) literals[key] = value;
+            }
+
+            if (literals.Count == 0) return "";
+
+            try
+            {
+                return ETL_SQL.Connectors.ConnectionStringBuilder.Build(connectionType, literals);
+            }
+            catch (Exception ex)
+            {
+                // An unknown provider or a malformed option bag is a script-authoring problem that
+                // the linter reports; metadata just degrades to "no schema for this connection".
+                _logger.LogDebug(ex, "Could not build a connection string for {Type} from its options.", connectionType);
+                return "";
+            }
+        }
+
         private async Task DiscoverMetadataRecursiveAsync(Statement stmt, string uri, HashSet<string> activeConnections, HashSet<string> activeTempTables)
         {
             if (_metadata.DebugMode)
@@ -389,6 +427,14 @@ namespace ETL_SQL.LSP
             {
                 var connStr = ccs.TargetExpression?.ToSql() ?? "";
                 connStr = connStr.Trim('\'', '\"', '(', ')', ' ');
+
+                // The option-bag form — FLATFILE(PATH='...', DELIMITER=',', HEADER=TRUE) — carries no
+                // target expression, so reading only TargetExpression left the connection string
+                // empty and the file was never opened: the Metadata Explorer showed the table with
+                // no columns under it. Build the string from the options the way the engine does.
+                if (string.IsNullOrEmpty(connStr) && ccs.Options is { Count: > 0 })
+                    connStr = BuildConnectionStringFromOptions(ccs.ConnectionType, ccs.Options);
+
                 _metadata.RegisterDocumentConnection(uri, ccs.ConnectionName, ccs.ConnectionType ?? "UNKNOWN", connStr);
                 activeConnections.Add(ccs.ConnectionName);
             }

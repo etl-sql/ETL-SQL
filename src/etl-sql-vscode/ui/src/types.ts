@@ -98,10 +98,18 @@ export interface TablesResponse {
     tables: string[];
 }
 
+export interface ColumnDetail {
+    name: string;
+    /** Declared type, when the source can report one. */
+    dataType?: string;
+}
+
 export interface ColumnsResponse {
     type: 'columnsResponse';
     requestId: string;
     columns: string[];
+    /** Positionally aligned with `columns`; absent from older servers. */
+    columnDetails?: ColumnDetail[];
 }
 
 export interface TempTablesResponse {

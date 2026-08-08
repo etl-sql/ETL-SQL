@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -118,7 +120,13 @@ namespace ETL_SQL.LSP
         public async Task<GetTablesResponse> Handle(GetTablesParams request, CancellationToken cancellationToken)
         {
             logger.LogInformation("LSP: etlsql/getTables requested for {Conn} (URI: {Uri})", request.connectionName, request.uri);
-            var tables = (await metadata.GetTablesAsync(request.connectionName, request.uri)).ToList();
+            // DUAL is a synthetic one-row table the metadata layer adds to every connection so
+            // "SELECT 1 FROM DUAL" completes. It is not a browsable object — it appeared in the
+            // Metadata Explorer under every connection with a meaningless DUMMY column beneath it.
+            // Completions read the metadata manager directly and still see it.
+            var tables = (await metadata.GetTablesAsync(request.connectionName, request.uri))
+                .Where(t => !string.Equals(t, "DUAL", StringComparison.OrdinalIgnoreCase))
+                .ToList();
             return new GetTablesResponse { tables = tables };
         }
 
@@ -127,7 +135,32 @@ namespace ETL_SQL.LSP
         {
             logger.LogInformation("LSP: etlsql/getColumns requested for {Conn}.{Table} (URI: {Uri})", request.connectionName, request.tableName, request.uri);
             var columns = (await metadata.GetColumnsAsync(request.connectionName, request.tableName, request.uri)).ToList();
-            return new GetColumnsResponse { columns = columns };
+
+            // Types are best-effort: sources that cannot report them still return names, and the
+            // explorer simply shows no type rather than an invented one.
+            var details = new List<ColumnDetail>();
+            try
+            {
+                var known = (await metadata.GetColumnDetailsAsync(request.connectionName, request.tableName, request.uri))
+                    .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().DataType, StringComparer.OrdinalIgnoreCase);
+
+                details = columns
+                    .Select(c => new ColumnDetail
+                    {
+                        name = c,
+                        dataType = known.TryGetValue(c, out var t) && !string.IsNullOrWhiteSpace(t) ? t : null
+                    })
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Column types unavailable for {Conn}.{Table}; returning names only.",
+                    request.connectionName, request.tableName);
+                details = columns.Select(c => new ColumnDetail { name = c }).ToList();
+            }
+
+            return new GetColumnsResponse { columns = columns, columnDetails = details };
         }
 
         /// <summary>Handles requests to list views for a connection.</summary>

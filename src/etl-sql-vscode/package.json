@@ -159,7 +159,8 @@
     ],
     "configuration": [
       {
-        "title": "ETL-SQL: Path Configurations",
+        "title": "Paths",
+        "order": 1,
         "properties": {
           "etlsql.executable.path": {
             "type": "string",
@@ -184,7 +185,8 @@
         }
       },
       {
-        "title": "ETL-SQL: Formatting Configurations",
+        "title": "Formatting",
+        "order": 2,
         "properties": {
           "etlsql.format.keywordCasing": {
             "type": "string",
@@ -234,7 +236,8 @@
         }
       },
       {
-        "title": "ETL-SQL: AI Configurations",
+        "title": "AI",
+        "order": 3,
         "properties": {
           "etlsql.ai.provider": {
             "type": "string",
@@ -267,7 +270,8 @@
         }
       },
       {
-        "title": "ETL-SQL: Report Configurations",
+        "title": "Reports",
+        "order": 4,
         "properties": {
           "etlsql.report.autoOpenPreview": {
             "type": "boolean",

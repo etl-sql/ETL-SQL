@@ -25,6 +25,7 @@ import { ensureExecutable } from './permissions';
 import { getTerminalCommand } from './terminalCommandBuilder';
 import { cleanupTempFiles } from './cleanupService';
 import { generateScriptFromSpec } from './generateScriptFromSpec';
+import { markPolicySave, consumePolicySave } from './saveGuard';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -507,11 +508,29 @@ export async function activate(context: vscode.ExtensionContext) {
                     editor.document.positionAt(editor.document.getText().length)
                 );
                 
-                await editor.edit(editBuilder => {
+                const applied = await editor.edit(editBuilder => {
                     editBuilder.replace(fullRange, response.encryptedText);
                 });
-                
-                vscode.window.showInformationMessage("Script secrets secured successfully.");
+
+                if (!applied) {
+                    vscode.window.showErrorMessage("ETL-SQL: Could not rewrite the script with the secured connections.");
+                    return;
+                }
+
+                // Persist immediately. Leaving the encrypted text unsaved is worse than not having
+                // encrypted at all: the editor shows ENC:... while the file on disk still holds the
+                // plaintext password, so closing without saving silently keeps the secret.
+                const documentKey = editor.document.uri.toString();
+                markPolicySave(documentKey);
+                const saved = await editor.document.save();
+
+                if (saved) {
+                    vscode.window.showInformationMessage("Script secrets secured and saved.");
+                } else {
+                    vscode.window.showWarningMessage(
+                        "ETL-SQL: Connections were secured but the file could not be saved — save it before closing, or the plaintext on disk will remain."
+                    );
+                }
             }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -565,6 +584,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
         if (document.languageId !== 'etlsql' && document.languageId !== 'rptsql') {
+            return;
+        }
+        // This save is the one the policy just performed — do not offer to apply it again.
+        if (consumePolicySave(document.uri.toString())) {
             return;
         }
         const text = document.getText();

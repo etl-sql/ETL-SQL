@@ -122,10 +122,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 tableName: message.tableName,
                 uri: message.uri
             });
+            const typed = response as { columns: string[], columnDetails?: { name: string, dataType?: string }[] };
             this.postMessage({
                 type: 'columnsResponse',
                 requestId: message.requestId,
-                columns: (response as { columns: string[] }).columns
+                columns: typed.columns,
+                columnDetails: typed.columnDetails ?? []
             });
         } catch {
             // ignore

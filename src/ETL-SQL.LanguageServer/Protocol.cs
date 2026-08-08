@@ -36,6 +36,20 @@ namespace ETL_SQL.LSP
     public class GetColumnsResponse
     {
         public List<string> columns { get; set; } = new();
+
+        /// <summary>
+        /// Column names paired with their declared type, positionally aligned with
+        /// <see cref="columns"/>. The explorer shows the type beside the name; the name alone is
+        /// what a drag inserts, so the two are kept apart rather than formatted into one string.
+        /// Empty when the source cannot report types.
+        /// </summary>
+        public List<ColumnDetail> columnDetails { get; set; } = new();
+    }
+
+    public class ColumnDetail
+    {
+        public string name { get; set; } = "";
+        public string? dataType { get; set; }
     }
 
     public class GetViewsParams : IRequest<GetViewsResponse>

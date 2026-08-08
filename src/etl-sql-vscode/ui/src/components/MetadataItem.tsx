@@ -5,6 +5,8 @@ import type { ProtocolMessage } from '../types';
 interface ChildItem {
   label: string;
   type: 'table' | 'column';
+  /** Rendered beside the name (a column's declared type). Never part of what a drag inserts. */
+  detail?: string;
 }
 
 interface MetadataItemProps {
@@ -56,7 +58,13 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
         setChildren(latest.tables.map(t => ({ label: t, type: 'table' as const })));
         setLoading(false);
     } else if (latest.type === 'columnsResponse') {
-        setChildren(latest.columns.map(c => ({ label: c, type: 'column' as const })));
+        // The type is shown as a suffix but kept out of the label, so dragging a column into a
+        // script still inserts just the column name.
+        const types = new Map((latest.columnDetails ?? []).map(d => [d.name, d.dataType]));
+        setChildren(latest.columns.map(c => {
+            const dataType = types.get(c);
+            return { label: c, type: 'column' as const, detail: dataType ? `::${dataType}` : undefined };
+        }));
         setLoading(false);
     } else if (latest.type === 'tempTablesResponse') {
         setChildren(latest.tables.map(t => ({ label: t, type: 'table' as const })));
@@ -127,6 +135,7 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
               key={`${child.label}-${idx}`}
               label={child.label}
               type={child.type}
+              detail={child.detail}
               icon={child.type === 'table' ? TableIcon : Box}
               connectionName={type === 'connection' ? label : connectionName}
               messages={messages}
