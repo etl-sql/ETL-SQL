@@ -1380,6 +1380,53 @@ support from an Enterprise happy path.
       refresh are not blocked by session cost; if either is slow the cause is the target read or the
       row cap.
 
+### Testing — retire the wall-clock flake class (scheduled for v0.19.0)
+
+Three release cycles have now recorded flaky tests with the **same shape**, and the standing policy
+of "stabilize the minimum to ship and record it" has kept them out of the way without retiring them:
+
+| Cycle | Test | Shape |
+| :--- | :--- | :--- |
+| v0.15.0 | `SchedulerServiceTests` (8), `ClusterLockTests.RunExclusive_SerializesConcurrentCriticalSections` | fixed delay as sole synchronization — **fixed**, `WaitUntilAsync` is the reference pattern |
+| v0.17.0 | `ProcessJobExecutorChaosTests` (2), `PortalIntegrationTests.Snapshot_ConcurrentRefreshReadsAndExports_…` | wall-clock budget on process kill / concurrent refresh |
+| v0.18.0 | `HostedServiceLaneTests.MissingDatasetAtRestKey_WithoutFallback_StopsApplication`, `SubscriptionIntegrationTests.Verify_Subscription_Failure_Scenario` | wall-clock budget exceeded under full-suite load |
+
+**Why the existing guardrail does not catch these.** `scripts/check-flaky-test-delays.mjs` (CI,
+`ci.yml:45`) flags a literal `Task.Delay` used as the *sole* synchronization before a positive
+assertion, and unreviewed elapsed-time upper bounds. It deliberately **excludes** delays inside a
+polling loop or behind a deadline — which is exactly the remaining shape. These tests poll
+correctly; their *budget* is simply too small for a machine running the other ~900 tests. So the
+next pass is not more of the same lint.
+
+The failure mode is also asymmetric and worth stating: a too-small budget produces a **false
+failure**, which costs a maintainer an investigation and teaches them to ignore red. A too-large
+budget only costs wall-clock time on a run that was going to fail anyway.
+
+- [ ] Establish the real distribution before changing any number. Run the Portal and Orchestrator
+      lanes N times under deliberate load and record, per waiting test, the observed time-to-satisfy
+      against its configured budget. Set budgets from that data rather than by doubling until green.
+- [ ] Replace bare deadlines with a shared load-aware helper — the `WaitUntilAsync` idea extended
+      with a budget that scales from a baseline measured once per run, so a saturated agent and a
+      developer laptop do not need the same constant.
+- [ ] Make a budget expiry **report what it was waiting for**. Every one of these cost an
+      investigation mostly because the failure said "expected true, got false" rather than "waited
+      15s for the host to stop; last observed state X". Diagnostics on timeout are the highest-value
+      part of this item.
+- [ ] Extend the guardrail to flag a *new* bare wall-clock budget in a waiting helper, so the class
+      cannot quietly regrow once retired. Same annotation escape hatch as the existing check.
+- [ ] Decide whether `HostedServiceLaneTests` should stay in the shared lane at all. It is the one
+      Portal suite that starts the full `IHostedService` pipeline, making it both the slowest to
+      reach a decision and the most sensitive to surrounding load — a separate lane may be a more
+      honest fix than a larger number.
+- [ ] Retire the three tracking documents into one when the class is closed, and record the outcome
+      the way [v0.15.0](docs/architecture/decisions/v0.15.0-flaky-tests.md) recorded its fix, so the
+      reference pattern stays findable.
+
+**Do not** simply add retries. A retry hides a genuine intermittent product defect exactly as well
+as it hides a test-harness one, and the shared-SQLite finding in the v0.18.0 notes — where the
+browser lane's failure turned out to describe a real production sharing hazard — is the reason to
+keep failures visible.
+
 ## Architecture documentation staleness audit (2026-08-05)
 
 Checked mechanically rather than by reading: every `src/…` path and every backticked type name in
