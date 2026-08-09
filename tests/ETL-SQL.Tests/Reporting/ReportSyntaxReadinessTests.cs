@@ -16,7 +16,18 @@ namespace ETL_SQL.Tests.Reporting
             var files = EnumerateReleaseFacingFiles(root).ToList();
             var failures = new List<string>();
 
-            foreach (var file in files)
+            // A named file that has moved must fail as a named file, not as a FileNotFoundException
+            // from the first read. The list below is the set of surfaces this check is supposed to
+            // protect; losing one silently — or crashing before reaching the rest — is the failure
+            // mode worth reporting.
+            foreach (var missing in files.Where(f => !File.Exists(f)))
+            {
+                failures.Add(
+                    $"{Path.GetRelativePath(root, missing)}: listed as release-facing but not found. " +
+                    "If it moved, update EnumerateReleaseFacingFiles; if it is gone, remove it.");
+            }
+
+            foreach (var file in files.Where(File.Exists))
             {
                 var text = File.ReadAllText(file);
                 CheckDoesNotContain(file, text, "AS LAYOUT", failures);
@@ -34,9 +45,9 @@ namespace ETL_SQL.Tests.Reporting
         private static IEnumerable<string> EnumerateReleaseFacingFiles(string root)
         {
             yield return Path.Combine(root, "AGENTS.md");
-            yield return Path.Combine(root, "docs", "guides", "report-sql.md");
-            yield return Path.Combine(root, "docs", "guides", "getting-started.md");
-            yield return Path.Combine(root, "docs", "guides", "sample-guide.md");
+            yield return Path.Combine(root, "docs", "guides", "feature-guides", "report-sql.md");
+            yield return Path.Combine(root, "docs", "guides", "onboarding", "getting-started.md");
+            yield return Path.Combine(root, "docs", "guides", "patterns", "sample-guide.md");
             yield return Path.Combine(root, "docs", "architecture", "roadmaps", "Portal_Strategy.md");
 
             var reportDir = Path.Combine(root, "docs", "reference", "visuals-reporting", "report");

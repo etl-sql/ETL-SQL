@@ -84,13 +84,19 @@ namespace ETL_SQL.Tests.Orchestration
             var method = typeof(SchedulerService).GetMethod("ExecuteJobAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
             // Act
-            await (Task)method.Invoke(service, new object[] { job });
+            // Reflection does not apply a method's default arguments, so every optional parameter
+            // has to be named here — adding one to ExecuteJobAsync otherwise breaks this call with
+            // a parameter-count mismatch rather than anything about what is under test.
+            await (Task)method.Invoke(service, [job, null, null, false]);
 
             // Assert
             Assert.Equal(3, attempts);
 
-            // Verify session ID was passed back in subsequent calls (attempts 2 and 3)
-            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, null, It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Once());
+            // The first attempt now carries a session id the scheduler allocates up front rather
+            // than null, so the run is identifiable before the executor reports anything back.
+            // What this test is about is unchanged: the id the executor returns is what the retries
+            // resume under.
+            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, It.Is<string?>(id => id != null && id != "sess_123"), It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Once());
             mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Exactly(2));
 
             // Verify history was logged for each attempt
@@ -178,7 +184,8 @@ namespace ETL_SQL.Tests.Orchestration
                     "ExecuteJobAsync",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-                await (Task)method!.Invoke(scheduler, [job])!;
+                // Reflection does not apply default arguments — every optional parameter is explicit.
+                await (Task)method!.Invoke(scheduler, [job, null, null, false])!;
 
                 Assert.NotNull(notificationScript);
                 Assert.Contains("CREATE CONNECTION __job_notification_sink AS WEBHOOK('SHARED:notify_webhook')", notificationScript);

@@ -87,7 +87,8 @@ namespace ETL_SQL.Tests.Orchestration
         {
             var method = typeof(SchedulerService).GetMethod("ExecuteJobAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-            return (Task)method.Invoke(service, new object[] { job })!;
+            // Reflection does not apply default arguments — every optional parameter is explicit.
+            return (Task)method.Invoke(service, [job, null, null, false])!;
         }
 
         [Fact]
