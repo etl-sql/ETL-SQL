@@ -214,6 +214,17 @@ public class LineageTracker : ILineageTracker
                 if (transformationExpression != null) existing.TransformationExpression = transformationExpression;
                 if (functionsApplied != null) existing.FunctionsApplied = functionsApplied;
 
+                // Static analysis records a hop before any connection is open, so its entry has no
+                // physical identifier. When the engine re-records the same hop the aliases have
+                // been resolved — take the identifiers now, or the columns whose two observations
+                // happen to collapse into one entry would be the only ones left showing an
+                // unresolved source.
+                existing.TargetTablePhysical ??= Physical(target);
+                for (int i = 0; i < existing.SourceTablesPhysical.Count; i++)
+                {
+                    existing.SourceTablesPhysical[i] ??= Physical(existing.SourceTables[i]);
+                }
+
                 // Tags merged into an existing entry still have to reach the metadata indexes, or
                 // a column tagged by a second observation of the same statement would be
                 // queryable on the entry but invisible to GetColumnMetadata and tag inheritance.

@@ -1,0 +1,58 @@
+/* @author: Data Engineering; @pipeline: Lineage Cookbook; */
+-- =============================================================================
+-- Lineage Cookbook — Part 2 of 2: the report
+--
+-- Run part 1 first. This script never reads the CSV — it only reads the EDW
+-- table part 1 wrote. On its own it could say the data came from Patient and
+-- no further. IMPORT LINEAGE picks up part 1's exported document, so the
+-- report's columns trace all the way back to the flat file, transformations
+-- included.
+--
+-- Note the connection is called `warehouse` here and was called `edw` in part
+-- 1. An alias is local to one script; lineage is matched on the physical
+-- identity of the database, so the two names resolve to the same dataset.
+-- =============================================================================
+
+SET REPORT TITLE = 'Patients by State';
+SET REPORT DESCRIPTION = 'Admission bands by state, loaded from the registration CSV.';
+
+DROP CONNECTION IF EXISTS warehouse;
+CREATE CONNECTION warehouse AS SQLITE(DATABASE = 'output/lineage_cookbook_edw.db');
+
+-- Seed this session with what happened before it. Imported rows carry the
+-- operation IMPORTED and are a starting point: anything this script records
+-- afterwards accrues on top.
+IMPORT LINEAGE FOR warehouse.Patient AS OPENLINEAGE FROM 'output/patient.openlineage.jsonl';
+
+CREATE DATASET &patients_by_state AS (
+    SELECT
+        state_code,
+        COUNT(*)         AS patient_count,
+        MIN(birth_year)  AS earliest_birth_year,
+        MAX(birth_year)  AS latest_birth_year
+    FROM warehouse.Patient
+    GROUP BY state_code
+);
+
+CREATE VISUAL PatientsByState AS BAR (
+    SOURCE = (SELECT state_code, patient_count FROM &patients_by_state),
+    TITLE    = 'Patients by State',
+    MAPPINGS (X = state_code, Y = patient_count),
+    OPTIONS (X_AXIS (label = 'State'), Y_AXIS (label = 'Patients', min = 0))
+);
+
+CREATE VISUAL PatientTotal AS CARD (
+    SOURCE = (SELECT SUM(patient_count) AS val, 'Patients Loaded' AS lbl FROM &patients_by_state),
+    TITLE    = 'Patients Loaded',
+    MAPPINGS (VALUE = val, LABEL = lbl)
+);
+
+-- The point of the import: this session never opened the CSV, and the chain still
+-- starts there. Read it top to bottom.
+-- Imported rows already carry the portable identity as the source name — that is what
+-- makes them portable — so read the chain from source_tables here rather than from
+-- source_physical, which is the resolution of a connection alias in *this* session.
+PRINT 'End-to-end lineage, flat file through to the report:';
+SELECT step, operation, target_table, target_column, source_tables, transformation_kind
+FROM eng.lineage
+WHERE target_column IS NOT NULL AND target_table <> 'RESULTSET';

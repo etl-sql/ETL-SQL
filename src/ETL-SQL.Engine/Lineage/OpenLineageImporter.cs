@@ -129,8 +129,19 @@ namespace ETL_SQL.Engine.Lineage
                         {
                             foreach (var tr in trs.EnumerateArray())
                             {
-                                var subtype = tr.TryGetProperty("subtype", out var sub) ? sub.GetString() : null;
-                                kind = ReverseTransform(subtype);
+                                // Prefer the exact kind when the document carries one — the standard
+                                // subtype is a lossy projection of it. Documents from other
+                                // producers have no such field and fall back to the subtype.
+                                if (tr.TryGetProperty("etlSqlKind", out var exact)
+                                    && Enum.TryParse<TransformationKind>(exact.GetString(), true, out var exactKind))
+                                {
+                                    kind = exactKind;
+                                }
+                                else
+                                {
+                                    var subtype = tr.TryGetProperty("subtype", out var sub) ? sub.GetString() : null;
+                                    kind = ReverseTransform(subtype);
+                                }
                                 if (tr.TryGetProperty("description", out var d))
                                 {
                                     var ds = d.GetString();

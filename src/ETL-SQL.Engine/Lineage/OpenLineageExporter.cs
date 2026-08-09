@@ -282,8 +282,17 @@ namespace ETL_SQL.Engine.Lineage
                         {
                             var (tType, tSubtype) = MapTransformationType(entry.TransformationKind);
                             var desc = entry.TransformationExpression ?? "";
+                            // OpenLineage's subtype vocabulary is smaller than ours and the mapping
+                            // is many-to-one — StringOperation and FunctionCall both become
+                            // FUNCTION, CaseExpression and Conditional both become CONDITIONAL — so
+                            // a document read back through the standard field alone returns a
+                            // different kind than it was written with. Carry the exact kind in an
+                            // additional field: standard consumers ignore what they do not know,
+                            // and our own import round-trips without loss.
                             var transformJson =
-                                $"{{\"type\":{JsonStr(tType)},\"subtype\":{JsonStr(tSubtype)},\"description\":{JsonStr(desc)},\"masking\":false}}";
+                                $"{{\"type\":{JsonStr(tType)},\"subtype\":{JsonStr(tSubtype)}," +
+                                $"\"etlSqlKind\":{JsonStr(entry.TransformationKind.ToString())}," +
+                                $"\"description\":{JsonStr(desc)},\"masking\":false}}";
                             inputFields.Add(
                                 $"{{\"namespace\":{JsonStr(srcNs.ns)},\"name\":{JsonStr(srcNs.name)},\"field\":{JsonStr(srcCol)},\"transformations\":[{transformJson}]}}");
                         }

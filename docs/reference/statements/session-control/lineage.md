@@ -302,7 +302,7 @@ executing ETL-SQL statements remains immutable.
 
 ### Tag Syntax
 
-Tags go in SQL block comments on the column expression they annotate, using semicolons to separate multiple tags:
+Tags go in SQL block comments on the column expression they annotate, using semicolons to separate multiple tags. The comment may sit on either side of the alias — before it reads as documenting the expression, after it as documenting the output column — and tags on both sides merge, with the later value winning if one is repeated:
 
 ```sql
 SELECT

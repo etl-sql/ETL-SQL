@@ -543,12 +543,25 @@ public class LineageAnalyzer
         _ => TransformationKind.Unknown
     };
 
-    private static bool IsStringConcat(BinaryExpression be)
+    /// <summary>
+    /// Heuristic: a <c>+</c> chain containing a string literal anywhere is concatenation.
+    /// <c>+</c> is overloaded and the classifier has no types, so the literal is the only evidence
+    /// available. It has to be looked for through the whole chain rather than at the immediate
+    /// operands: <c>first + ' ' + last</c> parses left-associatively as
+    /// <c>(first + ' ') + last</c>, whose top-level operands are a binary expression and an
+    /// identifier — no literal in sight — so checking only the immediate children classified every
+    /// multi-part name concatenation as arithmetic.
+    /// </summary>
+    private static bool IsStringConcat(BinaryExpression be) =>
+        ContainsStringLiteral(be.Left) || ContainsStringLiteral(be.Right);
+
+    private static bool ContainsStringLiteral(Expression expr) => expr switch
     {
-        // Heuristic: if either side is a string literal, treat + as string concat
-        return be.Left is LiteralExpression { Type: TokenType.STRING_LITERAL }
-            || be.Right is LiteralExpression { Type: TokenType.STRING_LITERAL };
-    }
+        LiteralExpression { Type: TokenType.STRING_LITERAL } => true,
+        BinaryExpression inner when inner.Operator == TokenType.PLUS || inner.Operator == TokenType.CONCAT =>
+            ContainsStringLiteral(inner.Left) || ContainsStringLiteral(inner.Right),
+        _ => false
+    };
 
     public static List<string> CollectFunctions(Expression expr)
     {

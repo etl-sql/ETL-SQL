@@ -1864,6 +1864,22 @@ public class Parser : IParser
             expr = ParseExpression();
         }
 
+        // A tag comment may sit on either side of the alias — `expr /* @d: ... */ AS name` reads
+        // naturally when the tag documents the expression, and is the form the reference examples
+        // use, while `expr AS name /* @d: ... */` reads naturally when it documents the output
+        // column. Both attach to this column; a tag repeated on both sides takes its later value.
+        Dictionary<string, string>? metadata = null;
+        void CollectTags()
+        {
+            while (Match(TokenType.COLUMN_TAG))
+            {
+                metadata ??= new(StringComparer.OrdinalIgnoreCase);
+                ParseMetadataTags(Previous.Value, metadata);
+            }
+        }
+
+        CollectTags();
+
         string? alias = null;
         if (Match(TokenType.AS))
         {
@@ -1881,12 +1897,7 @@ public class Parser : IParser
             alias = Advance().Value;
         }
 
-        Dictionary<string, string>? metadata = null;
-        while (Match(TokenType.COLUMN_TAG))
-        {
-            if (metadata == null) metadata = new(StringComparer.OrdinalIgnoreCase);
-            ParseMetadataTags(Previous.Value, metadata);
-        }
+        CollectTags();
 
         var col = new SelectColumn(expr, alias, metadata)
         {

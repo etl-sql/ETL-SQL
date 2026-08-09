@@ -1,0 +1,6 @@
+patient_id,first_name,last_name,date_of_birth,state,admissions
+1001,  Ada , Lovelace ,1975-12-10,ca,3
+1002,Grace, Hopper,1948-12-09,VA,1
+1003, Alan ,Turing,1962-06-23,ny,7
+1004,Katherine,Johnson ,1988-08-26,tx,0
+1005,Jean , Bartik ,1954-12-27,mo,2

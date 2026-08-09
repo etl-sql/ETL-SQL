@@ -1,0 +1,70 @@
+/* @author: Data Engineering; @pipeline: Lineage Cookbook; */
+-- =============================================================================
+-- Lineage Cookbook — Part 1 of 2: the EDW load
+--
+-- Flat file -> transformations -> EDW table, then export the lineage so a later
+-- script (part 2) can trace a column past the boundary of this run.
+--
+-- Run part 1 before part 2. Part 2 reads the EDW table this script writes and
+-- the lineage document this script exports.
+-- =============================================================================
+
+CREATE CONNECTION pats AS FLATFILE('lineage_cookbook_patients.csv', HEADER = 'ON');
+CREATE CONNECTION edw AS SQLITE(DATABASE = 'output/lineage_cookbook_edw.db');
+
+-- Start from a known state so the load is re-runnable.
+EXECUTE edw BEGIN
+    DROP TABLE IF EXISTS Patient;
+    CREATE TABLE Patient (
+        patient_id INTEGER PRIMARY KEY,
+        full_name TEXT,
+        birth_year INTEGER,
+        state_code TEXT,
+        admission_band TEXT
+    );
+END;
+
+-- OpenLineage exports append — a run log accumulates — so clear the previous
+-- document rather than growing it every time the sample runs.
+BEGIN TRY
+    DELETE FILE 'output/patient.openlineage.jsonl';
+END TRY
+BEGIN CATCH
+    PRINT 'No previous lineage export to clear.';
+END CATCH;
+
+-- -----------------------------------------------------------------------------
+-- Transform. Each expression below is a hop that lineage records: the kind of
+-- transformation, the expression text, and the functions applied.
+-- -----------------------------------------------------------------------------
+SELECT
+    CAST(patient_id AS INT)                        /* @d: EDW surrogate key; @owner: Data Engineering */ AS patient_id,
+    TRIM(first_name) + ' ' + TRIM(last_name)       /* @d: Patient full name; @pii: true; @classification: Confidential */ AS full_name,
+    CAST(SUBSTRING(date_of_birth, 1, 4) AS INT)    /* @d: Year of birth, derived from the source date; @pii: true */ AS birth_year,
+    UPPER(TRIM(state))                             /* @d: Normalized two-letter state code */ AS state_code,
+    CASE
+        WHEN CAST(admissions AS INT) = 0 THEN 'none'
+        WHEN CAST(admissions AS INT) <= 2 THEN 'low'
+        ELSE 'high'
+    END                                            /* @d: Admission frequency band; @quality: silver */ AS admission_band
+INTO #patient_stage
+FROM pats.FILE /* @source_system: Registration CSV; @load_pattern: full */;
+
+INSERT INTO edw.Patient (patient_id, full_name, birth_year, state_code, admission_band)
+SELECT patient_id, full_name, birth_year, state_code, admission_band FROM #patient_stage;
+
+PRINT 'Loaded EDW.Patient:';
+SELECT patient_id, full_name, birth_year, state_code, admission_band FROM edw.Patient;
+
+-- -----------------------------------------------------------------------------
+-- What the load recorded. Read this in order: the CSV read, then the write that
+-- applied the transformations.
+-- -----------------------------------------------------------------------------
+PRINT 'Lineage for the load, in order:';
+SELECT step, operation, target_table, target_column, source_physical, transformation_kind
+FROM eng.lineage
+WHERE target_column IS NOT NULL;
+
+-- Hand the lineage to whoever reads this table next.
+EXPORT LINEAGE FOR edw.Patient AS OPENLINEAGE TO 'output/patient.openlineage.jsonl';
+PRINT 'Exported lineage to output/patient.openlineage.jsonl';
