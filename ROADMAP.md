@@ -915,36 +915,148 @@ The custom tool runner is not complete until automated and retained evidence pro
 - Tenant administrators can manage their aliases/grants without platform impersonation, while
   platform policy can revoke unsafe artifacts/capabilities without receiving tenant data authority.
 
-### Reporting — Paginated PDF Export Engine
+### Reporting — Paginated Print Layout & PDF Rendering
 
-To support traditional enterprise reporting requirements (similar to SSRS or Crystal Reports), the visualization system needs a layout-aware PDF generation engine.
+Provide the physical-page reporting capabilities needed for invoices, statements, operational
+reports, scheduled delivery, and regulatory output. The objective is practical SSRS/Crystal Reports
+parity for page layout and tabular pagination, not RDL compatibility or a second reporting language.
 
-#### Core Design & Parameters:
-1. **Physical Page-Breaking and Layout Rules**:
-   - Translate responsive 12-column grid CSS layouts (`STRUCTURE`) into fixed A4/Letter pages on PDF export.
-   - Introduce card properties like `PAGE_BREAK = BEFORE | AFTER` to control printable pagination boundaries.
-2. **Repeating Table Headers & Footers**:
-   - The PDF exporter must automatically repeat `TABLE` headers at the top of every physical page during multiline grid overflow.
-   - Support system placeholders in report footers (e.g. `Page X of Y`, runtime timestamp).
+This work extends the existing static and browser-backed PDF exporters and `PDF_MODE` selection. It
+does not introduce an unrelated PDF pipeline. A shared print-layout contract must produce consistent
+results from CLI, Portal, Orchestrator subscriptions, and supported deployment platforms.
 
-### Reporting — Inline Row Detail Subreports
+`CREATE PAGE ... AS PAGINATED` already means deferred report-parameter application. Physical print
+pagination must use distinct terminology such as `PRINT_LAYOUT` or `PAGE_LAYOUT`; it must not overload
+the existing `PAGINATED` page mode.
 
-To enable hierarchical and nested data visualization inside tables without forcing users to navigate to separate pages or visuals.
+#### Physical Page Contract
 
-#### Core Design & Parameters:
-1. **The `ROW_DETAIL` Mapping Clause**:
-   - Expand the `TABLE` mapping syntax to support a collapsible child container:
-     ```sql
-     CREATE VISUAL CustomerTable AS TABLE (
-       SOURCE = #customers,
-       MAPPINGS (
-         CustomerID, Name, Email,
-         ROW_DETAIL (
-           TARGET = OrderSubTable,
-           KEY = CustomerID
-         )
-       )
-     );
-     ```
-2. **Interactive Row Expansion**:
-   - The Table UI renders a toggle icon (`▸`) at the start of each row. Clicking it expands the row vertically to embed the `TARGET` visual, pre-filtered by the row's `KEY` context.
+- Define page size (`LETTER`, `A4`, and bounded custom dimensions), orientation, margins, printable
+  area, and measurement units explicitly.
+- Use the responsive page/container `STRUCTURE` as the default placement input, but allow an explicit
+  print-layout override. Responsive dashboard geometry cannot be assumed to fit every physical page.
+- Define deterministic behavior for visual width, minimum height, wrapping, scaling, clipping, and
+  horizontal overflow. Wide tables must follow an author-selected fit, wrap, landscape, or fail policy;
+  the renderer must not silently discard columns.
+- Add layout controls at visual, container, table, and table-group boundaries for page break before,
+  page break after, keep together when possible, and row splitting.
+- Charts, cards, images, text, and containers remain together when they fit. When they do not fit, the
+  renderer follows a documented split/scale policy instead of relying on browser-specific CSS behavior.
+
+#### Tables, Groups, Headers, and Footers
+
+- Flow complete table data across physical pages. Existing preview or safety row caps must not become
+  silent PDF truncation; configured export limits fail clearly and identify the exceeded limit.
+- Repeat table column headers on each vertical page and row headers where a table spans horizontally.
+- Support group headers and footers, keep a group header with at least its first detail row, and allow
+  page breaks before, after, or between groups.
+- Add true print page-header and page-footer regions independent of the existing web-shell HTML footer.
+  They may contain bounded text, images, lines, report metadata, selected parameter values, export
+  timestamp, page number, and total page count.
+- Page-number and total-page placeholders are resolved by the renderer, including any required second
+  layout pass. Culture and timezone are captured from the report execution context.
+- Define first-page, last-page, odd/even-page, and empty-page behavior rather than inheriting accidental
+  differences between rendering modes.
+
+#### Rendering Architecture
+
+- Compile report definitions and runtime data into one renderer-neutral print-layout model. Static and
+  browser-backed exporters consume that model instead of independently inventing pagination rules.
+- Treat the deterministic server-side renderer as the canonical paginated-document path. Browser-backed
+  PDF remains useful for dashboard snapshot fidelity but must not be the only way to obtain correct
+  physical pagination.
+- Preserve searchable text, links, document metadata, and embedded or explicitly substituted fonts.
+  Font substitution, culture, timezone, and chart rasterization are observable in export diagnostics.
+- Provide print preview in the Report Builder using the same page contract used by unattended exports.
+- Define how interactive state becomes a document: applied parameters and filters are captured at export
+  start, while hover, focus, selection, and other browser-only state are excluded unless a report option
+  explicitly promotes them to export state.
+
+#### Safety, Operations, and Definition of Done
+
+- Enforce configurable limits for rows, pages, images, rendered bytes, layout passes, and export time.
+  Cancellation cleans temporary files and browser processes, and partial documents are never published
+  as successful subscription artifacts.
+- Resolve report assets through existing path, governance, tenant, and authorization boundaries. Remote
+  images and hosted browser export remain subject to outbound-network policy and bounded retrieval.
+- Subscription, retry, and HA behavior is deterministic: a retried export uses the same immutable report
+  version, parameter snapshot, data snapshot policy, culture, timezone, and renderer configuration.
+- Certification covers A4/Letter, portrait/landscape, repeating headers, group breaks, keep-together,
+  page totals, oversized content, wide tables, long tables, font substitution, cancellation, and identical
+  authorization behavior across interactive and unattended export.
+- The feature is complete only when layout assertions and rendered-page regression tests prove that
+  content is neither clipped nor silently omitted on supported Windows and Linux hosts.
+
+### Reporting — Expandable Master/Detail Rows
+
+Allow a `TABLE` row to expand in place and display related detail without forcing navigation to a
+different page. This is an expandable master/detail or drilldown interaction, not an SSRS-style
+subreport: a true subreport is a separately published report with its own execution and parameter scope.
+Keeping those concepts separate avoids introducing hidden per-row report execution and authorization.
+
+#### Prepared-Data Execution Model
+
+- The first release uses parent and child data prepared by the same plain-text report script. The engine
+  evaluates security, transformations, and row filtering before either dataset enters the report manifest.
+- The runtime builds a bounded index over the child relationship fields and renders matching children on
+  expansion. It must not issue one database query per parent row or allow the browser to construct SQL.
+- Prepared data preserves portability, offline/static report use, deterministic PDF export, and consistent
+  behavior across CLI, Report Player, Portal, and subscriptions.
+- Deferred or externally stored visual rows remain tenant-, report-version-, session-, and authorization-
+  scoped. Client-side collapsing is presentation behavior and is never treated as a security boundary.
+
+#### Structural Detail Contract
+
+- Row detail is a structural `TABLE` capability, not a `MAPPINGS` column. `MAPPINGS` continues to describe
+  displayed column projections and formatting.
+- A detail definition references a child visual or child container template and declares explicit typed
+  parent-to-child bindings. Both sides of every binding are named; a lone `KEY = CustomerID` is insufficient.
+- Bindings support composite keys and define null, duplicate, missing-child, and incompatible-type behavior.
+- Raw typed binding values are retained as hidden row metadata before display mappings rename, format, or
+  omit columns. Formatted cell text is never used as an execution or relationship key.
+- The contract defines default expanded/collapsed state, whether multiple rows may remain open, maximum
+  nesting depth, maximum open rows, maximum detail rows/bytes, and behavior after sorting, filtering,
+  parameter application, refresh, and data-version changes.
+- Target references participate in linting, lineage, dependency analysis, packaging, and cycle detection.
+  Missing targets or bindings fail during validation rather than at the first user click.
+
+#### Interactive and Accessible Behavior
+
+- Render an explicit button in the row header with keyboard operation, accessible labeling,
+  `aria-expanded`, and an owned detail region. Expansion must preserve valid table/grid semantics.
+- Display loading, empty-detail, error, retry, and authorization-denied states without corrupting the
+  parent table or exposing provider exception details.
+- Integrate detail content with existing visual actions and interactions using a scoped parent-row context;
+  a detail visual cannot mutate another row's context accidentally.
+- Virtualization and row recycling preserve expansion state by stable raw key, not by visible row index.
+  Sorting or paging therefore cannot attach one customer's detail to another customer's row.
+
+#### Export and Pagination Semantics
+
+- Define report-authored detail export behavior such as omit details, include all details, or include
+  details selected by a deterministic expression. PDF and unattended exports do not inherit incidental
+  expand/collapse state from an unrelated browser session.
+- When details are included in paginated output, keep the parent row with the first child row when possible,
+  repeat child table headers, honor group/page-break rules, and clearly delimit each parent instance.
+- Define noninteractive behavior for PDF, HTML snapshot, CSV, and spreadsheet export. Formats incapable of
+  representing nesting must fail clearly or use an explicitly selected flatten/separate-data policy.
+
+#### Security and Definition of Done
+
+- Every parent and child row in the manifest has already passed connector policy, report authorization,
+  tenant isolation, and applicable row-level policy. Filtering unauthorized rows in JavaScript is forbidden.
+- Detail bindings are data values, never script fragments, connection names, object names, or executable
+  expressions supplied by the browser.
+- Certification covers composite and formatted keys, nulls, duplicate parents, missing children, large
+  child sets, virtualization, refresh races, cancellation, malicious values, cross-tenant attempts,
+  accessible navigation, and all supported export policies.
+- Performance tests prove that expansion does not cause N+1 connector execution and that manifest/index
+  limits fail safely under adversarial cardinality.
+
+#### Explicitly Deferred: Reusable Report Subreports
+
+A later, separately approved roadmap item may embed a published child report and bind parent values to
+declared child parameters. That feature would require permission intersection, immutable version binding,
+parameter type validation, dependency and cycle detection, recursion limits, cache isolation, audit,
+failure rendering, and protection from per-row execution amplification. It must not be smuggled into the
+prepared-data master/detail implementation.
