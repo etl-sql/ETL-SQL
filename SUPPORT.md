@@ -10,8 +10,8 @@ If you have questions about using ETL-SQL, syntax, report design, or orchestrati
 
 * **User Manual**: Refer to [Getting Started](docs/guides/onboarding/getting-started.md) for the language guide.
 * **Cookbooks**: 
-  - For data pipelines and queries: [docs/cookbooks/etl-recipes.md](docs/cookbooks/etl-recipes.md)
-  - For reporting and dashboards: [docs/cookbooks/report-recipes.md](docs/cookbooks/report-recipes.md)
+  - For data pipelines and queries: [docs/cookbooks/etl/](docs/cookbooks/etl/README.md)
+  - For reporting and dashboards: [docs/cookbooks/report/](docs/cookbooks/report/README.md)
 * **FAQ**: Common troubleshooting questions are answered in [docs/guides/patterns/faq.md](docs/guides/patterns/faq.md).
 * **GitHub Discussions**: If your question isn't answered in the guides, please open a thread in the **Discussions** tab on GitHub instead of opening an issue.
 

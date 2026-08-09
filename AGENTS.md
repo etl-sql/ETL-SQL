@@ -57,9 +57,9 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[File Operations](docs/reference/file-operations/README.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, SSH key generation, Docker integration, and advanced file ops |
 | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
 | **[Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md)** | `@expect`/`@fail` column rules, the `ON FAILURE` routing clause, quarantine/warn capture schema; see also [ASSERT JOB](docs/reference/statements/session-control/assert-job.md) for run-metric assertions |
-| **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
+| **[Relative Date Parameters](docs/reference/functions/datetime/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
 | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
-| **[Administration](docs/guides/administration.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
+| **[Administration](docs/administration/platform/README.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
 
 Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
@@ -119,7 +119,7 @@ The platform now includes shipped enterprise operations features. When generatin
 - **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
 - **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
 
-For production configuration details, use **[Administration](docs/guides/administration.md)** as the source of truth. For the stable Solo/Team/Enterprise/SaaS topology, provider, binding, state, and authority model, use **[DeploymentProfiles.md](./docs/architecture/DeploymentProfiles.md)**. For the long-term enterprise operating model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
+For production configuration details, use **[Administration](docs/administration/platform/README.md)** as the source of truth. For the stable Solo/Team/Enterprise/SaaS topology, provider, binding, state, and authority model, use **[DeploymentProfiles.md](./docs/architecture/DeploymentProfiles.md)**. For the long-term enterprise operating model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
 
 ---
 
@@ -219,7 +219,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 26 production-grade complete recipes, see **[Cookbook.md](./docs/cookbooks/etl-recipes.md)**.
+For 29 production-grade complete recipes, see the **[ETL Cookbook](./docs/cookbooks/etl/README.md)**.
 
 ---
 
@@ -236,16 +236,16 @@ Use this map to find the right document for any task.
 | Functions (string, date, math, regex, window) | **[Standard Library](docs/reference/functions/README.md)** |
 | File ops, email, transfer, Docker, keys | **[File Operations](docs/reference/file-operations/README.md)** |
 | Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** |
-| Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** |
-| Complete production recipes | **[Cookbook](docs/cookbooks/etl-recipes.md)** |
+| Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/datetime/reldate.md)** |
+| Complete production recipes | **[Cookbook](docs/cookbooks/etl/README.md)** |
 | Pipeline mental model for new users | **[Getting Started](docs/guides/onboarding/getting-started.md)** |
 | Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** |
 | Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/tooling/report-builder.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
-| Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
+| Production install, HA, Governance Core, OIDC | **[Administration](docs/administration/platform/README.md)** |
 | Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
-| Orchestrator job operations | **[Job Orchestration](docs/guides/job-orchestration.md)** |
+| Orchestrator job operations | **[Job Orchestration](docs/administration/orchestration/README.md)** |
 | Deployment profiles, portability boundaries, and SaaS topology | **[Deployment Profile Architecture](./docs/architecture/DeploymentProfiles.md)** |
 | SaaS tenant isolation, hardened execution, checkpoints, and outbound Gateway | **[SaaS Tenant Isolation Architecture](./docs/architecture/SaaSTenantIsolation.md)** |
 | Tenant export/import, rebinding, cutover, and SaaS exit | **[Tenant Portability Architecture](./docs/architecture/TenantPortability.md)** |

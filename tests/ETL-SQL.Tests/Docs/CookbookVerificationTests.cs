@@ -28,10 +28,12 @@ namespace ETL_SQL.Tests.Docs
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
-        private static readonly string[] Cookbooks =
+        // Directories, not a fixed file list: every recipe is its own file, and a new one has to be
+        // covered the moment it is added rather than when somebody remembers to list it here.
+        private static readonly string[] CookbookDirectories =
         {
-            "docs/cookbooks/etl-recipes.md",
-            "docs/cookbooks/report-recipes.md",
+            "docs/cookbooks/etl",
+            "docs/cookbooks/report",
         };
 
         // Recipes that do not yet parse, keyed by content hash (stable across line shifts; changes the
@@ -41,20 +43,27 @@ namespace ETL_SQL.Tests.Docs
         public static IEnumerable<object[]> CookbookBlocks()
         {
             var any = false;
-            foreach (var rel in Cookbooks)
+            foreach (var rel in CookbookDirectories)
             {
-                var path = Path.Combine(RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar));
-                if (!File.Exists(path))
+                var dir = Path.Combine(RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(dir))
                 {
                     yield return new object[] { $"MISSING:{rel}", string.Empty };
                     any = true;
                     continue;
                 }
 
-                foreach (var (id, code) in ExtractSqlBlocks(File.ReadAllText(path), Path.GetFileName(path)))
+                foreach (var path in Directory.GetFiles(dir, "*.md").OrderBy(p => p, StringComparer.Ordinal))
                 {
-                    any = true;
-                    yield return new object[] { id, code };
+                    // The collection index is prose and links, not recipes.
+                    if (string.Equals(Path.GetFileName(path), "README.md", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    foreach (var (id, code) in ExtractSqlBlocks(File.ReadAllText(path), Path.GetFileName(path)))
+                    {
+                        any = true;
+                        yield return new object[] { id, code };
+                    }
                 }
             }
 
@@ -91,12 +100,17 @@ namespace ETL_SQL.Tests.Docs
         public void KnownBroken_HasNoStaleEntries()
         {
             var liveHashes = new HashSet<string>();
-            foreach (var rel in Cookbooks)
+            foreach (var rel in CookbookDirectories)
             {
-                var path = Path.Combine(RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar));
-                if (!File.Exists(path)) continue;
-                foreach (var (_, code) in ExtractSqlBlocks(File.ReadAllText(path), Path.GetFileName(path)))
-                    liveHashes.Add(Hash(code));
+                var dir = Path.Combine(RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(dir)) continue;
+                foreach (var path in Directory.GetFiles(dir, "*.md"))
+                {
+                    if (string.Equals(Path.GetFileName(path), "README.md", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    foreach (var (_, code) in ExtractSqlBlocks(File.ReadAllText(path), Path.GetFileName(path)))
+                        liveHashes.Add(Hash(code));
+                }
             }
 
             var stale = KnownBroken.Keys.Where(h => !liveHashes.Contains(h)).ToList();

@@ -454,7 +454,7 @@ Fuzzy matching is particularly susceptible to regression — a change in a simil
 ## Documentation Plan
 
 - `docs/guides/getting-started.md` — add `SIMILARITY`, `LEVENSHTEIN`, `METAPHONE`, `DMETAPHONE`, `NORMALIZE`, `NGRAMS` to the function reference
-- `docs/cookbooks/report-recipes.md` — add a "Fuzzy Matching" section with recipes for each common pattern (name matching, company matching, address matching, product matching)
+- `docs/cookbooks/report/` — add "Fuzzy Matching" recipes for each common pattern (name matching, company matching, address matching, product matching)
 - `Help/Functions/FUZZY.md` — new help file covering all fuzzy functions
 - `docs/guides/getting-started.md` — `FUZZY JOIN` syntax added to the JOIN section
 - Architecture doc — document the blocking index design and its performance characteristics

@@ -233,7 +233,7 @@ LEFT JOIN #revenue AS r ON c.CustomerId = r.CustomerId
 GROUP BY c.Region;
 ```
 
-This is the safest default. Push work down with `EXECUTE ... BEGIN ... END` only when it is clearly native to one remote system and needs no engine-side tables. More complete patterns — incremental load, quality gates, dead-letter queues — are in the [ETL Recipes](../../cookbooks/etl-recipes.md) cookbook.
+This is the safest default. Push work down with `EXECUTE ... BEGIN ... END` only when it is clearly native to one remote system and needs no engine-side tables. More complete patterns — incremental load, quality gates, dead-letter queues — are in the [ETL Recipes](../../cookbooks/etl/README.md) cookbook.
 
 ### Dialect awareness
 
@@ -259,7 +259,7 @@ You now have the fundamentals: the engine mental model, connections, variables, 
 - [Functions](../../reference/functions/README.md) · [Data Types](../../reference/data-types.md).
 
 **Data movement and pipelines**
-- [ETL Recipes](../../cookbooks/etl-recipes.md) — staging, incremental load, quality gates, dead-letter queues, parallel loads.
+- [ETL Recipes](../../cookbooks/etl/README.md) — staging, incremental load, quality gates, dead-letter queues, parallel loads.
 - [File Operations](../../reference/file-operations/README.md) — copy, transfer, compress, encrypt, email.
 - [Pipelines and DAGs](../feature-guides/pipelines-and-dags.md) · [Sample Guide](../patterns/sample-guide.md) — 55+ sample scripts.
 
@@ -272,7 +272,7 @@ You now have the fundamentals: the engine mental model, connections, variables, 
 - [Testing](../feature-guides/testing.md) — `GENERATE`, `SEED`, and the MOCKDB connector · [test lanes](../../../Testing.md).
 
 **Reports and the portal**
-- [Report SQL](../feature-guides/report-sql.md) — author `.rptsql` dashboards · [Report Recipes](../../cookbooks/report-recipes.md).
+- [Report SQL](../feature-guides/report-sql.md) — author `.rptsql` dashboards · [Report Recipes](../../cookbooks/report/README.md).
 - [Portal User Guide](../tooling/portal-user.md) · [Portal Administration](../../administration/portal/README.md).
 
 **Find anything**

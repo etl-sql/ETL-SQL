@@ -5,7 +5,7 @@ ETL-SQL documentation is organized by how readers use the product: learn the pla
 ## Start Here
 
 - [Getting Started](guides/onboarding/getting-started.md) - first script, engine mental model, connections, variables, and common workflows.
-- [ETL Recipes](cookbooks/etl-recipes.md) - complete pipeline examples for extraction, staging, validation, merge, cleanup, and notification.
+- [ETL Recipes](cookbooks/etl/README.md) - complete pipeline examples for extraction, staging, validation, merge, cleanup, and notification.
 - [Report SQL](guides/feature-guides/report-sql.md) - author `.rptsql` dashboards, visuals, layouts, filters, datasets, and portal publishing flows.
 - [Data Stewardship and Impact Analysis](guides/feature-guides/data-stewardship-impact.md) - use lineage tags, Portal stewardship views, and impact analysis before publish or schema changes.
 - [Administration](administration/platform/README.md) - install, configure, secure, back up, monitor, and scale ETL-SQL.

@@ -310,7 +310,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Getting Started](docs/guides/onboarding/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
 | [ETL Notebook Guide](docs/guides/tooling/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
 | [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
-| [Pattern Cookbook](docs/cookbooks/etl-recipes.md) | Self-contained ETL recipes for common production workflows. |
+| [Pattern Cookbook](docs/cookbooks/etl/README.md) | Self-contained ETL recipes for common production workflows. |
 | [Sample Guide](docs/guides/patterns/sample-guide.md) | Inventory of sample scripts in the `samples/` folder. |
 
 ### Reference

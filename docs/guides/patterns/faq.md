@@ -21,7 +21,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > Query `eng.version` for structured version info within a script session. The current release baseline is **v0.18.0**.
 
 **Q: Where do I start?**
-> Read [Getting Started](../onboarding/getting-started.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](../../cookbooks/etl-recipes.md) for production-ready examples.
+> Read [Getting Started](../onboarding/getting-started.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](../../cookbooks/etl/README.md) for production-ready examples.
 
 ---
 
@@ -356,4 +356,4 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 ---
 
-*Not finding your answer here? Open a [GitHub Discussion](https://github.com/etl-sql/ETL-SQL/discussions) or check [Getting Started](../onboarding/getting-started.md) and the [Cookbook](../../cookbooks/etl-recipes.md).*
+*Not finding your answer here? Open a [GitHub Discussion](https://github.com/etl-sql/ETL-SQL/discussions) or check [Getting Started](../onboarding/getting-started.md) and the [Cookbook](../../cookbooks/etl/README.md).*

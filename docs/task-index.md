@@ -13,30 +13,30 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Connect to a database, file, or service | [Connectors](reference/connectors/README.md) |
-| Load a CSV, Excel, or Parquet file into a table | [ETL Recipes](cookbooks/etl-recipes.md) — Staged Ingestion |
-| Ingest every file in a directory automatically | [ETL Recipes](cookbooks/etl-recipes.md) — Batch Directory Ingester |
-| Pull data from a REST API | [ETL Recipes](cookbooks/etl-recipes.md) — REST API Ingestion |
-| Copy or reconcile data across two databases | [ETL Recipes](cookbooks/etl-recipes.md) — Cross-Platform Reconciliation |
-| Ingest and query a graph database (Neo4j) | [ETL Recipes](cookbooks/etl-recipes.md) — Graph Ingestion & Querying |
+| Load a CSV, Excel, or Parquet file into a table | [Staged Ingestion](cookbooks/etl/staged-ingestion.md) |
+| Ingest every file in a directory automatically | [Batch Directory Ingester](cookbooks/etl/batch-directory-ingester.md) |
+| Pull data from a REST API | [REST API Ingestion](cookbooks/etl/rest-api-ingestion.md) |
+| Copy or reconcile data across two databases | [Cross-Platform Reconciliation](cookbooks/etl/cross-platform-reconciliation.md) |
+| Ingest and query a graph database (Neo4j) | [Graph Ingestion & Querying](cookbooks/etl/graph-ingestion-neo4j.md) |
 
 ## Transform data
 
 | I want to… | Go to |
 | :--- | :--- |
-| Stage, clean, and merge source data (classic ETL) | [ETL Recipes](cookbooks/etl-recipes.md) — Staged Ingestion |
-| Track history with SCD Type 2 | [ETL Recipes](cookbooks/etl-recipes.md) — SCD Type 2 |
-| Load only new/changed rows (incremental / high-water mark) | [ETL Recipes](cookbooks/etl-recipes.md) — Incremental Load |
-| Truncate and fully reload a table | [ETL Recipes](cookbooks/etl-recipes.md) — Full Refresh |
-| Pivot rows into columns for reporting | [ETL Recipes](cookbooks/etl-recipes.md) — Financial Reporting (PIVOT) |
-| De-duplicate records by fuzzy match | [ETL Recipes](cookbooks/etl-recipes.md) — Fuzzy Entity Resolution |
-| Build and run dynamic SQL | [ETL Recipes](cookbooks/etl-recipes.md) — Dynamic SQL with EXEC |
+| Stage, clean, and merge source data (classic ETL) | [Staged Ingestion](cookbooks/etl/staged-ingestion.md) |
+| Track history with SCD Type 2 | [SCD Type 2](cookbooks/etl/scd-type-2.md) |
+| Load only new/changed rows (incremental / high-water mark) | [Incremental Load](cookbooks/etl/incremental-load-with-high-water-mark.md) |
+| Truncate and fully reload a table | [Full Refresh](cookbooks/etl/full-refresh.md) |
+| Pivot rows into columns for reporting | [Financial Reporting (PIVOT)](cookbooks/etl/financial-reporting-pivot.md) |
+| De-duplicate records by fuzzy match | [Fuzzy Entity Resolution](cookbooks/etl/fuzzy-entity-resolution.md) |
+| Build and run dynamic SQL | [Dynamic SQL with EXEC](cookbooks/etl/dynamic-sql-with-exec.md) |
 
 ## Validate and handle errors
 
 | I want to… | Go to |
 | :--- | :--- |
-| Fail a pipeline when data quality checks fail | [ETL Recipes](cookbooks/etl-recipes.md) — Data Quality Gate |
-| Route bad rows to a dead-letter destination | [ETL Recipes](cookbooks/etl-recipes.md) — Dead-Letter Queue |
+| Fail a pipeline when data quality checks fail | [Data Quality Gate](cookbooks/etl/data-quality-gate.md) |
+| Route bad rows to a dead-letter destination | [Dead-Letter Queue](cookbooks/etl/dead-letter-queue.md) |
 
 ## Secure data and secrets
 
@@ -44,25 +44,25 @@ link to the page that shows how. For language keywords, functions, and options, 
 | :--- | :--- |
 | Encrypt a connection string for a script | [etl-sql encrypt](reference/cli/encrypt.md) |
 | Manage secrets and secret references | [Security and Secret Management](administration/platform/secrets.md) |
-| Mask or hash PII during load | [ETL Recipes](cookbooks/etl-recipes.md) — Secure PII Masking & Hashing |
-| Send files securely to a vendor over SFTP | [ETL Recipes](cookbooks/etl-recipes.md) — Secure Vendor Handshake |
+| Mask or hash PII during load | [Secure PII Masking & Hashing](cookbooks/etl/pii-masking-and-hashing.md) |
+| Send files securely to a vendor over SFTP | [Secure Vendor Handshake](cookbooks/etl/secure-vendor-handshake.md) |
 
 ## Schedule and orchestrate
 
 | I want to… | Go to |
 | :--- | :--- |
 | Schedule a recurring job (`CREATE JOB`) | [Job Scheduling](administration/orchestration/job-scheduling.md) |
-| Schedule a job on a remote Orchestrator | [ETL Recipes](cookbooks/etl-recipes.md) — Scheduling a Recurring Job on a Remote Orchestrator |
+| Schedule a job on a remote Orchestrator | [Scheduling a Recurring Job on a Remote Orchestrator](cookbooks/etl/remote-orchestrator-schedule.md) |
 | Compose pipelines as a DAG (fan-out, gating, branching) | [Pipelines and DAGs](guides/feature-guides/pipelines-and-dags.md) |
-| Deploy an immutable published script bundle (CI/CD) | [ETL Recipes](cookbooks/etl-recipes.md) — Immutable Published Script Bundles |
+| Deploy an immutable published script bundle (CI/CD) | [Immutable Published Script Bundles](cookbooks/etl/immutable-published-bundles.md) |
 
 ## Notify and deliver
 
 | I want to… | Go to |
 | :--- | :--- |
-| Send Slack/Teams alerts from a pipeline | [ETL Recipes](cookbooks/etl-recipes.md) — Automated Slack/Teams Alerting |
+| Send Slack/Teams alerts from a pipeline | [Automated Slack/Teams Alerting](cookbooks/etl/automated-slack-teams-alerting.md) |
 | Email report subscriptions to users | [SMTP Connections and Subscriptions](administration/portal/connections-and-subscriptions.md) |
-| Burst files out over SFTP on a schedule | [ETL Recipes](cookbooks/etl-recipes.md) — Automated SFTP Bursting |
+| Burst files out over SFTP on a schedule | [Automated SFTP Bursting](cookbooks/etl/automated-sftp-bursting.md) |
 
 ## Operate the server
 
@@ -80,7 +80,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | :--- | :--- |
 | Add, edit, or deactivate a user | [User Management](administration/portal/users.md) |
 | Grant folder permissions with groups | [Groups and Folder Permissions](administration/portal/permissions.md) |
-| Publish a report and manage a catalog | [Publishing Reports](administration/portal/publishing.md) · [ETL Recipes](cookbooks/etl-recipes.md) — Publishing and Operating a Portal Catalog |
+| Publish a report and manage a catalog | [Publishing Reports](administration/portal/publishing.md) · [Publishing and Operating a Portal Catalog](cookbooks/etl/portal-catalog.md) |
 | Configure and review the audit log | [Health Monitoring and Audit Log](administration/portal/monitoring-and-audit.md) |
 
 ## Author reports
@@ -88,14 +88,14 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Author a `.rptsql` report | [Report SQL](guides/feature-guides/report-sql.md) |
-| Follow complete report examples | [Report Recipes](cookbooks/report-recipes.md) |
-| Build a master–detail drill-through | [ETL Recipes](cookbooks/etl-recipes.md) — Master-Detail Cross-Report Drill-through |
+| Follow complete report examples | [Report Recipes](cookbooks/report/README.md) |
+| Build a master–detail drill-through | [Master-Detail Cross-Report Drill-through](cookbooks/etl/master-detail-drill-through.md) |
 
 ## Generate from a specification
 
 | I want to… | Go to |
 | :--- | :--- |
-| Build a vendor feed from a JSON contract | [ETL Recipes](cookbooks/etl-recipes.md) — Specification-Driven Vendor Feed Build |
+| Build a vendor feed from a JSON contract | [Specification-Driven Vendor Feed Build](cookbooks/etl/spec-driven-vendor-feed.md) |
 | Understand spec-driven development | [Spec-Driven Development](spec-import/spec-driven-development.md) |
 
 ## See Also

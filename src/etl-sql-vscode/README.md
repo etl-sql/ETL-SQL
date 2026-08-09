@@ -345,7 +345,7 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | Resource | Description |
 | :--- | :--- |
 | [Getting Started](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Core paradigms, connections, variables, control flow, and debugging |
-| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl-recipes.md) | 20 production-grade, copy-pasteable ETL recipes |
+| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | 29 production-grade, copy-pasteable ETL recipes |
 | [Report-SQL Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/report-sql.md) | Visuals, filters, dashboards, drill-downs, and hosting |
 | [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
 | [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) | Full guide to the AI spec extraction + `gen-script` workflow |

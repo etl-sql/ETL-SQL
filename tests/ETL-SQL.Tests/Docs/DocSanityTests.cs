@@ -935,9 +935,27 @@ namespace ETL_SQL.Tests.Docs
             Assert.True(File.Exists(welcomeViewPath), $"Missing WelcomeView.ts");
             var welcomeView = File.ReadAllText(welcomeViewPath);
 
-            // Should point to getting-started.md and etl-recipes.md
-            Assert.Contains("docs/guides/getting-started.md", welcomeView);
-            Assert.Contains("docs/cookbooks/etl-recipes.md", welcomeView);
+            // Every document the welcome page opens has to exist. Pinning the literal paths here
+            // instead only proves the strings have not changed — which is how the getting-started
+            // link went on pointing at a file the docs restructure had already moved, opening a
+            // dead link from the extension's front page while this test stayed green.
+            var openedPaths = System.Text.RegularExpressions.Regex
+                .Matches(welcomeView, @"resolveProductUri\(this\._extensionUri,\s*'([^']+)'\)")
+                .Select(m => m.Groups[1].Value)
+                .ToList();
+
+            Assert.NotEmpty(openedPaths);
+            foreach (var opened in openedPaths)
+            {
+                // resolveProductUri resolves against the extension root, not against the source file.
+                var resolved = Path.GetFullPath(Path.Combine(
+                    RepoFile("src/etl-sql-vscode"), opened.Replace('/', Path.DirectorySeparatorChar)));
+                Assert.True(File.Exists(resolved) || Directory.Exists(resolved),
+                    $"WelcomeView.ts opens '{opened}', which does not exist at {resolved}.");
+            }
+
+            // The cookbook is one of them, and is reached through its collection index.
+            Assert.Contains("docs/cookbooks/etl/README.md", welcomeView);
 
             // Should not reference legacy path casing or retired files
             Assert.DoesNotContain("Docs/User_Manual.md", welcomeView);

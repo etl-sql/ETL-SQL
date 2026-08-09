@@ -690,7 +690,7 @@ catalog, execution path, or migration format.
   table from EDW and making a report from it.  Everything should work and the lineage on the report should
   show the flat file source to the EDW to the report and all transformations that happen between.
 
-      **Done (v0.18.0).** Recipe 28 in [etl-recipes.md](docs/cookbooks/etl-recipes.md), backed by two
+      **Done (v0.18.0).** [End-to-End Lineage](docs/cookbooks/etl/end-to-end-lineage.md), backed by two
       runnable samples under `samples/04_Orchestration/` that the sample suite exercises. SQLite, so
       it runs with no infrastructure.
 

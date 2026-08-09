@@ -434,7 +434,7 @@ END;
 
 `TTL` stays on `CREATE DATASET` — it is cache expiry, not a schedule, and has no trigger.
 Consumers to update: `docs/reference/visuals-reporting/report/dataset.md`, `report-cli.md`,
-`docs/guides/report-sql.md`, `docs/cookbooks/report-recipes.md`, `docs/syntax-index.md`,
+`docs/guides/report-sql.md`, `docs/cookbooks/report/`, `docs/syntax-index.md`,
 `snippets/dataset.md`, and the sample reports under `samples/08_Reporting`,
 `samples/10_Kitchen_Sinks`, `samples/integration`, and `Reports/`.
 

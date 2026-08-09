@@ -554,6 +554,6 @@ Lineage is particularly vulnerable to silent regression — a change to the AST 
 | `Help/Operations/LINEAGE.md` | Phase 1 | Update with standard tags, transformation output |
 | `docs/guides/getting-started.md` | Phase 1, 3, 5 | Tag syntax, LINEAGE_TAGS, EXPORT LINEAGE syntax |
 | `Docs/Architecture/Engine.md` | Phase 2 | Document TransformationKind, LineageAnalyzer changes |
-| `docs/cookbooks/report-recipes.md` | Phase 2, 4 | Lineage cookbook recipes |
+| `docs/cookbooks/report/` | Phase 2, 4 | Lineage cookbook recipes |
 | OpenLineage integration guide | Phase 5 | How to connect ETL-SQL to Marquez/DataHub/Airflow |
 | Database catalog import guide | Phase 6 | Per-connector setup, appsettings config |
