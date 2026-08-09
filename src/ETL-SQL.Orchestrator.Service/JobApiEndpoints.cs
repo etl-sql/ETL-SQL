@@ -1447,18 +1447,18 @@ namespace ETL_SQL.Orchestrator.Service
             string objectName,
             IJobHistoryStore jobs,
             IJobCatalogStore catalog) => objectKind switch
-        {
-            OrchestratorObjectKind.Job => await jobs.GetJobAsync(objectName) is { } job
-                ? (true, job.CreatedBy)
-                : (false, null),
-            OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(objectName) is { } schedule
-                ? (true, schedule.CreatedBy)
-                : (false, null),
-            OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(objectName) is { } notification
-                ? (true, notification.CreatedBy)
-                : (false, null),
-            _ => (false, null)
-        };
+            {
+                OrchestratorObjectKind.Job => await jobs.GetJobAsync(objectName) is { } job
+                    ? (true, job.CreatedBy)
+                    : (false, null),
+                OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(objectName) is { } schedule
+                    ? (true, schedule.CreatedBy)
+                    : (false, null),
+                OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(objectName) is { } notification
+                    ? (true, notification.CreatedBy)
+                    : (false, null),
+                _ => (false, null)
+            };
 
         private static void EmitObjectAuthorizationAudit(
             string actor,

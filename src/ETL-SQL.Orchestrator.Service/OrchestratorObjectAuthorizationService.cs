@@ -53,12 +53,12 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
     public static bool Includes(
         OrchestratorObjectPermission granted,
         OrchestratorObjectPermission required) => granted switch
-    {
-        OrchestratorObjectPermission.Manage => true,
-        OrchestratorObjectPermission.Override => required is not OrchestratorObjectPermission.Manage,
-        OrchestratorObjectPermission.Execute => required is OrchestratorObjectPermission.Read or OrchestratorObjectPermission.Execute,
-        _ => required == OrchestratorObjectPermission.Read
-    };
+        {
+            OrchestratorObjectPermission.Manage => true,
+            OrchestratorObjectPermission.Override => required is not OrchestratorObjectPermission.Manage,
+            OrchestratorObjectPermission.Execute => required is OrchestratorObjectPermission.Read or OrchestratorObjectPermission.Execute,
+            _ => required == OrchestratorObjectPermission.Read
+        };
 
     private static bool Matches(OrchestratorCaller caller, OrchestratorObjectGrant grant) =>
         grant.PrincipalKind switch

@@ -38,8 +38,8 @@ namespace ETL_SQL.Portal.Tests
                 $"{expectedCount} completed Orchestrator history entries for job '{jobName}'",
                 async _ =>
                 {
-                using var req = Authorized(HttpMethod.Get, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history");
-                var res = await client.SendAsync(req);
+                    using var req = Authorized(HttpMethod.Get, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history");
+                    var res = await client.SendAsync(req);
                     var history = res.StatusCode == HttpStatusCode.OK
                         ? await res.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_jsonOptions) ?? []
                         : [];
@@ -102,16 +102,16 @@ namespace ETL_SQL.Portal.Tests
                 "scheduler metrics to report no active or queued jobs",
                 async _ =>
                 {
-                using var req = new HttpRequestMessage(HttpMethod.Get, "/metrics");
-                var res = await client.SendAsync(req);
-                if (res.StatusCode == HttpStatusCode.OK)
-                {
-                    using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
-                    var root = doc.RootElement;
+                    using var req = new HttpRequestMessage(HttpMethod.Get, "/metrics");
+                    var res = await client.SendAsync(req);
+                    if (res.StatusCode == HttpStatusCode.OK)
+                    {
+                        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+                        var root = doc.RootElement;
                         return (res.StatusCode,
                             Active: root.GetProperty("active_jobs").GetInt32(),
                             Queued: root.GetProperty("queued_jobs").GetInt32());
-                }
+                    }
                     return (res.StatusCode, Active: -1, Queued: -1);
                 },
                 state => state.StatusCode == HttpStatusCode.OK && state.Active == 0 && state.Queued == 0,
@@ -167,15 +167,15 @@ namespace ETL_SQL.Portal.Tests
                 async _ =>
                 {
                     var messages = await _smtp.GetMessagesAsync();
-                var messageList = messages.GetProperty("messages");
-                for (int i = 0; i < messageList.GetArrayLength(); i++)
-                {
-                    var msg = messageList[i];
-                    if (msg.GetProperty("Subject").GetString() == subject)
+                    var messageList = messages.GetProperty("messages");
+                    for (int i = 0; i < messageList.GetArrayLength(); i++)
                     {
+                        var msg = messageList[i];
+                        if (msg.GetProperty("Subject").GetString() == subject)
+                        {
                             return (Message: (JsonElement?)msg.Clone(), Count: messageList.GetArrayLength());
+                        }
                     }
-                }
                     return (Message: (JsonElement?)null, Count: messageList.GetArrayLength());
                 },
                 state => state.Message.HasValue,

@@ -104,9 +104,9 @@ try
     builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
     builder.Services.AddEtlSqlEngine(cfg);
-builder.Services.AddSingleton<OrchestratorObjectAuthorizationService>();
-builder.Services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
-    sp.GetRequiredService<OrchestratorObjectAuthorizationService>());
+    builder.Services.AddSingleton<OrchestratorObjectAuthorizationService>();
+    builder.Services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
+        sp.GetRequiredService<OrchestratorObjectAuthorizationService>());
 
     // Phase 7: choose execution strategy via config
     // "Jobs:UseProcessSpawning": true  → spawn ETL-SQL.exe run as child processes (production)

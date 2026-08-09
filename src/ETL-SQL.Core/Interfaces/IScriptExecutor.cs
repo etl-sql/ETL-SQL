@@ -1,7 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Core;
