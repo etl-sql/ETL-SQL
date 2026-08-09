@@ -128,11 +128,33 @@ Controls task execution parameters and process boundaries.
 | `Jobs:UseProcessSpawning` | boolean | `false` | — | When true, runs jobs in isolated OS sub-processes instead of thread tasks. |
 | `Jobs:UseWarmRunner` | boolean | `false` | — | When true with process spawning, reuses warm `ETL-SQL runner` child processes instead of launching a fresh process for every job. Falls back to one-shot spawning if a runner fails. |
 | `Jobs:ExecutablePath` | string | `""` | — | Absolute path to target `ETL-SQL.exe` engine when process spawning is active. |
+| `Jobs:ArgumentsTemplate` | string | `""` | — | Overrides the arguments passed to a spawned job. Supports `{ScriptFile}` and `{SessionId}`. Empty uses the built-in `run {ScriptFile} --json`. **A custom template must keep `--json`** — see below. |
 | `Jobs:TimeoutSeconds` | integer | `3600` | — | Maximum runtime permitted for a single job before terminating (1 hour). |
 | `Jobs:WarmRunnerPoolSize` | integer | `2` | — | Maximum number of reusable runner processes for concurrent job execution. |
 | `Jobs:WarmRunnerStartupTimeoutSeconds` | integer | `10` | — | Time allowed for a newly spawned warm runner to publish its ready handshake. |
 | `Jobs:WarmRunnerBatchSize` | integer | `10000` | — | Batch size passed into warm runner execution sessions. |
 | `Jobs:MaxConcurrentJobs` | integer | `0` | — | Process scale throttle. O denotes logical processor count. |
+
+### A custom `Jobs:ArgumentsTemplate` must keep `--json`
+
+`--json` is how a spawned job reports what it did. The scheduler reads a single JSON envelope from
+the child's output to learn the row count, the data-quality column metrics, and the rule failures.
+
+If a custom template omits it there is no envelope, and the scheduler falls back to the process exit
+code alone. A successful run then records **success with zero rows and no data-quality metrics** —
+no error, no warning in the run history, just numbers that are quietly always zero. The failure is
+silent by construction, and it lands only on deployments that customised the template.
+
+The Orchestrator logs a warning at startup when it detects this, but the setting is worth getting
+right rather than relying on someone reading the log:
+
+```jsonc
+// Correct — keeps the envelope
+"ArgumentsTemplate": "run {ScriptFile} --json --session {SessionId}"
+
+// Broken — row counts and quality metrics silently become zero
+"ArgumentsTemplate": "run {ScriptFile} --session {SessionId}"
+```
 
 ---
 

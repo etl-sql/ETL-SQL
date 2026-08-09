@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -46,7 +47,35 @@ namespace ETL_SQL.Orchestrator.Execution
             _options = options.Value;
             _tracker = tracker;
             _logger = logger;
+
+            var templateWarning = DescribeArgumentsTemplateRisk(_options.ArgumentsTemplate);
+            if (templateWarning is not null) _logger.LogWarning("{Warning}", templateWarning);
+
             CleanupOldTempScripts(force: true);
+        }
+
+        /// <summary>
+        /// Returns a warning when a custom <c>ArgumentsTemplate</c> would suppress the run envelope,
+        /// or null when the template is fine.
+        ///
+        /// <para>The envelope is how a child reports what it did. Without <c>--json</c> the
+        /// scheduler finds no envelope and falls back to the exit code alone, which returns
+        /// <b>success with zero rows</b> and no data-quality metrics — so runs keep reporting green
+        /// while row counts, rule failures, and quarantine counts quietly vanish. That silence is
+        /// the problem: it lands only on deployments that customised the template, which are the
+        /// ones least likely to notice a metric that was never there.</para>
+        /// </summary>
+        internal static string? DescribeArgumentsTemplateRisk(string? template)
+        {
+            if (string.IsNullOrWhiteSpace(template)) return null;
+
+            var tokens = template.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Any(token => string.Equals(token, "--json", StringComparison.OrdinalIgnoreCase)))
+                return null;
+
+            return "Jobs:ArgumentsTemplate does not include '--json'. Job runs will report success " +
+                   "with zero rows and no data-quality metrics, because the scheduler cannot read a " +
+                   "result envelope from the child process. Add '--json' to the template.";
         }
 
         internal static void ClearWarmRunnerPoolsForTests()

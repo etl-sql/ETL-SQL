@@ -1005,10 +1005,19 @@ tested against it.
       scheduler is the one process that must not run out of memory. Statement text is the bulk of the
       payload, so the normalization required for redaction below also largely removes this problem —
       do both in the same change.
-- [ ] Guard the `ArgumentsTemplate` escape hatch. An operator template that omits `--json` produces
+- [x] Guard the `ArgumentsTemplate` escape hatch. An operator template that omits `--json` produces
       no envelope, and the fallback path returns success with zero rows — so the flight recorder
       would go silently missing on exactly the customised deployments least likely to notice. Warn at
       startup when a template omits it.
+
+      **Shipped (v0.18.0), and it is a present bug rather than future-proofing.** The envelope
+      already carries `dataQualityColumnMetrics` and `dataQualityRuleFailures`, so a template
+      without `--json` is losing those *today* — `ParseResult`'s fallback returns
+      `ScriptExecutionResult(true, 0, null)`, i.e. success with zero rows. `ProcessJobExecutor`
+      now warns at construction, and the warning states the consequence ("runs will report success
+      with zero rows and no data-quality metrics") rather than just the omission, because "add
+      --json" alone reads as pedantry. `Jobs:ArgumentsTemplate` was also entirely undocumented; it
+      now has a reference entry and a worked correct/broken example.
 - [x] Redact or normalize statement text before persisting it. **This is a security requirement, not
       a nicety.** `ExecutionMetrics.Sql` is raw statement text and may contain inline literals and
       credentials. The data-quality design deliberately committed to counts-only, never sample values
