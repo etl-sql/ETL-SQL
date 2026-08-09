@@ -172,6 +172,66 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Null(captured);
         }
 
+        /// <summary>Only the fields actually supplied are sent, so an update cannot blank a field silently.</summary>
+        [Fact]
+        public async Task CliOrchestrator_UserUpdateCarriesOnlyTheSuppliedFields()
+        {
+            var ctx = await ParseRunAsync("admin", "user", "update", "--username", "jsmith", "--email", "j@corp.local");
+
+            Assert.Equal("j@corp.local", ctx.AdminEmail);
+            Assert.Null(ctx.AdminFirstName);
+            Assert.Null(ctx.AdminLastName);
+            Assert.Null(ctx.AdminRole);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_GroupUpdateKeepsTheLookupNameSeparateFromTheNewName()
+        {
+            var ctx = await ParseRunAsync("admin", "group", "update", "--name", "Finance", "--new-name", "Finance EU");
+
+            Assert.Equal("Finance", ctx.AdminGroupName);
+            Assert.Equal("Finance EU", ctx.AdminNewName);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_CapabilityFlagIsRepeatable()
+        {
+            var ctx = await ParseRunAsync("admin", "group", "set-capabilities", "--name", "Finance",
+                "--capability", "studio.author", "--capability", "studio.publish");
+
+            Assert.Equal(["studio.author", "studio.publish"], ctx.AdminCapabilities);
+        }
+
+        /// <summary>
+        /// An empty set is meaningful — it revokes every capability — so it must be distinguishable
+        /// from the flag being absent.
+        /// </summary>
+        [Fact]
+        public async Task CliOrchestrator_AbsentCapabilityFlagIsNotAnEmptyGrant()
+        {
+            var ctx = await ParseRunAsync("admin", "group", "capabilities", "--name", "Finance");
+            Assert.Null(ctx.AdminCapabilities);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ResetPasswordHasNoPasswordArgument()
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            var parse = root.Parse(new[]
+            {
+                "admin", "user", "reset-password", "--username", "jsmith", "--password", "hunter2"
+            });
+
+            Assert.NotEmpty(parse.Errors);
+            Assert.Null(captured);
+        }
+
         private static async Task<CliContext> ParseRunAsync(params string[] args)
         {
             CliContext? captured = null;

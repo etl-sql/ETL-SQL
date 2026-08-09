@@ -89,6 +89,18 @@ public class CliContext
     /// <summary>Fail the write unless the record is still at this version.</summary>
     public long? IfVersion { get; set; }
 
+    /// <summary>Given name for <c>admin user update</c>.</summary>
+    public string? AdminFirstName { get; set; }
+
+    /// <summary>Family name for <c>admin user update</c>.</summary>
+    public string? AdminLastName { get; set; }
+
+    /// <summary>Replacement name for <c>admin group update</c>, kept apart from the lookup name.</summary>
+    public string? AdminNewName { get; set; }
+
+    /// <summary>Studio capabilities for <c>admin group set-capabilities</c>. Replaces the grant wholesale.</summary>
+    public List<string>? AdminCapabilities { get; set; }
+
     /// <summary>
     /// Stable identity for an unattended run. Without it the job name is the script's file name, so
     /// the same script under two schedules — or same-named scripts in different folders — collapse

@@ -1,6 +1,6 @@
 # etl-sql admin session
 
-Inspect Portal sign-in sessions
+Inspect and disconnect Portal sign-in sessions
 
 ## Synopsis
 

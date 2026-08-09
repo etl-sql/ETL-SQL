@@ -164,6 +164,7 @@ namespace ETL_SQL.App
             }
 
             if (ctx.Command == "admin-portal-whoami"
+                || ctx.Command == "admin-access-simulate"
                 || ctx.Command.StartsWith("admin-user-", StringComparison.Ordinal)
                 || ctx.Command.StartsWith("admin-group-", StringComparison.Ordinal)
                 || ctx.Command.StartsWith("admin-session-", StringComparison.Ordinal))

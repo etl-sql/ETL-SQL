@@ -1154,7 +1154,7 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
       it" idiom and is the first thing to run when a runbook fails. Credentials come from
       `--portal-url` plus env or a `SECRET:name` reference resolved through the existing machine
       secret store; **never** from argv.
-- [ ] **Users.** `user list` (`--filter`, `--role`, `--include-inactive`), `user show`,
+- [x] **Users.** `user list` (`--filter`, `--role`, `--include-inactive`), `user show`,
       `user create` (`--username --email --role`, optional `--first-name --last-name --provider`,
       `--password-stdin`), `user update`, `user enable` / `user disable`, `user delete`,
       `user reset-password`, `user revoke-tokens`.
@@ -1162,7 +1162,7 @@ scanning cleanly. Record the inconsistency in the CLI reference so it reads as a
       `permissions/effective/user/{id}`, and `access-simulate --username --report` over the access
       simulator. Read-only, no new API needed, and the highest-value verb in the set: it answers
       "why can this person see this" without a browser.
-- [ ] **Groups.** `group list`, `group show`, `group create`, `group update`, `group delete`
+- [x] **Groups.** `group list`, `group show`, `group create`, `group update`, `group delete`
       (`--cascade`), `group members`, `group add-member`, `group remove-member` (repeatable
       `--username` maps to the bulk endpoints), `group capabilities` / `group set-capabilities`
       over `groups/{id}/studio-capabilities`.
@@ -1195,9 +1195,20 @@ make the tool worth having over a browser:
 Passwords come only from `--password-stdin`; there is no `--password` flag, and a test asserts that
 neither it nor `--client-secret` can be added without failing.
 
-Still open: `user update` beyond enable/disable, `user reset-password`, `group update`,
-`group capabilities` / `set-capabilities`, `service-account …`, and `access-simulate`.
-`user permissions` already covers the common access question.
+**The user, group, membership, session, and access verbs are now complete.** Added on top of the
+above: `user update`, `user reset-password`, `group update`, `group capabilities` /
+`set-capabilities`, and `access-simulate`.
+
+Two behaviours worth knowing rather than discovering: `user update` and `group update` send only the
+fields actually supplied, so changing an email cannot silently blank a name; and `set-capabilities`
+**replaces** the grant wholesale rather than adding to it, with no `--capability` meaning "revoke
+everything". Both are documented, and the second is stated plainly because "set" read as "add" is
+the kind of misunderstanding that quietly removes someone's access.
+
+Still open: the **`service-account`** verbs (`list|create|update|revoke`). Left deliberately for
+their own pass — `create` returns a one-time secret, so it needs a decision about how a CLI hands
+that back without it landing in a scrollback buffer or a CI log, and the bootstrap trap noted above
+(the first account must be mintable from the Portal UI) belongs in the same discussion.
 
 #### Cross-cutting behaviour the verbs must get right
 

@@ -144,6 +144,26 @@ namespace ETL_SQL.App
             Description = "Role to assign to the new user.",
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> AdminFirstNameOption = new("--first-name", Array.Empty<string>())
+        {
+            Description = "Given name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminLastNameOption = new("--last-name", Array.Empty<string>())
+        {
+            Description = "Family name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> AdminNewNameOption = new("--new-name", Array.Empty<string>())
+        {
+            Description = "Replacement group name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string[]> AdminCapabilityOption = new("--capability", Array.Empty<string>())
+        {
+            Description = "Studio capability to grant. Repeatable. Replaces the group's whole grant.",
+            AllowMultipleArgumentsPerToken = false
+        };
         private static readonly Option<string?> AdminEmailOption = new("--email", Array.Empty<string>())
         {
             Description = "Email address for the new user.",
@@ -977,7 +997,7 @@ namespace ETL_SQL.App
             whoAmICommand.SetAction(context => Dispatch(context, "admin-portal-whoami", handler));
             adminCommand.Add(whoAmICommand);
 
-            var userCommand = new Command("user", "Inspect Portal users");
+            var userCommand = new Command("user", "Manage Portal users");
 
             var userListCommand = new Command("list", "List Portal users")
             {
@@ -1040,9 +1060,26 @@ namespace ETL_SQL.App
             userRevokeCommand.SetAction(context => Dispatch(context, "admin-user-revoke-tokens", handler));
             userCommand.Add(userRevokeCommand);
 
+            var userUpdateCommand = new Command("update", "Update a Portal user's details or role")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption,
+                AdminEmailOption, AdminFirstNameOption, AdminLastNameOption, AdminAssignRoleOption,
+                IfVersionOption
+            };
+            userUpdateCommand.SetAction(context => Dispatch(context, "admin-user-update", handler));
+            userCommand.Add(userUpdateCommand);
+
+            var userResetPasswordCommand = new Command("reset-password", "Set a user's password, read from stdin")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption,
+                PasswordStdinOption, IfVersionOption
+            };
+            userResetPasswordCommand.SetAction(context => Dispatch(context, "admin-user-reset-password", handler));
+            userCommand.Add(userResetPasswordCommand);
+
             adminCommand.Add(userCommand);
 
-            var groupCommand = new Command("group", "Inspect Portal groups");
+            var groupCommand = new Command("group", "Manage Portal groups and their membership");
 
             var groupListCommand = new Command("list", "List Portal groups")
             {
@@ -1088,10 +1125,33 @@ namespace ETL_SQL.App
             groupRemoveMemberCommand.SetAction(context => Dispatch(context, "admin-group-remove-member", handler));
             groupCommand.Add(groupRemoveMemberCommand);
 
+            var groupUpdateCommand = new Command("update", "Rename a group or change its description")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption,
+                AdminGroupNameOption, AdminNewNameOption, AdminDescriptionOption, IfVersionOption
+            };
+            groupUpdateCommand.SetAction(context => Dispatch(context, "admin-group-update", handler));
+            groupCommand.Add(groupUpdateCommand);
+
+            var groupCapabilitiesCommand = new Command("capabilities", "Show a group's Studio capabilities")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminGroupNameOption
+            };
+            groupCapabilitiesCommand.SetAction(context => Dispatch(context, "admin-group-capabilities", handler));
+            groupCommand.Add(groupCapabilitiesCommand);
+
+            var groupSetCapabilitiesCommand = new Command("set-capabilities",
+                "Replace a group's Studio capabilities with the given set")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminGroupNameOption, AdminCapabilityOption
+            };
+            groupSetCapabilitiesCommand.SetAction(context => Dispatch(context, "admin-group-set-capabilities", handler));
+            groupCommand.Add(groupSetCapabilitiesCommand);
+
             adminCommand.Add(groupCommand);
 
             // Distinct from the root `session` command, which manages ad-hoc execution sessions.
-            var portalSessionCommand = new Command("session", "Inspect Portal sign-in sessions");
+            var portalSessionCommand = new Command("session", "Inspect and disconnect Portal sign-in sessions");
             var portalSessionListCommand = new Command("list", "List active Portal sessions")
             {
                 PortalUrlOption, PortalClientIdOption, JsonOption, AdminFilterOption
@@ -1106,6 +1166,14 @@ namespace ETL_SQL.App
             portalSessionCommand.Add(portalSessionDisconnectCommand);
 
             adminCommand.Add(portalSessionCommand);
+
+            var accessSimulateCommand = new Command("access-simulate",
+                "Simulate what a user can reach — the access question, answered without a browser")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminUsernameOption
+            };
+            accessSimulateCommand.SetAction(context => Dispatch(context, "admin-access-simulate", handler));
+            adminCommand.Add(accessSimulateCommand);
 
             var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
             {
@@ -1293,7 +1361,8 @@ namespace ETL_SQL.App
             if (commandName.StartsWith("admin-user-", StringComparison.Ordinal)
                 || commandName.StartsWith("admin-group-", StringComparison.Ordinal)
                 || commandName.StartsWith("admin-session-", StringComparison.Ordinal)
-                || commandName == "admin-portal-whoami")
+                || commandName == "admin-portal-whoami"
+                || commandName == "admin-access-simulate")
             {
                 cliContext.PortalUrl = TryGetString(res, PortalUrlOption);
                 cliContext.PortalClientId = TryGetString(res, PortalClientIdOption);
@@ -1309,6 +1378,12 @@ namespace ETL_SQL.App
                 cliContext.IfNotExists = TryGetBool(res, IfNotExistsOption);
                 cliContext.IfExists = TryGetBool(res, IfExistsOption);
                 cliContext.IfVersion = res.GetResult(IfVersionOption) is null ? null : res.GetValue(IfVersionOption);
+                cliContext.AdminFirstName = TryGetString(res, AdminFirstNameOption);
+                cliContext.AdminLastName = TryGetString(res, AdminLastNameOption);
+                cliContext.AdminNewName = TryGetString(res, AdminNewNameOption);
+                cliContext.AdminCapabilities = res.GetResult(AdminCapabilityOption) is null
+                    ? null
+                    : [.. res.GetValue(AdminCapabilityOption) ?? []];
             }
 
             if (commandName == "run")

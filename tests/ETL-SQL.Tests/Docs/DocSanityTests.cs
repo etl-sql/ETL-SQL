@@ -746,8 +746,15 @@ namespace ETL_SQL.Tests.Docs
             };
 
             // A drive-qualified or POSIX home path pointing at a named user's directory.
+            //
+            // The POSIX forms require that nothing path-like precedes them, because a home
+            // directory is the *root* of an absolute path. Without that, the pattern also matched
+            // REST routes such as "/api/admin/users/42/reset-password", which are not paths on
+            // anyone's machine — a false positive that would push authors to contort real routes.
             var pattern = new Regex(
-                @"([A-Za-z]:[\\/]Users[\\/][A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/)",
+                @"([A-Za-z]:[\\/]Users[\\/][A-Za-z0-9._-]+" +
+                @"|(?<![A-Za-z0-9._-])/home/[A-Za-z0-9._-]+/" +
+                @"|(?<![A-Za-z0-9._-])/Users/[A-Za-z0-9._-]+/)",
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
             // Paths that look developer-specific but are not a dependency on anyone's machine:

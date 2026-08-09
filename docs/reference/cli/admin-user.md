@@ -1,6 +1,6 @@
 # etl-sql admin user
 
-Inspect Portal users
+Manage Portal users
 
 ## Synopsis
 
@@ -18,8 +18,10 @@ etl-sql admin user <subcommand>
 | [`enable`](admin-user-enable.md) | Reactivate a Portal user |
 | [`list`](admin-user-list.md) | List Portal users |
 | [`permissions`](admin-user-permissions.md) | Show a user's effective permissions — answers "why can this person see this" |
+| [`reset-password`](admin-user-reset-password.md) | Set a user's password, read from stdin |
 | [`revoke-tokens`](admin-user-revoke-tokens.md) | Revoke a user's issued tokens |
 | [`show`](admin-user-show.md) | Show one Portal user |
+| [`update`](admin-user-update.md) | Update a Portal user's details or role |
 
 ## References
 

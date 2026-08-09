@@ -114,8 +114,31 @@ etl-sql admin user disable --username jsmith --if-version 7
 
 Last-writer-wins is the wrong default for an administration tool, so there is no way to ask for it.
 
-**Passwords are never arguments.** `--password-stdin` is the only way to supply one; there is no
-`--password` flag, and a test asserts there never will be.
+**Passwords are never arguments.** `--password-stdin` is the only way to supply one, on both
+`user create` and `user reset-password`. There is no `--password` flag, and tests assert that
+neither it nor `--client-secret` parses.
+
+```bash
+etl-sql admin user reset-password --username jsmith --password-stdin < /run/secrets/new-password
+```
+
+**Partial updates only touch what you name.** `user update` and `group update` send only the fields
+actually supplied, so changing an email cannot silently blank a name that was never mentioned.
+
+**`set-capabilities` replaces, it does not add.** The grant is written wholesale, matching the API,
+and passing no `--capability` clears it:
+
+```bash
+# Grant exactly these two, removing anything else the group had
+etl-sql admin group set-capabilities --name "Finance Analysts" \
+    --capability studio.author --capability studio.publish
+
+# Revoke everything
+etl-sql admin group set-capabilities --name "Finance Analysts"
+```
+
+Read the current grant first with `etl-sql admin group capabilities --name "…"`, which also lists
+what is available.
 
 ## Answering "why can this person see this"
 

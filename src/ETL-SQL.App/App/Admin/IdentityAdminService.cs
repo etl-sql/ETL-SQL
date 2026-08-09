@@ -53,6 +53,12 @@ public static class IdentityAdminService
                 "admin-group-delete" => await GroupDeleteAsync(client, ctx, logger),
                 "admin-group-add-member" => await GroupMemberChangeAsync(client, ctx, logger, add: true),
                 "admin-group-remove-member" => await GroupMemberChangeAsync(client, ctx, logger, add: false),
+                "admin-user-update" => await UserUpdateAsync(client, ctx, logger),
+                "admin-user-reset-password" => await UserResetPasswordAsync(client, ctx, logger),
+                "admin-group-update" => await GroupUpdateAsync(client, ctx, logger),
+                "admin-group-capabilities" => await GroupCapabilitiesAsync(client, ctx, logger),
+                "admin-group-set-capabilities" => await GroupSetCapabilitiesAsync(client, ctx, logger),
+                "admin-access-simulate" => await AccessSimulateAsync(client, ctx, logger),
                 _ => Fail(logger, AdminExitCode.ValidationError, $"Unknown identity command '{ctx.Command}'.")
             };
         }
@@ -363,6 +369,121 @@ public static class IdentityAdminService
         return 0;
     }
 
+    /// <summary>
+    /// Only the fields actually supplied are sent, so updating an email cannot silently blank a
+    /// name the caller never mentioned.
+    /// </summary>
+    private static async Task<int> UserUpdateAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+
+        var changes = new Dictionary<string, object?>();
+        if (ctx.AdminEmail is not null) changes["email"] = ctx.AdminEmail;
+        if (ctx.AdminFirstName is not null) changes["firstName"] = ctx.AdminFirstName;
+        if (ctx.AdminLastName is not null) changes["lastName"] = ctx.AdminLastName;
+        if (ctx.AdminRole is not null) changes["role"] = ctx.AdminRole;
+
+        if (changes.Count == 0)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "Nothing to update. Supply at least one of --email, --first-name, --last-name, --role.");
+
+        await client.PutAsync($"/api/admin/users/{user["id"]}", changes,
+            CancellationToken.None, VersionFor(ctx, user));
+        logger.WriteLine($"Updated user '{ctx.AdminUsername}' ({string.Join(", ", changes.Keys)}).", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> UserResetPasswordAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+
+        // No fallback to a prompt or a flag: the new password has exactly one source.
+        if (!ctx.PasswordStdin)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--password-stdin is required. A password is never accepted as a command-line argument.");
+
+        var password = ReadPasswordFromStdin(ctx);
+        await client.PostAsync($"/api/admin/users/{user["id"]}/reset-password",
+            new { newPassword = password }, CancellationToken.None, VersionFor(ctx, user));
+
+        logger.WriteLine($"Reset the password for '{ctx.AdminUsername}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> GroupUpdateAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var group = await ResolveGroupAsync(client, ctx);
+
+        var changes = new Dictionary<string, object?>();
+        if (ctx.AdminNewName is not null) changes["name"] = ctx.AdminNewName;
+        if (ctx.AdminDescription is not null) changes["description"] = ctx.AdminDescription;
+
+        if (changes.Count == 0)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "Nothing to update. Supply --new-name or --description.");
+
+        await client.PutAsync($"/api/admin/groups/{group["id"]}", changes,
+            CancellationToken.None, VersionFor(ctx, group));
+        logger.WriteLine($"Updated group '{ctx.AdminGroupName}' ({string.Join(", ", changes.Keys)}).", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> GroupCapabilitiesAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var group = await ResolveGroupAsync(client, ctx);
+        var payload = await client.GetAsync(
+            $"/api/admin/groups/{group["id"]}/studio-capabilities", CancellationToken.None);
+
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(payload?.ToJsonString(Pretty) ?? "null");
+            return 0;
+        }
+
+        var granted = ToStrings(payload?["capabilities"]);
+        var available = ToStrings(payload?["available"]);
+        logger.WriteLine($"Granted   : {Join(granted)}");
+        logger.WriteLine($"Available : {Join(available)}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Replaces the grant wholesale, matching the API. Stated plainly because "set" reading as
+    /// "add" is the kind of misunderstanding that quietly removes someone's access.
+    /// </summary>
+    private static async Task<int> GroupSetCapabilitiesAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var group = await ResolveGroupAsync(client, ctx);
+        var capabilities = (ctx.AdminCapabilities ?? []).ToArray();
+
+        await client.PutAsync($"/api/admin/groups/{group["id"]}/studio-capabilities",
+            new { capabilities }, CancellationToken.None);
+
+        logger.WriteLine(
+            capabilities.Length == 0
+                ? $"Cleared all Studio capabilities for '{ctx.AdminGroupName}'."
+                : $"Set Studio capabilities for '{ctx.AdminGroupName}' to: {string.Join(", ", capabilities)}.",
+            ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> AccessSimulateAsync(PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var user = await ResolveUserAsync(client, ctx);
+        var result = await client.GetAsync(
+            $"/api/admin/access-simulator/user/{user["id"]}", CancellationToken.None);
+
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(result?.ToJsonString(Pretty) ?? "null");
+            return 0;
+        }
+
+        logger.WriteLine($"Simulated access for {user["userName"]?.GetValue<string>()} (id {user["id"]}):");
+        Render(logger, result, indent: "  ");
+        return 0;
+    }
+
     // ── Mutation helpers ─────────────────────────────────────────────────────────
 
     private static void Require(string? value, string flag)
@@ -512,6 +633,10 @@ public static class IdentityAdminService
         JsonObject obj when obj["groups"] is JsonArray groups => groups.ToList(),
         _ => []
     };
+
+    private static string[] ToStrings(JsonNode? node) => node is JsonArray array
+        ? array.Select(item => item?.GetValue<string>() ?? "").Where(item => item.Length > 0).ToArray()
+        : [];
 
     private static string[] Roles(JsonNode? user) => user?["roles"] is JsonArray roles
         ? roles.Select(role => role?.GetValue<string>() ?? "").Where(role => role.Length > 0).ToArray()
