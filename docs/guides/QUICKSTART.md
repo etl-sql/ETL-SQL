@@ -1,0 +1,82 @@
+================================================================================
+  ETL-SQL v0.18.0 Quickstart Guide
+================================================================================
+
+Welcome to ETL-SQL, the script-first data orchestration engine for SQL, APIs,
+files, transfers, scheduling, governance, and reporting.
+
+WHAT MAKES IT DIFFERENT
+--------------------------------------------------------------------------------
+ETL-SQL keeps pipelines and dashboards in plain-text .etlsql and .rptsql files
+that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code,
+notebooks, Report Portal, Orchestrator, or CI/CD.
+
+It puts the T back in the middle of ETL. Stage rows in engine-managed #temp
+tables, validate and transform them there, attach lineage tags and governance
+metadata, then load or publish the result. Compatible SQL can still be pushed
+down to a database, but cross-source work stays portable and explicit instead
+of being locked inside one warehouse dialect or spread across separate tools.
+
+1. FIRST STEPS
+--------------------------------------------------------------------------------
+Open a terminal in the folder where you extracted the binaries and run:
+  
+  ./ETL-SQL doctor
+
+This command will verify that your OS, .NET runtime, and disk permissions are 
+correctly configured for operation.
+
+2. RUNNING A SCRIPT
+--------------------------------------------------------------------------------
+To run a standard ETL-SQL script:
+
+  ./ETL-SQL run path/to/your_script.etlsql
+
+Useful flags:
+  --perf     Display performance metrics after execution.
+  --verbose  Show detailed execution tracking.
+  --log      Save execution logs to the /logs directory.
+
+3. THE TERMINAL IDE (TUI)
+--------------------------------------------------------------------------------
+If you prefer a windowed environment for editing and running scripts:
+
+  ./ETL-SQL-TUI
+
+This starts the modern terminal IDE with syntax highlighting and F5 execution.
+
+4. REPORTING (Report-SQL)
+--------------------------------------------------------------------------------
+To compile a .rptsql file into a dashboard manifest:
+
+  ./ETL-SQL-Report path/to/report.rptsql
+
+Then, host the report using the portal player:
+
+  ./ETL-SQL-Portal
+
+REPORT PORTAL QUICKSTART:
+  1. Set a 32-char 'Portal__Jwt__Secret' env var.
+  2. Run ./ETL-SQL-Portal and login at http://localhost:5001.
+  3. Admin login: user 'admin'; password = Portal__FirstRun__AdminPassword if set,
+     otherwise generated and printed once in the startup log. (Change on first login!)
+  4. Detailed guide in Docs/ReportPortal_Guide.txt.
+
+5. CONNECTORS
+--------------------------------------------------------------------------------
+ETL-SQL supports:
+  - SQL: MSSQL, Postgres, MySQL, Oracle, SQLite, ODBC, Snowflake, BigQuery
+  - Files: CSV, JSON, XML, Parquet, Avro, Excel
+  - REST/API: Native HTTP/API connector, MongoDB, Kafka, Active Directory
+  - Transfers: SFTP, FTP, Azure Blob, S3, SharePoint
+
+6. DOCUMENTATION
+--------------------------------------------------------------------------------
+For the full language reference, visit the Docs/ folder in the repository 
+or the official documentation site.
+
+https://github.com/etl-sql/ETL-SQL
+
+Enjoy your data integration!
+- The ETL-SQL Team
+================================================================================
