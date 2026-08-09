@@ -962,15 +962,40 @@ missing for that run, while the run's own result stays correct.
 
 Known long-term costs of that choice, recorded so they are not rediscovered:
 
+**Payload defined and made safe (v0.18.0) — persistence still to come.**
+`StatementTextNormalizer` and `StatementMetricsPayload` in `ETL-SQL.Core/Profiling`, with 29 tests.
+
+- **Redaction is done at projection, not at the call site.** `StatementMetricsPayload.From` always
+  normalizes, so no future caller can forget. Literals — strings (including `''` escapes), numbers,
+  exponents — become `?`; comment bodies are dropped whole, since a comment holds whatever someone
+  pasted. Quoted and bracketed identifiers are deliberately **kept**: a name is schema, not data, and
+  stripping it would leave text nobody can recognise, which defeats recording it.
+- **The same pass fixes the memory problem**, as the note below predicted: whitespace collapses to
+  one line, which is also what the single-line envelope requires, and a long literal is replaced
+  rather than truncated mid-value.
+- **Capping keeps every failed statement**, then fills the remaining budget with the slowest, and
+  preserves original order so the result reads as a timeline. A run with more failures than the
+  budget keeps them all — dropping one would hide the thing being looked for, and an oversized
+  envelope is the lesser problem.
+
+**Found while building: nothing in the engine records a per-statement failure.** `ExecutionMetrics`
+has no status field, so "all failed statements" is not derivable from engine data today. The payload
+carries a `Failed` flag for the caller that knows the run's outcome to set; wiring something to
+actually set it is part of the persistence work below, and the selection rule is already written and
+tested against it.
+
 - [ ] Persist per-run statement metrics to a child table keyed on the job-history id, written by the
       scheduler alongside `LogJobEndAsync`.
-- [ ] **Define the statement payload once, as a shared contract type consumed by both the one-shot
-      envelope and `WarmRunnerResponse`.** This is the recurring tax and the main thing to get right:
+- [x] **Define the statement payload once, as a shared contract type consumed by both the one-shot
+      envelope and `WarmRunnerResponse`.** `StatementMetricsPayload` (Core/Profiling). The type and
+      its projection exist; **wiring the three execution paths to emit it is still to do** — that is
+      tracked by the persistence item above, since neither is useful without the other.
+      This is the recurring tax and the main thing to get right:
       there are three execution paths — in-process `ScriptExecutorAdapter` (the default, since
       `UseProcessSpawning` is `false`), the one-shot `--json` process, and the warm runner with its
       own stdin/stdout line protocol — and the latter two carry the payload separately today. Every
       field added to the envelope currently has to be written twice; one shared type makes that once.
-- [ ] Respect the single-line envelope constraint: `ParseResult` scans stdout backwards for one line
+- [x] Respect the single-line envelope constraint: `ParseResult` scans stdout backwards for one line
       beginning with `{` and parses that line as a complete document (`ProcessJobExecutor.cs:256-265`).
       There is no chunking or streaming, so a 500-statement script serializes onto one very long
       line. Cap the payload — all failed statements plus the top N by duration — rather than
@@ -984,7 +1009,7 @@ Known long-term costs of that choice, recorded so they are not rediscovered:
       no envelope, and the fallback path returns success with zero rows — so the flight recorder
       would go silently missing on exactly the customised deployments least likely to notice. Warn at
       startup when a template omits it.
-- [ ] Redact or normalize statement text before persisting it. **This is a security requirement, not
+- [x] Redact or normalize statement text before persisting it. **This is a security requirement, not
       a nicety.** `ExecutionMetrics.Sql` is raw statement text and may contain inline literals and
       credentials. The data-quality design deliberately committed to counts-only, never sample values
       (`IJobHistoryStore.cs:125`, `JobDataQualityFailure`); persisting raw SQL into a shared store
