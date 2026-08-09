@@ -62,6 +62,33 @@ remaining work requires the next CodeQL run on `main`.
 
 - [ ] Confirm alert 323 closes on the next `main` scan.
 
+### The sample-scripts gate could never fail
+
+**Fixed (v0.18.0), and it invalidates every previous release's sample evidence.**
+`Test-AllSamples.ps1` printed `FAILED` per script and a red summary count, then fell off the end of
+the script and exited 0. `Invoke-LoggedPhase` judges a phase by `$LASTEXITCODE`, so the "Sample
+scripts" phase reported **Passed** no matter how many samples failed. The POSIX twin
+`test-all-samples.sh` has always had `exit 1`; only the Windows script — the one the gate actually
+runs — was missing it. CI runs no sample lane at all, so nothing else covered this.
+
+Found by running the shipped `samples/03_SQL_Engines/Sqlite_Operations.etlsql` by hand while
+building the lineage cookbook: it failed on a defect dating to the connector's introduction
+(2026-05-29), meaning it shipped broken in v0.14.0 through v0.17.0.
+
+- [x] `Test-AllSamples.ps1` exits non-zero on failure.
+- [x] `-Passes <n>` runs the suite more than once. Sample output is gitignored, so a sample that
+      writes to a persistent store passes on a clean checkout and fails for everyone who runs it
+      twice — one pass structurally cannot see that class of defect. `Test-PreRelease.ps1` now runs
+      the phase with `-Passes 2`; `test-all-samples.sh` takes the same count as its first argument.
+- [x] `Sqlite_Operations.etlsql` made idempotent, and its staging corrected — three
+      `SELECT … INTO #stage` statements read as accumulating but each replaces the table, so the
+      sample had been demonstrating one row of the three it appeared to load.
+- [x] `register_schedule.etlsql` made idempotent. Found by the second pass on its first real run:
+      it registers a schedule and a job in the persistent Orchestrator store with plain `CREATE`,
+      so it succeeded exactly once per machine and failed forever after.
+- [ ] Consider a CI sample lane. The gate is currently the only thing that runs samples, and it is
+      Windows-and-PowerShell only.
+
 ### Automate the MSI in-place upgrade check
 
 Today this is a manual, elevated step in the release checklist, and it is the kind of step that
@@ -656,24 +683,43 @@ catalog, execution path, or migration format.
 
 ## Bugs
 
-- [ ] **SQLite `INSERT INTO <conn>.<table> SELECT` inserts each row twice.** Found while making the
-      lineage cookbook runnable, after fixing the two defects that were masking it (below). On a
-      **fresh** database, `samples/03_SQL_Engines/Sqlite_Operations.etlsql` stages three rows with
-      distinct ids into `#stage`, inserts them once, and fails with
-      `UNIQUE constraint failed: inventory.item_id`.
 
-      Not yet root-caused. The leading hypothesis is that `SqliteDataSource.WriteBatches` enumerates
-      its `IAsyncEnumerable<DataTable>` argument more than once — a re-enumerable source would then
-      be written twice — but that was not confirmed, and it may instead be the INSERT handler
-      invoking the write path twice for a pushdown-capable target. Worth checking whether other
-      database connectors share the shape before fixing it in SQLite alone.
-
-      Reproduce: `rm -f samples/output/local_store.db` then
-      `dotnet run --project src/ETL-SQL.App -- run samples/03_SQL_Engines/Sqlite_Operations.etlsql`.
-
-
-- [ ] **Create a working cookbook recipe for Lineage**  It should be two parts, part one should be data
+- [x] **Create a working cookbook recipe for Lineage**  It should be two parts, part one should be data
   from a flat file into a database with some transformations in the middle.  This is an EDW load.  This
   should also include an export of the Lineage.  Part two would be importing the lineage and taking the 
   table from EDW and making a report from it.  Everything should work and the lineage on the report should
   show the flat file source to the EDW to the report and all transformations that happen between.
+
+      **Done (v0.18.0).** Recipe 28 in [etl-recipes.md](docs/cookbooks/etl-recipes.md), backed by two
+      runnable samples under `samples/04_Orchestration/` that the sample suite exercises. SQLite, so
+      it runs with no infrastructure.
+
+      Writing it as a *runnable* recipe rather than a written one found five defects that reading
+      could not have: the documented tag syntax `expr /* @d: … */ AS alias` was a parse error in
+      every form; `eng.lineage` dropped the transformation on every renamed column (the display
+      dedup preferred the observation carrying the physical path and discarded the one carrying the
+      classification — so the columns most likely to *have* a transformation were exactly the ones
+      that lost it); a `+` chain containing a string literal was classified as arithmetic because
+      the heuristic only inspected the immediate operands of a left-associative parse; the
+      OpenLineage round trip returned a different `transformation_kind` than it was written with,
+      because our 12 kinds map many-to-one onto OpenLineage's subtype vocabulary; and re-recording a
+      hop never filled in the physical identifier the first (pre-connection) observation lacked.
+
+- [ ] **Sweep the samples that fail.** 19 of 195 fail, identically on both passes — see the
+      sample-runner item under the release-process RCI section for why this was invisible until now.
+      Each needs triaging individually: some will be stale syntax, some may be real engine defects.
+      Run `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2` for the current list.
+
+      As of 2026-08-09: `01_deploy_datasets`, `02_report_public_consumer`,
+      `03_report_private_allowed`, `04_report_private_denied`, `05_export_then_publish`,
+      `Batch_Processing`, `Data_Quality_Rules`, `Docker_Aliases`, `append_to_parquet`,
+      `backup_and_report`, `capacity_report`, `daily_failure_digest`, `ddl_dml_sink`,
+      `diagnostics_ssh_sink`, `flatfile_sink`, `golden_workflow.rptsql`, `parameterized_exec_test`,
+      `variables_config_sink`, `window_sink`.
+
+      Two idempotency failures found by the second pass are already fixed:
+      `Sqlite_Operations.etlsql` (fixed primary keys into a persistent database) and
+      `register_schedule.etlsql` (`CREATE SCHEDULE`/`CREATE JOB` into the persistent Orchestrator
+      store — succeeds once, fails every time after). Both now start from a known state. Expect more
+      of this shape: **any sample that writes to a store outside its own session has to be
+      idempotent**, and until now nothing checked.

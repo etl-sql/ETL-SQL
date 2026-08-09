@@ -101,6 +101,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- **Cookbook recipe 28 — end-to-end lineage across two scripts.** A CSV loads into an EDW table
+  through several transformations and exports its lineage; a separate report script, in its own
+  session and with different connection aliases, imports that document and shows the CSV as the
+  origin of every report column, transformations included. Backed by two runnable samples the sample
+  suite exercises, on SQLite so it needs no infrastructure.
+
 - Added a shared load-aware test wait with condition-specific timeout diagnostics and optional JSONL
   timing evidence. Timing-sensitive Portal and Orchestrator slices now use observable waits, CI
   rejects new bare deadline helpers, scheduler tests isolate their throttle databases, and the real
@@ -346,6 +352,42 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- **The sample-scripts release gate could never fail.** `Test-AllSamples.ps1` printed per-script
+  failures and a red summary, then exited 0; the gate judges a phase by its exit code, so the phase
+  reported Passed regardless. The POSIX twin always exited non-zero — only the Windows script the
+  gate actually runs was missing it. Both now fail properly, and both take a pass count: sample
+  output is gitignored, so a sample that writes to a persistent store passes on a clean checkout and
+  fails for anyone who runs it twice, which a single pass structurally cannot detect. The
+  pre-release gate runs two passes.
+- **A tag comment before a column alias was a syntax error.** `amount /* @d: … */ AS total` — the
+  form the lineage reference documents, and the natural reading order — failed to parse for every
+  expression shape; only the trailing placement worked. Tags now attach from either side of the
+  alias and merge when present on both.
+- **`eng.lineage` dropped the transformation on every renamed column.** One hop is observed twice —
+  by static analysis at parse time and by the engine as it executes — and each observation knows
+  something the other does not: only the engine has resolved connections, so the physical source is
+  on its entry, while the classification of the expression is on the analyzer's. Collapsing the two
+  for display picked one and discarded the other, so any column whose name differs from its source
+  lost its transformation — exactly the columns most likely to have one. The observations are now
+  merged rather than chosen between, into a copy, so rendering a chain cannot rewrite the session's
+  recorded lineage. Re-recording a hop also now fills in the physical identifier the earlier
+  pre-connection observation lacked.
+- **`first + ' ' + last` was classified as arithmetic, not string concatenation.** `+` is
+  overloaded and the classifier has no types, so a string literal in the chain is the only evidence
+  available — but it was looked for only in the immediate operands, and a left-associative parse
+  puts it out of reach in any concatenation of more than two parts.
+- **OpenLineage documents read back with a different `transformation_kind` than they were written
+  with.** ETL-SQL's twelve kinds map many-to-one onto OpenLineage's subtype vocabulary
+  (`StringOperation` and `FunctionCall` both become `FUNCTION`), so import could not recover the
+  original. Exports now also carry the exact kind alongside the standard subtype, which standard
+  consumers ignore and our own import prefers.
+- **SQLite connection declaration and pushdown parameter binding.** Declaring a connection probes it
+  for schema, and the columns lookup threw when no table was bound — so `CREATE CONNECTION … AS
+  SQLITE(…)` failed outright against a database with no tables, including every new one. Separately,
+  the query compiler emits `@p0` while the connector registered `$p0`; Microsoft.Data.Sqlite binds
+  by name, so any pushdown carrying a literal was rejected for a missing value. Both date to the
+  connector's introduction, and made the shipped SQLite sample unrunnable in v0.14.0 through
+  v0.17.0.
 - Moved smoke and optional Standard scale certification ahead of the long pre-release test lanes so
   baseline comparisons measure warmed binaries before sustained lane and container activity heats
   or pressures the machine; `Test-PreRelease.ps1 -Explain` reports the same execution order.
