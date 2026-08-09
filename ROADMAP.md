@@ -6,8 +6,9 @@ decomposed in `TODO.md`. Once an initiative is verified, record its notable outc
 entries may be retired when they no longer describe future work. Release-specific detail belongs
 in the release notes under `docs/releases/`.
 
-The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment
-promise are defined in
+The stable deployment-profile topology, provider, binding, state, and authority decisions are defined
+in [`docs/architecture/DeploymentProfiles.md`](docs/architecture/DeploymentProfiles.md). The
+Enterprise operating model and trust hierarchy are defined in
 [`docs/architecture/roadmaps/Enterprise_Platform_Strategy.md`](docs/architecture/roadmaps/Enterprise_Platform_Strategy.md).
 
 ---
@@ -17,7 +18,9 @@ promise are defined in
 ### Platform — Deployment Profiles and Upgrade Certification
 
 Build the profile, portability, and certification program defined in
-[`Deployment_Profile_Strategy.md`](docs/architecture/roadmaps/Deployment_Profile_Strategy.md).
+[`Deployment_Profile_Strategy.md`](docs/architecture/roadmaps/Deployment_Profile_Strategy.md) within
+the stable boundaries defined by
+[`DeploymentProfiles.md`](docs/architecture/DeploymentProfiles.md).
 Treat **Solo / Workstation**, **Team / SME**, **Enterprise / Corporate**, and
 **SaaS / Multi-Organization** as cumulative support profiles rather than editions.
 
@@ -193,6 +196,11 @@ each affects day-to-day use.
 
 ### SaaS Multi-Tenancy — Secure Outbound Data Gateway
 
+**Authoritative design:**
+[`SaaSTenantIsolation.md`](docs/architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway).
+This section tracks delivery and certification; the linked architecture owns the durable Gateway,
+resource-mapping, authority, and protocol decisions.
+
 The SaaS service must reach private databases, file shares, and APIs without inbound firewall
 exceptions, a general-purpose network tunnel, or any possibility that one tenant can address another
 tenant's gateway or resources. The gateway is an outbound-connected, tenant-attested policy
@@ -352,6 +360,11 @@ The feature is not complete until automated certification proves all of the foll
 
 ### SaaS Multi-Tenancy — Isolated Execution Data Plane (OCI + Hardened Sandboxes)
 
+**Authoritative design:**
+[`SaaSTenantIsolation.md`](docs/architecture/SaaSTenantIsolation.md).
+This section tracks delivery and certification; the linked architecture owns tenant context,
+execution isolation, storage, checkpoint, Gateway, capacity, observability, and support boundaries.
+
 ETL-SQL must execute mutually untrusted tenant scripts without allowing code, data, credentials,
 resource consumption, or residual state to cross tenant boundaries. OCI containers are the portable
 workload package, but an ordinary shared-kernel container is not by itself a sufficient security
@@ -510,6 +523,11 @@ The SaaS execution plane is not complete until automated and retained certificat
   Hardened, Dedicated, and self-hosted providers wherever the connector set is supported.
 
 ### SaaS Multi-Tenancy — Tenant Portability & Migration (Export/Import)
+
+**Authoritative design:**
+[`TenantPortability.md`](docs/architecture/TenantPortability.md).
+This section tracks delivery and certification; the linked architecture owns the bundle,
+classification, rebinding, import, cutover, rollback, deletion, and customer-exit contracts.
 
 Customers must be able to enter or leave ETL-SQL SaaS without rewriting their pipeline/report logic
 or depending on provider-owned infrastructure. The guarantee is full-fidelity migration of portable

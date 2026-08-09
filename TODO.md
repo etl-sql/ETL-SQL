@@ -396,8 +396,9 @@ promotion foundation. Do not rebuild those capabilities in SaaS-specific service
 - [ ] Certify that Team is a single-node provider configuration rather than a separate implementation:
       no Team-only parser, evaluator, connector, catalog, UI, checkpoint, or promotion model.
 - [ ] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
-      Managed Dedicated SaaS general availability. The retained migration item below owns the bundle
-      details; this gate owns its release sequencing.
+      Managed Dedicated SaaS general availability. The
+      [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
+      migration contract; this gate owns its release sequencing.
 
 #### Phase B — Managed Dedicated SaaS
 
@@ -419,7 +420,8 @@ promotion foundation. Do not rebuild those capabilities in SaaS-specific service
       proof that a restore cannot introduce another tenant's rows or resume its work.
 - [ ] Gateway: enroll a tenant-owned outbound Gateway, register resources locally, map them through
       tenant-admin `SHARED:` aliases, and prove revocation, local credential custody, typed operations,
-      and SaaS-to-on-premises connectivity before introducing a shared broker registry.
+      and SaaS-to-on-premises connectivity before introducing a shared broker registry. Follow the
+      [SaaS Tenant Isolation Architecture](docs/architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway).
 - [ ] Authoring: controlled tenant ingress and a certified tenant-admin/author boundary within the
       dedicated deployment.
 - [ ] Reports (currently Yellow): certify tenant catalog, dataset, snapshot, share/embed, export, and
@@ -566,7 +568,8 @@ catalog, execution path, or migration format.
       shared-service item.
 - [ ] **Full-Fidelity Tenant Portability Bundle**: unify the existing Portal configuration export,
       Orchestrator promotion package, source artifacts, and optional evidence/content into the one
-      open, versioned, signed, tenant-encrypted format defined in `ROADMAP.md`. Deliver the minimum
+      open, versioned, signed, tenant-encrypted format defined in
+      [`TenantPortability.md`](docs/architecture/TenantPortability.md). Deliver the minimum
       configuration/artifact bundle and SaaS → self-hosted Enterprise proof before Managed Dedicated
       SaaS GA; add large resumable content and incremental deltas later. Deliberately exclude resolved
       secrets, private keys, capabilities, checkpoints, leases, caches, and in-flight work rather

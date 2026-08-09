@@ -3,6 +3,7 @@
 **Status:** Active product strategy
 **Scope:** Enterprise operating model, trust boundaries, adoption path, and control objectives
 **Implementation sequence:** See [`ROADMAP.md`](../../../ROADMAP.md)
+**Deployment-profile architecture:** See [`DeploymentProfiles.md`](../DeploymentProfiles.md)
 **Current implementation:** See [`Docs/Architecture`](..) and the administrator guides
 
 ---

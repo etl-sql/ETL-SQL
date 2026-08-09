@@ -84,6 +84,9 @@ Completed reviews:
 
 ## References
 
+- [Deployment Profile Architecture](../DeploymentProfiles.md)
+- [SaaS Tenant Isolation Architecture](../SaaSTenantIsolation.md)
+- [Tenant Portability Architecture](../TenantPortability.md)
 - [Deployment Profile and Portability Strategy](../roadmaps/Deployment_Profile_Strategy.md)
 - [Release Checklist](../../releases/release-checklist.md)
 - [Enterprise Platform Strategy](../roadmaps/Enterprise_Platform_Strategy.md)

@@ -7,6 +7,9 @@ release evidence
 
 **Implementation sequence:** See [`ROADMAP.md`](../../../ROADMAP.md)
 
+**Authoritative deployment architecture:** See
+[`DeploymentProfiles.md`](../DeploymentProfiles.md)
+
 **Normative current matrix and review contract:** See
 [`Deployment_Profile_Standards.md`](../standards/Deployment_Profile_Standards.md)
 
@@ -14,6 +17,10 @@ release evidence
 [`Enterprise_Platform_Strategy.md`](Enterprise_Platform_Strategy.md),
 [`Test_Strategy.md`](Test_Strategy.md), and
 [`Release_Capability_Matrix.md`](Release_Capability_Matrix.md)
+
+**SaaS subsystem architecture:** See
+[`SaaSTenantIsolation.md`](../SaaSTenantIsolation.md) and
+[`TenantPortability.md`](../TenantPortability.md)
 
 ---
 
@@ -52,16 +59,19 @@ details without protecting the user journey.
 
 ETL-SQL therefore needs both:
 
-- **This strategy and eventual deployment-profile standard** define the supported profiles,
-  invariants, journeys, migration contract, and acceptable product claims.
+- **The deployment-profile architecture** defines the stable topology, provider, resource-binding,
+  state-placement, and authority boundaries.
+- **This strategy** defines adoption journeys, transition workflow, migration goals, and the
+  certification program.
+- **The deployment-profile standard** defines the current capability/evidence matrix and acceptable
+  product claims.
 - **A deployment-profile certification lane** executes representative journeys, validates
   transitions between profiles, and retains evidence for release decisions.
 
 Until the certification lane is built, the requirements in this document are targets rather than
-certified release claims. Once the contract stabilizes in implementation, the normative portions
-should move or be promoted to
-`docs/architecture/standards/Deployment_Profile_Standards.md`; this strategy should then retain
-design history and future phases.
+certified release claims. Current support status belongs in
+`docs/architecture/standards/Deployment_Profile_Standards.md`; this strategy retains adoption,
+migration, certification, and future-phase guidance.
 
 ## 3. Profile Definitions
 
@@ -284,6 +294,10 @@ upgrade. The portability guarantee applies to customer artifacts and eligible me
 turning a customer's workstation database directly into shared SaaS control-plane state.
 
 ## 8. SaaS Is a Distinct Trust Boundary
+
+The authoritative subsystem design is
+[`SaaSTenantIsolation.md`](../SaaSTenantIsolation.md); tenant migration and exit are defined in
+[`TenantPortability.md`](../TenantPortability.md). This section defines the certification strategy.
 
 Workstation through Enterprise is primarily an additive topology and control progression. SaaS adds
 mutually untrusted organizations and therefore requires more than additional servers and

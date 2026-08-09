@@ -1,0 +1,574 @@
+# ETL-SQL SaaS Tenant Isolation Architecture
+
+**Status:** Approved target architecture; Managed Dedicated and Shared SaaS implementation and
+certification remain incremental
+
+**Applies to:** SaaS control planes, execution fleets, tenant storage, persistent sessions,
+on-premises Gateway connectivity, telemetry, support, recovery, and deletion
+
+**Parent architecture:** [Deployment Profile Architecture](DeploymentProfiles.md)
+
+**Implementation sequence:** [Product Roadmap](../../ROADMAP.md)
+
+**Current support evidence:**
+[Deployment Profile Standards](standards/Deployment_Profile_Standards.md)
+
+---
+
+## 1. Decision
+
+ETL-SQL SaaS serves mutually untrusted customer organizations. Tenant isolation is therefore an
+end-to-end system property, not a database filter, container option, or Portal convention.
+
+SaaS is delivered through two topologies that implement the same logical contracts:
+
+1. **Managed Dedicated SaaS** first: an automated tenant-specific Enterprise-style deployment with
+   dedicated database, artifact, key, cache, queue, and worker or hypervisor boundaries.
+2. **Shared SaaS** later: shared tenant-aware control planes and fleets with hardened per-run
+   execution, fair scheduling, metering, and hostile cross-tenant certification.
+
+Managed Dedicated reduces the number of shared boundaries and supplies the first hosted operating
+model. It does not prove Shared SaaS isolation. Shared services are introduced only where demand and
+fleet economics justify their security and operational cost, and every new shared boundary remains
+unsupported until its negative isolation evidence passes.
+
+OCI containers are the portable workload package. An ordinary shared-kernel container is not, by
+itself, the hostile-tenant security boundary. Mutually untrusted SaaS executions require a hardened
+or tenant-dedicated boundary plus defense in depth across identity, scheduling, network, storage,
+secrets, connections, gateways, observability, support, and lifecycle operations.
+
+## 2. Scope and Relationship to Other Documents
+
+This document owns the stable SaaS isolation design:
+
+- Tenant identity propagation and authorization
+- Managed Dedicated and Shared topology boundaries
+- Control-plane and execution-plane separation
+- Execution scheduling, sandbox lifecycle, and persistent checkpoint placement
+- Tenant storage, secrets, keys, queues, caches, audit, and telemetry boundaries
+- Secure outbound access through tenant-owned Gateways
+- Tenant versus platform administrative authority
+- Failure containment and isolation certification
+
+[DeploymentProfiles.md](DeploymentProfiles.md) owns the common four-profile model and provider
+substitution. [TenantPortability.md](TenantPortability.md) owns export/import and customer exit.
+[Enterprise_Platform_Strategy.md](roadmaps/Enterprise_Platform_Strategy.md) owns the Enterprise
+operating foundation reused by hosted deployments. `ROADMAP.md` owns delivery order; `TODO.md` owns
+actionable implementation work.
+
+## 3. Security Outcomes
+
+The architecture must provide the following outcomes even when a tenant controls scripts, data,
+query values, filenames, report definitions, external tool input, and execution timing:
+
+- A tenant cannot discover, address, read, mutate, delay, resume, export, delete, or infer another
+  tenant's resources or activity.
+- A compromised workload cannot reach the host, container runtime, cloud metadata service, control
+  plane, another workload, an unauthorized destination, or broader tenant authority.
+- Platform administration does not implicitly confer tenant-user or tenant-data authority.
+- Tenant administrators can manage their own resources without platform impersonation.
+- On-premises credentials and physical resource definitions remain under on-premises administrator
+  control and are not delivered to SaaS workloads.
+- One tenant's CPU, memory, I/O, network, queue, connector, or storage consumption cannot violate
+  another tenant's isolation or committed availability.
+- Failed, cancelled, retried, resumed, or migrated work cannot publish partial output, duplicate an
+  ambiguous write silently, or reuse stale authority.
+- Tenant deletion and cryptographic erasure cover every tenant-bearing state class subject to
+  documented retention and legal holds.
+
+The design assumes defects may occur in any one layer. Independent checks at the control plane,
+scheduler, storage provider, broker, gateway, and execution boundary prevent a single missing
+controller predicate from becoming cross-tenant access.
+
+## 4. Trust Domains and Actors
+
+| Domain or actor | Authority | Explicitly lacks |
+| :--- | :--- | :--- |
+| **Tenant user** | Tenant-granted access to artifacts, reports, jobs, and governed resources | Authority to choose tenant context, physical placement, platform resources, or other tenants |
+| **Tenant service account** | Bounded nonhuman authority owned by a tenant principal and capped by tenant/platform policy | Human login, unrestricted delegation, or authority beyond its owner and grants |
+| **Tenant administrator** | Tenant catalog, users/groups, aliases, Gateway enrollment, resource approval, grants, policy within platform limits, export/import, and deletion requests | Platform infrastructure administration or local Gateway credentials |
+| **On-premises Gateway administrator** | Gateway installation, local resource registration, local credentials, operation allowlists, and local revocation | Tenant catalog grants, SaaS platform administration, or arbitrary cloud control |
+| **SaaS platform operator** | Fleet health, rollout, capacity, abuse controls, infrastructure recovery, and platform policy | Ambient tenant impersonation, tenant mappings, local credentials, or tenant-content inspection |
+| **Approved support principal** | Time-limited, purpose-bound support capability approved under policy | Standing tenant authority or reusable data-plane credentials |
+| **Execution workload** | One attempt's immutable artifact and short-lived scoped resource capabilities | Reusable platform credentials, tenant selection, broad storage roots, arbitrary network, or scheduler authority |
+
+All exceptional authority is explicit, expiring, least-privileged, and audited. “Platform admin” is
+not a universal bypass role.
+
+## 5. System Topology
+
+```text
+Tenant user/service identity
+          |
+          v
++-----------------------------+
+| SaaS control plane          |
+| auth, tenant catalog, ACL,  |
+| policy, scheduling intent   |
++--------------+--------------+
+               | authorized immutable request
+               v
++-----------------------------+       +-------------------------+
+| Execution Scheduler         |------>| Tenant-scoped storage   |
+| admission, placement,       |       | artifacts/checkpoints/  |
+| quotas, leases, outcomes    |       | results/evidence        |
++--------------+--------------+       +-------------------------+
+               |
+               v
++-----------------------------+       +-------------------------+
+| Ephemeral hardened attempt  |------>| Gateway Broker          |
+| common ETL-SQL runtime      |       | typed scoped operations |
++-----------------------------+       +------------+------------+
+                                                  |
+                                      outbound mTLS session
+                                                  |
+                                      +-----------v-------------+
+                                      | On-premises Gateway     |
+                                      | local resources/secrets |
+                                      +-------------------------+
+```
+
+Managed Dedicated may instantiate these responsibilities inside a tenant-specific deployment.
+Shared SaaS may share control-plane and scheduler services, but every request, lookup, cache, queue,
+lease, object, metric, and support operation remains tenant-scoped below the HTTP/controller layer.
+
+## 6. Tenant Context and Authority Flow
+
+### 6.1 Server-Derived Context
+
+Tenant identity is derived from authenticated server-side authority. It is never accepted from a
+script, hostname, query parameter, route value, request body, Gateway name, resource ID, job ID,
+object key, queue name, or caller-supplied claim without issuer/audience and tenant-binding
+validation.
+
+Every shared entry point resolves:
+
+1. Authenticated principal and issuer
+2. Server-owned tenant membership and active status
+3. Tenant-scoped object identity and ownership
+4. Principal/service-account grant
+5. Tenant and platform policy
+6. Resource binding and capability limits
+
+The resulting authority is passed forward as an internal immutable context. Downstream services
+validate it independently and compare it with their own resource ownership records.
+
+### 6.2 Collision Safety
+
+Shared stores must behave safely when two tenants use the same display name, alias, numeric ID,
+resource name, report name, job name, or object hash. Tenant scope is part of every uniqueness,
+foreign-key, lookup, cache, queue, lease, idempotency, and storage-key decision. Globally unique IDs
+do not replace tenant predicates; they only reduce accidental collision.
+
+### 6.3 Short-Lived Capabilities
+
+The control plane issues attempt- or operation-specific capabilities containing only the necessary
+tenant, actor/service account, run/attempt, resource, operation class, limits, policy/binding
+versions, audience, expiry, and replay protection. The exact serialization is an implementation
+decision; the security properties are not.
+
+Capabilities are:
+
+- Audience-restricted to one service or provider
+- Bound to one tenant, run/attempt, and resource operation
+- Short-lived and non-renewable by the workload
+- Integrity-protected and replay-resistant
+- Invalid after principal, alias, resource, Gateway, policy, or attempt revocation where required
+- Insufficient on their own when downstream resource ownership does not agree
+
+## 7. Control-Plane Isolation
+
+The control plane stores tenant-scoped identity mappings, catalog resources, ownership, ACLs,
+policies, schedules, report metadata, connection aliases, Gateway registrations, quotas, and
+lifecycle operations.
+
+Shared control-plane storage requires:
+
+- Tenant scope enforced in repository/storage APIs below controllers
+- Database constraints or equivalent partition boundaries where practical
+- No unscoped “get by ID” path for tenant-owned records
+- Tenant-aware migrations, backups, point-in-time recovery, and cache rebuilds
+- Tenant-aware job queues, leases, idempotency keys, pagination cursors, and search indexes
+- Separate platform records that cannot be joined into tenant data without an authorized audited
+  support operation
+- Negative tests for identifiers copied between tenants and for missing/altered tenant context
+
+Managed Dedicated can use physically separate stores, but application-level tenant context and
+authorization remain present so the same contracts survive progression to Shared SaaS.
+
+## 8. Execution Data Plane
+
+### 8.1 Provider-Neutral Request
+
+Execution scheduling consumes the common request described by
+[DeploymentProfiles.md](DeploymentProfiles.md#10-execution-and-checkpoint-contract): server-derived
+tenant and principal, immutable artifact hash, run/attempt/session identities, policy and binding
+versions, scoped resources, limits, required isolation tier, deadline, and optional checkpoint.
+
+Cloud vendor, cluster, node, runtime, image location, warm-pool identity, and physical tenant storage
+credentials are provider concerns and do not appear in portable scripts.
+
+### 8.2 Isolation Tiers
+
+| Tier | Minimum boundary | SaaS use |
+| :--- | :--- | :--- |
+| **Hardened** | OCI workload inside a microVM, Hyper-V-isolated container, userspace-kernel sandbox, or independently certified equivalent | Default minimum for mutually untrusted tenants in shared fleets |
+| **Dedicated** | Tenant-dedicated hardened worker pool, nodes, VM set, or cluster | Managed Dedicated, regulated/high-assurance tenants, or reserved large-tenant capacity |
+
+Local and Standard tiers remain useful in Solo, Team, and trusted Enterprise environments but do
+not satisfy the shared hostile-tenant SaaS boundary.
+
+### 8.3 Per-Attempt Lifecycle
+
+1. The control plane authenticates the actor, resolves the tenant and immutable artifact, and
+   authorizes logical resources.
+2. The scheduler admits work against tenant and fleet capacity, fences an attempt ID, selects a
+   compliant provider/tier, and creates short-lived workload identity.
+3. A pristine sandbox receives only the exact artifact, scoped handles, limits, runtime contract,
+   and optional authorized checkpoint.
+4. The engine executes with bounded scratch/spill storage and default-deny network policy.
+5. Outputs are staged and committed only through authorized connector/storage operations.
+6. The scheduler reconciles terminal or ambiguous outcomes, revokes authority, and destroys the
+   sandbox and writable storage.
+
+Scheduled jobs receive a fresh sandbox per attempt. A generic sandbox may be pre-booted, but once
+tenant material enters it the sandbox is single-use. Interactive sandboxes may survive briefly only
+while bound to the same tenant, authenticated session, artifact, and policy, with a hard lifetime.
+
+### 8.4 Sandbox Baseline
+
+- Minimal read-only signed image and locked dependencies
+- Non-root workload identity, dropped capabilities, restricted syscalls, no privileged mode
+- No host devices, runtime socket, host paths, control-plane credentials, or cloud metadata access
+- Default-deny ingress and egress
+- Bounded encrypted scratch and spill storage unique to the attempt
+- Bounded CPU, memory, processes/threads, I/O, network, rows, bytes, duration, and connector use
+- Just-in-time scoped secret/resource authority kept out of checkpoints, environment exports, crash
+  dumps, logs, and images
+- Destructive cleanup and retained audit of image digest, runtime, isolation tier, host policy, and
+  terminal outcome
+
+Tenant-authored native extensions or external command tools, if permitted, require separately
+approved immutable artifacts and capability profiles and run only in Hardened or Dedicated isolation.
+They are disabled by default in SaaS.
+
+## 9. Persistent Sessions and Checkpoint Resume
+
+A failed job session may remain resumable for the configured retention window—currently up to seven
+days by default—without keeping its container alive. Process lifetime and recovery lifetime are
+separate.
+
+At each completed top-level named checkpoint, the engine serializes resumable logical state to
+tenant-scoped durable storage. A replacement sandbox on another worker rehydrates that state and
+resumes from the last completed author-declared label, never an arbitrary instruction pointer.
+
+Conceptual storage ownership is:
+
+```text
+tenant/{server-owned-tenant-id}/sessions/{server-owned-session-id}/
+  authenticated manifest
+  metadata
+  encrypted state chunks
+  checkpoint outcome
+```
+
+The path is illustrative; providers may use database rows or object keys. A workload receives a
+scoped handle to one checkpoint, never credentials or a mount covering a tenant root.
+
+Checkpoint state may contain permitted variables, `#temp` schemas and encrypted chunks, lineage
+state, logical connection aliases, and the last completed label. It excludes live sockets, open
+transactions, processes, leases, resolved secrets, and reusable capabilities.
+
+Every checkpoint records tenant, original run, session, label, artifact hash, engine/checkpoint
+schema version, policy and binding versions, key version, timestamps, expiry, and content hashes. It
+is authenticated and envelope-encrypted with a per-session data key protected by tenant key
+authority.
+
+Resume reauthorizes the principal, policy, logical connections, Gateway resources, and checkpoint
+access. It fails closed on mismatch, revocation, expiry, incompatible versions, corrupt content, or
+an unsafe ambiguous external write. Retrying from a checkpoint may replay work after the checkpoint;
+authors and connectors must use transactions, staging, idempotency, or duplicate-safe operations.
+
+## 10. Tenant Storage, Keys, and Secrets
+
+### 10.1 Storage Scope
+
+Tenant identity is part of every artifact path/object key, checkpoint, result, dataset, report
+snapshot, spill object, cache key, queue entry, lineage/quality index, quarantine record, export,
+backup, and deletion marker.
+
+Storage access is granted through narrow capabilities. A sandbox cannot enumerate a tenant root or
+shared bucket. Path canonicalization, symlink handling, archive extraction, object-prefix validation,
+and provider redirects are checked after resolution and before I/O.
+
+Dedicated stores reduce collision risk but do not remove application authorization. Shared stores
+require negative tests against tenant swaps, equal object names, stale cache entries, backup/restore,
+and index rebuild.
+
+### 10.2 Key and Secret Separation
+
+- Resolved secret values and private keys never enter scripts, manifests, execution images,
+  checkpoints, logs, or ordinary portability exports.
+- Managed Dedicated uses a disjoint tenant provider/key namespace.
+- Shared SaaS derives provider namespace and key context from server-owned tenant authority and
+  proves tenant/key/version separation.
+- Data keys are scoped to their artifact/session purpose and protected by tenant key authority.
+- Rotation and revocation are versioned and audited; resume and retry do not revive a revoked value.
+- Platform credentials used to operate storage or key infrastructure do not become workload or
+  support credentials.
+
+## 11. Secure Outbound Data Gateway
+
+### 11.1 Boundary
+
+The on-premises Gateway allows SaaS to reach approved private databases, file roots, and APIs without
+inbound firewall exceptions or a general-purpose tunnel. It is an outbound-connected,
+tenant-attested policy enforcement point—not a VPN, SOCKS proxy, raw TCP relay, remote shell, or
+cloud-configurable arbitrary host/port forwarder.
+
+Deliver tenant-admin enrollment, resource catalog, local enforcement, and typed operations first in
+Managed Dedicated. Add a shared Gateway Broker registry and routing plane only with Shared SaaS
+certification.
+
+### 11.2 Logical Resource Mapping
+
+Scripts reference governed logical connection aliases; they do not select a Gateway or physical
+network address. Within server-derived tenant context, the catalog resolves the alias to either:
+
+- A **direct binding** for a resource the execution plane may reach directly; or
+- A **Gateway binding** containing connector type and immutable Gateway/resource IDs, with no
+  cloud-side physical endpoint or credential.
+
+Example resolution:
+
+```text
+tenant connection alias:  sales_prod
+  -> tenant Gateway:       hq-gateway
+  -> registered resource:  corp-sql-sales
+  -> Gateway-local target: MSSQL myserver:1433 / Sales
+  -> Gateway-local secret: sales-etl-credential
+```
+
+The script knows only `sales_prod`. Promotion changes the target environment's binding, not the
+script. There is no script option that requests Gateway routing or an automatic local bypass.
+
+### 11.3 Administrative Workflow
+
+1. A tenant administrator creates a one-time Gateway enrollment in the Portal.
+2. An on-premises administrator installs the Gateway, consumes enrollment once, and establishes a
+   unique asymmetric workload identity with short-lived rotated credentials.
+3. The on-premises administrator registers typed resources with stable IDs, local credential
+   references, allowed operations, and limits. Discovery can propose but never approve a resource.
+4. The Gateway publishes bounded non-secret metadata and health to the tenant catalog.
+5. A tenant administrator maps an online tenant-owned Gateway resource to a logical alias and grants
+   tenant groups or service accounts use. No grant means deny.
+6. Runs record tenant, actor/service account, alias, Gateway/resource IDs, operation class, policy
+   version, counts, result, and correlation ID without secrets or sensitive payloads.
+7. Tenant or on-premises administrators can disable aliases/resources or revoke the Gateway. New
+   work fails immediately; cached authority is invalidated and in-flight behavior follows policy.
+
+Platform operators receive aggregate service health but cannot create tenant mappings, approve local
+destinations, read local credentials, or grant themselves resource use.
+
+### 11.4 Gateway Runtime
+
+The Gateway:
+
+- Runs as a hardened Windows service or Linux systemd daemon with minimal local identity.
+- Initiates outbound-only mutually authenticated TLS over HTTPS-compatible transport.
+- Resolves local credentials and executes bounded typed connector operations.
+- Enforces immutable resource ID, connector/operation type, database/catalog or canonical path,
+  API origin, concurrency, row, byte, and time policy.
+- Revalidates DNS and canonical paths at operation time to block rebinding and traversal.
+- Never evaluates ETL-SQL scripts or accepts arbitrary socket, shell, path, or protocol forwarding.
+
+The shared Gateway Broker, when introduced, is a dedicated data-plane service. It authenticates
+Gateway sessions, maintains a tenant-scoped registry, routes typed streams, meters traffic, applies
+backpressure, and isolates queues, buffers, caches, temporary state, retry ledgers, logs, traces, and
+metrics by tenant and operation.
+
+Routing occurs only when execution tenant, capability tenant, Gateway identity tenant, catalog
+binding, resource ownership, actor grant, and policy version agree. Containers receive a typed
+operation handle, never reusable tunnel authority.
+
+### 11.5 Typed Operation Protocol
+
+Prefer bidirectional gRPC streaming over HTTPS, with a typed WebSocket transport only where required
+by restrictive proxies. Both implement one versioned operation model.
+
+- Database operations carry bounded connector-specific query/parameter requests and typed row batches.
+- File operations address registered roots/resources and stream bounded content.
+- API operations address registered origins and allowed operation shapes.
+- Deadlines, cancellation, bounded buffering, flow control, maximum request/response sizes, and
+  concurrency limits are mandatory.
+- Reconnect uses operation IDs and a durable outcome ledger. Ambiguous writes are never retried
+  blindly or reported as safely failed.
+
+## 12. Network Egress
+
+SaaS workloads have default-deny ingress and egress. Policy may authorize only the exact connector,
+object-storage, telemetry, control-plane, or Gateway Broker destinations required by the attempt.
+
+Controls block:
+
+- Cloud metadata and instance identity services
+- Hosting control-plane and internal management networks
+- Container runtime and node services
+- Other tenant/service discovery ranges
+- Unregistered hosts, ports, protocols, redirects, and alternate address forms
+- DNS rebinding and policy changes that would widen an existing run silently
+
+Network allowlisting supplements resource authorization; reachability alone never grants connector
+or Gateway access.
+
+## 13. Capacity and Noisy-Neighbor Boundary
+
+Admission and runtime enforcement cover tenant and global limits for:
+
+- Queued/running jobs and interactive sessions
+- CPU, memory, processes, threads, and execution time
+- Scratch/spill bytes, storage IOPS, and retained artifacts
+- Network bytes and Gateway throughput
+- Rows, result bytes, and connector concurrency
+- Queue depth, retry rate, and support/export operations
+
+Scheduling provides fair or weighted admission plus global reserve capacity. One tenant exhausting
+its allocation cannot starve, evict, or degrade another tenant's committed capacity. Dedicated
+placement never silently falls back to shared placement, and Hardened requirements never silently
+fall back to Standard isolation.
+
+## 14. Observability, Audit, and Support
+
+Logs, traces, metrics, profiles, health responses, diagnostics, billing records, and support bundles
+are potential data-exfiltration paths and carry explicit tenant/data classification.
+
+- Tenant views contain only tenant-scoped operational evidence.
+- Platform views default to aggregate infrastructure health and do not expose scripts, parameters,
+  connection targets, filenames, row values, or tenant secrets.
+- Shared metric labels avoid unbounded tenant-controlled values and content-bearing dimensions.
+- Raw support access is separately authorized, purpose-bound, time-limited, redacted where possible,
+  and audited as data access.
+- Tenant-complete audit and platform-operator audit are separate but correlatable by non-secret
+  operation IDs.
+- Metering uses tenant-scoped counts and resource measures; it never becomes execution authority or
+  a payload inspection service.
+
+## 15. Availability, Upgrade, and Recovery
+
+- Attempts use monotonic identities, durable leases, fencing, cancellation, deadlines, and a durable
+  outcome ledger so restarts cannot create two owners.
+- Fleet upgrades verify image/runtime/checkpoint compatibility, drain workloads, and retain rollback.
+- Gateway upgrades are signed, version-windowed, staged, and drain before identity or protocol change.
+- Backup and restore preserve tenant boundaries. A restore, point-in-time recovery, or index rebuild
+  cannot introduce another tenant's rows, keys, queues, or resumable sessions.
+- Managed Dedicated lifecycle includes automated provisioning, upgrade, fence/drain, support,
+  portability export, deletion, and recovery without manual platform database edits.
+- Shared SaaS rollout is tenant-aware and cannot violate Dedicated reservations or isolation tiers.
+
+## 16. Failure and Outcome Semantics
+
+The system distinguishes script failure, policy denial, quota exhaustion, connector failure,
+sandbox/runtime failure, lost worker, cancellation, Gateway disconnect, and ambiguous external
+outcome. These states are durable and tenant-scoped.
+
+Successful publication uses staged or transactional commit where supported. Sandbox death cannot
+publish an incomplete artifact or checkpoint. Retry is bounded and operation-aware. For an ambiguous
+write, the system reconciles with connector/Gateway outcome evidence or requires operator action; it
+does not assume failure and issue a duplicate write.
+
+## 17. Certification Contract
+
+### 17.1 Cross-Tenant Isolation
+
+Negative tests attempt to cross tenant boundaries through:
+
+- Authentication, object IDs, aliases, pagination cursors, and caller-supplied tenant values
+- Database records, migrations, backups, restores, and search/index rebuild
+- Artifacts, paths, object prefixes, archives, symlinks, caches, checkpoints, spill, and results
+- Queues, schedules, leases, attempts, retries, notifications, and idempotency ledgers
+- Secrets, keys, connections, Gateways, operation capabilities, and network destinations
+- Reports, datasets, snapshots, embeds, shares, subscriptions, lineage, quality, and quarantine
+- Logs, metrics, traces, billing, diagnostics, health, exports, deletion, and support tooling
+
+Known foreign tenant IDs, equal logical/numeric IDs, stale capabilities, malformed authority,
+revocation, races, and restore/failover paths must fail safely without confirming foreign existence.
+
+### 17.2 Sandbox and Residue
+
+Tests prove a hostile workload cannot reach the host/runtime/metadata/control plane or another
+workload, and that later assignments cannot observe filesystem, memory, environment, DNS, network,
+cache, or metadata residue. Forced termination, node loss, cancellation, and resume leave no reusable
+tenant authority.
+
+### 17.3 Gateway
+
+Tests cover mismatched Gateway tenant identity, known foreign Gateway/resource IDs, capability
+alteration/replay/expiry/revocation, arbitrary destinations, DNS rebinding, path traversal, symlink
+escape, unregistered databases/shares/origins, limit overruns, disconnect/reconnect, broker restart,
+Gateway restart, failover, and ambiguous writes.
+
+### 17.4 Capacity and Operations
+
+CPU, memory, I/O, storage, network, queue, connector, Gateway, export, and support exhaustion by one
+tenant remains within quota. Upgrade, restore, support, and deletion operations preserve isolation.
+
+Certification evidence records source commit, exact topology, provider/runtime versions, isolation
+tier, scenario IDs, negative outcomes, cleanup, and artifact references. Managed Dedicated and Shared
+results are reported separately.
+
+## 18. Rejected Alternatives
+
+- **Enterprise with a tenant column is enough** — rejected because queues, caches, storage, keys,
+  workers, telemetry, support, restore, and deletion also cross tenant boundaries.
+- **Ordinary containers are sufficient** — rejected as the sole hostile-tenant boundary because they
+  share the host kernel.
+- **Gateway as VPN or raw relay** — rejected because workloads could choose arbitrary destinations
+  and protocols.
+- **Platform admin as tenant superuser** — rejected because infrastructure and customer-data
+  authority are separate.
+- **Container-local seven-day sessions** — rejected because it preserves compromised processes,
+  wastes capacity, and prevents portable resumption. Checkpoints are durable tenant artifacts.
+- **Client-side tenant filtering** — rejected because presentation is never an authorization boundary.
+- **Shared SaaS claim inferred from Dedicated evidence** — rejected because the shared attack surface
+  is materially different.
+
+## 19. Open Implementation Decisions
+
+- The first hardened sandbox provider for each supported host platform
+- Execution Scheduler service/project ownership and provider API shape
+- Shared storage partitioning choices by state class
+- Capability serialization, signing, rotation, and revocation mechanism
+- Preferred Gateway protocol implementation and compatibility window
+- Default quota, retention, support-approval, and in-flight revocation policies
+- Exact automated deletion and backup-expiry mechanisms by provider
+- Which Dedicated services become shared first after demand evidence
+
+These decisions may change providers or operations but cannot weaken the invariants above.
+
+## 20. Definition of Done
+
+The SaaS tenant-isolation architecture is realized when:
+
+1. Managed Dedicated completes tenant provisioning, delegated administration, Gateway connectivity,
+   execution, checkpoint resume, reporting, support, metering, recovery, export, and deletion with
+   current topology-specific evidence.
+2. Platform administrators cannot implicitly impersonate tenant users or acquire tenant resource
+   authority.
+3. Tenant administrators can manage tenant-owned mappings and grants while on-premises administrators
+   retain physical destination and credential control.
+4. Failed persistent jobs resume in a different sandbox from an authorized named checkpoint without
+   retaining the failed process or stale secrets.
+5. Shared SaaS passes hostile cross-tenant certification across every shared state, execution,
+   network, Gateway, observability, support, restore, capacity, and deletion boundary.
+6. One tenant's resource exhaustion remains within its quota and cannot violate another tenant's
+   committed isolation or placement.
+7. Release claims name Managed Dedicated or Shared explicitly and link current commit-bound evidence.
+
+## References
+
+- [Deployment Profile Architecture](DeploymentProfiles.md)
+- [Tenant Portability Architecture](TenantPortability.md)
+- [Deployment Profile Standards](standards/Deployment_Profile_Standards.md)
+- [Enterprise Platform Strategy](roadmaps/Enterprise_Platform_Strategy.md)
+- [Product Roadmap](../../ROADMAP.md)
+- [Administration](../administration/README.md)

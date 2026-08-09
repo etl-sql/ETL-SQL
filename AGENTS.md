@@ -119,7 +119,7 @@ The platform now includes shipped enterprise operations features. When generatin
 - **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
 - **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
 
-For production configuration details, use **[Administration](docs/guides/administration.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
+For production configuration details, use **[Administration](docs/guides/administration.md)** as the source of truth. For the stable Solo/Team/Enterprise/SaaS topology, provider, binding, state, and authority model, use **[DeploymentProfiles.md](./docs/architecture/DeploymentProfiles.md)**. For the long-term enterprise operating model, use **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
 
 ---
 
@@ -246,6 +246,9 @@ Use this map to find the right document for any task.
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
 | Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
 | Orchestrator job operations | **[Job Orchestration](docs/guides/job-orchestration.md)** |
+| Deployment profiles, portability boundaries, and SaaS topology | **[Deployment Profile Architecture](./docs/architecture/DeploymentProfiles.md)** |
+| SaaS tenant isolation, hardened execution, checkpoints, and outbound Gateway | **[SaaS Tenant Isolation Architecture](./docs/architecture/SaaSTenantIsolation.md)** |
+| Tenant export/import, rebinding, cutover, and SaaS exit | **[Tenant Portability Architecture](./docs/architecture/TenantPortability.md)** |
 | Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](./docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
 
 ### Contributing Engine Code
