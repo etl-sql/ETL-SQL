@@ -597,6 +597,22 @@ catalog, execution path, or migration format.
 
 ## Bugs
 
+- [ ] **SQLite `INSERT INTO <conn>.<table> SELECT` inserts each row twice.** Found while making the
+      lineage cookbook runnable, after fixing the two defects that were masking it (below). On a
+      **fresh** database, `samples/03_SQL_Engines/Sqlite_Operations.etlsql` stages three rows with
+      distinct ids into `#stage`, inserts them once, and fails with
+      `UNIQUE constraint failed: inventory.item_id`.
+
+      Not yet root-caused. The leading hypothesis is that `SqliteDataSource.WriteBatches` enumerates
+      its `IAsyncEnumerable<DataTable>` argument more than once — a re-enumerable source would then
+      be written twice — but that was not confirmed, and it may instead be the INSERT handler
+      invoking the write path twice for a pushdown-capable target. Worth checking whether other
+      database connectors share the shape before fixing it in SQLite alone.
+
+      Reproduce: `rm -f samples/output/local_store.db` then
+      `dotnet run --project src/ETL-SQL.App -- run samples/03_SQL_Engines/Sqlite_Operations.etlsql`.
+
+
 - [ ] **Create a working cookbook recipe for Lineage**  It should be two parts, part one should be data
   from a flat file into a database with some transformations in the middle.  This is an EDW load.  This
   should also include an export of the Lineage.  Part two would be importing the lineage and taking the 

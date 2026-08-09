@@ -348,8 +348,13 @@ namespace ETL_SQL.Connectors.Sqlite
 
         public async Task<IEnumerable<string>> GetColumnsAsync(CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(_tableName))
-                throw new ExecutionException("No table specified for SQLite columns lookup.");
+            // A connection-level data source has no table yet, and declaring a connection probes it
+            // for schema. Throwing here made CREATE CONNECTION ... AS SQLITE(...) fail outright
+            // whenever the database had no table to bind to — including on a brand-new file, which
+            // is the normal way to start. SQL Server and PostgreSQL both return nothing in this
+            // position; SQLite was the outlier. Reading or writing without a table is still an
+            // error, because those genuinely need one.
+            if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
             return await GetColumnsAsync(_tableName, cancellationToken);
         }
 
@@ -464,10 +469,15 @@ namespace ETL_SQL.Connectors.Sqlite
 
                 if (parameters != null)
                 {
+                    // Must match the names in the SQL, which the query compiler emits as @p0, @p1…
+                    // Microsoft.Data.Sqlite accepts either prefix, but it binds by name: parameters
+                    // registered as $p0 against SQL saying @p0 simply never bind, and the provider
+                    // then rejects the command for a missing value. Any pushdown carrying a literal
+                    // — a WHERE with a constant is enough — failed on that mismatch.
                     int idx = 0;
                     foreach (var val in parameters)
                     {
-                        cmd.Parameters.Add(new SqliteParameter($"$p{idx++}", val ?? DBNull.Value));
+                        cmd.Parameters.Add(new SqliteParameter($"@p{idx++}", val ?? DBNull.Value));
                     }
                 }
 
