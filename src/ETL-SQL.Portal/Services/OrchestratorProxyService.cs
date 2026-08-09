@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Security.Claims;
 using ETL_SQL.Portal.Models;
 
 namespace ETL_SQL.Portal.Services;
@@ -12,8 +13,24 @@ namespace ETL_SQL.Portal.Services;
 public class OrchestratorProxyService(
     HttpClient http,
     OrchestratorSettingsService settings,
-    ILogger<OrchestratorProxyService> logger)
+    ILogger<OrchestratorProxyService> logger,
+    // Optional: background work (alert evaluation, subscription delivery) has no HTTP context and
+    // therefore no human to attribute, which is a legitimate state rather than a missing dependency.
+    IHttpContextAccessor? httpContext = null)
 {
+    /// <summary>
+    /// Carries the human who initiated a proxied action so the Orchestrator's own logs name them
+    /// rather than the shared service key.
+    ///
+    /// <para><b>Attribution, never authorization.</b> The Orchestrator authorizes on
+    /// <c>X-Orchestrator-Key</c> alone. This header is written by the Portal after its own
+    /// authorization has already passed, and anything reading it must treat it as a label — a
+    /// caller that can reach the Orchestrator directly can set it to any value, so trusting it for
+    /// access decisions would convert a shared secret into an impersonation vector. Federating a
+    /// verifiable identity is a separate, deliberately gated piece of work.</para>
+    /// </summary>
+    public const string ActorHeader = "X-Orchestrator-Actor";
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(settings.ApiUrl);
 
     public async Task<bool> IsOnlineAsync()
@@ -158,12 +175,38 @@ public class OrchestratorProxyService(
         var key = settings.ApiKey;
         if (!string.IsNullOrEmpty(key))
             req.Headers.TryAddWithoutValidation("X-Orchestrator-Key", key);
+
+        var actor = CurrentActor();
+        if (actor is not null)
+            req.Headers.TryAddWithoutValidation(ActorHeader, actor);
         if (version.HasValue)
             req.Headers.TryAddWithoutValidation("If-Match", OptimisticConcurrency.ToETag(version.Value));
         if (body is not null)
             req.Content = JsonContent.Create(body);
 
         return await http.SendAsync(req, cancellationToken);
+    }
+
+    /// <summary>
+    /// The signed-in principal as "id:username", or null for background work with no user. Header
+    /// values must stay single-line ASCII, so anything unexpected in the name is dropped rather
+    /// than smuggled into the Orchestrator's logs.
+    /// </summary>
+    private string? CurrentActor()
+    {
+        var user = httpContext?.HttpContext?.User;
+        if (user?.Identity?.IsAuthenticated != true) return null;
+
+        var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var name = user.FindFirstValue(ClaimTypes.Name) ?? user.Identity.Name;
+        if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(name)) return null;
+
+        var safeName = new string((name ?? "")
+            .Where(c => c is >= (char)0x20 and < (char)0x7F && c != ':')
+            .Take(64)
+            .ToArray());
+
+        return $"{id}:{safeName}";
     }
 
     // ── Private raw-deserialization types ─────────────────────────────────────

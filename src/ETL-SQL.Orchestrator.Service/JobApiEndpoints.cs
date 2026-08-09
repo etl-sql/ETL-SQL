@@ -799,7 +799,8 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("getLineageHistoryProtectedDataSuggestions");
 
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
-                SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg) =>
+                SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg,
+                ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
@@ -808,11 +809,14 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!triggered)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
+                logger.LogInformation(
+                    "Job {JobName} triggered out of schedule by {Actor}.", unescaped, RequestActor(ctx));
                 return Results.Accepted(uri: (string?)null, value: new { Message = $"Job '{unescaped}' queued for immediate execution." });
             }).WithName("triggerScheduledJob");
 
             app.MapPost("/api/scheduled-jobs/{name}/kill", async (HttpContext ctx, string name,
-                IJobManager jobManager, IJobHistoryStore store, IConfiguration cfg) =>
+                IJobManager jobManager, IJobHistoryStore store, IConfiguration cfg,
+                ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
@@ -823,6 +827,10 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = $"No running instance of job '{name}' found." });
 
                 var killed = jobManager.KillJob(running.Id);
+                if (killed)
+                    logger.LogWarning(
+                        "Job {JobName} (historyId={HistoryId}) killed by {Actor}.",
+                        unescaped, running.Id, RequestActor(ctx));
                 return killed
                     ? Results.Ok(new { Message = $"Job '{unescaped}' (historyId={running.Id}) kill signal sent." })
                     : Results.Problem($"Kill signal for history entry {running.Id} did not match a running job.");
@@ -1002,6 +1010,27 @@ namespace ETL_SQL.Orchestrator.Service
                 _cachedConfigFingerprint = fingerprint;
                 _configInitialized = true;
             }
+        }
+
+        /// <summary>
+        /// The human the Portal says initiated this request, or "service" when none was supplied.
+        ///
+        /// <para><b>Attribution only.</b> Authorization is decided entirely by
+        /// <c>X-Orchestrator-Key</c>. Anyone able to reach this API can set this header to any
+        /// value, so it must never influence an access decision — doing so would turn a shared
+        /// secret into an impersonation vector. It exists so a privileged action taken through the
+        /// Portal names a person in the log instead of the service key.</para>
+        /// </summary>
+        internal static string RequestActor(HttpContext ctx)
+        {
+            if (!ctx.Request.Headers.TryGetValue("X-Orchestrator-Actor", out var actor)) return "service";
+            var value = actor.ToString();
+            if (string.IsNullOrWhiteSpace(value)) return "service";
+
+            // Log-forging guard: a header is caller-controlled, so strip anything that could break
+            // out of the line it is written on.
+            var safe = new string(value.Where(c => c is >= (char)0x20 and < (char)0x7F).Take(96).ToArray());
+            return safe.Length == 0 ? "service" : safe;
         }
 
         private static bool ApiKeyDenied(HttpContext ctx, IConfiguration cfg)

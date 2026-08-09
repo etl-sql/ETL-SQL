@@ -74,9 +74,7 @@ public class OrchestratorController(
         }
         if (!string.IsNullOrEmpty(req.ScriptText))
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            int? userId = uid is not null && int.TryParse(uid, out var id) ? id : null;
-            await audit.LogAsync(userId, "JobScriptEdited", "Job", name, null);
+            await audit.LogAsync(CurrentUserId, "JobScriptEdited", "Job", name, null);
         }
         return NoContent();
     }
@@ -104,6 +102,10 @@ public class OrchestratorController(
         return Ok(history);
     }
 
+    /// <summary>The signed-in principal, for audit attribution.</summary>
+    private int? CurrentUserId =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
     [HttpPost("jobs/{name}/trigger")]
     public async Task<IActionResult> TriggerJob(string name)
     {
@@ -114,6 +116,12 @@ public class OrchestratorController(
             var body = await resp.Content.ReadAsStringAsync();
             return StatusCode((int)resp.StatusCode, body);
         }
+
+        // Audited only on success, and at the Portal edge: the Orchestrator is reached with a
+        // shared service key, so this is the only place that knows which human clicked. Triggering
+        // a job out of schedule is a privileged act whether it was done from the triage board or
+        // one job at a time, and only the former was recorded.
+        await audit.LogAsync(CurrentUserId, "JobTriggered", "Job", name, null);
         return Accepted();
     }
 
@@ -153,8 +161,7 @@ public class OrchestratorController(
         if (names.Count > MaxRerunBatch)
             return BadRequest(new { Error = $"At most {MaxRerunBatch} jobs may be re-run in one request." });
 
-        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        int? userId = uid is not null && int.TryParse(uid, out var id) ? id : null;
+        var userId = CurrentUserId;
 
         var results = new List<TriageRerunResultDto>(names.Count);
         foreach (var name in names)
@@ -191,6 +198,10 @@ public class OrchestratorController(
             var body = await resp.Content.ReadAsStringAsync();
             return StatusCode((int)resp.StatusCode, body);
         }
+
+        // Killing a running job destroys in-flight work; it should never be the one privileged
+        // Orchestrator action with no record of who did it.
+        await audit.LogAsync(CurrentUserId, "JobKilled", "Job", name, null);
         return Ok();
     }
 

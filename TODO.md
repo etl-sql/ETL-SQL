@@ -850,10 +850,24 @@ read grant afterwards is a migration rather than a definition.
       "may this principal trigger job X" and "may they override its variables" are two questions.
       Triage P2 is safe under `OrchestratorAccess` for a single-team Team deployment; a shared or
       multi-team Orchestrator needs this first.
-- [ ] Preserve the clicking principal across the Portal→Orchestrator proxy boundary. The Portal
-      proxies with the shared key, so a bulk re-run of 27 jobs from the triage inbox currently audits
-      as the service rather than the human who clicked — the Portal knows the actor and drops it.
-      Worth capturing at the Portal edge even before federated identity exists.
+- [x] Preserve the clicking principal across the Portal→Orchestrator proxy boundary.
+
+      **The premise was stale, and the real gap was worse.** Checked against the code rather than
+      taken as written: the bulk triage re-run (`OrchestratorController.RerunFromTriage`) *already*
+      attributed each job to the signed-in user, with a comment explaining why it is per job rather
+      than per batch. What had no record at all was the **single-job** `trigger` and `kill` — the
+      paths an operator actually uses one at a time. Both are now audited at the Portal edge, which
+      is the only place that knows the human, since the Orchestrator is reached with a shared key.
+
+      The actor is also forwarded to the Orchestrator as `X-Orchestrator-Actor` so its own log names
+      a person instead of the service key. **Attribution, never authorization** — the header is
+      caller-controlled, so treating it as an access input would turn a shared secret into an
+      impersonation vector. That is asserted by negative tests, and stated in both the header
+      constant and the reader, because it is exactly the kind of thing a later change would
+      "helpfully" start trusting. Federating a verifiable identity remains the gated item above.
+
+      Log-forging was handled at both ends: the value is stripped of control characters and length
+      capped before it reaches a log line.
 - [ ] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
 - [ ] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
 - [ ] Add negative tests proving a reachable Orchestrator does not imply authority over another
