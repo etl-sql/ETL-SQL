@@ -21,6 +21,17 @@ Statements are the top-level actions in an ETL-SQL script.
 | `TRUNCATE` | DML | [Statement Reference](reference/statements/README.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
 | `GENERATE CALENDAR` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
 | `TRANSFORM` | Data Prep | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
+| `DATA QUALITY RULES` | DML | [Statement Reference](reference/statements/README.md) | [DATA QUALITY RULES](reference/statements/dml/data-quality-rules.md) |
+| `TRANSFORM` | DML | [Statement Reference](reference/statements/README.md) | [TRANSFORM](reference/statements/dml/transform.md) |
+| `DEDUPLICATE` | Transform | [Transform](reference/transform/deduplicate.md) | [deduplicate.md](reference/transform/deduplicate.md) |
+| `FILL_DATES` | Transform | [Transform](reference/transform/fill_dates.md) | [fill_dates.md](reference/transform/fill_dates.md) |
+| `INTERPOLATE` | Transform | [Transform](reference/transform/interpolate.md) | [interpolate.md](reference/transform/interpolate.md) |
+| `NORMALIZE` | Transform | [Transform](reference/transform/normalize.md) | [normalize.md](reference/transform/normalize.md) |
+| `PERIOD_COMPARISON` | Transform | [Transform](reference/transform/period_comparison.md) | [period_comparison.md](reference/transform/period_comparison.md) |
+| `PIVOT` | Transform | [Transform](reference/transform/pivot.md) | [pivot.md](reference/transform/pivot.md) |
+| `ROLLING_AGGREGATE` | Transform | [Transform](reference/transform/rolling_aggregate.md) | [rolling_aggregate.md](reference/transform/rolling_aggregate.md) |
+| `SHARE_OF_TOTAL` | Transform | [Transform](reference/transform/share_of_total.md) | [share_of_total.md](reference/transform/share_of_total.md) |
+| `TOP_N_OTHERS` | Transform | [Transform](reference/transform/top_n_others.md) | [top_n_others.md](reference/transform/top_n_others.md) |
 | `COMPARE DATASETS` | Data Prep / CDC | [Data Prep Helpers](reference/statements/data-prep.md) | [data-prep.md](reference/statements/data-prep.md) |
 | `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
@@ -57,6 +68,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PARALLEL` | Orchestration | [Statement Reference](reference/statements/README.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
 | `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
 | `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
+| `ASSERT JOB` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT JOB](reference/statements/session-control/assert-job.md) |
+| `CONFIG` | Session | [Statement Reference](reference/statements/README.md) | [CONFIG](reference/statements/session-control/config.md) |
 | `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](reference/statements/README.md) |
 | `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
 | `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
@@ -100,6 +113,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/send-file.md) |
 | `eng.active_sessions` | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-admin/service-accounts.md) |
+| `Admin Identity CLI` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [admin identity cli](reference/portal-admin/admin-identity-cli.md) |
+| `PORTAL SHOW` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [portal show](reference/portal-admin/portal-show.md) |
 | `EXPECT SCHEMA` | DDL / Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
 | `TEST CONNECTION` | DDL / Diagnostics | [Statement Reference](reference/statements/README.md) | [TEST CONNECTION](reference/statements/ddl/test-connection.md) |
 | `UNNEST / FLATTEN` | DML / Query | [Statement Reference](reference/statements/README.md) | [UNNEST / FLATTEN](reference/statements/dml/unnest.md) |
@@ -139,6 +154,22 @@ Statements are the top-level actions in an ETL-SQL script.
 | `eng.subscriptions` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.tables` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.tables](reference/eng/tables.md) |
 | `eng.version` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [eng.version](reference/eng/version.md) |
+| `eng.bundle_dependencies` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundle_dependencies](reference/eng/bundle-dependencies.md) |
+| `eng.bundle_files` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundle_files](reference/eng/bundle-files.md) |
+| `eng.bundles` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.bundles](reference/eng/bundles.md) |
+| `eng.columns` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.columns](reference/eng/columns.md) |
+| `eng` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng](reference/eng/eng.md) |
+| `eng.job_statement_metrics` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.job_statement_metrics](reference/eng/job-statement-metrics.md) |
+| `eng.lineage_history` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.lineage_history](reference/eng/lineage-history.md) |
+| `eng.lineage` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.lineage](reference/eng/lineage.md) |
+| `eng.locks` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.locks](reference/eng/locks.md) |
+| `eng.missing_tags` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.missing_tags](reference/eng/missing-tags.md) |
+| `eng.portal_catalog` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.portal_catalog](reference/eng/portal-catalog.md) |
+| `eng.protected_data_suggestions` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.protected_data_suggestions](reference/eng/protected-data-suggestions.md) |
+| `eng.protected_data` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.protected_data](reference/eng/protected-data.md) |
+| `eng.safe_zones` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.safe_zones](reference/eng/safe-zones.md) |
+| `eng.sessions` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.sessions](reference/eng/sessions.md) |
+| `eng.tags` | Diagnostics | [Engine Catalog](reference/eng/README.md) | [eng.tags](reference/eng/tags.md) |
 | `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
 | `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 | `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
@@ -252,6 +283,7 @@ Connectors define how to communicate with external data sources.
 | `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/services/orchestrator.md) | HOST, PORT, API_KEY |
 | `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](reference/connectors/services/active-directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
+| `WEBHOOK` | Service | [WEBHOOK.md](reference/connectors/services/webhook.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ... |
 
 ### 2.1 File-Based Table Alias
 `FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
@@ -314,6 +346,10 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `SUBSTR(string, start, length)` | String | [SUBSTR.md](reference/functions/string/substr.md) | Alias for SUBSTRING |
 | `STUFF(string, start, length, replacement)` | String | [STUFF.md](reference/functions/string/stuff.md) | Deletes part of string and inserts replacement |
 | `STR(number, [length], [decimals])` | String | [STR.md](reference/functions/string/str.md) | Formats number as string |
+| `CLEAN_STRING(string)` | String | [CLEAN_STRING.md](reference/functions/string/clean_string.md) | Clean string |
+| `MASK_EMAIL(string)` | String | [MASK_EMAIL.md](reference/functions/string/mask_email.md) | Mask email |
+| `MASK_PHONE(string)` | String | [MASK_PHONE.md](reference/functions/string/mask_phone.md) | Mask phone |
+| `MASK_SSN(string)` | String | [MASK_SSN.md](reference/functions/string/mask_ssn.md) | Mask SSN |
 | `GETDATE()` | Date | [GETDATE.md](reference/functions/datetime/getdate.md) | Current local datetime |
 | `SYSDATE()` | Date | [SYSDATE.md](reference/functions/datetime/sysdate.md) | Current system datetime (Oracle style) |
 | `NOW()` | Date | [NOW.md](reference/functions/datetime/now.md) | Current UTC datetime |
@@ -344,6 +380,13 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `HOUR(date)` | Date | [HOUR.md](reference/functions/datetime/hour.md) | Hour component |
 | `MINUTE(date)` | Date | [MINUTE.md](reference/functions/datetime/minute.md) | Minute component |
 | `SECOND(date)` | Date | [SECOND.md](reference/functions/datetime/second.md) | Second component |
+| `END_OF_MONTH(date)` | Date | [END_OF_MONTH.md](reference/functions/datetime/end_of_month.md) | End of month |
+| `END_OF_QUARTER(date)` | Date | [END_OF_QUARTER.md](reference/functions/datetime/end_of_quarter.md) | End of quarter |
+| `END_OF_WEEK(date)` | Date | [END_OF_WEEK.md](reference/functions/datetime/end_of_week.md) | End of week |
+| `SAME_PERIOD_LAST_YEAR(date)` | Date | [SAME_PERIOD_LAST_YEAR.md](reference/functions/datetime/same_period_last_year.md) | Same period last year |
+| `START_OF_MONTH(date)` | Date | [START_OF_MONTH.md](reference/functions/datetime/start_of_month.md) | Start of month |
+| `START_OF_QUARTER(date)` | Date | [START_OF_QUARTER.md](reference/functions/datetime/start_of_quarter.md) | Start of quarter |
+| `START_OF_WEEK(date)` | Date | [START_OF_WEEK.md](reference/functions/datetime/start_of_week.md) | Start of week |
 | `ABS(number)` | Math | [ABS.md](reference/functions/math/abs.md) | Absolute value |
 | `ROUND(number, decimals)` | Math | [ROUND.md](reference/functions/math/round.md) | Rounds to N decimal places |
 | `FLOOR(number)` | Math | [FLOOR.md](reference/functions/math/floor.md) | Largest integer <= number |
@@ -362,6 +405,9 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `LOG10(number)` | Math | [LOG10.md](reference/functions/math/log10.md) | Base-10 logarithm |
 | `LEAST(value1, value2, ...)` | Math | [LEAST.md](reference/functions/collections/least.md) | Smallest of arguments |
 | `GREATEST(value1, value2, ...)` | Math | [GREATEST.md](reference/functions/collections/greatest.md) | Largest of arguments |
+| `AGE_BUCKET(...)` | Math | [AGE_BUCKET.md](reference/functions/math/age_bucket.md) | Age bucket |
+| `SAFE_DIVIDE(...)` | Math | [SAFE_DIVIDE.md](reference/functions/math/safe_divide.md) | Safe divide |
+| `VALUE_BUCKET(...)` | Math | [VALUE_BUCKET.md](reference/functions/math/value_bucket.md) | Value bucket |
 | `SIN(radians)` | Math | [SIN.md](reference/functions/math/sin.md) | Sine |
 | `COS(radians)` | Math | [COS.md](reference/functions/math/cos.md) | Cosine |
 | `TAN(radians)` | Math | [TAN.md](reference/functions/math/tan.md) | Tangent |
@@ -1257,13 +1303,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | Command | Purpose | Help File |
 | :--- | :--- | :--- |
 | `etl-sql admin backup` | Back up portal/orchestrator state into split-custody data and keys archives | [admin backup](reference/cli/admin-backup.md) |
-| `etl-sql admin delete-connection` | Permanently remove a shared connection from the catalog | [admin delete-connection](reference/cli/admin-delete-connection.md) |
-| `etl-sql admin delete-secret` | Permanently remove a named secret from the secret store | [admin delete-secret](reference/cli/admin-delete-secret.md) |
-| `etl-sql admin disable-connection` | Disable a shared connection so SHARED:alias fails until it is re-enabled | [admin disable-connection](reference/cli/admin-disable-connection.md) |
-| `etl-sql admin disable-secret` | Disable a named secret so resolution fails until it is re-enabled | [admin disable-secret](reference/cli/admin-disable-secret.md) |
 | `etl-sql admin doctor` | Perform a system health check to verify the environment | [admin doctor](reference/cli/admin-doctor.md) |
-| `etl-sql admin enable-connection` | Re-enable a disabled shared connection; its stored definition is retained | [admin enable-connection](reference/cli/admin-enable-connection.md) |
-| `etl-sql admin enable-secret` | Re-enable a disabled secret; the stored value resolves again | [admin enable-secret](reference/cli/admin-enable-secret.md) |
 | `etl-sql admin ha-soak diagnostics` | Export a redacted diagnostics bundle for a topology run | [admin ha-soak diagnostics](reference/cli/admin-ha-soak-diagnostics.md) |
 | `etl-sql admin ha-soak evidence` | Generate the non-secret HA soak evidence checklist | [admin ha-soak evidence](reference/cli/admin-ha-soak-evidence.md) |
 | `etl-sql admin ha-soak fault-plan` | Generate the HA fault-injection plan | [admin ha-soak fault-plan](reference/cli/admin-ha-soak-fault-plan.md) |
@@ -1276,15 +1316,63 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql admin ha-soak validate` | Validate completed HA soak evidence before citing it | [admin ha-soak validate](reference/cli/admin-ha-soak-validate.md) |
 | `etl-sql admin ha-soak workload` | Materialize the sustained-load workload config for a topology run | [admin ha-soak workload](reference/cli/admin-ha-soak-workload.md) |
 | `etl-sql admin ha-soak` | Prepare and collect PostgreSQL HA soak certification artifacts | [admin ha-soak](reference/cli/admin-ha-soak.md) |
-| `etl-sql admin list-connections` | List shared connection catalog entries and their status | [admin list-connections](reference/cli/admin-list-connections.md) |
+| `etl-sql admin machine connection delete` | Permanently remove a machine-local shared connection | [admin machine connection delete](reference/cli/admin-machine-connection-delete.md) |
+| `etl-sql admin machine connection disable` | Disable a machine-local shared connection | [admin machine connection disable](reference/cli/admin-machine-connection-disable.md) |
+| `etl-sql admin machine connection enable` | Re-enable a machine-local shared connection | [admin machine connection enable](reference/cli/admin-machine-connection-enable.md) |
+| `etl-sql admin machine connection list` | List machine-local shared connections and status | [admin machine connection list](reference/cli/admin-machine-connection-list.md) |
+| `etl-sql admin machine connection set` | Store a machine-local SHARED: connection | [admin machine connection set](reference/cli/admin-machine-connection-set.md) |
+| `etl-sql admin machine connection verify` | Verify a machine-local shared connection without printing values | [admin machine connection verify](reference/cli/admin-machine-connection-verify.md) |
+| `etl-sql admin machine secret delete` | Permanently remove a machine-local secret | [admin machine secret delete](reference/cli/admin-machine-secret-delete.md) |
+| `etl-sql admin machine secret disable` | Disable a machine-local secret | [admin machine secret disable](reference/cli/admin-machine-secret-disable.md) |
+| `etl-sql admin machine secret enable` | Re-enable a disabled machine-local secret | [admin machine secret enable](reference/cli/admin-machine-secret-enable.md) |
+| `etl-sql admin machine secret list` | List names and status from the machine-local secret store | [admin machine secret list](reference/cli/admin-machine-secret-list.md) |
+| `etl-sql admin machine secret rotate` | Replace an existing machine-local secret | [admin machine secret rotate](reference/cli/admin-machine-secret-rotate.md) |
+| `etl-sql admin machine secret set` | Encrypt and store a named machine-local secret | [admin machine secret set](reference/cli/admin-machine-secret-set.md) |
+| `etl-sql admin machine secret verify` | Resolve a machine-local secret without printing the value | [admin machine secret verify](reference/cli/admin-machine-secret-verify.md) |
 | `etl-sql admin migrate-database` | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment | [admin migrate-database](reference/cli/admin-migrate-database.md) |
 | `etl-sql admin restore` | Validate and restore a backup (data + keys archives) | [admin restore](reference/cli/admin-restore.md) |
-| `etl-sql admin rotate-secret` | Replace the value of an existing named secret | [admin rotate-secret](reference/cli/admin-rotate-secret.md) |
-| `etl-sql admin set-connection` | Store a shared connection in the catalog for scripts to use as SHARED:alias | [admin set-connection](reference/cli/admin-set-connection.md) |
-| `etl-sql admin set-secret` | Encrypt and store a named secret in the configured secret store (machine scope) | [admin set-secret](reference/cli/admin-set-secret.md) |
 | `etl-sql admin support-bundle` | Collect a redacted support archive (config, health, logs, database metrics) | [admin support-bundle](reference/cli/admin-support-bundle.md) |
-| `etl-sql admin verify-connection` | Prove a shared connection's definition and secret references resolve, without printing values | [admin verify-connection](reference/cli/admin-verify-connection.md) |
-| `etl-sql admin verify-secret` | Resolve a named secret to prove it is readable, without printing the value | [admin verify-secret](reference/cli/admin-verify-secret.md) |
+| `etl-sql admin access simulate` | Simulate access | [admin access simulate](reference/cli/admin-access-simulate.md) |
+| `etl-sql admin group add-member` | Add member to group | [admin group add-member](reference/cli/admin-group-add-member.md) |
+| `etl-sql admin group capabilities` | View group capabilities | [admin group capabilities](reference/cli/admin-group-capabilities.md) |
+| `etl-sql admin group create` | Create a group | [admin group create](reference/cli/admin-group-create.md) |
+| `etl-sql admin group delete` | Delete a group | [admin group delete](reference/cli/admin-group-delete.md) |
+| `etl-sql admin group list` | List groups | [admin group list](reference/cli/admin-group-list.md) |
+| `etl-sql admin group members` | List group members | [admin group members](reference/cli/admin-group-members.md) |
+| `etl-sql admin group remove-member` | Remove member from group | [admin group remove-member](reference/cli/admin-group-remove-member.md) |
+| `etl-sql admin group set-capabilities` | Set capabilities for a group | [admin group set-capabilities](reference/cli/admin-group-set-capabilities.md) |
+| `etl-sql admin group update` | Update group | [admin group update](reference/cli/admin-group-update.md) |
+| `etl-sql admin group` | Manage groups | [admin group](reference/cli/admin-group.md) |
+| `etl-sql admin machine connection` | Manage machine connection | [admin machine connection](reference/cli/admin-machine-connection.md) |
+| `etl-sql admin machine secret` | Manage machine secret | [admin machine secret](reference/cli/admin-machine-secret.md) |
+| `etl-sql admin machine` | Manage machine settings | [admin machine](reference/cli/admin-machine.md) |
+| `etl-sql admin portal whoami` | Show portal identity | [admin portal whoami](reference/cli/admin-portal-whoami.md) |
+| `etl-sql admin promotion export` | Export promotion | [admin promotion export](reference/cli/admin-promotion-export.md) |
+| `etl-sql admin promotion import` | Import promotion | [admin promotion import](reference/cli/admin-promotion-import.md) |
+| `etl-sql admin promotion preflight` | Promotion preflight check | [admin promotion preflight](reference/cli/admin-promotion-preflight.md) |
+| `etl-sql admin promotion saas-onboard` | SaaS onboard promotion | [admin promotion saas-onboard](reference/cli/admin-promotion-saas-onboard.md) |
+| `etl-sql admin promotion validate` | Validate promotion | [admin promotion validate](reference/cli/admin-promotion-validate.md) |
+| `etl-sql admin promotion` | Manage promotions | [admin promotion](reference/cli/admin-promotion.md) |
+| `etl-sql admin service-account create` | Create service account | [admin service-account create](reference/cli/admin-service-account-create.md) |
+| `etl-sql admin service-account list` | List service accounts | [admin service-account list](reference/cli/admin-service-account-list.md) |
+| `etl-sql admin service-account revoke` | Revoke service account | [admin service-account revoke](reference/cli/admin-service-account-revoke.md) |
+| `etl-sql admin service-account rotate-secret` | Rotate service account secret | [admin service-account rotate-secret](reference/cli/admin-service-account-rotate-secret.md) |
+| `etl-sql admin service-account update` | Update service account | [admin service-account update](reference/cli/admin-service-account-update.md) |
+| `etl-sql admin service-account` | Manage service accounts | [admin service-account](reference/cli/admin-service-account.md) |
+| `etl-sql admin session disconnect` | Disconnect session | [admin session disconnect](reference/cli/admin-session-disconnect.md) |
+| `etl-sql admin session list` | List sessions | [admin session list](reference/cli/admin-session-list.md) |
+| `etl-sql admin session` | Manage admin sessions | [admin session](reference/cli/admin-session.md) |
+| `etl-sql admin user create` | Create user | [admin user create](reference/cli/admin-user-create.md) |
+| `etl-sql admin user delete` | Delete user | [admin user delete](reference/cli/admin-user-delete.md) |
+| `etl-sql admin user disable` | Disable user | [admin user disable](reference/cli/admin-user-disable.md) |
+| `etl-sql admin user enable` | Enable user | [admin user enable](reference/cli/admin-user-enable.md) |
+| `etl-sql admin user list` | List users | [admin user list](reference/cli/admin-user-list.md) |
+| `etl-sql admin user permissions` | Manage user permissions | [admin user permissions](reference/cli/admin-user-permissions.md) |
+| `etl-sql admin user reset-password` | Reset user password | [admin user reset-password](reference/cli/admin-user-reset-password.md) |
+| `etl-sql admin user revoke-tokens` | Revoke user tokens | [admin user revoke-tokens](reference/cli/admin-user-revoke-tokens.md) |
+| `etl-sql admin user show` | Show user details | [admin user show](reference/cli/admin-user-show.md) |
+| `etl-sql admin user update` | Update user | [admin user update](reference/cli/admin-user-update.md) |
+| `etl-sql admin user` | Manage users | [admin user](reference/cli/admin-user.md) |
 | `etl-sql admin` | Operator and administration commands | [admin](reference/cli/admin.md) |
 | `etl-sql config setup-jwt` | Generate a secure JWT secret and update appsettings.json | [config setup-jwt](reference/cli/config-setup-jwt.md) |
 | `etl-sql config` | Manage application configuration | [config](reference/cli/config.md) |
@@ -1301,6 +1389,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql notices` | Show third-party notices and dependency credits | [notices](reference/cli/notices.md) |
 | `etl-sql purge` | Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions) | [purge](reference/cli/purge.md) |
 | `etl-sql run` | Execute an ETL-SQL script | [run](reference/cli/run.md) |
+| `etl-sql scan` | Scan files | [scan](reference/cli/scan.md) |
 | `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
 | `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
 | `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |

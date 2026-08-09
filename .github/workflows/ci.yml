@@ -41,6 +41,12 @@ jobs:
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
+      - name: Check syntax index is up to date with LanguageMetadata.cs
+        run: node scripts/generate-syntax-index.js --check
+
+      - name: Audit syntax index links and reference page coverage
+        run: node scripts/audit-syntax-index.js --strict
+
       - name: Check for flaky sleep-then-assert test delays
         run: node scripts/check-flaky-test-delays.mjs
 
