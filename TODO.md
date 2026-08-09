@@ -188,11 +188,33 @@ Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it
       eligible. Managed Dedicated is named explicitly and Shared SaaS remains `NotCertified`.
 - [ ] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
       and Shared SaaS separately; neither inherits the other's claim status.
+- [ ] Certify that Team is a single-node provider configuration rather than a separate implementation:
+      no Team-only parser, evaluator, connector, catalog, UI, checkpoint, or promotion model.
+
+      *Moved here from the SaaS track's Phase A (2026-08-09). It is an assertion about the Team
+      profile and belongs to profile certification; filing it under a SaaS gate implied Team was
+      something SaaS had to clear rather than something every release re-proves.*
 
 ### Portal — Comprehensive Product and UX Update
 
 The remaining Portal-wide item is consolidating the last duplicated headers and focus-management
 implementations without regressing the browser-covered dialog behavior.
+
+#### P1 — Studio and collaboration capabilities
+
+Both moved out of the SaaS track (2026-08-09). Each item's own text already said it was not a
+SaaS-isolation prerequisite, so filing them under a SaaS heading made cross-profile Studio work look
+blocked on hostile-tenant certification that it does not need.
+
+- [ ] **Portal ETL IDE Data Preview & Schema Browser**: add interactive schema inspection and bounded
+      row previews of intermediate `#temp` tables and governed source connections. Cross-profile
+      Studio capability: start with Solo/Team, require Enterprise connection ACLs, and certify tenant
+      scope before enabling it in SaaS (SaaS domain 7).
+- [ ] **Portal Script Concurrent Editing Locks**: implement optimistic concurrency plus collaborative
+      edit/session leases that warn authors and prevent silent overwrite. Team/Enterprise
+      collaboration work; SaaS additionally requires tenant-scoped lease keys, hard expiry,
+      disconnect recovery, and negative cross-tenant tests (SaaS domain 5).
+
 #### P1 — Accessibility and visual-system completion
 
 - [ ] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
@@ -368,7 +390,9 @@ worth retaining. `eng.profile` remains the Solo answer.
       certified. Managed Dedicated must prove its tenant-specific store and tenant-approved support
       path; Shared must additionally prove server-derived scope in cross-tenant aggregation. Persisted
       statement text is tenant SQL, so platform triage is controlled support access rather than
-      implicit platform authority.
+      implicit platform authority. **Same cell as SaaS domain 8** (Audit, observability, and support
+      access) below — this bullet owns the feature-side review, that domain owns the matrix cell.
+      Neither is complete alone.
 - [ ] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
       record the review outcome the way
       [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) did.
@@ -482,90 +506,223 @@ control-plane or execution-plane isolation Green. Until the matrix can represent
 release reviews must report Dedicated and Shared status separately and must not publish a generic
 SaaS isolation claim.
 
-Ordering below is by dependency. The existing Portal/Orchestrator Enterprise tracks supply the
-identity, authorization, durable state, artifacts, secrets, policy, audit, HA, recovery, and
-promotion foundation. Do not rebuild those capabilities in SaaS-specific services.
+The existing Portal/Orchestrator Enterprise tracks supply the identity, authorization, durable state,
+artifacts, secrets, policy, audit, HA, recovery, and promotion foundation. Do not rebuild those
+capabilities in SaaS-specific services.
+
+**Reorganized by isolation domain, one entry per matrix cell (2026-08-09).** This track previously
+carried the same work on three axes: Phase B bullets (Dedicated), Phase C bullets (Shared), and a
+parallel *Cross-Cutting SaaS Follow-through* list whose eleven entries each restated "Dedicated does
+X, Shared adds Y". Every one of those was therefore a duplicate spanning two phase bullets,
+maintained in two places. Worse, B and C did not use the same domain list — B had managed operations
+and no observability or HA, C had observability and HA and no managed operations — so a domain
+nobody had written down looked the same as a domain deliberately marked N/A.
+
+The nine domains below are the axis the definition of done already uses: *the relevant Dedicated or
+Shared matrix cell*. Each entry now maps to exactly one cell, and an uncovered cell is stated as a
+**Gap** rather than being invisible. Regrouping surfaced six of them. Three items also left this
+track entirely — their own text already said they were not SaaS-isolation prerequisites (see the
+Portal UX and Deployment-profile certification sections above).
 
 #### Phase A — Enterprise and portability prerequisites
+
+Gates every domain below; nothing in Managed Dedicated ships before these.
 
 - [ ] Complete the Enterprise prerequisites used by hosted deployments: verifiable caller identity,
       per-object authorization, shared PostgreSQL/artifact providers, scoped secret/policy authority,
       durable audit, HA, backup/restore, and upgrade/promotion evidence. Track implementation in the
       existing Enterprise and Orchestrator sections; this item proves the joined hosted prerequisite.
-- [ ] Certify that Team is a single-node provider configuration rather than a separate implementation:
-      no Team-only parser, evaluator, connector, catalog, UI, checkpoint, or promotion model.
 - [ ] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
       Managed Dedicated SaaS general availability. The
       [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
-      migration contract; this gate owns its release sequencing.
+      migration contract; this gate owns its release sequencing, and domain 9 owns its delivery.
 
-#### Phase B — Managed Dedicated SaaS
+#### Isolation domains
 
-- [ ] Identity: establish platform/tenant identity separation and delegated tenant administration,
-      and prove platform administration is separately audited and cannot implicitly impersonate a
-      tenant user even when the tenant has its own deployment boundary.
-- [ ] Policy: tenant-specific policy authority with platform/tenant separation, so one tenant's policy
-      cannot be authored or overridden from platform scope.
-- [ ] Connections and secrets: disjoint tenant provider/key namespaces plus export proof; no
-      cross-tenant key reuse, raw secret export, or provider credential in an execution artifact.
-- [ ] Scheduling and Execution: provision tenant-dedicated queues, schedules, leases, quotas, session
-      roots, and VM/worker boundaries; run disposable OCI tasks without treating a shared-kernel
-      container as the boundary between customers.
-- [ ] Quality and stewardship: prove disjoint lineage, scans, quality evidence, caches, outboxes, and
-      quarantine data using tenant-specific stores and artifact roots.
-- [ ] Audit: provide tenant-complete audit plus separately authorized and audited platform support
-      access; aggregate platform health must not expose tenant script or data content.
-- [ ] Backup and recovery: tenant-scoped backup, export, restore, and key/artifact recovery, including
-      proof that a restore cannot introduce another tenant's rows or resume its work.
-- [ ] Gateway: enroll a tenant-owned outbound Gateway, register resources locally, map them through
-      tenant-admin `SHARED:` aliases, and prove revocation, local credential custody, typed operations,
-      and SaaS-to-on-premises connectivity before introducing a shared broker registry. Follow the
+Each domain states its **Dedicated** obligation and its **Shared** obligation, plus the Enterprise
+contract it builds on where one exists. An entry is complete only when the matching matrix cell
+carries a current linked evidence reference and the release review records the topology explicitly,
+the way [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) recorded its review. Do not
+infer Dedicated support from an Enterprise happy path, or Shared support from Dedicated evidence.
+
+##### 1. Tenant context and authority
+
+- [ ] **Dedicated.** Derive tenant context server-side even where the tenant has its own deployment
+      boundary. A deployment per tenant makes cross-tenant reach unlikely, not impossible: the
+      provisioning control plane, platform automation, and support tooling all still span tenants,
+      and each is an entry point that can be handed a caller-supplied identifier.
+      **Gap — Phase C carried this alone, as though a dedicated boundary settled the question.**
+- [ ] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
+      test per surface that a caller-supplied tenant, alias, gateway, resource, run, object, or
+      storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
+      across tenants.
+
+##### 2. Identity and delegated administration
+
+- [ ] **Dedicated.** Establish platform/tenant identity separation and delegated tenant
+      administration, and prove platform administration is separately audited and cannot implicitly
+      impersonate a tenant user even when the tenant has its own deployment boundary. Supports one
+      tenant-owned IdP configuration through the Enterprise identity contract.
+- [ ] **Shared.** Extend identity and delegated administration to shared stores with tenant
+      predicates/partitioning enforced below controller code. Add dynamic, server-verified
+      tenant/issuer/domain discovery without trusting a caller-selected tenant or issuer, and
+      without allowing platform administrators to impersonate tenant users.
+
+*Absorbs the retained discovery item **SaaS Multi-Tenant Identity (Multi-IdP)**.*
+
+##### 3. Policy, secrets, and keys
+
+- [ ] **Enterprise contract first.** Establish one provider-neutral key contract and refactor
+      `DatasetAtRestKeyValidator.cs`, dataset, credential, artifact, and checkpoint encryption away
+      from a single global master key. Resolved keys never enter portable exports or execution images.
+- [ ] **Dedicated.** Tenant-specific policy authority with platform/tenant separation, so one
+      tenant's policy cannot be authored or overridden from platform scope. Disjoint tenant
+      provider/key namespaces plus export proof: no cross-tenant key reuse, raw secret export, or
+      provider credential in an execution artifact.
+- [ ] **Shared.** Extend policy, connections, secrets, keys, and catalog bindings to shared stores
+      with tenant predicates/partitioning enforced below controller code, and prove tenant, key, and
+      key-version separation.
+
+*Absorbs the retained discovery item **Tenant-Scoped Encryption Keys (BYOK)**.*
+
+##### 4. Storage, paths, and artifacts
+
+- [ ] **Enterprise contract first.** Extend the existing `ResolvePath` boundary into
+      provider-neutral, server-derived tenant storage capabilities for file/directory connectors and
+      operations such as `FLATFILE`, `DIRECTORY`, and `SEND FILE`.
+- [ ] **Dedicated.** Tenant-specific artifact roots and object prefixes, with canonical paths,
+      symlinks, archives, caches, checkpoints, and spill all remaining inside the authorized
+      tenant/run root. Do not treat `chroot` or a container filesystem alone as authority.
+      **Gap — previously implicit inside the quality bullet's trailing "and artifact roots".**
+- [ ] **Shared.** Server-derived storage identifiers with a negative test that a caller-supplied
+      object, prefix, or path identifier cannot widen scope, and no reuse of volumes, directories,
+      object prefixes, or encryption data keys across tenants or sandbox assignments.
+      **Gap — no phase bullet covered shared storage scope.**
+
+*Absorbs the retained discovery item **Tenant-Scoped Virtual Filesystem and Object Storage**.*
+
+##### 5. Scheduling, execution, and capacity
+
+- [ ] **Dedicated.** Provision tenant-dedicated queues, schedules, leases, quotas, session roots, and
+      VM/worker boundaries; run disposable OCI tasks without treating a shared-kernel container as
+      the boundary between customers. Prove reserved placement.
+- [ ] **Shared.** Implement the provider-neutral scheduler and Hardened per-run sandbox boundary with
+      tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
+      ambiguous-outcome handling, and destructive cleanup. Tenant-partitioned queues and
+      weighted/fair admission so one tenant cannot cause head-of-line blocking or starvation; enforce
+      reservations, maximums, backpressure, and Dedicated placement without silently borrowing across
+      an isolation or service-tier boundary.
+- [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
+      IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
+      Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
+      boundary.
+- [ ] **High availability, Dedicated.** Fleet rollout, compatibility, and drain behavior across a
+      population of per-tenant deployments — upgrading a hundred dedicated stacks is the operational
+      problem the topology creates. **Gap — Phase C carried HA alone.**
+- [ ] **High availability, Shared.** Tenant-aware fleet rollout, compatibility/drain behavior, and
+      noisy-neighbour containment without silently falling back from Dedicated placement or Hardened
+      isolation.
+
+*Absorbs the retained discovery items **Noisy-Neighbor CPU/Memory/I/O Containment** and
+**Tenant-Aware Fair-Share Scheduling**.*
+
+##### 6. Network egress and the Gateway
+
+- [ ] **Dedicated.** Enroll a tenant-owned outbound Gateway, register resources locally, map them
+      through tenant-admin `SHARED:` aliases, and prove revocation, local credential custody, typed
+      operations, and SaaS-to-on-premises connectivity before introducing a shared broker registry.
+      Follow the
       [SaaS Tenant Isolation Architecture](docs/architecture/SaaSTenantIsolation.md#11-secure-outbound-data-gateway).
-- [ ] Authoring: controlled tenant ingress and a certified tenant-admin/author boundary within the
-      dedicated deployment.
-- [ ] Reports (currently Yellow): certify tenant catalog, dataset, snapshot, share/embed, export, and
-      subscription isolation within the dedicated deployment.
-- [ ] Managed operations: automate provisioning, upgrades, drain/fence, capacity assignment, basic
-      metering, support approval, portability export, legal/retention-aware deletion, and recovery for
-      one tenant without manual SaaS-platform database edits.
-- [ ] Relabel the current Tenant-isolation implementation-Green evidence as **Managed Dedicated only**,
-      attach clean commit-bound topology evidence, and prevent it from satisfying Shared SaaS cells.
-
-#### Phase C — Shared SaaS
-
-- [ ] Prove tenant context is server-derived at every shared entry point — a negative test per surface
-      that a caller-supplied tenant, alias, gateway, resource, run, object, or storage identifier cannot
-      widen scope.
-- [ ] Extend identity, delegated administration, policy, connections, secrets, keys, and catalog
-      bindings to shared stores with tenant predicates/partitioning enforced below controller code and
-      negative collision tests for equal numeric/logical IDs across tenants.
-- [ ] Scheduling and Execution: implement the provider-neutral scheduler and Hardened per-run sandbox
-      boundary with tenant-scoped queues, leases, capabilities, checkpoints, quotas, fair admission,
-      ambiguous-outcome handling, and destructive cleanup.
-- [ ] Quality and stewardship: prove tenant-isolated lineage/graph indexes, scans, quality evidence,
-      quarantine, caches, searches, and outboxes in shared services.
-- [ ] Audit: preserve tenant-complete audit while separately authorizing and auditing platform access;
-      shared support tooling cannot become an impersonation or bulk-content path.
-- [ ] Backup and recovery: tenant-scoped export/restore from shared stores, including proof that
-      point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's rows.
-- [ ] Observability: tenant telemetry and support-access separation. **This is the cell the Operations
-      Triage track above collides with** — cross-job aggregation and persisted statement text require
-      server-derived scope and tenant-approved support access.
-- [ ] High availability: tenant-aware fleet rollout, compatibility/drain behavior, and noisy-neighbour
-      containment without falling back from Dedicated placement or Hardened isolation silently.
-- [ ] Authoring and Reports: re-certify tenant ingress, catalogs, datasets, embeds, snapshots, exports,
-      subscriptions, and interactive sessions against shared stores and worker fleets.
-- [ ] Gateway Broker: add the shared tenant/gateway session registry, typed stream routing, metering,
+- [ ] **Shared.** Add the shared tenant/gateway session registry, typed stream routing, metering,
       backpressure, and negative cross-tenant tests without weakening gateway-local resource policy.
-- [ ] Move Shared Tenant isolation from Red to claim-Green only with clean commit-bound hostile
-      cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality, path,
-      key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion surfaces.
+- [ ] **Both topologies.** Execute tenant workloads with default-deny networking, blocked cloud
+      metadata/control-plane/internal hosting ranges, and only capability-authorized connector,
+      storage, telemetry, or Gateway Broker destinations. Test DNS rebinding, redirects, alternate
+      address forms, port scanning, and policy changes during a run. **Gap — egress fencing sat only
+      in the discovery list and in neither phase, though a dedicated tenant's own worker still must
+      not reach the cloud metadata service.**
 
-Each item is complete only when the relevant **Dedicated or Shared** matrix cell has a current linked
-evidence reference and the release review records the topology explicitly, the way
-[v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) recorded its review. Do
-not infer Dedicated SaaS support from an Enterprise happy path, or Shared SaaS support from Dedicated
-topology evidence.
+*Absorbs the retained discovery item **Internal Network Egress Fencing**.*
+
+##### 7. Data assets and evidence
+
+Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress.
+
+- [ ] **Dedicated.** Prove disjoint lineage, scans, quality evidence, caches, outboxes, and
+      quarantine data using tenant-specific stores and artifact roots. Deliver controlled tenant
+      ingress and a certified tenant-admin/author boundary within the dedicated deployment. Reports
+      (currently Yellow): certify tenant catalog, dataset, snapshot, share/embed, export, and
+      subscription isolation.
+- [ ] **Shared.** Prove tenant-isolated lineage/graph indexes, scans, quality evidence, quarantine,
+      caches, searches, and outboxes in shared services — partitioning metadata search, graph
+      traversal, exports, and support diagnostics so table names, schemas, tags, edges, and evidence
+      cannot leak across tenants. Re-certify tenant ingress, catalogs, datasets, embeds, snapshots,
+      exports, subscriptions, and interactive sessions against shared stores and worker fleets.
+      Dedicated-store evidence is explicitly not sufficient here.
+
+*Absorbs the retained discovery item **Tenant-Isolated Lineage Graphs**.*
+
+##### 8. Audit, observability, and support access
+
+- [ ] **Dedicated.** Tenant-complete audit plus separately authorized and audited platform support
+      access; aggregate platform health must not expose tenant script or data content. Observability
+      must prove the tenant-specific telemetry store and the tenant-approved support path. Persisted
+      statement text is tenant SQL, so platform triage is controlled support access rather than
+      implicit platform authority. **Tracked jointly with the deployment-profile portability review
+      in the Operations Triage track above, which owns the same cell from the feature side.**
+- [ ] **Shared.** Preserve tenant-complete audit while separately authorizing and auditing platform
+      access; shared support tooling cannot become an impersonation or bulk-content path. Tenant
+      telemetry and support-access separation: cross-job aggregation and persisted statement text
+      both require server-derived scope.
+
+##### 9. Lifecycle — provisioning, backup, portability, deletion, metering
+
+The former `Managed operations` bullet was one checkbox covering nine deliverables and could not be
+checked off meaningfully. Split:
+
+- [ ] **Dedicated — provisioning.** Automate tenant provisioning with no manual SaaS-platform
+      database edits.
+- [ ] **Dedicated — upgrades and capacity.** Automate upgrades, drain/fence, and capacity assignment
+      for one tenant.
+- [ ] **Dedicated — backup and recovery.** Tenant-scoped backup, export, restore, and key/artifact
+      recovery, including proof that a restore cannot introduce another tenant's rows or resume its
+      work.
+- [ ] **Dedicated — support approval.** The approval workflow behind domain 8's audited platform
+      access.
+- [ ] **Dedicated — metering.** Tenant-specific usage records for dedicated operations.
+- [ ] **Dedicated — deletion.** Legal/retention-aware tenant deletion with a completion record.
+- [ ] **Shared — backup and recovery.** Tenant-scoped export/restore from shared stores, including
+      proof that point-in-time recovery, retry, or cache rebuild cannot introduce another tenant's
+      rows.
+- [ ] **Shared — metering.** Shared-fleet attribution for rows/bytes, connector class, sandbox
+      CPU/memory/I/O, Gateway traffic, storage, and concurrency. Metering keeps its own durable,
+      tenant-partitioned ledger; it cannot read payload content or become execution authorization.
+- [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
+      **Gap — Phase C carried no managed-operations bullet at all.**
+- [ ] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
+      promotion package, source artifacts, and optional evidence/content into the one open,
+      versioned, signed, tenant-encrypted format defined in
+      [`TenantPortability.md`](docs/architecture/TenantPortability.md). Deliver the minimum
+      configuration/artifact bundle and the SaaS → self-hosted Enterprise proof before Managed
+      Dedicated SaaS GA (Phase A above); add large resumable content and incremental deltas later.
+      Deliberately exclude resolved secrets, private keys, capabilities, checkpoints, leases, caches,
+      and in-flight work rather than making an indefensible "zero-loss" claim.
+
+*Absorbs the retained discovery items **Usage Metering & Billing Collector** and **Full-Fidelity
+Tenant Portability Bundle**.*
+
+#### Certification and evidence
+
+- [ ] Add the topology qualifier to the capability matrix itself, so a Dedicated pass cannot render a
+      Shared cell Green. Per-profile and per-transition release claims are tracked under **Platform —
+      Deployment Profiles and Upgrade Certification → P2** above.
+- [ ] Relabel the current Tenant-isolation implementation-Green evidence as **Managed Dedicated
+      only**, attach clean commit-bound topology evidence, and prevent it from satisfying Shared SaaS
+      cells.
+- [ ] Move Shared Tenant isolation from Red to claim-Green only with clean commit-bound hostile
+      cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality,
+      path, key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion
+      surfaces.
 
 ### Testing — retire the wall-clock flake class (scheduled for v0.19.0)
 
@@ -622,70 +779,6 @@ pipeline runs in its own `portal-hosted` process. The consolidated policy and ev
 as it hides a test-harness one, and the shared-SQLite finding in the v0.18.0 notes — where the
 browser lane's failure turned out to describe a real production sharing hazard — is the reason to
 keep failures visible.
-
-## Cross-Cutting SaaS and Portal Follow-through (Retained Discovery Items)
-
-These items originated in the earlier SaaS/Portal gap rounds and remain here so their history is not
-erased. The Progressive SaaS phases above own their delivery order and certification. Completion of
-an item here must satisfy the corresponding canonical phase; it must not create a second provider,
-catalog, execution path, or migration format.
-
-### Security, identity, operations, and authoring
-
-- [ ] **Tenant-Scoped Encryption Keys (BYOK)**: first establish one provider-neutral Enterprise key
-      contract, then use tenant-isolated key namespaces for Managed Dedicated SaaS and prove
-      tenant/key/version separation in Shared SaaS. Refactor `DatasetAtRestKeyValidator.cs`, dataset,
-      credential, artifact, and checkpoint encryption away from a single global master key. Resolved
-      keys never enter portable exports or execution images.
-- [ ] **Tenant-Scoped Virtual Filesystem and Object Storage**: extend the existing `ResolvePath`
-      boundary into provider-neutral, server-derived tenant storage capabilities for file/directory
-      connectors and operations such as `FLATFILE`, `DIRECTORY`, and `SEND FILE`. Canonical paths,
-      object prefixes, symlinks, archives, caches, checkpoints, and spill must remain inside the
-      authorized tenant/run root. Do not treat `chroot` or a container filesystem alone as authority.
-- [ ] **Noisy-Neighbor CPU/Memory/I/O Containment**: implement admission and runtime limits for CPU,
-      memory, processes, scratch/spill, IOPS, network, rows, duration, connector concurrency, queue
-      depth, and interactive sessions. Dedicated SaaS proves reserved placement; Shared SaaS adds
-      Hardened per-run sandboxes and fair-share scheduling. Ordinary cgroups/containers are useful
-      controls but are not the hostile-tenant security boundary.
-- [ ] **Portal ETL IDE Data Preview & Schema Browser**: add interactive schema inspection and bounded
-      row previews of intermediate `#temp` tables and governed source connections. This is a
-      cross-profile Studio capability, not a SaaS-isolation prerequisite; start with Solo/Team,
-      require Enterprise connection ACLs, and certify tenant scope before enabling it in SaaS.
-- [ ] **SaaS Multi-Tenant Identity (Multi-IdP)**: Managed Dedicated SaaS supports one tenant-owned IdP
-      configuration through the Enterprise identity contract. Shared SaaS later supports dynamic,
-      server-verified tenant/issuer/domain discovery without trusting a caller-selected tenant or
-      issuer and without allowing platform administrators to impersonate tenant users.
-- [ ] **Usage Metering & Billing Collector**: begin with tenant-specific usage records for Managed
-      Dedicated operations, then add shared-fleet attribution for rows/bytes, connector class,
-      sandbox CPU/memory/I/O, Gateway traffic, storage, and concurrency. Metering has its own durable,
-      tenant-partitioned ledger and cannot read payload content or become execution authorization.
-
-### Shared-fleet isolation and portability
-
-- [ ] **Tenant-Aware Fair-Share Scheduling**: implement tenant-partitioned queues and weighted/fair
-      admission in the provider-neutral Execution Scheduler so one tenant cannot cause head-of-line
-      blocking or starvation. Enforce reservations, maximums, backpressure, and Dedicated placement;
-      do not silently borrow across an isolation or service-tier boundary.
-- [ ] **Internal Network Egress Fencing**: execute tenant workloads with default-deny networking,
-      blocked cloud metadata/control-plane/internal hosting ranges, and only capability-authorized
-      connector, storage, telemetry, or Gateway Broker destinations. Test DNS rebinding, redirects,
-      alternate address forms, port scanning, and policy changes during a run.
-- [ ] **Tenant-Isolated Lineage Graphs**: partition shared metadata search and lineage/quality indexes,
-      caches, graph traversal, exports, and support diagnostics so table names, schemas, tags, edges,
-      and evidence cannot leak across tenants. Dedicated-store evidence is not sufficient for this
-      shared-service item.
-- [ ] **Full-Fidelity Tenant Portability Bundle**: unify the existing Portal configuration export,
-      Orchestrator promotion package, source artifacts, and optional evidence/content into the one
-      open, versioned, signed, tenant-encrypted format defined in
-      [`TenantPortability.md`](docs/architecture/TenantPortability.md). Deliver the minimum
-      configuration/artifact bundle and SaaS → self-hosted Enterprise proof before Managed Dedicated
-      SaaS GA; add large resumable content and incremental deltas later. Deliberately exclude resolved
-      secrets, private keys, capabilities, checkpoints, leases, caches, and in-flight work rather
-      than making an indefensible "zero-loss" claim.
-- [ ] **Portal Script Concurrent Editing Locks**: implement optimistic concurrency plus collaborative
-      edit/session leases that warn authors and prevent silent overwrite. This is Team/Enterprise
-      collaboration work, not a SaaS security prerequisite; SaaS additionally requires tenant-scoped
-      lease keys, hard expiry, disconnect recovery, and negative cross-tenant tests.
 
 ## Bugs
 
