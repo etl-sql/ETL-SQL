@@ -70,6 +70,14 @@ External NuGet packages:
 - `Microsoft.Extensions.DependencyInjection` 10.x — service scope management
 - `Microsoft.Extensions.Logging.Abstractions` 10.x — structured logging contracts
 
+### 1.2 Caller identity and object authorization
+
+The HTTP API has two independent trust checks. `X-Orchestrator-Key` authenticates the calling Portal instance. `X-Orchestrator-Identity` is a short-lived HMAC-SHA256 assertion issued by that Portal after local or OIDC authentication; it carries the stable user/service principal, roles, and Portal group IDs. The Orchestrator validates issuer, audience, lifetime, and signature and never treats a caller-name header as identity.
+
+`JOB`, `SCHEDULE`, and `NOTIFICATION` use durable owner fields plus `OrchestratorObjectAcls`. Grants target users, groups, or service accounts and form the hierarchy `READ < EXECUTE < OVERRIDE < MANAGE`. The separate `OVERRIDE` capability is deliberate: permission to run the stored job does not imply permission to replace variables and widen its data scope.
+
+Authorization is enforced twice: minimal-API endpoints filter reads and protect mutations, while engine catalog statement handlers resolve `IOrchestratorObjectAuthorizer` from the execution host. Ad-hoc scripts receive only the cryptographically verified `ExecutionIdentity`, so submitting `CREATE OR ALTER` cannot bypass shared-name ownership. Solo/local hosts that do not register an authorizer retain script-first local administration semantics.
+
 ---
 
 ## 2. Session Lifecycle — `ExecutionSession`

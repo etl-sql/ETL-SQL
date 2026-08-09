@@ -104,13 +104,15 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
+                var caller = RequestCaller(ctx);
                 var jobId = Guid.NewGuid().ToString("N")[..8];
                 var cts = new CancellationTokenSource();
-                var entry = new JobEntry(jobId, cts, ctx.TraceIdentifier);
+                var entry = new JobEntry(jobId, cts, ctx.TraceIdentifier, caller.PrincipalKey);
                 _jobs[jobId] = entry;
 
-                logger.LogInformation("Job {JobId} submitted (label={Label})", jobId, ETL_SQL.Core.Common.LogSanitizer.Clean(request.Label));
-                _ = RunJobAsync(entry, request, scopeFactory, logger, cts.Token);
+                logger.LogInformation("Job {JobId} submitted by {Actor} (label={Label})", jobId,
+                    caller.AuditActor, ETL_SQL.Core.Common.LogSanitizer.Clean(request.Label));
+                _ = RunJobAsync(entry, request, ToExecutionIdentity(caller), scopeFactory, logger, cts.Token);
 
                 return Results.Accepted($"/jobs/{jobId}", new { JobId = jobId });
             }).WithName("submitJob");
@@ -121,8 +123,11 @@ namespace ETL_SQL.Orchestrator.Service
 
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
+                if (!CanAccessAdHoc(RequestCaller(ctx), entry))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-                logger.LogInformation("Cancelling job {JobId}", ETL_SQL.Core.Common.LogSanitizer.Clean(id));
+                logger.LogInformation("Cancelling job {JobId} by {Actor}",
+                    ETL_SQL.Core.Common.LogSanitizer.Clean(id), RequestActor(ctx));
                 entry.Cts.Cancel();
                 entry.Status = JobRunStatus.Cancelled;
                 return Results.Ok(new { JobId = id, Status = "Cancelled" });
@@ -134,6 +139,8 @@ namespace ETL_SQL.Orchestrator.Service
 
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
+                if (!CanAccessAdHoc(RequestCaller(ctx), entry))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 var includeSensitivePayload = ApiKeyAcceptedForSensitivePayload(ctx, cfg);
                 return Results.Ok(new JobStatusResponse
@@ -151,16 +158,26 @@ namespace ETL_SQL.Orchestrator.Service
 
             // ── Scheduled job management ──────────────────────────────────────
 
-            app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store, IConfiguration cfg,
+            app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
                 int limit = 100, int offset = 0) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var jobs = await store.GetJobsPageAsync(limit, offset);
-                return Results.Ok(jobs);
+                var caller = RequestCaller(ctx);
+                var visible = new List<JobDefinition>();
+                foreach (var job in jobs)
+                {
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Name,
+                            OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                        visible.Add(job);
+                }
+                return Results.Ok(visible);
             }).WithName("listScheduledJobs");
 
             app.MapPost("/api/scheduled-jobs", async (HttpContext ctx, CreateScheduledJobRequest req,
-                IJobHistoryStore store, IJobCatalogStore catalog, IBundleStore bundleStore, IConfiguration cfg) =>
+                IJobHistoryStore store, IJobCatalogStore catalog, IBundleStore bundleStore,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (string.IsNullOrWhiteSpace(req.Name))
@@ -170,6 +187,13 @@ namespace ETL_SQL.Orchestrator.Service
                 var normalized = !string.IsNullOrWhiteSpace(req.TargetPath)
                     || !string.IsNullOrWhiteSpace(req.JobType);
                 var existing = await store.GetJobAsync(req.Name);
+                var caller = RequestCaller(ctx);
+                if (existing is null && !OrchestratorObjectAuthorizationService.CanCreate(caller))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                if (existing is not null && !await authorization.CanAsync(
+                        caller, OrchestratorObjectKind.Job, existing.Name,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 if (normalized)
                 {
@@ -219,7 +243,7 @@ namespace ETL_SQL.Orchestrator.Service
                         req.DisplayName ?? (patches ? existing!.DisplayName : req.Name),
                         req.Description ?? (patches ? existing!.Description : null),
                         req.Options is null ? (patches ? existing!.Options : null) : JsonSerializer.Serialize(req.Options),
-                        existing?.CreatedBy,
+                        existing?.CreatedBy ?? caller.PrincipalKey,
                         ReadActor(ctx));
 
                     await store.SaveJobAsync(job);
@@ -248,7 +272,7 @@ namespace ETL_SQL.Orchestrator.Service
                     job = new JobDefinition(
                         req.Name, scriptText, req.Interval.Value, (req.Unit ?? "HOUR").ToUpperInvariant(),
                         req.AtTime, null, null, true, req.MaxRetries ?? 0, req.RetryDelaySeconds ?? 30,
-                        null, req.HashPolicy ?? "Warn");
+                        null, req.HashPolicy ?? "Warn", CreatedBy: caller.PrincipalKey, ModifiedBy: ReadActor(ctx));
                     await store.SaveJobAsync(job);
                 }
 
@@ -256,7 +280,8 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("createScheduledJob");
 
             app.MapPut("/api/scheduled-jobs/{name}", async (HttpContext ctx, string name,
-                UpdateScheduledJobRequest req, IJobHistoryStore store, IBundleStore bundleStore, IConfiguration cfg) =>
+                UpdateScheduledJobRequest req, IJobHistoryStore store, IBundleStore bundleStore,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var expectedVersion = ReadExpectedVersion(ctx);
@@ -268,6 +293,10 @@ namespace ETL_SQL.Orchestrator.Service
                 var existing = await store.GetJobAsync(Uri.UnescapeDataString(name));
                 if (existing == null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Name,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
                 var targetPath = req.TargetPath;
@@ -311,7 +340,8 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("updateScheduledJob");
 
             app.MapDelete("/api/scheduled-jobs/{name}", async (HttpContext ctx, string name,
-                IJobHistoryStore store, IConfiguration cfg) =>
+                IJobHistoryStore store, IOrchestratorAuthorizationStore authorizationStore,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var expectedVersion = ReadExpectedVersion(ctx);
@@ -321,8 +351,13 @@ namespace ETL_SQL.Orchestrator.Service
                         statusCode: StatusCodes.Status428PreconditionRequired);
 
                 var unescaped = Uri.UnescapeDataString(name);
-                if (await store.GetJobAsync(unescaped) is null)
+                var existing = await store.GetJobAsync(unescaped);
+                if (existing is null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Name,
+                        OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 if (!await store.TryDeleteJobAsync(unescaped, expectedVersion.Value))
                 {
@@ -333,37 +368,92 @@ namespace ETL_SQL.Orchestrator.Service
                         Current = current
                     });
                 }
+                await authorizationStore.DeleteObjectGrantsAsync(
+                    OrchestratorObjectKind.Job, unescaped, ctx.RequestAborted);
                 return Results.Ok(new { Deleted = unescaped });
             }).WithName("deleteScheduledJob");
 
             app.MapGet("/api/scheduled-jobs/{name}/history", async (HttpContext ctx, string name,
-                IJobHistoryStore store, IConfiguration cfg, int limit = 50) =>
+                IJobHistoryStore store, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg, int limit = 50) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = await store.GetHistoryAsync(Uri.UnescapeDataString(name), Math.Clamp(limit, 1, 1000));
+                var unescaped = Uri.UnescapeDataString(name);
+                var job = await store.GetJobAsync(unescaped);
+                if (job is null) return Results.NotFound();
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                var history = await store.GetHistoryAsync(unescaped, Math.Clamp(limit, 1, 1000));
                 return Results.Ok(history);
             }).WithName("getScheduledJobHistory");
 
+            app.MapPost("/api/job-runs/{historyId:long}/resume", async (HttpContext ctx, long historyId,
+                SchedulerService scheduler, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg, ILogger<Program> logger) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var history = await store.GetHistoryEntryAsync(historyId);
+                if (history is null) return Results.NotFound(new { Error = $"Run '{historyId}' not found." });
+                var job = await store.GetJobAsync(history.JobName);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{history.JobName}' not found." });
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        OrchestratorObjectPermission.Execute, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var result = await scheduler.ResumeJobAsync(historyId);
+                if (result.Status == ResumeTriggerStatus.RunNotFound)
+                    return Results.NotFound(new { Error = result.Reason });
+                if (result.Status == ResumeTriggerStatus.JobNotFound)
+                    return Results.NotFound(new { Error = result.Reason, result.CheckpointLabel });
+                if (result.Status is ResumeTriggerStatus.NotResumable or ResumeTriggerStatus.AlreadyRunning)
+                    return Results.Conflict(new { Error = result.Reason, result.CheckpointLabel });
+
+                var actor = RequestActor(ctx);
+                logger.LogWarning(
+                    "Run {HistoryId} resumed from named checkpoint {CheckpointLabel} by {Actor}.",
+                    historyId, result.CheckpointLabel, actor);
+                EmitNamedCheckpointResumeAudit(
+                    actor, historyId, result.CheckpointLabel!, ctx.TraceIdentifier);
+                return Results.Accepted(value: new
+                {
+                    Message = $"Run {historyId} queued to resume from checkpoint '{result.CheckpointLabel}'.",
+                    result.CheckpointLabel
+                });
+            }).WithName("resumeScheduledJobRun");
+
             app.MapGet("/api/history", async (HttpContext ctx, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization,
                 IConfiguration cfg, string? jobName = null, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000));
-                return Results.Ok(history);
+                var history = (await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000))).ToList();
+                return Results.Ok(await FilterReadableJobRowsAsync(
+                    history, row => row.JobName, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
             }).WithName("getAllJobHistory");
 
             app.MapGet("/api/data-quality/status", async (HttpContext ctx, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization,
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                return Results.Ok(await store.GetDataQualityStatusesAsync(Math.Clamp(limit, 1, 10000)));
+                var rows = await store.GetDataQualityStatusesAsync(Math.Clamp(limit, 1, 10000));
+                return Results.Ok(await FilterReadableJobRowsAsync(
+                    rows.Where(row => !string.IsNullOrWhiteSpace(row.JobName)).ToList(),
+                    row => row.JobName!, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
             }).WithName("getDataQualityStatus");
 
             app.MapGet("/api/data-quality/failures", async (HttpContext ctx, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization,
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                return Results.Ok(await store.GetDataQualityFailuresAsync(Math.Clamp(limit, 1, 10000)));
+                var rows = await store.GetDataQualityFailuresAsync(Math.Clamp(limit, 1, 10000));
+                return Results.Ok(await FilterReadableJobRowsAsync(
+                    rows, row => row.JobName, RequestCaller(ctx), store, authorization, ctx.RequestAborted));
             }).WithName("getDataQualityFailures");
 
             app.MapGet("/api/stewardship/score", async (HttpContext ctx, ILineageCatalogStore store,
@@ -382,13 +472,76 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(evaluation.Gaps);
             }).WithName("getStewardshipGaps");
 
+            app.MapGet("/api/schedules", async (HttpContext ctx, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
+                int limit = 100, int offset = 0) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                var visible = new List<ScheduleDefinition>();
+                foreach (var schedule in await catalog.GetSchedulesAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, schedule.Name,
+                            OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted))
+                        visible.Add(schedule);
+                return Results.Ok(visible);
+            }).WithName("listSchedules");
+
+            app.MapGet("/api/schedules/{name}", async (HttpContext ctx, string name,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var schedule = await catalog.GetScheduleAsync(Uri.UnescapeDataString(name));
+                if (schedule is null) return Results.NotFound();
+                return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Schedule,
+                        schedule.Name, OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted)
+                    ? Results.Ok(schedule)
+                    : Results.StatusCode(StatusCodes.Status403Forbidden);
+            }).WithName("getSchedule");
+
+            app.MapGet("/api/notifications", async (HttpContext ctx, IJobCatalogStore catalog,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
+                int limit = 100, int offset = 0) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var caller = RequestCaller(ctx);
+                var visible = new List<NotificationDefinition>();
+                foreach (var notification in await catalog.GetNotificationsAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
+                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, notification.Name,
+                            OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted))
+                        visible.Add(notification);
+                return Results.Ok(visible);
+            }).WithName("listNotifications");
+
+            app.MapGet("/api/notifications/{name}", async (HttpContext ctx, string name,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var notification = await catalog.GetNotificationAsync(Uri.UnescapeDataString(name));
+                if (notification is null) return Results.NotFound();
+                return await authorization.CanAsync(RequestCaller(ctx), OrchestratorObjectKind.Notification,
+                        notification.Name, OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted)
+                    ? Results.Ok(notification)
+                    : Results.StatusCode(StatusCodes.Status403Forbidden);
+            }).WithName("getNotification");
+
             app.MapPost("/api/notifications/{name}/dispatch", async (HttpContext ctx, string name,
-                DispatchNotificationApiRequest req, NotificationDispatchService dispatch, IConfiguration cfg,
+                DispatchNotificationApiRequest req, NotificationDispatchService dispatch,
+                IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg,
                 CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var notificationName = Uri.UnescapeDataString(name);
+                var notification = await catalog.GetNotificationAsync(notificationName);
+                if (notification is null)
+                    return Results.NotFound(new { Error = $"Notification '{notificationName}' was not found." });
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Notification, notification.Name,
+                        OrchestratorObjectPermission.Execute, notification.CreatedBy, ct))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var sourceKind = string.IsNullOrWhiteSpace(req.SourceKind)
                     ? "ALERT"
                     : req.SourceKind.Trim().ToUpperInvariant();
@@ -480,7 +633,7 @@ namespace ETL_SQL.Orchestrator.Service
                     entries.Add(ToConnectionCatalogEntry(alias, status, definition));
                 }
 
-                EmitConnectionAudit("SHARED_CONNECTION_EXPORT", null, $"Count={entries.Count}");
+                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_EXPORT", null, $"Count={entries.Count}");
                 return Results.Ok(entries);
             }).WithName("exportAdminConnections");
 
@@ -511,7 +664,7 @@ namespace ETL_SQL.Orchestrator.Service
                         var rawCredential = SharedConnectionValidator.FindRawCredential(definition.Options, definition.Target);
                         if (rawCredential is not null)
                         {
-                            EmitConnectionAudit(
+                            EmitConnectionAudit(RequestActor(ctx),
                                 "SHARED_CONNECTION_IMPORT_DENIED",
                                 entry.Alias,
                                 $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference.",
@@ -532,7 +685,7 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.BadRequest(new { Error = ex.Message });
                 }
 
-                EmitConnectionAudit("SHARED_CONNECTION_IMPORT", null, $"Created={created}; Updated={updated}");
+                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPORT", null, $"Created={created}; Updated={updated}");
                 return Results.Ok(new { Created = created, Updated = updated });
             }).WithName("importAdminConnections");
 
@@ -571,7 +724,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var rawCredential = SharedConnectionValidator.FindRawCredential(entry.Options, entry.Target);
                 if (rawCredential is not null)
                 {
-                    EmitConnectionAudit(
+                    EmitConnectionAudit(RequestActor(ctx),
                         "SHARED_CONNECTION_WRITE_DENIED",
                         entry.Alias,
                         $"Connection option '{rawCredential}' must be a SECRET: or ENC: reference.",
@@ -583,7 +736,7 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var existed = await writable.GetStatusAsync(entry.Alias, ct) != SecretLifecycleStatus.NotFound;
                     await writable.StoreAsync(entry, ct);
-                    EmitConnectionAudit(
+                    EmitConnectionAudit(RequestActor(ctx),
                         existed ? "SHARED_CONNECTION_UPDATE" : "SHARED_CONNECTION_CREATE",
                         entry.Alias,
                         $"ConnectorType={entry.ConnectorType}");
@@ -606,7 +759,7 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var decodedAlias = Uri.UnescapeDataString(alias);
                     await writable.EnableAsync(decodedAlias, ct);
-                    EmitConnectionAudit("SHARED_CONNECTION_ENABLE", decodedAlias, "Status=active");
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_ENABLE", decodedAlias, "Status=active");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -626,7 +779,7 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var decodedAlias = Uri.UnescapeDataString(alias);
                     await writable.DisableAsync(decodedAlias, ct);
-                    EmitConnectionAudit("SHARED_CONNECTION_DISABLE", decodedAlias, "Status=disabled");
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_DISABLE", decodedAlias, "Status=disabled");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -649,7 +802,7 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = $"Connection '{decodedAlias}' was not found." });
                 if (status == SecretLifecycleStatus.Disabled)
                 {
-                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=disabled", allowed: false);
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=disabled", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "disabled" });
                 }
 
@@ -660,7 +813,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
                 {
-                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
                 }
 
@@ -677,7 +830,7 @@ namespace ETL_SQL.Orchestrator.Service
                     var report = await diagnostics.DiagnoseAsync(
                         decodedAlias, entry.ConnectorType, target, options, security, snapshot, timeoutSeconds, ct);
 
-                    EmitConnectionAudit(
+                    EmitConnectionAudit(RequestActor(ctx),
                         "SHARED_CONNECTION_TEST",
                         decodedAlias,
                         report.Succeeded ? "Outcome=ok" : "Outcome=failed");
@@ -696,7 +849,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
                 {
-                    EmitConnectionAudit("SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_TEST_DENIED", decodedAlias, "Status=unresolvable", allowed: false);
                     return Results.Conflict(new { Alias = decodedAlias, Status = "unresolvable", Error = ex.Message });
                 }
             }).WithName("testAdminConnection");
@@ -730,7 +883,7 @@ namespace ETL_SQL.Orchestrator.Service
                     }
                 }
 
-                EmitConnectionAudit("SHARED_CONNECTION_IMPACT", decodedAlias, $"ConsumerCount={consumers.Count}");
+                EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_IMPACT", decodedAlias, $"ConsumerCount={consumers.Count}");
                 return Results.Ok(new ImpactReportResponse(reference, consumers.Count, consumers));
             }).WithName("impactAdminConnection");
 
@@ -745,7 +898,7 @@ namespace ETL_SQL.Orchestrator.Service
                 {
                     var decodedAlias = Uri.UnescapeDataString(alias);
                     await writable.DeleteAsync(decodedAlias, ct);
-                    EmitConnectionAudit("SHARED_CONNECTION_DELETE", decodedAlias, "Status=deleted");
+                    EmitConnectionAudit(RequestActor(ctx), "SHARED_CONNECTION_DELETE", decodedAlias, "Status=deleted");
                     return Results.NoContent();
                 }
                 catch (KeyNotFoundException ex)
@@ -799,28 +952,57 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("getLineageHistoryProtectedDataSuggestions");
 
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
-                SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg,
-                ILogger<Program> logger) =>
+                SchedulerService scheduler, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
+                ILogger<Program> logger, TriggerScheduledJobRequest? request = null) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var unescaped = Uri.UnescapeDataString(name);
-                var triggered = await scheduler.TriggerJobAsync(unescaped);
-                if (!triggered)
-                    return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (!TryNormalizeVariableOverrides(request?.Variables, out var overrides, out var validationError))
+                    return Results.BadRequest(new { Error = validationError });
+                var job = await store.GetJobAsync(unescaped);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                var required = overrides.Count == 0
+                    ? OrchestratorObjectPermission.Execute
+                    : OrchestratorObjectPermission.Override;
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        required, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
+                var triggerResult = await scheduler.TriggerJobWithOverridesAsync(unescaped, overrides);
+                if (triggerResult == ManualTriggerResult.JobNotFound)
+                    return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (triggerResult == ManualTriggerResult.AlreadyRunning)
+                    return Results.Conflict(new
+                    {
+                        Error = $"Job '{unescaped}' already has an execution in progress. Retry the one-run trigger after it finishes."
+                    });
+
+                var actor = RequestActor(ctx);
                 logger.LogInformation(
-                    "Job {JobName} triggered out of schedule by {Actor}.", unescaped, RequestActor(ctx));
+                    "Job {JobName} triggered out of schedule by {Actor} with {OverrideCount} variable overrides ({OverrideNames}).",
+                    unescaped, actor, overrides.Count, string.Join(',', overrides.Keys));
+                if (overrides.Count > 0)
+                    EmitVariableOverrideAudit(actor, unescaped, overrides.Keys, ctx.TraceIdentifier);
                 return Results.Accepted(uri: (string?)null, value: new { Message = $"Job '{unescaped}' queued for immediate execution." });
             }).WithName("triggerScheduledJob");
 
             app.MapPost("/api/scheduled-jobs/{name}/kill", async (HttpContext ctx, string name,
-                IJobManager jobManager, IJobHistoryStore store, IConfiguration cfg,
+                IJobManager jobManager, IJobHistoryStore store,
+                OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
                 ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var unescaped = Uri.UnescapeDataString(name);
+                var job = await store.GetJobAsync(unescaped);
+                if (job is null) return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), OrchestratorObjectKind.Job, job.Name,
+                        OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var history = await store.GetHistoryAsync(unescaped, 10);
                 var running = history.FirstOrDefault(h => h.Status == "RUNNING" && h.EndTime == null);
                 if (running == null)
@@ -835,6 +1017,113 @@ namespace ETL_SQL.Orchestrator.Service
                     ? Results.Ok(new { Message = $"Job '{unescaped}' (historyId={running.Id}) kill signal sent." })
                     : Results.Problem($"Kill signal for history entry {running.Id} did not match a running job.");
             }).WithName("killScheduledJob");
+
+            // ── Per-object authorization ─────────────────────────────────────
+
+            app.MapGet("/api/authorization/{kind}/{name}", async (
+                HttpContext ctx,
+                string kind,
+                string name,
+                IJobHistoryStore jobs,
+                IJobCatalogStore catalog,
+                IOrchestratorAuthorizationStore grants,
+                OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryParseObjectKind(kind, out var objectKind))
+                    return Results.BadRequest(new { Error = "Kind must be JOB, SCHEDULE, or NOTIFICATION." });
+                var objectName = Uri.UnescapeDataString(name);
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                if (owner.Exists == false) return Results.NotFound();
+                if (!await authorization.CanAsync(
+                        RequestCaller(ctx), objectKind, objectName,
+                        OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+                return Results.Ok(await grants.GetObjectGrantsAsync(objectKind, objectName, ctx.RequestAborted));
+            }).WithName("getOrchestratorObjectGrants");
+
+            app.MapPut("/api/authorization/{kind}/{name}/{principalKind}/{principalId}", async (
+                HttpContext ctx,
+                string kind,
+                string name,
+                string principalKind,
+                string principalId,
+                SetObjectGrantRequest request,
+                IJobHistoryStore jobs,
+                IJobCatalogStore catalog,
+                IOrchestratorAuthorizationStore grants,
+                OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryParseObjectKind(kind, out var objectKind)
+                    || !Enum.TryParse<OrchestratorPrincipalKind>(principalKind, true, out var parsedPrincipalKind)
+                    || !Enum.TryParse<OrchestratorObjectPermission>(request.Permission, true, out var permission))
+                    return Results.BadRequest(new
+                    {
+                        Error = "Use JOB|SCHEDULE|NOTIFICATION, USER|GROUP|SERVICE, and READ|EXECUTE|OVERRIDE|MANAGE."
+                    });
+                var objectName = Uri.UnescapeDataString(name);
+                var normalizedPrincipalId = Uri.UnescapeDataString(principalId).Trim();
+                if (normalizedPrincipalId.Length is 0 or > 128)
+                    return Results.BadRequest(new { Error = "PrincipalId must contain 1 to 128 characters." });
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                if (owner.Exists == false) return Results.NotFound();
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(
+                        caller, objectKind, objectName,
+                        OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var grant = new OrchestratorObjectGrant(
+                    objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId,
+                    permission, caller.PrincipalKey);
+                await grants.SaveObjectGrantAsync(grant, ctx.RequestAborted);
+                EmitObjectAuthorizationAudit(caller.AuditActor, grant, "GRANT", ctx.TraceIdentifier);
+                return Results.Ok(grant);
+            }).WithName("setOrchestratorObjectGrant");
+
+            app.MapDelete("/api/authorization/{kind}/{name}/{principalKind}/{principalId}", async (
+                HttpContext ctx,
+                string kind,
+                string name,
+                string principalKind,
+                string principalId,
+                IJobHistoryStore jobs,
+                IJobCatalogStore catalog,
+                IOrchestratorAuthorizationStore grants,
+                OrchestratorObjectAuthorizationService authorization,
+                IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryParseObjectKind(kind, out var objectKind)
+                    || !Enum.TryParse<OrchestratorPrincipalKind>(principalKind, true, out var parsedPrincipalKind))
+                    return Results.BadRequest(new { Error = "Kind or principal kind is invalid." });
+                var objectName = Uri.UnescapeDataString(name);
+                var normalizedPrincipalId = Uri.UnescapeDataString(principalId).Trim();
+                var owner = await ReadObjectOwnerAsync(objectKind, objectName, jobs, catalog);
+                if (owner.Exists == false) return Results.NotFound();
+                var caller = RequestCaller(ctx);
+                if (!await authorization.CanAsync(
+                        caller, objectKind, objectName,
+                        OrchestratorObjectPermission.Manage, owner.Owner, ctx.RequestAborted))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+                var deleted = await grants.DeleteObjectGrantAsync(
+                    objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId, ctx.RequestAborted);
+                if (deleted)
+                {
+                    EmitObjectAuthorizationAudit(
+                        caller.AuditActor,
+                        new OrchestratorObjectGrant(
+                            objectKind, objectName, parsedPrincipalKind, normalizedPrincipalId,
+                            OrchestratorObjectPermission.Read, caller.PrincipalKey),
+                        "REVOKE",
+                        ctx.TraceIdentifier);
+                }
+                return deleted ? Results.NoContent() : Results.NotFound();
+            }).WithName("deleteOrchestratorObjectGrant");
 
             // ── Script browser ────────────────────────────────────────────────
 
@@ -1012,32 +1301,214 @@ namespace ETL_SQL.Orchestrator.Service
             }
         }
 
-        /// <summary>
-        /// The human the Portal says initiated this request, or "service" when none was supplied.
-        ///
-        /// <para><b>Attribution only.</b> Authorization is decided entirely by
-        /// <c>X-Orchestrator-Key</c>. Anyone able to reach this API can set this header to any
-        /// value, so it must never influence an access decision — doing so would turn a shared
-        /// secret into an impersonation vector. It exists so a privileged action taken through the
-        /// Portal names a person in the log instead of the service key.</para>
-        /// </summary>
+        private const string CallerItemKey = "ETL_SQL.Orchestrator.VerifiedCaller";
+
+        /// <summary>The cryptographically verified caller, or the explicit legacy service principal.</summary>
+        internal static OrchestratorCaller RequestCaller(HttpContext ctx) =>
+            ctx.Items.TryGetValue(CallerItemKey, out var value) && value is OrchestratorCaller caller
+                ? caller
+                : new OrchestratorCaller("service", "unverified", "Unverified caller", [], []);
+
+        /// <summary>Stable, sanitized audit identity derived only from the verified assertion.</summary>
         internal static string RequestActor(HttpContext ctx)
         {
-            if (!ctx.Request.Headers.TryGetValue("X-Orchestrator-Actor", out var actor)) return "service";
-            var value = actor.ToString();
-            if (string.IsNullOrWhiteSpace(value)) return "service";
+            var actor = RequestCaller(ctx).AuditActor;
+            return actor.Length <= 192 ? actor : actor[..192];
+        }
 
-            // Log-forging guard: a header is caller-controlled, so strip anything that could break
-            // out of the line it is written on.
-            var safe = new string(value.Where(c => c is >= (char)0x20 and < (char)0x7F).Take(96).ToArray());
-            return safe.Length == 0 ? "service" : safe;
+        private static ExecutionIdentity ToExecutionIdentity(OrchestratorCaller caller) => new()
+        {
+            EffectiveUser = caller.PrincipalKey,
+            RealUser = caller.AuditActor,
+            IsAdmin = caller.IsInRole("Admin"),
+            Roles = caller.Roles,
+            Groups = caller.GroupIds
+        };
+
+        private static bool CanAccessAdHoc(OrchestratorCaller caller, JobEntry entry) =>
+            caller.IsInRole("Admin")
+            || string.Equals(caller.PrincipalKey, entry.OwnerPrincipal, StringComparison.OrdinalIgnoreCase);
+
+        private static async Task<IReadOnlyList<T>> FilterReadableJobRowsAsync<T>(
+            IReadOnlyList<T> rows,
+            Func<T, string> jobName,
+            OrchestratorCaller caller,
+            IJobHistoryStore jobs,
+            OrchestratorObjectAuthorizationService authorization,
+            CancellationToken cancellationToken)
+        {
+            var access = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            var visible = new List<T>();
+            foreach (var row in rows)
+            {
+                var name = jobName(row);
+                if (!access.TryGetValue(name, out var canRead))
+                {
+                    var job = await jobs.GetJobAsync(name);
+                    canRead = job is not null && await authorization.CanAsync(
+                        caller, OrchestratorObjectKind.Job, name,
+                        OrchestratorObjectPermission.Read, job.CreatedBy, cancellationToken);
+                    access[name] = canRead;
+                }
+                if (canRead) visible.Add(row);
+            }
+            return visible;
+        }
+
+        internal static bool TryNormalizeVariableOverrides(
+            IReadOnlyDictionary<string, string>? requested,
+            out IReadOnlyDictionary<string, string> normalized,
+            out string? error)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            normalized = result;
+            error = null;
+            if (requested is null || requested.Count == 0) return true;
+            if (requested.Count > 32)
+            {
+                error = "At most 32 variable overrides may be supplied.";
+                return false;
+            }
+
+            foreach (var (rawName, value) in requested)
+            {
+                var name = rawName?.Trim() ?? string.Empty;
+                if (name.StartsWith('@')) name = name[1..];
+                if (name.Length is 0 or > 128 || !IsVariableName(name))
+                {
+                    error = $"Variable name '{rawName}' is invalid. Use letters, numbers, and underscores, beginning with a letter or underscore.";
+                    return false;
+                }
+                if (value is null || value.Length > 4096)
+                {
+                    error = $"Variable '@{name}' must have a value no longer than 4096 characters.";
+                    return false;
+                }
+                if (!result.TryAdd("@" + name, value))
+                {
+                    error = $"Variable '@{name}' was supplied more than once.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool IsVariableName(string name) =>
+            (char.IsLetter(name[0]) || name[0] == '_')
+            && name.Skip(1).All(c => char.IsLetterOrDigit(c) || c == '_');
+
+        private static void EmitVariableOverrideAudit(
+            string actor,
+            string jobName,
+            IEnumerable<string> variableNames,
+            string correlationId)
+        {
+            var names = variableNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Warning,
+                SecurityEventType.OverrideAttempt,
+                actor,
+                actor,
+                $"JOB:{jobName}",
+                SecurityEventDecision.Allowed,
+                $"MANUAL_TRIGGER_VARIABLE_OVERRIDE: Count={names.Length}; Names={string.Join(',', names)}") with
+            {
+                HostName = Environment.MachineName,
+                JobId = jobName,
+                CorrelationId = correlationId
+            });
+        }
+
+        private static void EmitNamedCheckpointResumeAudit(
+            string actor,
+            long historyId,
+            string checkpointLabel,
+            string correlationId)
+        {
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Warning,
+                SecurityEventType.CatalogMutation,
+                actor,
+                actor,
+                $"JOB_RUN:{historyId}",
+                SecurityEventDecision.Allowed,
+                $"NAMED_CHECKPOINT_RESUME: Label={checkpointLabel}") with
+            {
+                HostName = Environment.MachineName,
+                CorrelationId = correlationId
+            });
+        }
+
+        private static bool TryParseObjectKind(string raw, out OrchestratorObjectKind objectKind) =>
+            Enum.TryParse(raw, ignoreCase: true, out objectKind);
+
+        private static async Task<(bool Exists, string? Owner)> ReadObjectOwnerAsync(
+            OrchestratorObjectKind objectKind,
+            string objectName,
+            IJobHistoryStore jobs,
+            IJobCatalogStore catalog) => objectKind switch
+        {
+            OrchestratorObjectKind.Job => await jobs.GetJobAsync(objectName) is { } job
+                ? (true, job.CreatedBy)
+                : (false, null),
+            OrchestratorObjectKind.Schedule => await catalog.GetScheduleAsync(objectName) is { } schedule
+                ? (true, schedule.CreatedBy)
+                : (false, null),
+            OrchestratorObjectKind.Notification => await catalog.GetNotificationAsync(objectName) is { } notification
+                ? (true, notification.CreatedBy)
+                : (false, null),
+            _ => (false, null)
+        };
+
+        private static void EmitObjectAuthorizationAudit(
+            string actor,
+            OrchestratorObjectGrant grant,
+            string action,
+            string correlationId)
+        {
+            SecurityEventRuntime.Emit(SecurityEventContract.Create(
+                SecurityEventSeverity.Warning,
+                SecurityEventType.CatalogMutation,
+                actor,
+                actor,
+                $"{grant.ObjectKind.ToString().ToUpperInvariant()}:{grant.ObjectName}",
+                SecurityEventDecision.Allowed,
+                $"ACL_{action}: {grant.PrincipalKind}:{grant.PrincipalId}; Permission={grant.Permission}") with
+            {
+                HostName = Environment.MachineName,
+                CorrelationId = correlationId
+            });
         }
 
         private static bool ApiKeyDenied(HttpContext ctx, IConfiguration cfg)
         {
             InitializeCache(cfg);
             ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
-            return !ApiKeyAcceptedInternal(provided.ToString());
+            if (!ApiKeyAcceptedInternal(provided.ToString())) return true;
+            return !FederatedIdentityAccepted(ctx, cfg);
+        }
+
+        internal static bool FederatedIdentityAccepted(HttpContext ctx, IConfiguration cfg)
+        {
+            var signingSecret = cfg["Orchestrator:IdentitySigningSecret"];
+            var required = cfg.GetValue<bool?>("Orchestrator:RequireFederatedIdentity")
+                ?? OrchestratorStartup.BindsToNonLoopback(cfg);
+            if (!required)
+            {
+                ctx.Items[CallerItemKey] = new OrchestratorCaller(
+                    "service", "legacy-api-key", "Legacy API-key client", [], []);
+                return true;
+            }
+            if (string.IsNullOrWhiteSpace(signingSecret)) return false;
+
+            ctx.Request.Headers.TryGetValue(OrchestratorIdentityAssertion.HeaderName, out var assertion);
+            if (!OrchestratorIdentityAssertion.TryValidate(
+                    assertion.ToString(), signingSecret, out var caller, out _)
+                || caller is null)
+                return false;
+
+            ctx.Items[CallerItemKey] = caller;
+            return true;
         }
 
         private static bool ApiKeyAcceptedForSensitivePayload(HttpContext ctx, IConfiguration cfg)
@@ -1109,20 +1580,15 @@ namespace ETL_SQL.Orchestrator.Service
             return latest == null ? targetPath : uri.ToPinnedString(latest.Version);
         }
 
-        private static string? ReadActor(HttpContext context)
-        {
-            context.Request.Headers.TryGetValue("X-ETL-SQL-Actor", out var actor);
-            var value = actor.ToString();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
-        }
+        private static string ReadActor(HttpContext context) => RequestActor(context);
 
         private static void EmitConnectionAudit(
+            string actor,
             string action,
             string? alias,
             string reason,
             bool allowed = true)
         {
-            var actor = "orchestrator-api";
             var target = string.IsNullOrWhiteSpace(alias)
                 ? "SHARED_CONNECTION:*"
                 : $"SHARED_CONNECTION:{alias}";
@@ -1266,6 +1732,7 @@ namespace ETL_SQL.Orchestrator.Service
         // ── Ad-hoc job runner (unchanged) ─────────────────────────────────────
 
         private static async Task RunJobAsync(JobEntry entry, JobSubmitRequest request,
+            ExecutionIdentity executionIdentity,
             IServiceScopeFactory scopeFactory, ILogger logger, CancellationToken ct)
         {
             entry.Status = JobRunStatus.Running;
@@ -1281,7 +1748,8 @@ namespace ETL_SQL.Orchestrator.Service
                     request.ScriptText,
                     request.SessionId,
                     ct,
-                    request.GetLineageJobName(entry.JobId));
+                    request.GetLineageJobName(entry.JobId),
+                    executionIdentity: executionIdentity);
                 entry.RowsProcessed = result.RowsProcessed;
                 entry.PeakMemoryBytes = result.PeakMemoryBytes;
                 entry.CpuTimeSeconds = result.CpuTimeSeconds;
@@ -1382,6 +1850,12 @@ namespace ETL_SQL.Orchestrator.Service
             string? Description = null,
             Dictionary<string, string>? Options = null
         );
+
+        private sealed record TriggerScheduledJobRequest(
+            Dictionary<string, string>? Variables = null
+        );
+
+        private sealed record SetObjectGrantRequest(string Permission);
 
         private sealed record DispatchNotificationApiRequest(
             string? SourceKind = null,
@@ -1528,11 +2002,16 @@ namespace ETL_SQL.Orchestrator.Service
             string? Password = null
         );
 
-        private sealed class JobEntry(string jobId, CancellationTokenSource cts, string? correlationId)
+        private sealed class JobEntry(
+            string jobId,
+            CancellationTokenSource cts,
+            string? correlationId,
+            string ownerPrincipal)
         {
             public string JobId { get; } = jobId;
             public CancellationTokenSource Cts { get; } = cts;
             public string? CorrelationId { get; } = correlationId;
+            public string OwnerPrincipal { get; } = ownerPrincipal;
             public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
             public long RowsProcessed { get; set; }
             public long ExecutionTimeMs { get; set; }

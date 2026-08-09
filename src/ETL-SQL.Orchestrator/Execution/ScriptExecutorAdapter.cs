@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -39,6 +40,38 @@ namespace ETL_SQL.Orchestrator.Execution
         }
 
         public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
+            => await ExecuteTextCoreAsync(scriptText, sessionId, cancellationToken, jobName, queueWaitMs, executionIdentity, null, resume: false);
+
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(
+            string scriptText,
+            string? sessionId,
+            CancellationToken cancellationToken,
+            string? jobName,
+            long queueWaitMs,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity,
+            IReadOnlyDictionary<string, string> variableOverrides)
+            => await ExecuteTextCoreAsync(scriptText, sessionId, cancellationToken, jobName, queueWaitMs, executionIdentity, variableOverrides, resume: false);
+
+        public async Task<ScriptExecutionResult> ResumeTextAsync(
+            string scriptText,
+            string sessionId,
+            CancellationToken cancellationToken = default,
+            string? jobName = null,
+            long queueWaitMs = 0,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
+            => await ExecuteTextCoreAsync(
+                scriptText, sessionId, cancellationToken, jobName, queueWaitMs,
+                executionIdentity, null, resume: true);
+
+        private async Task<ScriptExecutionResult> ExecuteTextCoreAsync(
+            string scriptText,
+            string? sessionId,
+            CancellationToken cancellationToken,
+            string? jobName,
+            long queueWaitMs,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity,
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            bool resume)
         {
             var process = System.Diagnostics.Process.GetCurrentProcess();
             var startCpu = process.TotalProcessorTime.TotalSeconds;
@@ -57,7 +90,9 @@ namespace ETL_SQL.Orchestrator.Execution
                     _ctx.SessionId = sessionId;
 
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
-                var result = await session.ExecuteAsync(scriptText, cancellationToken, jobName, queueWaitMs, executionIdentity);
+                var result = await session.ExecuteAsync(
+                    scriptText, cancellationToken, jobName, queueWaitMs, executionIdentity,
+                    variableOverrides, resume);
                 LastEvaluator = session.LastEvaluator;
 
                 // Persist lineage to the cross-run catalog (fire-and-forget errors so they never fail the job)

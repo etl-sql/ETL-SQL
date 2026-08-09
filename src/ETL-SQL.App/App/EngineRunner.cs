@@ -168,18 +168,18 @@ namespace ETL_SQL.App
                 || ctx.Command == "admin-access-simulate"
                 || ctx.Command.StartsWith("admin-user-", StringComparison.Ordinal)
                 || ctx.Command.StartsWith("admin-group-", StringComparison.Ordinal)
-                || ctx.Command.StartsWith("admin-session-", StringComparison.Ordinal))
+                || ctx.Command.StartsWith("admin-session-", StringComparison.Ordinal)
+                || ctx.Command.StartsWith("admin-service-account-", StringComparison.Ordinal))
             {
                 return await Admin.IdentityAdminService.RunAsync(ctx, logger);
             }
 
-            if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal) && ctx.Command.EndsWith("-secret", StringComparison.Ordinal))
+            if (ctx.Command.StartsWith("admin-machine-secret-", StringComparison.Ordinal))
             {
                 return await SecretAdminService.RunAsync(ctx, logger);
             }
 
-            if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal)
-                && (ctx.Command.EndsWith("-connection", StringComparison.Ordinal) || ctx.Command.EndsWith("-connections", StringComparison.Ordinal)))
+            if (ctx.Command.StartsWith("admin-machine-connection-", StringComparison.Ordinal))
             {
                 return await ConnectionAdminService.RunAsync(ctx, logger);
             }

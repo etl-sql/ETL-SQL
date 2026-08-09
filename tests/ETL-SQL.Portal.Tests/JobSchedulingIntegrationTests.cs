@@ -9,10 +9,12 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Tests.Integration.Connectors;
+using ETL_SQL.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -32,22 +34,24 @@ namespace ETL_SQL.Portal.Tests
 
         private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(HttpClient client, string jobName, int expectedCount, int timeoutSeconds = 90)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
+            var observed = await LoadAwareWait.UntilAsync(
+                $"{expectedCount} completed Orchestrator history entries for job '{jobName}'",
+                async _ =>
+                {
                 using var req = Authorized(HttpMethod.Get, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history");
                 var res = await client.SendAsync(req);
-                if (res.StatusCode == HttpStatusCode.OK)
-                {
-                    var history = await res.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_jsonOptions);
-                    if (history != null && history.Count >= expectedCount && history.Take(expectedCount).All(h => h.EndTime != null))
-                    {
-                        return history;
-                    }
-                }
-                await Task.Delay(500);
-            }
-            throw new TimeoutException($"Timed out waiting for {expectedCount} completed history entries for job '{jobName}'.");
+                    var history = res.StatusCode == HttpStatusCode.OK
+                        ? await res.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_jsonOptions) ?? []
+                        : [];
+                    return (res.StatusCode, History: history);
+                },
+                state => state.StatusCode == HttpStatusCode.OK
+                         && state.History.Count >= expectedCount
+                         && state.History.Take(expectedCount).All(h => h.EndTime != null),
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(500),
+                state => $"HTTP={(int)state.StatusCode}; count={state.History.Count}; statuses=[{string.Join(',', state.History.Select(h => h.Status))}]");
+            return observed.History;
         }
 
         private static HttpRequestMessage Authorized(HttpMethod method, string uri, object? body = null)
@@ -94,25 +98,26 @@ namespace ETL_SQL.Portal.Tests
 
         private static async Task PollSchedulerIdleAsync(HttpClient client, int timeoutSeconds = 30)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
+            await LoadAwareWait.UntilAsync(
+                "scheduler metrics to report no active or queued jobs",
+                async _ =>
+                {
                 using var req = new HttpRequestMessage(HttpMethod.Get, "/metrics");
                 var res = await client.SendAsync(req);
                 if (res.StatusCode == HttpStatusCode.OK)
                 {
                     using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
                     var root = doc.RootElement;
-                    if (root.GetProperty("active_jobs").GetInt32() == 0 &&
-                        root.GetProperty("queued_jobs").GetInt32() == 0)
-                    {
-                        return;
-                    }
+                        return (res.StatusCode,
+                            Active: root.GetProperty("active_jobs").GetInt32(),
+                            Queued: root.GetProperty("queued_jobs").GetInt32());
                 }
-                await Task.Delay(300);
-            }
-
-            throw new TimeoutException("Timed out waiting for scheduler metrics to report no active or queued jobs.");
+                    return (res.StatusCode, Active: -1, Queued: -1);
+                },
+                state => state.StatusCode == HttpStatusCode.OK && state.Active == 0 && state.Queued == 0,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(300),
+                state => $"HTTP={(int)state.StatusCode}; active={state.Active}; queued={state.Queued}");
         }
 
         private static async Task<JobDefinition> PollJobDefinitionUpdatedAsync(
@@ -120,18 +125,30 @@ namespace ETL_SQL.Portal.Tests
             string jobName,
             int timeoutSeconds = 30)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
-                var job = await store.GetJobAsync(jobName);
-                if (job?.LastRun is not null && job.NextRun is not null)
-                {
-                    return job;
-                }
-                await Task.Delay(200);
-            }
+            return (await LoadAwareWait.UntilAsync(
+                $"job definition '{jobName}' to persist LastRun and NextRun",
+                _ => store.GetJobAsync(jobName),
+                job => job?.LastRun is not null && job.NextRun is not null,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(200),
+                job => job is null
+                    ? "job missing"
+                    : $"LastRun={job.LastRun:O}; NextRun={job.NextRun:O}"))!;
+        }
 
-            throw new TimeoutException($"Timed out waiting for job definition '{jobName}' to persist LastRun and NextRun.");
+        private static async Task<JobHistoryEntry> PollRunningEntryAsync(
+            IJobHistoryStore store,
+            string jobName,
+            int timeoutSeconds = 10)
+        {
+            return (await LoadAwareWait.UntilAsync(
+                $"job '{jobName}' to enter RUNNING",
+                async _ => (await store.GetHistoryAsync(jobName, 10))
+                    .FirstOrDefault(h => h.Status == "RUNNING" && h.EndTime == null),
+                entry => entry is not null,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(200),
+                entry => entry is null ? "no running entry" : $"history id={entry.Id}"))!;
         }
 
         private static void AssertNoSecretLeak(string? text, params string[] secrets)
@@ -145,23 +162,27 @@ namespace ETL_SQL.Portal.Tests
 
         private async Task<JsonElement?> FindMailPitMessageAsync(string subject)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 30)
-            {
-                var messages = await _smtp.GetMessagesAsync();
+            var found = await LoadAwareWait.UntilAsync(
+                $"MailPit message with subject '{subject}'",
+                async _ =>
+                {
+                    var messages = await _smtp.GetMessagesAsync();
                 var messageList = messages.GetProperty("messages");
                 for (int i = 0; i < messageList.GetArrayLength(); i++)
                 {
                     var msg = messageList[i];
                     if (msg.GetProperty("Subject").GetString() == subject)
                     {
-                        return msg.Clone();
+                            return (Message: (JsonElement?)msg.Clone(), Count: messageList.GetArrayLength());
                     }
                 }
-                await Task.Delay(300);
-            }
-
-            return null;
+                    return (Message: (JsonElement?)null, Count: messageList.GetArrayLength());
+                },
+                state => state.Message.HasValue,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromMilliseconds(300),
+                state => $"message count={state.Count}; subject found={state.Message.HasValue}");
+            return found.Message;
         }
 
         [Fact]
@@ -280,6 +301,142 @@ INTO mail_conn.Email;
         }
 
         [Fact]
+        public async Task ManualTrigger_VariableOverridesApplyWithoutEditingTheSavedJob()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+            var jobName = $"BackfillOverride_{Guid.NewGuid():N}";
+            const string script = "DECLARE @mode = 'scheduled'; DECLARE @access_token = 'none'; IF (@mode = 'backfill') PRINT 'override applied'; ELSE THROW 'override was not applied';";
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            await store.SaveJobAsync(new JobDefinition(
+                jobName, script, 1, "HOUR", null, null, DateTime.Now.AddHours(1)));
+
+            var securityEvents = new RecordingSecurityEventSink();
+            using var securityEventScope = new SecurityEventSinkScope(securityEvents);
+
+            using var trigger = Authorized(
+                HttpMethod.Post,
+                $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger",
+                new
+                {
+                    variables = new Dictionary<string, string>
+                    {
+                        ["@mode"] = "backfill",
+                        ["@access_token"] = "SECRET:tenant-backfill-token"
+                    }
+                });
+            var response = await client.SendAsync(trigger);
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            var audit = Assert.Single(securityEvents.Events, entry =>
+                entry.Type == SecurityEventType.OverrideAttempt && entry.JobId == jobName);
+            Assert.Contains("@access_token", audit.Reason, StringComparison.Ordinal);
+            Assert.DoesNotContain("tenant-backfill-token", audit.Reason, StringComparison.Ordinal);
+
+            var history = await PollHistoryUntilCountAsync(client, jobName, 1);
+            Assert.True(
+                string.Equals("SUCCESS", history[0].Status, StringComparison.OrdinalIgnoreCase),
+                $"Status={history[0].Status}; Error={history[0].ErrorMessage ?? "<null>"}");
+
+            var saved = await store.GetJobAsync(jobName);
+            Assert.NotNull(saved);
+            Assert.Equal(script, saved.Script);
+        }
+
+        [Fact]
+        public async Task ManualTrigger_RejectsInvalidOrOversizedVariableOverrides()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+            var jobName = $"BackfillValidation_{Guid.NewGuid():N}";
+            await factory.Services.GetRequiredService<IJobHistoryStore>().SaveJobAsync(new JobDefinition(
+                jobName, "SELECT 1;", 1, "HOUR", null, null, DateTime.Now.AddHours(1)));
+
+            using var invalid = Authorized(
+                HttpMethod.Post,
+                $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger",
+                new { variables = new Dictionary<string, string> { ["@bad-name"] = "SECRET:must-not-echo" } });
+            var invalidResponse = await client.SendAsync(invalid);
+            Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+            Assert.DoesNotContain("must-not-echo", await invalidResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+            var tooMany = Enumerable.Range(0, 33).ToDictionary(i => $"@v{i}", i => i.ToString());
+            using var oversized = Authorized(
+                HttpMethod.Post,
+                $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger",
+                new { variables = tooMany });
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(oversized)).StatusCode);
+        }
+
+        [Fact]
+        public async Task ManualTrigger_RejectsOverridesWhileTheSameJobIsAlreadyRunning()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+            var jobName = $"BackfillConflict_{Guid.NewGuid():N}";
+            await factory.Services.GetRequiredService<IJobHistoryStore>().SaveJobAsync(new JobDefinition(
+                jobName,
+                "DECLARE @mode = 'scheduled'; WAITFOR DELAY '00:00:02';",
+                1,
+                "HOUR",
+                null,
+                null,
+                DateTime.Now.AddHours(1)));
+
+            using var first = Authorized(
+                HttpMethod.Post,
+                $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger",
+                new { variables = new Dictionary<string, string> { ["@mode"] = "first" } });
+            Assert.Equal(HttpStatusCode.Accepted, (await client.SendAsync(first)).StatusCode);
+
+            using var second = Authorized(
+                HttpMethod.Post,
+                $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger",
+                new { variables = new Dictionary<string, string> { ["@mode"] = "must-not-be-dropped" } });
+            var conflict = await client.SendAsync(second);
+
+            Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+            Assert.DoesNotContain("must-not-be-dropped", await conflict.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task RunHistory_ExposesCheckpointLabelButNotOpaqueSessionId()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            var runId = await store.LogJobStartAsync("resume_history");
+            await store.LogJobEndAsync(runId, "FAILURE", "boom");
+            await store.UpdateJobResumeMetadataAsync(runId, "private-session-handle", "load_complete");
+
+            using var request = Authorized(HttpMethod.Get, "/api/scheduled-jobs/resume_history/history");
+            using var response = await client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsStringAsync();
+
+            Assert.Contains("load_complete", payload, StringComparison.Ordinal);
+            Assert.Contains("hasResumeSession", payload, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("private-session-handle", payload, StringComparison.Ordinal);
+            Assert.DoesNotContain("sessionId", payload, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ResumeRun_ExplainsWhenNoNamedCheckpointExists()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            var runId = await store.LogJobStartAsync("ordinary_failure");
+            await store.LogJobEndAsync(runId, "FAILURE", "boom");
+
+            using var request = Authorized(HttpMethod.Post, $"/api/job-runs/{runId}/resume");
+            using var response = await client.SendAsync(request);
+            var payload = await response.Content.ReadAsStringAsync();
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            Assert.Contains("not a persistent session", payload, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task Verify_Resume_Restart_Behavior()
         {
             string tempDir = Path.Combine(Path.GetTempPath(), $"orch_restart_{Guid.NewGuid():N}");
@@ -360,16 +517,7 @@ INTO mail_conn.Email;
             await CreateJobAsync(client, jobName, "WAITFOR DELAY '00:00:10';");
 
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
-            JobHistoryEntry? runningEntry = null;
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 10)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                runningEntry = history.FirstOrDefault(h => h.Status == "RUNNING");
-                if (runningEntry != null) break;
-                await Task.Delay(300);
-            }
-            Assert.NotNull(runningEntry);
+            var runningEntry = await PollRunningEntryAsync(store, jobName);
 
             using var killReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/kill");
             var killRes = await client.SendAsync(killReq);
@@ -396,16 +544,7 @@ INTO mail_conn.Email;
             await TriggerJobAsync(client, jobName);
 
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
-            JobHistoryEntry? runningEntry = null;
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 10)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                runningEntry = history.FirstOrDefault(h => h.Status == "RUNNING" && h.EndTime == null);
-                if (runningEntry != null) break;
-                await Task.Delay(200);
-            }
-            Assert.NotNull(runningEntry);
+            var runningEntry = await PollRunningEntryAsync(store, jobName);
 
             using var triggerReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger");
             using var disableReq = Authorized(HttpMethod.Put, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}", new { IsEnabled = false });
@@ -439,14 +578,7 @@ INTO mail_conn.Email;
             await TriggerJobAsync(client, jobName);
 
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 10)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                if (history.Any(h => h.Status == "RUNNING" && h.EndTime == null)) break;
-                await Task.Delay(200);
-            }
-            Assert.Contains(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
+            _ = await PollRunningEntryAsync(store, jobName);
 
             using var deleteReq = Authorized(HttpMethod.Delete, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}");
             deleteReq.Headers.TryAddWithoutValidation(
@@ -564,6 +696,25 @@ SELECT * FROM api_conn.ENDPOINT;
 
             var history2 = await PollHistoryUntilCountAsync(client, jobName2, 1);
             Assert.Equal("SUCCESS", history2[0].Status);
+        }
+
+        private sealed class SecurityEventSinkScope : IDisposable
+        {
+            private readonly ISecurityEventSink _previous;
+
+            public SecurityEventSinkScope(ISecurityEventSink sink)
+            {
+                _previous = SecurityEventRuntime.Sink;
+                SecurityEventRuntime.Sink = sink;
+            }
+
+            public void Dispose() => SecurityEventRuntime.Sink = _previous;
+        }
+
+        private sealed class RecordingSecurityEventSink : ISecurityEventSink
+        {
+            public List<SecurityEvent> Events { get; } = [];
+            public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
         }
     }
 

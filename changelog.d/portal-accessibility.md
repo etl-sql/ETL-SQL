@@ -51,4 +51,4 @@
   Kestrel host and waits before disposing it — `IHost.Dispose()` only signals shutdown, so teardown
   had been racing the deletion of the temp directory it was still using. Both are real fixes; neither
   resolved the lane's intermittent startup failure, which survives across separate processes and is
-  recorded with the current diagnosis in `docs/architecture/decisions/v0.18.0-flaky-tests.md`.
+  recorded with the current diagnosis in `docs/releases/flaky-test-stability.md`.

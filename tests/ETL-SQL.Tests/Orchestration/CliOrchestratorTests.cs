@@ -214,6 +214,70 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_ParsesServiceAccountCreateWithoutASecretArgument()
+        {
+            var ctx = await ParseRunAsync("admin", "service-account", "create",
+                "--name", "nightly-loader", "--owner", "tenant-admin",
+                "--scope", "admin.identity", "--scope", "portal.read",
+                "--role", "Admin", "--secret-out", "nightly-loader.secret");
+
+            Assert.Equal("admin-service-account-create", ctx.Command);
+            Assert.Equal("nightly-loader", ctx.ServiceAccountName);
+            Assert.Equal("tenant-admin", ctx.ServiceAccountOwner);
+            Assert.Equal(["admin.identity", "portal.read"], ctx.ServiceAccountScopes);
+            Assert.Equal(["Admin"], ctx.ServiceAccountRoles);
+            Assert.Equal("nightly-loader.secret", ctx.ServiceAccountSecretOutput);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_MachineStoreScopeIsExplicitForSecretsAndConnections()
+        {
+            var secret = await ParseRunAsync("admin", "machine", "secret", "set",
+                "--name", "warehouse_password", "--value", "test-only");
+            Assert.Equal("admin-machine-secret-set", secret.Command);
+            Assert.Equal("warehouse_password", secret.SecretName);
+
+            var connection = await ParseRunAsync("admin", "machine", "connection", "set",
+                "--alias", "warehouse", "--type", "MSSQL", "--option", "SERVER=sql01");
+            Assert.Equal("admin-machine-connection-set", connection.Command);
+            Assert.Equal("warehouse", connection.ConnectionAlias);
+
+            var root = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
+            Assert.NotEmpty(root.Parse(new[] { "admin", "set-secret", "--name", "ambiguous" }).Errors);
+            Assert.NotEmpty(root.Parse(new[] { "admin", "list-connections" }).Errors);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_ParsesServiceAccountUpdateAndRotation()
+        {
+            var update = await ParseRunAsync("admin", "service-account", "update",
+                "--name", "nightly-loader", "--disable", "--clear-expiry",
+                "--clear-capabilities", "--if-version", "4");
+            Assert.True(update.ServiceAccountDisable);
+            Assert.True(update.ServiceAccountClearExpiry);
+            Assert.True(update.ServiceAccountClearCapabilities);
+            Assert.Equal(4L, update.IfVersion);
+
+            var rotate = await ParseRunAsync("admin", "service-account", "rotate-secret",
+                "--name", "nightly-loader", "--secret-out", "rotated.secret");
+            Assert.Equal("admin-service-account-rotate-secret", rotate.Command);
+            Assert.Equal("rotated.secret", rotate.ServiceAccountSecretOutput);
+        }
+
+        [Fact]
+        public void CliOrchestrator_ServiceAccountHasNoClientSecretArgument()
+        {
+            var root = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
+            var parse = root.Parse(new[]
+            {
+                "admin", "service-account", "create", "--name", "nightly-loader",
+                "--client-secret", "sas_leak"
+            });
+
+            Assert.NotEmpty(parse.Errors);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_ResetPasswordHasNoPasswordArgument()
         {
             CliContext? captured = null;

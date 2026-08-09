@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -5,93 +6,115 @@ using Microsoft.Extensions.Configuration;
 namespace ETL_SQL.Portal.Tests;
 
 /// <summary>
-/// The actor header names the human behind a proxied action so a privileged Orchestrator operation
-/// is not logged as the shared service key.
-///
-/// <para>The tests that matter here are the negative ones. The header is caller-controlled — anyone
-/// who can reach the Orchestrator can set it to anything — so it must remain a label and never an
-/// input to an access decision. If it ever gained authority, a shared secret would become an
-/// impersonation vector.</para>
+/// Portal-to-Orchestrator identity is a short-lived signed assertion. A caller-controlled actor
+/// header is deliberately ignored: attribution and authorization must use the same verified
+/// principal or the audit trail can be forged independently of the access decision.
 /// </summary>
-public sealed class OrchestratorActorHeaderTests
+public sealed class OrchestratorIdentityAssertionTests
 {
-    private static IConfiguration Config(string? key) =>
+    private const string Secret = "test-only-orchestrator-identity-secret-32-bytes";
+
+    private static IConfiguration Config(
+        string? key = "real-key",
+        string? secret = Secret,
+        bool requireIdentity = true) =>
         new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Orchestrator:ApiKey"] = key })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Orchestrator:ApiKey"] = key,
+                ["Orchestrator:IdentitySigningSecret"] = secret,
+                ["Orchestrator:RequireFederatedIdentity"] = requireIdentity.ToString()
+            })
             .Build();
 
     [Fact]
-    public void ActorHeaderNamesTheHumanWhenSupplied()
+    public void SignedAssertionRoundTripsIdentityRolesAndGroups()
     {
-        var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["X-Orchestrator-Actor"] = "42:jsmith";
+        var expected = new OrchestratorCaller(
+            "user", "42", "jsmith", ["OrchestratorManager"], ["7", "11"]);
+        var assertion = OrchestratorIdentityAssertion.Create(expected, Secret);
 
-        Assert.Equal("42:jsmith", JobApiEndpoints.RequestActor(ctx));
+        Assert.True(OrchestratorIdentityAssertion.TryValidate(
+            assertion, Secret, out var actual, out var error), error);
+        Assert.Equal(expected.SubjectType, actual!.SubjectType);
+        Assert.Equal(expected.SubjectId, actual.SubjectId);
+        Assert.Equal(expected.Roles, actual.Roles);
+        Assert.Equal(expected.GroupIds, actual.GroupIds);
     }
 
     [Fact]
-    public void AbsentActorFallsBackToTheService()
-    {
-        Assert.Equal("service", JobApiEndpoints.RequestActor(new DefaultHttpContext()));
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void BlankActorFallsBackToTheService(string value)
+    public void VerifiedAssertionBecomesTheOnlyAuditActor()
     {
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["X-Orchestrator-Actor"] = value;
+        ctx.Request.Headers[OrchestratorIdentityAssertion.HeaderName] =
+            OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller("user", "42", "jsmith", ["Admin"], []), Secret);
+        ctx.Request.Headers["X-Orchestrator-Actor"] = "999:forged-admin";
 
-        Assert.Equal("service", JobApiEndpoints.RequestActor(ctx));
-    }
-
-    /// <summary>
-    /// The value reaches a log line, and a header is attacker-controlled, so a newline would let a
-    /// caller forge an entirely fake log entry.
-    /// </summary>
-    [Fact]
-    public void ControlCharactersCannotForgeALogLine()
-    {
-        var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["X-Orchestrator-Actor"] = "42:jsmith\nWARN Job deleted by admin";
-
-        var actor = JobApiEndpoints.RequestActor(ctx);
-
-        Assert.DoesNotContain('\n', actor);
-        Assert.DoesNotContain('\r', actor);
+        Assert.True(JobApiEndpoints.FederatedIdentityAccepted(ctx, Config()));
+        Assert.Equal("user:42:jsmith", JobApiEndpoints.RequestActor(ctx));
     }
 
     [Fact]
-    public void AnAbsurdlyLongActorIsTruncated()
+    public void UnsignedActorHeaderHasNoIdentityOrAttributionAuthority()
     {
         var ctx = new DefaultHttpContext();
-        ctx.Request.Headers["X-Orchestrator-Actor"] = new string('a', 5000);
+        ctx.Request.Headers["X-Orchestrator-Actor"] = "42:admin";
 
-        Assert.True(JobApiEndpoints.RequestActor(ctx).Length <= 96);
+        Assert.False(JobApiEndpoints.FederatedIdentityAccepted(ctx, Config()));
+        Assert.Equal("service:unverified:Unverified caller", JobApiEndpoints.RequestActor(ctx));
     }
 
-    // ── The header confers nothing ───────────────────────────────────────────────
+    [Fact]
+    public void TamperingWithSubjectInvalidatesTheAssertion()
+    {
+        var assertion = OrchestratorIdentityAssertion.Create(
+            new OrchestratorCaller("user", "42", "jsmith", [], []), Secret);
+        var parts = assertion.Split('.');
+        var tampered = "e30." + parts[1];
 
-    /// <summary>
-    /// Authorization is decided by the API key alone. Supplying an actor must not make an
-    /// unauthenticated call acceptable, however administrative the claimed identity looks.
-    /// </summary>
+        Assert.False(OrchestratorIdentityAssertion.TryValidate(
+            tampered, Secret, out _, out var error));
+        Assert.Contains("signature", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExpiredAssertionIsRejected()
+    {
+        var issuedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var assertion = OrchestratorIdentityAssertion.Create(
+            new OrchestratorCaller("user", "42", "jsmith", [], []), Secret, issuedAt);
+
+        Assert.False(OrchestratorIdentityAssertion.TryValidate(
+            assertion, Secret, out _, out var error, DateTimeOffset.UtcNow));
+        Assert.Contains("expired", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExplicitLegacyModeGetsANamedServicePrincipalButCannotForgeAHuman()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["X-Orchestrator-Actor"] = "42:admin";
+
+        Assert.True(JobApiEndpoints.FederatedIdentityAccepted(
+            ctx, Config(secret: null, requireIdentity: false)));
+        Assert.Equal("service:legacy-api-key:Legacy API-key client", JobApiEndpoints.RequestActor(ctx));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("wrong-key")]
-    public void AnActorHeaderNeverSubstitutesForTheApiKey(string? providedKey)
+    public void IdentityAssertionNeverSubstitutesForTheApiKey(string? providedKey)
     {
-        var configuration = Config("real-key");
-
-        // Whatever the actor claims to be, the key is what decides.
-        Assert.False(JobApiEndpoints.ApiKeyAccepted(configuration, providedKey));
+        Assert.False(JobApiEndpoints.ApiKeyAccepted(Config(), providedKey));
     }
 
     [Fact]
-    public void TheApiKeyStillGrantsAccessWithNoActorAtAll()
+    public void ApiKeyAndIdentityAreIndependentFactors()
     {
-        Assert.True(JobApiEndpoints.ApiKeyAccepted(Config("real-key"), "real-key"));
+        Assert.True(JobApiEndpoints.ApiKeyAccepted(Config(), "real-key"));
+        Assert.False(JobApiEndpoints.FederatedIdentityAccepted(
+            new DefaultHttpContext(), Config()));
     }
 }

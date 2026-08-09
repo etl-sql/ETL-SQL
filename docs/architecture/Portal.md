@@ -299,7 +299,10 @@ hosted services against the same isolated temp-directory databases, defaults to 
 at-rest key and one-second poll/purge intervals (`Portal:Orchestrator:PollIntervalSeconds`,
 `Portal:Jwt:RefreshTokenPurgeIntervalSeconds`), and accepts an injectable `TimeProvider`
 (registered in `Program.cs`, default `TimeProvider.System`) so time-based maintenance decisions
-are deterministic. `HostedServiceLaneTests` covers: full-pipeline startup health plus
+are deterministic. `HostedServiceLaneTests` runs in the dedicated `portal-hosted` test process
+(and as a separate invocation within the `portal`, `full`, and `release` lanes), so unrelated
+Portal classes cannot consume its startup/shutdown budget or share background-service state. It
+covers: full-pipeline startup health plus
 instance-lock acquisition, the fatal JWT/dataset-key startup validators actually stopping the
 host, the machine-fallback opt-in, and the in-host refresh-token purge honoring a pinned clock.
 

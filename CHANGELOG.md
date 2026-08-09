@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Breaking
 
+**Machine governance stores are explicit in the admin command path**
+
+- Ambiguous flat secret and connection commands move under `admin machine`: use
+  `admin machine secret set|list|verify|rotate|disable|enable|delete` and
+  `admin machine connection set|list|verify|disable|enable|delete`. These commands never mutate the
+  separate Portal catalog stores; list output identifies the configured machine-local provider.
+
 **Portal SMTP is an ordinary connector; `CREATE SMTP CONNECTION` is removed**
 
 - SMTP now uses the connector grammar: `CREATE CONNECTION <alias> AS SMTP(...)` inside an
@@ -71,6 +78,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Security
 
+- Orchestrator management now requires a short-lived Portal-signed caller assertion in addition to
+  the service API key on network-reachable listeners. Durable owner and user/group/service ACLs
+  protect `JOB`, `SCHEDULE`, and `NOTIFICATION` reads and mutations, including catalog statements
+  submitted through the ad-hoc script API. `READ`, `EXECUTE`, variable `OVERRIDE`, and `MANAGE`
+  remain separate capabilities; history, quality, and triage evidence is filtered by job read
+  authority, and mutation security events use the verified human or service principal.
 - Portal SMTP credentials move from an encrypted value in a bespoke table to a `SECRET:` reference
   in the governed connection catalog, which enforces reference-only credentials on write, encrypts
   target and options at rest, and carries per-connection use ACLs, ownership, an audit trail and a
@@ -87,6 +100,32 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `SecurityBoundaryDocTests`.
 
 ### Added
+
+- Added a shared load-aware test wait with condition-specific timeout diagnostics and optional JSONL
+  timing evidence. Timing-sensitive Portal and Orchestrator slices now use observable waits, CI
+  rejects new bare deadline helpers, scheduler tests isolate their throttle databases, and the real
+  Portal hosted-service pipeline runs in a separate `portal-hosted` process. Three deliberate-load
+  repetitions retained the existing budgets with at least 14x measured headroom.
+
+- Added audited Orchestrator recovery from the last completed author-declared checkpoint. Failed or
+  cancelled persistent runs expose the checkpoint label without exposing the opaque session handle;
+  in-process, one-shot, warm-runner, and custom-template paths all honor named-label resume. The
+  Portal explains ineligible runs and intentionally offers no statement-index resume.
+
+- Added an audited one-run Orchestrator backfill form with optional input-variable overrides. The
+  values flow through in-process, one-shot, warm-runner, and custom argument-template execution
+  paths without changing the saved job; audit records retain only normalized names and counts. A
+  concurrent trigger for the same job now returns `409 Conflict` instead of silently discarding its
+  override set.
+
+- Added an Orchestrator triage run drill-down that joins script-hash integrity, normalized
+  counts-only quality failures, and the durable normalized statement timeline in one expandable
+  operator evidence view. Run-level history reads avoid scanning unrelated executions, and the UI
+  distinguishes loading, missing telemetry, and read failures from a clean run.
+
+- Added the remote `admin service-account list|create|update|rotate-secret|revoke` lifecycle. New
+  secrets require a create-new `--secret-out` file and are never printed; service identities can
+  delegate only within their own current owner, scope, role, and Studio-capability authority.
 
 - Completed the Orchestrator statement flight recorder across in-process, one-shot, and warm-runner
   execution paths. Statement text is normalized and capped before serialization, failed statements
@@ -441,7 +480,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   can review affected reports, datasets, subscriptions, jobs, owners, and stewards before changes.
 - Added auditable `STEWARD_LINEAGE_IMPACT` hooks for report execution and persisted ad hoc
   interaction lineage changes that affect steward-owned assets.
-- Added [Data Stewardship and Impact Analysis](docs/guides/data-stewardship-impact.md) as the
+- Added [Data Stewardship and Impact Analysis](docs/guides/feature-guides/data-stewardship-impact.md) as the
   operator and publisher usage guide.
 
 **Data prep helpers**
@@ -557,6 +596,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Performance
 
+- Removed 432 bytes of per-row validator allocation for passing synchronous data-quality rules by
+  keeping their hot path out of async state machines and boxed interface enumeration. A 100,000-row
+  allocation budget test allows no more than 4 KB total measurement noise; `EXPR` evaluation and
+  real quarantine/warn writes remain asynchronous.
 - Reduced Portal catalog-search allocation pressure by replacing the Levenshtein two-dimensional
   allocation with rolling buffers.
 - Cached request-scoped Portal group lookups by user to avoid repeated `UserGroups` queries during

@@ -10,6 +10,7 @@ using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Scheduling;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers;
 
@@ -28,13 +29,38 @@ internal static class CatalogStatementSupport
         options is null || options.Count == 0 ? null : JsonSerializer.Serialize(options);
 
     /// <summary>
-    /// Applies a <c>SECRET:</c>-free identity for attribution. The Orchestrator has no identity model
-    /// of its own, so this is who the calling host says is acting — attribution, never authorization.
+    /// Applies the host-verified principal key used for ownership and attribution.
     /// </summary>
     public static string? ActingIdentity(IExecutionContext context)
     {
         var user = context.ExecutionIdentity?.EffectiveUser;
         return string.IsNullOrWhiteSpace(user) ? null : user;
+    }
+
+    public static void DemandCreate(IExecutionContext context, Statement statement, string kind)
+    {
+        var authorizer = context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>();
+        if (authorizer is null || authorizer.CanCreate(context.ExecutionIdentity)) return;
+        throw new ExecutionException(
+            $"The authenticated principal may not create {kind} objects on this Orchestrator.",
+            null, statement.Line, statement.Column);
+    }
+
+    public static async Task DemandAsync(
+        IExecutionContext context,
+        Statement statement,
+        OrchestratorObjectKind kind,
+        string name,
+        OrchestratorObjectPermission permission,
+        string? owner)
+    {
+        var authorizer = context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>();
+        if (authorizer is null || await authorizer.CanAsync(
+                context.ExecutionIdentity, kind, name, permission, owner, context.CancellationToken))
+            return;
+        throw new ExecutionException(
+            $"The authenticated principal lacks {permission.ToString().ToUpperInvariant()} authority on {kind.ToString().ToUpperInvariant()} '{name}'.",
+            null, statement.Line, statement.Column);
     }
 
     /// <summary>
@@ -115,6 +141,9 @@ public class CreateScheduleStatementHandler(IJobCatalogStore? catalog = null, IC
                 $"Schedule '{stmt.Name}' already exists. Use CREATE OR ALTER SCHEDULE to update it, " +
                 $"CREATE OR REPLACE SCHEDULE to redefine it, or DROP SCHEDULE {stmt.Name} first.",
                 null, stmt.Line, stmt.Column);
+        if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "SCHEDULE");
+        else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule, stmt.Name,
+            OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         // The zone is resolved and stored now, not read at each fire: otherwise editing the
         // configured default would silently move every schedule that relied on it.
@@ -168,6 +197,9 @@ public class CreateNotificationStatementHandler(IJobCatalogStore? catalog = null
                 $"update it, CREATE OR REPLACE NOTIFICATION to redefine it, or DROP NOTIFICATION " +
                 $"{stmt.Name} first.",
                 null, stmt.Line, stmt.Column);
+        if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "NOTIFICATION");
+        else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification, stmt.Name,
+            OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -215,6 +247,8 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
         {
             var existing = await store.GetScheduleAsync(stmt.Name)
                 ?? throw NotFound(stmt, kind);
+            await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule,
+                stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
             var cron = stmt.Cron ?? existing.Cron;
             var timeZone = stmt.TimeZone ?? existing.TimeZone;
@@ -247,6 +281,8 @@ public class AlterCatalogObjectStatementHandler(IJobCatalogStore? catalog = null
         {
             var existing = await store.GetNotificationAsync(stmt.Name)
                 ?? throw NotFound(stmt, kind);
+            await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification,
+                stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
             if (context.IsWhatIf)
             {
@@ -297,9 +333,9 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
         var kind = stmt.Kind.ToString().ToUpperInvariant();
         var store = CatalogStatementSupport.Require(catalog, stmt, $"DROP {kind}");
 
-        var exists = stmt.Kind == CatalogObjectKind.Schedule
-            ? await store.GetScheduleAsync(stmt.Name) is not null
-            : await store.GetNotificationAsync(stmt.Name) is not null;
+        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(stmt.Name) : null;
+        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(stmt.Name) : null;
+        var exists = schedule is not null || notification is not null;
 
         if (!exists)
         {
@@ -310,6 +346,11 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
             }
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
         }
+        await CatalogStatementSupport.DemandAsync(
+            context, stmt,
+            stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
+            stmt.Name, OrchestratorObjectPermission.Manage,
+            schedule?.CreatedBy ?? notification?.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -329,6 +370,14 @@ public class DropCatalogObjectStatementHandler(IJobCatalogStore? catalog = null)
                 $"{string.Join(", ", blockers.OrderBy(b => b, StringComparer.OrdinalIgnoreCase))}. " +
                 $"Detach it with ALTER JOB <job> REMOVE {kind} {stmt.Name} before dropping it.",
                 null, stmt.Line, stmt.Column);
+
+        if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants)
+            await grants.DeleteObjectGrantsAsync(
+                stmt.Kind == CatalogObjectKind.Schedule
+                    ? OrchestratorObjectKind.Schedule
+                    : OrchestratorObjectKind.Notification,
+                stmt.Name,
+                context.CancellationToken);
 
         CatalogStatementSupport.AuditMutation(
             context,
@@ -351,11 +400,16 @@ public class SetCatalogObjectEnabledStatementHandler(IJobCatalogStore? catalog =
         var verb = stmt.IsEnabled ? "ENABLE" : "DISABLE";
         var store = CatalogStatementSupport.Require(catalog, stmt, $"{verb} {kind}");
 
-        var exists = stmt.Kind == CatalogObjectKind.Schedule
-            ? await store.GetScheduleAsync(stmt.Name) is not null
-            : await store.GetNotificationAsync(stmt.Name) is not null;
+        var schedule = stmt.Kind == CatalogObjectKind.Schedule ? await store.GetScheduleAsync(stmt.Name) : null;
+        var notification = stmt.Kind == CatalogObjectKind.Notification ? await store.GetNotificationAsync(stmt.Name) : null;
+        var exists = schedule is not null || notification is not null;
         if (!exists)
             throw new ExecutionException($"{kind} '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
+        await CatalogStatementSupport.DemandAsync(
+            context, stmt,
+            stmt.Kind == CatalogObjectKind.Schedule ? OrchestratorObjectKind.Schedule : OrchestratorObjectKind.Notification,
+            stmt.Name, OrchestratorObjectPermission.Manage,
+            schedule?.CreatedBy ?? notification?.CreatedBy);
 
         if (context.IsWhatIf)
         {
@@ -397,6 +451,15 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
         var kind = stmt.Kind.ToString().ToUpperInvariant();
         var verb = stmt.Action.ToString().ToUpperInvariant();
         var store = CatalogStatementSupport.Require(catalog, stmt, $"ALTER JOB … {verb} {kind}");
+        if (context.ServiceProvider.GetService<IOrchestratorObjectAuthorizer>() is not null)
+        {
+            var jobs = context.ServiceProvider.GetService<IJobHistoryStore>() ?? store as IJobHistoryStore
+                ?? throw new ExecutionException("The shared Orchestrator job store is unavailable.", null, stmt.Line, stmt.Column);
+            var job = await jobs.GetJobAsync(stmt.JobName)
+                ?? throw new ExecutionException($"Job '{stmt.JobName}' does not exist.", null, stmt.Line, stmt.Column);
+            await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+                job.Name, OrchestratorObjectPermission.Manage, job.CreatedBy);
+        }
 
         if (context.IsWhatIf)
         {
@@ -435,6 +498,8 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
             ?? throw new ExecutionException(
                 $"Schedule '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Schedule,
+            schedule.Name, OrchestratorObjectPermission.Read, schedule.CreatedBy);
 
         // The link is armed at the schedule's next occurrence, never left empty: an unarmed link is
         // dormant in this model, so a job attached without one would silently never run.
@@ -482,6 +547,8 @@ public class AlterJobAttachmentStatementHandler(IJobCatalogStore? catalog = null
             ?? throw new ExecutionException(
                 $"Notification '{stmt.TargetName}' does not exist. Create it before attaching it to a job.",
                 null, stmt.Line, stmt.Column);
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Notification,
+            notification.Name, OrchestratorObjectPermission.Read, notification.CreatedBy);
 
         try
         {

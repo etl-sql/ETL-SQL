@@ -20,18 +20,31 @@ public sealed class ServiceAccountsController(
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    private bool IsServiceIdentity =>
+        User.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType;
+
     [HttpGet]
-    public async Task<IReadOnlyList<ServiceAccountDto>> List(CancellationToken ct) =>
-        await db.ServiceAccounts.AsNoTracking().OrderBy(value => value.Name)
-            .Select(value => ToDto(value)).ToListAsync(ct);
+    public async Task<IReadOnlyList<ServiceAccountDto>> List(CancellationToken ct)
+    {
+        var query = db.ServiceAccounts.AsNoTracking();
+        if (IsServiceIdentity)
+            query = query.Where(value => value.OwnerUserId == CurrentUserId);
+        return await query.OrderBy(value => value.Name).Select(value => ToDto(value)).ToListAsync(ct);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create(CreateServiceAccountRequest request, CancellationToken ct)
     {
         if (request.Description?.Trim().Length > 500)
             return BadRequest(new { error = "Description must not exceed 500 characters." });
+        // Refuse a cross-owner delegation before looking that owner up, so a service identity
+        // cannot use validation differences to enumerate active administrator IDs.
+        if (IsServiceIdentity && request.OwnerUserId != CurrentUserId) return Forbid();
         var validation = await Validate(request.Name, request.OwnerUserId, request.Scopes, request.Roles, request.ExpiresAt);
         if (validation.Error is not null) return BadRequest(new { error = validation.Error });
+        if (IsServiceIdentity && !CanDelegate(request.OwnerUserId, request.Scopes,
+                validation.Roles, request.StudioCapabilities ?? []))
+            return Forbid();
         var normalizedName = request.Name.Trim().ToUpperInvariant();
         if (await db.ServiceAccounts.AnyAsync(value => value.NormalizedName == normalizedName, ct))
             return Conflict(new { error = "A service account with this name already exists." });
@@ -63,6 +76,10 @@ public sealed class ServiceAccountsController(
     {
         var account = await db.ServiceAccounts.FindAsync([id], ct);
         if (account is null) return NotFound();
+        if (IsServiceIdentity && (!CanManage(account)
+                || !CanDelegate(account.OwnerUserId, request.Scopes, Roles(account),
+                    request.StudioCapabilities ?? Capabilities(account))))
+            return Forbid();
         var concurrency = PrepareMutation(account);
         if (concurrency is not null) return concurrency;
         var scopes = ServiceAccountScopes.Normalize(request.Scopes);
@@ -92,6 +109,7 @@ public sealed class ServiceAccountsController(
     {
         var account = await db.ServiceAccounts.FindAsync([id], ct);
         if (account is null) return NotFound();
+        if (IsServiceIdentity && !CanManage(account)) return Forbid();
         var concurrency = PrepareMutation(account);
         if (concurrency is not null) return concurrency;
         if (account.RevokedAt is not null) return Conflict(new { error = "A revoked service account cannot be rotated." });
@@ -110,6 +128,7 @@ public sealed class ServiceAccountsController(
     {
         var account = await db.ServiceAccounts.FindAsync([id], ct);
         if (account is null) return NotFound();
+        if (IsServiceIdentity && !CanManage(account)) return Forbid();
         var concurrency = PrepareMutation(account);
         if (concurrency is not null) return concurrency;
         if (account.RevokedAt is null)
@@ -179,6 +198,37 @@ public sealed class ServiceAccountsController(
         return excessive.Length > 0
             ? ($"Roles exceed the owner's current roles: {string.Join(", ", excessive)}", [])
             : (null, roles);
+    }
+
+    /// <summary>
+    /// A service identity may delegate only its current effective authority, and only beneath the
+    /// same human owner. This prevents selecting a stronger administrator as owner, adding a scope
+    /// the caller lacks, or rotating a more privileged sibling account to steal its credential.
+    /// </summary>
+    private bool CanDelegate(
+        int ownerUserId, IEnumerable<string> scopes, IEnumerable<string> roles,
+        IEnumerable<string> capabilities) =>
+        ownerUserId == CurrentUserId
+        && IsSubset(scopes, User.FindAll(TokenService.ScopeClaim).Select(value => value.Value))
+        && IsSubset(roles, User.FindAll(ClaimTypes.Role).Select(value => value.Value))
+        && IsSubset(capabilities,
+            User.FindAll(StudioAuthorizationService.CapabilityClaim).Select(value => value.Value));
+
+    private bool CanManage(ServiceAccount account) =>
+        CanDelegate(account.OwnerUserId, ServiceAccountScopes.Parse(account.Scopes),
+            Roles(account), Capabilities(account));
+
+    private static string[] Roles(ServiceAccount account) =>
+        account.RoleNames.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    private static string[] Capabilities(ServiceAccount account) =>
+        [.. StudioCapabilityStore.Parse(account.StudioCapabilities)];
+
+    private static bool IsSubset(IEnumerable<string> requested, IEnumerable<string> granted)
+    {
+        var grant = granted.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return requested.Select(value => value.Trim()).Where(value => value.Length > 0)
+            .All(grant.Contains);
     }
 
     private static ServiceAccountDto ToDto(ServiceAccount value) => new(

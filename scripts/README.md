@@ -17,7 +17,7 @@ than the operator front door.
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](./build-debug.ps1)** / **[`build-debug.sh`](./build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
 | **[`test-smoke.ps1`](./test-smoke.ps1)** / **[`test-smoke.sh`](./test-smoke.sh)** | PowerShell / Bash | Cross-platform | Executes targeted minimal smoke tests divided into specific categories (Core, Security, Reporting, Portal). |
-| **[`test-lane.ps1`](./test-lane.ps1)** / **[`test-lane.sh`](./test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `fast` lane stays bounded to smoke + language-server checks; `engine` carries the broad `ETL-SQL.Tests` regression pass, and `portal`/`full` run Portal tests plus Node UI smoke coverage. |
+| **[`test-lane.ps1`](./test-lane.ps1)** / **[`test-lane.sh`](./test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, portal-hosted, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `fast` lane stays bounded to smoke + language-server checks; `engine` carries the broad `ETL-SQL.Tests` regression pass, and `portal`/`full` run ordinary Portal tests, the isolated hosted-service process, and Node UI smoke coverage. |
 | **[`Get-TestLaneInventory.ps1`](./Get-TestLaneInventory.ps1)** | PowerShell | Cross-platform | Generates a static Markdown or JSON inventory of discovered xUnit tests by lane, category trait, and project. |
 | **[`Test-SltCorpus.ps1`](./Test-SltCorpus.ps1)** / **[`Test-SltCorpus.sh`](./Test-SltCorpus.sh)** | PowerShell / Bash | Cross-platform | Runs the SqlLogicTests corpus suite and pipes console logs + TRX file output to a timestamped folder in `slt_results/`. |
 | **[`Parse-SltResults.ps1`](./Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
@@ -119,8 +119,9 @@ Checks that protect conventions the compiler cannot. Useful to run locally befor
 
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
-| **[`Audit-SyntaxIndex.py`](./Audit-SyntaxIndex.py)** | Python | Cross-platform | Audits `docs/syntax-index.md` against the reference documentation tree for broken links and unlinked pages. `--strict` fails on any finding (CI mode). |
-| **[`check-flaky-test-delays.mjs`](./check-flaky-test-delays.mjs)** | JavaScript | Cross-platform | Flags the "sleep-then-assert" anti-pattern — a literal `Task.Delay` used as the only synchronization before an assertion. See [flaky-test policy](../docs/architecture/decisions/v0.15.0-flaky-tests.md). |
+| **[`audit-syntax-index.js`](./audit-syntax-index.js)** | JavaScript | Cross-platform | Audits `docs/syntax-index.md` against the reference documentation tree for broken links and unlinked pages. `--strict` fails on any finding (CI mode). |
+| **[`check-flaky-test-delays.mjs`](./check-flaky-test-delays.mjs)** | JavaScript | Cross-platform | Flags sleep-then-assert, unreviewed elapsed upper bounds, and bare deadline-based wait helpers. See [flaky-test policy](../docs/releases/flaky-test-stability.md). |
+| **[`Measure-TestWaitDistribution.ps1`](./Measure-TestWaitDistribution.ps1)** | PowerShell | Cross-platform | Repeats the historically timing-sensitive Portal and Orchestrator slices under deliberate CPU load and writes JSONL plus distribution summaries. |
 | **[`Test-DependencyAudit.ps1`](./Test-DependencyAudit.ps1)** | PowerShell | Cross-platform | Script-level tests for the NuGet dependency-audit helpers in `scripts/lib/DependencyAudit.ps1`. |
 
 ### Browser-side unit tests

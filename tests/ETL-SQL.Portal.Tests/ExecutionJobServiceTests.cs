@@ -8,6 +8,7 @@ using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.TestSupport;
 using ETL_SQL.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -798,13 +799,13 @@ public class ExecutionJobServiceTests : IDisposable
         // Generous deadline so the assertion is about the steady-state outcome, not how fast jobs
         // reach Running. It returns the instant the count matches, so a slow CI box only ever waits
         // longer when something is genuinely wrong (a tight 1.5s window flaked under parallel load).
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await RunningCountAsync(service, jobIds) == expected) return;
-            await Task.Delay(25);
-        }
-        Assert.Fail($"Expected {expected} running job(s) within the observation window.");
+        await LoadAwareWait.UntilAsync(
+            $"running job count to become {expected}",
+            _ => RunningCountAsync(service, jobIds),
+            count => count == expected,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMilliseconds(25),
+            count => $"running count={count}; jobs=[{string.Join(',', jobIds)}]");
     }
 
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
@@ -813,33 +814,24 @@ public class ExecutionJobServiceTests : IDisposable
         // ahead of it does, and on a saturated CI box timer callbacks/continuations are delayed, so a
         // 2s logical timeout can take noticeably longer to fully unwind. Returns the instant the job
         // is terminal, so the normal case is unaffected.
-        var deadline = DateTime.UtcNow.AddSeconds(45);
-        while (DateTime.UtcNow < deadline)
-        {
-            var job = await service.GetAsync(jobId);
-            Assert.NotNull(job);
-            if (job.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed)
-                return;
-            await Task.Delay(50);
-        }
-
-        Assert.Fail(
-            $"Job {jobId} did not reach a terminal state within 45s " +
-            $"(status={(await service.GetAsync(jobId))?.Status}).");
+        await LoadAwareWait.UntilAsync(
+            $"job '{jobId}' to become terminal",
+            async _ => await service.GetAsync(jobId),
+            job => job?.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed,
+            TimeSpan.FromSeconds(45),
+            TimeSpan.FromMilliseconds(50),
+            job => $"status={job?.Status.ToString() ?? "<missing>"}");
     }
 
     private static async Task WaitForNoActiveRefreshAsync(ExecutionJobService service, int reportId)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (await service.GetActiveRefreshJobIdAsync(reportId) is null)
-                return;
-
-            await Task.Delay(25);
-        }
-
-        Assert.Null(await service.GetActiveRefreshJobIdAsync(reportId));
+        await LoadAwareWait.UntilAsync(
+            $"report '{reportId}' to have no active refresh",
+            _ => service.GetActiveRefreshJobIdAsync(reportId),
+            activeJobId => activeJobId is null,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(25),
+            activeJobId => $"active refresh job={activeJobId ?? "<none>"}");
     }
 
     private static async Task AssertStatusForAsync(
@@ -848,7 +840,7 @@ public class ExecutionJobServiceTests : IDisposable
         JobStatus expected,
         TimeSpan duration)
     {
-        var deadline = DateTime.UtcNow + duration;
+        var deadline = DateTime.UtcNow + duration; // flaky-wait-budget-ok: deliberate stability window asserting status remains unchanged
         while (DateTime.UtcNow < deadline)
         {
             var job = await service.GetAsync(jobId);
@@ -944,19 +936,13 @@ public class ExecutionJobServiceTests : IDisposable
 
         public async Task WaitForSubmittedCountAsync(int expected, TimeSpan? timeout = null)
         {
-            var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(3));
-            while (DateTime.UtcNow < deadline)
-            {
-                lock (_sync)
-                {
-                    if (_submittedReportIds.Count >= expected)
-                        return;
-                }
-
-                await Task.Delay(25);
-            }
-
-            Assert.Fail($"Expected at least {expected} submitted job(s), saw {SubmittedReportIds.Count}.");
+            await LoadAwareWait.UntilAsync(
+                $"at least {expected} submitted report job(s)",
+                _ => Task.FromResult(SubmittedReportIds),
+                submitted => submitted.Count >= expected,
+                timeout ?? TimeSpan.FromSeconds(3),
+                TimeSpan.FromMilliseconds(25),
+                submitted => $"submitted count={submitted.Count}; ids=[{string.Join(',', submitted)}]");
         }
 
         public void ReleaseFirstJob() => _releaseFirstJob.TrySetResult();

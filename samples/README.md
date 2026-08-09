@@ -2,7 +2,7 @@
 
 This directory contains runnable `.etlsql` and `.rptsql` examples for learning, demos, regression checks, and release-readiness coverage. The samples are intentionally source-controlled because they are script-first product artifacts: they document supported syntax, exercise cross-source orchestration, and provide reviewable examples for CLI, VS Code, Portal, Orchestrator, and CI/CD workflows.
 
-For the detailed walkthrough and highlighted scripts, see [`../docs/guides/sample-guide.md`](../docs/guides/sample-guide.md).
+For the detailed walkthrough and highlighted scripts, see [`../docs/guides/patterns/sample-guide.md`](../docs/guides/patterns/sample-guide.md).
 
 ## Source control policy
 

@@ -1,9 +1,9 @@
 # ETL-SQL Development TODO List
 
 Use this list as the execution ledger for active-release and roadmap work. Once work is verified,
-record its notable outcome in `CHANGELOG.md` and remove the completed task from this file and from
-`ROADMAP.md`. `ROADMAP.md` remains the high-level product-direction source, and its initiatives are
-decomposed into actionable tasks here.
+check it off in place and record its notable outcome in `CHANGELOG.md`; completed entries remain as
+decision and delivery history. `ROADMAP.md` remains the high-level product-direction source, and its
+initiatives are decomposed into actionable tasks here.
 
 ---
 
@@ -55,7 +55,7 @@ revocation logic, a red test is far stronger evidence than a careful read.
 
 Open High `js/xss` accepted for v0.17.0 and left **open** rather than dismissed, because it is a real
 latent gap. Full triage in
-[v0.17.0-code-review.md](docs/architecture/decisions/v0.17.0-code-review.md).
+[v0.17.0-code-review.md](docs/releases/v0.17.0-code-review.md).
 
 Implementation has been fixed in the canonical shared runtime and synced to host copies; the
 remaining work requires the next CodeQL run on `main`.
@@ -114,7 +114,7 @@ and nothing else. Consider adding them as a fast unit test over the built MSI re
 **Resolves a question open since v0.15.0.** There was no engine regression in v0.15.0, v0.16.0, or
 v0.17.0. Every "regression" was produced by measuring cold binaries at the end of a long gate. Full
 measurements in
-[v0.17.0-performance-results.md](docs/architecture/decisions/v0.17.0-performance-results.md).
+[v0.17.0-performance-results.md](docs/releases/v0.17.0-performance-results.md).
 
 The same commit measures 5013 ms warmed and 8977 ms cold — a **56% spread**, far wider than any
 threshold the gate compares against. v0.15.0 reached the right conclusion ("environmental, not
@@ -123,9 +123,17 @@ release day plus a false regression alarm.
 
 Remaining work:
 
-- [ ] Investigate performance improvements when data-quality allocation is active. Focus on reducing
+- [x] Investigate performance improvements when data-quality allocation is active. Focus on reducing
       per-row allocation and GC pause time without weakening `@expect`/`@fail` behavior, quarantine
       routing, or lineage/tag capture.
+
+      **Done (v0.18.0).** The passing synchronous-rule path (`NOT NULL`, comparison, `IN`,
+      `MATCHES`, `EXISTS IN`, and prepared `UNIQUE`) no longer enters nested async `Task` state
+      machines or boxes interface enumerators per row. A focused 100,000-row measurement fell from
+      43.2 MB (432 bytes/row) to the test's ≤4 KB total noise budget. `EXPR` rules and actual
+      quarantine/warn target writes retain their asynchronous paths. The full 91-test quality
+      runtime/parser suite pins THROW/WARN/QUARANTINE, dry-run, PII, metrics, replay, lineage/tag,
+      expression, and routing behavior alongside the new allocation budget.
 
 Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
 measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.
@@ -210,46 +218,80 @@ text of every job in the estate" — an analyst who should see why the nightly l
 therefore need kill and service-stop. If per-object ACLs ship with manage semantics only, adding a
 read grant afterwards is a migration rather than a definition.
 
-- [ ] Federate a verifiable caller identity from Portal/OIDC; do not trust an identity header.
-- [ ] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant
+- [x] Federate a verifiable caller identity from Portal/OIDC; do not trust an identity header.
+- [x] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant
       vocabulary, with **read** and **manage** as separate grants (see the interaction note above).
-- [ ] Decide authority for a parameter-overridden trigger — an override can widen a data scope, so
+- [x] Decide authority for a parameter-overridden trigger — an override can widen a data scope, so
       "may this principal trigger job X" and "may they override its variables" are two questions.
       Triage P2 is safe under `OrchestratorAccess` for a single-team Team deployment; a shared or
       multi-team Orchestrator needs this first.
-- [ ] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
-- [ ] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
-- [ ] Add negative tests proving a reachable Orchestrator does not imply authority over another
+- [x] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
+- [x] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
+- [x] Add negative tests proving a reachable Orchestrator does not imply authority over another
       principal's objects.
+
+Done: Portal/OIDC callers now cross the service boundary in short-lived HMAC-signed assertions;
+unsigned actor headers have no authority. Durable owner plus user/group/service ACLs distinguish
+`READ`, `EXECUTE`, variable `OVERRIDE`, and `MANAGE` for jobs, schedules, and notifications. The
+same checks run in HTTP endpoints and engine catalog handlers, so ad-hoc ETL-SQL cannot take over a
+shared name. History, quality, triage, and ad-hoc status reads are filtered, and mutation security
+events use the verified principal. Negative integration tests cover forged/missing identity,
+cross-principal reads, endpoint and script `CREATE OR ALTER`, trigger versus override, and all three
+catalog object kinds.
 
 ### Orchestrator — Operations Triage and Run Flight Recorder
 
 Statement timelines are now durable across in-process, one-shot, and warm-runner execution. The
 remaining work is the joined operator drill-down, recovery controls, and cross-profile evidence.
 #### P1 — Flight recorder (persist what is already measured)
-- [ ] Join the run drill-down across all three sources now available: statement timeline, the
+- [x] Join the run drill-down across all three sources now available: statement timeline, the
       normalized data-quality failures, and `ScriptHashAtRunTime`/`HashMatched` — the last of which
       tells an operator *the script changed between the good run and the bad one*, which SSISDB
       cannot do.
 
+      **Done (v0.18.0).** The Portal triage board now opens a run-level evidence row that joins the
+      registered/runtime hash decision, the normalized counts-only quality failures, and the
+      normalized/capped statement timeline. Run reads are direct and bounded by durable run id;
+      loading, missing, empty, and failed-read states are explicit, and the endpoint retains the
+      existing `OrchestratorAccess` authorization boundary.
+
 #### P2 — Recovery controls
 
-- [ ] Thread variable overrides through `/api/scheduled-jobs/{name}/trigger` → `TriggerJobAsync` →
+- [x] Thread variable overrides through `/api/scheduled-jobs/{name}/trigger` → `TriggerJobAsync` →
       `BuildArguments` as `--var`, turning a backfill from "edit the job, run it, remember to edit it
       back" into a form. Overrides must also apply on the `ArgumentsTemplate` branch, which currently
       bypasses the default argument builder.
-- [ ] Treat a parameter-overridden trigger as a privileged, audited mutation — an override can widen
+- [x] Treat a parameter-overridden trigger as a privileged, audited mutation — an override can widen
       a data scope — and redact override values that resolve to secrets before they reach history.
-- [ ] Expose resume as **"Resume from checkpoint `<label>`"**, passing `--resume` with the run's
+
+      **Done (v0.18.0).** Portal operators can open a one-run form and supply up to 32 validated
+      input overrides without editing the saved job. The values reach in-process execution,
+      one-shot processes, warm runners, retries, and custom `ArgumentsTemplate` launches; scripts
+      retain their declared scheduled defaults when no override is supplied. Portal audit and the
+      Orchestrator security-event outbox record normalized names and counts only, while process and
+      operational logs never render values. A same-job concurrency race returns `409 Conflict`
+      instead of accepting and discarding an override set. API, execution-path, redaction, dynamic
+      form, and responsive UI coverage pin the contract.
+- [x] Expose resume as **"Resume from checkpoint `<label>`"**, passing `--resume` with the run's
       session id, disabled with a stated reason when the run was not a persistent session or never
       reached a label. Be explicit in the UI that this is opt-in on script authoring and will not
       retroactively cover existing jobs.
-- [ ] **Do not implement resume-at-statement-index.** It is unsound here: statements share the
+- [x] **Do not implement resume-at-statement-index.** It is unsound here: statements share the
       evaluator's variable scope, derived/temp result sets, connection state, and open transactions,
       so restarting at an arbitrary index either fails on an unbound variable or silently runs
       against a half-built intermediate. SQL Agent can start at step 3 because its steps are
       independent processes. The author-declared checkpoint label is the only safe unit, and it is
       the one the engine already implements.
+
+      **Done (v0.18.0).** Failed or cancelled persistent runs now retain an opaque session handle
+      and the last reached top-level label without exposing the handle through history APIs. The
+      Portal offers an audited `Resume · <label>` action only while that saved state and label are
+      still valid; otherwise it shows the specific reason recovery is unavailable. Resume loads the
+      saved evaluator state and passes `--resume` plus the recorded session through in-process,
+      one-shot, warm-runner, retry, and custom-argument paths. The scheduler also verifies that the
+      current saved script still contains the label. No API, executor, or UI accepts a statement
+      index. Engine, store, scheduler, API, Portal, static UI, and responsive visual coverage pin
+      the named-checkpoint-only contract and its replay/idempotency warning.
 
 #### Deployment-profile portability review
 
@@ -287,8 +329,8 @@ worth retaining. `eng.profile` remains the Solo answer.
       deferring it a few minutes; the lease is released rather than left to expire.
       `Scheduler:MaintenanceLeaseMinutes` is configurable.
 
-      **Still open:** parameter-override triggers reaching the audit outbox — that belongs with the
-      P2 recovery-controls item above, which has not been started.
+      Parameter-override triggers now emit a sanitized `OverrideAttempt` security event into the
+      configured durable outbox, carrying variable names and count but never values.
 - [ ] **SaaS.** Observability remains **Red** until tenant telemetry and support-access separation are
       certified. Managed Dedicated must prove its tenant-specific store and tenant-approved support
       path; Shared must additionally prove server-derived scope in cross-tenant aggregation. Persisted
@@ -296,7 +338,7 @@ worth retaining. `eng.profile` remains the Solo answer.
       implicit platform authority.
 - [ ] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
       record the review outcome the way
-      [v0.18.0](docs/architecture/decisions/v0.18.0-deployment-profile-review.md) did.
+      [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) did.
 
 ### Platform — Admin CLI for Identity and Access
 
@@ -308,7 +350,7 @@ Nested under `admin` (`admin user list`), following the `admin ha-soak <verb>` p
 than the flat `admin set-secret` style — the identity family is ~25 verbs and flat naming stops
 scanning cleanly. Record the inconsistency in the CLI reference so it reads as a decision.
 
-- [ ] **Service accounts.** `service-account list|create|update|revoke` over
+- [x] **Service accounts.** `service-account list|create|update|revoke` over
       `api/admin/service-accounts`. Sequencing trap: this is how the CLI's *own* credential is
       minted, so the first one must be creatable interactively in the Portal — do not build a
       bootstrap that requires a token to mint the first token.
@@ -346,25 +388,33 @@ fields actually supplied, so changing an email cannot silently blank a name; and
 everything". Both are documented, and the second is stated plainly because "set" read as "add" is
 the kind of misunderstanding that quietly removes someone's access.
 
-Still open: the **`service-account`** verbs (`list|create|update|revoke`). Left deliberately for
-their own pass — `create` returns a one-time secret, so it needs a decision about how a CLI hands
-that back without it landing in a scrollback buffer or a CI log, and the bootstrap trap noted above
-(the first account must be mintable from the Portal UI) belongs in the same discussion.
+**Service-account lifecycle shipped (v0.18.0).** `service-account list|create|update|rotate-secret|revoke`
+uses the same remote Portal client, idempotence, and version-guarded mutation model. Create and
+rotation require `--secret-out`; the CLI reserves a new file, never overwrites, removes an unused
+reservation on failure, and never emits the one-time secret to terminal or JSON. The first account
+remains a tenant-admin Portal bootstrap. Later service identities use constrained delegation: same
+human owner, and no scope, role, or Studio capability broader than the caller's current grant.
 
 #### Disambiguate the two secret and connection stores (do this first)
 
-- [ ] `admin set-secret` writes the machine-local `Governance:Secrets` provider
+- [x] `admin set-secret` writes the machine-local `Governance:Secrets` provider
       (`SecretAdminService.cs`); the Portal Admin tab writes `PortalSecretStoreService`
       (`SecretsAdminController.cs`) — an encrypted, audited, RBAC'd store in the catalog DB. They
       are different stores with overlapping names. An operator who runs `admin set-secret`
       expecting to change what the Admin tab shows silently edits the wrong one. The `set-secret`
       help text says "(machine scope)"; nothing else does, and no `list` verb shows which store it
       read.
-- [ ] Make the scope explicit and symmetric across the secret and connection verbs — a `--scope
+- [x] Make the scope explicit and symmetric across the secret and connection verbs — a `--scope
       machine|portal` selector or separate verb families, decided once and applied to both. Do this
       **before** the identity verbs land, so the new surface inherits a coherent model instead of
       the ambiguity.
-- [ ] Same audit for shared connections: `ConnectionAdminService` vs `ConnectionsAdminController`.
+- [x] Same audit for shared connections: `ConnectionAdminService` vs `ConnectionsAdminController`.
+
+**Store scope is explicit (v0.18.0).** Machine-local lifecycle is now nested symmetrically under
+`admin machine secret set|list|verify|rotate|disable|enable|delete` and
+`admin machine connection set|list|verify|disable|enable|delete`. The ambiguous flat verbs are
+removed rather than retained as aliases. Both list surfaces name their configured machine provider;
+the Portal Admin stores remain the encrypted, audited, tenant-admin surfaces in the catalog DB.
 
 #### Admin TUI — considered, deferred, and the condition for revisiting
 
@@ -480,7 +530,7 @@ promotion foundation. Do not rebuild those capabilities in SaaS-specific service
 
 Each item is complete only when the relevant **Dedicated or Shared** matrix cell has a current linked
 evidence reference and the release review records the topology explicitly, the way
-[v0.18.0](docs/architecture/decisions/v0.18.0-deployment-profile-review.md) recorded its review. Do
+[v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) recorded its review. Do
 not infer Dedicated SaaS support from an Enterprise happy path, or Shared SaaS support from Dedicated
 topology evidence.
 
@@ -506,25 +556,34 @@ The failure mode is also asymmetric and worth stating: a too-small budget produc
 failure**, which costs a maintainer an investigation and teaches them to ignore red. A too-large
 budget only costs wall-clock time on a run that was going to fail anyway.
 
-- [ ] Establish the real distribution before changing any number. Run the Portal and Orchestrator
+- [x] Establish the real distribution before changing any number. Run the Portal and Orchestrator
       lanes N times under deliberate load and record, per waiting test, the observed time-to-satisfy
       against its configured budget. Set budgets from that data rather than by doubling until green.
-- [ ] Replace bare deadlines with a shared load-aware helper — the `WaitUntilAsync` idea extended
+- [x] Replace bare deadlines with a shared load-aware helper — the `WaitUntilAsync` idea extended
       with a budget that scales from a baseline measured once per run, so a saturated agent and a
       developer laptop do not need the same constant.
-- [ ] Make a budget expiry **report what it was waiting for**. Every one of these cost an
+- [x] Make a budget expiry **report what it was waiting for**. Every one of these cost an
       investigation mostly because the failure said "expected true, got false" rather than "waited
       15s for the host to stop; last observed state X". Diagnostics on timeout are the highest-value
       part of this item.
-- [ ] Extend the guardrail to flag a *new* bare wall-clock budget in a waiting helper, so the class
+- [x] Extend the guardrail to flag a *new* bare wall-clock budget in a waiting helper, so the class
       cannot quietly regrow once retired. Same annotation escape hatch as the existing check.
-- [ ] Decide whether `HostedServiceLaneTests` should stay in the shared lane at all. It is the one
+- [x] Decide whether `HostedServiceLaneTests` should stay in the shared lane at all. It is the one
       Portal suite that starts the full `IHostedService` pipeline, making it both the slowest to
       reach a decision and the most sensitive to surrounding load — a separate lane may be a more
       honest fix than a larger number.
-- [ ] Retire the three tracking documents into one when the class is closed, and record the outcome
-      the way [v0.15.0](docs/architecture/decisions/v0.15.0-flaky-tests.md) recorded its fix, so the
+- [x] Retire the three tracking documents into one when the class is closed, and record the outcome
+      the way the [stability record](docs/releases/flaky-test-stability.md) records its fix, so the
       reference pattern stays findable.
+
+**Done (v0.19.0):** `LoadAwareWait` now owns bounded observable waits, diagnostics, bounded
+per-process load calibration, and optional JSONL evidence across the known engine, Orchestrator,
+Portal, Docker, and language-server offenders. Three loaded repetitions of both sensitive lanes
+passed with the worst 15-second condition completing in 1.05 seconds; the baselines were retained.
+The static guard rejects new bare deadline helpers, scheduler tests use isolated throttle stores,
+signed subscription triggers exercise the authorization boundary, and the full Portal hosted-service
+pipeline runs in its own `portal-hosted` process. The consolidated policy and evidence are in
+[Flaky Test Stability](docs/releases/flaky-test-stability.md).
 
 **Do not** simply add retries. A retry hides a genuine intermittent product defect exactly as well
 as it hides a test-harness one, and the shared-SQLite finding in the v0.18.0 notes — where the

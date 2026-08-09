@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text.Json;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.TestSupport;
 using Testcontainers.PostgreSql;
 
 namespace ETL_SQL.Portal.Tests;
@@ -625,35 +626,27 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         PortalProcess process,
         HttpStatusCode expectedStatus)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        (HttpStatusCode StatusCode, HealthzResponse Body)? last = null;
-        Exception? lastException = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            try
+        var observed = await LoadAwareWait.UntilAsync(
+            $"Portal process healthz to reach {expectedStatus}",
+            async ct =>
             {
-                using var response = await client.GetAsync($"{process.BaseUrl}/healthz");
-                var body = (await response.Content.ReadFromJsonAsync<HealthzResponse>(Json))!;
-                last = (response.StatusCode, body);
-                lastException = null;
-                if (response.StatusCode == expectedStatus)
-                    return last.Value;
-            }
-            catch (HttpRequestException ex)
-            {
-                lastException = ex;
-            }
-            catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
-            {
-                lastException = ex;
-            }
-
-            await Task.Delay(250);
-        }
-
-        throw new TimeoutException(
-            $"Healthz did not reach {expectedStatus}. Last status: {last?.StatusCode.ToString() ?? "<none>"}",
-            lastException);
+                try
+                {
+                    using var response = await client.GetAsync($"{process.BaseUrl}/healthz", ct);
+                    var body = (await response.Content.ReadFromJsonAsync<HealthzResponse>(Json, ct))!;
+                    return (StatusCode: (HttpStatusCode?)response.StatusCode, Body: body, Error: (string?)null);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                {
+                    return (StatusCode: (HttpStatusCode?)null, Body: (HealthzResponse?)null,
+                        Error: $"{ex.GetType().Name}: {ex.Message}");
+                }
+            },
+            state => state.StatusCode == expectedStatus && state.Body is not null,
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMilliseconds(250),
+            state => $"status={state.StatusCode?.ToString() ?? "<none>"}; error={state.Error ?? "<none>"}");
+        return (observed.StatusCode!.Value, observed.Body!);
     }
 
     private static async Task<JobDto> WaitForJobStatusAsync(
@@ -663,19 +656,13 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         string jobId,
         string expectedStatus)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        JobDto? last = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            last = await GetJsonAsync<JobDto>(client, $"{process.BaseUrl}/api/jobs/{jobId}", token);
-            if (string.Equals(last.Status, expectedStatus, StringComparison.OrdinalIgnoreCase))
-                return last;
-
-            await Task.Delay(250);
-        }
-
-        throw new TimeoutException(
-            $"Job {jobId} did not reach {expectedStatus}. Last status: {last?.Status ?? "<missing>"}");
+        return await LoadAwareWait.UntilAsync(
+            $"multi-process job '{jobId}' to reach {expectedStatus}",
+            _ => GetJsonAsync<JobDto>(client, $"{process.BaseUrl}/api/jobs/{jobId}", token),
+            job => string.Equals(job.Status, expectedStatus, StringComparison.OrdinalIgnoreCase),
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMilliseconds(250),
+            job => $"status={job.Status}");
     }
 
     private sealed record SharedRoots(
@@ -715,28 +702,26 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         public async Task WaitForHealthzAsync()
         {
             using var client = new HttpClient();
-            var deadline = DateTime.UtcNow.AddSeconds(45);
-            while (DateTime.UtcNow < deadline)
-            {
-                if (process.HasExited)
-                    throw new InvalidOperationException(
-                        $"Portal process exited with code {process.ExitCode}: {await process.StandardError.ReadToEndAsync()}");
-
-                try
+            await LoadAwareWait.UntilAsync(
+                $"Portal process at {BaseUrl} to become healthy",
+                async ct =>
                 {
-                    var response = await client.GetAsync($"{BaseUrl}/healthz");
-                    if (response.IsSuccessStatusCode)
-                        return;
-                }
-                catch
-                {
-                    // Process is still starting.
-                }
-
-                await Task.Delay(500);
-            }
-
-            throw new TimeoutException($"Portal process at {BaseUrl} did not become healthy.");
+                    if (process.HasExited)
+                        throw new InvalidOperationException(
+                            $"Portal process exited with code {process.ExitCode}: {await process.StandardError.ReadToEndAsync(ct)}");
+                    try
+                    {
+                        using var response = await client.GetAsync($"{BaseUrl}/healthz", ct);
+                        return $"HTTP {(int)response.StatusCode} {response.StatusCode}";
+                    }
+                    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                    {
+                        return $"{ex.GetType().Name}: {ex.Message}";
+                    }
+                },
+                state => state.StartsWith("HTTP 2", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(45),
+                TimeSpan.FromMilliseconds(500));
         }
 
         public async ValueTask DisposeAsync()

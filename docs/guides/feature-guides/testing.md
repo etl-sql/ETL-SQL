@@ -119,6 +119,7 @@ Use `scripts/test-lane.ps1` when you want a named suite rather than only smoke t
 .\scripts\test-lane.ps1 -Lane fast
 .\scripts\test-lane.ps1 -Lane engine
 .\scripts\test-lane.ps1 -Lane portal
+.\scripts\test-lane.ps1 -Lane portal-hosted # full Portal IHostedService pipeline only
 .\scripts\test-lane.ps1 -Lane integration
 .\scripts\test-lane.ps1 -Lane perf
 .\scripts\test-lane.ps1 -Lane release

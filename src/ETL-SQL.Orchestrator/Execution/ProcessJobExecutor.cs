@@ -87,7 +87,39 @@ namespace ETL_SQL.Orchestrator.Execution
             WarmRunnerPools.Clear();
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
+        public Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null) =>
+            ExecuteTextCoreAsync(scriptText, sessionId, cancellationToken, jobName, queueWaitMs, executionIdentity, null, resume: false);
+
+        public Task<ScriptExecutionResult> ExecuteTextAsync(
+            string scriptText,
+            string? sessionId,
+            CancellationToken cancellationToken,
+            string? jobName,
+            long queueWaitMs,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity,
+            IReadOnlyDictionary<string, string> variableOverrides) =>
+            ExecuteTextCoreAsync(scriptText, sessionId, cancellationToken, jobName, queueWaitMs, executionIdentity, variableOverrides, resume: false);
+
+        public Task<ScriptExecutionResult> ResumeTextAsync(
+            string scriptText,
+            string sessionId,
+            CancellationToken cancellationToken = default,
+            string? jobName = null,
+            long queueWaitMs = 0,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null) =>
+            ExecuteTextCoreAsync(
+                scriptText, sessionId, cancellationToken, jobName, queueWaitMs,
+                executionIdentity, null, resume: true);
+
+        private async Task<ScriptExecutionResult> ExecuteTextCoreAsync(
+            string scriptText,
+            string? sessionId,
+            CancellationToken cancellationToken,
+            string? jobName,
+            long queueWaitMs,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity,
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            bool resume)
         {
             // Out-of-process execution does not carry a row-level-security identity across the process
             // boundary; identity-sensitive scripts therefore fail closed in this path. Subscription
@@ -103,7 +135,9 @@ namespace ETL_SQL.Orchestrator.Execution
                 {
                     try
                     {
-                        return await RunWarmProcessAsync(tempFile, sessionId, cancellationToken, jobName, queueWaitMs);
+                        return await RunWarmProcessAsync(
+                            tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
+                            variableOverrides, resume);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -111,7 +145,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     }
                 }
 
-                return await RunProcessAsync(tempFile, sessionId, cancellationToken, queueWaitMs);
+                return await RunProcessAsync(
+                    tempFile, sessionId, cancellationToken, queueWaitMs, variableOverrides, resume);
             }
             finally
             {
@@ -153,12 +188,21 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct, long queueWaitMs = 0)
+        private async Task<ScriptExecutionResult> RunProcessAsync(
+            string scriptFile,
+            string? sessionId,
+            CancellationToken ct,
+            long queueWaitMs = 0,
+            IReadOnlyDictionary<string, string>? variableOverrides = null,
+            bool resume = false)
         {
             var exePath = ResolveExecutablePath();
-            var argList = BuildArguments(scriptFile, sessionId);
+            var argList = BuildArguments(
+                scriptFile, sessionId, _options.ArgumentsTemplate, variableOverrides, resume);
 
-            _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, ETL_SQL.Core.Common.LogSanitizer.Clean(string.Join(' ', argList)));
+            _logger.LogInformation(
+                "Spawning job process: {Exe} ({ArgumentCount} arguments; {OverrideCount} variable overrides).",
+                exePath, argList.Count, variableOverrides?.Count ?? 0);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             if (_options.TimeoutSeconds > 0)
@@ -248,7 +292,9 @@ namespace ETL_SQL.Orchestrator.Execution
             string? sessionId,
             CancellationToken ct,
             string? jobName,
-            long queueWaitMs)
+            long queueWaitMs,
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            bool resume)
         {
             var exePath = ResolveExecutablePath();
             var key = $"{Path.GetFullPath(exePath)}|{Math.Max(1, _options.WarmRunnerPoolSize)}|{Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)}";
@@ -272,7 +318,9 @@ namespace ETL_SQL.Orchestrator.Execution
                         sessionId,
                         jobName,
                         queueWaitMs,
-                        _options.WarmRunnerBatchSize),
+                        _options.WarmRunnerBatchSize,
+                        variableOverrides,
+                        resume),
                     cts.Token);
             }
             catch (OperationCanceledException)
@@ -463,32 +511,58 @@ namespace ETL_SQL.Orchestrator.Execution
                 $"Searched in: {dir}");
         }
 
-        private List<string> BuildArguments(string scriptFile, string? sessionId)
+        internal static List<string> BuildArguments(
+            string scriptFile,
+            string? sessionId,
+            string? argumentsTemplate,
+            IReadOnlyDictionary<string, string>? variableOverrides = null,
+            bool resume = false)
         {
-            if (!string.IsNullOrWhiteSpace(_options.ArgumentsTemplate))
+            List<string> result;
+            if (!string.IsNullOrWhiteSpace(argumentsTemplate))
             {
                 // Each whitespace-separated template token becomes one argument; placeholders
                 // are substituted as whole values so a tokenised {SessionId} can never expand
                 // into multiple arguments. Operators should not add their own quoting —
                 // ArgumentList handles escaping.
-                var result = new List<string>();
-                foreach (var token in _options.ArgumentsTemplate.Split(
+                result = new List<string>();
+                foreach (var token in argumentsTemplate.Split(
                              (char[]?)null, StringSplitOptions.RemoveEmptyEntries))
                 {
                     result.Add(token
                         .Replace("{ScriptFile}", scriptFile, StringComparison.Ordinal)
                         .Replace("{SessionId}", sessionId ?? string.Empty, StringComparison.Ordinal));
                 }
-                return result;
+            }
+            else
+            {
+                result = new List<string> { "run", scriptFile, "--json" };
+                if (!string.IsNullOrEmpty(sessionId))
+                {
+                    result.Add("--session");
+                    result.Add(sessionId);
+                }
             }
 
-            var args = new List<string> { "run", scriptFile, "--json" };
-            if (!string.IsNullOrEmpty(sessionId))
+            foreach (var (name, value) in variableOverrides ?? new Dictionary<string, string>())
             {
-                args.Add("--session");
-                args.Add(sessionId);
+                result.Add("--var");
+                result.Add($"{(name.StartsWith('@') ? name : "@" + name)}={value}");
             }
-            return args;
+            if (resume)
+            {
+                if (string.IsNullOrWhiteSpace(sessionId))
+                    throw new InvalidOperationException("Named-checkpoint resume requires a session id.");
+                if (!result.Any(argument =>
+                        argument.Equals("--session", StringComparison.OrdinalIgnoreCase)
+                        || argument.StartsWith("--session=", StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Add("--session");
+                    result.Add(sessionId);
+                }
+                result.Add("--resume");
+            }
+            return result;
         }
     }
 
@@ -773,7 +847,9 @@ namespace ETL_SQL.Orchestrator.Execution
         string? SessionId,
         string? JobName,
         long QueueWaitMs,
-        int BatchSize);
+        int BatchSize,
+        IReadOnlyDictionary<string, string>? VariableOverrides = null,
+        bool Resume = false);
 
     internal sealed record WarmRunnerResponse(
         string Type,

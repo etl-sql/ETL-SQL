@@ -26,21 +26,21 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void SampleFiles_ReferencedInSampleGuide_AllExist()
         {
-            var sampleGuidePath = RepoFile("docs/guides/sample-guide.md");
+            var sampleGuidePath = RepoFile("docs/guides/patterns/sample-guide.md");
             Assert.True(File.Exists(sampleGuidePath), $"Missing: {sampleGuidePath}");
 
             var content = File.ReadAllText(sampleGuidePath);
 
             // Match markdown links like [text](../samples/08_Reporting/foo.rptsql)
-            var linkPattern = new Regex(@"\]\((\.\./samples/[^)]+)\)", RegexOptions.Compiled);
+            var linkPattern = new Regex(@"\]\((\.\./\.\./\.\./samples/[^)]+)\)", RegexOptions.Compiled);
             var matches = linkPattern.Matches(content);
 
             var missing = new List<string>();
             foreach (Match m in matches)
             {
                 var relPath = m.Groups[1].Value;
-                // sample-guide.md is in docs/guides/, so ../../samples/... resolves from docs/guides/
-                var fullPath = Path.GetFullPath(Path.Combine(RepoRoot, "docs", "guides", relPath));
+                var fullPath = Path.GetFullPath(Path.Combine(
+                    RepoRoot, "docs", "guides", "patterns", relPath));
                 if (!File.Exists(fullPath))
                     missing.Add(relPath);
             }
@@ -332,15 +332,15 @@ namespace ETL_SQL.Tests.Docs
                 "docs/reference/file-operations/README.md",
                 "docs/reference/performance/performance.md",
                 "docs/reference/configuration/settings.md",
-                "docs/reference/portal-admin/README.md",
-                "docs/reference/portal-admin/service-accounts.md",
+                "docs/reference/portal-commands/README.md",
+                "docs/reference/portal-commands/service-accounts.md",
                 "docs/reference/visuals-reporting/README.md",
                 "docs/reference/data-types.md",
                 "docs/administration/platform/README.md",
                 "docs/administration/portal/README.md",
                 "docs/administration/orchestration/README.md",
-                "docs/guides/getting-started.md",
-                "docs/guides/report-sql.md"
+                "docs/guides/onboarding/getting-started.md",
+                "docs/guides/feature-guides/report-sql.md"
             };
 
             var missing = new List<string>();

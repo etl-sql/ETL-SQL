@@ -1,4 +1,6 @@
 using ETL_SQL.Orchestrator.Execution;
+using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration;
@@ -57,4 +59,60 @@ public class ArgumentsTemplateGuardTests
     [InlineData("run {ScriptFile} --no-json")]
     public void ASimilarlyNamedTokenDoesNotCountAsTheFlag(string template) =>
         Assert.NotNull(ProcessJobExecutor.DescribeArgumentsTemplateRisk(template));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("run {ScriptFile} --json --session {SessionId}")]
+    public void VariableOverridesAreAppendedToDefaultAndCustomArgumentPaths(string? template)
+    {
+        var args = ProcessJobExecutor.BuildArguments(
+            "job.etlsql",
+            "session-1",
+            template,
+            new Dictionary<string, string>
+            {
+                ["@start_date"] = "2026-08-01",
+                ["region"] = "North America"
+            });
+
+        var first = args.IndexOf("--var");
+        Assert.True(first >= 0);
+        Assert.Equal("@start_date=2026-08-01", args[first + 1]);
+        var second = args.IndexOf("--var", first + 1);
+        Assert.True(second > first);
+        Assert.Equal("@region=North America", args[second + 1]);
+        Assert.Equal(2, args.Count(arg => arg == "--var"));
+    }
+
+    [Fact]
+    public void DefaultResumePassesSessionAndResumeFlag()
+    {
+        var args = ProcessJobExecutor.BuildArguments(
+            "job.etlsql", "session-42", argumentsTemplate: null, resume: true);
+
+        Assert.Equal(
+            ["run", "job.etlsql", "--json", "--session", "session-42", "--resume"],
+            args);
+    }
+
+    [Fact]
+    public void CustomTemplateResumeAppendsMissingSessionContract()
+    {
+        var args = ProcessJobExecutor.BuildArguments(
+            "job.etlsql", "session-42", "run {ScriptFile} --json", resume: true);
+
+        Assert.Equal(
+            ["run", "job.etlsql", "--json", "--session", "session-42", "--resume"],
+            args);
+    }
+
+    [Fact]
+    public void CustomTemplateResumeDoesNotDuplicateSessionOption()
+    {
+        var args = ProcessJobExecutor.BuildArguments(
+            "job.etlsql", "session-42", "run {ScriptFile} --json --session {SessionId}", resume: true);
+
+        Assert.Equal(1, args.Count(argument => argument == "--session"));
+        Assert.Equal("--resume", args[^1]);
+    }
 }

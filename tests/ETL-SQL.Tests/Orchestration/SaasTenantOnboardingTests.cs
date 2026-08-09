@@ -5,6 +5,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.TestSupport;
 
 namespace ETL_SQL.Tests.Orchestration;
 
@@ -151,5 +152,43 @@ public sealed class SaasTenantOnboardingTests : IDisposable
 
         await Assert.ThrowsAsync<IOException>(() =>
             SaasTenantOnboardingService.OnboardAsync(Context("tenant-alpha", "Solo", 2)));
+
+        await DeploymentCertificationEvidenceWriter.WriteAsync(
+            "profile-saas-managed-dedicated",
+            new
+            {
+                schemaVersion = "etl-sql.deployment-scenario-evidence/v1",
+                scenarioId = "SaaSManagedDedicatedIsolation",
+                kind = "Profile",
+                sourceProfile = "Solo, Enterprise",
+                targetProfile = "SaaS",
+                topology = "Managed Dedicated (one host-fixed tenant runtime boundary per tenant)",
+                artifactHashes = alpha.PortableArtifacts.Select(artifact => new
+                {
+                    artifact.Path,
+                    before = artifact.Sha256,
+                    after = beta.PortableArtifacts.Single(other => other.Path == artifact.Path).Sha256,
+                    matched = artifact.Sha256 == beta.PortableArtifacts.Single(other => other.Path == artifact.Path).Sha256
+                }),
+                resources = new { imported = 2, skipped = 0, failed = 0 },
+                mappingDecisions = Array.Empty<object>(),
+                continuity = new { tenantBoundaries = alpha.Boundaries.Count, jobs = 1, lineage = 1, dataQuality = 1, reports = 0 },
+                negativeIsolation = new[]
+                {
+                    new { boundary = "orchestrator database", result = "Passed" },
+                    new { boundary = "lineage and quality history", result = "Passed" },
+                    new { boundary = "audit outbox", result = "Passed" },
+                    new { boundary = "cache and artifact paths", result = "Passed" },
+                    new { boundary = "path traversal", result = "Passed" },
+                    new { boundary = "storage quota", result = "Passed" },
+                    new { boundary = "duplicate tenant activation", result = "Passed" }
+                },
+                rollback = new { attempted = false, result = "NotApplicableToOnboardingProfileProof" },
+                claims = new
+                {
+                    managedDedicated = "Passed",
+                    shared = "NotCertified"
+                }
+            });
     }
 }

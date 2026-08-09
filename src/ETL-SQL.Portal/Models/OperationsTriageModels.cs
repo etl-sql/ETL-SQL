@@ -16,6 +16,15 @@ public sealed record TriageRunDto(
     bool? HashMatched);
 
 /// <summary>
+/// The durable evidence for one run, joined at the Portal boundary so an operator does not have to
+/// correlate three unrelated screens while handling an incident.
+/// </summary>
+public sealed record TriageRunDetailDto(
+    TriageRunDto Run,
+    IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload> Statements,
+    IReadOnlyList<ETL_SQL.Core.Data.JobDataQualityFailure> QualityFailures);
+
+/// <summary>
 /// Failed runs that share a normalized error signature, presented as one incident. One bad source
 /// database at 03:00 produces a failure per dependent job; without grouping an operator reads the
 /// same outage N times and has to infer the common cause themselves.

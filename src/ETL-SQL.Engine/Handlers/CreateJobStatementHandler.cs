@@ -40,6 +40,9 @@ public class CreateJobStatementHandler : IStatementHandler
                 $"Job '{stmt.JobName}' already exists. Use CREATE OR ALTER JOB to update it, " +
                 $"CREATE OR REPLACE JOB to redefine it, or DROP JOB {stmt.JobName} first.",
                 null, stmt.Line, stmt.Column);
+        if (existing is null) CatalogStatementSupport.DemandCreate(context, stmt, "JOB");
+        else await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+            stmt.JobName, OrchestratorObjectPermission.Manage, existing.CreatedBy);
 
         if (context.IsWhatIf)
         {

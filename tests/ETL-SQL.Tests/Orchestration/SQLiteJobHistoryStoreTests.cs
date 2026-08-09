@@ -683,5 +683,20 @@ namespace ETL_SQL.Tests.Orchestration
             var updated = await _store.GetJobStateAsync("TestJob", "Watermark");
             Assert.Equal("2026-06-20", updated);
         }
+
+        [Fact]
+        public async Task ResumeMetadata_RoundTripsWithoutChangingRunOutcome()
+        {
+            var id = await _store.LogJobStartAsync("PersistentFailure");
+            await _store.LogJobEndAsync(id, "FAILURE", "boom");
+            await _store.UpdateJobResumeMetadataAsync(id, "job-session-42", "load_complete");
+
+            var entry = await _store.GetHistoryEntryAsync(id);
+
+            Assert.NotNull(entry);
+            Assert.Equal("FAILURE", entry.Status);
+            Assert.Equal("job-session-42", entry.SessionId);
+            Assert.Equal("load_complete", entry.CheckpointLabel);
+        }
     }
 }

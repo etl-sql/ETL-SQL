@@ -324,6 +324,36 @@
   </div>
 </div>
 
+<!-- ── Manual run / backfill modal ─────────────────────────────────────── -->
+<div id="runJobModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="runJobTitle">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">One-run execution</span>
+        <h3 class="modal-title" id="runJobTitle">Run job</h3>
+        <p class="modal-subtitle">Optionally override input variables for this run only. The saved job is not edited.</p>
+      </div>
+      <button class="btn-icon" id="runJobCloseBtn" title="Close" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="run-override-head">
+        <div>
+          <strong>Variable overrides</strong>
+          <p>Use the script variable name and the same value text accepted by <code>--var</code>.</p>
+        </div>
+        <button class="btn btn-sm btn-outline" id="runAddOverrideBtn" type="button">+ Add variable</button>
+      </div>
+      <div id="runOverrideRows"></div>
+      <p class="run-override-security">Override names—not values—are written to the audit trail. Secret references are redacted before operational logging.</p>
+      <div id="runJobError" class="error-msg"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="runJobSubmitBtn" type="button">Run now</button>
+      <button class="btn btn-outline" id="runJobCancelBtn" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/echarts.min.js?v=0.18.0"></script>
 <script src="/js/feedback.js?v=0.18.0"></script>
 <script type="module">
@@ -386,23 +416,27 @@ const api = {
   metrics:  () => apiJson(`${BASE}/metrics`),
   jobs:     () => apiJson(`${BASE}/jobs`),
   history:  (name, limit = 30) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/history?limit=${limit}`),
+  resume:   (historyId) => apiFetch(`${BASE}/runs/${historyId}/resume`, { method: 'POST' }),
   create:   (body) => apiFetch(`${BASE}/jobs`, { method: 'POST', body }),
   update:   (name, body) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'PUT', body }),
   delete:   (name) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  trigger:  (name) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/trigger`, { method: 'POST' }),
+  trigger:  (name, variables = {}) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/trigger`, { method: 'POST', body: { variables } }),
   kill:     (name) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/kill`, { method: 'POST' }),
   scripts:  () => apiJson(`${BASE}/scripts`),
   scriptContent: (path) => apiJson(`${BASE}/scripts/content?path=${encodeURIComponent(path)}`),
   stop:     () => apiFetch(`${BASE}/service/stop`, { method: 'POST' }),
   dag:      (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dag`),
   triage:   (lookbackHours = 24) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`),
+  triageRun:(runId) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`),
   rerun:    (jobNames) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames } }),
 };
 
 // ── Operations triage ──────────────────────────────────────────────────────────
 // View state is kept outside the render so a background poll never collapses an incident the
 // operator has open or clears a selection they were about to act on.
-const triageState = { expanded: new Set(), selected: new Set() };
+const triageState = {
+  expanded: new Set(), selected: new Set(), openRuns: new Set(), details: new Map()
+};
 let triageBoardData = null;
 
 async function loadTriage() {
@@ -426,6 +460,10 @@ async function loadTriage() {
 
 async function rerunJobs(jobNames) {
   if (jobNames.length === 0) return;
+  if (jobNames.length === 1) {
+    openRunModal(jobNames[0]);
+    return;
+  }
   const label = jobNames.length === 1 ? jobNames[0] : `${jobNames.length} jobs`;
   if (!confirm(`Re-run ${label}?`)) return;
   try {
@@ -448,18 +486,117 @@ async function rerunJobs(jobNames) {
   }
 }
 
+// ── One-run variables / backfill form ────────────────────────────────────────
+let runJobName = null;
+
+function addRunOverrideRow(name = '', value = '') {
+  const row = document.createElement('div');
+  row.className = 'run-override-row';
+  row.innerHTML = `
+    <div class="form-group"><label>Variable<input class="run-override-name" type="text" placeholder="@start_date" value="${escHtml(name)}" autocomplete="off"></label></div>
+    <div class="form-group"><label>Value<input class="run-override-value" type="text" placeholder="2026-08-01" value="${escHtml(value)}" autocomplete="off"></label></div>
+    <button class="btn-icon run-override-remove" type="button" title="Remove variable" aria-label="Remove variable">✕</button>`;
+  row.querySelector('.run-override-remove').addEventListener('click', () => row.remove());
+  document.getElementById('runOverrideRows').appendChild(row);
+  row.querySelector('.run-override-name').focus();
+}
+
+function openRunModal(jobName) {
+  runJobName = jobName;
+  document.getElementById('runJobTitle').textContent = `Run ${jobName}`;
+  document.getElementById('runOverrideRows').innerHTML = '';
+  document.getElementById('runJobError').textContent = '';
+  document.getElementById('runJobModal').style.display = 'flex';
+  document.getElementById('runJobSubmitBtn').focus();
+}
+
+function closeRunModal() {
+  document.getElementById('runJobModal').style.display = 'none';
+  runJobName = null;
+}
+
+function collectRunOverrides() {
+  const variables = {};
+  for (const row of document.querySelectorAll('.run-override-row')) {
+    let name = row.querySelector('.run-override-name').value.trim();
+    const value = row.querySelector('.run-override-value').value;
+    if (!name && !value) continue;
+    if (!name) throw new Error('Every override value needs a variable name.');
+    if (!name.startsWith('@')) name = '@' + name;
+    if (!/^@[A-Za-z_][A-Za-z0-9_]*$/.test(name))
+      throw new Error(`'${name}' is not a valid variable name.`);
+    const duplicate = Object.keys(variables).some(existing => existing.toLowerCase() === name.toLowerCase());
+    if (duplicate) throw new Error(`'${name}' is listed more than once.`);
+    variables[name] = value;
+  }
+  return variables;
+}
+
+document.getElementById('runAddOverrideBtn').addEventListener('click', () => addRunOverrideRow());
+document.getElementById('runJobCloseBtn').addEventListener('click', closeRunModal);
+document.getElementById('runJobCancelBtn').addEventListener('click', closeRunModal);
+document.getElementById('runJobSubmitBtn').addEventListener('click', async () => {
+  const button = document.getElementById('runJobSubmitBtn');
+  const error = document.getElementById('runJobError');
+  try {
+    const variables = collectRunOverrides();
+    button.disabled = true;
+    error.textContent = '';
+    const response = await api.trigger(runJobName, variables);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error || 'The Orchestrator refused the run.');
+    }
+    const name = runJobName;
+    closeRunModal();
+    showToast(`Job '${name}' triggered${Object.keys(variables).length ? ' with one-run overrides' : ''}.`);
+    await loadJobs();
+  } catch (err) {
+    error.textContent = err.message || String(err);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 document.getElementById('triageRefreshBtn').addEventListener('click', () => loadTriage());
 document.getElementById('triageLookback').addEventListener('change', () => {
   triageState.expanded.clear();
   triageState.selected.clear();
+  triageState.openRuns.clear();
+  triageState.details.clear();
   loadTriage();
 });
 
-document.getElementById('triageBoard').addEventListener('click', event => {
+document.getElementById('triageBoard').addEventListener('click', async event => {
   const toggle = event.target.closest('.triage-incident-toggle');
   if (toggle) {
     const index = Number(toggle.dataset.incident);
     triageState.expanded.has(index) ? triageState.expanded.delete(index) : triageState.expanded.add(index);
+    document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
+    return;
+  }
+  const evidence = event.target.closest('.triage-run-evidence');
+  if (evidence) {
+    const runId = Number(evidence.dataset.run);
+    if (triageState.openRuns.has(runId)) {
+      triageState.openRuns.delete(runId);
+      document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
+      return;
+    }
+
+    triageState.openRuns.add(runId);
+    if (!triageState.details.has(runId)) {
+      triageState.details.set(runId, { status: 'loading' });
+      document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
+      try {
+        const detail = await api.triageRun(runId);
+        if (detail) triageState.details.set(runId, detail);
+      } catch (err) {
+        triageState.details.set(runId, {
+          status: 'error', message: String(err.message || err).slice(0, 300)
+        });
+      }
+    }
     document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
     return;
   }
@@ -771,8 +908,7 @@ async function handleAction(btn) {
   btn.disabled = true;
   try {
     if (action === 'trigger') {
-      await api.trigger(name);
-      showToast(`Job '${name}' triggered.`);
+      openRunModal(name);
     } else if (action === 'toggle') {
       const enable = btn.dataset.enabled === 'true' ? false : true;
       await api.update(name, { IsEnabled: enable });
@@ -942,6 +1078,17 @@ function renderHistoryTable(entries) {
       : (jobValue(h, 'Status') === 'RUNNING' ? 'running…' : '—');
     const ram = jobValue(h, 'PeakMemoryBytes') > 0 ? (jobValue(h, 'PeakMemoryBytes') / 1048576).toFixed(1) + 'MB' : '—';
     const cls = { SUCCESS: 'success', FAILURE: 'failure', RUNNING: 'running', BLOCKED: 'blocked', CANCELLED: 'cancelled' }[jobValue(h, 'Status')] ?? '';
+    const checkpoint = jobValue(h, 'CheckpointLabel');
+    const failedOrCancelled = ['FAILURE', 'FAILED', 'CANCELLED'].includes(String(jobValue(h, 'Status')).toUpperCase());
+    const hasResumeSession = jobValue(h, 'HasResumeSession') === true;
+    const canResume = failedOrCancelled && hasResumeSession && Boolean(checkpoint);
+    const resumeReason = canResume
+      ? `Resume from checkpoint '${checkpoint}'`
+      : failedOrCancelled && checkpoint
+        ? 'The recorded checkpoint state has expired or is unavailable on this deployment.'
+        : failedOrCancelled
+        ? 'No resumable checkpoint: this run was not persistent or never reached a top-level label.'
+        : 'Only failed or cancelled runs can resume.';
     return `<tr>
       <td><span class="status-badge ${cls}">${jobValue(h, 'Status')}</span></td>
       <td>${fmtDt(jobValue(h, 'StartTime'))}</td>
@@ -949,16 +1096,45 @@ function renderHistoryTable(entries) {
       <td>${jobValue(h, 'RowsProcessed') > 0 ? Number(jobValue(h, 'RowsProcessed')).toLocaleString() : '—'}</td>
       <td>${ram}</td>
       <td class="history-error-cell" title="${escHtml(jobValue(h, 'ErrorMessage') ?? '')}">${jobValue(h, 'ErrorMessage') ? escHtml(String(jobValue(h, 'ErrorMessage'))) : ''}</td>
+      <td><button class="btn btn-xs btn-outline history-resume-btn" type="button"
+        data-history-id="${Number(jobValue(h, 'Id'))}" data-checkpoint="${escHtml(checkpoint ?? '')}"
+        title="${escHtml(resumeReason)}" ${canResume ? '' : 'disabled'}>${canResume ? `Resume · ${escHtml(checkpoint)}` : 'Unavailable'}</button>
+        ${canResume ? '' : `<span class="history-resume-reason">${escHtml(resumeReason)}</span>`}</td>
     </tr>`;
   }).join('');
   document.getElementById('historyTableWrap').innerHTML = `
     <div class="history-table-scroll">
-    <table class="data-table history-table">
-      <thead><tr><th>Status</th><th>Start</th><th>Duration</th><th>Rows</th><th>Peak RAM</th><th>Error</th></tr></thead>
+    <table class="data-table history-table orchestrator-run-history-table">
+      <thead><tr><th>Status</th><th>Start</th><th>Duration</th><th>Rows</th><th>Peak RAM</th><th>Error</th><th>Recovery</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>`;
 }
+
+document.getElementById('historyTableWrap').addEventListener('click', async event => {
+  const button = event.target.closest('.history-resume-btn');
+  if (!button || button.disabled) return;
+  const historyId = Number(button.dataset.historyId);
+  const checkpoint = button.dataset.checkpoint;
+  const confirmed = await ETLSQLFeedback.confirm(
+    `Resume this failed run from checkpoint '${checkpoint}'?`,
+    {
+      title: 'Resume from named checkpoint',
+      impact: 'The engine restores the saved persistent session and starts at the author-declared label. Work after that label may run again.',
+      confirmLabel: `Resume from ${checkpoint}`,
+      auditAction: 'orchestrator.job.resume-checkpoint'
+    });
+  if (!confirmed) return;
+  button.disabled = true;
+  try {
+    await api.resume(historyId);
+    showToast(`Run queued from checkpoint '${checkpoint}'.`);
+    if (selectedJob) await openDetail(selectedJob);
+  } catch (error) {
+    showToast(error.message || 'Resume request failed.', 'error');
+    button.disabled = false;
+  }
+});
 
 function renderSparkline(entries) {
   lastSparklineEntries = entries;

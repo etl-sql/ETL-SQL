@@ -3,6 +3,7 @@ using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.TestSupport;
 
 namespace ETL_SQL.Tests.Orchestration;
 
@@ -86,6 +87,33 @@ public sealed class DeploymentTransitionLifecycleTests : IDisposable
         Assert.False(Assert.Single(await rollback.GetAllJobsAsync()).IsEnabled);
         Assert.Single(await rollback.GetHistoryAsync(limit: 100));
         Assert.Single(await rollback.GetRecentLineageAsync());
+
+        var targetArtifactRoot = Path.Combine(root, "target", "pipelines");
+        Directory.CreateDirectory(targetArtifactRoot);
+        var targetArtifact = Path.Combine(targetArtifactRoot, "load.etlsql");
+        File.Copy(artifact, targetArtifact, overwrite: true);
+        var targetHash = await HashAsync(targetArtifact);
+        Assert.Equal(sourceHash, targetHash);
+
+        await DeploymentCertificationEvidenceWriter.WriteAsync(
+            $"transition-{sourceProfile}-to-{targetProfile}",
+            new
+            {
+                schemaVersion = "etl-sql.deployment-scenario-evidence/v1",
+                scenarioId = $"{sourceProfile}To{targetProfile}",
+                kind = "Transition",
+                sourceProfile,
+                targetProfile,
+                topology = Topology(targetProfile),
+                artifactHashes = new { before = sourceHash, after = targetHash, matched = true },
+                resources = new { imported = 3, skipped = 0, failed = 0 },
+                mappingDecisions = Array.Empty<object>(),
+                continuity = new { jobs = 1, jobHistory = 1, lineage = 1, dataQuality = 0, reports = 0 },
+                negativeIsolation = targetProfile == "SaaS"
+                    ? new[] { new { boundary = "host-fixed tenant activation", result = "Passed" } }
+                    : Array.Empty<object>(),
+                rollback = new { attempted = true, result = "Passed", jobsFenced = true, restoredJobs = 1, restoredHistory = 1, restoredLineage = 1 }
+            });
     }
 
     private static async Task<string> HashAsync(string path)
@@ -94,4 +122,13 @@ public sealed class DeploymentTransitionLifecycleTests : IDisposable
             81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream));
     }
+
+    private static string Topology(string profile) => profile switch
+    {
+        "Solo" => "Local process, local artifacts, optional local SQLite",
+        "Team" => "Single-node Orchestrator with SQLite and local artifacts",
+        "Enterprise" => "Governed deployment contract; external HA topology certified separately",
+        "SaaS" => "Managed Dedicated (one host-fixed tenant runtime boundary)",
+        _ => profile
+    };
 }

@@ -40,13 +40,14 @@ namespace ETL_SQL.App
             }
 
             ISecretProvider? secrets = null;
-            if (ctx.Command == "admin-verify-connection")
+            if (ctx.Command == "admin-machine-connection-verify")
             {
                 try { secrets = SecretAdminService.CreateProvider(configuration); }
                 catch { /* verify still checks the definition; secret resolution is reported as unavailable */ }
             }
 
-            return await ExecuteAsync(ctx.Command["admin-".Length..], ctx, catalog, secrets, logger, CancellationToken.None);
+            var action = ctx.Command["admin-machine-connection-".Length..] + "-connection";
+            return await ExecuteAsync(action, ctx, catalog, secrets, logger, CancellationToken.None);
         }
 
         internal static async Task<int> ExecuteAsync(
@@ -106,6 +107,7 @@ namespace ETL_SQL.App
                 return LifecycleUnsupported(catalog, logger);
 
             var aliases = await writable.ListAsync(ct);
+            logger.WriteLine($"Machine shared connection catalog: provider '{catalog.ProviderName}'.");
             if (aliases.Count == 0)
             {
                 logger.WriteLine("The connection catalog is empty.", ConsoleColor.Yellow);
@@ -148,7 +150,7 @@ namespace ETL_SQL.App
             {
                 logger.WriteLine(
                     $"Field '{rawCredential}' holds a raw credential value. The catalog stores references only: " +
-                    "store the value with 'etl-sql admin set-secret' and reference it as SECRET:name.",
+                    "store the value with 'etl-sql admin machine secret set' and reference it as SECRET:name.",
                     ConsoleColor.Red);
                 return 1;
             }
@@ -160,7 +162,7 @@ namespace ETL_SQL.App
                 ct);
             // The alias is not secret, but "SHARED:alias" would be masked by the redactor — phrase around it.
             logger.WriteLine(
-                $"Shared connection '{ctx.ConnectionAlias.Trim()}' stored ({ctx.ConnectionType.Trim().ToUpperInvariant()}, " +
+                $"Machine shared connection '{ctx.ConnectionAlias.Trim()}' stored ({ctx.ConnectionType.Trim().ToUpperInvariant()}, " +
                 $"{options.Count} option(s)). Scripts reference it with the SHARED: prefix and the alias '{ctx.ConnectionAlias.Trim()}'.",
                 ConsoleColor.Green);
             return 0;
@@ -192,7 +194,7 @@ namespace ETL_SQL.App
             }
 
             logger.WriteLine(
-                $"Shared connection '{definition.Alias}' verified: {definition.ConnectorType}, " +
+                $"Machine shared connection '{definition.Alias}' verified: {definition.ConnectorType}, " +
                 $"{definition.Options.Count} option(s), {references.Count} secret reference(s) resolvable. Values not shown.",
                 ConsoleColor.Green);
             return 0;

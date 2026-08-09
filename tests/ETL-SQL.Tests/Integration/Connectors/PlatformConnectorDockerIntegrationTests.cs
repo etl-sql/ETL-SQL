@@ -18,6 +18,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.TestSupport;
 using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
@@ -160,22 +161,21 @@ namespace ETL_SQL.Tests.Integration.Connectors
         // then give up before a job that ultimately succeeds, producing a flaky timeout.
         public async Task<JsonElement[]> PollHistoryUntilCompletedAsync(HttpClient http, string jobName, int timeoutSeconds = 90)
         {
-            var started = DateTime.UtcNow;
-            while ((DateTime.UtcNow - started).TotalSeconds < timeoutSeconds)
-            {
-                var history = await http.GetFromJsonAsync<JsonElement[]>($"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history");
-                var completed = history?
-                    .Where(h => h.GetProperty("endTime").ValueKind != JsonValueKind.Null)
-                    .ToArray();
-                if (completed is { Length: > 0 })
+            return await LoadAwareWait.UntilAsync(
+                $"completed Docker service history for job '{jobName}'",
+                async cancellationToken =>
                 {
-                    return completed;
-                }
-
-                await Task.Delay(500);
-            }
-
-            throw new TimeoutException($"Timed out waiting for completed Docker service history for job '{jobName}'.");
+                    var history = await http.GetFromJsonAsync<JsonElement[]>(
+                        $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history",
+                        cancellationToken);
+                    return history?
+                        .Where(h => h.GetProperty("endTime").ValueKind != JsonValueKind.Null)
+                        .ToArray() ?? [];
+                },
+                completed => completed.Length > 0,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                pollInterval: TimeSpan.FromMilliseconds(500),
+                describe: completed => $"completed history entries={completed.Length}");
         }
 
         public async Task InitializeAsync()

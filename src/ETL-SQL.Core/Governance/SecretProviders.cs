@@ -29,8 +29,11 @@ public enum SecretLifecycleStatus
     Disabled
 }
 
+public sealed record SecretLifecycleEntry(string Name, SecretLifecycleStatus Status);
+
 public interface ISecretLifecycleProvider : IWritableSecretProvider
 {
+    Task<IReadOnlyList<SecretLifecycleEntry>> ListAsync(CancellationToken cancellationToken = default);
     Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default);
     Task DisableAsync(string name, CancellationToken cancellationToken = default);
     /// <summary>Re-enables a disabled entry without requiring a new value. No-op when already active.</summary>
@@ -76,7 +79,8 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
         {
             if (File.Exists(GetDisabledPath(name)))
                 throw new InvalidOperationException(
-                    $"Secret '{name}' is disabled. Re-enable it by storing a value with set-secret or rotate-secret.");
+                    $"Secret '{name}' is disabled. Re-enable it with 'admin machine secret enable' " +
+                    "or replace it with 'admin machine secret rotate'.");
 
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
         }
@@ -105,6 +109,23 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
         var disabledPath = GetDisabledPath(name);
         if (File.Exists(disabledPath))
             File.Delete(disabledPath);
+    }
+
+    public Task<IReadOnlyList<SecretLifecycleEntry>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        var root = GetRootDirectory();
+        if (!Directory.Exists(root))
+            return Task.FromResult<IReadOnlyList<SecretLifecycleEntry>>([]);
+
+        var entries = Directory.EnumerateFiles(root, "*.secret", SearchOption.TopDirectoryOnly)
+            .Select(path => new SecretLifecycleEntry(
+                Path.GetFileName(path)[..^".secret".Length], SecretLifecycleStatus.Active))
+            .Concat(Directory.EnumerateFiles(root, "*.secret.disabled", SearchOption.TopDirectoryOnly)
+                .Select(path => new SecretLifecycleEntry(
+                    Path.GetFileName(path)[..^".secret.disabled".Length], SecretLifecycleStatus.Disabled)))
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<SecretLifecycleEntry>>(entries);
     }
 
     public Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default)
@@ -165,12 +186,16 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
     private string GetSecretPath(string name)
     {
         SecretNameValidator.Validate(name);
+        return Path.Combine(GetRootDirectory(), name + ".secret");
+    }
+
+    private string GetRootDirectory()
+    {
         if (string.IsNullOrWhiteSpace(rootDirectory))
             throw new ArgumentException("Secret store root directory is required.", nameof(rootDirectory));
         if (!Path.IsPathFullyQualified(rootDirectory))
             throw new InvalidOperationException("OS secret store root directory must be fully qualified.");
-
-        return Path.Combine(Path.GetFullPath(rootDirectory), name + ".secret");
+        return Path.GetFullPath(rootDirectory);
     }
 }
 

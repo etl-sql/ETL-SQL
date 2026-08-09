@@ -11,6 +11,7 @@ using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -3982,40 +3983,34 @@ CREATE VISUAL Summary AS TABLE (
 
     private async Task<JsonObject> WaitForJobAsync(string token, string jobId)
     {
-        JsonObject? job = null;
-        for (var i = 0; i < 300; i++)
-        {
-            var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
-            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
-            job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-            var status = job!["status"]!.GetValue<string>();
-            if (status is "Completed" or "Failed" or "Cancelled")
-                return job;
-
-            await Task.Delay(200);
-        }
-
-        Assert.NotNull(job);
-        return job!;
+        return await LoadAwareWait.UntilAsync(
+            $"Portal execution job '{jobId}' to become terminal",
+            async _ =>
+            {
+                var response = await AuthGet(token, $"/api/jobs/{jobId}");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                return (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!;
+            },
+            job => job["status"]!.GetValue<string>() is "Completed" or "Failed" or "Cancelled",
+            TimeSpan.FromSeconds(60),
+            TimeSpan.FromMilliseconds(200),
+            job => $"status={job["status"]?.GetValue<string>() ?? "<missing>"}");
     }
 
     private async Task<JsonObject> WaitForRunningOrCompletedJobAsync(string token, string jobId)
     {
-        JsonObject? job = null;
-        for (var i = 0; i < 300; i++)
-        {
-            var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
-            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
-            job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-            var status = job!["status"]!.GetValue<string>();
-            if (status is "Running" or "Completed" or "Failed" or "Cancelled")
-                return job;
-
-            await Task.Delay(50);
-        }
-
-        Assert.NotNull(job);
-        return job!;
+        return await LoadAwareWait.UntilAsync(
+            $"Portal execution job '{jobId}' to start",
+            async _ =>
+            {
+                var response = await AuthGet(token, $"/api/jobs/{jobId}");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                return (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!;
+            },
+            job => job["status"]!.GetValue<string>() is "Running" or "Completed" or "Failed" or "Cancelled",
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMilliseconds(50),
+            job => $"status={job["status"]?.GetValue<string>() ?? "<missing>"}");
     }
 
     private static string GetGoldenWorkflowPath()

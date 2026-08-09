@@ -97,7 +97,7 @@ This is the profile where the failure mode is not "I forgot a setting" but "I sh
 > [!WARNING]
 > Support for a mutually untrusted tenant boundary is **not certified**. The Enterprise happy path
 > is not evidence that it holds. See the
-> [v0.18.0 deployment profile review](../architecture/decisions/v0.18.0-deployment-profile-review.md).
+> [v0.18.0 deployment profile review](../releases/v0.18.0-deployment-profile-review.md).
 
 ---
 

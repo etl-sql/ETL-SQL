@@ -101,6 +101,20 @@ public class CliContext
     /// <summary>Studio capabilities for <c>admin group set-capabilities</c>. Replaces the grant wholesale.</summary>
     public List<string>? AdminCapabilities { get; set; }
 
+    // ── admin service-account lifecycle ─────────────────────────────────────────
+    public string? ServiceAccountName { get; set; }
+    public string? ServiceAccountOwner { get; set; }
+    public string? ServiceAccountDescription { get; set; }
+    public List<string>? ServiceAccountScopes { get; set; }
+    public List<string>? ServiceAccountRoles { get; set; }
+    public List<string>? ServiceAccountCapabilities { get; set; }
+    public bool ServiceAccountClearCapabilities { get; set; }
+    public string? ServiceAccountExpiresAt { get; set; }
+    public bool ServiceAccountClearExpiry { get; set; }
+    public bool ServiceAccountEnable { get; set; }
+    public bool ServiceAccountDisable { get; set; }
+    public string? ServiceAccountSecretOutput { get; set; }
+
     /// <summary>
     /// Stable identity for an unattended run. Without it the job name is the script's file name, so
     /// the same script under two schedules — or same-named scripts in different folders — collapse

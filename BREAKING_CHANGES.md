@@ -74,9 +74,9 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 ## v1.0.0 (baseline)
 
 All syntax and behavior documented in:
-- [`docs/guides/getting-started.md`](docs/guides/getting-started.md)
+- [`docs/guides/onboarding/getting-started.md`](docs/guides/onboarding/getting-started.md)
 - [`docs/administration/platform/README.md`](docs/administration/platform/README.md)
-- [`docs/guides/getting-started.md`](docs/guides/getting-started.md)
+- [`docs/guides/onboarding/getting-started.md`](docs/guides/onboarding/getting-started.md)
 
 as of this version constitutes the **v1.0 baseline**. No migration required from prior versions.
 

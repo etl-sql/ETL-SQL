@@ -1,6 +1,6 @@
 # Security Model
 
-For non-interactive API and CLI identities, see [Service Accounts](../../reference/portal-admin/service-accounts.md).
+For non-interactive API and CLI identities, see [Service Accounts](../../reference/portal-commands/service-accounts.md).
 
 ## By deployment profile
 
@@ -9,7 +9,7 @@ For non-interactive API and CLI identities, see [Service Accounts](../../referen
 | **Solo / Workstation** | The **OS account and file permissions**. There is no Portal to authenticate against, and adding one would not make a single-operator workstation safer. |
 | **Team / SME** | Portal authentication, roles and folder ACLs, over TLS. The model becomes two-axis here: a role decides the class of operation, an ACL decides which resources. |
 | **Enterprise / Corporate** | Adds federated identity, service accounts capped by their owner's authority, Studio capabilities, row-level security, and a durable audit trail with optional fail-closed mutations. |
-| **SaaS / Departmental** | Adds the environment boundary itself, which is **host-fixed rather than request-derived** — a caller cannot select their own tenant. Hard multi-tenant separation is not certified; see the [deployment profile review](../../architecture/decisions/v0.18.0-deployment-profile-review.md). |
+| **SaaS / Departmental** | Adds the environment boundary itself, which is **host-fixed rather than request-derived** — a caller cannot select their own tenant. Hard multi-tenant separation is not certified; see the [deployment profile review](../../releases/v0.18.0-deployment-profile-review.md). |
 
 ## Authentication
 

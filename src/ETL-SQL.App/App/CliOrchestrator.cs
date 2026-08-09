@@ -164,6 +164,62 @@ namespace ETL_SQL.App
             Description = "Studio capability to grant. Repeatable. Replaces the group's whole grant.",
             AllowMultipleArgumentsPerToken = false
         };
+        private static readonly Option<string?> ServiceAccountNameOption = new("--name", Array.Empty<string>())
+        {
+            Description = "Service-account name.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> ServiceAccountOwnerOption = new("--owner", Array.Empty<string>())
+        {
+            Description = "Portal username that owns the service account.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> ServiceAccountDescriptionOption = new("--description", Array.Empty<string>())
+        {
+            Description = "Service-account description.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string[]> ServiceAccountScopeOption = new("--scope", Array.Empty<string>())
+        {
+            Description = "Scope to grant. Repeatable; on update, replaces the whole scope set.",
+            AllowMultipleArgumentsPerToken = false
+        };
+        private static readonly Option<string[]> ServiceAccountRoleOption = new("--role", Array.Empty<string>())
+        {
+            Description = "Role to grant. Repeatable and accepted only when creating the account.",
+            AllowMultipleArgumentsPerToken = false
+        };
+        private static readonly Option<string[]> ServiceAccountCapabilityOption = new("--capability", Array.Empty<string>())
+        {
+            Description = "Studio capability to grant. Repeatable; on update, replaces the whole grant.",
+            AllowMultipleArgumentsPerToken = false
+        };
+        private static readonly Option<bool> ServiceAccountClearCapabilitiesOption = new("--clear-capabilities", Array.Empty<string>())
+        {
+            Description = "Remove every Studio capability. Mutually exclusive with --capability."
+        };
+        private static readonly Option<string?> ServiceAccountExpiresOption = new("--expires-at", Array.Empty<string>())
+        {
+            Description = "UTC expiry as an ISO-8601 timestamp.",
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<bool> ServiceAccountClearExpiryOption = new("--clear-expiry", Array.Empty<string>())
+        {
+            Description = "Remove the account expiry. Mutually exclusive with --expires-at."
+        };
+        private static readonly Option<bool> ServiceAccountEnableOption = new("--enable", Array.Empty<string>())
+        {
+            Description = "Enable the account. Mutually exclusive with --disable."
+        };
+        private static readonly Option<bool> ServiceAccountDisableOption = new("--disable", Array.Empty<string>())
+        {
+            Description = "Disable the account without revoking it. Mutually exclusive with --enable."
+        };
+        private static readonly Option<string?> ServiceAccountSecretOutputOption = new("--secret-out", Array.Empty<string>())
+        {
+            Description = "New file that receives the one-time secret. The secret is never printed.",
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> AdminEmailOption = new("--email", Array.Empty<string>())
         {
             Description = "Email address for the new user.",
@@ -987,8 +1043,8 @@ namespace ETL_SQL.App
             adminCommand.Add(haSoakCommand);
 
             // Identity administration over the Portal API. Nested under `admin` following the
-            // ha-soak precedent rather than the flat `admin set-secret` style: the identity family
-            // is large enough that flat naming stops scanning cleanly.
+            // ha-soak and machine-store precedent: the identity family is large enough that flat
+            // naming stops scanning cleanly.
             var whoAmICommand = new Command("portal-whoami",
                 "Resolve Portal credentials and print the identity, roles, and scopes (never a secret)")
             {
@@ -1167,6 +1223,51 @@ namespace ETL_SQL.App
 
             adminCommand.Add(portalSessionCommand);
 
+            var serviceAccountCommand = new Command("service-account", "Manage Portal service accounts");
+            var serviceAccountListCommand = new Command("list", "List Portal service accounts")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, AdminFilterOption
+            };
+            serviceAccountListCommand.SetAction(context => Dispatch(context, "admin-service-account-list", handler));
+            serviceAccountCommand.Add(serviceAccountListCommand);
+
+            var serviceAccountCreateCommand = new Command("create", "Create a Portal service account")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, ServiceAccountNameOption,
+                ServiceAccountOwnerOption, ServiceAccountDescriptionOption, ServiceAccountScopeOption,
+                ServiceAccountRoleOption, ServiceAccountCapabilityOption, ServiceAccountExpiresOption,
+                ServiceAccountSecretOutputOption, IfNotExistsOption
+            };
+            serviceAccountCreateCommand.SetAction(context => Dispatch(context, "admin-service-account-create", handler));
+            serviceAccountCommand.Add(serviceAccountCreateCommand);
+
+            var serviceAccountUpdateCommand = new Command("update", "Update a Portal service account")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, ServiceAccountNameOption,
+                ServiceAccountScopeOption, ServiceAccountCapabilityOption, ServiceAccountExpiresOption,
+                ServiceAccountClearCapabilitiesOption, ServiceAccountClearExpiryOption,
+                ServiceAccountEnableOption, ServiceAccountDisableOption,
+                IfVersionOption
+            };
+            serviceAccountUpdateCommand.SetAction(context => Dispatch(context, "admin-service-account-update", handler));
+            serviceAccountCommand.Add(serviceAccountUpdateCommand);
+
+            var serviceAccountRotateCommand = new Command("rotate-secret", "Rotate a service account secret")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, ServiceAccountNameOption,
+                ServiceAccountSecretOutputOption, IfVersionOption
+            };
+            serviceAccountRotateCommand.SetAction(context => Dispatch(context, "admin-service-account-rotate-secret", handler));
+            serviceAccountCommand.Add(serviceAccountRotateCommand);
+
+            var serviceAccountRevokeCommand = new Command("revoke", "Permanently revoke a Portal service account")
+            {
+                PortalUrlOption, PortalClientIdOption, JsonOption, ServiceAccountNameOption, IfVersionOption
+            };
+            serviceAccountRevokeCommand.SetAction(context => Dispatch(context, "admin-service-account-revoke", handler));
+            serviceAccountCommand.Add(serviceAccountRevokeCommand);
+            adminCommand.Add(serviceAccountCommand);
+
             var accessSimulateCommand = new Command("access-simulate",
                 "Simulate what a user can reach — the access question, answered without a browser")
             {
@@ -1175,51 +1276,62 @@ namespace ETL_SQL.App
             accessSimulateCommand.SetAction(context => Dispatch(context, "admin-access-simulate", handler));
             adminCommand.Add(accessSimulateCommand);
 
-            var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
+            // Machine-local governance stores are a distinct namespace from the encrypted,
+            // audited Portal catalog. Keeping "machine" in the command path prevents an operator
+            // from successfully changing the wrong store.
+            var machineCommand = new Command("machine", "Manage machine-local governance stores");
+            var machineSecretCommand = new Command("secret", "Manage the machine-local Governance:Secrets provider");
+            var setSecretCommand = new Command("set", "Encrypt and store a named machine-local secret")
             {
                 SecretNameOption,
                 SecretValueOption,
             };
-            setSecretCommand.SetAction(context => Dispatch(context, "admin-set-secret", handler));
-            adminCommand.Add(setSecretCommand);
+            setSecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-set", handler));
+            machineSecretCommand.Add(setSecretCommand);
 
-            var verifySecretCommand = new Command("verify-secret", "Resolve a named secret to prove it is readable, without printing the value")
+            var listSecretsCommand = new Command("list", "List names and status from the machine-local secret store");
+            listSecretsCommand.SetAction(context => Dispatch(context, "admin-machine-secret-list", handler));
+            machineSecretCommand.Add(listSecretsCommand);
+
+            var verifySecretCommand = new Command("verify", "Resolve a machine-local secret without printing the value")
             {
                 SecretNameOption,
             };
-            verifySecretCommand.SetAction(context => Dispatch(context, "admin-verify-secret", handler));
-            adminCommand.Add(verifySecretCommand);
+            verifySecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-verify", handler));
+            machineSecretCommand.Add(verifySecretCommand);
 
-            var rotateSecretCommand = new Command("rotate-secret", "Replace the value of an existing named secret")
+            var rotateSecretCommand = new Command("rotate", "Replace an existing machine-local secret")
             {
                 SecretNameOption,
                 SecretValueOption,
             };
-            rotateSecretCommand.SetAction(context => Dispatch(context, "admin-rotate-secret", handler));
-            adminCommand.Add(rotateSecretCommand);
+            rotateSecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-rotate", handler));
+            machineSecretCommand.Add(rotateSecretCommand);
 
-            var disableSecretCommand = new Command("disable-secret", "Disable a named secret so resolution fails until it is re-enabled")
+            var disableSecretCommand = new Command("disable", "Disable a machine-local secret")
             {
                 SecretNameOption,
             };
-            disableSecretCommand.SetAction(context => Dispatch(context, "admin-disable-secret", handler));
-            adminCommand.Add(disableSecretCommand);
+            disableSecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-disable", handler));
+            machineSecretCommand.Add(disableSecretCommand);
 
-            var enableSecretCommand = new Command("enable-secret", "Re-enable a disabled secret; the stored value resolves again")
+            var enableSecretCommand = new Command("enable", "Re-enable a disabled machine-local secret")
             {
                 SecretNameOption,
             };
-            enableSecretCommand.SetAction(context => Dispatch(context, "admin-enable-secret", handler));
-            adminCommand.Add(enableSecretCommand);
+            enableSecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-enable", handler));
+            machineSecretCommand.Add(enableSecretCommand);
 
-            var deleteSecretCommand = new Command("delete-secret", "Permanently remove a named secret from the secret store")
+            var deleteSecretCommand = new Command("delete", "Permanently remove a machine-local secret")
             {
                 SecretNameOption,
             };
-            deleteSecretCommand.SetAction(context => Dispatch(context, "admin-delete-secret", handler));
-            adminCommand.Add(deleteSecretCommand);
+            deleteSecretCommand.SetAction(context => Dispatch(context, "admin-machine-secret-delete", handler));
+            machineSecretCommand.Add(deleteSecretCommand);
+            machineCommand.Add(machineSecretCommand);
 
-            var setConnectionCommand = new Command("set-connection", "Store a shared connection in the catalog for scripts to use as SHARED:alias")
+            var machineConnectionCommand = new Command("connection", "Manage the machine-local shared connection catalog");
+            var setConnectionCommand = new Command("set", "Store a machine-local SHARED: connection")
             {
                 ConnectionAliasOption,
                 ConnectionTypeOption,
@@ -1227,40 +1339,42 @@ namespace ETL_SQL.App
                 ConnectionOptionOption,
                 ConnectionSensitiveOption,
             };
-            setConnectionCommand.SetAction(context => Dispatch(context, "admin-set-connection", handler));
-            adminCommand.Add(setConnectionCommand);
+            setConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-set", handler));
+            machineConnectionCommand.Add(setConnectionCommand);
 
-            var listConnectionsCommand = new Command("list-connections", "List shared connection catalog entries and their status");
-            listConnectionsCommand.SetAction(context => Dispatch(context, "admin-list-connections", handler));
-            adminCommand.Add(listConnectionsCommand);
+            var listConnectionsCommand = new Command("list", "List machine-local shared connections and status");
+            listConnectionsCommand.SetAction(context => Dispatch(context, "admin-machine-connection-list", handler));
+            machineConnectionCommand.Add(listConnectionsCommand);
 
-            var verifyConnectionCommand = new Command("verify-connection", "Prove a shared connection's definition and secret references resolve, without printing values")
+            var verifyConnectionCommand = new Command("verify", "Verify a machine-local shared connection without printing values")
             {
                 ConnectionAliasOption,
             };
-            verifyConnectionCommand.SetAction(context => Dispatch(context, "admin-verify-connection", handler));
-            adminCommand.Add(verifyConnectionCommand);
+            verifyConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-verify", handler));
+            machineConnectionCommand.Add(verifyConnectionCommand);
 
-            var disableConnectionCommand = new Command("disable-connection", "Disable a shared connection so SHARED:alias fails until it is re-enabled")
+            var disableConnectionCommand = new Command("disable", "Disable a machine-local shared connection")
             {
                 ConnectionAliasOption,
             };
-            disableConnectionCommand.SetAction(context => Dispatch(context, "admin-disable-connection", handler));
-            adminCommand.Add(disableConnectionCommand);
+            disableConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-disable", handler));
+            machineConnectionCommand.Add(disableConnectionCommand);
 
-            var enableConnectionCommand = new Command("enable-connection", "Re-enable a disabled shared connection; its stored definition is retained")
+            var enableConnectionCommand = new Command("enable", "Re-enable a machine-local shared connection")
             {
                 ConnectionAliasOption,
             };
-            enableConnectionCommand.SetAction(context => Dispatch(context, "admin-enable-connection", handler));
-            adminCommand.Add(enableConnectionCommand);
+            enableConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-enable", handler));
+            machineConnectionCommand.Add(enableConnectionCommand);
 
-            var deleteConnectionCommand = new Command("delete-connection", "Permanently remove a shared connection from the catalog")
+            var deleteConnectionCommand = new Command("delete", "Permanently remove a machine-local shared connection")
             {
                 ConnectionAliasOption,
             };
-            deleteConnectionCommand.SetAction(context => Dispatch(context, "admin-delete-connection", handler));
-            adminCommand.Add(deleteConnectionCommand);
+            deleteConnectionCommand.SetAction(context => Dispatch(context, "admin-machine-connection-delete", handler));
+            machineConnectionCommand.Add(deleteConnectionCommand);
+            machineCommand.Add(machineConnectionCommand);
+            adminCommand.Add(machineCommand);
 
             var enterpriseCommand = new Command("enterprise", "Manage machine-level enterprise policy enrollment");
             var enterpriseEnrollCommand = new Command("enroll", "Enroll this machine in authoritative enterprise policy")
@@ -1361,6 +1475,7 @@ namespace ETL_SQL.App
             if (commandName.StartsWith("admin-user-", StringComparison.Ordinal)
                 || commandName.StartsWith("admin-group-", StringComparison.Ordinal)
                 || commandName.StartsWith("admin-session-", StringComparison.Ordinal)
+                || commandName.StartsWith("admin-service-account-", StringComparison.Ordinal)
                 || commandName == "admin-portal-whoami"
                 || commandName == "admin-access-simulate")
             {
@@ -1384,6 +1499,25 @@ namespace ETL_SQL.App
                 cliContext.AdminCapabilities = res.GetResult(AdminCapabilityOption) is null
                     ? null
                     : [.. res.GetValue(AdminCapabilityOption) ?? []];
+
+                if (commandName.StartsWith("admin-service-account-", StringComparison.Ordinal))
+                {
+                    cliContext.ServiceAccountName = TryGetString(res, ServiceAccountNameOption);
+                    cliContext.ServiceAccountOwner = TryGetString(res, ServiceAccountOwnerOption);
+                    cliContext.ServiceAccountDescription = TryGetString(res, ServiceAccountDescriptionOption);
+                    cliContext.ServiceAccountScopes = res.GetResult(ServiceAccountScopeOption) is null
+                        ? null : [.. res.GetValue(ServiceAccountScopeOption) ?? []];
+                    cliContext.ServiceAccountRoles = res.GetResult(ServiceAccountRoleOption) is null
+                        ? null : [.. res.GetValue(ServiceAccountRoleOption) ?? []];
+                    cliContext.ServiceAccountCapabilities = res.GetResult(ServiceAccountCapabilityOption) is null
+                        ? null : [.. res.GetValue(ServiceAccountCapabilityOption) ?? []];
+                    cliContext.ServiceAccountClearCapabilities = TryGetBool(res, ServiceAccountClearCapabilitiesOption);
+                    cliContext.ServiceAccountExpiresAt = TryGetString(res, ServiceAccountExpiresOption);
+                    cliContext.ServiceAccountClearExpiry = TryGetBool(res, ServiceAccountClearExpiryOption);
+                    cliContext.ServiceAccountEnable = TryGetBool(res, ServiceAccountEnableOption);
+                    cliContext.ServiceAccountDisable = TryGetBool(res, ServiceAccountDisableOption);
+                    cliContext.ServiceAccountSecretOutput = TryGetString(res, ServiceAccountSecretOutputOption);
+                }
             }
 
             if (commandName == "run")
@@ -1549,16 +1683,17 @@ namespace ETL_SQL.App
                 cliContext.HaSoakNoDocker = TryGetBool(res, HaSoakNoDockerOption);
                 cliContext.HaSoakForce = TryGetBool(res, HaSoakForceOption);
             }
-            else if (commandName is "admin-set-secret" or "admin-rotate-secret")
+            else if (commandName is "admin-machine-secret-set" or "admin-machine-secret-rotate")
             {
                 cliContext.SecretName = res.GetValue(SecretNameOption);
                 cliContext.SecretValue = res.GetValue(SecretValueOption);
             }
-            else if (commandName is "admin-verify-secret" or "admin-disable-secret" or "admin-enable-secret" or "admin-delete-secret")
+            else if (commandName is "admin-machine-secret-verify" or "admin-machine-secret-disable"
+                     or "admin-machine-secret-enable" or "admin-machine-secret-delete")
             {
                 cliContext.SecretName = res.GetValue(SecretNameOption);
             }
-            else if (commandName == "admin-set-connection")
+            else if (commandName == "admin-machine-connection-set")
             {
                 cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
                 cliContext.ConnectionType = res.GetValue(ConnectionTypeOption);
@@ -1566,7 +1701,8 @@ namespace ETL_SQL.App
                 cliContext.ConnectionOptions = res.GetValue(ConnectionOptionOption);
                 cliContext.ConnectionSensitiveFields = res.GetValue(ConnectionSensitiveOption);
             }
-            else if (commandName is "admin-verify-connection" or "admin-disable-connection" or "admin-enable-connection" or "admin-delete-connection")
+            else if (commandName is "admin-machine-connection-verify" or "admin-machine-connection-disable"
+                     or "admin-machine-connection-enable" or "admin-machine-connection-delete")
             {
                 cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
             }
@@ -1608,21 +1744,12 @@ namespace ETL_SQL.App
                     if (parts.Length == 2)
                     {
                         var key = parts[0].StartsWith("@") ? parts[0] : "@" + parts[0];
-                        cliContext.Variables[key] = ParseValue(parts[1]);
+                        cliContext.Variables[key] = ETL_SQL.Core.Common.VariableOverrideValueParser.Parse(parts[1]);
                     }
                 }
             }
 
             return await handler(cliContext);
-        }
-
-        private static object? ParseValue(string raw)
-        {
-            if (int.TryParse(raw, out var i)) return i;
-            if (double.TryParse(raw, out var d)) return d;
-            if (bool.TryParse(raw, out var b)) return b;
-            if (DateTime.TryParse(raw, out var dt)) return dt;
-            return raw.Trim('\'', '\"');
         }
 
         public static void ShowAdvancedHelp()

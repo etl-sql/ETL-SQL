@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Linq;
@@ -12,6 +13,7 @@ using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Services;
+using ETL_SQL.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,13 +23,16 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
-    public class SchedulerServiceTests
+    public class SchedulerServiceTests : IDisposable
     {
+        private readonly string _throttleRoot = Path.Combine(
+            Path.GetTempPath(), "etl-sql-tests", "scheduler-throttle", Guid.NewGuid().ToString("N"));
+
         /// <summary>
         /// Builds a SchedulerService with mocked dependencies.
         /// The service provider is wired so CreateScope() returns a scope containing the given executor.
         /// </summary>
-        private static (SchedulerService service, Mock<IJobHistoryStore> store, Mock<IScriptExecutor> executor)
+        private (SchedulerService service, Mock<IJobHistoryStore> store, Mock<IScriptExecutor> executor)
             Build(
                 IEnumerable<JobDefinition> jobs,
                 ScriptExecutionResult result,
@@ -57,11 +62,12 @@ namespace ETL_SQL.Tests.Orchestration
             return (BuildService(mockStore, mockExecutor, capacityMonitor, config), mockStore, mockExecutor);
         }
 
-        private static SchedulerService BuildService(
+        private SchedulerService BuildService(
             Mock<IJobHistoryStore> mockStore,
             Mock<IScriptExecutor> mockExecutor,
             INodeCapacityMonitor? capacityMonitor = null,
-            Dictionary<string, string?>? config = null)
+            Dictionary<string, string?>? config = null,
+            Mock<ISessionStateManager>? sessionManager = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
@@ -80,15 +86,23 @@ namespace ETL_SQL.Tests.Orchestration
             mockServiceProvider.Setup(p => p.GetService(typeof(IServiceScopeFactory)))
                                .Returns(mockScopeFactory.Object);
 
-            var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 4 });
-            var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object);
-
+            Directory.CreateDirectory(_throttleRoot);
+            var effectiveConfig = config is null
+                ? new Dictionary<string, string?>()
+                : new Dictionary<string, string?>(config);
+            effectiveConfig.TryAdd(
+                "Orchestrator:DatabasePath",
+                Path.Combine(_throttleRoot, $"throttle-{Guid.NewGuid():N}.db"));
             var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(config ?? new Dictionary<string, string?>())
+                .AddInMemoryCollection(effectiveConfig)
                 .Build();
+            var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 4 });
+            var throttle = new JobThrottle(
+                throttleOptions,
+                new Mock<ILogger<JobThrottle>>().Object,
+                configuration);
 
-            var mockSessLogger = new Mock<ETL_SQL.Common.ILogger>();
-            var sessionManager = new Mock<ISessionStateManager>();
+            sessionManager ??= new Mock<ISessionStateManager>();
 
             return new SchedulerService(
                 mockServiceProvider.Object,
@@ -100,18 +114,34 @@ namespace ETL_SQL.Tests.Orchestration
                 capacityMonitor);
         }
 
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(_throttleRoot))
+                    Directory.Delete(_throttleRoot, recursive: true);
+            }
+            catch
+            {
+                // SQLite can finish releasing a pooled handle just after a scheduler stops. The
+                // per-test directory still prevents cross-test state even if best-effort cleanup
+                // has to leave this one temporary artifact for the OS temp sweeper.
+            }
+        }
+
         // Scheduler execution is asynchronous; poll for the expected mock interaction instead of a
         // fixed sleep so these tests are not flaky on slow/loaded CI runners (a 500 ms Task.Delay
         // could elapse before the scheduler's first loop executed the job). Returns as soon as the
         // condition holds; a genuinely-never-executed job still fails the subsequent Verify.
         private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 10000)
         {
-            var deadline = Environment.TickCount64 + timeoutMs;
-            while (Environment.TickCount64 < deadline)
-            {
-                if (condition()) return;
-                await Task.Delay(20);
-            }
+            await LoadAwareWait.UntilAsync(
+                "scheduler mock invocation condition",
+                _ => Task.FromResult(condition()),
+                observed => observed,
+                TimeSpan.FromMilliseconds(timeoutMs),
+                TimeSpan.FromMilliseconds(20),
+                observed => $"condition={observed}");
         }
 
         private static bool Invoked<T>(Mock<T> mock, string method) where T : class
@@ -536,6 +566,52 @@ namespace ETL_SQL.Tests.Orchestration
                 It.IsAny<long>(), "QUARANTINED", It.Is<string>(m => m!.Contains("consecutive failures")),
                 It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()),
                 Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task ResumeJob_UsesRecordedSessionAndNamedCheckpoint()
+        {
+            const string script = "SET PERSIST ON; resume_here: SELECT 1;";
+            var job = new JobDefinition("ResumeJob", script, 1, "HOUR", null, null, DateTime.Now.AddHours(1));
+            var history = new JobHistoryEntry(
+                42, job.Name, DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "boom",
+                SessionId: "session-42", CheckpointLabel: "resume_here");
+
+            var store = new Mock<IJobHistoryStore>();
+            store.Setup(s => s.GetHistoryEntryAsync(42)).ReturnsAsync(history);
+            store.Setup(s => s.GetJobAsync(job.Name)).ReturnsAsync(job);
+            store.Setup(s => s.LogJobStartAsync(job.Name)).ReturnsAsync(43L);
+            store.Setup(s => s.AcquireJobLeaseAsync(job.Name, It.IsAny<string>(), It.IsAny<TimeSpan>()))
+                .ReturnsAsync(1L);
+            store.Setup(s => s.TryRenewJobLeaseAsync(job.Name, It.IsAny<string>(), It.IsAny<TimeSpan>()))
+                .ReturnsAsync(true);
+            store.Setup(s => s.ReleaseJobLeaseAsync(job.Name, It.IsAny<string>())).Returns(Task.CompletedTask);
+            store.Setup(s => s.TryUpdateJobLastRunFencedAsync(
+                job.Name, It.IsAny<DateTime>(), It.IsAny<DateTime?>(), 1L)).ReturnsAsync(true);
+
+            var sessions = new Mock<ISessionStateManager>();
+            sessions.Setup(s => s.LoadSession("session-42")).ReturnsAsync(new SessionState
+            {
+                SessionId = "session-42",
+                GlobalVariables = new Dictionary<string, object?>
+                {
+                    ["@_LAST_CHECKPOINT_LABEL"] = "resume_here"
+                }
+            });
+
+            var executor = new Mock<IScriptExecutor>();
+            executor.Setup(e => e.ResumeTextAsync(
+                    script, "session-42", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), null))
+                .ReturnsAsync(new ScriptExecutionResult(true, 1, SessionId: "session-42"));
+
+            var service = BuildService(store, executor, sessionManager: sessions);
+            var result = await service.ResumeJobAsync(42);
+            await WaitUntilAsync(() => Invoked(executor, nameof(IScriptExecutor.ResumeTextAsync)));
+
+            Assert.Equal(ResumeTriggerStatus.Accepted, result.Status);
+            Assert.Equal("resume_here", result.CheckpointLabel);
+            executor.Verify(e => e.ResumeTextAsync(
+                script, "session-42", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), null), Times.Once());
         }
 
         private sealed class FixedCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor

@@ -27,7 +27,12 @@ public record JobHistoryEntryDto(
     long PeakMemoryBytes,
     double CpuTimeSeconds,
     string? ScriptHashAtRunTime,
-    bool? HashMatched
+    bool? HashMatched,
+    long RowsQuarantined = 0,
+    long RowsWarned = 0,
+    string? DataQualityFailures = null,
+    string? CheckpointLabel = null,
+    bool HasResumeSession = false
 );
 
 public record OrchestratorMetricsDto(
@@ -71,6 +76,10 @@ public record UpdateJobRequest(
     int? MaxRetries = null,
     int? RetryDelaySeconds = null,
     string? HashPolicy = null
+);
+
+public record TriggerJobRequest(
+    Dictionary<string, string>? Variables = null
 );
 
 public record UpdateOrchestratorSettingsRequest(

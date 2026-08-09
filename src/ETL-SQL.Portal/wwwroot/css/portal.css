@@ -1151,11 +1151,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .history-section { min-width: 0; }
 .history-table-scroll { overflow-x: auto; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
 .history-table { width: 100%; min-width: 0; font-size: .8em; table-layout: fixed; }
+.orchestrator-run-history-table { min-width: 880px; }
 .history-table th, .history-table td {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
   vertical-align: top;
+}
+.history-resume-btn { white-space: nowrap; }
+.history-resume-reason {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-muted);
+  font-size: .88em;
+  line-height: 1.3;
 }
 .snapshot-history-table th:nth-child(1), .snapshot-history-table td:nth-child(1) { width: 27%; }
 .snapshot-history-table th:nth-child(2), .snapshot-history-table td:nth-child(2) { width: 12%; }
@@ -1234,11 +1243,57 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-size: .78em; white-space: nowrap; color: var(--portal-accent); text-decoration: none;
 }
 .triage-impact-link:hover { text-decoration: underline; }
+.triage-evidence-row > td { padding: 0 !important; background: var(--portal-bg); }
+.triage-evidence-grid {
+  display: grid; grid-template-columns: minmax(180px, .65fr) minmax(300px, 1.35fr);
+  grid-template-areas: 'integrity quality' 'timeline timeline'; gap: 8px; padding: 10px;
+}
+.triage-evidence-rail {
+  min-width: 0; padding: 10px; border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-sm); background: var(--portal-surface);
+}
+.triage-evidence-rail.integrity { grid-area: integrity; }
+.triage-evidence-rail.quality { grid-area: quality; }
+.triage-evidence-rail.timeline { grid-area: timeline; overflow-x: auto; }
+.triage-evidence-rail h4 {
+  margin: 0 0 8px; color: var(--portal-muted); font-size: .72em;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.triage-evidence-rail p { margin: 0; font-size: .82em; line-height: 1.5; }
+.triage-evidence-rail dl { margin: 10px 0 0; font-size: .75em; }
+.triage-evidence-rail dt { color: var(--portal-muted); }
+.triage-evidence-rail dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.triage-evidence-table { margin: 0; font-size: .8em; }
+.triage-evidence-table code { white-space: normal; overflow-wrap: anywhere; }
+.triage-statement-failed { box-shadow: inset 3px 0 0 var(--portal-danger); }
+.triage-evidence-empty, .triage-evidence-state {
+  margin: 0; padding: 12px; color: var(--portal-muted); font-size: .82em;
+}
+.triage-evidence-state.danger { color: var(--portal-danger); }
+.run-override-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px;
+}
+.run-override-head p, .run-override-security {
+  margin: 3px 0 0; color: var(--portal-muted); font-size: .8em; line-height: 1.45;
+}
+.run-override-row {
+  display: grid; grid-template-columns: minmax(140px, .75fr) minmax(200px, 1.25fr) auto;
+  align-items: end; gap: 10px; padding: 10px 0; border-top: 1px solid var(--portal-border-soft);
+}
+.run-override-row .btn-icon { margin-bottom: 2px; }
+.run-override-security { padding-top: 12px; border-top: 1px solid var(--portal-border-soft); }
 
 @media (max-width: 720px) {
   .triage-incident-head { flex-wrap: wrap; }
   .triage-incident-when { width: 100%; padding-left: 26px; }
   .triage-incident-error { white-space: normal; }
+  .triage-evidence-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'integrity' 'quality' 'timeline';
+  }
+  .run-override-head { align-items: stretch; flex-direction: column; }
+  .run-override-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .run-override-row .form-group:first-child { grid-column: 1 / -1; }
 }
 
 /* Create job modal — script preview */

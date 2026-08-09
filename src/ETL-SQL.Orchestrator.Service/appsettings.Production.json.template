@@ -1,4 +1,9 @@
 {
+  "Orchestrator": {
+    "ApiKey": "ENC:GENERATED_API_KEY_HERE",
+    "IdentitySigningSecret": "ENC:GENERATED_IDENTITY_SIGNING_SECRET_HERE",
+    "RequireFederatedIdentity": true
+  },
   "Jobs": {
     "UseProcessSpawning": true,
     "UseWarmRunner": false,

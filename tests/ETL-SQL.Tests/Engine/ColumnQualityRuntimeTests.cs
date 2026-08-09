@@ -11,6 +11,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using ETL_SQL.Engine.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -1313,6 +1314,45 @@ namespace ETL_SQL.Tests.Engine
             // The rules still ran — this is about the measurement, not the enforcement.
             Assert.Equal(2, eval.DataQuality.RowsValidated);
         }
+
+        [Fact]
+        public async Task PassingSynchronousRules_DoNotAllocatePerValidatedRow()
+        {
+            var eval = NewEvaluator();
+            eval.Telemetry.IsProfiling = true;
+            var script = new Lexer(@"
+                SELECT Id /* @expect: 'NOT NULL, >= 0, IN (1, 2)'; @fail: 'WARN'; */
+                FROM #src ON FAILURE WARN;").TokenizeToScript();
+            var statement = Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
+            var validator = Assert.IsType<ColumnQualityValidator>(
+                ColumnQualityValidator.TryCreate(eval, eval.Logger, statement, ["Id"]));
+            await validator.InitializeAsync();
+
+            var row = new Row();
+            row[0] = 1m;
+            for (var i = 0; i < 1_000; i++)
+                Assert.True(await validator.TryAcceptRowAsync(row, row));
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            var allAcceptedSynchronously = true;
+            const int measuredRows = 100_000;
+            for (var i = 0; i < measuredRows; i++)
+            {
+                var result = validator.TryAcceptRowAsync(row, row);
+                allAcceptedSynchronously &= ReadCompleted(result);
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+            Assert.True(allAcceptedSynchronously);
+            Assert.True(allocated <= 4_096,
+                $"Synchronous data-quality validation allocated {allocated:N0} bytes for {measuredRows:N0} passing rows.");
+        }
+
+        private static bool ReadCompleted(ValueTask<bool> result) =>
+            result.IsCompletedSuccessfully && result.Result;
 
         // ── Harness ────────────────────────────────────────────────────────
 

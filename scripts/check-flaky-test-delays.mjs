@@ -11,6 +11,8 @@
 //
 // A site that is genuinely fine but still matches can be annotated on the delay line with a
 // trailing `// flaky-delay-ok: <reason>` comment; the check then skips it (and requires a reason).
+// A deliberately fixed waiting budget can use `// flaky-wait-budget-ok: <reason>` on the helper
+// declaration or deadline. New condition waits should use the shared LoadAwareWait helper instead.
 //
 // Also flags unreviewed wall-clock upper-bound assertions such as `ElapsedMilliseconds < 1000`.
 // These can be valid when they distinguish cancellation/timeout from a much longer competing
@@ -31,6 +33,7 @@ const DELAY = /await\s+Task\.Delay\(\s*\d/; // literal-ms delay only
 const TIME_UPPER_BOUND = /Assert\.True\([^;\n]*(?:Elapsed(?:Milliseconds)?|Total(?:Seconds|Milliseconds))[^;\n]*(?:<|<=)|Assert\.True\([^;\n]*(?:<|<=)[^;\n]*(?:Elapsed(?:Milliseconds)?|Total(?:Seconds|Milliseconds))/;
 const FRESHNESS_BOUND = /\b(DateTime(?:Offset)?\.(?:Now|UtcNow)|LastRun|CreatedDate|Updated(?:At|Date)|Timestamp)\b/;
 const PERF_OR_SCALE_TEST = /[\\/]ETL-SQL\.PerfTests[\\/]|[\\/]Scale[\\/]|[\\/]Hardening[\\/]Performance[\\/]/;
+const BARE_WAIT_BUDGET = /\bwhile\s*\([^\n]*TotalSeconds\s*<|\b(?:\w*deadline|timeout)\s*=.*(?:Add(?:Milliseconds|Seconds|Minutes)|TickCount64?\s*\+)|\.WaitOne\(\s*TimeSpan\./i;
 
 const files = [];
 for await (const f of glob('tests/**/*.cs')) files.push(f);
@@ -38,6 +41,13 @@ for await (const f of glob('tests/**/*.cs')) files.push(f);
 const findings = [];
 for (const file of files.sort()) {
   const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!BARE_WAIT_BUDGET.test(lines[i])) continue;
+    const annotationWindow = lines.slice(Math.max(0, i - 3), i + 1).join('\n');
+    if (/\/\/\s*flaky-wait-budget-ok:\s*\S/.test(annotationWindow)) continue;
+    findings.push({ file, line: i + 1, text: lines[i].trim() });
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!DELAY.test(line)) continue;

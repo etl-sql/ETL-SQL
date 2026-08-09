@@ -102,7 +102,9 @@ namespace ETL_SQL.App
             var execution = await session.ExecuteAsync(
                 scriptText,
                 jobName: request.JobName,
-                queueWaitMs: request.QueueWaitMs);
+                queueWaitMs: request.QueueWaitMs,
+                variableOverrides: request.VariableOverrides,
+                resume: request.Resume);
 
             process.Refresh();
             var cpuSeconds = Math.Max(0, process.TotalProcessorTime.TotalSeconds - startCpu);
@@ -144,7 +146,9 @@ namespace ETL_SQL.App
         string? SessionId,
         string? JobName,
         long QueueWaitMs,
-        int BatchSize);
+        int BatchSize,
+        IReadOnlyDictionary<string, string>? VariableOverrides = null,
+        bool Resume = false);
 
     internal sealed record WarmRunnerResponse(
         string Type,

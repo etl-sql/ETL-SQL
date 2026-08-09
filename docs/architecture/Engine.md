@@ -921,3 +921,16 @@ All threshold values (`JoinSpillThreshold`, `WindowSpillThreshold`, `OperatorMem
 | `Spill Count` | | ✓ | `SortSpillCount` delta, reported on the Sort row |
 
 Spill metrics are statement-level totals mapped to the Sort plan row (the most common spill point). Per-operator spill attribution requires adding SpillStore call-site counters to each external engine — a future enhancement.
+
+### Durable statement profiling contract
+
+`ETL-SQL.Core/Profiling` owns the shared job-boundary representation of statement measurements.
+`StatementMetricsPayload.FromRun` projects `ExecutionMetrics`, marks the terminal failed statement,
+keeps every failure, fills the remaining configured budget with the slowest statements, and restores
+timeline order. The in-process adapter, one-shot JSON process, and warm-runner protocol therefore
+persist the same fields and apply the same cap.
+
+`StatementTextNormalizer` removes comments, replaces string and numeric literals, collapses
+whitespace, preserves quoted and bracketed identifiers, and caps the result before it crosses into
+durable history. This is a security boundary: operator-readable history identifies which statement
+ran without retaining literal data that belonged to the execution principal.

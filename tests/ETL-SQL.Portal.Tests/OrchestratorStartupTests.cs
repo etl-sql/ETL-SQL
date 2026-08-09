@@ -85,8 +85,19 @@ public class OrchestratorStartupTests
     [Fact]
     public void KeyConfigured_NonLoopback_DoesNotThrow()
     {
-        var cfg = Config(("Orchestrator:ApiKey", "a-real-key"), ("urls", "http://0.0.0.0:5001"));
+        var cfg = Config(
+            ("Orchestrator:ApiKey", "a-real-key"),
+            ("Orchestrator:IdentitySigningSecret", "a-dedicated-test-identity-secret-at-least-32-bytes"),
+            ("urls", "http://0.0.0.0:5001"));
         OrchestratorStartup.ValidateApiKeyBinding(cfg);
+    }
+
+    [Fact]
+    public void KeyWithoutFederatedIdentitySecret_NonLoopback_Throws()
+    {
+        var cfg = Config(("Orchestrator:ApiKey", "a-real-key"), ("urls", "http://0.0.0.0:5001"));
+        var ex = Assert.Throws<InvalidOperationException>(() => OrchestratorStartup.ValidateApiKeyBinding(cfg));
+        Assert.Contains("IdentitySigningSecret", ex.Message);
     }
 
     [Fact]

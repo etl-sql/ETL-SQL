@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "fuzz-smoke", "fuzz")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "fuzz-smoke", "fuzz")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -21,7 +21,7 @@ $fastFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleC
 # Portal lanes run the whole Portal project (its WebApplicationFactory tests have
 # "Integration" in their names but need no Docker), so they can't use the name-based
 # fastFilter. Exclude only Docker-backed tests by category instead.
-$portalFilter = "(Category!=Integration)"
+$portalFilter = "(Category!=Integration)&(Category!=HostedServices)"
 
 function Invoke-DotNetTest {
     param(
@@ -137,7 +137,13 @@ switch ($Lane) {
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
+        # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
+        # consume its startup/shutdown budget or share its background-service state.
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
         Invoke-LineageUiSmoke
+    }
+    "portal-hosted" {
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
     }
     "browser" {
         # Opt-in: drives a real Chromium against a Kestrel-hosted Portal. Chromium is downloaded on
@@ -156,6 +162,7 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
+        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
         Invoke-LineageUiSmoke
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
     }

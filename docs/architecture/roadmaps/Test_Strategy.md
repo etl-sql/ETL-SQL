@@ -18,7 +18,8 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Smoke | `.\scripts\test-lane.ps1 -Lane smoke` | Hand-picked checks for the product's main shape: core language, security/path guardrails, reporting runtime, portal publish/execute/snapshot. | First check after a local change; first CI test step. |
 | Fast | `.\scripts\test-lane.ps1 -Lane fast` | Bounded quick-feedback lane: all smoke categories plus language-server tests. | First local check after most changes. |
 | Engine | `.\scripts\test-lane.ps1 -Lane engine` | Main engine/parser/evaluator behavior in `ETL-SQL.Tests`, excluding explicit integration/performance/scale categories. | Pre-push and focused engine work. |
-| Portal | `.\scripts\test-lane.ps1 -Lane portal` | Portal integration behavior. | Portal/API work. |
+| Portal | `.\scripts\test-lane.ps1 -Lane portal` | Portal integration behavior plus the hosted-service suite in a separate process. | Portal/API work. |
+| Portal hosted services | `.\scripts\test-lane.ps1 -Lane portal-hosted` | Full Portal `IHostedService` startup, validation, polling, and maintenance pipeline in isolation. | Hosted-service and startup/shutdown work. |
 | Integration | `.\scripts\test-lane.ps1 -Lane integration` | Tests that need real-ish external boundaries, hosted portal infrastructure, or connector integration setup. | Scheduled, release, or targeted connector work. |
 | Perf | `.\scripts\test-lane.ps1 -Lane perf` | Performance assertions in `ETL-SQL.Tests` hardening coverage and `ETL-SQL.PerfTests`. | Scheduled, release, or perf-sensitive work. |
 | Release | `.\scripts\test-lane.ps1 -Lane release` | Fast (including smoke) + engine + portal + fuzz smoke + SLT, without benchmarks, installer packaging, Docker, or scale certification. | Local release candidate confidence when packaging is not needed. |

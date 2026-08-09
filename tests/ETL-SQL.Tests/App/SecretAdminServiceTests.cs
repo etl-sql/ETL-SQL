@@ -19,6 +19,9 @@ public class SecretAdminServiceTests
         Assert.Equal("second-value", (await provider.ResolveAsync("db_password")).Value);
 
         Assert.Equal(0, await Run("disable-secret", "db_password", null, provider, logger));
+        Assert.Equal(0, await Run("list-secret", null, null, provider, logger));
+        Assert.Contains(logger.Messages, m => m.Contains("Machine secret store") && m.Contains("OsSecretStore"));
+        Assert.Contains(logger.Messages, m => m.Contains("db_password") && m.Contains("Disabled"));
         Assert.Equal(1, await Run("verify-secret", "db_password", null, provider, logger));
         Assert.Contains(logger.Messages, m => m.Contains("disabled"));
 
@@ -44,7 +47,7 @@ public class SecretAdminServiceTests
         var logger = new CapturingLogger();
 
         Assert.Equal(1, await Run("rotate-secret", "missing", "value", provider, logger));
-        Assert.Contains(logger.Messages, m => m.Contains("set-secret"));
+        Assert.Contains(logger.Messages, m => m.Contains("admin machine secret set"));
     }
 
     [Fact]

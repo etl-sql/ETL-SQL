@@ -56,7 +56,13 @@ public class EnableJobStatementHandler : IStatementHandler
 
         var existing = await _store.GetJobAsync(stmt.Name)
             ?? throw new ExecutionException($"ENABLE JOB failed: job '{stmt.Name}' not found.");
-        await _store.SaveJobAsync(existing with { IsEnabled = true });
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+            stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+        await _store.SaveJobAsync(existing with
+        {
+            IsEnabled = true,
+            ModifiedBy = CatalogStatementSupport.ActingIdentity(context)
+        });
         context.Log($"Job '{stmt.Name}' enabled.", ConsoleColor.Green);
     }
 }
@@ -79,7 +85,13 @@ public class DisableJobStatementHandler : IStatementHandler
 
         var existing = await _store.GetJobAsync(stmt.Name)
             ?? throw new ExecutionException($"DISABLE JOB failed: job '{stmt.Name}' not found.");
-        await _store.SaveJobAsync(existing with { IsEnabled = false });
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+            stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+        await _store.SaveJobAsync(existing with
+        {
+            IsEnabled = false,
+            ModifiedBy = CatalogStatementSupport.ActingIdentity(context)
+        });
         context.Log($"Job '{stmt.Name}' disabled.", ConsoleColor.Yellow);
     }
 }
@@ -103,6 +115,8 @@ public class TriggerJobStatementHandler : IStatementHandler
 
         var existing = await _store.GetJobAsync(stmt.Name)
             ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.");
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+            stmt.Name, OrchestratorObjectPermission.Execute, existing.CreatedBy);
 
         // TRIGGER JOB against the local store is informational — the scheduler loop
         // is responsible for polling and immediate triggering requires an Orchestrator

@@ -44,7 +44,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 FAST_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
-PORTAL_FILTER="(Category!=Integration)"
+PORTAL_FILTER="(Category!=Integration)&(Category!=HostedServices)"
 
 invoke_dotnet_test() {
     local project="$1"
@@ -101,7 +101,12 @@ case "$LANE" in
         ;;
     portal)
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
+        # Keep the real hosted-service pipeline in its own process, away from unrelated classes.
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
         invoke_lineage_ui_smoke
+        ;;
+    portal-hosted)
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
         ;;
     integration)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Integration"
@@ -115,6 +120,7 @@ case "$LANE" in
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
+        invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
         invoke_lineage_ui_smoke
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" ""
         ;;

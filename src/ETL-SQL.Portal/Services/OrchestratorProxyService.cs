@@ -1,6 +1,9 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Services;
 
@@ -16,19 +19,16 @@ public class OrchestratorProxyService(
     ILogger<OrchestratorProxyService> logger,
     // Optional: background work (alert evaluation, subscription delivery) has no HTTP context and
     // therefore no human to attribute, which is a legitimate state rather than a missing dependency.
-    IHttpContextAccessor? httpContext = null)
+    IHttpContextAccessor? httpContext = null,
+    PortalConfig? portalConfig = null,
+    PortalDbContext? portalDb = null)
 {
     /// <summary>
-    /// Carries the human who initiated a proxied action so the Orchestrator's own logs name them
-    /// rather than the shared service key.
-    ///
-    /// <para><b>Attribution, never authorization.</b> The Orchestrator authorizes on
-    /// <c>X-Orchestrator-Key</c> alone. This header is written by the Portal after its own
-    /// authorization has already passed, and anything reading it must treat it as a label — a
-    /// caller that can reach the Orchestrator directly can set it to any value, so trusting it for
-    /// access decisions would convert a shared secret into an impersonation vector. Federating a
-    /// verifiable identity is a separate, deliberately gated piece of work.</para>
+    /// Retired caller-controlled attribution header. Signed identity assertions now carry both
+    /// attribution and authorization identity; retaining this constant only prevents source-level
+    /// surprises for integrations while ensuring it is never emitted or trusted.
     /// </summary>
+    [Obsolete("Use the signed X-Orchestrator-Identity assertion. This header has no authority and is no longer emitted.")]
     public const string ActorHeader = "X-Orchestrator-Actor";
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(settings.ApiUrl);
@@ -96,10 +96,30 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogDebug(ex, "Failed to get history for {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
     }
 
-    public async Task<HttpResponseMessage?> TriggerJobAsync(string name)
+    public async Task<HttpResponseMessage?> TriggerJobAsync(
+        string name,
+        IReadOnlyDictionary<string, string>? variables = null)
     {
-        try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/trigger"); }
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Post,
+                $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/trigger",
+                new TriggerJobRequest(variables is null
+                    ? null
+                    : new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase)));
+        }
         catch (Exception ex) { logger.LogWarning(ex, "Failed to trigger job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
+    }
+
+    public async Task<HttpResponseMessage?> ResumeRunAsync(long historyId)
+    {
+        try { return await SendAsync(HttpMethod.Post, $"api/job-runs/{historyId}/resume"); }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resume job run {HistoryId}.", historyId);
+            return null;
+        }
     }
 
     public async Task<HttpResponseMessage?> KillJobAsync(string name)
@@ -176,9 +196,9 @@ public class OrchestratorProxyService(
         if (!string.IsNullOrEmpty(key))
             req.Headers.TryAddWithoutValidation("X-Orchestrator-Key", key);
 
-        var actor = CurrentActor();
-        if (actor is not null)
-            req.Headers.TryAddWithoutValidation(ActorHeader, actor);
+        var identityAssertion = await CurrentIdentityAssertionAsync(cancellationToken);
+        if (identityAssertion is not null)
+            req.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.HeaderName, identityAssertion);
         if (version.HasValue)
             req.Headers.TryAddWithoutValidation("If-Match", OptimisticConcurrency.ToETag(version.Value));
         if (body is not null)
@@ -187,26 +207,50 @@ public class OrchestratorProxyService(
         return await http.SendAsync(req, cancellationToken);
     }
 
-    /// <summary>
-    /// The signed-in principal as "id:username", or null for background work with no user. Header
-    /// values must stay single-line ASCII, so anything unexpected in the name is dropped rather
-    /// than smuggled into the Orchestrator's logs.
-    /// </summary>
-    private string? CurrentActor()
+    private async Task<string?> CurrentIdentityAssertionAsync(CancellationToken cancellationToken)
     {
+        var secret = portalConfig?.Orchestrator.IdentitySigningSecret;
+        if (string.IsNullOrWhiteSpace(secret)) return null;
+
         var user = httpContext?.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated != true) return null;
+        if (user?.Identity?.IsAuthenticated != true)
+        {
+            return OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller("service", "portal-background", "Portal background service", ["PortalSystem"], []),
+                secret);
+        }
 
         var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
         var name = user.FindFirstValue(ClaimTypes.Name) ?? user.Identity.Name;
-        if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(name)) return null;
+        var serviceAccountId = user.FindFirstValue(TokenService.ServiceAccountIdClaim);
+        var isService = string.Equals(
+            user.FindFirstValue(TokenService.IdentityTypeClaim),
+            TokenService.ServiceIdentityType,
+            StringComparison.Ordinal);
+        var subjectId = isService ? serviceAccountId : id;
+        if (string.IsNullOrWhiteSpace(subjectId)) return null;
 
-        var safeName = new string((name ?? "")
-            .Where(c => c is >= (char)0x20 and < (char)0x7F && c != ':')
-            .Take(64)
-            .ToArray());
+        string[] groupIds = [];
+        if (!isService && int.TryParse(id, out var userId) && portalDb is not null)
+        {
+            groupIds = await portalDb.UserGroups.AsNoTracking()
+                .Where(membership => membership.UserId == userId)
+                .Select(membership => membership.GroupId.ToString())
+                .ToArrayAsync(cancellationToken);
+        }
 
-        return $"{id}:{safeName}";
+        var roles = user.FindAll(ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return OrchestratorIdentityAssertion.Create(
+            new OrchestratorCaller(
+                isService ? "service" : "user",
+                subjectId,
+                name ?? subjectId,
+                roles,
+                groupIds),
+            secret);
     }
 
     // ── Private raw-deserialization types ─────────────────────────────────────

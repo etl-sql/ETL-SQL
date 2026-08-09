@@ -13,6 +13,7 @@ The portal communicates with the Orchestrator Service over HTTP. Configure the c
   "Orchestrator": {
     "ApiUrl": "http://orchestrator-host:5001",
     "ApiKey": "your-shared-secret",
+    "IdentitySigningSecret": "a-distinct-random-secret-at-least-32-bytes",
     "SameHost": false
   }
 }
@@ -33,13 +34,23 @@ To verify the connection, click **Test Connection** — the button calls the `/a
 > [!TIP]
 > If you change the URL or key without saving, **Test Connection** still tests the previously saved settings. Save first, then test.
 
-### API Key
+### API key and caller identity
 
 The API key is sent as an `X-Orchestrator-Key` header on every request the portal makes to the Orchestrator. The Orchestrator must be configured with the same key:
 
 ```
 Orchestrator__ApiKey=your-shared-secret
 ```
+
+The API key identifies the Portal service, not the human or service account making the request. The Portal therefore also emits a short-lived, HMAC-signed `X-Orchestrator-Identity` assertion derived from the authenticated Portal/OIDC principal. Configure a separate matching secret on both hosts:
+
+```
+Portal__Orchestrator__IdentitySigningSecret=a-distinct-random-secret-at-least-32-bytes
+Orchestrator__IdentitySigningSecret=a-distinct-random-secret-at-least-32-bytes
+Orchestrator__RequireFederatedIdentity=true
+```
+
+The Orchestrator ignores caller-name headers and rejects missing, expired, or modified assertions. Do not reuse the API key as the signing secret. The Admin UI can rotate the URL/API key sidecar, but the signing secret is host-only configuration.
 
 Remote report execution returns the completed report manifest through the authenticated Orchestrator
 job-status API. The Portal then persists the manifest under its own `SnapshotDirectory`, so a shared
@@ -123,11 +134,14 @@ The job detail panel's history table includes per-execution performance data:
 | :--- | :--- | :--- |
 | `Portal:Orchestrator:ApiUrl` | Portal `appsettings.json` / env var | Base URL of the Orchestrator Service HTTP API |
 | `Portal:Orchestrator:ApiKey` | Portal `appsettings.json` / env var | Shared secret sent as `X-Orchestrator-Key` header |
+| `Portal:Orchestrator:IdentitySigningSecret` | Portal protected configuration / env var | Signs short-lived caller assertions; must match the Orchestrator value |
 | `Portal:Orchestrator:SameHost` | Portal `appsettings.json` / env var | `true` enables the **Start** button using Windows `ServiceController` |
 | `Portal:Orchestrator:DatabasePath` | Portal `appsettings.json` / env var | Location of the Orchestrator's SQLite DB from Portal context (used to query job status/history locally). Defaults to `../Orchestrator/etlsql.db` relative to the Portal's database directory. |
 | `portal-orchestrator.json` | Sidecar file next to portal database | Overrides for URL/key saved via the Admin UI; takes precedence over env vars |
 | `Orchestrator:DatabasePath` | Orchestrator `appsettings.json` / env var | Path to the Orchestrator's SQLite database. Defaults to `%LocalAppData%/ETL-SQL/etlsql.db` if unset. |
 | `Orchestrator:ApiKey` | Orchestrator `appsettings.json` / env var | Key the Orchestrator validates against incoming `X-Orchestrator-Key` headers |
+| `Orchestrator:IdentitySigningSecret` | Orchestrator protected configuration / env var | Verifies Portal caller assertions; use a distinct value of at least 32 bytes |
+| `Orchestrator:RequireFederatedIdentity` | Orchestrator `appsettings.json` / env var | Requires a valid signed caller assertion; defaults on for non-loopback listeners |
 | `Orchestrator:ScriptRoot` | Orchestrator `appsettings.json` / env var | Root directory for the script file browser exposed to the portal |
 
 ---

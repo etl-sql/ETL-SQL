@@ -22,7 +22,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
+    public partial class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IJobCatalogStore, IOrchestratorAuthorizationStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -122,6 +122,20 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (JobName, NotificationName, TriggerCondition)
                 );
                 CREATE INDEX IF NOT EXISTS idx_jn_notification ON JobNotifications(NotificationName);";
+
+                    var createObjectAclTable = @"
+                CREATE TABLE IF NOT EXISTS OrchestratorObjectAcls (
+                    ObjectKind TEXT NOT NULL,
+                    ObjectName TEXT COLLATE NOCASE NOT NULL,
+                    PrincipalKind TEXT NOT NULL,
+                    PrincipalId TEXT NOT NULL,
+                    Permission TEXT NOT NULL,
+                    GrantedBy TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY (ObjectKind, ObjectName, PrincipalKind, PrincipalId)
+                );
+                CREATE INDEX IF NOT EXISTS idx_ooa_principal
+                    ON OrchestratorObjectAcls(PrincipalKind, PrincipalId, ObjectKind);";
 
                     var createHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS JobHistory (
@@ -323,7 +337,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Day, NodeId)
                 );";
 
-                    var schema = createJobsTable + createCatalogTables + createHistoryTable + createColumnMetricsTable
+                    var schema = createJobsTable + createCatalogTables + createObjectAclTable + createHistoryTable + createColumnMetricsTable
                         + createDataQualityFailuresTable + createStatementMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables;
@@ -567,6 +581,20 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN DataQualityFailures TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("SessionId"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN SessionId TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("CheckpointLabel"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN CheckpointLabel TEXT;";
                 await cmd.ExecuteNonQueryAsync();
             }
         }
@@ -1330,6 +1358,19 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task UpdateJobResumeMetadataAsync(long entryId, string? sessionId, string? checkpointLabel)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE JobHistory SET SessionId = @session, CheckpointLabel = @label WHERE Id = @id;";
+            command.AddParam("@id", entryId);
+            command.AddParam("@session", (object?)sessionId ?? DBNull.Value);
+            command.AddParam("@label", (object?)checkpointLabel ?? DBNull.Value);
+            await command.ExecuteNonQueryAsync();
+        }
+
         public async Task<long> ImportJobHistoryAsync(JobHistoryEntry entry)
         {
             await EnsureInitializedAsync();
@@ -1355,10 +1396,10 @@ namespace ETL_SQL.Orchestrator.Storage
                 INSERT INTO JobHistory
                     (JobName, StartTime, EndTime, Status, ErrorMessage, RowsProcessed,
                      PeakMemoryBytes, CpuTimeSeconds, ScriptHashAtRunTime, HashMatched,
-                     RowsQuarantined, RowsWarned, DataQualityFailures)
+                     RowsQuarantined, RowsWarned, DataQualityFailures, SessionId, CheckpointLabel)
                 VALUES
                     (@name, @start, @end, @status, @error, @rows,
-                     @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures)", "Id");
+                     @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures, @session, @checkpoint)", "Id");
             using var insert = connection.CreateCommand();
             insert.CommandText = sql;
             insert.AddParam("@name", entry.JobName);
@@ -1374,6 +1415,8 @@ namespace ETL_SQL.Orchestrator.Storage
             insert.AddParam("@quarantined", entry.RowsQuarantined);
             insert.AddParam("@warned", entry.RowsWarned);
             insert.AddParam("@failures", (object?)entry.DataQualityFailures ?? DBNull.Value);
+            insert.AddParam("@session", (object?)entry.SessionId ?? DBNull.Value);
+            insert.AddParam("@checkpoint", (object?)entry.CheckpointLabel ?? DBNull.Value);
             return Convert.ToInt64((await insert.ExecuteScalarAsync())!);
         }
 
@@ -1671,6 +1714,37 @@ namespace ETL_SQL.Orchestrator.Storage
                 ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
                 LIMIT @limit;";
             command.AddParam("@jobName", jobName);
+            command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+
+            var results = new List<JobDataQualityFailure>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new JobDataQualityFailure(
+                    reader.GetInt64(0), reader.GetString(1), DateTime.Parse(reader.GetString(2)),
+                    reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)), reader.GetString(4),
+                    reader.IsDBNull(5) || string.IsNullOrEmpty(reader.GetString(5)) ? null : reader.GetString(5),
+                    reader.GetString(6), reader.GetString(7),
+                    reader.GetString(8), reader.GetInt64(9), reader.IsDBNull(10) ? null : reader.GetString(10)));
+            }
+            return results;
+        }
+
+        public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForRunAsync(long entryId, int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
+                       f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
+                FROM JobDataQualityFailures f
+                INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
+                WHERE h.Id = @historyId
+                ORDER BY f.TargetTable, f.ColumnName, f.RuleText, f.Action
+                LIMIT @limit;";
+            command.AddParam("@historyId", entryId);
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
             var results = new List<JobDataQualityFailure>();
@@ -2048,6 +2122,19 @@ namespace ETL_SQL.Orchestrator.Storage
             return entries;
         }
 
+        public async Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM JobHistory WHERE Id = @historyId LIMIT 1;";
+            command.AddParam("@historyId", entryId);
+            using var reader = await command.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadHistoryEntry(reader) : null;
+        }
+
         public async Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
             DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0)
         {
@@ -2088,7 +2175,9 @@ namespace ETL_SQL.Orchestrator.Storage
             // upgraded mid-rollout may not have them yet.
             ReadOptionalInt64(reader, "RowsQuarantined"),
             ReadOptionalInt64(reader, "RowsWarned"),
-            ReadOptionalString(reader, "DataQualityFailures"));
+            ReadOptionalString(reader, "DataQualityFailures"),
+            ReadOptionalString(reader, "SessionId"),
+            ReadOptionalString(reader, "CheckpointLabel"));
 
         private static long ReadOptionalInt64(DbDataReader reader, string columnName)
         {

@@ -31,7 +31,7 @@ namespace ETL_SQL.App
                 return 1;
             }
 
-            var action = ctx.Command["admin-".Length..];
+            var action = ctx.Command["admin-machine-secret-".Length..] + "-secret";
             string? value = null;
             if (action is "set-secret" or "rotate-secret")
             {
@@ -54,6 +54,26 @@ namespace ETL_SQL.App
             ILogger logger,
             CancellationToken cancellationToken)
         {
+            if (action == "list-secret")
+            {
+                if (provider is not ISecretLifecycleProvider lifecycle)
+                    return LifecycleUnsupported(provider, logger);
+                try
+                {
+                    var entries = await lifecycle.ListAsync(cancellationToken);
+                    logger.WriteLine($"Machine secret store: provider '{provider.ProviderName}'.");
+                    if (entries.Count == 0) logger.WriteLine("(none)");
+                    foreach (var entry in entries)
+                        logger.WriteLine($"{entry.Name}  [{entry.Status}]");
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    logger.WriteLine(SecretRedactor.Redact(ex.Message) ?? "Secret listing failed.", ConsoleColor.Red);
+                    return 1;
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(name))
             {
                 logger.WriteLine("--name is required.", ConsoleColor.Red);
@@ -86,7 +106,7 @@ namespace ETL_SQL.App
                                 && provider is ISecretLifecycleProvider lifecycleForRotate
                                 && await lifecycleForRotate.GetStatusAsync(name, cancellationToken) == SecretLifecycleStatus.NotFound)
                             {
-                                logger.WriteLine($"Secret '{name}' does not exist; use set-secret to create it.", ConsoleColor.Red);
+                                logger.WriteLine($"Secret '{name}' does not exist; use 'admin machine secret set' to create it.", ConsoleColor.Red);
                                 return 1;
                             }
 

@@ -2,33 +2,90 @@ name: MSI In-Place Upgrade
 
 # This job downloads a ~900 MB previous release, installs WiX and builds an installer before it can
 # assert anything — roughly 26 minutes. Running that for a documentation change buys nothing, so the
-# push trigger is scoped to the files that can actually change upgrade behaviour. Tags always run it
-# in full, because a release must be certified whatever the diff looked like.
-#
-# If this ever becomes a required status check, add a companion job that always succeeds on the
-# filtered-out paths: a path-filtered workflow reports "skipped" rather than "success", and a
-# required check that never reports will block every unrelated pull request.
+# expensive job is scoped inside the workflow to files that can actually change upgrade behaviour.
+# The workflow itself always runs for pull requests so the final gate reports success when the
+# certification is intentionally skipped. Tags and manual dispatches always run it in full.
 on:
   push:
     branches:
       - 'release/**'
-    paths:
-      - 'src/ETL-SQL.Installer/**'
-      - 'scripts/Test-MsiUpgrade.ps1'
-      - 'scripts/MsiUpgrade.Helpers.ps1'
-      - 'scripts/build-msi.ps1'
-      - '.github/workflows/msi-upgrade.yml'
-      - 'Directory.Build.props'
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  detect-upgrade-impact:
+    name: Detect MSI Upgrade Impact
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.changes.outputs.should_run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: changes
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $force = $env:EVENT_NAME -eq 'workflow_dispatch' -or $env:REF_TYPE -eq 'tag'
+          if ($force) {
+            'should_run=true' >> $env:GITHUB_OUTPUT
+            Write-Host 'Running full MSI certification for a tag or manual dispatch.'
+            exit 0
+          }
+
+          $baseSha = if ($env:EVENT_NAME -eq 'pull_request') { $env:BASE_SHA } else { $env:BEFORE_SHA }
+          if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -match '^0+$') {
+            'should_run=true' >> $env:GITHUB_OUTPUT
+            Write-Host 'No usable base commit; failing safe by running the full MSI certification.'
+            exit 0
+          }
+
+          $changedPaths = @(git diff --name-only $baseSha $env:CURRENT_SHA)
+          if ($LASTEXITCODE -ne 0) { throw "git diff failed for $baseSha..$env:CURRENT_SHA" }
+
+          $upgradePatterns = @(
+            '^src/ETL-SQL\.Installer/',
+            '^scripts/Test-MsiUpgrade\.ps1$',
+            '^scripts/MsiUpgrade\.Helpers\.ps1$',
+            '^scripts/build-msi\.ps1$',
+            '^\.github/workflows/msi-upgrade\.yml$',
+            '^Directory\.Build\.props$'
+          )
+          $relevant = @($changedPaths | Where-Object {
+            $path = $_
+            @($upgradePatterns | Where-Object { $path -match $_ }).Count -gt 0
+          })
+          $shouldRun = $relevant.Count -gt 0
+          "should_run=$($shouldRun.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+          if ($shouldRun) {
+            Write-Host 'MSI-impacting paths:'
+            $relevant | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host 'No MSI-impacting paths changed; the expensive certification will be skipped.'
+          }
+
   msi-upgrade:
-    name: MSI In-Place Upgrade
+    name: MSI In-Place Upgrade Certification
+    needs: detect-upgrade-impact
+    if: needs.detect-upgrade-impact.outputs.should_run == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -119,3 +176,34 @@ jobs:
           path: release-validation/msi-upgrade
           if-no-files-found: warn
           retention-days: 30
+
+  msi-upgrade-gate:
+    name: MSI In-Place Upgrade
+    needs:
+      - detect-upgrade-impact
+      - msi-upgrade
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require certification when applicable
+        shell: pwsh
+        env:
+          DETECTION_RESULT: ${{ needs.detect-upgrade-impact.result }}
+          SHOULD_RUN: ${{ needs.detect-upgrade-impact.outputs.should_run }}
+          CERTIFICATION_RESULT: ${{ needs.msi-upgrade.result }}
+        run: |
+          if ($env:DETECTION_RESULT -ne 'success') {
+            throw "MSI impact detection ended as '$env:DETECTION_RESULT'."
+          }
+          if ($env:SHOULD_RUN -eq 'true' -and $env:CERTIFICATION_RESULT -ne 'success') {
+            throw "MSI upgrade certification was required but ended as '$env:CERTIFICATION_RESULT'."
+          }
+          if ($env:SHOULD_RUN -ne 'true' -and $env:CERTIFICATION_RESULT -ne 'skipped') {
+            throw "MSI upgrade certification was not required but ended as '$env:CERTIFICATION_RESULT'."
+          }
+
+          if ($env:SHOULD_RUN -eq 'true') {
+            Write-Host 'MSI upgrade certification passed.'
+          } else {
+            Write-Host 'MSI upgrade certification was not applicable to this change.'
+          }

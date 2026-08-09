@@ -1,5 +1,7 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Core;
@@ -18,6 +20,33 @@ public interface IScriptExecutor
     /// identity-sensitive scripts. See Docs/Design/RowLevelSecurity.md.
     /// </summary>
     Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, Governance.ExecutionIdentity? executionIdentity = null);
+
+    /// <summary>
+    /// Executes with one-run input-variable overrides. The separate overload preserves existing
+    /// executors while making the privileged manual-trigger path explicit.
+    /// </summary>
+    Task<ScriptExecutionResult> ExecuteTextAsync(
+        string scriptText,
+        string? sessionId,
+        CancellationToken cancellationToken,
+        string? jobName,
+        long queueWaitMs,
+        Governance.ExecutionIdentity? executionIdentity,
+        IReadOnlyDictionary<string, string> variableOverrides) =>
+        throw new NotSupportedException("This script executor does not support variable overrides.");
+
+    /// <summary>
+    /// Restores an existing persistent session and resumes at its last completed author-declared
+    /// checkpoint. Arbitrary statement offsets are intentionally not part of this contract.
+    /// </summary>
+    Task<ScriptExecutionResult> ResumeTextAsync(
+        string scriptText,
+        string sessionId,
+        CancellationToken cancellationToken = default,
+        string? jobName = null,
+        long queueWaitMs = 0,
+        Governance.ExecutionIdentity? executionIdentity = null) =>
+        throw new NotSupportedException("This script executor does not support named-checkpoint resume.");
 }
 
 public record ScriptExecutionResult(

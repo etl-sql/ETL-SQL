@@ -9,12 +9,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using ETL_SQL.Tests.Integration.Connectors;
+using ETL_SQL.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -100,53 +102,49 @@ namespace ETL_SQL.Portal.Tests
 
         private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(SQLiteJobHistoryStore store, string jobName, int expectedCount, int timeoutSeconds = 15)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                if (history.Count >= expectedCount && history.Take(expectedCount).All(h => h.EndTime != null))
-                {
-                    return history;
-                }
-                await Task.Delay(500);
-            }
-            throw new TimeoutException($"Timed out waiting for {expectedCount} completed history entries for job '{jobName}'.");
+            return await LoadAwareWait.UntilAsync(
+                $"{expectedCount} completed history entries for job '{jobName}'",
+                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                history => history.Count >= expectedCount
+                           && history.Take(expectedCount).All(h => h.EndTime != null),
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(500),
+                history => $"count={history.Count}; statuses=[{string.Join(',', history.Select(h => h.Status))}]");
         }
 
         private async Task PollHistoryUntilStatusAsync(SQLiteJobHistoryStore store, string jobName, string status, int timeoutSeconds = 15)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                if (history.Any(h => string.Equals(h.Status, status, StringComparison.OrdinalIgnoreCase)))
-                {
-                    return;
-                }
-                await Task.Delay(200);
-            }
-            throw new TimeoutException($"Timed out waiting for job '{jobName}' to reach status '{status}'.");
+            await LoadAwareWait.UntilAsync(
+                $"job '{jobName}' to reach status '{status}'",
+                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                history => history.Any(h => string.Equals(h.Status, status, StringComparison.OrdinalIgnoreCase)),
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(200),
+                history => history.Count == 0
+                    ? "no history entries"
+                    : $"statuses=[{string.Join(',', history.Select(h => h.Status))}]");
         }
 
         private async Task PollMailPitUntilCountAsync(int expectedCount, int timeoutSeconds = 15)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
-            {
-                var count = await _smtp.GetMessageCountAsync();
-                if (count >= expectedCount)
-                {
-                    return;
-                }
-                await Task.Delay(500);
-            }
-            throw new TimeoutException($"Timed out waiting for {expectedCount} email messages in MailPit.");
+            await LoadAwareWait.UntilAsync(
+                $"{expectedCount} email messages in MailPit",
+                _ => _smtp.GetMessageCountAsync(),
+                count => count >= expectedCount,
+                TimeSpan.FromSeconds(timeoutSeconds),
+                TimeSpan.FromMilliseconds(500),
+                count => $"message count={count}");
         }
 
         private static async Task TriggerJobAsync(HttpClient orchClient, string jobName)
         {
             using var triggerReq = new HttpRequestMessage(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger");
             triggerReq.Headers.Add("X-Orchestrator-Key", "test-orch-key-12345");
+            triggerReq.Headers.Add(
+                OrchestratorIdentityAssertion.HeaderName,
+                OrchestratorIdentityAssertion.Create(
+                    new OrchestratorCaller("user", "1", "admin", ["Admin"], []),
+                    OrchestratorWebFactory.IdentitySecret));
             var triggerRes = await orchClient.SendAsync(triggerReq);
             Assert.Equal(HttpStatusCode.Accepted, triggerRes.StatusCode);
         }
@@ -255,7 +253,7 @@ namespace ETL_SQL.Portal.Tests
         public async Task Verify_Subscription_E2E_Delivery(string format, string? expectedExtension, string? expectedMimeType)
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -369,7 +367,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_With_Parameters_Runs_Correctly()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -463,7 +461,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Update_Syncs_Orchestrator_And_Script()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -575,7 +573,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Update_While_Running_Preserves_Active_Attempt_And_Future_Config()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -642,7 +640,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Concurrent_Portal_And_Orchestrator_Sqlite_Writes_Preserve_All_Subscriptions()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -723,7 +721,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Delete_While_Running_Cleans_Up_Without_Stuck_Work()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -763,16 +761,13 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var deleteRes = await AuthDelete(portalClient, token, $"/api/subscriptions/{subId}");
             Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
 
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 10)
-            {
-                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
-                if (!history.Any(h => h.Status == "RUNNING" && h.EndTime == null))
-                {
-                    break;
-                }
-                await Task.Delay(200);
-            }
+            await LoadAwareWait.UntilAsync(
+                $"deleted subscription job '{jobName}' to stop running",
+                async _ => (await store.GetHistoryAsync(jobName, 10)).ToList(),
+                history => !history.Any(h => h.Status == "RUNNING" && h.EndTime == null),
+                TimeSpan.FromSeconds(10),
+                TimeSpan.FromMilliseconds(200),
+                history => $"running={history.Count(h => h.Status == "RUNNING" && h.EndTime == null)}");
 
             Assert.Null(await store.GetJobAsync(jobName));
             Assert.DoesNotContain(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
@@ -786,7 +781,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Delete_Removes_Row_Script_And_Orchestrator_Job()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -846,7 +841,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Failure_Scenario()
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -997,7 +992,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         public async Task Verify_Subscription_Controlled_Failure_Scenarios(string scenario)
         {
             using var portalFactory = new PortalWebFactory();
-            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir, requireFederatedIdentity: true);
 
             using var portalClient = portalFactory.CreateClient();
             using var orchClient = orchestratorFactory.CreateClient();
@@ -1097,7 +1092,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.NotNull(job);
             Assert.False(job.IsEnabled);
 
-            var start = DateTime.UtcNow;
+            var start = DateTime.UtcNow; // flaky-wait-budget-ok: deliberate stability window proving the disabled job never fires
             while ((DateTime.UtcNow - start).TotalSeconds < 3)
             {
                 Assert.Empty(await store.GetHistoryAsync(jobName, 10));

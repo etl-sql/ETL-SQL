@@ -70,6 +70,8 @@ public sealed class EngineSubsystemCoverageTests
             "Row-level security scanning, secret providers, enrollment protection."),
         ["ETL-SQL.Core/Planning"] = new("Engine.md", "PlanDecisionReasonCodes",
             "Plan decision records shared with the engine."),
+        ["ETL-SQL.Core/Profiling"] = new("Engine.md", "StatementMetricsPayload",
+            "Normalized, bounded statement metrics shared by every job execution transport."),
         ["ETL-SQL.Core/Execution"] = new("Engine.md", "IExecutionContext",
             "Execution context contracts."),
         ["ETL-SQL.Core/Formatting"] = new("LanguageServer.md", "FormattingProvider",

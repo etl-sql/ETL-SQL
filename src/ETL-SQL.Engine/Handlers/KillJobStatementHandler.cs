@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -29,6 +30,15 @@ public class KillJobStatementHandler : IStatementHandler
         if (jobIdObj == null || !long.TryParse(jobIdObj.ToString(), out long historyId))
         {
             throw new ExecutionException($"KILL JOB requires a valid numeric HistoryId. Got: {jobIdObj ?? "NULL"}");
+        }
+
+        var historyStore = context.ServiceProvider.GetService<IJobHistoryStore>();
+        if (historyStore is not null && await historyStore.GetHistoryEntryAsync(historyId) is { } history)
+        {
+            var job = await historyStore.GetJobAsync(history.JobName);
+            if (job is not null)
+                await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+                    job.Name, OrchestratorObjectPermission.Manage, job.CreatedBy);
         }
 
         _logger.Info("Attempting to kill job with HistoryId: {HistoryId}", historyId);

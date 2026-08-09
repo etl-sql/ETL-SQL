@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -22,6 +23,15 @@ public class DropJobStatementHandler : IStatementHandler
     {
         var stmt = (DropJobStatement)statement;
 
+        var existing = await _store.GetJobAsync(stmt.Name);
+        if (existing is null)
+        {
+            if (stmt.IfExists) return;
+            throw new ExecutionException($"DROP JOB failed: job '{stmt.Name}' not found.", null, stmt.Line, stmt.Column);
+        }
+        await CatalogStatementSupport.DemandAsync(context, stmt, OrchestratorObjectKind.Job,
+            stmt.Name, OrchestratorObjectPermission.Manage, existing.CreatedBy);
+
         if (context.IsWhatIf)
         {
             context.Log($"WHAT IF: Would drop job '{stmt.Name}'.", ConsoleColor.Yellow);
@@ -32,6 +42,9 @@ public class DropJobStatementHandler : IStatementHandler
         {
             // DeleteJobAsync deletes both the job and its history entries.
             await _store.DeleteJobAsync(stmt.Name);
+            if (context.ServiceProvider.GetService<IOrchestratorAuthorizationStore>() is { } grants)
+                await grants.DeleteObjectGrantsAsync(
+                    OrchestratorObjectKind.Job, stmt.Name, context.CancellationToken);
             CatalogStatementSupport.AuditMutation(
                 context,
                 "DROP_JOB",

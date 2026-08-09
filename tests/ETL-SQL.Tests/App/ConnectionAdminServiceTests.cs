@@ -54,7 +54,7 @@ public class ConnectionAdminServiceTests
             ctx.ConnectionType = "MSSQL";
             ctx.ConnectionOptions = ["PASSWORD=hunter2"];
         }));
-        Assert.Contains(logger.Messages, m => m.Contains("set-secret"));
+        Assert.Contains(logger.Messages, m => m.Contains("admin machine secret set"));
         Assert.Equal(SecretLifecycleStatus.NotFound, await catalog.GetStatusAsync("bad"));
 
         Assert.Equal(1, await Run("set-connection", catalog, null, logger, ctx =>

@@ -11,6 +11,67 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class ServiceAccountIntegrationTests
 {
     [Fact]
+    public async Task IdentityAutomation_CanDelegateOnlyItsCurrentAuthorityForItsOwner()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var ownerId = await GetAdminIdAsync(factory);
+
+        var provisionerResponse = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts",
+            adminToken, new
+            {
+                name = "identity-provisioner",
+                ownerUserId = ownerId,
+                scopes = new[] { "admin.identity" },
+                roles = new[] { "Admin" },
+                expiresAt = DateTime.UtcNow.AddHours(1)
+            });
+        Assert.Equal(HttpStatusCode.Created, provisionerResponse.StatusCode);
+        var provisionerBody = (await provisionerResponse.Content.ReadFromJsonAsync<JsonObject>())!;
+        var provisioner = provisionerBody["account"]!.AsObject();
+        var serviceToken = await ExchangeAsync(client,
+            provisioner["clientId"]!.GetValue<string>(),
+            provisionerBody["clientSecret"]!.GetValue<string>());
+
+        var delegated = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts",
+            serviceToken, new
+            {
+                name = "delegated-identity",
+                ownerUserId = ownerId,
+                scopes = new[] { "admin.identity" },
+                roles = new[] { "Admin" },
+                expiresAt = DateTime.UtcNow.AddHours(1)
+            });
+        Assert.Equal(HttpStatusCode.Created, delegated.StatusCode);
+
+        var broadened = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts",
+            serviceToken, new
+            {
+                name = "scope-escalation",
+                ownerUserId = ownerId,
+                scopes = new[] { "admin.identity", "portal.read" },
+                roles = new[] { "Admin" },
+                expiresAt = DateTime.UtcNow.AddHours(1)
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, broadened.StatusCode);
+
+        var strongerResponse = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts",
+            adminToken, new
+            {
+                name = "stronger-sibling",
+                ownerUserId = ownerId,
+                scopes = new[] { "admin.identity", "portal.read" },
+                roles = new[] { "Admin" },
+                expiresAt = DateTime.UtcNow.AddHours(1)
+            });
+        var stronger = (await strongerResponse.Content.ReadFromJsonAsync<JsonObject>())!["account"]!.AsObject();
+        var stealSecret = await SendAsync(client, HttpMethod.Post,
+            $"/api/admin/service-accounts/{stronger["id"]}/rotate-secret", serviceToken, version: 1);
+        Assert.Equal(HttpStatusCode.Forbidden, stealSecret.StatusCode);
+    }
+
+    [Fact]
     public async Task ProvisionAndExchange_ExposeSecretOnce_EnforceScopes_AndAttributeAudit()
     {
         using var factory = new PortalWebFactory();

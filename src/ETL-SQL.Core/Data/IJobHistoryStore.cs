@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Quality;
@@ -123,8 +124,16 @@ public record JobHistoryEntry(
     /// <summary>Rows that failed a WARN rule but still reached the target during this run.</summary>
     long RowsWarned = 0,
     /// <summary>Compact per-rule failure counts (<c>column:rule=count;…</c>). Counts only — never sample values.</summary>
-    string? DataQualityFailures = null
-);
+    string? DataQualityFailures = null,
+    /// <summary>Opaque engine session identifier retained only when the run produced resumable state.</summary>
+    [property: JsonIgnore] string? SessionId = null,
+    /// <summary>Last completed author-declared top-level checkpoint label.</summary>
+    string? CheckpointLabel = null
+)
+{
+    /// <summary>Safe API hint; the opaque session identifier itself is never serialized.</summary>
+    public bool HasResumeSession => !string.IsNullOrWhiteSpace(SessionId);
+}
 
 /// <summary>One normalized, counts-only data-quality failure joined to its run identity.</summary>
 /// <summary>
@@ -213,6 +222,8 @@ public interface IJobHistoryStore
     // History Management
     Task<long> LogJobStartAsync(string jobName);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null, long rowsQuarantined = 0, long rowsWarned = 0, string? dataQualityFailures = null);
+    /// <summary>Attaches opaque named-checkpoint resume metadata after an execution attempt.</summary>
+    Task UpdateJobResumeMetadataAsync(long entryId, string? sessionId, string? checkpointLabel) => Task.CompletedTask;
     /// <summary>
     /// Imports one completed historical run while preserving its original timestamps. Implementations
     /// must be idempotent for the run's job/start/end tuple and return the target run id.
@@ -266,11 +277,20 @@ public interface IJobHistoryStore
             .Where(row => row.JobName.Equals(jobName, StringComparison.OrdinalIgnoreCase))
             .Take(limit)
             .ToList();
+    /// <summary>Reads normalized, counts-only data-quality failures for one run.</summary>
+    async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresForRunAsync(long entryId, int limit = 1000) =>
+        (await GetDataQualityFailuresAsync(Math.Max(limit, 1000)))
+            .Where(row => row.RunId == entryId)
+            .Take(limit)
+            .ToList();
     Task<IReadOnlyList<JobDataQualityStatus>> GetDataQualityStatusesAsync(int limit = 1000) =>
         Task.FromResult<IReadOnlyList<JobDataQualityStatus>>(Array.Empty<JobDataQualityStatus>());
     Task<IReadOnlyList<ColumnRunMetrics>> GetRecentColumnMetricsAsync(string jobName, string? targetTable, string columnName, int limit = 100) =>
         Task.FromResult<IReadOnlyList<ColumnRunMetrics>>(Array.Empty<ColumnRunMetrics>());
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
+    /// <summary>Reads one durable run by identity, or null when it has expired or never existed.</summary>
+    async Task<JobHistoryEntry?> GetHistoryEntryAsync(long entryId) =>
+        (await GetHistoryAsync(null, 1000)).FirstOrDefault(row => row.Id == entryId);
     /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
     Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
         DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);

@@ -8,11 +8,11 @@ Thank you for using ETL-SQL! Whether you are seeking help, wanting to discuss fe
 
 If you have questions about using ETL-SQL, syntax, report design, or orchestration patterns, please check the following resources first:
 
-* **User Manual**: Refer to [Getting Started](docs/guides/getting-started.md) for the language guide.
+* **User Manual**: Refer to [Getting Started](docs/guides/onboarding/getting-started.md) for the language guide.
 * **Cookbooks**: 
   - For data pipelines and queries: [docs/cookbooks/etl-recipes.md](docs/cookbooks/etl-recipes.md)
   - For reporting and dashboards: [docs/cookbooks/report-recipes.md](docs/cookbooks/report-recipes.md)
-* **FAQ**: Common troubleshooting questions are answered in [docs/guides/faq.md](docs/guides/faq.md).
+* **FAQ**: Common troubleshooting questions are answered in [docs/guides/patterns/faq.md](docs/guides/patterns/faq.md).
 * **GitHub Discussions**: If your question isn't answered in the guides, please open a thread in the **Discussions** tab on GitHub instead of opening an issue.
 
 ---

@@ -7,10 +7,9 @@ namespace ETL_SQL.Portal.Services;
 /// Builds the cross-job triage board: what failed, what is still running, and what should have run
 /// and did not.
 ///
-/// Reads the shared job-history store directly rather than proxying the Orchestrator's HTTP API,
-/// which is how every other Portal job-history read already works (failure digest, capacity report,
-/// operations posture). Besides avoiding a hop, it means the board still answers when the
-/// Orchestrator service is down — which is exactly when an operator is triaging.
+/// Reads the shared job-history store after the controller obtains the caller's readable object set
+/// from the Orchestrator. The direct read preserves detailed offline diagnostics without allowing a
+/// coarse Portal role to bypass the Orchestrator's per-job ACL.
 /// </summary>
 public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
 {
@@ -27,6 +26,7 @@ public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
     public async Task<TriageBoardDto> BuildAsync(
         int lookbackHours = 24,
         int graceMinutes = DefaultGraceMinutes,
+        IReadOnlySet<string>? readableJobNames = null,
         CancellationToken cancellationToken = default)
     {
         lookbackHours = Math.Clamp(lookbackHours, 1, 720);
@@ -38,7 +38,9 @@ public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
         var now = DateTime.Now;
         var since = now.AddHours(-lookbackHours);
 
-        var history = (await jobHistory.GetHistoryAsync(null, HistoryReadLimit)).ToList();
+        var history = (await jobHistory.GetHistoryAsync(null, HistoryReadLimit))
+            .Where(row => readableJobNames is null || readableJobNames.Contains(row.JobName))
+            .ToList();
         cancellationToken.ThrowIfCancellationRequested();
 
         var truncated = history.Count >= HistoryReadLimit;
@@ -74,7 +76,7 @@ public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
             .OrderByDescending(i => i.LastSeen)
             .ToList();
 
-        var missed = await BuildMissedAsync(now, graceMinutes, cancellationToken);
+        var missed = await BuildMissedAsync(now, graceMinutes, readableJobNames, cancellationToken);
 
         return new TriageBoardDto(
             now,
@@ -89,8 +91,36 @@ public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
             truncated);
     }
 
+    /// <summary>
+    /// Joins the run identity and script-integrity evidence to its normalized statement timeline
+    /// and counts-only quality failures. Raw SQL literals and failed sample values are deliberately
+    /// absent from all three persisted contracts.
+    /// </summary>
+    public async Task<TriageRunDetailDto?> GetRunDetailAsync(
+        long runId,
+        IReadOnlySet<string>? readableJobNames = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (runId <= 0) return null;
+
+        var run = await jobHistory.GetHistoryEntryAsync(runId);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (run is null) return null;
+        if (readableJobNames is not null && !readableJobNames.Contains(run.JobName)) return null;
+
+        var statementsTask = jobHistory.GetJobStatementMetricsAsync(runId);
+        var qualityTask = jobHistory.GetDataQualityFailuresForRunAsync(runId);
+        await Task.WhenAll(statementsTask, qualityTask);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new TriageRunDetailDto(ToRun(run), await statementsTask, await qualityTask);
+    }
+
     private async Task<List<TriageMissedJobDto>> BuildMissedAsync(
-        DateTime now, int graceMinutes, CancellationToken cancellationToken)
+        DateTime now,
+        int graceMinutes,
+        IReadOnlySet<string>? readableJobNames,
+        CancellationToken cancellationToken)
     {
         var cutoff = now.AddMinutes(-graceMinutes);
         var jobs = await jobHistory.GetAllJobsAsync();
@@ -99,7 +129,8 @@ public sealed class OperationsTriageService(IJobHistoryStore jobHistory)
         return jobs
             // A null NextRun means "due now" to the scheduler rather than "overdue" (it is a derived
             // display value that starts null), so an unclaimed null is not evidence of a miss.
-            .Where(j => j.IsEnabled && j.NextRun.HasValue && j.NextRun.Value < cutoff)
+            .Where(j => (readableJobNames is null || readableJobNames.Contains(j.Name))
+                        && j.IsEnabled && j.NextRun.HasValue && j.NextRun.Value < cutoff)
             .Select(j => new TriageMissedJobDto(
                 j.Name,
                 j.DisplayName,

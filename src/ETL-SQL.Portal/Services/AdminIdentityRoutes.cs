@@ -63,6 +63,15 @@ public static class AdminIdentityRoutes
         ("GET",    "groups/*/studio-capabilities"),
         ("PUT",    "groups/*/studio-capabilities"),
 
+        // Service-account delegation is additionally constrained in the controller: a service
+        // identity can manage only its owner's accounts and cannot delegate authority it does not
+        // currently hold. The route allowlist alone is deliberately not the security boundary.
+        ("GET",    "service-accounts"),
+        ("POST",   "service-accounts"),
+        ("PUT",    "service-accounts/*"),
+        ("POST",   "service-accounts/*/rotate-secret"),
+        ("POST",   "service-accounts/*/revoke"),
+
         // Read-only introspection of a single user's access. Answers "why can this person see
         // this" without a browser. Folder- and report-keyed effective permissions are not identity
         // administration and are deliberately absent.

@@ -113,18 +113,33 @@ namespace ETL_SQL.Orchestrator.Service
 
             var apiKeys = new[] { configuration["Orchestrator:ApiKey"] }
                 .Concat(previousApiKeys);
-            if (apiKeys.Any(key => !string.IsNullOrWhiteSpace(key)))
-            {
-                return;
-            }
-
-            if (BindsToNonLoopback(configuration))
+            var hasApiKey = apiKeys.Any(key => !string.IsNullOrWhiteSpace(key));
+            if (!hasApiKey && BindsToNonLoopback(configuration))
             {
                 throw new InvalidOperationException(
                     "Orchestrator:ApiKey is not configured but the service is bound to a non-loopback address " +
                     $"({string.Join(", ", GetConfiguredUrls(configuration))}). The ad-hoc job API would accept " +
                     "unauthenticated script execution. Set Orchestrator:ApiKey (and the matching " +
                     "Portal:Orchestrator:ApiKey) or bind the service to loopback only.");
+            }
+
+            var requiresFederatedIdentity = configuration.GetValue<bool?>("Orchestrator:RequireFederatedIdentity")
+                ?? BindsToNonLoopback(configuration);
+            if (requiresFederatedIdentity)
+            {
+                var identitySecret = configuration["Orchestrator:IdentitySigningSecret"];
+                try
+                {
+                    ETL_SQL.Core.Governance.OrchestratorIdentityAssertion.ValidateSecret(identitySecret ?? string.Empty);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException(
+                        "Federated Orchestrator identity is required, but Orchestrator:IdentitySigningSecret " +
+                        "is missing or shorter than 32 UTF-8 bytes. Configure the matching " +
+                        "Portal:Orchestrator:IdentitySigningSecret. Set RequireFederatedIdentity=false only " +
+                        "for an isolated legacy deployment.", ex);
+                }
             }
         }
     }

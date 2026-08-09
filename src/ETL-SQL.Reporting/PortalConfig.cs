@@ -615,6 +615,12 @@ public class OrchestratorConfig
     public string? ApiUrl { get; set; }
     public string? DatabasePath { get; set; }
     public string? ApiKey { get; set; }
+    /// <summary>
+    /// Dedicated secret used to sign short-lived Portal-to-Orchestrator identity assertions.
+    /// It must match <c>Orchestrator:IdentitySigningSecret</c> on the service and contain at least
+    /// 32 UTF-8 bytes. It is intentionally distinct from both the browser JWT and API key.
+    /// </summary>
+    public string? IdentitySigningSecret { get; set; }
     public bool SameHost { get; set; } = false;
 
     /// <summary>Seconds between Orchestrator job-history polls. Minimum effective value is 1.</summary>

@@ -15,7 +15,7 @@ it different from an over-broad grant.
 
 That regression shipped into a release cycle once, in five places at once. It was caught by two
 pre-existing tests during the release gate, after a hand review of the same diff had cleared it. The
-full triage is in [v0.17.0-code-review.md](v0.17.0-code-review.md#h-1--fixed-report-authorship-survived-deprovisioning-privilege-persistence).
+full triage is in [v0.17.0-code-review.md](../../releases/v0.17.0-code-review.md#h-1--fixed-report-authorship-survived-deprovisioning-privilege-persistence).
 
 ## How each resource kind satisfies it
 
@@ -93,7 +93,7 @@ administrator-only.
 
 ## References
 
-- [v0.17.0 code review](v0.17.0-code-review.md) — the original regression and its report-side fix.
+- [v0.17.0 code review](../../releases/v0.17.0-code-review.md) — the original regression and its report-side fix.
 - [Row-Level Security](RowLevelSecurity.md) — row filtering, which composes with these grants.
 - `TODO.md` → *Portal — Authorship Is Not Permission* — remaining work for connections,
   subscriptions, alerts, and saved views.

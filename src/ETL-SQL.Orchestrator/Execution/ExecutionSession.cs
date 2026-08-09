@@ -48,7 +48,14 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger = logger;
         }
 
-        public async Task<ExecutionResult> ExecuteAsync(string source, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
+        public async Task<ExecutionResult> ExecuteAsync(
+            string source,
+            CancellationToken cancellationToken = default,
+            string? jobName = null,
+            long queueWaitMs = 0,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null,
+            IReadOnlyDictionary<string, string>? variableOverrides = null,
+            bool resume = false)
         {
             var result = new ExecutionResult();
             var timer = Stopwatch.StartNew();
@@ -111,6 +118,31 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.Telemetry.IsProfiling = true;
                 evaluator.Telemetry.QueueWaitMs = queueWaitMs > 0 ? queueWaitMs : (long.TryParse(Environment.GetEnvironmentVariable("ETLSQL_QUEUE_WAIT_MS"), out var eqw) ? eqw : 0);
                 evaluator.RedirectOutput = true;
+
+                if (resume)
+                {
+                    if (string.IsNullOrWhiteSpace(_ctx.SessionId))
+                        throw new InvalidOperationException("Named-checkpoint resume requires a session id.");
+
+                    var sessionState = await evaluator.SessionStateManager.LoadSession(_ctx.SessionId);
+                    if (sessionState is null)
+                        throw new InvalidOperationException(
+                            $"No saved persistent session exists for '{_ctx.SessionId}'.");
+
+                    evaluator.IsPersistentSession = true;
+                    evaluator.SessionRoot = evaluator.SessionStateManager.SessionRoot;
+                    await evaluator.LoadSessionState(sessionState);
+                    evaluator.IsResuming = true;
+                }
+
+                foreach (var (name, rawValue) in variableOverrides ?? new Dictionary<string, string>())
+                {
+                    var normalizedName = name.StartsWith('@') ? name : "@" + name;
+                    evaluator.DeclareVariable(
+                        normalizedName,
+                        VariableOverrideValueParser.Parse(rawValue),
+                        new VariableMetadata { IsInput = true, IsDeclared = false });
+                }
 
                 if (OnTreeNodeAdded != null)
                     evaluator.Telemetry.ExecutionTree.OnNodeAdded = node => OnTreeNodeAdded.Invoke(node.Name);

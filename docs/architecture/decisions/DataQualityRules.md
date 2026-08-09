@@ -210,6 +210,10 @@ one destination catalog.
 ### 4. Runtime enforcement — Engine
 
 - `src/ETL-SQL.Engine/Services/ColumnQualityValidator.cs` (model on `DataConstraintValidator.cs` / `TagGovernanceRuntimePolicy.cs`), invoked by wrapping the `ProjectRows(...)` stream (`SelectExecutionEngine.cs:724`) in a validating async iterator. **Zero rules ⇒ zero overhead** (the path is skipped).
+  - Passing synchronous rules use a synchronous `ValueTask` fast path with indexed rule traversal;
+    they do not allocate an async state machine or boxed interface enumerator per row. `EXPR`
+    predicates and actual quarantine/warn target writes remain asynchronous. The allocation budget
+    is pinned at no more than 4 KB of measurement noise over 100,000 passing rows (down from 43.2 MB).
   - **Per-row rules** (NotNull/Matches/Comparison/In/Expr) evaluate inline against the projected value; `EXPR` predicates get the full projected row. NULL values **skip** every rule except `NOT NULL` (see Proposed surface). Honor `SET CASE_SENSITIVE` for MATCHES/IN/EXISTS IN. Numeric compares are **decimal** at runtime. THROW → `ExecutionException`; WARN → aggregated (below); QUARANTINE → divert row.
   - **EXISTS IN** builds its key set once per statement from the referenced table (hash set via the existing spill-aware infrastructure; reference tables are typically dimension-sized), then probes per row. The build honors `SET CASE_SENSITIVE`.
   - **WARN is aggregated, never per-row.** Per-row diagnostics on a 10M-row load with a high failure rate is a diagnostics DoS. The validator keeps, per (rule, column): a failure **count** plus the first **N sample values** (default 10, configurable under `appsettings.json → Engine`), and emits **one** `Diagnostic(Warning)` per (rule, column) at end of stream with count + samples. Per-row detail goes to Debug-level logging only.

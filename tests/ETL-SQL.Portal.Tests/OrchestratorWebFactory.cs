@@ -17,10 +17,13 @@ namespace ETL_SQL.Portal.Tests;
 
 public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
 {
+    public const string IdentitySecret = "test-only-federated-orchestrator-identity-secret";
     public string TempDir { get; }
+    private readonly bool requireFederatedIdentity;
 
-    public OrchestratorWebFactory(string? tempDir = null)
+    public OrchestratorWebFactory(string? tempDir = null, bool requireFederatedIdentity = false)
     {
+        this.requireFederatedIdentity = requireFederatedIdentity;
         TempDir = tempDir ?? Path.Combine(Path.GetTempPath(), $"orch_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(TempDir);
         Directory.CreateDirectory(Path.Combine(TempDir, "logs"));
@@ -48,6 +51,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
                 ["Scheduler:MetricsIntervalSeconds"] = "5",
                 ["Scheduler:SleepIntervalSeconds"] = "1",
                 ["Orchestrator:ApiKey"] = "test-orch-key-12345",
+                ["Orchestrator:RequireFederatedIdentity"] = requireFederatedIdentity.ToString(),
+                ["Orchestrator:IdentitySigningSecret"] = requireFederatedIdentity ? IdentitySecret : null,
                 ["Logging:AppLog:Directory"] = Path.Combine(TempDir, "logs"),
                 ["Jobs:UseProcessSpawning"] = "false", // Run jobs in-process during tests
                 ["Governance:ConnectionCatalog:Provider"] = "Local",
@@ -59,6 +64,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
         {
             services.RemoveAll<SQLiteJobHistoryStore>();
             services.RemoveAll<IJobHistoryStore>();
+            services.RemoveAll<IJobCatalogStore>();
+            services.RemoveAll<IOrchestratorAuthorizationStore>();
             services.RemoveAll<IHostMetricsStore>();
             services.RemoveAll<IBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
@@ -67,6 +74,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             var testStore = new SQLiteJobHistoryStore(orchDbPath);
             services.AddSingleton(testStore);
             services.AddSingleton<IJobHistoryStore>(testStore);
+            services.AddSingleton<IJobCatalogStore>(testStore);
+            services.AddSingleton<IOrchestratorAuthorizationStore>(testStore);
             services.AddSingleton<IHostMetricsStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);

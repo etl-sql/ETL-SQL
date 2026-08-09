@@ -18,6 +18,27 @@ using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Orchestrator.Scheduling
 {
+    public enum ManualTriggerResult
+    {
+        Accepted,
+        JobNotFound,
+        AlreadyRunning
+    }
+
+    public enum ResumeTriggerStatus
+    {
+        Accepted,
+        RunNotFound,
+        JobNotFound,
+        NotResumable,
+        AlreadyRunning
+    }
+
+    public sealed record ResumeTriggerResult(
+        ResumeTriggerStatus Status,
+        string? CheckpointLabel = null,
+        string? Reason = null);
+
     /// <summary>
     /// Background service that manages the scheduling and execution of automated ETL-SQL jobs.
     /// Concurrency is limited by <see cref="JobThrottle"/> — jobs beyond the cap are queued
@@ -339,33 +360,124 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
-        public async Task<bool> TriggerJobAsync(string jobName)
+        public async Task<bool> TriggerJobAsync(string jobName) =>
+            await TriggerJobWithOverridesAsync(jobName, null) != ManualTriggerResult.JobNotFound;
+
+        /// <summary>Enqueues a one-run manual execution with optional input-variable overrides.</summary>
+        public async Task<ManualTriggerResult> TriggerJobWithOverridesAsync(
+            string jobName,
+            IReadOnlyDictionary<string, string>? variableOverrides)
         {
             var job = await _store.GetJobAsync(jobName);
-            if (job == null) return false;
+            if (job == null) return ManualTriggerResult.JobNotFound;
+
+            // The request object belongs to the HTTP scope. Copy it before the detached task so a
+            // caller cannot mutate values while the job waits for a throttle slot or retry.
+            IReadOnlyDictionary<string, string>? capturedOverrides = variableOverrides is { Count: > 0 }
+                ? new Dictionary<string, string>(variableOverrides, StringComparer.OrdinalIgnoreCase)
+                : null;
 
             // Same start guard as the scheduling loop: one execution of a job at a time. A
             // trigger racing an in-flight run coalesces with it instead of starting a duplicate.
             if (!_scheduledJobStarts.TryAdd(job.Name, 0))
             {
                 _logger.LogInformation(
-                    "Job {JobName}: manual trigger coalesced with an execution already in progress.",
+                    "Job {JobName}: manual trigger rejected because an execution is already in progress.",
                     job.Name);
-                return true;
+                return ManualTriggerResult.AlreadyRunning;
             }
 
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await ExecuteJobAsync(job);
+                    await ExecuteJobAsync(job, capturedOverrides);
                 }
                 finally
                 {
                     _scheduledJobStarts.TryRemove(job.Name, out _);
                 }
             }, CancellationToken.None);
-            return true;
+            return ManualTriggerResult.Accepted;
+        }
+
+        /// <summary>Resumes one failed persistent run from its last completed named checkpoint.</summary>
+        public async Task<ResumeTriggerResult> ResumeJobAsync(long historyId)
+        {
+            var history = await _store.GetHistoryEntryAsync(historyId);
+            if (history is null)
+                return new(ResumeTriggerStatus.RunNotFound, Reason: "Run history was not found.");
+
+            if (!IsResumeFailureStatus(history.Status))
+                return new(ResumeTriggerStatus.NotResumable,
+                    Reason: "Only failed or cancelled runs can be resumed.");
+            if (string.IsNullOrWhiteSpace(history.SessionId))
+                return new(ResumeTriggerStatus.NotResumable,
+                    Reason: "This run was not a persistent session.");
+            if (string.IsNullOrWhiteSpace(history.CheckpointLabel))
+                return new(ResumeTriggerStatus.NotResumable,
+                    Reason: "This run never reached an author-declared checkpoint.");
+
+            var state = await _sessionManager.LoadSession(history.SessionId);
+            if (state is null)
+                return new(ResumeTriggerStatus.NotResumable,
+                    history.CheckpointLabel,
+                    "The saved checkpoint has expired or is unavailable on this deployment.");
+            if (!TryReadCheckpointLabel(state, out var persistedLabel) ||
+                !string.Equals(persistedLabel, history.CheckpointLabel, StringComparison.OrdinalIgnoreCase))
+                return new(ResumeTriggerStatus.NotResumable,
+                    history.CheckpointLabel,
+                    "The saved session no longer contains the recorded checkpoint.");
+
+            var job = await _store.GetJobAsync(history.JobName);
+            if (job is null)
+                return new(ResumeTriggerStatus.JobNotFound,
+                    history.CheckpointLabel,
+                    "The saved job no longer exists.");
+
+            try
+            {
+                var parsed = new Parser(new Lexer(job.Script).Tokenize(), job.Script).Parse();
+                if (parsed.Diagnostics.Any(diagnostic =>
+                        diagnostic.Severity == DiagnosticSeverity.Error))
+                    return new(ResumeTriggerStatus.NotResumable,
+                        history.CheckpointLabel,
+                        "The current saved script has parse errors and cannot be resumed.");
+                if (!parsed.Statements.OfType<SectionLabelStatement>().Any(label =>
+                        label.IsTopLevel && label.LabelName.Equals(
+                            history.CheckpointLabel, StringComparison.OrdinalIgnoreCase)))
+                    return new(ResumeTriggerStatus.NotResumable,
+                        history.CheckpointLabel,
+                        "The current saved script no longer contains the recorded checkpoint label.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Job {JobName}: could not validate resume checkpoint {Checkpoint}.",
+                    job.Name, history.CheckpointLabel);
+                return new(ResumeTriggerStatus.NotResumable,
+                    history.CheckpointLabel,
+                    "The current saved script could not be validated for checkpoint resume.");
+            }
+
+            if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+                return new(ResumeTriggerStatus.AlreadyRunning,
+                    history.CheckpointLabel,
+                    "The job already has an execution in progress.");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ExecuteJobAsync(
+                        job, initialSessionId: history.SessionId, resumeFromCheckpoint: true);
+                }
+                finally
+                {
+                    _scheduledJobStarts.TryRemove(job.Name, out _);
+                }
+            }, CancellationToken.None);
+
+            return new(ResumeTriggerStatus.Accepted, history.CheckpointLabel);
         }
 
         /// <summary>Kills a running job instance by its HistoryId.</summary>
@@ -381,7 +493,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
             return false;
         }
 
-        private async Task ExecuteJobAsync(JobDefinition job)
+        private async Task ExecuteJobAsync(
+            JobDefinition job,
+            IReadOnlyDictionary<string, string>? variableOverrides = null,
+            string? initialSessionId = null,
+            bool resumeFromCheckpoint = false)
         {
             var capacity = _capacityMonitor.Capture();
             if (capacity.IsOverloaded)
@@ -417,7 +533,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             try
             {
-                await ExecuteLeasedJobAsync(job, leaseDuration, fenceToken.Value);
+                await ExecuteLeasedJobAsync(
+                    job, leaseDuration, fenceToken.Value, variableOverrides,
+                    initialSessionId, resumeFromCheckpoint);
             }
             finally
             {
@@ -433,7 +551,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
-        private async Task ExecuteLeasedJobAsync(JobDefinition job, TimeSpan leaseDuration, long fenceToken)
+        private async Task ExecuteLeasedJobAsync(
+            JobDefinition job,
+            TimeSpan leaseDuration,
+            long fenceToken,
+            IReadOnlyDictionary<string, string>? variableOverrides,
+            string? initialSessionId,
+            bool resumeFromCheckpoint)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
@@ -469,7 +593,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 }
             }
 
-            string? sessionId = null;
+            string sessionId = string.IsNullOrWhiteSpace(initialSessionId)
+                ? $"job-{Guid.NewGuid():N}"
+                : initialSessionId;
             int maxAttempts = Math.Max(1, job.MaxRetries + 1);
             ScriptExecutionResult? lastResult = null;
             var finalStatus = "FAILURE";
@@ -520,8 +646,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         using var scope = _serviceProvider.CreateScope();
                         var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
 
-                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
-                        sessionId = lastResult.SessionId;
+                        lastResult = resumeFromCheckpoint
+                            ? await executor.ResumeTextAsync(
+                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
+                            : variableOverrides is { Count: > 0 }
+                            ? await executor.ExecuteTextAsync(
+                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                executionIdentity: null, variableOverrides: variableOverrides)
+                            : await executor.ExecuteTextAsync(
+                                job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
+                        sessionId = lastResult.SessionId ?? sessionId;
 
                         if (lastResult.Success)
                         {
@@ -543,6 +677,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
                                 await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
                                 await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
+                                await PersistResumeMetadataAsync(historyId, sessionId);
                             }
 
                             break; // Done
@@ -568,6 +703,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
                                 await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
                                 await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
+                                await PersistResumeMetadataAsync(historyId, sessionId);
                             }
                         }
                     }
@@ -578,6 +714,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         {
                             await _store.LogJobEndAsync(historyId, "FAILURE", SecretRedactor.Redact(ex.Message),
                                 scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
+                            await PersistResumeMetadataAsync(historyId, sessionId);
                         }
                         lastResult = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message));
                         finalStatus = "FAILURE";
@@ -649,6 +786,27 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             await QuarantineIfRepeatedlyFailingAsync(job);
         }
+
+        private async Task PersistResumeMetadataAsync(long historyId, string? sessionId)
+        {
+            if (historyId <= 0 || string.IsNullOrWhiteSpace(sessionId)) return;
+            var state = await _sessionManager.LoadSession(sessionId);
+            if (state is null || !TryReadCheckpointLabel(state, out var checkpointLabel)) return;
+            await _store.UpdateJobResumeMetadataAsync(historyId, sessionId, checkpointLabel);
+        }
+
+        private static bool TryReadCheckpointLabel(SessionState state, out string checkpointLabel)
+        {
+            checkpointLabel = string.Empty;
+            if (!state.GlobalVariables.TryGetValue("@_LAST_CHECKPOINT_LABEL", out var value)) return false;
+            checkpointLabel = value?.ToString()?.Trim() ?? string.Empty;
+            return checkpointLabel.Length > 0;
+        }
+
+        private static bool IsResumeFailureStatus(string status) =>
+            status.Equals("FAILURE", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("FAILED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("CANCELLED", StringComparison.OrdinalIgnoreCase);
 
         private async Task QuarantineIfRepeatedlyFailingAsync(JobDefinition job)
         {

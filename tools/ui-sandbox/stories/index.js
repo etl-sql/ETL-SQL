@@ -20,9 +20,13 @@ import portalStudio from './portal-studio.story.js';
 import portalOperations from './portal-operations.story.js';
 import feedback from './feedback.story.js';
 import triageBoard from './triage-board.story.js';
+import orchestratorRunOverrides from './orchestrator-run-overrides.story.js';
+import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story.js';
 
 export const stories = [
   triageBoard,
+  orchestratorRunOverrides,
+  orchestratorCheckpointResume,
   portalGovernance,
   dataQualityQueue,
   portalResponsiveShell,

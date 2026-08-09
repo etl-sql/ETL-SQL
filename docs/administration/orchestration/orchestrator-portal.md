@@ -4,18 +4,20 @@ The **Orchestrator Management Portal** is a browser-based dashboard embedded in 
 
 ## Prerequisites
 
-The management portal is hosted inside the Portal (`ETL-SQL-Portal`). The Orchestrator Service (`ETL-SQL-Service`) must be running and reachable from the machine that runs the portal. The two services communicate over HTTP using a shared API key.
+The management portal is hosted inside the Portal (`ETL-SQL-Portal`). The Orchestrator Service (`ETL-SQL-Service`) must be running and reachable from the machine that runs the portal. Requests use both a shared API key for service-to-service authentication and a short-lived Portal-signed identity assertion for caller authorization.
 
-## Enabling the API Key
+## Configuring Service and Caller Authentication
 
-By default the Orchestrator's management endpoints are open (no authentication). For production, set a shared secret on both sides.
+For production, generate two independent secrets: an API key and an identity-signing secret of at least 32 bytes. Configure the same value for each secret on both services. A network-reachable Orchestrator requires caller assertions by default; `RequireFederatedIdentity=false` is a loopback-only compatibility escape hatch and must not be used for a shared service.
 
 **On the Orchestrator Service** (`appsettings.json` or environment variable):
 
 ```json
 {
   "Orchestrator": {
-    "ApiKey": "your-shared-secret",
+    "ApiKey": "your-shared-api-key",
+    "IdentitySigningSecret": "a-distinct-random-secret-at-least-32-bytes",
+    "RequireFederatedIdentity": true,
     "ScriptRoot": "/opt/etl/scripts"
   }
 }
@@ -23,7 +25,9 @@ By default the Orchestrator's management endpoints are open (no authentication).
 
 Or via environment variable:
 ```
-Orchestrator__ApiKey=your-shared-secret
+Orchestrator__ApiKey=your-shared-api-key
+Orchestrator__IdentitySigningSecret=a-distinct-random-secret-at-least-32-bytes
+Orchestrator__RequireFederatedIdentity=true
 Orchestrator__ScriptRoot=/opt/etl/scripts
 ```
 
@@ -35,7 +39,8 @@ Orchestrator__ScriptRoot=/opt/etl/scripts
   "Portal": {
     "Orchestrator": {
       "ApiUrl": "http://orchestrator-host:5001",
-      "ApiKey": "your-shared-secret"
+      "ApiKey": "your-shared-api-key",
+      "IdentitySigningSecret": "a-distinct-random-secret-at-least-32-bytes"
     }
   }
 }
@@ -43,11 +48,12 @@ Orchestrator__ScriptRoot=/opt/etl/scripts
 Or:
 ```
 Portal__Orchestrator__ApiUrl=http://orchestrator-host:5001
-Portal__Orchestrator__ApiKey=your-shared-secret
+Portal__Orchestrator__ApiKey=your-shared-api-key
+Portal__Orchestrator__IdentitySigningSecret=a-distinct-random-secret-at-least-32-bytes
 ```
 
 *Option B — Admin UI (applied immediately, no restart needed):*
-Log in as Admin, navigate to **Admin → Settings → Orchestrator Connection**, enter the URL and API key, and click **Save**. Settings are written to a `portal-orchestrator.json` sidecar file and take effect on the very next request. UI-saved settings take precedence over environment variables.
+Log in as Admin, navigate to **Admin → Settings → Orchestrator Connection**, enter the URL and API key, and click **Save**. Settings are written to a `portal-orchestrator.json` sidecar file and take effect on the very next request. UI-saved URL/API-key settings take precedence over environment variables. The identity-signing secret remains host configuration and is never accepted from or returned to the browser.
 
 ## Script Root
 
@@ -69,10 +75,18 @@ Two roles can access the Orchestrator tab in the portal:
 
 | Role | Access |
 | :--- | :--- |
-| **Admin** | Full access — Orchestrator tab is always visible |
-| **OrchestratorManager** | Orchestrator tab only — cannot access the Admin panel |
+| **Admin** | Full object-authority bypass — Orchestrator tab is always visible |
+| **OrchestratorManager** | May create objects and manage objects they own or have been granted; cannot access the Admin panel |
 
 Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Portal Administrator's Guide](../portal/README.md#orchestrator-manager-role) for role assignment instructions.
+
+### Object ownership and grants
+
+`JOB`, `SCHEDULE`, and `NOTIFICATION` names are shared catalog identities. The principal that creates an object owns it; `CREATE OR ALTER` and `CREATE OR REPLACE` preserve that owner and cannot be used to take over another principal's name. This is enforced in both HTTP endpoints and ETL-SQL statement handlers.
+
+Owners and administrators can grant `READ`, `EXECUTE`, `OVERRIDE`, or `MANAGE` to a Portal user, group, or service account. `MANAGE` includes all lower permissions; `OVERRIDE` includes execute/read; `EXECUTE` includes read. Variable-overridden triggers require `OVERRIDE`, because an override may widen the job's data scope. Plain triggers and named-checkpoint resumes require `EXECUTE`.
+
+The management API uses `/api/authorization/{kind}/{name}` to list grants and `/api/authorization/{kind}/{name}/{principalKind}/{principalId}` to set or revoke them. Valid kinds are `JOB`, `SCHEDULE`, and `NOTIFICATION`; valid principal kinds are `USER`, `GROUP`, and `SERVICE`. Job history and data-quality APIs filter rows using the same `READ` decision. Ad-hoc run status and cancellation are visible only to that run's submitting principal or an administrator.
 
 ## Dashboard Features
 

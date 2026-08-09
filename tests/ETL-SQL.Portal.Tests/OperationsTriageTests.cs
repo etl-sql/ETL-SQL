@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Profiling;
+using ETL_SQL.Core.Quality;
+using ETL_SQL.Portal.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Portal.Tests;
@@ -217,6 +220,99 @@ public sealed class OperationsTriageTests
     }
 
     [Fact]
+    public async Task RunDetailJoinsIntegrityStatementTimelineAndNormalizedQualityFailures()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+        var jobName = $"evidence_{Suffix()}";
+        long runId;
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            runId = await store.LogJobStartAsync(jobName);
+            await store.SaveJobStatementMetricsAsync(runId,
+            [
+                new StatementMetricsPayload
+                {
+                    Statement = "SELECT * FROM source WHERE secret = ?",
+                    DurationMs = 412,
+                    RowsProcessed = 93,
+                    QueueWaitMs = 7,
+                    Failed = true
+                }
+            ]);
+            await store.SaveJobDataQualityFailuresAsync(runId,
+            [
+                new DataQualityRuleFailureMetric(
+                    "warehouse.Customers", "Email", "not-null", "QUARANTINE", 3, "Data Steward")
+            ]);
+            await store.LogJobEndAsync(
+                runId, "FAILED", "quality gate failed", rowsProcessed: 93,
+                scriptHashAtRunTime: "sha256:runtime", hashMatched: false,
+                rowsQuarantined: 3, dataQualityFailures: "Email:not-null=3");
+        }
+
+        var response = await AuthGet(client, token, $"/api/orchestrator/triage/runs/{runId}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var detail = (await response.Content.ReadFromJsonAsync<JsonObject>(Json))!;
+
+        Assert.Equal(runId, detail["run"]!["id"]!.GetValue<long>());
+        Assert.False(detail["run"]!["hashMatched"]!.GetValue<bool>());
+        Assert.Equal("sha256:runtime", detail["run"]!["scriptHashAtRunTime"]!.GetValue<string>());
+
+        var statement = detail["statements"]!.AsArray().Single()!;
+        Assert.Equal("SELECT * FROM source WHERE secret = ?", statement["statement"]!.GetValue<string>());
+        Assert.Equal(412, statement["duration_ms"]!.GetValue<long>());
+        Assert.True(statement["failed"]!.GetValue<bool>());
+
+        var quality = detail["qualityFailures"]!.AsArray().Single()!;
+        Assert.Equal(runId, quality["runId"]!.GetValue<long>());
+        Assert.Equal("Email", quality["columnName"]!.GetValue<string>());
+        Assert.Equal("not-null", quality["rule"]!.GetValue<string>());
+        Assert.Equal(3, quality["failureCount"]!.GetValue<long>());
+        Assert.Null(quality["sampleValue"]);
+    }
+
+    [Fact]
+    public async Task UnknownRunDetailReturnsNotFound()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await AuthGet(client, token, "/api/orchestrator/triage/runs/9223372036854775807")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadableJobSetFiltersBoardAndRunDetailEvidence()
+    {
+        using var factory = new PortalWebFactory();
+        var allowedName = $"allowed_{Suffix()}";
+        var deniedName = $"denied_{Suffix()}";
+        long allowedRun;
+        long deniedRun;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            allowedRun = await store.LogJobStartAsync(allowedName);
+            await store.LogJobEndAsync(allowedRun, "FAILED", "allowed failure");
+            deniedRun = await store.LogJobStartAsync(deniedName);
+            await store.LogJobEndAsync(deniedRun, "FAILED", "denied failure");
+
+            var triage = scope.ServiceProvider.GetRequiredService<OperationsTriageService>();
+            IReadOnlySet<string> readable = new HashSet<string>([allowedName], StringComparer.OrdinalIgnoreCase);
+            var board = await triage.BuildAsync(readableJobNames: readable);
+            Assert.Single(board.Incidents);
+            Assert.Equal([allowedName], board.Incidents[0].JobNames);
+            Assert.NotNull(await triage.GetRunDetailAsync(allowedRun, readable));
+            Assert.Null(await triage.GetRunDetailAsync(deniedRun, readable));
+        }
+    }
+
+    [Fact]
     public async Task TriageAndBulkRerunRequireOrchestratorAccess()
     {
         using var factory = new PortalWebFactory();
@@ -228,6 +324,8 @@ public sealed class OperationsTriageTests
 
         Assert.Equal(HttpStatusCode.Forbidden,
             (await AuthGet(client, viewerToken, "/api/orchestrator/triage")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthGet(client, viewerToken, "/api/orchestrator/triage/runs/1")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await AuthPost(client, viewerToken, "/api/orchestrator/jobs/rerun",
                 new { jobNames = new[] { "anything" } })).StatusCode);

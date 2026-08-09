@@ -47,6 +47,11 @@ public sealed class AdminIdentityScopeTests : IDisposable
     [InlineData("PUT", "/api/admin/groups/7/studio-capabilities")]
     [InlineData("GET", "/api/admin/permissions/effective/user/42")]
     [InlineData("GET", "/api/admin/access-simulator/user/42")]
+    [InlineData("GET", "/api/admin/service-accounts")]
+    [InlineData("POST", "/api/admin/service-accounts")]
+    [InlineData("PUT", "/api/admin/service-accounts/account-id")]
+    [InlineData("POST", "/api/admin/service-accounts/account-id/rotate-secret")]
+    [InlineData("POST", "/api/admin/service-accounts/account-id/revoke")]
     public void IdentityRoutesAreOnTheAllowlist(string method, string path) =>
         Assert.True(AdminIdentityRoutes.IsIdentityRoute(path, method));
 

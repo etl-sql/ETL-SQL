@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,7 +15,7 @@ namespace ETL_SQL.Portal.Tests;
 /// the background maintenance/poll loops — all against the fixture's isolated temp-directory databases
 /// and, where time matters, a controlled clock.
 /// </summary>
-[Trait("Category", "Portal")]
+[Trait("Category", "HostedServices")]
 public sealed class HostedServiceLaneTests
 {
     private static bool WaitForStop(IServiceProvider services, TimeSpan timeout)
@@ -52,26 +53,36 @@ public sealed class HostedServiceLaneTests
 
     /// <summary>A JWT secret under 32 characters is fatal: the started host shuts itself down.</summary>
     [Fact]
-    public void ShortJwtSecret_StopsApplicationAtStartup()
+    public async Task ShortJwtSecret_StopsApplicationAtStartup()
     {
         using var factory = new HostedPortalFactory(portalConfig: cfg => cfg.Jwt.Secret = "short");
         _ = factory.Services; // force host start
 
-        Assert.True(WaitForStop(factory.Services, TimeSpan.FromSeconds(15)),
-            "expected JwtSecretValidationService to stop the application");
+        var lifetime = factory.Services.GetRequiredService<IHostApplicationLifetime>();
+        await LoadAwareWait.UntilAsync(
+            "JwtSecretValidationService to stop the application",
+            _ => Task.FromResult(lifetime.ApplicationStopping.IsCancellationRequested),
+            stopped => stopped,
+            TimeSpan.FromSeconds(15),
+            describe: stopped => $"ApplicationStopping={stopped}");
     }
 
     /// <summary>
     /// A missing dataset at-rest key without the explicit machine fallback is fatal at startup.
     /// </summary>
     [Fact]
-    public void MissingDatasetAtRestKey_WithoutFallback_StopsApplication()
+    public async Task MissingDatasetAtRestKey_WithoutFallback_StopsApplication()
     {
         using var factory = new HostedPortalFactory(portalConfig: cfg => cfg.Dataset.AtRestKey = null);
         _ = factory.Services;
 
-        Assert.True(WaitForStop(factory.Services, TimeSpan.FromSeconds(15)),
-            "expected DatasetAtRestKeyValidationService to stop the application");
+        var lifetime = factory.Services.GetRequiredService<IHostApplicationLifetime>();
+        await LoadAwareWait.UntilAsync(
+            "DatasetAtRestKeyValidationService to stop the application",
+            _ => Task.FromResult(lifetime.ApplicationStopping.IsCancellationRequested),
+            stopped => stopped,
+            TimeSpan.FromSeconds(15),
+            describe: stopped => $"ApplicationStopping={stopped}");
     }
 
     /// <summary>
@@ -129,16 +140,18 @@ public sealed class HostedServiceLaneTests
             await db.SaveChangesAsync();
         }
 
-        var purged = false;
-        for (var attempt = 0; attempt < 60 && !purged; attempt++)
-        {
-            await Task.Delay(250);
-            using var scope = factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            purged = !await db.AuditLogs.AnyAsync(a => a.Action == "OLD_EVENT");
-        }
-
-        Assert.True(purged, "expected the retention sweep to delete the out-of-window audit row");
+        await LoadAwareWait.UntilAsync(
+            "audit retention sweep to delete OLD_EVENT",
+            async _ =>
+            {
+                using var scope = factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                return await db.AuditLogs.AnyAsync(a => a.Action == "OLD_EVENT");
+            },
+            oldEventExists => !oldEventExists,
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMilliseconds(250),
+            oldEventExists => $"OLD_EVENT exists={oldEventExists}");
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -181,16 +194,18 @@ public sealed class HostedServiceLaneTests
             await db.SaveChangesAsync();
         }
 
-        var purged = false;
-        for (var attempt = 0; attempt < 60 && !purged; attempt++)
-        {
-            await Task.Delay(250);
-            using var scope = factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            purged = !await db.RefreshTokens.AnyAsync(t => t.Token == expiredToken);
-        }
-
-        Assert.True(purged, "expected the purge loop to delete the token expired under the pinned clock");
+        await LoadAwareWait.UntilAsync(
+            "refresh-token purge to delete the expired token",
+            async _ =>
+            {
+                using var scope = factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                return await db.RefreshTokens.AnyAsync(t => t.Token == expiredToken);
+            },
+            expiredTokenExists => !expiredTokenExists,
+            TimeSpan.FromSeconds(15),
+            TimeSpan.FromMilliseconds(250),
+            expiredTokenExists => $"expired token exists={expiredTokenExists}");
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();

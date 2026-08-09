@@ -59,6 +59,11 @@ public static class IdentityAdminService
                 "admin-group-capabilities" => await GroupCapabilitiesAsync(client, ctx, logger),
                 "admin-group-set-capabilities" => await GroupSetCapabilitiesAsync(client, ctx, logger),
                 "admin-access-simulate" => await AccessSimulateAsync(client, ctx, logger),
+                "admin-service-account-list" => await ServiceAccountListAsync(client, ctx, logger),
+                "admin-service-account-create" => await ServiceAccountCreateAsync(client, ctx, logger),
+                "admin-service-account-update" => await ServiceAccountUpdateAsync(client, ctx, logger),
+                "admin-service-account-rotate-secret" => await ServiceAccountRotateSecretAsync(client, ctx, logger),
+                "admin-service-account-revoke" => await ServiceAccountRevokeAsync(client, ctx, logger),
                 _ => Fail(logger, AdminExitCode.ValidationError, $"Unknown identity command '{ctx.Command}'.")
             };
         }
@@ -483,6 +488,189 @@ public static class IdentityAdminService
         Render(logger, result, indent: "  ");
         return 0;
     }
+
+    // ── Service accounts ─────────────────────────────────────────────────────────
+
+    private static async Task<int> ServiceAccountListAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var accounts = AsArray(await client.GetAsync("/api/admin/service-accounts", CancellationToken.None))
+            .Where(account => Matches(account?["name"]?.GetValue<string>(), ctx.AdminFilter))
+            .ToList();
+
+        return Emit(ctx, logger, accounts,
+            ["ID", "NAME", "CLIENT ID", "OWNER", "SCOPES", "ENABLED", "REVOKED", "VERSION"],
+            account =>
+            [
+                account?["id"]?.ToString() ?? "",
+                account?["name"]?.GetValue<string>() ?? "",
+                account?["clientId"]?.GetValue<string>() ?? "",
+                account?["ownerUserId"]?.ToString() ?? "",
+                Join(ToStrings(account?["scopes"])),
+                (account?["isEnabled"]?.GetValue<bool>() ?? false) ? "yes" : "no",
+                account?["revokedAt"] is null ? "no" : "yes",
+                account?["version"]?.ToString() ?? ""
+            ]);
+    }
+
+    private static async Task<int> ServiceAccountCreateAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        Require(ctx.ServiceAccountName, "--name");
+        Require(ctx.ServiceAccountOwner, "--owner");
+        if (ctx.IfNotExists
+            && await FindAsync(client, "/api/admin/service-accounts", "name", ctx.ServiceAccountName) is not null)
+        {
+            logger.WriteLine($"Service account '{ctx.ServiceAccountName}' already exists; nothing to do.");
+            return 0;
+        }
+
+        var scopes = Clean(ctx.ServiceAccountScopes);
+        if (scopes.Length == 0)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "At least one --scope is required.");
+
+        var owner = await ResolveAsync(client, ctx, "/api/admin/users", "userName",
+            ctx.ServiceAccountOwner, "user", "--owner");
+        await using var output = OneTimeSecretFile.Reserve(ctx.ServiceAccountSecretOutput);
+        var created = await client.PostAsync("/api/admin/service-accounts", new
+        {
+            name = ctx.ServiceAccountName,
+            description = ctx.ServiceAccountDescription,
+            ownerUserId = owner["id"]!.GetValue<int>(),
+            scopes,
+            roles = Clean(ctx.ServiceAccountRoles),
+            expiresAt = ParseExpiry(ctx.ServiceAccountExpiresAt),
+            studioCapabilities = Clean(ctx.ServiceAccountCapabilities)
+        }, CancellationToken.None);
+
+        var secret = created?["clientSecret"]?.GetValue<string>();
+        await output.CommitAsync(secret ?? "", CancellationToken.None);
+        return EmitSecretResult(ctx, logger, created?["account"], output.Path, "Created");
+    }
+
+    private static async Task<int> ServiceAccountUpdateAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var account = await ResolveServiceAccountAsync(client, ctx);
+        if (ctx.ServiceAccountEnable && ctx.ServiceAccountDisable)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--enable and --disable are mutually exclusive.");
+        if (ctx.ServiceAccountClearExpiry && ctx.ServiceAccountExpiresAt is not null)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--clear-expiry and --expires-at are mutually exclusive.");
+        if (ctx.ServiceAccountClearCapabilities && ctx.ServiceAccountCapabilities is not null)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--clear-capabilities and --capability are mutually exclusive.");
+
+        var changesRequested = ctx.ServiceAccountEnable || ctx.ServiceAccountDisable
+            || ctx.ServiceAccountClearExpiry || ctx.ServiceAccountExpiresAt is not null
+            || ctx.ServiceAccountScopes is not null || ctx.ServiceAccountCapabilities is not null
+            || ctx.ServiceAccountClearCapabilities;
+        if (!changesRequested)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "Nothing to update. Supply --enable, --disable, --expires-at, --clear-expiry, " +
+                "--scope, --capability, or --clear-capabilities.");
+
+        var enabled = ctx.ServiceAccountEnable || (!ctx.ServiceAccountDisable
+            && (account["isEnabled"]?.GetValue<bool>() ?? false));
+        var expiresAt = ctx.ServiceAccountClearExpiry
+            ? null
+            : ctx.ServiceAccountExpiresAt is not null
+                ? ParseExpiry(ctx.ServiceAccountExpiresAt)
+                : ReadDate(account["expiresAt"]);
+        var scopes = ctx.ServiceAccountScopes is null
+            ? ToStrings(account["scopes"])
+            : Clean(ctx.ServiceAccountScopes);
+        if (scopes.Length == 0)
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "An update cannot clear every scope. Supply at least one --scope.");
+
+        await client.PutAsync($"/api/admin/service-accounts/{account["id"]}", new
+        {
+            isEnabled = enabled,
+            expiresAt,
+            scopes,
+            studioCapabilities = ctx.ServiceAccountClearCapabilities
+                ? [] : ctx.ServiceAccountCapabilities is null
+                    ? null : Clean(ctx.ServiceAccountCapabilities)
+        }, CancellationToken.None, VersionFor(ctx, account));
+
+        logger.WriteLine($"Updated service account '{ctx.ServiceAccountName}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static async Task<int> ServiceAccountRotateSecretAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var account = await ResolveServiceAccountAsync(client, ctx);
+        await using var output = OneTimeSecretFile.Reserve(ctx.ServiceAccountSecretOutput);
+        var rotated = await client.PostAsync(
+            $"/api/admin/service-accounts/{account["id"]}/rotate-secret", null,
+            CancellationToken.None, VersionFor(ctx, account));
+        var secret = rotated?["clientSecret"]?.GetValue<string>();
+        await output.CommitAsync(secret ?? "", CancellationToken.None);
+        return EmitSecretResult(ctx, logger, rotated?["account"], output.Path, "Rotated");
+    }
+
+    private static async Task<int> ServiceAccountRevokeAsync(
+        PortalAdminClient client, CliContext ctx, ILogger logger)
+    {
+        var account = await ResolveServiceAccountAsync(client, ctx);
+        if (account["revokedAt"] is not null)
+        {
+            logger.WriteLine($"Service account '{ctx.ServiceAccountName}' is already revoked; nothing to do.");
+            return 0;
+        }
+
+        await client.PostAsync($"/api/admin/service-accounts/{account["id"]}/revoke", null,
+            CancellationToken.None, VersionFor(ctx, account));
+        logger.WriteLine($"Revoked service account '{ctx.ServiceAccountName}'.", ConsoleColor.Green);
+        return 0;
+    }
+
+    private static int EmitSecretResult(
+        CliContext ctx, ILogger logger, JsonNode? account, string outputPath, string action)
+    {
+        if (ctx.IsJsonMode)
+        {
+            logger.WriteLine(JsonSerializer.Serialize(new
+            {
+                account,
+                secretWrittenTo = outputPath
+            }, Pretty));
+        }
+        else
+        {
+            logger.WriteLine($"{action} service account '{account?["name"]}'.", ConsoleColor.Green);
+            logger.WriteLine($"One-time secret written to: {outputPath}");
+        }
+        return 0;
+    }
+
+    private static Task<JsonObject> ResolveServiceAccountAsync(PortalAdminClient client, CliContext ctx) =>
+        ResolveAsync(client, ctx, "/api/admin/service-accounts", "name",
+            ctx.ServiceAccountName, "service account", "--name");
+
+    private static string[] Clean(IEnumerable<string>? values) => (values ?? [])
+        .Select(value => value.Trim()).Where(value => value.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private static DateTime? ParseExpiry(string? value)
+    {
+        if (value is null) return null;
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal |
+                System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
+            throw new AdminCliException(AdminExitCode.ValidationError,
+                "--expires-at must be an ISO-8601 timestamp, for example 2027-01-31T23:59:59Z.");
+        return parsed.UtcDateTime;
+    }
+
+    private static DateTime? ReadDate(JsonNode? node) => node is null
+        ? null
+        : DateTimeOffset.Parse(node.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal).UtcDateTime;
 
     // ── Mutation helpers ─────────────────────────────────────────────────────────
 

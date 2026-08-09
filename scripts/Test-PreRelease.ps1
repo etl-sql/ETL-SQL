@@ -113,7 +113,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the release-acceptance journeys: the role/permission authorization matrix (every grant against every operation, both directions), departmental environment isolation across two deployments, policy authority and distribution, module gating, Studio capabilities, and the browser API contract checked against the same file the browser validates with." })
     $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey (first-run sign-in, user, folder, publish, run); Viewer/Publisher/Steward/Operator role journeys, asserting that surfaces a role cannot use are absent rather than merely guarded; accessibility and responsive checks at 1440px and 390px (computed accessible names, no page overflow at phone width or 200% text, closed dialogs unreachable, both colour schemes, reduced motion, forced colours); accessibility-tree snapshots of critical surfaces; and every UI-sandbox story mounting cleanly." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
-    $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 2"; Reason = "Published samples remain runnable, and remain runnable a second time — sample output is gitignored, so a sample that leaves state behind passes on a clean checkout and fails for every user who runs it twice." })
     $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release." })
 
     if ($IncludeSlt) {
@@ -870,9 +870,12 @@ try {
         { & dotnet test "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" $Configuration "--no-restore" "--no-build" } `
         $previousPhaseMap $fingerprint $results
 
+    # Two passes, deliberately: sample output is gitignored, so a sample that writes to a persistent
+    # store can pass on a clean checkout and fail for every user who runs it a second time. One pass
+    # cannot see that.
     Invoke-LoggedPhase "Sample scripts" `
-        ".\scripts\Test-AllSamples.ps1" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" } `
+        ".\scripts\Test-AllSamples.ps1 -Passes 2" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "2" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "HA soak contract gate" `

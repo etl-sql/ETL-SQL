@@ -3,6 +3,7 @@ import {
   renderIncident,
   formatOverdue,
   selectedJobNames,
+  renderRunEvidence,
 } from '../../../src/ETL-SQL.Portal/wwwroot/js/triage-ui.js';
 
 // The 03:00 shape: one source database down, every dependent job failing identically, plus an
@@ -106,6 +107,18 @@ const quietBoard = {
 
 const truncatedBoard = { ...board, truncated: true };
 
+const runDetails = new Map([[14355, {
+  run: board.incidents[2].runs[0],
+  statements: [
+    { statement: 'SELECT order_id, amount FROM sales.orders WHERE load_date = ?', duration_ms: 841, rows_processed: 98_400, queue_wait_ms: 18, lock_wait_ms: 0, spilled_bytes: 0, failed: false },
+    { statement: 'INSERT INTO warehouse.fact_sales SELECT * FROM #validated', duration_ms: 1284, rows_processed: 96_980, queue_wait_ms: 32, lock_wait_ms: 141, spilled_bytes: 8_388_608, failed: true },
+  ],
+  qualityFailures: [
+    { targetTable: 'warehouse.fact_sales', columnName: 'amount', rule: 'positive', action: 'QUARANTINE', failureCount: 1420, owner: 'Finance Data' },
+    { targetTable: 'warehouse.fact_sales', columnName: 'region', rule: 'not_null', action: 'WARN', failureCount: 87, owner: null },
+  ],
+}]]);
+
 export default {
   id: 'triage-board',
   title: 'Orchestrator — Triage Board',
@@ -118,7 +131,7 @@ export default {
     { id: 'truncated', label: 'History clipped' }
   ],
   async mount(stage, fixtureId, ctx) {
-    const state = { expanded: new Set([0]), selected: new Set() };
+    const state = { expanded: new Set([0, 2]), selected: new Set(), openRuns: new Set([14355]), details: runDetails };
     let current = { busy: board, quiet: quietBoard, truncated: truncatedBoard }[fixtureId] || board;
 
     stage.innerHTML = `
@@ -144,6 +157,15 @@ export default {
       if (rerun) {
         log.textContent = `POST /api/orchestrator/jobs/rerun\n` +
           JSON.stringify({ jobNames: selectedJobNames(current, state.selected) }, null, 2);
+        return;
+      }
+      const evidence = event.target.closest('.triage-run-evidence');
+      if (evidence) {
+        const runId = Number(evidence.dataset.run);
+        state.openRuns.has(runId) ? state.openRuns.delete(runId) : state.openRuns.add(runId);
+        if (!state.details.has(runId)) state.details.set(runId, { status: 'loading' });
+        log.textContent = `GET /api/orchestrator/triage/runs/${runId}`;
+        draw();
         return;
       }
       const one = event.target.closest('.triage-rerun-one');
@@ -176,4 +198,4 @@ export default {
 };
 
 // Exported for quick console checks while iterating in the sandbox.
-export const _fixtures = { board, quietBoard, truncatedBoard, renderIncident, formatOverdue };
+export const _fixtures = { board, quietBoard, truncatedBoard, runDetails, renderIncident, renderRunEvidence, formatOverdue };

@@ -41,6 +41,22 @@ function fmtDuration(start, end) {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
+function fmtMetricDuration(milliseconds) {
+  const ms = Math.max(0, Number(milliseconds) || 0);
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+function fmtBytes(value) {
+  let bytes = Math.max(0, Number(value) || 0);
+  if (bytes === 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let unit = 0;
+  while (bytes >= 1024 && unit < units.length - 1) { bytes /= 1024; unit += 1; }
+  return `${bytes.toFixed(unit === 0 || bytes >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
 export function renderSummary(board) {
   const chip = (value, label, cls) => `
     <div class="orch-stat-chip ${cls}">
@@ -76,7 +92,65 @@ export function impactUrl(jobName) {
   return `/index.html?${params.toString()}#governance/impact`;
 }
 
-function renderRunRow(run) {
+export function renderRunEvidence(detailState) {
+  if (detailState?.status === 'loading') {
+    return '<div class="triage-evidence-state">Loading durable run evidence…</div>';
+  }
+  if (detailState?.status === 'error') {
+    return `<div class="triage-evidence-state danger"><strong>Evidence unavailable.</strong> ${esc(detailState.message)}</div>`;
+  }
+  if (!detailState?.run) {
+    return '<div class="triage-evidence-state">Open a run to load its durable evidence.</div>';
+  }
+
+  const run = detailState.run;
+  const integrity = run.hashMatched === false
+    ? { badge: 'badge-stale', label: 'MISMATCH', text: 'The executed script differs from its registered hash.' }
+    : run.hashMatched === true
+      ? { badge: 'badge-ok', label: 'MATCHED', text: 'The executed script matches its registered hash.' }
+      : { badge: 'badge-neutral', label: 'NOT PINNED', text: 'No registered hash was available for comparison.' };
+
+  const quality = detailState.qualityFailures || [];
+  const qualityBody = quality.length > 0
+    ? `<table class="data-table triage-evidence-table">
+         <thead><tr><th>Target / column</th><th>Rule</th><th>Action</th><th>Failed</th><th>Owner</th></tr></thead>
+         <tbody>${quality.map(q => `<tr>
+           <td>${esc(q.targetTable || '#temp')} / ${esc(q.columnName)}</td>
+           <td><code>${esc(q.rule)}</code></td>
+           <td><span class="badge badge-warning">${esc(q.action)}</span></td>
+           <td>${Number(q.failureCount || 0).toLocaleString()}</td>
+           <td>${esc(q.owner || '—')}</td>
+         </tr>`).join('')}</tbody>
+       </table>`
+    : '<p class="triage-evidence-empty">No normalized quality-rule failures were recorded.</p>';
+
+  const statements = detailState.statements || [];
+  const statementBody = statements.length > 0
+    ? `<table class="data-table triage-evidence-table">
+         <thead><tr><th>#</th><th>Normalized statement</th><th>Duration</th><th>Rows</th><th>Wait</th><th>Spill</th></tr></thead>
+         <tbody>${statements.map((s, i) => `<tr class="${s.failed ? 'triage-statement-failed' : ''}">
+           <td>${i + 1}</td>
+           <td><code>${esc(s.statement)}</code>${s.failed ? ' <span class="badge badge-error">failed</span>' : ''}</td>
+           <td>${fmtMetricDuration(s.duration_ms)}</td>
+           <td>${Number(s.rows_processed || 0).toLocaleString()}</td>
+           <td>${fmtMetricDuration((Number(s.queue_wait_ms) || 0) + (Number(s.lock_wait_ms) || 0))}</td>
+           <td>${fmtBytes(s.spilled_bytes)}</td>
+         </tr>`).join('')}</tbody>
+       </table>`
+    : '<p class="triage-evidence-empty">No statement timeline was retained for this run.</p>';
+
+  return `<div class="triage-evidence-grid">
+    <section class="triage-evidence-rail integrity">
+      <h4>Script integrity</h4>
+      <p><span class="badge ${integrity.badge}">${integrity.label}</span> ${esc(integrity.text)}</p>
+      <dl><dt>Runtime hash</dt><dd><code>${esc(run.scriptHashAtRunTime || 'not recorded')}</code></dd></dl>
+    </section>
+    <section class="triage-evidence-rail quality"><h4>Quality failures (${quality.length})</h4>${qualityBody}</section>
+    <section class="triage-evidence-rail timeline"><h4>Statement timeline (${statements.length})</h4>${statementBody}</section>
+  </div>`;
+}
+
+function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
   const dq = run.dataQualityFailures
     ? `<span class="badge badge-warning" title="Per-rule failure counts">${esc(run.dataQualityFailures)}</span>`
     : '';
@@ -85,7 +159,7 @@ function renderRunRow(run) {
   const drift = run.hashMatched === false
     ? '<span class="badge badge-stale" title="Script differs from the registered hash">script changed</span>'
     : '';
-  return `
+  const row = `
     <tr>
       <td>${esc(run.jobName)}</td>
       <td><span class="badge badge-error">${esc(run.status)}</span></td>
@@ -97,14 +171,21 @@ function renderRunRow(run) {
         <a class="triage-impact-link" href="${esc(impactUrl(run.jobName))}"
            title="What is downstream of this job">Impact →</a>
       </td>
+      <td><button class="btn-link triage-run-evidence" type="button" data-run="${Number(run.id)}"
+                  aria-expanded="${evidenceOpen ? 'true' : 'false'}">${evidenceOpen ? 'Close evidence' : 'Evidence'}</button></td>
     </tr>`;
+  return evidenceOpen
+    ? `${row}<tr class="triage-evidence-row"><td colspan="8">${renderRunEvidence(evidence)}</td></tr>`
+    : row;
 }
 
 /**
  * One incident: the shared error, who it hit, and the runs behind it. `expanded` controls the run
  * table, `selected` the re-run checkbox — both are owned by the host page so this stays pure.
  */
-export function renderIncident(incident, { expanded = false, selected = false, index = 0 } = {}) {
+export function renderIncident(incident, {
+  expanded = false, selected = false, index = 0, openRuns = new Set(), details = new Map()
+} = {}) {
   const jobs = incident.jobNames || [];
   const shown = jobs.slice(0, 6).map(j => `<span class="badge badge-neutral">${esc(j)}</span>`).join(' ');
   const more = jobs.length > 6 ? ` <span class="triage-more">+${jobs.length - 6} more</span>` : '';
@@ -130,8 +211,11 @@ export function renderIncident(incident, { expanded = false, selected = false, i
       ${expanded ? `
       <div class="triage-incident-runs">
         <table class="data-table">
-          <thead><tr><th>Job</th><th>Status</th><th>Started</th><th>Duration</th><th>Rows</th><th>Quality</th><th>Downstream</th></tr></thead>
-          <tbody>${(incident.runs || []).map(renderRunRow).join('')}</tbody>
+          <thead><tr><th>Job</th><th>Status</th><th>Started</th><th>Duration</th><th>Rows</th><th>Quality</th><th>Downstream</th><th>Run</th></tr></thead>
+          <tbody>${(incident.runs || []).map(run => renderRunRow(run, {
+            evidenceOpen: openRuns.has(Number(run.id)),
+            evidence: details.get(Number(run.id))
+          })).join('')}</tbody>
         </table>
       </div>` : ''}
     </article>`;
@@ -197,6 +281,8 @@ export function renderTriageBoard(board, state = {}) {
 
   const expanded = state.expanded instanceof Set ? state.expanded : new Set();
   const selected = state.selected instanceof Set ? state.selected : new Set();
+  const openRuns = state.openRuns instanceof Set ? state.openRuns : new Set();
+  const details = state.details instanceof Map ? state.details : new Map();
   const incidents = board.incidents || [];
 
   const truncated = board.truncated
@@ -224,7 +310,9 @@ export function renderTriageBoard(board, state = {}) {
         ${incidents.map((incident, i) => renderIncident(incident, {
           expanded: expanded.has(i),
           selected: selected.has(i),
-          index: i
+          index: i,
+          openRuns,
+          details
         })).join('')}
       </section>` : ''}
       ${renderMissed(board.missed)}

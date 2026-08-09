@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Interfaces;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
+using ETL_SQL.TestSupport;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -274,13 +275,13 @@ namespace ETL_SQL.LanguageServer.Tests
 
         private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
         {
-            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (DateTime.UtcNow < deadline)
-            {
-                if (condition()) return;
-                await Task.Delay(20);
-            }
-            Assert.True(condition(), "Condition not met within timeout.");
+            await LoadAwareWait.UntilAsync(
+                "language-server metadata refresh condition",
+                _ => Task.FromResult(condition()),
+                observed => observed,
+                TimeSpan.FromMilliseconds(timeoutMs),
+                TimeSpan.FromMilliseconds(20),
+                observed => $"condition={observed}");
         }
 
         [Fact]

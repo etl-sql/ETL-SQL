@@ -12,6 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\TestSupport\LoadAwareWait.cs" Link="TestSupport\LoadAwareWait.cs" />
+    <Compile Include="..\TestSupport\DeploymentCertificationEvidenceWriter.cs" Link="TestSupport\DeploymentCertificationEvidenceWriter.cs" />
     <PackageReference Include="Moq" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />

@@ -36,5 +36,5 @@ FROM prod_portal.eng.report_history('Monthly Sales');
 
 ## References
 
-- [Portal Administration](../portal-admin/README.md)
+- [Portal Administration](../../administration/portal/README.md)
 - [Engine Catalog](README.md)

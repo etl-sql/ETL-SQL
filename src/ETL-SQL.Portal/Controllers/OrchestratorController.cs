@@ -107,9 +107,12 @@ public class OrchestratorController(
         int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
     [HttpPost("jobs/{name}/trigger")]
-    public async Task<IActionResult> TriggerJob(string name)
+    public async Task<IActionResult> TriggerJob(
+        string name,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
+        TriggerJobRequest? request = null)
     {
-        using var resp = await proxy.TriggerJobAsync(name);
+        using var resp = await proxy.TriggerJobAsync(name, request?.Variables);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -121,8 +124,37 @@ public class OrchestratorController(
         // shared service key, so this is the only place that knows which human clicked. Triggering
         // a job out of schedule is a privileged act whether it was done from the triage board or
         // one job at a time, and only the former was recorded.
-        await audit.LogAsync(CurrentUserId, "JobTriggered", "Job", name, null);
+        var overrideNames = request?.Variables?.Keys
+            .Select(variable => variable.StartsWith('@') ? variable : "@" + variable)
+            .OrderBy(variable => variable, StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+        await audit.LogAsync(
+            CurrentUserId,
+            overrideNames.Length == 0 ? "JobTriggered" : "JobTriggeredWithVariableOverrides",
+            "Job",
+            name,
+            overrideNames.Length == 0
+                ? null
+                : $"OverrideCount={overrideNames.Length}; Names={string.Join(',', overrideNames)}");
         return Accepted();
+    }
+
+    [HttpPost("runs/{historyId:long}/resume")]
+    public async Task<IActionResult> ResumeRun(long historyId)
+    {
+        using var resp = await proxy.ResumeRunAsync(historyId);
+        if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        var body = await resp.Content.ReadAsStringAsync();
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, body);
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "JobRunResumedFromNamedCheckpoint",
+            "JobRun",
+            historyId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "ResumeMode=NamedCheckpoint");
+        return Accepted(body);
     }
 
     // ── Operations triage ─────────────────────────────────────────────────────
@@ -138,8 +170,29 @@ public class OrchestratorController(
         [FromQuery] int graceMinutes = OperationsTriageService.DefaultGraceMinutes,
         CancellationToken cancellationToken = default)
     {
-        var board = await triage.BuildAsync(lookbackHours, graceMinutes, cancellationToken);
+        IReadOnlySet<string>? readableJobs = User.IsInRole("Admin")
+            ? null
+            : (await proxy.GetJobsAsync())
+                .Select(job => job.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var board = await triage.BuildAsync(
+            lookbackHours, graceMinutes, readableJobs, cancellationToken);
         return Ok(board);
+    }
+
+    /// <summary>Statement, quality, and script-integrity evidence for one durable run.</summary>
+    [HttpGet("triage/runs/{runId:long}")]
+    public async Task<IActionResult> GetTriageRun(
+        long runId,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlySet<string>? readableJobs = User.IsInRole("Admin")
+            ? null
+            : (await proxy.GetJobsAsync())
+                .Select(job => job.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var detail = await triage.GetRunDetailAsync(runId, readableJobs, cancellationToken);
+        return detail is null ? NotFound() : Ok(detail);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -278,9 +279,13 @@ public class ProcessJobExecutorChaosTests
 
     private static async Task WaitForExitAsync(Process process, int timeoutSeconds)
     {
-        var timeout = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
-        var exited = await Task.WhenAny(process.WaitForExitAsync(), timeout);
-        Assert.NotSame(timeout, exited);
+        await LoadAwareWait.UntilAsync(
+            $"process {process.Id} to exit",
+            _ => Task.FromResult(process.HasExited),
+            exited => exited,
+            TimeSpan.FromSeconds(timeoutSeconds),
+            TimeSpan.FromMilliseconds(50),
+            exited => $"HasExited={exited}");
     }
 
     private static void TryDelete(string path)

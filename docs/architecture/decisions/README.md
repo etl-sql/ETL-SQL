@@ -28,4 +28,4 @@
 | [Design Spec: Unified Notebook & Script Execution (Virtual Cells and Checkpoints)](UnifiedNotebookScriptExecution.md) | This document specifies the design for unifying the `.etlnb` (ETL-SQL Notebook) execution controller with plain-text `.etlsql` and `.rptsql` script... |
 | [Design Spec: Job, Schedule, and Alerting Refactor](job_schedule_notification.md) | This document outlines the architectural changes for establishing a unified, many-to-many scheduling |
 
-> **Note:** Per-release evidence files (code reviews, performance results, flaky-test logs) live in [`releases/`](../releases/README.md) alongside their corresponding release notes, not here. This folder contains architecture decisions, design specs, and operational certifications that are not scoped to a single release.
+> **Note:** Per-release evidence files (code reviews, performance results, flaky-test logs) live in [`releases/`](../../releases/README.md) alongside their corresponding release notes, not here. This folder contains architecture decisions, design specs, and operational certifications that are not scoped to a single release.

@@ -6,6 +6,9 @@
       "Secret": "ENC:GENERATED_SECRET_HERE",
       "ExpiryMinutes": 60
     },
+    "Orchestrator": {
+      "IdentitySigningSecret": "ENC:GENERATED_IDENTITY_SIGNING_SECRET_HERE"
+    },
     "FirstRun": {
       "AdminUsername": "admin",
       "MustChangePassword": true

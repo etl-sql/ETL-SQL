@@ -99,7 +99,7 @@ ambiguity.
   offset (normally the standard-time occurrence).
 - Period anchors normally resolve at midnight, but historical timezone changes can also affect midnight.
 
-See [RELDATE](reldate.md) for all relative-date anchors and arithmetic rules.
+See [RELDATE](../functions/datetime/reldate.md) for all relative-date anchors and arithmetic rules.
 
 ---
 

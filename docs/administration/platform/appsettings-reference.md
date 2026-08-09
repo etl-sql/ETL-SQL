@@ -198,6 +198,8 @@ Configuration details for the background runner service.
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `Orchestrator:ApiKey` | string | `""` | — | Secret token used to authenticate request calls to the scheduler API. |
+| `Orchestrator:IdentitySigningSecret` | string | `""` | — | Dedicated 32+ byte secret used to verify short-lived Portal caller assertions. Required when federated identity is enabled. |
+| `Orchestrator:RequireFederatedIdentity` | boolean | network-dependent | — | Requires a signed caller assertion in addition to the API key. Defaults to `true` for non-loopback listeners. |
 | `Orchestrator:PreviousApiKeys` | array | `[]` | — | Rolled api keys accepted temporarily during secret rotation phases. |
 | `Orchestrator:MaxPreviousApiKeys` | integer | `1` | — | Maximum number of previous API keys accepted during a temporary rotation overlap. |
 | `Orchestrator:ScriptRoot` | string | `""` | — | Path target folder for orchestrator scripts and scheduling plans. |
@@ -228,6 +230,9 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | `Portal:DatabasePath` | string | `./portal.db` | — | Local file path for portal SQLite database. Used when provider is `Sqlite`. |
 | `Portal:Database:Provider` | string | `Sqlite` | — | Database backing portal configuration state (`Sqlite` or `Postgres`). |
 | `Portal:Database:ConnectionString` | string | `""` | — | Database connection details when `Postgres` provider is used (required for HA). |
+| `Portal:Orchestrator:ApiUrl` | string | `http://localhost:5001` | — | Base URL of the Orchestrator Service. |
+| `Portal:Orchestrator:ApiKey` | string | `""` | — | Service credential sent to the Orchestrator; configure from a protected source. |
+| `Portal:Orchestrator:IdentitySigningSecret` | string | `""` | — | Dedicated 32+ byte secret used to sign short-lived caller assertions; must match the Orchestrator. |
 | `Portal:SubscriptionRetryDelaySeconds` | integer | `60` | — | Wait time to retry failed email subscription dispatches. |
 | `Portal:ScriptRootPath` | string | `./Reports` | — | Folder containing reports and dashboard scripts (`.rptsql`). |
 | `Portal:SnapshotDirectory` | string | `./Snapshots` | — | Directory where PDF/CSV dashboard exports are saved. |

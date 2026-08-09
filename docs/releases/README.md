@@ -15,15 +15,13 @@
 | [v0.13.0 Performance Results](v0.13.0-performance-results.md) | Benchmark results for v0.13.0. |
 | [ETL-SQL v0.14.0](v0.14.0.md) | **Released:** 2026-07-05 |
 | [ETL-SQL v0.15.0](v0.15.0.md) | **Released:** 2026-07-12 |
-| [v0.15.0 Flaky Tests](v0.15.0-flaky-tests.md) | Flaky tests noted during v0.15.0, resolved in v0.16.0. |
+| [Flaky Test Stability](flaky-test-stability.md) | Canonical wait policy, cross-release history, and v0.19.0 closure evidence. |
 | [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Benchmark results for v0.15.0. |
 | [ETL-SQL v0.16.0](v0.16.0.md) | **Released:** 2026-07-19 |
 | [ETL-SQL v0.17.0](v0.17.0.md) | **Released:** 2026-07-26 |
 | [v0.17.0 Code Review](v0.17.0-code-review.md) | Security and bug review for v0.17.0. |
-| [v0.17.0 Flaky Tests](v0.17.0-flaky-tests.md) | Flaky tests noted during v0.17.0, resolved in v0.18.0. |
 | [v0.17.0 Performance Results](v0.17.0-performance-results.md) | Benchmark results for v0.17.0. |
 | [v0.18.0 Deployment Profile Review](v0.18.0-deployment-profile-review.md) | Deployment profile review conducted during v0.18.0 development. |
-| [v0.18.0 Flaky Tests](v0.18.0-flaky-tests.md) | Flaky tests noted during v0.18.0 development. |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |
 | [ETL-SQL v0.4.0 *(Unofficial)*](v0.4.0.md) | **Released:** 2026-04-20 |

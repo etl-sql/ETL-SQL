@@ -80,7 +80,7 @@ A release claim must name the profile and transition it actually proves. Review 
 
 Completed reviews:
 
-- [v0.18.0](../decisions/v0.18.0-deployment-profile-review.md) — Portal and Enterprise weighted; no cell moved to Green, SaaS unchanged and still Red for every concern touched.
+- [v0.18.0](../../releases/v0.18.0-deployment-profile-review.md) — Portal and Enterprise weighted; no cell moved to Green, SaaS unchanged and still Red for every concern touched.
 
 ## References
 

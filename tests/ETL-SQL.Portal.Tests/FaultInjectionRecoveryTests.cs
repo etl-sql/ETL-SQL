@@ -12,6 +12,7 @@ using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.TestSupport;
 using ETL_SQL.Reporting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -369,17 +370,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
         Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
 
-        Report? reportState = null;
-        var dbDeadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < dbDeadline)
-        {
-            await using var pollScope = provider.CreateAsyncScope();
-            var pollDb = pollScope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            reportState = await pollDb.Reports.FindAsync(reportId);
-            if (reportState?.LastRefreshStatus == "Failed")
-                break;
-            await Task.Delay(50);
-        }
+        var reportState = await WaitForFailedReportStateAsync(provider, reportId);
 
         Assert.NotNull(reportState);
         Assert.Equal("Failed", reportState.LastRefreshStatus);
@@ -460,17 +451,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
         Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
 
-        Report? reportState = null;
-        var dbDeadline = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < dbDeadline)
-        {
-            await using var pollScope = provider.CreateAsyncScope();
-            var pollDb = pollScope.ServiceProvider.GetRequiredService<PortalDbContext>();
-            reportState = await pollDb.Reports.FindAsync(reportId);
-            if (reportState?.LastRefreshStatus == "Failed")
-                break;
-            await Task.Delay(50);
-        }
+        var reportState = await WaitForFailedReportStateAsync(provider, reportId);
 
         Assert.NotNull(reportState);
         Assert.Equal("Failed", reportState.LastRefreshStatus);
@@ -687,17 +668,33 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
 
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline)
-        {
-            var job = await service.GetAsync(jobId);
-            Assert.NotNull(job);
-            if (job.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed)
-                return;
-            await Task.Delay(25);
-        }
+        await LoadAwareWait.UntilAsync(
+            $"fault-injection job '{jobId}' to become terminal",
+            async _ => await service.GetAsync(jobId),
+            job => job?.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMilliseconds(25),
+            job => $"status={job?.Status.ToString() ?? "<missing>"}");
+    }
 
-        Assert.Fail($"Job {jobId} did not reach a terminal state within 10s.");
+    private static async Task<Report> WaitForFailedReportStateAsync(
+        IServiceProvider provider,
+        int reportId)
+    {
+        return (await LoadAwareWait.UntilAsync(
+            $"report '{reportId}' refresh state to persist Failed",
+            async _ =>
+            {
+                await using var scope = provider.CreateAsyncScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                return await db.Reports.AsNoTracking().SingleOrDefaultAsync(report => report.Id == reportId);
+            },
+            report => string.Equals(report?.LastRefreshStatus, "Failed", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(50),
+            report => report is null
+                ? "report missing"
+                : $"LastRefreshStatus={report.LastRefreshStatus ?? "<null>"}"))!;
     }
 
     private static string? Tag(Activity activity, string key)

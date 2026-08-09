@@ -96,7 +96,7 @@ ETL-SQL/
 │   └── etl-sql-vscode/        # VS Code language extension (TypeScript/Node)
 ├── tests/
 │   └── ETL-SQL.Tests/         # xUnit test suite (unit + integration)
-├── samples/                   # Sample .etlsql scripts (see docs/guides/sample-guide.md)
+├── samples/                   # Sample .etlsql scripts (see docs/guides/patterns/sample-guide.md)
 ├── Docs/                      # Full documentation library
 ├── AGENTS.md                  # AI assistant instruction manual
 ├── CHANGELOG.md               # Version history
@@ -222,13 +222,13 @@ When your change affects user-facing behavior, update the relevant docs:
 
 | What changed | Update |
 | :--- | :--- |
-| New syntax / keyword | [docs/guides/getting-started.md](docs/guides/getting-started.md) |
-| New built-in function | [docs/guides/getting-started.md](docs/guides/getting-started.md) — signature, return type, and copy-pasteable example required |
+| New syntax / keyword | [docs/guides/onboarding/getting-started.md](docs/guides/onboarding/getting-started.md) |
+| New built-in function | [docs/guides/onboarding/getting-started.md](docs/guides/onboarding/getting-started.md) — signature, return type, and copy-pasteable example required |
 | New connector or new `WITH()` option | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
 | New file/email/Docker operation | [docs/administration/platform/README.md](docs/administration/platform/README.md) |
 | New connector implementation | [Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
-| Breaking syntax change | [docs/guides/migration-guide.md](docs/guides/migration-guide.md) |
+| Breaking syntax change | [docs/guides/onboarding/migration-guide.md](docs/guides/onboarding/migration-guide.md) |
 | User-facing code, docs, samples, scripts, or workflow changes | Add a `changelog.d/<feature>.md` fragment; the pre-release gate compiles it into [CHANGELOG.md](CHANGELOG.md) |
 | New release | [CHANGELOG.md](CHANGELOG.md) — use Keep a Changelog format |
 
