@@ -112,9 +112,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/receive-file.md) |
 | `` | File IO / Conn | [Statement Reference](reference/statements/README.md) | [](reference/file-operations/send-file.md) |
 | `eng.active_sessions` | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-admin/service-accounts.md) |
-| `Admin Identity CLI` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [admin identity cli](reference/portal-admin/admin-identity-cli.md) |
-| `PORTAL SHOW` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [portal show](reference/portal-admin/portal-show.md) |
+| `Service Accounts` | Portal Admin | [Statement Reference](reference/statements/README.md) | [Service Accounts](reference/portal-commands/service-accounts.md) |
+| `Admin Identity CLI` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [admin identity cli](reference/portal-commands/admin-identity-cli.md) |
+| `PORTAL SHOW` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [portal show](reference/portal-commands/portal-show.md) |
 | `EXPECT SCHEMA` | DDL / Validation | [Statement Reference](reference/statements/README.md) | [EXPECT SCHEMA](reference/statements/ddl/expect-schema.md) |
 | `TEST CONNECTION` | DDL / Diagnostics | [Statement Reference](reference/statements/README.md) | [TEST CONNECTION](reference/statements/ddl/test-connection.md) |
 | `UNNEST / FLATTEN` | DML / Query | [Statement Reference](reference/statements/README.md) | [UNNEST / FLATTEN](reference/statements/dml/unnest.md) |
@@ -127,7 +127,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `LATERAL` | Query Clauses | [Statement Reference](reference/statements/README.md) | [LATERAL](reference/statements/query-syntax/lateral.md) |
 | `Set Operations` | Set Operations | [Statement Reference](reference/statements/README.md) | [Set Operations](reference/statements/query-syntax/set-operations.md) |
 | `WINDOW` | Window Functions | [Statement Reference](reference/statements/README.md) | [WINDOW](reference/statements/query-syntax/window.md) |
-| `` | Date/Time | [Statement Reference](reference/statements/README.md) | [](reference/dates-times/reldate.md) |
+| `` | Date/Time | [Statement Reference](reference/statements/README.md) | [](reference/functions/datetime/reldate.md) |
 | `Data Types` | Data Types | [Statement Reference](reference/statements/README.md) | [Data Types](reference/data-types.md) |
 | `eng.alerts()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.catalog_search()` | Diagnostics / Portal | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
@@ -203,46 +203,46 @@ Statements are the top-level actions in an ETL-SQL script.
 | `STOP DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
 | `PAUSE DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
 | `CLOSE DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `CREATE USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `ALTER USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `DROP USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `DISCONNECT USER` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `REVOKE TOKENS FOR USER` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `CREATE GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `DROP GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `ADD USER TO GROUP` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `CREATE FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
-| `DROP FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
-| `GRANT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_PERMISSIONS.md](reference/portal-admin/portal-permissions.md) |
-| `REVOKE` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [REVOKE.md](reference/portal-admin/revoke.md) |
-| `FAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [FAVORITE.md](reference/portal-admin/favorite.md) |
-| `UNFAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [FAVORITE.md](reference/portal-admin/favorite.md) |
-| `PUBLISH REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `ALTER REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `DROP REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `REFRESH REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `CREATE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
-| `REVOKE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
-| `CREATE SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
-| `DROP SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
-| `CREATE ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
-| `DROP ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
-| `CREATE CONNECTION ... AS SMTP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
-| `DROP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
-| `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
-| `DROP SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
-| `REFRESH DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `ALTER DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `DROP DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `REBUILD SNAPSHOT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
-| `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `CREATE USER` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_USER.md](reference/portal-commands/portal-user.md) |
+| `ALTER USER` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_USER.md](reference/portal-commands/portal-user.md) |
+| `DROP USER` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_USER.md](reference/portal-commands/portal-user.md) |
+| `DISCONNECT USER` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_USER.md](reference/portal-commands/portal-user.md) |
+| `REVOKE TOKENS FOR USER` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_USER.md](reference/portal-commands/portal-user.md) |
+| `CREATE GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_GROUP.md](reference/portal-commands/portal-group.md) |
+| `DROP GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_GROUP.md](reference/portal-commands/portal-group.md) |
+| `ADD USER TO GROUP` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_GROUP.md](reference/portal-commands/portal-group.md) |
+| `CREATE FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_FOLDER.md](reference/portal-commands/portal-folder.md) |
+| `DROP FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_FOLDER.md](reference/portal-commands/portal-folder.md) |
+| `GRANT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_PERMISSIONS.md](reference/portal-commands/portal-permissions.md) |
+| `REVOKE` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [REVOKE.md](reference/portal-commands/revoke.md) |
+| `FAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [FAVORITE.md](reference/portal-commands/favorite.md) |
+| `UNFAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [FAVORITE.md](reference/portal-commands/favorite.md) |
+| `PUBLISH REPORT` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_REPORT.md](reference/portal-commands/portal-report.md) |
+| `ALTER REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_REPORT.md](reference/portal-commands/portal-report.md) |
+| `DROP REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_REPORT.md](reference/portal-commands/portal-report.md) |
+| `REFRESH REPORT` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_REPORT.md](reference/portal-commands/portal-report.md) |
+| `CREATE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SHARE.md](reference/portal-commands/portal-share.md) |
+| `REVOKE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SHARE.md](reference/portal-commands/portal-share.md) |
+| `CREATE SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-commands/portal-savedview.md) |
+| `DROP SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-commands/portal-savedview.md) |
+| `CREATE ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ALERT.md](reference/portal-commands/portal-alert.md) |
+| `DROP ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ALERT.md](reference/portal-commands/portal-alert.md) |
+| `CREATE CONNECTION ... AS SMTP` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SMTP.md](reference/portal-commands/portal-smtp.md) |
+| `DROP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SMTP.md](reference/portal-commands/portal-smtp.md) |
+| `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-commands/portal-subscription.md) |
+| `DROP SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-commands/portal-subscription.md) |
+| `REFRESH DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
+| `ALTER DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
+| `DROP DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
+| `REBUILD SNAPSHOT` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
+| `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_DATASET.md](reference/portal-commands/portal-dataset.md) |
+| `CREATE JOB ... FOR REPORT` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-commands/portal-refreshjob.md) |
+| `ALTER JOB ... ADD SCHEDULE` | Orchestrator | [Job Orchestration](reference/orchestrator-jobs/schedule.md) | [PORTAL_REFRESHJOB.md](reference/portal-commands/portal-refreshjob.md) |
 | `eng.users` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.reports` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
 | `eng.active_sessions` (portal) | Portal Admin | [Engine Catalog](reference/eng/README.md) | [Engine Catalog](reference/eng/README.md) |
-| `RESTART PORTAL` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
-| `SHUTDOWN PORTAL` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
+| `RESTART PORTAL` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ADMIN.md](reference/portal-commands/portal-admin.md) |
+| `SHUTDOWN PORTAL` | Portal Admin | [Portal Admin](reference/portal-commands/README.md) | [PORTAL_ADMIN.md](reference/portal-commands/portal-admin.md) |
 
 ---
 
@@ -280,7 +280,7 @@ Connectors define how to communicate with external data sources.
 | `KAFKA` | Streaming | [KAFKA.md](reference/connectors/services/kafka.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
-| `PORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
+| `PORTAL` | Admin Service | [Portal Admin](reference/portal-commands/README.md) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/services/orchestrator.md) | HOST, PORT, API_KEY |
 | `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](reference/connectors/services/active-directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 | `WEBHOOK` | Service | [WEBHOOK.md](reference/connectors/services/webhook.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ... |

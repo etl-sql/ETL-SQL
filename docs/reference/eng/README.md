@@ -1,6 +1,8 @@
-# ENG Reference
+# Engine Catalog (`eng.*`)
 
 [« Back to parent](../README.md)
+
+The `eng.*` virtual tables expose engine-internal state for diagnostics, governance, and observability. Query them like any table inside an ETL-SQL script: `SELECT * FROM eng.connections`, `SELECT * FROM eng.data_quality_failures`, etc. All views are read-only and scoped to the current session unless otherwise noted.
 
 | Page | Description |
 | :--- | :--- |

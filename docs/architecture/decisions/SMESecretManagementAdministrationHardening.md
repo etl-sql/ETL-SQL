@@ -81,10 +81,10 @@ there is no plaintext read path.
 `OsSecretStore` CLI workflow:
 
 ```powershell
-etl-sql admin set-secret --name sales_db_password --value <prompted-or-stdin>
-etl-sql admin verify-secret --name sales_db_password
-etl-sql admin rotate-secret --name sales_db_password --value <prompted-or-stdin>
-etl-sql admin disable-secret --name sales_db_password
+etl-sql admin machine secret set --name sales_db_password --value <prompted-or-stdin>
+etl-sql admin machine secret verify --name sales_db_password
+etl-sql admin machine secret rotate --name sales_db_password --value <prompted-or-stdin>
+etl-sql admin machine secret disable --name sales_db_password
 ```
 
 The CLI must avoid shell-history leaks by preferring masked prompt or stdin over command-line values.
@@ -197,7 +197,7 @@ The catalog is provider-selectable, mirroring `ISecretProvider`, so a portal is 
 
 | Provider | Deployment fit | Storage authority |
 | :--- | :--- | :--- |
-| Local catalog | single-node SME install, no Portal | machine-scoped entries on disk beside the OS secret store, managed by `etl-sql admin set-connection` / `list-connections` / `verify-connection` / `disable-connection` / `delete-connection` (same lifecycle verbs and masked-input rules as the secret CLI) |
+| Local catalog | single-node SME install, no Portal | machine-scoped entries on disk beside the OS secret store, managed by `etl-sql admin machine connection set|list|verify|disable|enable|delete` (same lifecycle verbs and masked-input rules as the secret CLI) |
 | Portal catalog | Portal/Orchestrator deployments | Portal database with RBAC, environment/tenant scope, approval, audit, and Admin UI/API |
 
 Entries store credentials as `SECRET:name` references, never resolved values, so the secret store
