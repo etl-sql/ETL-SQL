@@ -285,7 +285,7 @@ When you create or modify any documentation, follow these standards:
 
 ### 7.1 Help Documents Formatting Standards
 
-Help documents located under `src/ETL-SQL.Core/Resources/Help/` are loaded dynamically by the engine and LSP server to serve hover tooltips and in-editor help. Because editor hover viewports are narrow and automatically collapse single-newline paragraphs, all help documents must adhere to these consistency rules:
+Help documents located under `docs/reference/` are loaded dynamically by the engine and LSP server to serve hover tooltips and in-editor help. Because editor hover viewports are narrow and automatically collapse single-newline paragraphs, all help documents must adhere to these consistency rules:
 
 - **Title Header**: The file must start with a level-1 header `# TOPIC` matching the exact keyword or visual type (e.g., `# PAGE` or `# TABLE`).
 - **Description Paragraph**: A short, single-paragraph description immediately following the title header, explaining what the command or feature does.
@@ -298,7 +298,7 @@ Help documents located under `src/ETL-SQL.Core/Resources/Help/` are loaded dynam
 
 ### 7.2 Snippet Formatting Standards
 
-Snippet files located under `src/ETL-SQL.Core/Resources/Help/Snippets/` are used by the LSP server to generate autocomplete templates. They must adhere to this exact structure:
+Snippet files located under `snippets/` are used by the LSP server to generate autocomplete templates. They must adhere to this exact structure:
 
 - **Frontmatter**: Every snippet file must start with a YAML frontmatter delimited by `---` containing exactly:
   - `trigger`: The autocomplete trigger keyword, which MUST start with a `$` (e.g., `trigger: $dataset`).

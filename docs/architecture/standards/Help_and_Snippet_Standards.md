@@ -8,7 +8,7 @@ All contributions and edits must follow these guidelines to ensure consistency, 
 
 ## 1. Editor Help Documents (.md)
 
-Help documents located under `src/ETL-SQL.Core/Resources/Help/` are loaded dynamically by the engine and LSP server to serve hover tooltips and in-editor help. 
+Help documents located under `docs/reference/` are loaded dynamically by the engine and LSP server to serve hover tooltips and in-editor help. 
 
 Because editor hover viewports are narrow and automatically collapse single-newline paragraphs, all help documents must adhere to these consistency rules:
 
@@ -29,7 +29,7 @@ Every help document must follow this exact layout:
 
 ## 2. Autocomplete Snippets (.md)
 
-Snippet files located under `src/ETL-SQL.Core/Resources/Help/Snippets/` are used by the LSP server to generate autocomplete templates. They must adhere to this exact structure:
+Snippet files located under `snippets/` are used by the LSP server to generate autocomplete templates. They must adhere to this exact structure:
 
 ### 2.1 Frontmatter
 

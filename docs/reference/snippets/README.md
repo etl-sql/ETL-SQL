@@ -59,7 +59,7 @@ The editor cycles through `«placeholder»` fields when the snippet is accepted.
 
 - Keep `/snippets` as the source of truth for built-ins.
 - Do not edit generated resource copies under build output folders.
-- Remove old physical `src/ETL-SQL.Core/Resources/Help` copies only after the project file embeds the replacement docs/snippets and build/test coverage confirms the runtime help library can load them.
+- The old physical folder `src/ETL-SQL.Core/Resources/Help` has been retired. The build now embeds the files from the `/snippets` root directory and the `docs/reference/` directory directly.
 
 ## References
 

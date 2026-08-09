@@ -317,7 +317,7 @@ Use each report document for a specific job:
 
 - `docs/guides/report-sql.md` explains how to build reports and should favor complete, readable examples.
 - `docs/guides/getting-started.md` is the exact syntax contract and should stay close to parser behavior.
-- `src/ETL-SQL.Core/Resources/Help/Report/*.md` feeds editor help and hover text, so examples must stay short and parser-backed.
+- `docs/reference/visuals-reporting/report/*.md` feeds editor help and hover text, so examples must stay short and parser-backed.
 - `samples/**/*.rptsql` files are runnable workflows and should use canonical syntax unless they are intentionally testing compatibility.
 
 ---
