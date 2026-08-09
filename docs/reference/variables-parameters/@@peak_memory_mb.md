@@ -14,4 +14,4 @@ END;
 This reflects the OS working-set size of the engine process, not just the current statement's allocation. It only increases within a session; it does not reset between statements.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

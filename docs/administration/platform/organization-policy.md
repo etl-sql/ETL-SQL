@@ -6,7 +6,7 @@ Signed, centrally published organization policy for enrolled machines — the En
 
 | Profile | What applies |
 | :--- | :--- |
-| **Solo / Workstation** | **Not this document.** Your policy is the source-controlled workspace policy `etlsql-policy.json` — checked in, versioned with the scripts it governs, and enforced by the CLI. See the [one-person quality loop](../../guides/one-person-quality-loop.md). |
+| **Solo / Workstation** | **Not this document.** Your policy is the source-controlled workspace policy `etlsql-policy.json` — checked in, versioned with the scripts it governs, and enforced by the CLI. See the [one-person quality loop](../../guides/patterns/one-person-quality-loop.md). |
 | **Team / SME** | Workspace policy still applies and is usually enough. A signed organization authority is available but is not where most teams should start. |
 | **Enterprise / Corporate** | Everything here: signed policy envelopes, a private key that never leaves the OS certificate store, machine enrollment, canary rollout and rollback. Check `GET /api/admin/policy-authority/impact` before activating — it answers what happens when you press the button. |
 | **SaaS / Departmental** | As Enterprise, with policy authority **scoped per tenant or environment**. Tenant-specific policy authority and platform separation are **not certified**; do not infer them from the Enterprise path. |

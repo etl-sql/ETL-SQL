@@ -55,4 +55,4 @@ The effective manifest should reflect this order, with later layers winning:
 Named styles are resolved by C# from `IExecutionContext.ReportContext.StyleDefinitions`. Host runtimes receive the resolved style dictionary on each manifest object.
 
 ## References
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)

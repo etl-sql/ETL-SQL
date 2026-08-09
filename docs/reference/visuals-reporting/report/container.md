@@ -78,4 +78,4 @@ clause keeps its current value. Changing `LAYOUT` is a re-layout rather than a p
 `CREATE OR REPLACE CONTAINER`.
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

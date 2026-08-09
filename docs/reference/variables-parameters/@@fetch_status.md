@@ -18,4 +18,4 @@ END;
 @@FETCH_STATUS is automatically managed by FOREACH — you rarely need to check it manually. It is available for advanced cursor-like control patterns where you inspect the value explicitly before processing each row.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

@@ -23,7 +23,7 @@ Every help document must follow this exact layout:
    - Never use raw leading-space indentation (e.g., `  PAGE_SIZE — rows per page`) as it collapses into a single paragraph in editor hover cards.
    - Bold the option/parameter name (e.g., `- **PAGE_SIZE = n** — ...`).
 5. **Examples**: Provide one or two clean, copy-pasteable example blocks using ` ```sql ... ``` ` to illustrate common use cases.
-6. **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](../../guides/report-sql.md)`).
+6. **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](../../guides/feature-guides/report-sql.md)`).
 
 ---
 

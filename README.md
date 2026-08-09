@@ -307,11 +307,11 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | :--- | :--- |
 | [ETL-SQL Goals](GOALS.md) | Core product vision, language goals, and engineering principles. |
 | [Documentation Home](docs/README.md) | Main documentation map for guides, reference, cookbooks, architecture, and releases. |
-| [Getting Started](docs/guides/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
-| [ETL Notebook Guide](docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
-| [Report-SQL Guide](docs/guides/report-sql.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
+| [Getting Started](docs/guides/onboarding/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
+| [ETL Notebook Guide](docs/guides/tooling/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
+| [Report-SQL Guide](docs/guides/feature-guides/report-sql.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
 | [Pattern Cookbook](docs/cookbooks/etl-recipes.md) | Self-contained ETL recipes for common production workflows. |
-| [Sample Guide](docs/guides/sample-guide.md) | Inventory of sample scripts in the `samples/` folder. |
+| [Sample Guide](docs/guides/patterns/sample-guide.md) | Inventory of sample scripts in the `samples/` folder. |
 
 ### Reference
 

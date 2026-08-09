@@ -18,4 +18,4 @@ PRINT 'Cache misses: ' + @@SUBQUERY_CACHE_MISSES;
 A high hit ratio means the engine is avoiding repeated subquery execution. If hits are lower than expected, verify the subquery does not reference outer-row variables that prevent caching — correlated subqueries are always misses.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

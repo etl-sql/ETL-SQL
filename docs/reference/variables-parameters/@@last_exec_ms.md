@@ -17,4 +17,4 @@ END;
 For aggregate timing across multiple statements, use `SET PROFILE ON` and query `eng.profile`.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

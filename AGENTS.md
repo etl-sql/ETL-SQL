@@ -58,7 +58,7 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
 | **[Data Quality Rules](docs/reference/statements/dml/data-quality-rules.md)** | `@expect`/`@fail` column rules, the `ON FAILURE` routing clause, quarantine/warn capture schema; see also [ASSERT JOB](docs/reference/statements/session-control/assert-job.md) for run-metric assertions |
 | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
-| **[Report-SQL Guide](docs/guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
+| **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
 | **[Administration](docs/guides/administration.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
 
 Key syntax facts:
@@ -238,10 +238,10 @@ Use this map to find the right document for any task.
 | Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** |
 | Relative date parameters (`@TODAY`, offsets, report filters) | **[Relative Date Parameters](docs/reference/functions/general/reldate.md)** |
 | Complete production recipes | **[Cookbook](docs/cookbooks/etl-recipes.md)** |
-| Pipeline mental model for new users | **[Getting Started](docs/guides/getting-started.md)** |
-| Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/sample-guide.md)** |
-| Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/report-sql.md)** |
-| Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/report-builder.md)** |
+| Pipeline mental model for new users | **[Getting Started](docs/guides/onboarding/getting-started.md)** |
+| Sample script inventory (290+ files in `/samples/`) | **[Sample Guide](docs/guides/patterns/sample-guide.md)** |
+| Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/feature-guides/report-sql.md)** |
+| Visual Report Builder (WYSIWYG 12-col grid, ergonomics, drag-and-drop) | **[Visual Report Builder Guide](docs/guides/tooling/report-builder.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](./docs/architecture/standards/Script_Composition_Standards.md)** |
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
 | Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
@@ -294,7 +294,7 @@ Help documents located under `docs/reference/` are loaded dynamically by the eng
   - Never use raw leading-space indentation (e.g., `  PAGE_SIZE — rows per page`) as it collapses into a single paragraph in editor hover cards.
   - Bold the option/parameter name (e.g., `- **PAGE_SIZE = n** — ...`).
 - **Examples**: Provide one or two clean, copy-pasteable example blocks using ` ```sql ... ``` ` to illustrate common use cases.
-- **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](docs/guides/report-sql.md)`).
+- **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](docs/guides/feature-guides/report-sql.md)`).
 
 ### 7.2 Snippet Formatting Standards
 
@@ -532,4 +532,4 @@ All ETL-SQL keywords must be **UPPERCASE, underscore-separated**: `ENGINE_COMPAT
 
 ---
 
-*For a complete syntax walkthrough, start at [Getting Started](docs/guides/getting-started.md), then use the [Syntax Index](docs/syntax-index.md) to find the focused reference page for each statement, function, or option.*
+*For a complete syntax walkthrough, start at [Getting Started](docs/guides/onboarding/getting-started.md), then use the [Syntax Index](docs/syntax-index.md) to find the focused reference page for each statement, function, or option.*

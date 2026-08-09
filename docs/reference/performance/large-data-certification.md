@@ -178,4 +178,4 @@ Tests were validated on a developer workstation with no specific memory constrai
 For release certification, run Standard tier on a machine with ≥ 8 GB available RAM to avoid OS-level swap interference.
 
 ## References
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)

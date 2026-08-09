@@ -62,4 +62,4 @@ Use `HELP REPORT <component>` for details (e.g. `HELP REPORT VISUAL`, `HELP REPO
 Use `HELP VISUAL <type>` for chart-specific options (e.g. `HELP VISUAL BAR`).
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

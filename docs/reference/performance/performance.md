@@ -234,4 +234,4 @@ To run the operator scenarios explicitly on a suitable machine:
 ```
 
 ## References
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)

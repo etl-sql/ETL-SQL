@@ -26,8 +26,8 @@ and no Orchestrator service**, so most of the Portal administration section does
 5. [Operator CLI](platform/operator-cli.md) — `doctor`, `support-bundle`, `backup`/`restore`.
 
 Quality and governance work fully without a Portal: see the
-[one-person quality loop](../guides/one-person-quality-loop.md) and
-[data quality](../guides/data-quality.md#running-unattended-without-portal).
+[one-person quality loop](../guides/patterns/one-person-quality-loop.md) and
+[data quality](../guides/feature-guides/data-quality.md#running-unattended-without-portal).
 
 ## Team / SME
 

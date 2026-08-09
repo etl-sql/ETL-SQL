@@ -55,4 +55,4 @@ parse time rather than accepted and ignored. Actions still accept `ON_CLICK` onl
 `CREATE BUTTON`.
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

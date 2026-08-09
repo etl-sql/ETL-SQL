@@ -22,5 +22,5 @@ WHERE m.UserId = @@CURRENT_USER_ID;
 ```
 
 ## See Also
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)
 - Related: [@@CURRENT_USER](@@current_user.md), [@@REAL_USER](@@real_user.md), [@@IS_ADMIN](@@is_admin.md)

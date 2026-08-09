@@ -1,24 +1,60 @@
-# GUIDES Reference
+# User and Operator Guides
 
 [« Back to parent](../README.md)
 
+ETL-SQL narrative guides are organized by audience and stage: onboarding, core features, tool integrations, and operational patterns.
+
+---
+
+## 1. Onboarding
+
+Getting started with the engine, writing your first pipeline, or migrating from a legacy layout.
+
 | Page | Description |
 | :--- | :--- |
-| [Catalog Search & Discovery Guide](catalog-search.md) | The ETL-SQL Portal includes a fuzzy, tokenized catalog search engine that allows non-technical business consumers and developers to discover report... |
-| [Validating Data Quality](data-quality.md) | Schema checks tell you the *shape* of your data is right. They say nothing about whether the values |
-| [Data Stewardship and Impact Analysis](data-stewardship-impact.md) | This guide is for administrators, data stewards, report publishers, and CI/CD owners who need to use ETL-SQL lineage metadata before publishing das... |
-| [ETL-SQL Pipeline & Report-SQL Best Practices Guide](etl-sql-best-practices.md) | Recommended patterns, security rules, and boilerplate templates for script authors and dashboard designers. |
-| [ETL-SQL FAQ & Troubleshooting Guide](faq.md) | Common questions, gotchas, and their solutions. If you're stuck, start here. |
-| [ETL-SQL User Manual: Thinking in Pipelines](getting-started.md) | Welcome to ETL-SQL. This guide helps you transition from "Single Database SQL" to "Multi-Context Data Flow." It is a **narrative onboarding** — the... |
-| [Logging and Performance Tuning](logging-and-performance.md) | Where ETL-SQL writes its logs, how to turn up detail when something is wrong, and the levers that |
-| [ETL-SQL Migration Guide (v0.18.0)](migration-guide.md) | ETL-SQL v0.18.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for... |
-| [ETL-SQL Notebooks (.etlnb)](notebook-guide.md) | ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code. |
-| [One-person quality loop](one-person-quality-loop.md) | This workflow gives one operator a source-controlled pipeline, policy, non-zero quality gate, local schedule, durable history, and two reports with... |
-| [Orchestrating Pipelines & DAGs](pipelines-and-dags.md) | ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or d... |
-| [ETL-SQL Portal: User Guide](portal-user.md) | The Portal is a web application that lets you browse, run, and subscribe to reports built with Report-SQL scripts. You don't need to know ETL-SQL s... |
-| [Report Ownership & Data Freshness Badges](report-badges-freshness.md) | Published reports display standardized metadata badges in the report runtime header and Portal catalog cards. Badges provide immediate visual trust... |
-| [Visual Report Builder & Dashboard Designer Guide](report-builder.md) | The **Visual Report Builder & Dashboard Designer** is the integrated WYSIWYG authoring surface for ETL-SQL. It allows developers, analysts, and ste... |
-| [Report-SQL Scripting Guide](report-sql.md) | Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL... |
-| [ETL-SQL Sample Guide](sample-guide.md) | This guide describes the provided sample scripts in the `samples/` folder. These samples are organized into topical subfolders (for example, `01_Ba... |
-| [Testing](testing.md) | For the overall lane model and cleanup guidance, see Test_Strategy.md. |
-| [VS Code Extension](vscode-extension.md) | ETL-SQL ships with a dedicated VS Code extension (`src/etl-sql-vscode/`) that enhances the development experience. The extension communicates with ... |
+| [ETL-SQL User Manual: Thinking in Pipelines](onboarding/getting-started.md) | Welcome to ETL-SQL. Narrative onboarding for transitioning from single-database SQL to multi-context data flows. |
+| [Quickstart Guide](onboarding/QUICKSTART.md) | Standard quickstart runbook for terminal and local installations. |
+| [ETL-SQL Migration Guide (v0.18.0)](onboarding/migration-guide.md) | Migration baseline and compatibility notes for upgrading deployment configurations to v0.18.0. |
+
+---
+
+## 2. Feature Guides
+
+Deep dives into the capabilities, syntax extensions, and execution behaviors of the engine.
+
+| Page | Description |
+| :--- | :--- |
+| [Validating Data Quality](feature-guides/data-quality.md) | Declare inline row-value rules using `@expect`/`@fail` and route failed rows with `ON FAILURE`. |
+| [Orchestrating Pipelines & DAGs](feature-guides/pipelines-and-dags.md) | Coordinate multi-source tasks using `RUN SCRIPT`, `PARALLEL`, loops, try-catch, and scheduling. |
+| [Report-SQL Scripting Guide](feature-guides/report-sql.md) | Author `.rptsql` dashboards, visuals, grids, actions, bindings, and portal publishing hooks. |
+| [Data Stewardship and Impact Analysis](feature-guides/data-stewardship-impact.md) | Extract, query, and inspect lineage metadata and metadata tags before pushing changes. |
+| [Report Ownership & Data Freshness Badges](feature-guides/report-badges-freshness.md) | Configure trust, ownership, and freshness badges in report headers and Portal catalog cards. |
+| [Testing Guide](feature-guides/testing.md) | Strategy for engine contributors, testing mock connectors, and running verification suites. |
+
+---
+
+## 3. Tooling & Integrations
+
+IDE integrations, VS Code extensions, web designers, and portal user guides.
+
+| Page | Description |
+| :--- | :--- |
+| [VS Code Extension](tooling/vscode-extension.md) | Configure autocomplete, syntax validation, and hover help powered by the Language Server Protocol. |
+| [ETL-SQL Notebooks (.etlnb)](tooling/notebook-guide.md) | Run stateful interactive markdown cells and scratch scripts directly inside VS Code. |
+| [Visual Report Builder Guide](tooling/report-builder.md) | Use the drag-and-drop WYSIWYG editor and 12-column grid to assemble Report-SQL layouts. |
+| [ETL-SQL Portal: User Guide](tooling/portal-user.md) | Consume, run, filter, favorite, subscribe to, and share published reports. |
+| [Catalog Search & Discovery Guide](tooling/catalog-search.md) | Search the Portal metadata catalog for tables, reports, tags, and lineage paths. |
+
+---
+
+## 4. Patterns & Best Practices
+
+Standard recipes, operational playbooks, and troubleshooting diagnostics.
+
+| Page | Description |
+| :--- | :--- |
+| [ETL-SQL Best Practices Guide](patterns/etl-sql-best-practices.md) | Script authoring conventions, transactional blocks, transaction safe zones, and coding style. |
+| [One-Person Quality Loop](patterns/one-person-quality-loop.md) | Complete local workflow mapping policy, CLI tests, schedules, local reports, and notifications. |
+| [Logging and Performance Tuning](patterns/logging-and-performance.md) | Engine logger targets, detail level settings, disk spill thresholds, and performance debug parameters. |
+| [ETL-SQL FAQ & Troubleshooting Guide](patterns/faq.md) | Frequently asked questions, common syntax gotchas, and error remediation steps. |
+| [ETL-SQL Sample Guide](patterns/sample-guide.md) | Map of the `samples/` directory files covering basics, connectors, and reports. |

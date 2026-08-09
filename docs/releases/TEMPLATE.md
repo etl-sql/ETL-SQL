@@ -166,10 +166,10 @@ Verify checksums against `sha256sums.txt` published with the release assets.
 
 - [Full Changelog](../../CHANGELOG.md) — exhaustive developer-oriented change log
 - [Administrator's Guide](../administration/platform/README.md) — production deployment and configuration
-- [Getting Started](../guides/getting-started.md) — getting started and scripting patterns
-- [Report SQL Guide](../guides/report-sql.md) — dashboard and visualization authoring
+- [Getting Started](../guides/onboarding/getting-started.md) — getting started and scripting patterns
+- [Report SQL Guide](../guides/feature-guides/report-sql.md) — dashboard and visualization authoring
 
 <!-- Add version-specific links if applicable:
-- [Migration Guide](../guides/migration-guide.md)
-- [FAQ](../guides/faq.md)
+- [Migration Guide](../guides/onboarding/migration-guide.md)
+- [FAQ](../guides/patterns/faq.md)
 -->

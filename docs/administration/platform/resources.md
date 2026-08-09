@@ -115,6 +115,6 @@ CREATE CONNECTION «ConnName» AS MSSQL(
 );
 ```
 
-User snippets with the same trigger as a built-in override the built-in. The directory is loaded once at startup; restart the application to pick up changes. The path can be a UNC share for team-wide deployment (`\\fileserver\etlsql\snippets`). See [Getting Started](../../guides/getting-started.md) for the full authoring reference.
+User snippets with the same trigger as a built-in override the built-in. The directory is loaded once at startup; restart the application to pick up changes. The path can be a UNC share for team-wide deployment (`\\fileserver\etlsql\snippets`). See [Getting Started](../../guides/onboarding/getting-started.md) for the full authoring reference.
 
 ---

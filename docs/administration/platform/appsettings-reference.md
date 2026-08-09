@@ -128,7 +128,7 @@ Controls task execution parameters and process boundaries.
 | `Jobs:UseProcessSpawning` | boolean | `false` | — | When true, runs jobs in isolated OS sub-processes instead of thread tasks. |
 | `Jobs:UseWarmRunner` | boolean | `false` | — | When true with process spawning, reuses warm `ETL-SQL runner` child processes instead of launching a fresh process for every job. Falls back to one-shot spawning if a runner fails. |
 | `Jobs:ExecutablePath` | string | `""` | — | Absolute path to target `ETL-SQL.exe` engine when process spawning is active. |
-| `Jobs:ArgumentsTemplate` | string | `""` | — | Overrides the arguments passed to a spawned job. Supports `{ScriptFile}` and `{SessionId}`. Empty uses the built-in `run {ScriptFile} --json`. **A custom template must keep `--json`** — see below. |
+| `Jobs:ArgumentsTemplate` | string | `""` | — | Overrides the arguments passed to a spawned job. Supports `{ScriptFile}` and `{SessionId}`. Empty uses the built-in `run {ScriptFile} --json`. **A custom template must keep `--json`** — see below. One-run variable overrides are appended as separate `--var @name=value` arguments after either path. Named-checkpoint recovery also appends `--resume` and, when the template omitted it, `--session <id>`. |
 | `Jobs:TimeoutSeconds` | integer | `3600` | — | Maximum runtime permitted for a single job before terminating (1 hour). |
 | `Jobs:WarmRunnerPoolSize` | integer | `2` | — | Maximum number of reusable runner processes for concurrent job execution. |
 | `Jobs:WarmRunnerStartupTimeoutSeconds` | integer | `10` | — | Time allowed for a newly spawned warm runner to publish its ready handshake. |

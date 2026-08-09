@@ -76,4 +76,4 @@ Changing `STRUCTURE` or `MAP` is a re-layout rather than a patch — use `CREATE
 Clauses a page does not have, such as `SOURCE` or `MAPPINGS`, are refused at parse time.
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

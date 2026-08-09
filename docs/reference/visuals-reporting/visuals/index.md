@@ -60,4 +60,4 @@ Common CARD options:
   COLOR_MISSED, ICON_SET, TREND_DIR, DELTA_FORMAT, DELTA_LABEL
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

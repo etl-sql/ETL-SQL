@@ -16,5 +16,5 @@ the declared steward when available, and `source` identifies current, local, or 
 
 ## References
 
-- [Data Quality Guide](../../guides/data-quality.md)
+- [Data Quality Guide](../../guides/feature-guides/data-quality.md)
 - [Engine Catalog](README.md)

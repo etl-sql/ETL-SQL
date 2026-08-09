@@ -82,4 +82,4 @@ DROP VISUAL IF EXISTS RevenueChart;
 definition, not a patchable field — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

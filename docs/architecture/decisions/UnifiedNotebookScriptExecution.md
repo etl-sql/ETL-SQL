@@ -99,4 +99,4 @@ SEND FILE 'data/export.zip' TO '/inbox/' AT vendor_sftp;
 ### References
 - [Session Checkpointing Reference](../../administration/orchestration/sessions-and-variables.md)
 - [Language Server Protocol Handlers](../LanguageServer.md)
-- [ETL Notebook Guide](../../guides/notebook-guide.md)
+- [ETL Notebook Guide](../../guides/tooling/notebook-guide.md)

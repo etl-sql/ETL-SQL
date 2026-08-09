@@ -4,10 +4,10 @@ ETL-SQL documentation is organized by how readers use the product: learn the pla
 
 ## Start Here
 
-- [Getting Started](guides/getting-started.md) - first script, engine mental model, connections, variables, and common workflows.
+- [Getting Started](guides/onboarding/getting-started.md) - first script, engine mental model, connections, variables, and common workflows.
 - [ETL Recipes](cookbooks/etl-recipes.md) - complete pipeline examples for extraction, staging, validation, merge, cleanup, and notification.
-- [Report SQL](guides/report-sql.md) - author `.rptsql` dashboards, visuals, layouts, filters, datasets, and portal publishing flows.
-- [Data Stewardship and Impact Analysis](guides/data-stewardship-impact.md) - use lineage tags, Portal stewardship views, and impact analysis before publish or schema changes.
+- [Report SQL](guides/feature-guides/report-sql.md) - author `.rptsql` dashboards, visuals, layouts, filters, datasets, and portal publishing flows.
+- [Data Stewardship and Impact Analysis](guides/feature-guides/data-stewardship-impact.md) - use lineage tags, Portal stewardship views, and impact analysis before publish or schema changes.
 - [Administration](administration/platform/README.md) - install, configure, secure, back up, monitor, and scale ETL-SQL.
 - [Task Index](task-index.md) - goal-oriented "how do I…" locator that points each task to the page that shows how.
 - [Syntax Index](syntax-index.md) - searchable map of statements, functions, connectors, options, visuals, variables, and CLI commands.

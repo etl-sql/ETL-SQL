@@ -84,7 +84,7 @@ Shipped in v0.17.0:
   cycle-safe traversal, pre-publish validation summaries, steward audit hooks, and the UI sandbox
   Impact fixture.
 - Publisher and administrator usage is documented in
-  [Data Stewardship and Impact Analysis](../../guides/data-stewardship-impact.md).
+  [Data Stewardship and Impact Analysis](../../guides/feature-guides/data-stewardship-impact.md).
 
 ### Phase 4 - Certification & Review Workflow
 

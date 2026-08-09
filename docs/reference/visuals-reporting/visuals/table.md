@@ -63,4 +63,4 @@ FORMATTING (
 ```
 
 ## References
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

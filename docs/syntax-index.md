@@ -1400,7 +1400,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql ui simple` | Start the simple interactive menu UI | [ui simple](reference/cli/ui-simple.md) |
 | `etl-sql ui` | Interactive user interface commands | [ui](reference/cli/ui.md) |
 
-See [Getting Started](guides/getting-started.md) and [Administration](administration/platform/README.md) for full option reference.
+See [Getting Started](guides/onboarding/getting-started.md) and [Administration](administration/platform/README.md) for full option reference.
 
 ---
 

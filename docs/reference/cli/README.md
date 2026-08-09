@@ -10,13 +10,7 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin`](admin.md) | Operator and administration commands |
 | [`etl-sql admin access-simulate`](admin-access-simulate.md) | Simulate what a user can reach — the access question, answered without a browser |
 | [`etl-sql admin backup`](admin-backup.md) | Back up portal/orchestrator state into split-custody data and keys archives |
-| [`etl-sql admin delete-connection`](admin-delete-connection.md) | Permanently remove a shared connection from the catalog |
-| [`etl-sql admin delete-secret`](admin-delete-secret.md) | Permanently remove a named secret from the secret store |
-| [`etl-sql admin disable-connection`](admin-disable-connection.md) | Disable a shared connection so SHARED:alias fails until it is re-enabled |
-| [`etl-sql admin disable-secret`](admin-disable-secret.md) | Disable a named secret so resolution fails until it is re-enabled |
 | [`etl-sql admin doctor`](admin-doctor.md) | Perform a system health check to verify the environment |
-| [`etl-sql admin enable-connection`](admin-enable-connection.md) | Re-enable a disabled shared connection; its stored definition is retained |
-| [`etl-sql admin enable-secret`](admin-enable-secret.md) | Re-enable a disabled secret; the stored value resolves again |
 | [`etl-sql admin group`](admin-group.md) | Manage Portal groups and their membership |
 | [`etl-sql admin group add-member`](admin-group-add-member.md) | Add a user to a group |
 | [`etl-sql admin group capabilities`](admin-group-capabilities.md) | Show a group's Studio capabilities |
@@ -39,7 +33,22 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin ha-soak runbook`](admin-ha-soak-runbook.md) | Generate an ordered operator runbook for a topology run |
 | [`etl-sql admin ha-soak validate`](admin-ha-soak-validate.md) | Validate completed HA soak evidence before citing it |
 | [`etl-sql admin ha-soak workload`](admin-ha-soak-workload.md) | Materialize the sustained-load workload config for a topology run |
-| [`etl-sql admin list-connections`](admin-list-connections.md) | List shared connection catalog entries and their status |
+| [`etl-sql admin machine`](admin-machine.md) | Manage machine-local governance stores |
+| [`etl-sql admin machine connection`](admin-machine-connection.md) | Manage the machine-local shared connection catalog |
+| [`etl-sql admin machine connection delete`](admin-machine-connection-delete.md) | Permanently remove a machine-local shared connection |
+| [`etl-sql admin machine connection disable`](admin-machine-connection-disable.md) | Disable a machine-local shared connection |
+| [`etl-sql admin machine connection enable`](admin-machine-connection-enable.md) | Re-enable a machine-local shared connection |
+| [`etl-sql admin machine connection list`](admin-machine-connection-list.md) | List machine-local shared connections and status |
+| [`etl-sql admin machine connection set`](admin-machine-connection-set.md) | Store a machine-local SHARED: connection |
+| [`etl-sql admin machine connection verify`](admin-machine-connection-verify.md) | Verify a machine-local shared connection without printing values |
+| [`etl-sql admin machine secret`](admin-machine-secret.md) | Manage the machine-local Governance:Secrets provider |
+| [`etl-sql admin machine secret delete`](admin-machine-secret-delete.md) | Permanently remove a machine-local secret |
+| [`etl-sql admin machine secret disable`](admin-machine-secret-disable.md) | Disable a machine-local secret |
+| [`etl-sql admin machine secret enable`](admin-machine-secret-enable.md) | Re-enable a disabled machine-local secret |
+| [`etl-sql admin machine secret list`](admin-machine-secret-list.md) | List names and status from the machine-local secret store |
+| [`etl-sql admin machine secret rotate`](admin-machine-secret-rotate.md) | Replace an existing machine-local secret |
+| [`etl-sql admin machine secret set`](admin-machine-secret-set.md) | Encrypt and store a named machine-local secret |
+| [`etl-sql admin machine secret verify`](admin-machine-secret-verify.md) | Resolve a machine-local secret without printing the value |
 | [`etl-sql admin migrate-database`](admin-migrate-database.md) | Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment |
 | [`etl-sql admin portal-whoami`](admin-portal-whoami.md) | Resolve Portal credentials and print the identity, roles, and scopes (never a secret) |
 | [`etl-sql admin promotion`](admin-promotion.md) | Inspect and prepare deployment-profile promotions |
@@ -49,12 +58,15 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin promotion saas-onboard`](admin-promotion-saas-onboard.md) | Create and populate one physically isolated SaaS tenant boundary |
 | [`etl-sql admin promotion validate`](admin-promotion-validate.md) | Validate mappings and collisions without changing the target |
 | [`etl-sql admin restore`](admin-restore.md) | Validate and restore a backup (data + keys archives) |
-| [`etl-sql admin rotate-secret`](admin-rotate-secret.md) | Replace the value of an existing named secret |
+| [`etl-sql admin service-account`](admin-service-account.md) | Manage Portal service accounts |
+| [`etl-sql admin service-account create`](admin-service-account-create.md) | Create a Portal service account |
+| [`etl-sql admin service-account list`](admin-service-account-list.md) | List Portal service accounts |
+| [`etl-sql admin service-account revoke`](admin-service-account-revoke.md) | Permanently revoke a Portal service account |
+| [`etl-sql admin service-account rotate-secret`](admin-service-account-rotate-secret.md) | Rotate a service account secret |
+| [`etl-sql admin service-account update`](admin-service-account-update.md) | Update a Portal service account |
 | [`etl-sql admin session`](admin-session.md) | Inspect and disconnect Portal sign-in sessions |
 | [`etl-sql admin session disconnect`](admin-session-disconnect.md) | Disconnect a user's Portal sessions |
 | [`etl-sql admin session list`](admin-session-list.md) | List active Portal sessions |
-| [`etl-sql admin set-connection`](admin-set-connection.md) | Store a shared connection in the catalog for scripts to use as SHARED:alias |
-| [`etl-sql admin set-secret`](admin-set-secret.md) | Encrypt and store a named secret in the configured secret store (machine scope) |
 | [`etl-sql admin support-bundle`](admin-support-bundle.md) | Collect a redacted support archive (config, health, logs, database metrics) |
 | [`etl-sql admin user`](admin-user.md) | Manage Portal users |
 | [`etl-sql admin user create`](admin-user-create.md) | Create a Portal user |
@@ -67,8 +79,6 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin user revoke-tokens`](admin-user-revoke-tokens.md) | Revoke a user's issued tokens |
 | [`etl-sql admin user show`](admin-user-show.md) | Show one Portal user |
 | [`etl-sql admin user update`](admin-user-update.md) | Update a Portal user's details or role |
-| [`etl-sql admin verify-connection`](admin-verify-connection.md) | Prove a shared connection's definition and secret references resolve, without printing values |
-| [`etl-sql admin verify-secret`](admin-verify-secret.md) | Resolve a named secret to prove it is readable, without printing the value |
 | [`etl-sql config`](config.md) | Manage application configuration |
 | [`etl-sql config setup-jwt`](config-setup-jwt.md) | Generate a secure JWT secret and update appsettings.json |
 | [`etl-sql doctor`](doctor.md) | Perform a system health check to verify the environment |

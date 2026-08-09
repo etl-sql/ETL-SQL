@@ -24,4 +24,4 @@ PRINT 'Rows merged: ' + @@ROWCOUNT;
 ```
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

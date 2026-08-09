@@ -20,4 +20,4 @@ High spill volumes slow execution significantly. To reduce them:
 - Add intermediate INTO #temp steps to reduce sort/join input size.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

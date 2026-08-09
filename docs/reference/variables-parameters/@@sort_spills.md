@@ -15,4 +15,4 @@ Spills increase latency significantly. To reduce them:
 - Add an INTO #temp before a large ORDER BY to reduce the sort input size.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

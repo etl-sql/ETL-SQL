@@ -5,7 +5,7 @@
 > User-facing documentation lives at
 > [Data Quality Rules](../../reference/statements/dml/data-quality-rules.md),
 > [ASSERT JOB](../../reference/statements/session-control/assert-job.md), and the
-> [Validating Data Quality](../../guides/data-quality.md) guide — those are authoritative for
+> [Validating Data Quality](../../guides/feature-guides/data-quality.md) guide — those are authoritative for
 > behavior. This document remains the design record: the decisions and their rationale, plus the
 > v2 design below. The quarantine replay manifest foundation, `UPDATE`-time disposition
 > enforcement, `REPLAY QUARANTINE` source-substitution replay with cluster-lock fencing, the Portal

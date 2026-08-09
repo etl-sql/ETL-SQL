@@ -14,4 +14,4 @@ PRINT 'Cache misses (correlated — expected): ' + @@SUBQUERY_CACHE_MISSES;
 Correlated subqueries (those referencing the outer query's current row) are always cache misses because their result changes per row. Rewrite them as JOINs to eliminate the per-row evaluation overhead.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

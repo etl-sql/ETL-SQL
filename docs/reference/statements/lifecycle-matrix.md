@@ -82,5 +82,5 @@ References:
 - [CREATE](ddl/create.md)
 - [ALTER](ddl/alter.md)
 - [DROP](ddl/drop.md)
-- [Report-SQL Guide](../../guides/report-sql.md)
+- [Report-SQL Guide](../../guides/feature-guides/report-sql.md)
 - [Job Orchestration](../orchestrator-jobs/schedule.md)

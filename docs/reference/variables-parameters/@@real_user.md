@@ -20,5 +20,5 @@ VALUES ('ViewReport', @@CURRENT_USER, @@REAL_USER, GETDATE());
 ```
 
 ## See Also
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)
 - Related: [@@CURRENT_USER](@@current_user.md), [@@CURRENT_USER_ID](@@current_user_id.md), [@@IS_ADMIN](@@is_admin.md)

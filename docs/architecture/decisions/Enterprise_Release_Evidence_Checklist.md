@@ -46,6 +46,6 @@ secret values, connection strings, private keys, `ENC:` payloads, or `SECRET:` r
 ## References
 
 - [Enterprise Release Gates](Enterprise_Release_Gates.md)
-- [Testing Guide](../../guides/testing.md)
+- [Testing Guide](../../guides/feature-guides/testing.md)
 - [HA Topology Failure Certification](HA_Topology_Failure_Certification.md)
 - [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md)

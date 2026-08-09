@@ -20,5 +20,5 @@ WHERE OwnerId = @@CURRENT_USER;
 ```
 
 ## See Also
-- [User Manual](../../guides/getting-started.md)
+- [User Manual](../../guides/onboarding/getting-started.md)
 - Related: [@@CURRENT_USER_ID](@@current_user_id.md), [@@REAL_USER](@@real_user.md), [@@IS_ADMIN](@@is_admin.md)

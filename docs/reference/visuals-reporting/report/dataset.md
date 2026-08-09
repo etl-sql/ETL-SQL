@@ -41,4 +41,4 @@ CREATE VISUAL RevBar AS BAR (
 `&name` is the report-dataset form. Keep intermediate preparation in ordinary `#temp` tables, then expose reusable report data through `CREATE DATASET &dataset` definitions. `USE DATASET` and `REFRESH DATASET` also require the `&dataset` name.
 
 References:
-- [Report SQL Guide](../../../guides/report-sql.md)
+- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

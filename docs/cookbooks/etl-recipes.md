@@ -966,7 +966,7 @@ LEFT FUZZY JOIN #reference r
     KEEP BEST 1;
 ```
 
-> Use `KEEP BEST 3` and `ORDER BY __score DESC` instead when you want the top few candidates per row for a human to adjudicate. See [Reference/Grammar.md](../guides/getting-started.md) §5.4 for the full `FUZZY JOIN` options and the `SIMILARITY` / `LEVENSHTEIN` / `NORMALIZE` functions.
+> Use `KEEP BEST 3` and `ORDER BY __score DESC` instead when you want the top few candidates per row for a human to adjudicate. See [Reference/Grammar.md](../guides/onboarding/getting-started.md) §5.4 for the full `FUZZY JOIN` options and the `SIMILARITY` / `LEVENSHTEIN` / `NORMALIZE` functions.
 
 ---
 
@@ -1031,7 +1031,7 @@ EXECUTE portal BEGIN
 END;
 ```
 
-> Use the same script with environment-specific connection values during promotion. See [Reference/Grammar.md](../guides/getting-started.md) Appendix B for users, groups, permissions, subscriptions, share links, embed tokens, saved views, alerts, and usage metrics.
+> Use the same script with environment-specific connection values during promotion. See [Reference/Grammar.md](../guides/onboarding/getting-started.md) Appendix B for users, groups, permissions, subscriptions, share links, embed tokens, saved views, alerts, and usage metrics.
 
 ---
 
@@ -1229,5 +1229,5 @@ END CATCH;
 
 ---
 
-*Refer to [Standard Library](../reference/functions/README.md) for function signatures, [Data Connectors](../reference/connectors/README.md) for connector options, and [Getting Started](../guides/getting-started.md) for the mental model.*
+*Refer to [Standard Library](../reference/functions/README.md) for function signatures, [Data Connectors](../reference/connectors/README.md) for connector options, and [Getting Started](../guides/onboarding/getting-started.md) for the mental model.*
 

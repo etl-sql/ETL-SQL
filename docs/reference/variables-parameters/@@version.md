@@ -13,4 +13,4 @@ VALUES (GETDATE(), @@VERSION);
 Query `eng.version` for structured component/version rows. `@@VERSION` includes the full build metadata.
 
 References:
-- [Standard Library](../../guides/getting-started.md)
+- [Standard Library](../../guides/onboarding/getting-started.md)

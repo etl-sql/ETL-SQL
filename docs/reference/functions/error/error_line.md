@@ -40,4 +40,4 @@ END CATCH;
 
 - [TRY...CATCH](../../control-flow/try-catch.md)
 - [ERROR_MESSAGE](error_message.md)
-- [User Manual](../../../guides/getting-started.md)
+- [User Manual](../../../guides/onboarding/getting-started.md)

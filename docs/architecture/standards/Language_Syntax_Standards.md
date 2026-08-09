@@ -67,4 +67,4 @@ To ensure a stable developer experience, never break existing parser syntax rule
 ## References
 
 - [Breaking Change Standards](Breaking_Change_Standards.md)
-- [Grammar Guide](../../guides/getting-started.md)
+- [Grammar Guide](../../guides/onboarding/getting-started.md)

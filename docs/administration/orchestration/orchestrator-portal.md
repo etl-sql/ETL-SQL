@@ -107,6 +107,51 @@ Navigate to the Orchestrator tab in the portal after logging in with an eligible
 > [!NOTE]
 > Jobs created through the portal store the selected script target in the Orchestrator catalog. If the `.etlsql` file on disk is edited later, update the job through the portal or with `ALTER JOB <name> SET TARGET = '...'` / `CREATE OR REPLACE JOB <name> FOR SCRIPT '...'`.
 
+## Operations Triage and Run Evidence
+
+The Orchestrator tab groups recent failed runs by normalized error signature and separately calls out
+running work and enabled jobs whose scheduled occurrence passed without being claimed. Expanding an
+incident shows its individual runs. Use **Evidence** on a run to join three durable sources in one
+view:
+
+- **Script integrity** — the runtime script hash and whether it matched the registered hash.
+- **Quality failures** — normalized target, column, rule, action, owner, and failure count. Failed
+  sample values are not stored or displayed.
+- **Statement timeline** — normalized statement text, duration, rows, queue/lock wait, spill volume,
+  and the statement that failed. SQL literals are normalized before persistence.
+
+An empty rail means that evidence was not retained for that run; it does not assert that no statement
+ran or no rule was evaluated. Loading and read failures are shown explicitly. Run evidence uses the
+same `OrchestratorAccess` policy as the triage board and remains readable from the shared history store
+when the Orchestrator service itself is offline.
+
+Use **Run** (or **Run now** on a missed occurrence) to open the one-run execution form. Optional
+variable overrides use the same names and value text as CLI `--var`; the script should declare each
+input with a scheduled-run default. Overrides apply to that execution and its retries only—the saved
+job and its schedule are unchanged. The Portal and Orchestrator audit the override count and variable
+names, but never the values. Up to 32 overrides are accepted, with a 4,096-character limit per value.
+If the same job is already running, the trigger returns `409 Conflict`; retry after that execution
+finishes so the requested override set cannot be silently coalesced or discarded.
+
+### Resume from a named checkpoint
+
+Run history shows **Resume · `<label>`** only for a failed or cancelled run whose persistent session
+reached an author-declared top-level label. Selecting it restores that run's opaque session state and
+queues the current saved script with its session id and `--resume`. The same contract is honored by
+in-process execution, one-shot child processes, warm runners, and custom argument templates.
+
+Resume is opt-in at script-authoring time: enable persistence with `SET PERSIST ON` and place a
+top-level label at a boundary that is safe to replay. Existing runs cannot become resumable
+retroactively. A disabled action states whether the run has no named checkpoint or has a terminal
+status that does not permit recovery; a `409 Conflict` after selection means the checkpoint expired,
+the current script no longer contains the label, or the same job is already running.
+
+The engine resumes only at the last completed named label. It does not accept a statement number or
+instruction offset: variables, `#temp` tables, connection state, and transactions make an arbitrary
+mid-script jump unsafe. Work following the label can run again, so external writes after a checkpoint
+must be idempotent or duplicate-safe. Resume is audited at both the Portal and Orchestrator security
+event boundaries without exposing the opaque session handle.
+
 ## Service Control
 
 When the Orchestrator is **online**, two service-control buttons appear next to the Online chip:

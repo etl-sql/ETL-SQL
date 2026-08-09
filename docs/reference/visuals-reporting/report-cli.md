@@ -2,7 +2,7 @@
 
 Reference for building, serving, and previewing `.rptsql` reports: the `etl-sql-report` CLI, multi-report
 hosting, the ReportPlayer web dashboard and its API, VS Code preview, and the report linter rules. For
-authoring `.rptsql` scripts, see the [Report-SQL guide](../../guides/report-sql.md).
+authoring `.rptsql` scripts, see the [Report-SQL guide](../../guides/feature-guides/report-sql.md).
 
 ## `etl-sql-report build`
 
@@ -167,7 +167,7 @@ The language server checks `.rptsql` files automatically:
 
 ## References
 
-- [Report-SQL guide](../../guides/report-sql.md)
+- [Report-SQL guide](../../guides/feature-guides/report-sql.md)
 - [ReportManifest JSON schema](report-manifest.md)
 - [Report runtime contract](report-runtime-contract.md)
 - [Report objects](report/README.md) · [Visual types](visuals/README.md)

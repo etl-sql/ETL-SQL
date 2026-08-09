@@ -29,7 +29,7 @@ resource permissions, while the account's stored role cap and explicit scopes ca
 | `portal.read` | Authenticated read-only portal APIs, still subject to roles and resource ACLs |
 | `reports.execute` | Report execution and dataset refresh operations |
 | `orchestrator.execute` | Orchestrator API operations, still subject to the required portal role |
-| `admin.identity` | Identity administration only — users, groups, group membership, sessions, and read-only introspection of one user's effective access |
+| `admin.identity` | Identity administration only — users, groups, group membership, sessions, service accounts under constrained delegation, and read-only introspection of one user's effective access |
 
 Scopes do not grant a role or resource permission. A request must pass the scope check and every
 existing authorization check.
@@ -51,6 +51,7 @@ added later is unreachable until someone opts it in on purpose:
 | Sessions | `sessions` |
 | Groups | `groups`, `groups/catalog`, `groups/{id}`, `groups/bulk-delete`, `groups/{id}/studio-capabilities` |
 | Membership | `groups/{id}/members`, `groups/{id}/members/catalog`, `groups/{id}/members/bulk-add`, `groups/{id}/members/bulk-remove`, `groups/{id}/members/{userId}` |
+| Service accounts | `service-accounts`, `service-accounts/{id}`, `service-accounts/{id}/rotate-secret`, `service-accounts/{id}/revoke` |
 | Introspection (read-only) | `permissions/effective/user/{id}`, `access-simulator/user/{id}` |
 
 An account using this scope must **also** hold the `Admin` role — the scope never substitutes for
@@ -58,6 +59,12 @@ the role. Because the role claim is stamped when the token is issued and a servi
 15 minutes, the owner's `Admin` assignment is re-read from the store on every identity-route
 request: demoting an administrator revokes their automation's access immediately rather than at the
 end of the token's life.
+
+Service-account administration is constrained beyond the route allowlist. A service identity may
+manage only accounts under its own human owner, and the target's scopes, roles, and Studio
+capabilities must all be subsets of the caller's current effective claims. The same rule applies
+before secret rotation, preventing a narrow provisioning account from rotating a stronger sibling
+and stealing its authority. Human tenant administrators retain the full lifecycle.
 
 ## Provisioning
 
@@ -81,6 +88,11 @@ Content-Type: application/json
 Store the returned `clientId` and one-time `clientSecret` in the caller's secret manager. Do not put
 them in scripts, command histories, logs, or source control. `GET /api/admin/service-accounts` lists
 account metadata but never returns a secret or its hash.
+
+For terminal automation, `etl-sql admin service-account create|rotate-secret --secret-out <new-file>`
+uses create-new file semantics and never prints the one-time secret. The first CLI credential must
+still be created by a signed-in tenant administrator in the Portal; there is no token-dependent
+bootstrap loop. See [Admin Identity CLI](admin-identity-cli.md).
 
 ## Authentication
 

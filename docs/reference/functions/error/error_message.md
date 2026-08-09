@@ -43,4 +43,4 @@ END CATCH;
 - [ERROR_NUMBER](error_number.md)
 - [ERROR_LINE](error_line.md)
 - [ERROR_STATE](error_state.md)
-- [User Manual](../../../guides/getting-started.md)
+- [User Manual](../../../guides/onboarding/getting-started.md)

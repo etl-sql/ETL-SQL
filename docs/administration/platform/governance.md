@@ -46,19 +46,20 @@ With `Governance:Secrets:Provider=OsSecretStore` configured, administrators mana
 without touching secret files directly:
 
 ```powershell
-etl-sql admin set-secret --name sales_db_password      # prompts (masked) and confirms
-etl-sql admin verify-secret --name sales_db_password   # proves the secret resolves; never prints it
-etl-sql admin rotate-secret --name sales_db_password   # replaces the value; fails if it does not exist
-etl-sql admin disable-secret --name sales_db_password  # resolution fails until re-enabled
-etl-sql admin enable-secret --name sales_db_password   # re-enables; the stored value resolves again
-etl-sql admin delete-secret --name sales_db_password   # permanently removes the secret
+etl-sql admin machine secret set --name sales_db_password      # prompts (masked) and confirms
+etl-sql admin machine secret list                              # names/status only; identifies provider
+etl-sql admin machine secret verify --name sales_db_password   # proves resolution; never prints it
+etl-sql admin machine secret rotate --name sales_db_password   # replaces an existing value
+etl-sql admin machine secret disable --name sales_db_password  # resolution fails until re-enabled
+etl-sql admin machine secret enable --name sales_db_password   # restores the retained value
+etl-sql admin machine secret delete --name sales_db_password   # permanently removes the secret
 ```
 
-`set-secret` and `rotate-secret` read the value from a masked interactive prompt (with
+`machine secret set` and `machine secret rotate` read the value from a masked interactive prompt (with
 confirmation), or from stdin when input is piped (`Get-Content value.txt | etl-sql admin
-set-secret --name x`). `--value` is supported for automation but can persist in shell history —
+machine secret set --name x`). `--value` is supported for automation but can persist in shell history —
 the CLI warns when it is used. Values are encrypted machine-scoped before they reach disk, so run
-these commands on the machine that will resolve the secrets. `set-secret` on a disabled secret
+these commands on the machine that will resolve the secrets. `machine secret set` on a disabled secret
 re-enables it. Secret values are never echoed, logged, or included in error messages.
 
 ### Shared connections (connection catalog)
@@ -70,17 +71,17 @@ reference it without knowing the credentials. Configure the catalog with
 with filesystem ACLs), then manage entries from the CLI:
 
 ```powershell
-etl-sql admin set-connection --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
-etl-sql admin set-connection --alias archive_s3 --type S3 --option BUCKET=archive-prod --option ACCESS_KEY=SECRET:archive_access_key --option SECRET_KEY=SECRET:archive_secret_key --sensitive BUCKET
-etl-sql admin list-connections                       # aliases and Active/Disabled status
-etl-sql admin verify-connection --alias sales_dw     # proves the entry and its SECRET: references resolve
-etl-sql admin disable-connection --alias sales_dw    # SHARED:sales_dw fails until re-enabled
-etl-sql admin enable-connection --alias sales_dw     # re-enables; the stored definition is retained
-etl-sql admin delete-connection --alias sales_dw
+etl-sql admin machine connection set --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
+etl-sql admin machine connection set --alias archive_s3 --type S3 --option BUCKET=archive-prod --option ACCESS_KEY=SECRET:archive_access_key --option SECRET_KEY=SECRET:archive_secret_key --sensitive BUCKET
+etl-sql admin machine connection list                       # aliases/status and provider identity
+etl-sql admin machine connection verify --alias sales_dw     # proves entry and SECRET: references
+etl-sql admin machine connection disable --alias sales_dw    # SHARED:sales_dw fails until re-enabled
+etl-sql admin machine connection enable --alias sales_dw     # restores the retained definition
+etl-sql admin machine connection delete --alias sales_dw
 ```
 
 Catalog entries hold `SECRET:name` references, never credential values — `set-connection` rejects
-raw credentials and points at `set-secret`. Scripts use the entry through the declared connector
+raw credentials and points at `admin machine secret set`. Scripts use the entry through the declared connector
 type, which must match the catalog entry:
 
 ```sql

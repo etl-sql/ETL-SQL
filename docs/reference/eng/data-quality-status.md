@@ -34,5 +34,5 @@ FROM ProdOrch.eng.data_quality_status;
 
 ## References
 
-- [Data Quality Guide](../../guides/data-quality.md)
+- [Data Quality Guide](../../guides/feature-guides/data-quality.md)
 - [Engine Catalog](README.md)
