@@ -158,6 +158,29 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_dqf_history ON JobDataQualityFailures(JobHistoryId);";
 
+                    var createStatementMetricsTable = @"
+                CREATE TABLE IF NOT EXISTS JobStatementMetrics (
+                    JobHistoryId INTEGER NOT NULL,
+                    Ordinal INTEGER NOT NULL,
+                    Statement TEXT NOT NULL,
+                    DurationMs INTEGER NOT NULL,
+                    RowsProcessed INTEGER NOT NULL,
+                    CpuTimeMs INTEGER NOT NULL,
+                    SpilledBytes INTEGER NOT NULL,
+                    SpillReadBytes INTEGER NOT NULL,
+                    Partitions INTEGER NOT NULL,
+                    QueueWaitMs INTEGER NOT NULL,
+                    LockWaitMs INTEGER NOT NULL,
+                    IndexUsed TEXT,
+                    DqRowsValidated INTEGER NOT NULL,
+                    DqRowsQuarantined INTEGER NOT NULL,
+                    DqRowsWarned INTEGER NOT NULL,
+                    DqValidationMs INTEGER NOT NULL,
+                    Failed INTEGER NOT NULL,
+                    PRIMARY KEY (JobHistoryId, Ordinal)
+                );
+                CREATE INDEX IF NOT EXISTS idx_jsm_history ON JobStatementMetrics(JobHistoryId);";
+
                     var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
                     BundleName TEXT NOT NULL,
@@ -301,7 +324,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 );";
 
                     var schema = createJobsTable + createCatalogTables + createHistoryTable + createColumnMetricsTable
-                        + createDataQualityFailuresTable + createBundleTables
+                        + createDataQualityFailuresTable + createStatementMetricsTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
@@ -317,7 +340,19 @@ namespace ETL_SQL.Orchestrator.Storage
                         .Replace("StateDiskFreeBytes INTEGER", $"StateDiskFreeBytes {_dialect.Int64Type}")
                         .Replace("SpillDiskFreeBytes INTEGER", $"SpillDiskFreeBytes {_dialect.Int64Type}")
                         .Replace("MinStateDiskFreeBytes INTEGER", $"MinStateDiskFreeBytes {_dialect.Int64Type}")
-                        .Replace("MinSpillDiskFreeBytes INTEGER", $"MinSpillDiskFreeBytes {_dialect.Int64Type}");
+                        .Replace("MinSpillDiskFreeBytes INTEGER", $"MinSpillDiskFreeBytes {_dialect.Int64Type}")
+                        // Statement metrics: durations and byte counters must be 64-bit on
+                        // PostgreSQL too, where INTEGER is 32-bit and a spill byte count overflows.
+                        .Replace("DurationMs INTEGER", $"DurationMs {_dialect.Int64Type}")
+                        .Replace("CpuTimeMs INTEGER", $"CpuTimeMs {_dialect.Int64Type}")
+                        .Replace("SpilledBytes INTEGER", $"SpilledBytes {_dialect.Int64Type}")
+                        .Replace("SpillReadBytes INTEGER", $"SpillReadBytes {_dialect.Int64Type}")
+                        .Replace("QueueWaitMs INTEGER", $"QueueWaitMs {_dialect.Int64Type}")
+                        .Replace("LockWaitMs INTEGER", $"LockWaitMs {_dialect.Int64Type}")
+                        .Replace("DqRowsValidated INTEGER", $"DqRowsValidated {_dialect.Int64Type}")
+                        .Replace("DqRowsQuarantined INTEGER", $"DqRowsQuarantined {_dialect.Int64Type}")
+                        .Replace("DqRowsWarned INTEGER", $"DqRowsWarned {_dialect.Int64Type}")
+                        .Replace("DqValidationMs INTEGER", $"DqValidationMs {_dialect.Int64Type}");
 
                     await EnsureCollationExistsAsync(connection);
 
@@ -1163,6 +1198,13 @@ namespace ETL_SQL.Orchestrator.Storage
                 commandFailures.AddParam("@name", name);
                 await commandFailures.ExecuteNonQueryAsync();
 
+                var sqlStatements = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+                using var commandStatements = connection.CreateCommand();
+                commandStatements.CommandText = sqlStatements;
+                commandStatements.Transaction = transaction;
+                commandStatements.AddParam("@name", name);
+                await commandStatements.ExecuteNonQueryAsync();
+
                 var sql2 = "DELETE FROM JobHistory WHERE JobName = @name;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
@@ -1212,6 +1254,12 @@ namespace ETL_SQL.Orchestrator.Storage
             deleteFailures.CommandText = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
             deleteFailures.AddParam("@name", name);
             await deleteFailures.ExecuteNonQueryAsync();
+
+            using var deleteStatements = connection.CreateCommand();
+            deleteStatements.Transaction = transaction;
+            deleteStatements.CommandText = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobName = @name);";
+            deleteStatements.AddParam("@name", name);
+            await deleteStatements.ExecuteNonQueryAsync();
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
@@ -1361,6 +1409,95 @@ namespace ETL_SQL.Orchestrator.Storage
                     : DBNull.Value);
                 await command.ExecuteNonQueryAsync();
             }
+        }
+
+        public async Task SaveJobStatementMetricsAsync(
+            long entryId, IEnumerable<ETL_SQL.Core.Profiling.StatementMetricsPayload> statements)
+        {
+            var rows = statements as IList<ETL_SQL.Core.Profiling.StatementMetricsPayload> ?? statements.ToList();
+            if (rows.Count == 0) return;
+
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            for (var ordinal = 0; ordinal < rows.Count; ordinal++)
+            {
+                var statement = rows[ordinal];
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO JobStatementMetrics (
+                        JobHistoryId, Ordinal, Statement, DurationMs, RowsProcessed, CpuTimeMs,
+                        SpilledBytes, SpillReadBytes, Partitions, QueueWaitMs, LockWaitMs, IndexUsed,
+                        DqRowsValidated, DqRowsQuarantined, DqRowsWarned, DqValidationMs, Failed)
+                    VALUES (
+                        @historyId, @ordinal, @statement, @duration, @rows, @cpu,
+                        @spilled, @spillRead, @partitions, @queueWait, @lockWait, @indexUsed,
+                        @dqValidated, @dqQuarantined, @dqWarned, @dqMs, @failed)
+                    ON CONFLICT (JobHistoryId, Ordinal) DO NOTHING;";
+                command.AddParam("@historyId", entryId);
+                command.AddParam("@ordinal", ordinal);
+                // Normalized upstream by StatementMetricsPayload.From; never raw statement text.
+                command.AddParam("@statement", statement.Statement ?? "");
+                command.AddParam("@duration", statement.DurationMs);
+                command.AddParam("@rows", statement.RowsProcessed);
+                command.AddParam("@cpu", statement.CpuTimeMs);
+                command.AddParam("@spilled", statement.SpilledBytes);
+                command.AddParam("@spillRead", statement.SpillReadBytes);
+                command.AddParam("@partitions", statement.Partitions);
+                command.AddParam("@queueWait", statement.QueueWaitMs);
+                command.AddParam("@lockWait", statement.LockWaitMs);
+                command.AddParam("@indexUsed", (object?)statement.IndexUsed ?? DBNull.Value);
+                command.AddParam("@dqValidated", statement.DataQualityRowsValidated);
+                command.AddParam("@dqQuarantined", statement.DataQualityRowsQuarantined);
+                command.AddParam("@dqWarned", statement.DataQualityRowsWarned);
+                command.AddParam("@dqMs", statement.DataQualityValidationMs);
+                command.AddParam("@failed", statement.Failed ? 1 : 0);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>>
+            GetJobStatementMetricsAsync(long entryId)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT Statement, DurationMs, RowsProcessed, CpuTimeMs, SpilledBytes, SpillReadBytes,
+                       Partitions, QueueWaitMs, LockWaitMs, IndexUsed,
+                       DqRowsValidated, DqRowsQuarantined, DqRowsWarned, DqValidationMs, Failed
+                FROM JobStatementMetrics
+                WHERE JobHistoryId = @historyId
+                ORDER BY Ordinal;";
+            command.AddParam("@historyId", entryId);
+
+            var result = new List<ETL_SQL.Core.Profiling.StatementMetricsPayload>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new ETL_SQL.Core.Profiling.StatementMetricsPayload
+                {
+                    Statement = reader.GetString(0),
+                    DurationMs = Convert.ToInt64(reader.GetValue(1)),
+                    RowsProcessed = Convert.ToInt64(reader.GetValue(2)),
+                    CpuTimeMs = Convert.ToInt64(reader.GetValue(3)),
+                    SpilledBytes = Convert.ToInt64(reader.GetValue(4)),
+                    SpillReadBytes = Convert.ToInt64(reader.GetValue(5)),
+                    Partitions = Convert.ToInt32(reader.GetValue(6)),
+                    QueueWaitMs = Convert.ToInt64(reader.GetValue(7)),
+                    LockWaitMs = Convert.ToInt64(reader.GetValue(8)),
+                    IndexUsed = reader.IsDBNull(9) ? null : reader.GetString(9),
+                    DataQualityRowsValidated = Convert.ToInt64(reader.GetValue(10)),
+                    DataQualityRowsQuarantined = Convert.ToInt64(reader.GetValue(11)),
+                    DataQualityRowsWarned = Convert.ToInt64(reader.GetValue(12)),
+                    DataQualityValidationMs = Convert.ToInt64(reader.GetValue(13)),
+                    Failed = Convert.ToInt64(reader.GetValue(14)) != 0
+                });
+            }
+            return result;
         }
 
         public async Task SaveJobDataQualityFailuresAsync(long entryId, IEnumerable<DataQualityRuleFailureMetric> failures)
@@ -1555,6 +1692,20 @@ namespace ETL_SQL.Orchestrator.Storage
                     );";
                 deleteFailures.AddParam("@cutoff", cutoff);
                 await deleteFailures.ExecuteNonQueryAsync();
+            }
+
+            using (var deleteStatements = connection.CreateCommand())
+            {
+                // Statement detail is the bulk of a run's rows, so it must go with the history row
+                // it belongs to. Orphaning it here is how the flight recorder would grow without
+                // bound on a 200-jobs-a-day estate.
+                deleteStatements.CommandText = @"
+                    DELETE FROM JobStatementMetrics
+                    WHERE JobHistoryId IN (
+                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    );";
+                deleteStatements.AddParam("@cutoff", cutoff);
+                await deleteStatements.ExecuteNonQueryAsync();
             }
 
             using var command = connection.CreateCommand();

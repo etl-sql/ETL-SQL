@@ -984,8 +984,19 @@ carries a `Failed` flag for the caller that knows the run's outcome to set; wiri
 actually set it is part of the persistence work below, and the selection rule is already written and
 tested against it.
 
-- [ ] Persist per-run statement metrics to a child table keyed on the job-history id, written by the
-      scheduler alongside `LogJobEndAsync`.
+- [x] Persist per-run statement metrics to a child table keyed on the job-history id, written by the
+      scheduler alongside `LogJobEndAsync`. `JobStatementMetrics`, written from both the success and
+      failure paths. **The in-process executor emits it today; the one-shot `--json` and warm-runner
+      paths do not yet** — see the envelope item below.
+
+      **The default path needed no envelope at all.** `UseProcessSpawning` is `false`, so the
+      default executor runs in-process and the measurements are already in memory — they are handed
+      to the scheduler directly rather than serialized through a child's stdout. That makes the
+      envelope work a requirement only for the two spawning paths, not for the feature to be useful.
+
+      A per-statement failure flag does not exist in the engine, so the last statement of a failed
+      run is marked failed: it is what was executing when the run stopped, and it is what an
+      operator opens the run to find. Recorded as an approximation rather than left implicit.
 - [x] **Define the statement payload once, as a shared contract type consumed by both the one-shot
       envelope and `WarmRunnerResponse`.** `StatementMetricsPayload` (Core/Profiling). The type and
       its projection exist; **wiring the three execution paths to emit it is still to do** — that is
@@ -1026,10 +1037,16 @@ tested against it.
       exposing the same text in-process is not precedent — that is the author reading their own run.
 - [ ] Name the persisted table's columns to match `eng.profile` so the same query shape works whether
       an operator is reading the live session or durable history.
-- [ ] Bound growth before shipping: 200 jobs/day × dozens of statements compounds quickly. Follow the
+- [x] Bound growth before shipping: 200 jobs/day × dozens of statements compounds quickly. Follow the
       existing pattern (`PruneHistoryAsync` / `RollUpJobHistoryAsync`, `IJobHistoryStore.cs:230-252`)
       and prefer retaining statement detail for failed runs plus a sampled slice of successes — that
       removes most of the volume while still answering every triage question.
+
+      **Partly done.** Statement rows are deleted with the history they belong to at all three
+      delete sites — per-job purge, per-job delete, and the retention prune — so the table cannot
+      orphan and grow without bound, which was the immediate risk. **The finer policy is still
+      open**: retaining failed runs longer than successes needs a second cutoff and a configuration
+      knob, and adding a sampling rule without one would be a policy nobody can tune.
 - [ ] Join the run drill-down across all three sources now available: statement timeline, the
       normalized data-quality failures, and `ScriptHashAtRunTime`/`HashMatched` — the last of which
       tells an operator *the script changed between the good run and the bad one*, which SSISDB

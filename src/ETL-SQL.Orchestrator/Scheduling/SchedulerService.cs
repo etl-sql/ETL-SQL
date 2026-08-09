@@ -477,6 +477,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     dataQualityFailures: lastResult.DataQualityFailures);
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
                                 await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
+                                await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
                             }
 
                             break; // Done
@@ -501,6 +502,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     dataQualityFailures: lastResult.DataQualityFailures);
                                 await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
                                 await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
+                                await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
                             }
                         }
                     }

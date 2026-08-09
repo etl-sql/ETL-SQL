@@ -10,6 +10,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Observability;
+using ETL_SQL.Core.Profiling;
 using ETL_SQL.Engine;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -79,7 +80,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
                     process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
                     result.RowsQuarantined, result.RowsWarned, result.DataQualityFailures,
-                    result.DataQualityColumnMetrics, result.DataQualityRuleFailures);
+                    result.DataQualityColumnMetrics, result.DataQualityRuleFailures,
+                    CollectStatementMetrics(runFailed: !result.Success));
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(
                     activity,
@@ -98,7 +100,9 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
-                var output = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message), process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                var output = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message),
+                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId,
+                    StatementMetrics: CollectStatementMetrics(runFailed: true));
                 sw.Stop();
                 EngineExecutionObservability.CompleteExecutionActivity(
                     activity,
@@ -118,6 +122,30 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             var value = Activity.Current?.GetTagItem(ObservabilityConventions.Tags.CorrelationId)?.ToString();
             return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        /// <summary>
+        /// Projects the run's per-statement measurements for the flight recorder.
+        ///
+        /// <para>The in-process path is the default (<c>UseProcessSpawning</c> is false) and needs
+        /// no result envelope: the measurements are already in this process, so they are handed
+        /// over directly rather than serialized through a child's stdout.</para>
+        ///
+        /// <para>The last statement of a failed run is marked failed. Nothing in the engine records
+        /// a per-statement outcome, and the statement executing when the run stopped is the closest
+        /// honest approximation — it is what an operator opens the run to find. Capping then keeps
+        /// every failed statement and fills the rest of the budget with the slowest.</para>
+        /// </summary>
+        private IReadOnlyList<StatementMetricsPayload>? CollectStatementMetrics(bool runFailed)
+        {
+            var metrics = LastEvaluator?.Telemetry?.ProfileMetrics;
+            if (metrics is null || metrics.Count == 0) return null;
+
+            var projected = new List<StatementMetricsPayload>(metrics.Count);
+            for (var i = 0; i < metrics.Count; i++)
+                projected.Add(StatementMetricsPayload.From(metrics[i], failed: runFailed && i == metrics.Count - 1));
+
+            return StatementMetricsPayload.Cap(projected);
         }
     }
 }

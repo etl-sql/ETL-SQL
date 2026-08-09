@@ -36,4 +36,10 @@ public record ScriptExecutionResult(
     /// <summary>Column-level run metrics collected for ASSERT JOB predicates.</summary>
     IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
     /// <summary>Structured counts-only rule failures; never contains sample values.</summary>
-    IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null);
+    IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null,
+    /// <summary>
+    /// Per-statement measurements for the run flight recorder. Statement text is normalized by
+    /// <c>StatementMetricsPayload.From</c> before it gets here, and the list is capped — a run is
+    /// represented by its failures and its slowest statements, not by every statement it executed.
+    /// </summary>
+    IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>? StatementMetrics = null);

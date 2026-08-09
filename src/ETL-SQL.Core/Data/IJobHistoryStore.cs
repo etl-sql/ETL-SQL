@@ -206,6 +206,24 @@ public interface IJobHistoryStore
     /// </summary>
     Task<long> ImportJobHistoryAsync(JobHistoryEntry entry);
     Task SaveJobColumnMetricsAsync(long entryId, IEnumerable<DataQualityColumnMetric> metrics) => Task.CompletedTask;
+
+    /// <summary>
+    /// Persists the run's per-statement measurements — the flight recorder.
+    ///
+    /// <para>Statement text arriving here is already normalized by
+    /// <c>StatementMetricsPayload.From</c>: this store is shared, and a run's history is read by
+    /// operators who are a different principal from whoever ran the script, so raw statement text
+    /// with its literal values must never reach it.</para>
+    ///
+    /// <para>Default no-op so a store that does not implement the flight recorder still satisfies
+    /// the interface, matching the column-metrics precedent above.</para>
+    /// </summary>
+    Task SaveJobStatementMetricsAsync(
+        long entryId, IEnumerable<ETL_SQL.Core.Profiling.StatementMetricsPayload> statements) => Task.CompletedTask;
+
+    /// <summary>Reads back a run's statement timeline, in execution order.</summary>
+    Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>> GetJobStatementMetricsAsync(long entryId) =>
+        Task.FromResult<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>>([]);
     Task SaveJobDataQualityFailuresAsync(long entryId, IEnumerable<DataQualityRuleFailureMetric> failures) => Task.CompletedTask;
     Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresAsync(int limit = 1000) =>
         Task.FromResult<IReadOnlyList<JobDataQualityFailure>>(Array.Empty<JobDataQualityFailure>());
