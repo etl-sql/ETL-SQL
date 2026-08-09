@@ -195,7 +195,7 @@ namespace ETL_SQL.Tests.Analysis
 
             // Get the complete ancestor lineage for the target column
             var ancestors = evaluator2.LineageTracker.GetAncestors("dest.FILE", "id").ToList();
-            
+
             // Should contain:
             // 1. dest.FILE (target of second insert, from #intermediate)
             // 2. #intermediate (target of first insert, from src.Users, with CAST)

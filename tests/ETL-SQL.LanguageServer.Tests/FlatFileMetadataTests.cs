@@ -7,8 +7,8 @@ using ETL_SQL.Core.Services;
 using ETL_SQL.LSP;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
 using Xunit;
+using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
 
 namespace ETL_SQL.LanguageServer.Tests
 {

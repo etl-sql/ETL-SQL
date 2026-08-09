@@ -653,11 +653,11 @@ public static class SqlFormatter
         }
 
         // Check if preceding word is a function that shouldn't be split
-        string[] noSplitFunctions = { 
-            "IDENTITY", "DATEADD", "DATEDIFF", "DATEPART", "CONVERT", "CAST", "SUBSTRING", 
-            "COALESCE", "NULLIF", "ISNULL", "ABS", "ROUND", "UPPER", "LOWER", "TRIM", 
-            "LTRIM", "RTRIM", "CHARINDEX", "REPLACE", "LEFT", "RIGHT", "LEN", 
-            "FORMAT", "TRY_CAST", "TRY_CONVERT", "HASHBYTES", "REGEX", "GETDATE", "NOW" 
+        string[] noSplitFunctions = {
+            "IDENTITY", "DATEADD", "DATEDIFF", "DATEPART", "CONVERT", "CAST", "SUBSTRING",
+            "COALESCE", "NULLIF", "ISNULL", "ABS", "ROUND", "UPPER", "LOWER", "TRIM",
+            "LTRIM", "RTRIM", "CHARINDEX", "REPLACE", "LEFT", "RIGHT", "LEN",
+            "FORMAT", "TRY_CAST", "TRY_CONVERT", "HASHBYTES", "REGEX", "GETDATE", "NOW"
         };
         if (!string.IsNullOrEmpty(precedingWord) && noSplitFunctions.Contains(precedingWord.ToUpper()))
         {

@@ -220,11 +220,15 @@ public sealed class AdminIdentityScopeTests : IDisposable
         db.Roles.Add(new PortalRole { Id = 2, Name = "Viewer", NormalizedName = "VIEWER" });
         db.Users.Add(new PortalUser
         {
-            Id = 1, UserName = "owner", NormalizedUserName = "OWNER", IsActive = true
+            Id = 1,
+            UserName = "owner",
+            NormalizedUserName = "OWNER",
+            IsActive = true
         });
         db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<int>
         {
-            UserId = 1, RoleId = ownerIsAdmin ? 1 : 2
+            UserId = 1,
+            RoleId = ownerIsAdmin ? 1 : 2
         });
         await db.SaveChangesAsync();
         return db;
