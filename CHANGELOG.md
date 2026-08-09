@@ -88,6 +88,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Completed the Orchestrator statement flight recorder across in-process, one-shot, and warm-runner
+  execution paths. Statement text is normalized and capped before serialization, failed statements
+  are retained, and configurable maintenance keeps failed-run detail longer than successful-run
+  detail.
+
 - Added Dialect-Aware function transpilation rewrites for common SQL functions:
   - `ISNULL(val, default)` transpiled to `COALESCE(val, default)` on Postgres and Oracle targets.
   - `YEAR(val)`, `MONTH(val)`, and `DAY(val)` transpiled to `EXTRACT(YEAR/MONTH/DAY FROM val)` on Postgres and Oracle targets.

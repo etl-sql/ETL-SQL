@@ -221,6 +221,17 @@ public interface IJobHistoryStore
     Task SaveJobStatementMetricsAsync(
         long entryId, IEnumerable<ETL_SQL.Core.Profiling.StatementMetricsPayload> statements) => Task.CompletedTask;
 
+    /// <summary>
+    /// Drops statement detail earlier than the run record it belongs to.
+    ///
+    /// <para>Statement detail is the bulk of a run's rows, and a successful run stops being
+    /// interesting long before its history entry does — an operator asks "what did last night's
+    /// failure do" far longer than "which statement was slowest three weeks ago on a run that
+    /// worked". Failed runs are retained longer than successes for that reason, and both windows
+    /// are deployment settings rather than fixed values.</para>
+    /// </summary>
+    Task<int> PruneStatementMetricsAsync(TimeSpan successMaxAge, TimeSpan failedMaxAge) => Task.FromResult(0);
+
     /// <summary>Reads back a run's statement timeline, in execution order.</summary>
     Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>> GetJobStatementMetricsAsync(long entryId) =>
         Task.FromResult<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>>([]);

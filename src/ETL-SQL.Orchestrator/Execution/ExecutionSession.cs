@@ -140,7 +140,12 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 // Capture active connections even on failure so the TUI's autocomplete cache stays live
                 if (evaluator != null)
+                {
                     result.ActiveConnections = evaluator.Connections.ToDictionary(k => k.Key, v => v.Value);
+                    // Failed runs still have a useful partial profile. Keep the evaluator available
+                    // to callers so the failed statement can reach the flight recorder.
+                    LastEvaluator = evaluator;
+                }
 
                 timer.Stop();
                 result.ExecutionTimeMs = timer.ElapsedMilliseconds;

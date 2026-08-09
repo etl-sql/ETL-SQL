@@ -1457,6 +1457,51 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
+        public async Task<int> PruneStatementMetricsAsync(TimeSpan successMaxAge, TimeSpan failedMaxAge)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            var removed = 0;
+
+            // A run with a statement marked failed is a failed run; the flag lives on the
+            // statement rows rather than being inferred again from a status vocabulary.
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"
+                    DELETE FROM JobStatementMetrics
+                    WHERE JobHistoryId IN (
+                        SELECT h.Id FROM JobHistory h
+                        WHERE h.Status <> 'RUNNING' AND h.StartTime < @successCutoff
+                          AND NOT EXISTS (
+                              SELECT 1 FROM JobStatementMetrics m
+                              WHERE m.JobHistoryId = h.Id AND m.Failed <> 0
+                          )
+                    );";
+                command.AddParam("@successCutoff", DateTime.Now.Subtract(successMaxAge).ToString("O"));
+                removed += await command.ExecuteNonQueryAsync();
+            }
+
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = @"
+                    DELETE FROM JobStatementMetrics
+                    WHERE JobHistoryId IN (
+                        SELECT h.Id FROM JobHistory h
+                        WHERE h.Status <> 'RUNNING' AND h.StartTime < @failedCutoff
+                          AND EXISTS (
+                              SELECT 1 FROM JobStatementMetrics m
+                              WHERE m.JobHistoryId = h.Id AND m.Failed <> 0
+                          )
+                    );";
+                command.AddParam("@failedCutoff", DateTime.Now.Subtract(failedMaxAge).ToString("O"));
+                removed += await command.ExecuteNonQueryAsync();
+            }
+
+            return removed;
+        }
+
         public async Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>>
             GetJobStatementMetricsAsync(long entryId)
         {

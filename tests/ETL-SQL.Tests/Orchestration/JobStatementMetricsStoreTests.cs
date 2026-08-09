@@ -139,6 +139,48 @@ public sealed class JobStatementMetricsStoreTests : IDisposable
         Assert.Empty(await store.GetJobStatementMetricsAsync(historyId));
     }
 
+    [Fact]
+    public async Task StatementRetentionKeepsFailedRunsLongerThanSuccessfulRuns()
+    {
+        var store = NewStore();
+        await store.InitializeAsync();
+        var successful = await store.LogJobStartAsync("success");
+        var failed = await store.LogJobStartAsync("failure");
+        await store.LogJobEndAsync(successful, "SUCCESS", null);
+        await store.LogJobEndAsync(failed, "FAILURE", "boom");
+        await store.SaveJobStatementMetricsAsync(successful, [Statement("SELECT ?", 10)]);
+        await store.SaveJobStatementMetricsAsync(failed, [Statement("THROW ?", 10, failed: true)]);
+
+        var removed = await store.PruneStatementMetricsAsync(
+            successMaxAge: TimeSpan.Zero,
+            failedMaxAge: TimeSpan.FromDays(30));
+
+        Assert.Equal(1, removed);
+        Assert.Empty(await store.GetJobStatementMetricsAsync(successful));
+        Assert.Single(await store.GetJobStatementMetricsAsync(failed));
+    }
+
+    [Fact]
+    public async Task FailedStatementRetentionDoesNotDeleteSuccessfulRunsEarly()
+    {
+        var store = NewStore();
+        await store.InitializeAsync();
+        var successful = await store.LogJobStartAsync("success");
+        var failed = await store.LogJobStartAsync("failure");
+        await store.LogJobEndAsync(successful, "SUCCESS", null);
+        await store.LogJobEndAsync(failed, "FAILURE", "boom");
+        await store.SaveJobStatementMetricsAsync(successful, [Statement("SELECT ?", 10)]);
+        await store.SaveJobStatementMetricsAsync(failed, [Statement("THROW ?", 10, failed: true)]);
+
+        var removed = await store.PruneStatementMetricsAsync(
+            successMaxAge: TimeSpan.FromDays(30),
+            failedMaxAge: TimeSpan.Zero);
+
+        Assert.Equal(1, removed);
+        Assert.Single(await store.GetJobStatementMetricsAsync(successful));
+        Assert.Empty(await store.GetJobStatementMetricsAsync(failed));
+    }
+
     /// <summary>Re-writing the same run must not duplicate its timeline.</summary>
     [Fact]
     public async Task SavingTwiceDoesNotDuplicateTheTimeline()

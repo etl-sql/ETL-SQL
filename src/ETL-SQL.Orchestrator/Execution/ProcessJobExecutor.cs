@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Profiling;
 using ETL_SQL.Core.Quality;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -323,10 +324,11 @@ namespace ETL_SQL.Orchestrator.Execution
                         ? dq.GetString() : null;
                     var columnMetrics = ParseColumnMetrics(root);
                     var ruleFailures = ParseRuleFailures(root);
+                    var statementMetrics = ParseStatementMetrics(root);
 
                     return new ScriptExecutionResult(
                         success, rows, error, peakMemory, cpuSeconds, session, quarantined, warned, dqFailures,
-                        columnMetrics, ruleFailures);
+                        columnMetrics, ruleFailures, statementMetrics);
                 }
                 catch (JsonException)
                 {
@@ -398,6 +400,25 @@ namespace ETL_SQL.Orchestrator.Execution
                     ReadInt64(item, "failureCount", "FailureCount"), ReadString(item, "owner", "Owner")));
             }
             return result;
+        }
+
+        internal static IReadOnlyList<StatementMetricsPayload> ParseStatementMetrics(JsonElement root)
+        {
+            if (!root.TryGetProperty("statementMetrics", out var metrics) ||
+                metrics.ValueKind != JsonValueKind.Array)
+                return [];
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<StatementMetricsPayload>>(
+                    metrics.GetRawText(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            }
+            catch (JsonException)
+            {
+                // Version tolerance: malformed optional metrics must not change the run outcome.
+                return [];
+            }
         }
 
         private static string? ReadString(JsonElement item, string camelName, string pascalName)
@@ -719,7 +740,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     response.RowsWarned,
                     response.DataQualityFailures,
                     response.DataQualityColumnMetrics,
-                    response.DataQualityRuleFailures);
+                    response.DataQualityRuleFailures,
+                    response.StatementMetrics);
             }
         }
 
@@ -766,5 +788,6 @@ namespace ETL_SQL.Orchestrator.Execution
         long RowsWarned = 0,
         string? DataQualityFailures = null,
         IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics = null,
-        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null);
+        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures = null,
+        IReadOnlyList<StatementMetricsPayload>? StatementMetrics = null);
 }

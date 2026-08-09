@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Profiling;
+using ETL_SQL.Orchestrator.Execution;
 using Xunit;
 
 namespace ETL_SQL.Tests.Engine;
@@ -45,6 +46,24 @@ public class StatementMetricsPayloadTests
         Assert.Equal(7, payload.DataQualityRowsQuarantined);
     }
 
+    [Fact]
+    public void RunProjectionAppliesFailureMarkingTextLimitAndCountCapTogether()
+    {
+        var metrics = Enumerable.Range(1, 5).Select(i => new ExecutionMetrics
+        {
+            Sql = $"SELECT '{new string('x', 80)}' AS secret_{i}",
+            DurationMs = i
+        }).ToList();
+
+        var payload = StatementMetricsPayload.FromRun(
+            metrics, runFailed: true, maxStatements: 2, maxTextLength: 24);
+
+        Assert.Equal(2, payload.Count);
+        Assert.All(payload, statement => Assert.True(statement.Statement.Length <= 24));
+        Assert.True(payload[^1].Failed);
+        Assert.DoesNotContain(payload, statement => statement.Statement.Contains(new string('x', 10)));
+    }
+
     /// <summary>
     /// The wire names are the same names an operator sees in eng.profile, so one query shape reads
     /// both the live session and durable history.
@@ -59,6 +78,21 @@ public class StatementMetricsPayloadTests
         Assert.Contains("\"queue_wait_ms\"", json);
         Assert.Contains("\"index_used\"", json);
         Assert.DoesNotContain("\"DurationMs\"", json);
+    }
+
+    [Fact]
+    public void OneShotEnvelopeParserReadsTheSharedStatementPayload()
+    {
+        using var document = JsonDocument.Parse("""
+            {"statementMetrics":[{"statement":"SELECT ?","duration_ms":17,"failed":true}]}
+            """);
+
+        var payload = ProcessJobExecutor.ParseStatementMetrics(document.RootElement);
+
+        var statement = Assert.Single(payload);
+        Assert.Equal("SELECT ?", statement.Statement);
+        Assert.Equal(17, statement.DurationMs);
+        Assert.True(statement.Failed);
     }
 
     // ── Capping ──────────────────────────────────────────────────────────────────

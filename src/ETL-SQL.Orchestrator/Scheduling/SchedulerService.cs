@@ -206,11 +206,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _lastSessionReap = now;
                     }
 
-                    // Periodic job-history pruning: bound unbounded JobHistory growth. Retention 0
-                    // (or negative) disables pruning — history is kept indefinitely.
+                    // Periodic history maintenance. Parent-history and statement-detail retention
+                    // are independent: a deployment may keep run summaries indefinitely while
+                    // pruning the much denser statement timeline.
                     int historyPruneIntervalMinutes = _configuration.GetValue<int>("Scheduler:HistoryPruneIntervalMinutes", 360);
                     int historyRetentionDays = _configuration.GetValue<int>("Orchestrator:JobHistoryRetentionDays", 30);
-                    if (historyRetentionDays > 0 && now - _lastHistoryPrune >= TimeSpan.FromMinutes(historyPruneIntervalMinutes))
+                    if (now - _lastHistoryPrune >= TimeSpan.FromMinutes(historyPruneIntervalMinutes))
                     {
                         // Reconcile orphaned/hung RUNNING rows first so they become prunable and visible
                         // to failure reporting, then prune old terminal rows.
@@ -236,9 +237,31 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                 if (metricsStore != null) await metricsStore.PruneHostMetricsDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
                             }
 
-                            int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
-                            if (pruned > 0)
-                                _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+                            if (historyRetentionDays > 0)
+                            {
+                                int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
+                                if (pruned > 0)
+                                    _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+                            }
+
+                            int successfulStatementRetentionDays = _configuration.GetValue<int>(
+                                "Orchestrator:SuccessfulStatementMetricsRetentionDays", 7);
+                            int failedStatementRetentionDays = _configuration.GetValue<int>(
+                                "Orchestrator:FailedStatementMetricsRetentionDays", 30);
+                            if (successfulStatementRetentionDays > 0 && failedStatementRetentionDays > 0)
+                            {
+                                int prunedStatements = await _store.PruneStatementMetricsAsync(
+                                    TimeSpan.FromDays(successfulStatementRetentionDays),
+                                    TimeSpan.FromDays(failedStatementRetentionDays));
+                                if (prunedStatements > 0)
+                                {
+                                    _logger.LogInformation(
+                                        "Orchestrator: pruned {Count} statement-metric row(s) using success={SuccessDays}d and failure={FailureDays}d retention.",
+                                        prunedStatements,
+                                        successfulStatementRetentionDays,
+                                        failedStatementRetentionDays);
+                                }
+                            }
 
                             // Host-metrics samples are dense; retain them shorter than job history and
                             // rely on the roll-up for long-term trend. Same store implements both.

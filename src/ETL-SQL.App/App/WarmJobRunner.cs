@@ -9,8 +9,10 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Profiling;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Execution;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.App
@@ -65,6 +67,7 @@ namespace ETL_SQL.App
                         0,
                         null,
                         null,
+                        null,
                         null);
                     await Console.Out.WriteLineAsync(JsonSerializer.Serialize(response, JsonOptions));
                     await Console.Out.FlushAsync();
@@ -106,6 +109,16 @@ namespace ETL_SQL.App
             var error = execution.Success
                 ? null
                 : string.Join("; ", execution.Diagnostics.Select(d => d.Message));
+            var configuration = services.GetService<IConfiguration>();
+            var statementMetrics = StatementMetricsPayload.FromRun(
+                session.LastEvaluator?.Telemetry.ProfileMetrics,
+                runFailed: !execution.Success,
+                maxStatements: configuration?.GetValue<int>(
+                    "Orchestrator:MaxStatementsPerRun", StatementMetricsPayload.DefaultMaxStatements)
+                    ?? StatementMetricsPayload.DefaultMaxStatements,
+                maxTextLength: configuration?.GetValue<int>(
+                    "Orchestrator:MaxStatementTextLength", StatementTextNormalizer.DefaultMaxLength)
+                    ?? StatementTextNormalizer.DefaultMaxLength);
 
             return new WarmRunnerResponse(
                 "result",
@@ -120,7 +133,8 @@ namespace ETL_SQL.App
                 execution.RowsWarned,
                 execution.DataQualityFailures,
                 execution.DataQualityColumnMetrics,
-                execution.DataQualityRuleFailures);
+                execution.DataQualityRuleFailures,
+                statementMetrics);
         }
     }
 
@@ -145,5 +159,6 @@ namespace ETL_SQL.App
         long RowsWarned,
         string? DataQualityFailures,
         IReadOnlyList<DataQualityColumnMetric>? DataQualityColumnMetrics,
-        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures);
+        IReadOnlyList<DataQualityRuleFailureMetric>? DataQualityRuleFailures,
+        IReadOnlyList<StatementMetricsPayload>? StatementMetrics);
 }

@@ -45,6 +45,8 @@ public class ProcessJobExecutorChaosTests
             Assert.True(second.Success, second.ErrorMessage);
             Assert.Equal("warm-test-1", first.SessionId);
             Assert.Equal("warm-test-2", second.SessionId);
+            Assert.NotEmpty(first.StatementMetrics ?? []);
+            Assert.Contains("?", first.StatementMetrics![0].Statement);
             Assert.Equal(0, tracker.ActiveCount);
         }
         finally

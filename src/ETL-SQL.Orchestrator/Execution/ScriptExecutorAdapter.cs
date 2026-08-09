@@ -12,6 +12,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Profiling;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Orchestrator.Execution
 {
@@ -141,11 +142,17 @@ namespace ETL_SQL.Orchestrator.Execution
             var metrics = LastEvaluator?.Telemetry?.ProfileMetrics;
             if (metrics is null || metrics.Count == 0) return null;
 
-            var projected = new List<StatementMetricsPayload>(metrics.Count);
-            for (var i = 0; i < metrics.Count; i++)
-                projected.Add(StatementMetricsPayload.From(metrics[i], failed: runFailed && i == metrics.Count - 1));
+            // How much of a run to keep is a deployment decision, not ours: a 200-job estate and a
+            // single nightly load want very different budgets, and both limits drive storage.
+            var configuration = _serviceProvider.GetService(typeof(IConfiguration)) as IConfiguration;
+            var maxStatements = configuration?.GetValue<int>(
+                "Orchestrator:MaxStatementsPerRun", StatementMetricsPayload.DefaultMaxStatements)
+                ?? StatementMetricsPayload.DefaultMaxStatements;
+            var maxTextLength = configuration?.GetValue<int>(
+                "Orchestrator:MaxStatementTextLength", StatementTextNormalizer.DefaultMaxLength)
+                ?? StatementTextNormalizer.DefaultMaxLength;
 
-            return StatementMetricsPayload.Cap(projected);
+            return StatementMetricsPayload.FromRun(metrics, runFailed, maxStatements, maxTextLength);
         }
     }
 }

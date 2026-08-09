@@ -74,27 +74,61 @@ public sealed class StatementMetricsPayload
     public bool Failed { get; set; }
 
     /// <summary>Projects engine measurements into the wire shape, normalizing the statement text.</summary>
-    public static StatementMetricsPayload From(ExecutionMetrics metrics, bool failed = false) => new()
-    {
-        Statement = StatementTextNormalizer.Normalize(metrics.Sql),
-        DurationMs = metrics.DurationMs,
-        RowsProcessed = metrics.RowsProcessed,
-        CpuTimeMs = metrics.CpuTimeMs,
-        SpilledBytes = metrics.SpilledBytes,
-        SpillReadBytes = metrics.SpillReadBytes,
-        Partitions = metrics.PartitionsCount,
-        QueueWaitMs = metrics.QueueWaitMs,
-        LockWaitMs = metrics.LockWaitMs,
-        IndexUsed = metrics.IndexName,
-        DataQualityRowsValidated = metrics.DataQualityRowsValidated,
-        DataQualityRowsQuarantined = metrics.DataQualityRowsQuarantined,
-        DataQualityRowsWarned = metrics.DataQualityRowsWarned,
-        DataQualityValidationMs = metrics.DataQualityValidationMs,
-        Failed = failed
-    };
+    public static StatementMetricsPayload From(
+        ExecutionMetrics metrics,
+        bool failed = false,
+        int maxTextLength = StatementTextNormalizer.DefaultMaxLength) => new()
+        {
+            Statement = StatementTextNormalizer.Normalize(metrics.Sql, maxTextLength),
+            DurationMs = metrics.DurationMs,
+            RowsProcessed = metrics.RowsProcessed,
+            CpuTimeMs = metrics.CpuTimeMs,
+            SpilledBytes = metrics.SpilledBytes,
+            SpillReadBytes = metrics.SpillReadBytes,
+            Partitions = metrics.PartitionsCount,
+            QueueWaitMs = metrics.QueueWaitMs,
+            LockWaitMs = metrics.LockWaitMs,
+            IndexUsed = metrics.IndexName,
+            DataQualityRowsValidated = metrics.DataQualityRowsValidated,
+            DataQualityRowsQuarantined = metrics.DataQualityRowsQuarantined,
+            DataQualityRowsWarned = metrics.DataQualityRowsWarned,
+            DataQualityValidationMs = metrics.DataQualityValidationMs,
+            Failed = failed
+        };
 
-    /// <summary>Default cap. A triage question is answered by the slow statements and the failure.</summary>
+    /// <summary>
+    /// Default cap, used when no deployment setting is supplied. A triage question is answered by
+    /// the slow statements and the failure, so this is a starting point rather than a limit —
+    /// <c>Orchestrator:MaxStatementsPerRun</c> overrides it.
+    /// </summary>
     public const int DefaultMaxStatements = 25;
+
+    /// <summary>
+    /// Projects, normalizes, marks, and caps a run's measurements in one operation so every
+    /// execution path applies the same security and memory policy before serialization.
+    /// </summary>
+    public static IReadOnlyList<StatementMetricsPayload> FromRun(
+        IEnumerable<ExecutionMetrics>? metrics,
+        bool runFailed,
+        int maxStatements = DefaultMaxStatements,
+        int maxTextLength = StatementTextNormalizer.DefaultMaxLength)
+    {
+        if (metrics is null) return [];
+
+        var source = metrics as IList<ExecutionMetrics> ?? metrics.ToList();
+        if (source.Count == 0) return [];
+
+        var projected = new List<StatementMetricsPayload>(source.Count);
+        for (var i = 0; i < source.Count; i++)
+        {
+            projected.Add(From(
+                source[i],
+                failed: runFailed && i == source.Count - 1,
+                maxTextLength: maxTextLength));
+        }
+
+        return Cap(projected, maxStatements);
+    }
 
     /// <summary>
     /// Reduces a run's statements to what is worth carrying.

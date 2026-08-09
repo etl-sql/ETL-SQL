@@ -16,6 +16,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Profiling;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting;
 using ETL_SQL.Services;
@@ -712,7 +713,8 @@ namespace ETL_SQL.App
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
                             dataQualityColumnMetrics = evaluator.DataQuality.ColumnMetrics,
-                            dataQualityRuleFailures = evaluator.DataQuality.FailureMetrics
+                            dataQualityRuleFailures = evaluator.DataQuality.FailureMetrics,
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: false)
                         }));
                     }
 
@@ -737,6 +739,8 @@ namespace ETL_SQL.App
                                     : null);
                             await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                             await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
+                            await historyStore.SaveJobStatementMetricsAsync(
+                                auditHistoryId, CollectStatementMetrics(evaluator, runFailed: false));
                         }
                         catch (Exception ex)
                         {
@@ -786,7 +790,8 @@ namespace ETL_SQL.App
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
                             dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
-                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics
+                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics,
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true)
                         }));
                     }
                     else
@@ -818,6 +823,8 @@ namespace ETL_SQL.App
                             {
                                 await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                                 await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
+                                await historyStore.SaveJobStatementMetricsAsync(
+                                    auditHistoryId, CollectStatementMetrics(evaluator, runFailed: true));
                             }
                         }
                         catch { }
@@ -843,7 +850,8 @@ namespace ETL_SQL.App
                                 ? evaluator.DataQuality.ToHistoryPayload()
                                 : null,
                             dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
-                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics
+                            dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics,
+                            statementMetrics = CollectStatementMetrics(evaluator, runFailed: true)
                         }));
                     }
                     else
@@ -874,6 +882,8 @@ namespace ETL_SQL.App
                             {
                                 await historyStore.SaveJobColumnMetricsAsync(auditHistoryId, evaluator.DataQuality.ColumnMetrics);
                                 await historyStore.SaveJobDataQualityFailuresAsync(auditHistoryId, evaluator.DataQuality.FailureMetrics);
+                                await historyStore.SaveJobStatementMetricsAsync(
+                                    auditHistoryId, CollectStatementMetrics(evaluator, runFailed: true));
                             }
                         }
                         catch { }
@@ -890,6 +900,22 @@ namespace ETL_SQL.App
 
             logger.WriteLine($"Unknown command: {ctx.Command}", ConsoleColor.Red);
             return 1;
+        }
+
+        private static IReadOnlyList<StatementMetricsPayload> CollectStatementMetrics(
+            ETL_SQL.Engine.Evaluator? evaluator,
+            bool runFailed)
+        {
+            var configuration = Program.ServiceProvider.GetService<IConfiguration>();
+            return StatementMetricsPayload.FromRun(
+                evaluator?.Telemetry.ProfileMetrics,
+                runFailed,
+                configuration?.GetValue<int>(
+                    "Orchestrator:MaxStatementsPerRun", StatementMetricsPayload.DefaultMaxStatements)
+                    ?? StatementMetricsPayload.DefaultMaxStatements,
+                configuration?.GetValue<int>(
+                    "Orchestrator:MaxStatementTextLength", StatementTextNormalizer.DefaultMaxLength)
+                    ?? StatementTextNormalizer.DefaultMaxLength);
         }
 
         private static async Task EmitQualityEvidenceAsync(

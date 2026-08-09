@@ -202,6 +202,10 @@ Configuration details for the background runner service.
 | `Orchestrator:MaxPreviousApiKeys` | integer | `1` | — | Maximum number of previous API keys accepted during a temporary rotation overlap. |
 | `Orchestrator:ScriptRoot` | string | `""` | — | Path target folder for orchestrator scripts and scheduling plans. |
 | `Orchestrator:DatabasePath` | string | `null` | — | SQLite database path. `null` uses the canonical `%LocalAppData%/ETL-SQL/etlsql.db` default. |
+| `Orchestrator:MaxStatementsPerRun` | integer | `25` | — | Maximum non-failed statements retained per run; failed statements are always retained. |
+| `Orchestrator:MaxStatementTextLength` | integer | `512` | — | Maximum normalized statement-text length carried in process envelopes and durable history. |
+| `Orchestrator:SuccessfulStatementMetricsRetentionDays` | integer | `7` | — | Retains statement detail for successful runs for this many days. Set either statement-retention value to `0` to disable early detail pruning. |
+| `Orchestrator:FailedStatementMetricsRetentionDays` | integer | `30` | — | Retains failed-run statement detail longer; parent history pruning still removes detail with its run. |
 | `Orchestrator:Database:Provider` | string | `Sqlite` | — | Database backing storage (`Sqlite` or `Postgres`). |
 | `Orchestrator:Database:ConnectionString` | string | `""` | — | DB Connection details when `Postgres` provider is specified. |
 
