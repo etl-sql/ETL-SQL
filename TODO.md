@@ -256,11 +256,15 @@ remaining work is the joined operator drill-down, recovery controls, and cross-p
 Required by [Deployment_Profile_Standards.md](docs/architecture/standards/Deployment_Profile_Standards.md#feature-design-portability-review).
 Smallest safe profile is **Solo**, and the capability must not become Portal-only.
 
-- [ ] **Solo.** The smallest safe form already exists as `eng.profile` (live, in-session) — so the
+- [x] **Solo.** The smallest safe form already exists as `eng.profile` (live, in-session) — so the
       durable table must be reachable as an `eng.*` read model, not only through the Portal inbox,
       or Solo silently loses a capability that Team gains. Precedent: `eng.job_history`,
       `eng.data_quality_status`, and `eng.data_quality_failures` are all already exposed this way
       (`EngineCatalogDataSources.cs`).
+
+      **Done (v0.18.0).** `eng.job_statement_metrics` returns the live session as `CURRENT_RUN`
+      followed by persisted rows as `HISTORY`, with column names matching `eng.profile` so one query
+      shape reads either. Documented at `docs/reference/eng/job-statement-metrics.md`.
 
 **Decided: a bare CLI run stays live-only and records nothing.** That is the point of the profile —
 developing against real data should not accumulate a run history, and only production execution is
@@ -268,11 +272,23 @@ worth retaining. `eng.profile` remains the Solo answer.
 
 - [ ] **Team.** The reference case for this track; no profile change expected. The 200-job shop above
       *is* the Team profile, and Scheduling/Observability are already Green here.
-- [ ] **Enterprise.** Statement metrics must be written to the shared store, not node-local, or the
+- [x] **Enterprise.** Statement metrics must be written to the shared store, not node-local, or the
       inbox returns different results per node behind the load balancer; the new table needs both
       `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect`. Retention/roll-up must be
       leader-elected via the existing lease/`ClusterLock` machinery rather than running concurrently
       on every node. Parameter-override triggers must reach the audit outbox.
+
+      **Partly done (v0.18.0).** The table already goes through the shared store and both dialects
+      (`Int64Type` rewrites cover the duration and byte counters, since PostgreSQL `INTEGER` is
+      32-bit). **Maintenance is now leased**: roll-up and both prunes sat behind no lock at all, so
+      behind a load balancer every node ran them concurrently against one database — duplicating
+      roll-up work and racing each other's deletes. A node that loses the race now *skips the cycle*
+      rather than waiting, because blocking a scheduler loop to redo maintenance is worse than
+      deferring it a few minutes; the lease is released rather than left to expire.
+      `Scheduler:MaintenanceLeaseMinutes` is configurable.
+
+      **Still open:** parameter-override triggers reaching the audit outbox — that belongs with the
+      P2 recovery-controls item above, which has not been started.
 - [ ] **SaaS.** Observability remains **Red** until tenant telemetry and support-access separation are
       certified. Managed Dedicated must prove its tenant-specific store and tenant-approved support
       path; Shared must additionally prove server-derived scope in cross-tenant aggregation. Persisted

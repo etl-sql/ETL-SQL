@@ -1576,6 +1576,57 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
+        public async Task<IReadOnlyList<JobStatementMetric>> GetStatementMetricsAsync(int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
+                       m.Ordinal, m.Statement, m.DurationMs, m.RowsProcessed, m.CpuTimeMs,
+                       m.SpilledBytes, m.SpillReadBytes, m.Partitions, m.QueueWaitMs, m.LockWaitMs,
+                       m.IndexUsed, m.DqRowsValidated, m.DqRowsQuarantined, m.DqRowsWarned,
+                       m.DqValidationMs, m.Failed
+                FROM JobStatementMetrics m
+                INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
+                ORDER BY h.StartTime DESC, h.Id DESC, m.Ordinal
+                LIMIT @limit;";
+            command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
+
+            var results = new List<JobStatementMetric>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new JobStatementMetric(
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    DateTime.Parse(reader.GetString(2)),
+                    reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
+                    reader.GetString(4),
+                    Convert.ToInt32(reader.GetValue(5)),
+                    new ETL_SQL.Core.Profiling.StatementMetricsPayload
+                    {
+                        Statement = reader.GetString(6),
+                        DurationMs = Convert.ToInt64(reader.GetValue(7)),
+                        RowsProcessed = Convert.ToInt64(reader.GetValue(8)),
+                        CpuTimeMs = Convert.ToInt64(reader.GetValue(9)),
+                        SpilledBytes = Convert.ToInt64(reader.GetValue(10)),
+                        SpillReadBytes = Convert.ToInt64(reader.GetValue(11)),
+                        Partitions = Convert.ToInt32(reader.GetValue(12)),
+                        QueueWaitMs = Convert.ToInt64(reader.GetValue(13)),
+                        LockWaitMs = Convert.ToInt64(reader.GetValue(14)),
+                        IndexUsed = reader.IsDBNull(15) ? null : reader.GetString(15),
+                        DataQualityRowsValidated = Convert.ToInt64(reader.GetValue(16)),
+                        DataQualityRowsQuarantined = Convert.ToInt64(reader.GetValue(17)),
+                        DataQualityRowsWarned = Convert.ToInt64(reader.GetValue(18)),
+                        DataQualityValidationMs = Convert.ToInt64(reader.GetValue(19)),
+                        Failed = Convert.ToInt64(reader.GetValue(20)) != 0
+                    }));
+            }
+            return results;
+        }
+
         public async Task<IReadOnlyList<JobDataQualityFailure>> GetDataQualityFailuresAsync(int limit = 1000)
         {
             await EnsureInitializedAsync();

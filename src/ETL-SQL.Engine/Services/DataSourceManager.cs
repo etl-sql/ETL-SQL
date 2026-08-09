@@ -271,6 +271,10 @@ public class DataSourceManager(
         {
             return new DataQualityFailuresDataSource(_evaluator, _jobHistoryStore);
         }
+        else if (IsEngineVirtualTable(table, "job_statement_metrics"))
+        {
+            return new JobStatementMetricsDataSource(_evaluator, _jobHistoryStore);
+        }
         else if (IsEngineVirtualTable(table, "job_state"))
         {
             return new JobStateDataSource(_jobHistoryStore);

@@ -16,6 +16,7 @@
 | [ENG](eng.md) | - **eng.connections** - Active session connections. |
 | [eng.host_metrics](host-metrics.md) | - Engine Catalog |
 | [eng.job_history](job-history.md) | - Engine Catalog |
+| [`eng.job_statement_metrics`](job-statement-metrics.md) | Per-statement measurements for job runs — the run flight recorder, live session and durable history. |
 | [eng.job_state](job-state.md) | - Engine Catalog |
 | [eng.jobs](jobs.md) | - Engine Catalog |
 | [`eng.lineage_history`](lineage-history.md) | Durable lineage events captured across orchestrated runs. Qualify the schema with an Orchestrator connection to query a remote catalog. |

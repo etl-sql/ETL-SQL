@@ -727,6 +727,111 @@ public sealed class DataQualityStatusDataSource : IDataSource
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
+/// <summary>
+/// <c>eng.job_statement_metrics</c> — the run flight recorder as an engine catalog table.
+///
+/// <para>Solo has no Portal, so the durable statement timeline has to be readable here or the
+/// smallest deployment profile silently loses a capability Team gains. Same reason
+/// <c>eng.job_history</c> and <c>eng.data_quality_failures</c> exist.</para>
+///
+/// <para>Live session rows come first with <c>source = 'CURRENT_RUN'</c>, matching
+/// <c>eng.profile</c>; persisted rows follow as <c>'HISTORY'</c>. Column names match
+/// <c>eng.profile</c> so one query shape reads either.</para>
+/// </summary>
+public sealed class JobStatementMetricsDataSource : IDataSource
+{
+    private readonly IExecutionContext _context;
+    private readonly IJobHistoryStore? _store;
+    private static readonly string[] Columns =
+    [
+        "run_id", "job_name", "start_time", "end_time", "status", "ordinal", "statement",
+        "duration_ms", "rows_processed", "cpu_time_ms", "spilled_bytes", "spill_read_bytes",
+        "partitions", "queue_wait_ms", "lock_wait_ms", "index_used",
+        "dq_rows_validated", "dq_rows_quarantined", "dq_rows_warned", "dq_validation_ms",
+        "failed", "source"
+    ];
+
+    public JobStatementMetricsDataSource(IExecutionContext context, IJobHistoryStore? store)
+    {
+        _context = context;
+        _store = store;
+    }
+
+    public string Path => "eng.job_statement_metrics";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "ENG";
+    public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => ReadBatches(batchSize, CancellationToken.None);
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var rows = new List<Row>();
+
+        // The live session, so a Solo author reading their own run sees it without a store.
+        var live = _context.Telemetry?.ProfileMetrics;
+        if (live is not null)
+        {
+            for (var i = 0; i < live.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(ToRow(
+                    _context.SessionId ?? "current", _context.JobName, null, null, "RUNNING", i,
+                    ETL_SQL.Core.Profiling.StatementMetricsPayload.From(live[i]), "CURRENT_RUN"));
+            }
+        }
+
+        if (_store != null)
+        {
+            foreach (var entry in await _store.GetStatementMetricsAsync(Math.Max(batchSize, 1000)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rows.Add(ToRow(entry.RunId.ToString(), entry.JobName, entry.StartTime, entry.EndTime,
+                    entry.Status, entry.Ordinal, entry.Statement, "HISTORY"));
+            }
+        }
+
+        var table = new DataTable();
+        table.SetColumns(Columns);
+        foreach (var row in rows) await table.AddRowAsync(row);
+        yield return table;
+    }
+
+    private static Row ToRow(
+        string runId, string? jobName, DateTime? startTime, DateTime? endTime, string status,
+        int ordinal, ETL_SQL.Core.Profiling.StatementMetricsPayload statement, string source) => new()
+        {
+            ["run_id"] = runId,
+            ["job_name"] = jobName,
+            ["start_time"] = startTime,
+            ["end_time"] = endTime,
+            ["status"] = status,
+            ["ordinal"] = (decimal)ordinal,
+            ["statement"] = statement.Statement,
+            ["duration_ms"] = (decimal)statement.DurationMs,
+            ["rows_processed"] = (decimal)statement.RowsProcessed,
+            ["cpu_time_ms"] = (decimal)statement.CpuTimeMs,
+            ["spilled_bytes"] = (decimal)statement.SpilledBytes,
+            ["spill_read_bytes"] = (decimal)statement.SpillReadBytes,
+            ["partitions"] = (decimal)statement.Partitions,
+            ["queue_wait_ms"] = (decimal)statement.QueueWaitMs,
+            ["lock_wait_ms"] = (decimal)statement.LockWaitMs,
+            ["index_used"] = statement.IndexUsed,
+            ["dq_rows_validated"] = (decimal)statement.DataQualityRowsValidated,
+            ["dq_rows_quarantined"] = (decimal)statement.DataQualityRowsQuarantined,
+            ["dq_rows_warned"] = (decimal)statement.DataQualityRowsWarned,
+            ["dq_validation_ms"] = (decimal)statement.DataQualityValidationMs,
+            ["failed"] = statement.Failed,
+            ["source"] = source
+        };
+
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+        throw new NotSupportedException("eng.job_statement_metrics is read-only.");
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult<IEnumerable<string>>(Columns);
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
+    public IDataSource WithTable(string tableName) => this;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
 public sealed class DataQualityFailuresDataSource : IDataSource
 {
     private readonly IExecutionContext _context;

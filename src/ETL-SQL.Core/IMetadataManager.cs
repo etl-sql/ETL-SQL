@@ -23,7 +23,8 @@ public static class EngineCatalog
         "profile", "connection_config", "jobs", "job_history", "job_state", "host_metrics",
         "bundles", "bundle_files", "bundle_dependencies", "tags",
         "lineage", "locks", "sessions", "lineage_history", "missing_tags",
-        "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps"
+        "protected_data", "protected_data_suggestions", "data_quality_rules", "stewardship_score", "stewardship_gaps",
+        "job_statement_metrics"
     };
 
     public static readonly Dictionary<string, List<ColumnMetadata>> TableColumns = new(StringComparer.OrdinalIgnoreCase)
@@ -62,6 +63,16 @@ public static class EngineCatalog
         ["data_quality_rules"] = new() { new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("rule_tag", "VARCHAR"), new("rule", "VARCHAR"), new("action", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "VARCHAR") },
         ["stewardship_score"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("numerator", "INT"), new("denominator", "INT"), new("percentage", "DECIMAL"), new("asset_count", "INT"), new("column_count", "INT"), new("weight", "DECIMAL"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
         ["stewardship_gaps"] = new() { new("scope_type", "VARCHAR"), new("scope_name", "VARCHAR"), new("component", "VARCHAR"), new("target_table", "VARCHAR"), new("target_column", "VARCHAR"), new("requirement", "VARCHAR"), new("source_file", "VARCHAR"), new("line", "INT"), new("evaluated_at_utc", "DATETIME"), new("definition_version", "VARCHAR") },
+        ["job_statement_metrics"] = new()
+        {
+            new("run_id", "VARCHAR"), new("job_name", "VARCHAR"), new("start_time", "DATETIME"), new("end_time", "DATETIME"),
+            new("status", "VARCHAR"), new("ordinal", "INT"), new("statement", "VARCHAR"),
+            new("duration_ms", "INT"), new("rows_processed", "INT"), new("cpu_time_ms", "INT"),
+            new("spilled_bytes", "INT"), new("spill_read_bytes", "INT"), new("partitions", "INT"),
+            new("queue_wait_ms", "INT"), new("lock_wait_ms", "INT"), new("index_used", "VARCHAR"),
+            new("dq_rows_validated", "INT"), new("dq_rows_quarantined", "INT"), new("dq_rows_warned", "INT"),
+            new("dq_validation_ms", "INT"), new("failed", "BOOLEAN"), new("source", "VARCHAR")
+        },
         ["profile"] = new()
         {
             new("timestamp", "VARCHAR"), new("statement", "VARCHAR"), new("rows_processed", "VARCHAR"), new("index_used", "VARCHAR"), new("duration_ms", "VARCHAR"), new("memory_kb", "VARCHAR"),

@@ -127,6 +127,19 @@ public record JobHistoryEntry(
 );
 
 /// <summary>One normalized, counts-only data-quality failure joined to its run identity.</summary>
+/// <summary>
+/// A persisted statement measurement joined to the run it belongs to, for the
+/// <c>eng.job_statement_metrics</c> read model.
+/// </summary>
+public sealed record JobStatementMetric(
+    long RunId,
+    string JobName,
+    DateTime StartTime,
+    DateTime? EndTime,
+    string Status,
+    int Ordinal,
+    ETL_SQL.Core.Profiling.StatementMetricsPayload Statement);
+
 public sealed record JobDataQualityFailure(
     long RunId,
     string JobName,
@@ -231,6 +244,16 @@ public interface IJobHistoryStore
     /// are deployment settings rather than fixed values.</para>
     /// </summary>
     Task<int> PruneStatementMetricsAsync(TimeSpan successMaxAge, TimeSpan failedMaxAge) => Task.FromResult(0);
+
+    /// <summary>
+    /// Recent statement measurements across runs, newest run first, for the <c>eng.*</c> read model.
+    ///
+    /// <para>Solo has no Portal, so the durable timeline has to be reachable as an engine catalog
+    /// table or the smallest profile silently loses a capability that Team gains — the same reason
+    /// <c>eng.job_history</c> and <c>eng.data_quality_failures</c> exist.</para>
+    /// </summary>
+    Task<IReadOnlyList<JobStatementMetric>> GetStatementMetricsAsync(int limit = 1000) =>
+        Task.FromResult<IReadOnlyList<JobStatementMetric>>([]);
 
     /// <summary>Reads back a run's statement timeline, in execution order.</summary>
     Task<IReadOnlyList<ETL_SQL.Core.Profiling.StatementMetricsPayload>> GetJobStatementMetricsAsync(long entryId) =>

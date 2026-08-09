@@ -55,6 +55,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         }
 
+        /// <summary>Process-unique owner id for the maintenance lease, matching the heartbeat's form.</summary>
+        private readonly string _maintenanceOwner =
+            $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+
+        /// <summary>Lease name for the periodic history/metrics maintenance pass.</summary>
+        internal const string MaintenanceLockName = "orchestrator:history-maintenance";
+
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
         public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
 
@@ -216,67 +223,102 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         // Reconcile orphaned/hung RUNNING rows first so they become prunable and visible
                         // to failure reporting, then prune old terminal rows.
                         int maxRuntimeHours = _configuration.GetValue<int>("Orchestrator:MaxJobRuntimeHours", 24);
-                        try
+                        // Roll-up and pruning rewrite shared state. Behind a load balancer every
+                        // node reaches this on its own timer, so without a lease they run
+                        // concurrently against one database — duplicating roll-up work and racing
+                        // each other's deletes. A node that loses the race skips this cycle rather
+                        // than waiting: the next pass is minutes away, and blocking a scheduler
+                        // loop to do maintenance twice is worse than not doing it now.
+                        var maintenanceLocks = _store as IClusterLockStore;
+                        var maintenanceLease = TimeSpan.FromMinutes(
+                            _configuration.GetValue<int>("Scheduler:MaintenanceLeaseMinutes", 15));
+                        var holdsMaintenanceLease = maintenanceLocks is null
+                            || await maintenanceLocks.TryAcquireLockAsync(
+                                MaintenanceLockName, _maintenanceOwner, maintenanceLease);
+
+                        if (!holdsMaintenanceLease)
                         {
-                            if (maxRuntimeHours > 0)
+                            _logger.LogDebug(
+                                "Skipping history maintenance this cycle; another node holds '{Lock}'.",
+                                MaintenanceLockName);
+                        }
+                        else
+                            try
                             {
-                                int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
-                                if (reconciled > 0)
-                                    _logger.LogWarning("Marked {Count} RUNNING job-history row(s) exceeding the max runtime ({Hours}h) as INTERRUPTED.", reconciled, maxRuntimeHours);
-                            }
-
-                            // Roll up BEFORE pruning raw rows, so daily trend captures rows about to
-                            // age out. Daily summaries are retained far longer than raw history/samples.
-                            var metricsStore = _store as IHostMetricsStore;
-                            int rollupRetentionDays = _configuration.GetValue<int>("Orchestrator:HistoryRollupRetentionDays", 400);
-                            await _store.RollUpJobHistoryAsync();
-                            if (metricsStore != null) await metricsStore.RollUpHostMetricsAsync();
-                            if (rollupRetentionDays > 0)
-                            {
-                                await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
-                                if (metricsStore != null) await metricsStore.PruneHostMetricsDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
-                            }
-
-                            if (historyRetentionDays > 0)
-                            {
-                                int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
-                                if (pruned > 0)
-                                    _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
-                            }
-
-                            int successfulStatementRetentionDays = _configuration.GetValue<int>(
-                                "Orchestrator:SuccessfulStatementMetricsRetentionDays", 7);
-                            int failedStatementRetentionDays = _configuration.GetValue<int>(
-                                "Orchestrator:FailedStatementMetricsRetentionDays", 30);
-                            if (successfulStatementRetentionDays > 0 && failedStatementRetentionDays > 0)
-                            {
-                                int prunedStatements = await _store.PruneStatementMetricsAsync(
-                                    TimeSpan.FromDays(successfulStatementRetentionDays),
-                                    TimeSpan.FromDays(failedStatementRetentionDays));
-                                if (prunedStatements > 0)
+                                if (maxRuntimeHours > 0)
                                 {
-                                    _logger.LogInformation(
-                                        "Orchestrator: pruned {Count} statement-metric row(s) using success={SuccessDays}d and failure={FailureDays}d retention.",
-                                        prunedStatements,
-                                        successfulStatementRetentionDays,
-                                        failedStatementRetentionDays);
+                                    int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
+                                    if (reconciled > 0)
+                                        _logger.LogWarning("Marked {Count} RUNNING job-history row(s) exceeding the max runtime ({Hours}h) as INTERRUPTED.", reconciled, maxRuntimeHours);
+                                }
+
+                                // Roll up BEFORE pruning raw rows, so daily trend captures rows about to
+                                // age out. Daily summaries are retained far longer than raw history/samples.
+                                var metricsStore = _store as IHostMetricsStore;
+                                int rollupRetentionDays = _configuration.GetValue<int>("Orchestrator:HistoryRollupRetentionDays", 400);
+                                await _store.RollUpJobHistoryAsync();
+                                if (metricsStore != null) await metricsStore.RollUpHostMetricsAsync();
+                                if (rollupRetentionDays > 0)
+                                {
+                                    await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
+                                    if (metricsStore != null) await metricsStore.PruneHostMetricsDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
+                                }
+
+                                if (historyRetentionDays > 0)
+                                {
+                                    int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
+                                    if (pruned > 0)
+                                        _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+                                }
+
+                                int successfulStatementRetentionDays = _configuration.GetValue<int>(
+                                    "Orchestrator:SuccessfulStatementMetricsRetentionDays", 7);
+                                int failedStatementRetentionDays = _configuration.GetValue<int>(
+                                    "Orchestrator:FailedStatementMetricsRetentionDays", 30);
+                                if (successfulStatementRetentionDays > 0 && failedStatementRetentionDays > 0)
+                                {
+                                    int prunedStatements = await _store.PruneStatementMetricsAsync(
+                                        TimeSpan.FromDays(successfulStatementRetentionDays),
+                                        TimeSpan.FromDays(failedStatementRetentionDays));
+                                    if (prunedStatements > 0)
+                                    {
+                                        _logger.LogInformation(
+                                            "Orchestrator: pruned {Count} statement-metric row(s) using success={SuccessDays}d and failure={FailureDays}d retention.",
+                                            prunedStatements,
+                                            successfulStatementRetentionDays,
+                                            failedStatementRetentionDays);
+                                    }
+                                }
+
+                                // Host-metrics samples are dense; retain them shorter than job history and
+                                // rely on the roll-up for long-term trend. Same store implements both.
+                                int hostMetricsRetentionDays = _configuration.GetValue<int>("Orchestrator:HostMetricsRetentionDays", 14);
+                                if (hostMetricsRetentionDays > 0 && metricsStore != null)
+                                {
+                                    int prunedMetrics = await metricsStore.PruneHostMetricsAsync(TimeSpan.FromDays(hostMetricsRetentionDays));
+                                    if (prunedMetrics > 0)
+                                        _logger.LogInformation("Orchestrator: pruned {Count} host-metrics sample(s) older than {Days} day(s).", prunedMetrics, hostMetricsRetentionDays);
                                 }
                             }
-
-                            // Host-metrics samples are dense; retain them shorter than job history and
-                            // rely on the roll-up for long-term trend. Same store implements both.
-                            int hostMetricsRetentionDays = _configuration.GetValue<int>("Orchestrator:HostMetricsRetentionDays", 14);
-                            if (hostMetricsRetentionDays > 0 && metricsStore != null)
+                            catch (Exception ex)
                             {
-                                int prunedMetrics = await metricsStore.PruneHostMetricsAsync(TimeSpan.FromDays(hostMetricsRetentionDays));
-                                if (prunedMetrics > 0)
-                                    _logger.LogInformation("Orchestrator: pruned {Count} host-metrics sample(s) older than {Days} day(s).", prunedMetrics, hostMetricsRetentionDays);
+                                _logger.LogWarning(ex, "Job-history maintenance failed; will retry next cycle.");
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Job-history maintenance failed; will retry next cycle.");
-                        }
+                            finally
+                            {
+                                // Released rather than left to expire, so the next cycle is not blocked
+                                // for the remainder of the lease if this node finishes early.
+                                if (maintenanceLocks is not null)
+                                {
+                                    try { await maintenanceLocks.ReleaseLockAsync(MaintenanceLockName, _maintenanceOwner); }
+                                    catch (Exception releaseEx)
+                                    {
+                                        _logger.LogDebug(releaseEx,
+                                            "Could not release '{Lock}'; it will expire on its lease.",
+                                            MaintenanceLockName);
+                                    }
+                                }
+                            }
                         _lastHistoryPrune = now;
                     }
 

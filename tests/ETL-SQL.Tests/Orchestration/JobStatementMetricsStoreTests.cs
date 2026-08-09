@@ -181,6 +181,46 @@ public sealed class JobStatementMetricsStoreTests : IDisposable
         Assert.Empty(await store.GetJobStatementMetricsAsync(failed));
     }
 
+    /// <summary>
+    /// Solo has no Portal, so the durable timeline must be reachable across runs as an engine
+    /// catalog read model or the smallest profile loses a capability Team gains.
+    /// </summary>
+    [Fact]
+    public async Task StatementsAreReadableAcrossRunsForTheEngReadModel()
+    {
+        var store = NewStore();
+        await store.InitializeAsync();
+        var first = await store.LogJobStartAsync("nightly");
+        var second = await store.LogJobStartAsync("hourly");
+        await store.SaveJobStatementMetricsAsync(first, [Statement("SELECT ?", 10)]);
+        await store.SaveJobStatementMetricsAsync(second, [Statement("UPDATE t SET x = ?", 20)]);
+
+        var all = await store.GetStatementMetricsAsync(100);
+
+        Assert.Equal(2, all.Count);
+        Assert.Contains(all, m => m.JobName == "nightly" && m.Statement.Statement == "SELECT ?");
+        Assert.Contains(all, m => m.JobName == "hourly");
+    }
+
+    [Fact]
+    public async Task TheCrossRunReadCarriesRunIdentityAlongsideTheMeasurements()
+    {
+        var store = NewStore();
+        await store.InitializeAsync();
+        var historyId = await store.LogJobStartAsync("nightly");
+        await store.LogJobEndAsync(historyId, "FAILURE", "boom");
+        await store.SaveJobStatementMetricsAsync(historyId, [Statement("THROW ?", 42, failed: true)]);
+
+        var entry = Assert.Single(await store.GetStatementMetricsAsync(100));
+
+        Assert.Equal(historyId, entry.RunId);
+        Assert.Equal("nightly", entry.JobName);
+        Assert.Equal("FAILURE", entry.Status);
+        Assert.Equal(0, entry.Ordinal);
+        Assert.Equal(42, entry.Statement.DurationMs);
+        Assert.True(entry.Statement.Failed);
+    }
+
     /// <summary>Re-writing the same run must not duplicate its timeline.</summary>
     [Fact]
     public async Task SavingTwiceDoesNotDuplicateTheTimeline()
