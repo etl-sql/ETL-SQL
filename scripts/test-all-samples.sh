@@ -14,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 SAMPLES_DIR="$ROOT/samples"
 PROJECT_PATH="$ROOT/src/ETL-SQL.App"
+VALIDATOR_STATE_ROOT="$ROOT/release-validation/sample-validator-$$"
+SECURITY_EVENT_OUTBOX_PATH="$VALIDATOR_STATE_ROOT/security-events.db"
+SESSION_ROOT="$VALIDATOR_STATE_ROOT/sessions"
+mkdir -p "$VALIDATOR_STATE_ROOT"
+trap 'rm -rf -- "$VALIDATOR_STATE_ROOT"' EXIT
 
 # Check port availability (returns 0=open, 1=closed)
 port_open() {
@@ -76,15 +81,31 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
         fi
     fi
 
+    EXPECTED_EXIT_TAG=$(head -5 "$SCRIPT_FILE" 2>/dev/null | grep -i '@expected-exit-code:' | head -1 || true)
+    EXPECTED_ERROR_TAG=$(head -5 "$SCRIPT_FILE" 2>/dev/null | grep -i '@expected-error:' | head -1 || true)
+    EXPECTED_EXIT=""
+    EXPECTED_ERROR=""
+    if [[ -n "$EXPECTED_EXIT_TAG" ]]; then
+        EXPECTED_EXIT=$(echo "$EXPECTED_EXIT_TAG" | sed -E 's/.*@expected-exit-code:[[:space:]]*//' | tr -d '\r')
+        EXPECTED_ERROR=$(echo "$EXPECTED_ERROR_TAG" | sed -E 's/.*@expected-error:[[:space:]]*//' | tr -d '\r')
+    fi
+
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(timeout 180 dotnet run --no-build --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" timeout 180 dotnet run --no-build --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
+    HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then
+        HAS_INTERNAL_ERROR=true
         EXIT_CODE=1
     fi
 
-    if [[ "$EXIT_CODE" -eq 0 ]]; then
+    EXPECTED_FAILURE_MATCHED=false
+    if [[ -n "$EXPECTED_EXIT" && -n "$EXPECTED_ERROR" && "$HAS_INTERNAL_ERROR" == false && "$EXIT_CODE" -eq "$EXPECTED_EXIT" && "$OUTPUT" == *"$EXPECTED_ERROR"* ]]; then
+        EXPECTED_FAILURE_MATCHED=true
+    fi
+
+    if { [[ -z "$EXPECTED_EXIT" && "$EXIT_CODE" -eq 0 ]]; } || [[ "$EXPECTED_FAILURE_MATCHED" == true ]]; then
         echo "PASSED"
         PASSED=$((PASSED + 1))
     else

@@ -4,13 +4,20 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 `scripts/` so a release is reproducible and auditable. Strategy and rationale live in
 [`Release_Workflows.md`](../architecture/roadmaps/Release_Workflows.md); this file is the step list.
 
-> **Tooling note.** The authoritative validation gate is `scripts/Test-PreRelease.ps1`
+> **Tooling note.** This checklist is the authoritative release policy. The local validation driver is
+> `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
 > packaging is `scripts/Master-Release.ps1`, which calls `scripts/publish-release.ps1`
 > (checksums + SBOM) and `scripts/build-msi.ps1`. The mechanical Phases 3–5 below (gate check →
 > version consistency → notes → push/CI → tag → watch `release.yml` → attach `sha256sums`/`sbom`)
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
 > `-DryRun` first, and `-Force` to continue a partial release.
+>
+> `Test-PreRelease.ps1` does not yet execute or validate every certification listed below, and
+> `Invoke-Release.ps1` currently checks only that its latest state passed for the current source
+> fingerprint. It does not distinguish a full release run from `-Quick`, omitted optional lanes, or
+> external CI/operator evidence. Complete every applicable checkbox in this document before tagging;
+> a green local gate alone is necessary but not sufficient.
 
 Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
 
@@ -28,6 +35,9 @@ Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
       preserved, and target bindings or new N/A boundaries are explicit.
 - [ ] Release claims name only profiles/transitions with current linked evidence; changed matrix
       cells and applicable regulated, air-gapped, high-volume, HA, DR, or residency overlays were reviewed.
+- [ ] The exact release-candidate commit is recorded. Certification from a dirty worktree, another
+      commit, another topology, or an earlier release is development/history evidence—not release
+      evidence.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
 - [ ] **Pause Dependabot during the release window.** Temporarily pause or comment out Dependabot update schedules in `.github/dependabot.yml` so automatic PR rebases and CI runs do not compete for runner capacity during release builds.
 - [ ] **Release path is actually open** (these blocked v0.16.0 mid-release):
@@ -97,13 +107,16 @@ Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
       authority still gates dataset/connection access. Data isolation from an author is a DB-layer
       responsibility, out of scope. See open question 1 in [`RowLevelSecurity.md`](../architecture/decisions/RowLevelSecurity.md).
 
-## Phase 3 — Local validation gate (authoritative)
+## Phase 3 — Validation and certification evidence
 
-This is the gate. Green CI is **not** a substitute — CI does not run the Docker-integration or SLT lanes.
+The local gate is the authoritative local validation run. It is one required part of the release
+decision, not the whole decision. Green CI is not a substitute because CI does not run the
+Docker-integration or SLT lanes; likewise, a green local gate is not a substitute for the
+cross-platform and operator-run certifications below.
 
 - [ ] Preview the plan (no side effects):
       ```powershell
-      .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration
+      .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
 - [ ] Run the full gate:
       ```powershell
@@ -111,7 +124,7 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
       ```
 - [ ] On a failure, fix it and resume (reuses passed phases only if the source fingerprint matches):
       ```powershell
-      .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration
+      .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
 - [ ] Run the gate detached to avoid terminal interruption during long runs (PowerShell on Windows):
       ```powershell
@@ -134,6 +147,98 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
       ```
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
+
+### Certification schedule and evidence ledger
+
+Use this schedule on every release. “Separate workflow” means the work may run in CI or on a
+controlled operator host; it does **not** make the evidence optional. Every blocking artifact must
+name the exact clean candidate commit, its topology/platform, command, result, and uncovered scope.
+Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
+
+#### Required for every release candidate
+
+- [ ] **Full local pre-release gate:** passed with SLT, Docker integration, and Standard scale—not
+      `-Quick`, and not a default run with those switches omitted:
+      ```powershell
+      .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
+      ```
+      Evidence: `release-validation/<run-id>/` and `release-validation/latest/state.json`.
+- [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass:
+      ```powershell
+      .\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion x.y.z
+      ```
+- [ ] **Deployment transitions and upgrades:** all supported transitions and N→N+1 profile upgrades
+      pass:
+      ```powershell
+      .\scripts\Test-DeploymentProfileCertification.ps1 -Transition All -ReleaseVersion x.y.z
+      ```
+      Evidence for both commands:
+      `artifacts/release-evidence/x.y.z/deployment-profiles/claims-index.{json,md}` plus every linked
+      timestamped bundle. Managed Dedicated evidence must say `Managed Dedicated`; Shared SaaS must
+      remain `NotCertified` until its own hostile shared-topology lane exists.
+- [ ] **Enterprise hardening:** `Test-EnterpriseHardeningCertification.ps1` passes on both Windows
+      and Linux for the candidate SHA. Use the `Enterprise Certification (windows)` and `(linux)` CI
+      artifacts, or equivalent controlled-host runs under
+      `certification-results/enterprise-hardening/<run-id>/<platform>/`.
+- [ ] **Recovery drill:** `etl-sql admin restore --validate --report` passes against candidate backup
+      material, with the report retained under `artifacts/release-evidence/x.y.z/recovery/`.
+- [ ] **HA fault/recovery evidence:** the candidate's fault plan is run and its evidence validates.
+      Retain topology metadata, fault report, recovery/continuity result, and the output of:
+      ```powershell
+      etl-sql admin ha-soak validate --run-root <run-root> --required-gate All `
+        --markdown-report artifacts/release-evidence/x.y.z/ha/evidence-validation.md
+      ```
+      If an environment cannot run a required topology, record the release as not certified for that
+      topology; do not inherit an older result while continuing to publish a current HA claim.
+- [ ] **CodeQL:** both language analyses for the candidate `main` commit are green, with no unresolved
+      High/Critical alert accepted silently. CodeQL remains a CI gate rather than a local phase.
+- [ ] **MSI in-place upgrade:** the `MSI In-Place Upgrade` workflow passes for the candidate/tag and
+      its `release-validation/msi-upgrade/` evidence is retained. Tags force the full install test;
+      path-based PR skipping is not tag evidence.
+
+#### Conditional certification—run when the affected surface changed
+
+Mark each row **Run** or **Not applicable**, and record the diff-based reason. “Not applicable” is a
+reviewed decision, not a silent omission.
+
+| Certification | Trigger | Command / evidence |
+| :--- | :--- | :--- |
+| Stress scale | Evaluator, spill, memory governor, scheduler, temp-table, large-data, or relevant runtime changes | `Test-ScaleCertification.ps1 -Tier Stress`; retain its JSON/Markdown report and use `Test-ScaleCommitComparison.ps1 -Tier Stress` for affected-scenario regression claims. |
+| Provider scale | Connector/provider, batching, retry, timeout, pushdown, or serialization changes | `Test-ScaleCertification.ps1 -Tier Provider` plus the applicable Docker/provider lane. |
+| Columnar storage/operator gates | Columnar layout, scan, filter, projection, aggregate, join, or admission thresholds changed | `Test-ColumnarStorageGate.ps1` and/or `Test-ColumnarOperatorGate.ps1`; retain their reports. |
+| Spill allocation profile | Spill/temp-table allocation, GC, cleanup, or I/O changed | `Test-SpillAllocProfile.ps1`; compare with the checked-in allocation budget. |
+| Service capacity | Portal/Orchestrator concurrency, queues, admission, scheduling, caching, or API hot paths changed | `test-service-capacity.mjs`; retain JSON/Markdown plus `compare-capacity-results.mjs` output. |
+| Provider/OS packaging | Installer, RID publishing, native dependency, VSIX, or packaging changed | Run the affected package/install lane on every supported affected OS/architecture. |
+
+#### Periodic or performance-claim certification
+
+These are deliberately not ordinary per-release workstation phases. Run them on controlled hosts,
+retain commit-bound evidence, and require them for any release that changes the certified path or
+makes/renews the associated claim.
+
+| Certification | Required cadence |
+| :--- | :--- |
+| Huge scale | Scheduled baseline (at least quarterly), and whenever a release changes the relevant large-data execution path or publishes a new large-scale claim. Use `Test-ScaleCertification.ps1 -Tier Huge`. |
+| Billion-row certification | Before changing/publishing a billion-row claim and whenever its certified scan/spill/operator paths change. Run `Test-BillionRowCertification.ps1`, then validate with `Test-BillionRowEvidence.ps1` for the candidate commit. |
+| Sustained HA/capacity soak | Scheduled on the controlled HA environment and whenever HA capacity, recovery time, or failure-containment behavior changes. Validate the retained run with `etl-sql admin ha-soak validate`; do not cite an unvalidated soak. |
+| Full service-capacity baseline | Scheduled baseline (at least quarterly) and before publishing new Portal/Orchestrator throughput, concurrency, or latency claims. |
+
+The `New-Ha*`, `Test-Ha*Plan`, workload-materialization, diagnostics, and runbook scripts are harness
+components, not separate product certifications. Their inexpensive self-tests remain grouped behind
+`Test-HaSoakContracts.ps1`. `Test-GateF.ps1`/`Test-GateFEvidence.ps1` are compatibility aliases for
+the `Test-BillionRow*` commands and are not additional gates.
+
+#### Final evidence review before packaging
+
+- [ ] Every required and conditionally applicable row above has a current evidence link or an explicit
+      reviewed N/A reason.
+- [ ] Evidence paths are indexed under `artifacts/release-evidence/x.y.z/`; the index records what was
+      not covered as well as what passed.
+- [ ] Profile, transition, platform, topology, configuration, commit, dirty state, and result match the
+      release claim. Managed Dedicated and Shared SaaS are reviewed as separate claims.
+- [ ] `Invoke-Release.ps1` is not used as a substitute for this review. Until it validates a
+      release-mode evidence manifest, its green pre-release-state check does not prove that the
+      optional and external rows above ran.
 
 The gate covers (in order): asset-drift check, changelog compilation, **secret scan**,
 `dotnet restore`, dependency-audit self-test, NuGet dependency audit (no
@@ -198,6 +303,12 @@ Linux (WSL/Docker) as part of the gate.
 
 ## Phase 4 — Build & package artifacts
 
+Packaging consumes validated evidence; it does not certify it. `publish-release.ps1` currently
+archives whatever is present under `certification-results/` without checking commit, freshness,
+topology, completeness, or result. Run packaging from the clean candidate worktree and include only
+the evidence accepted in Phase 3—never treat the existence of the ZIP as proof that its contents
+passed.
+
 - [ ] Build installers via the gate (preferred, logged) **or** the master orchestrator:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Resume -BuildInstallers -Platforms win-x64
@@ -206,6 +317,11 @@ Linux (WSL/Docker) as part of the gate.
       ```
 - [ ] Confirm `release/` contains the platform bundles, `sha256sums.txt`, and `sbom.json`
       (CycloneDX) generated by `publish-release.ps1`.
+- [ ] Inspect `ETL-SQL-vx.y.z-certification-results.zip` against the Phase 3 evidence index. It
+      contains no stale, dirty, failed, wrong-commit, or unrelated local certification runs.
+- [ ] Retain or attach `artifacts/release-evidence/x.y.z/` separately. The current
+      `publish-release.ps1` certification ZIP includes `certification-results/`, not this release
+      evidence directory; neither archive substitutes for the Phase 3 evidence review.
 - [ ] Windows MSI built (WiX 3.14 `candle`/`light` on PATH) — `build-msi.ps1`.
 - [ ] Linux/Mac packages built on (or via WSL/native host) as applicable.
 - [ ] Spot-check a built binary launches: `dotnet ETL-SQL.dll --version` (or run an MSI install in a VM).
@@ -287,7 +403,13 @@ Stop the bleeding, then fix forward.
 | Step | Script | Notes |
 | :--- | :--- | :--- |
 | Bump version | `scripts/Set-Version.ps1 -Version x.y.z` | All locations except CHANGELOG + WiX manifest |
-| Validation gate | `scripts/Test-PreRelease.ps1` (`test-pre-release.sh`) | Authoritative; `-Resume`, `-Explain`, `-IncludeSlt`, `-IncludeDockerIntegration`, `-IncludeStandardScale`, `-BuildInstallers` |
+| Local validation gate | `scripts/Test-PreRelease.ps1` (`test-pre-release.sh`) | Required local component; full release run includes SLT, Docker integration, and Standard scale; never use `-Quick` as release evidence |
+| Deployment certification | `scripts/Test-DeploymentProfileCertification.ps1` | Every release: `-Profile All` and `-Transition All`, both with `-ReleaseVersion x.y.z` |
+| Enterprise certification | `scripts/Test-EnterpriseHardeningCertification.ps1` | Every release on Windows and Linux; retain both artifacts |
+| Scale certification | `scripts/Test-ScaleCertification.ps1` | Smoke + Standard every release; Stress/Provider conditional; Huge periodic/claim-driven |
+| Billion-row certification | `scripts/Test-BillionRowCertification.ps1` + `Test-BillionRowEvidence.ps1` | Controlled host; changed certified paths or billion-row claims |
+| HA contract/evidence | `scripts/Test-HaSoakContracts.ps1`; native `etl-sql admin ha-soak ...` | Contracts every release; measured fault/recovery evidence validated separately |
+| MSI upgrade certification | `.github/workflows/msi-upgrade.yml` / `scripts/Test-MsiUpgrade.ps1` | Full run for every tag; path-aware on PRs |
 | Package all platforms | `scripts/Master-Release.ps1 -Version x.y.z` | Calls publish + MSI; `-SkipTests`, `-SkipUI`, `-IncludeSampleValidation` |
 | Publish artifacts | `scripts/publish-release.ps1` | Emits `release/`, `sha256sums.txt`, `sbom.json` |
 | Windows MSI | `scripts/build-msi.ps1` | WiX 3.14 |

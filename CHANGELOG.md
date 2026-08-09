@@ -101,6 +101,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added fail-closed deployment-profile certification bundles. Profile, transition, upgrade, and
+  Managed Dedicated lifecycle tests now emit concrete scenario evidence; the runner aggregates
+  topology, artifact hashes, target-owned mappings, continuity identifiers/counts, negative proof,
+  and rollback outcomes into JSON and Markdown. A stable release claims index keeps profiles and
+  transitions separate, rejects dirty-worktree release evidence, and records Shared SaaS as
+  `NotCertified` rather than inheriting a Managed Dedicated result.
+
 - **Cookbook recipe 28 — end-to-end lineage across two scripts.** A CSV loads into an EDW table
   through several transformations and exports its lineage; a separate report script, in its own
   session and with different connection aliases, imports that document and shows the CSV as the
@@ -352,6 +359,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- **Sample certification now distinguishes intended failures from regressions.** Samples that
+  demonstrate a fail-closed guardrail can declare both an expected exit code and an exact error
+  fragment; the Windows and POSIX runners require both to match. Validator processes also use
+  isolated session and security-event stores instead of mutating or contending with the user's
+  machine state. Native Arrow spill now round-trips `GUID`/`UUID` columns, and the Docker alias
+  lifecycle sample uses the matching pause/resume operations.
 - **The sample-scripts release gate could never fail.** `Test-AllSamples.ps1` printed per-script
   failures and a red summary, then exited 0; the gate judges a phase by its exit code, so the phase
   reported Passed regardless. The POSIX twin always exited non-zero — only the Windows script the

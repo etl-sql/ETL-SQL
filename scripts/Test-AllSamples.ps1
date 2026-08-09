@@ -37,6 +37,10 @@ Set-Location $solutionRoot
 $samplesDir = Join-Path $solutionRoot "samples"
 $etlScripts = Get-ChildItem -Path $samplesDir -Include "*.etlsql", "*.rptsql" -Recurse
 $total = $etlScripts.Count * $Passes
+$validatorStateRoot = Join-Path $solutionRoot "release-validation\sample-validator-$PID"
+$securityEventOutboxPath = Join-Path $validatorStateRoot "security-events.db"
+$sessionRoot = Join-Path $validatorStateRoot "sessions"
+New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
@@ -59,7 +63,8 @@ if ($Passes -gt 1) {
 }
 
 foreach ($script in $etlScripts) {
-    # Skip scripts tagged with -- @requires: <service> when that service is unavailable
+    # Tags belong in the first five lines. @expected-error keeps deliberate failure
+    # demonstrations honest by proving that the intended guardrail caused the non-zero exit.
     $firstLines = Get-Content $script.FullName -TotalCount 5 -ErrorAction SilentlyContinue
     $requiresTag = $firstLines | Where-Object { $_ -match '--\s*@requires:' } | Select-Object -First 1
     if ($requiresTag) {
@@ -88,6 +93,16 @@ foreach ($script in $etlScripts) {
         }
     }
 
+    $expectedExitTag = $firstLines | Where-Object { $_ -match '--\s*@expected-exit-code:' } | Select-Object -First 1
+    $expectedErrorTag = $firstLines | Where-Object { $_ -match '--\s*@expected-error:' } | Select-Object -First 1
+    $expectsFailure = $null -ne $expectedExitTag
+    $expectedExitCode = if ($expectsFailure) {
+        [int](($expectedExitTag -replace '.*@expected-exit-code:\s*', '').Trim())
+    } else { 0 }
+    $expectedError = if ($null -ne $expectedErrorTag) {
+        ($expectedErrorTag -replace '.*@expected-error:\s*', '').Trim()
+    } else { $null }
+
     Write-Host "Starting: $($script.Name) ... " -NoNewline
 
     # Execute the engine and capture output streams
@@ -103,6 +118,8 @@ foreach ($script in $etlScripts) {
         $procInfo.RedirectStandardError = $true
         $procInfo.UseShellExecute = $false
         $procInfo.CreateNoWindow = $true
+        $procInfo.Environment["ETLSQL_SECURITY_EVENT_OUTBOX_PATH"] = $securityEventOutboxPath
+        $procInfo.Environment["Session__Root"] = $sessionRoot
 
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $procInfo
@@ -133,7 +150,14 @@ foreach ($script in $etlScripts) {
     # We do a secondary baseline check on the output text.
     $hasInternalError = ($cliOutput -match "CRITICAL FAILURE|Unhandled exception")
     
-    if ($exitCode -eq 0 -and (-not $hasInternalError)) {
+    $matchesExpectedFailure = $expectsFailure `
+        -and $exitCode -eq $expectedExitCode `
+        -and (-not $hasInternalError) `
+        -and (-not [string]::IsNullOrWhiteSpace($expectedError)) `
+        -and $cliOutput.Contains($expectedError, [StringComparison]::OrdinalIgnoreCase)
+
+    if ((-not $expectsFailure -and $exitCode -eq 0 -and (-not $hasInternalError)) `
+        -or $matchesExpectedFailure) {
         Write-Host "PASSED" -ForegroundColor Green
         $passed++
     }
@@ -148,6 +172,13 @@ foreach ($script in $etlScripts) {
     }
 
 }
+}
+
+# Do not mix certification events or sessions with the interactive user's machine state.
+$resolvedValidatorRoot = [IO.Path]::GetFullPath($validatorStateRoot)
+$expectedValidatorPrefix = [IO.Path]::GetFullPath((Join-Path $solutionRoot "release-validation\sample-validator-"))
+if ($resolvedValidatorRoot.StartsWith($expectedValidatorPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    Remove-Item -LiteralPath $resolvedValidatorRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan

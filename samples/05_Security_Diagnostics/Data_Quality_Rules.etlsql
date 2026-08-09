@@ -1,4 +1,6 @@
 -- Data Quality Rules: validating column VALUES, not just schema shape.
+-- @expected-exit-code: 1
+-- @expected-error: ASSERT JOB sample_user_import failed
 --
 -- EXPECT SCHEMA tells you the columns are the right shape. It says nothing about
 -- whether the values are usable: a VARCHAR happily accepts 'not-an-email', and an

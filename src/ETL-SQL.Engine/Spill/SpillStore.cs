@@ -872,6 +872,7 @@ public partial class SpillStore : ISpillStore
             // Arrow timestamps preserve an instant but not the original DateTimeOffset offset. Store
             // the round-trip representation as UTF-8 so spill/reload retains both pieces of information.
             if (elementType == typeof(DateTimeOffset)) return StringType.Default;
+            if (elementType == typeof(Guid)) return StringType.Default;
             if (elementType == typeof(string)) return StringType.Default;
             throw new NotSupportedException($"Native spill writing does not support '{elementType.Name}' columns.");
         }
@@ -902,6 +903,7 @@ public partial class SpillStore : ISpillStore
             bool => "Boolean",
             DateTime => "Timestamp",
             DateTimeOffset => "DateTimeOffset",
+            Guid => "UUID",
             _ => "Json"
         };
 
@@ -980,6 +982,14 @@ public partial class SpillStore : ISpillStore
                 for (var i = 0; i < offsets.Count; i++)
                     if (offsets.IsNull(i)) builder.AppendNull();
                     else builder.Append(offsets.Values.Span[i].ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<Guid> guids)
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < guids.Count; i++)
+                    if (guids.IsNull(i)) builder.AppendNull();
+                    else builder.Append(guids.Values.Span[i].ToString("D"));
                 return builder.Build();
             }
             if (column is Utf8ColumnBuffer strings)
@@ -1290,6 +1300,9 @@ public partial class SpillStore : ISpillStore
             StringArray values when IsDateTimeOffsetLogicalType(logicalType)
                 => CopyFixed<DateTimeOffset>(count, values.IsNull,
                     i => ParseDateTimeOffsetString(values.GetString(i)!)),
+            StringArray values when IsGuidLogicalType(logicalType)
+                => CopyFixed<Guid>(count, values.IsNull,
+                    i => Guid.Parse(values.GetString(i)!)),
             StringArray values => Utf8ColumnBuffer.CopyEncoded(
                 values.ValueOffsets,
                 values.Values,
@@ -1346,6 +1359,8 @@ public partial class SpillStore : ISpillStore
                 TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
                 StringArray a when IsDateTimeOffsetLogicalType(logicalType)
                     => ParseDateTimeOffsetString(a.GetString(index)!),
+                StringArray a when IsGuidLogicalType(logicalType)
+                    => Guid.Parse(a.GetString(index)!),
                 StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType),
                 _ => null
             };
@@ -1377,6 +1392,11 @@ public partial class SpillStore : ISpillStore
         private static bool IsDateTimeOffsetLogicalType(string? logicalType)
             => logicalType?.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("DateTimeOffset", StringComparison.OrdinalIgnoreCase) == true;
+
+        private static bool IsGuidLogicalType(string? logicalType)
+            => logicalType?.Equals("GUID", StringComparison.OrdinalIgnoreCase) == true
+                || logicalType?.Equals("UUID", StringComparison.OrdinalIgnoreCase) == true
+                || logicalType?.Equals("UNIQUEIDENTIFIER", StringComparison.OrdinalIgnoreCase) == true;
 
         private static DateTimeOffset ParseDateTimeOffsetString(string value)
         {

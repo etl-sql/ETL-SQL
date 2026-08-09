@@ -288,6 +288,7 @@ namespace ETL_SQL.Tests.Hardening
             amount.Values.Span[0] = 4.25m;
             amount.SetNull(1);
             var instant = new DateTimeOffset(2026, 7, 2, 13, 14, 15, TimeSpan.FromHours(5.5));
+            var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
             using var batch = new ETL_SQL.Core.Data.ColumnBatch(
                 new ETL_SQL.Core.Data.ColumnBatchSchema(new[]
                 {
@@ -295,7 +296,8 @@ namespace ETL_SQL.Tests.Hardening
                     new ETL_SQL.Core.Data.ColumnBatchField("Amount", typeof(decimal), "Decimal"),
                     new ETL_SQL.Core.Data.ColumnBatchField("Flag", typeof(bool), "Boolean"),
                     new ETL_SQL.Core.Data.ColumnBatchField("Label", typeof(string), "String"),
-                    new ETL_SQL.Core.Data.ColumnBatchField("OccurredAt", typeof(DateTimeOffset), "DATETIMEOFFSET")
+                    new ETL_SQL.Core.Data.ColumnBatchField("OccurredAt", typeof(DateTimeOffset), "DATETIMEOFFSET"),
+                    new ETL_SQL.Core.Data.ColumnBatchField("Identifier", typeof(Guid), "UUID")
                 }),
                 new ETL_SQL.Core.Data.IColumnBuffer[]
                 {
@@ -303,7 +305,8 @@ namespace ETL_SQL.Tests.Hardening
                     amount,
                     new ETL_SQL.Core.Data.ColumnBuffer<bool>(new bool[] { true, false }, 2),
                     ETL_SQL.Core.Data.Utf8ColumnBuffer.FromStrings(new string?[] { "001", null }),
-                    new ETL_SQL.Core.Data.ColumnBuffer<DateTimeOffset>(new[] { instant, instant.AddHours(1) }, 2)
+                    new ETL_SQL.Core.Data.ColumnBuffer<DateTimeOffset>(new[] { instant, instant.AddHours(1) }, 2),
+                    new ETL_SQL.Core.Data.ColumnBuffer<Guid>(new[] { identifier, Guid.Empty }, 2)
                 },
                 2);
             await using (var writer = await store.CreateWriterAsync("native_write"))
@@ -327,6 +330,7 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.True(result.GetUtf8Column("Label").IsNull(1));
                 Assert.Equal(instant, result.GetColumn<DateTimeOffset>("OccurredAt").Values.Span[0]);
                 Assert.Equal(instant.Offset, result.GetColumn<DateTimeOffset>("OccurredAt").Values.Span[0].Offset);
+                Assert.Equal(identifier, result.GetColumn<Guid>("Identifier").Values.Span[0]);
             }
             finally
             {

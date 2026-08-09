@@ -17,8 +17,8 @@ CREATE CONNECTION ms AS MSSQL(@ms_conn);
 CREATE CONNECTION pg AS POSTGRES(@pg_conn);
 
 -- 4. Management commands
-STOP DOCKER dmsP;    -- Persist state but stop container
-PRINT('DMS stopped');
+PAUSE DOCKER dms;   -- Suspend CPU while preserving container state
+PRINT('DMS paused');
 
 START DOCKER dms;   -- Resume
 PRINT('DMS resumed');

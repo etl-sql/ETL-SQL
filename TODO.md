@@ -177,9 +177,15 @@ Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it
 
 #### P2 — Deployment-profile certification
 
-- [ ] Retain commit-bound JSON and Markdown certification evidence with topology, hashes, mappings,
+- [x] Retain commit-bound JSON and Markdown certification evidence with topology, hashes, mappings,
       continuity counts, negative isolation results, and rollback outcomes. SaaS evidence must name
       Managed Dedicated or Shared topology explicitly.
+
+      **Done (v0.18.0).** The certification runner now enables scenario evidence in its child test
+      processes, validates required scenario ids and schemas, and aggregates concrete hashes,
+      mapping decisions, continuity, negative proof, and rollback results into the commit-bound JSON
+      and Markdown bundle. Dirty runs remain useful development evidence but are never release
+      eligible. Managed Dedicated is named explicitly and Shared SaaS remains `NotCertified`.
 - [ ] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
       and Shared SaaS separately; neither inherits the other's claim status.
 
@@ -705,17 +711,22 @@ catalog, execution path, or migration format.
       because our 12 kinds map many-to-one onto OpenLineage's subtype vocabulary; and re-recording a
       hop never filled in the physical identifier the first (pre-connection) observation lacked.
 
-- [ ] **Sweep the samples that fail.** 19 of 195 fail, identically on both passes — see the
+- [ ] **Sweep the samples that fail.** 16 of 195 remain after the first triage cluster — see the
       sample-runner item under the release-process RCI section for why this was invisible until now.
       Each needs triaging individually: some will be stale syntax, some may be real engine defects.
       Run `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2` for the current list.
 
       As of 2026-08-09: `01_deploy_datasets`, `02_report_public_consumer`,
       `03_report_private_allowed`, `04_report_private_denied`, `05_export_then_publish`,
-      `Batch_Processing`, `Data_Quality_Rules`, `Docker_Aliases`, `append_to_parquet`,
-      `backup_and_report`, `capacity_report`, `daily_failure_digest`, `ddl_dml_sink`,
+      `append_to_parquet`, `backup_and_report`, `capacity_report`, `daily_failure_digest`, `ddl_dml_sink`,
       `diagnostics_ssh_sink`, `flatfile_sink`, `golden_workflow.rptsql`, `parameterized_exec_test`,
       `variables_config_sink`, `window_sink`.
+
+      First triage cluster completed: `Batch_Processing` exposed missing native spill support for
+      UUID columns; `Docker_Aliases` mixed a misspelled stop target with resume semantics; and
+      `Data_Quality_Rules` is deliberately fail-closed, so the sample runners now require its exact
+      expected exit code and assertion message. Validator session/outbox state is isolated from the
+      user's machine state so an interrupted run cannot manufacture unrelated startup failures.
 
       Two idempotency failures found by the second pass are already fixed:
       `Sqlite_Operations.etlsql` (fixed primary keys into a persistent database) and
