@@ -20,6 +20,7 @@ ETL-SQL documentation is organized by how readers use the product: learn the pla
 - [Architecture](architecture/README.md) - subsystem design, source boundaries, standards, decisions, and roadmaps.
 - [Releases](releases/README.md) - release notes and release note authoring guidance.
 - [Templates](templates/README.md) - templates for keeping new documentation consistent.
+- [spec-import](spec-import/) - internal tooling for parsing data specification files into ETL-SQL script stubs. Contains the JSON schema (`spec_pipeline.schema.json`) and agent instructions for spec-driven development.
 
 ## Naming Convention
 
@@ -44,6 +45,11 @@ Existing uppercase reference filenames should be migrated gradually with link up
 - Every statement page must include syntax, semantics, examples, errors or guardrails, and references.
 - Every guide should state its audience, prerequisites, workflow, validation steps, and related reference pages.
 
-## Current Migration Status
+## Build Constraint — Reference Filenames Are Help Keywords
 
-The reconfigure from `Docs_Legacy/` is still in progress. Use [Documentation Audit](DOCUMENTATION_AUDIT.md) for the active gap list and cleanup order. Large legacy guides are being split into focused guides, reference pages, and index entries instead of remaining as catch-all manuals.
+`docs/reference/**` pages are embedded directly into the engine build as the runtime help corpus (CLI `help`, LSP hover tooltips, and autocomplete). This means:
+
+- **Renaming or deleting a reference page changes or removes a help keyword.** If a page must be renamed, update the csproj `Link` (or its glob) and any `LanguageService` keyword mapping in the same change.
+- **Moving a page out of its category folder drops it from help.** Moving files *within* `functions/**`, `statements/**`, or `connectors/**` is safe (recursive globs). Moving outside those trees requires a csproj glob update.
+- **`guides/**` is NOT build-embedded** — those files can be freely split, renamed, or deleted (fix inbound links only).
+- Every restructure step should end green on `dotnet build` (embed globs resolve) and the `audit-syntax-index.js --strict` check.

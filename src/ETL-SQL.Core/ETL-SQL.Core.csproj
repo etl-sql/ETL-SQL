@@ -33,7 +33,7 @@
     <EmbeddedResource Include="..\..\docs\reference\variables-parameters\@@*.md" Link="Resources\Help\Variables\%(Filename)%(Extension)" />
     
     <!-- Dates & Times (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\dates-times\reldate.md" Link="Resources\Help\Keywords\RELDATE.md" />
+    <EmbeddedResource Include="..\..\docs\reference\functions\datetime\reldate.md" Link="Resources\Help\Keywords\RELDATE.md" />
 
     <!-- File Operations (Operations & Keywords Categories) -->
     <EmbeddedResource Include="..\..\docs\reference\file-operations\bulk-insert.md" Link="Resources\Help\Keywords\BULK.INSERT.md" />
@@ -57,7 +57,7 @@
     <EmbeddedResource Include="..\..\docs\reference\connectors\README.md" Link="Resources\Help\Connectors\INDEX.md" />
 
     <!-- Functions (Functions Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" Exclude="..\..\docs\reference\functions\**\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" Exclude="..\..\docs\reference\functions\**\README.md;..\..\docs\reference\functions\datetime\reldate.md" />
     <EmbeddedResource Include="..\..\docs\reference\functions\README.md" Link="Resources\Help\Functions\INDEX.md" />
 
     <!-- Visuals & Reporting (Visuals & Report Categories) -->
@@ -65,8 +65,8 @@
     <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\report\*.md" Link="Resources\Help\Report\%(Filename)%(Extension)" Exclude="..\..\docs\reference\visuals-reporting\report\README.md" />
     <EmbeddedResource Include="..\..\docs\reference\statements\README.md" Link="Resources\Help\Keywords\INDEX.md" />
 
-    <!-- Portal Administration (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\portal-admin\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\portal-admin\README.md" />
+    <!-- Portal Commands - scripting-level EXECUTE portal BEGIN...END reference (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\\reference\\portal-commands\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\\reference\\portal-commands\README.md" />
 
     <!-- Orchestrator Jobs & Bundles (Keywords Category) -->
     <EmbeddedResource Include="..\..\docs\reference\orchestrator-jobs\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\orchestrator-jobs\README.md" />
