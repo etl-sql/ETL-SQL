@@ -1,8 +1,14 @@
 #!/bin/bash
 # test-all-samples.sh - Run all ETL-SQL sample scripts and report pass/fail.
-# Usage: ./scripts/test-all-samples.sh
+# Usage: ./scripts/test-all-samples.sh [passes]
+#
+# passes (default 1) runs the whole suite that many times. More than one pass proves the samples are
+# re-runnable: sample output is gitignored, so a sample that writes to a persistent store passes on
+# a clean checkout and fails for anyone who runs it twice. Mirrors Test-AllSamples.ps1 -Passes.
 
 set -e
+
+PASSES="${1:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
@@ -37,13 +43,27 @@ echo "======================================================="
 echo " ETL-SQL SAMPLE VALIDATOR STARTING..."
 
 mapfile -t SCRIPTS < <(find "$SAMPLES_DIR" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
-TOTAL="${#SCRIPTS[@]}"
-echo " Found $TOTAL scripts to validate in '$SAMPLES_DIR'."
+echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR'."
+if [[ "$PASSES" -gt 1 ]]; then
+    echo " Running $PASSES passes to prove the samples are re-runnable."
+fi
 echo "======================================================="
 echo ""
 
+TOTAL=$(( ${#SCRIPTS[@]} * PASSES ))
+
+for PASS in $(seq 1 "$PASSES"); do
+if [[ "$PASSES" -gt 1 ]]; then
+    echo ""
+    echo "--- Pass $PASS of $PASSES ---"
+    echo ""
+fi
+
 for SCRIPT_FILE in "${SCRIPTS[@]}"; do
     SCRIPT_NAME="$(basename "$SCRIPT_FILE")"
+    if [[ "$PASSES" -gt 1 ]]; then
+        SCRIPT_NAME="$SCRIPT_NAME (pass $PASS)"
+    fi
 
     # Check @requires: tag in first 5 lines
     REQUIRES_TAG=$(head -5 "$SCRIPT_FILE" 2>/dev/null | grep -i '@requires:' | head -1 || true)
@@ -72,6 +92,7 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
         FAILED=$((FAILED + 1))
         FAILED_NAMES+=("$SCRIPT_NAME|$EXIT_CODE|$(echo "$OUTPUT" | head -6 | tr '\n' '|')")
     fi
+done
 done
 
 echo ""

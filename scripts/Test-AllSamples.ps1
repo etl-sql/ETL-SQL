@@ -7,24 +7,43 @@
     runs them sequentially through the ETL-SQL runtime engine, and logs their Exit Codes.
     It generates a final color-coded summary report highlighting successes and failures.
 
+    Exits non-zero when any sample fails, so callers (Test-PreRelease.ps1, Master-Release.ps1) can
+    gate on it. This mirrors the POSIX twin, test-all-samples.sh.
+
+.PARAMETER Passes
+    How many times to run the whole suite. More than one pass proves the samples are re-runnable:
+    a sample that writes to a persistent store (a SQLite file, an appended table) can pass on a
+    clean checkout and fail for anyone who runs it twice. Sample output is gitignored, so a single
+    pass on a fresh CI checkout cannot see that class of defect.
+
 .EXAMPLE
     .\Test-AllSamples.ps1
+
+.EXAMPLE
+    .\Test-AllSamples.ps1 -Passes 2
 #>
+
+param(
+    [ValidateRange(1, 10)]
+    [int]$Passes = 1
+)
 
 $ErrorActionPreference = "Stop"
 
-# Navigate to solution root relative to this script's location
 # Navigate to solution root relative to this script's location
 $solutionRoot = Split-Path -Path $PSScriptRoot -Parent
 Set-Location $solutionRoot
 
 $samplesDir = Join-Path $solutionRoot "samples"
 $etlScripts = Get-ChildItem -Path $samplesDir -Include "*.etlsql", "*.rptsql" -Recurse
-$total = $etlScripts.Count
+$total = $etlScripts.Count * $Passes
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
-Write-Host " Found $total scripts to validate in '$samplesDir'." -ForegroundColor Cyan
+Write-Host " Found $($etlScripts.Count) scripts to validate in '$samplesDir'." -ForegroundColor Cyan
+if ($Passes -gt 1) {
+    Write-Host " Running $Passes passes to prove the samples are re-runnable." -ForegroundColor Cyan
+}
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 $passed = 0
@@ -33,6 +52,11 @@ $failedScripts = @()
 
 $skipped = 0
 $skippedScripts = @()
+
+foreach ($pass in 1..$Passes) {
+if ($Passes -gt 1) {
+    Write-Host "`n--- Pass $pass of $Passes ---`n" -ForegroundColor Cyan
+}
 
 foreach ($script in $etlScripts) {
     # Skip scripts tagged with -- @requires: <service> when that service is unavailable
@@ -117,12 +141,13 @@ foreach ($script in $etlScripts) {
         Write-Host "FAILED" -ForegroundColor Red
         $failed++
         $failedScripts += [PSCustomObject]@{
-            Name     = $script.Name
+            Name     = if ($Passes -gt 1) { "$($script.Name) (pass $pass)" } else { $script.Name }
             ExitCode = $exitCode
             Output   = $cliOutput
         }
     }
 
+}
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
@@ -141,14 +166,15 @@ if ($failed -gt 0) {
         Write-Host "   Preview: $preview" -ForegroundColor Gray
     }
 
-
-
-
     Write-Host "`nRecommendation: Run failing scripts individually using the verbose flag (-v) to debug." -ForegroundColor Yellow
+    if ($Passes -gt 1 -and ($failedScripts | Where-Object { $_.Name -notlike "*(pass 1)" })) {
+        Write-Host "A sample that passed an earlier pass and failed a later one is not re-runnable:" -ForegroundColor Yellow
+        Write-Host "it leaves state behind. Make it start from a known state." -ForegroundColor Yellow
+    }
+    Write-Host "=======================================================" -ForegroundColor Cyan
+    exit 1
 }
 
-else {
-    Write-Host "`nSUCCESS: All ETL-SQL Samples validated flawlessly!" -ForegroundColor Green
-}
-
+Write-Host "`nSUCCESS: All ETL-SQL Samples validated flawlessly!" -ForegroundColor Green
 Write-Host "=======================================================" -ForegroundColor Cyan
+exit 0

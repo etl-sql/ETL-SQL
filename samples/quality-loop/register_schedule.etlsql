@@ -1,6 +1,8 @@
 -- Register the sample with the default local SQLite Orchestrator.
-CREATE SCHEDULE CustomerQualityDaily ON '15 2 * * *' AT TIME ZONE 'UTC';
-CREATE JOB CustomerQuality FOR SCRIPT 'samples/quality-loop/customer_quality.etlsql';
+-- The Orchestrator store persists between runs, so registration has to be idempotent —
+-- CREATE alone succeeds once and fails every time after.
+CREATE OR ALTER SCHEDULE CustomerQualityDaily ON '15 2 * * *' AT TIME ZONE 'UTC';
+CREATE OR ALTER JOB CustomerQuality FOR SCRIPT 'samples/quality-loop/customer_quality.etlsql';
 ALTER JOB CustomerQuality ADD SCHEDULE CustomerQualityDaily;
 
 SELECT * FROM eng.jobs WHERE JobName = 'CustomerQuality';

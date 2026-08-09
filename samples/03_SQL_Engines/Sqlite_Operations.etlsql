@@ -5,9 +5,12 @@ CREATE CONNECTION sqlite_mem AS SQLITE(DATABASE = ':memory:');
 -- 2. File-Based SQLite database
 CREATE CONNECTION sqlite_db AS SQLITE(DATABASE = 'samples/output/local_store.db');
 
--- Create a table in the file-based SQLite database
+-- Create a table in the file-based SQLite database.
+-- The database file survives between runs, so start from a known state — otherwise a second run
+-- of this sample re-inserts the same primary keys and fails on the UNIQUE constraint.
 EXECUTE sqlite_db BEGIN
-    CREATE TABLE IF NOT EXISTS inventory (
+    DROP TABLE IF EXISTS inventory;
+    CREATE TABLE inventory (
         item_id INTEGER PRIMARY KEY,
         item_name TEXT NOT NULL,
         stock_count INTEGER,
@@ -15,10 +18,12 @@ EXECUTE sqlite_db BEGIN
     );
 END;
 
--- Stage data in the engine
+-- Stage data in the engine.
+-- SELECT ... INTO creates the temp table (replacing any previous one), so only the first row uses
+-- it; the rest are appended with INSERT.
 SELECT 101 AS item_id, 'Steel Gear' AS item_name, 50 AS stock_count, 12.99 AS price INTO #stage;
-SELECT 102 AS item_id, 'Bronze Shaft' AS item_name, 35 AS stock_count, 24.50 AS price INTO #stage;
-SELECT 103 AS item_id, 'Copper Bushing' AS item_name, 120 AS stock_count, 3.75 AS price INTO #stage;
+INSERT INTO #stage (item_id, item_name, stock_count, price) VALUES (102, 'Bronze Shaft', 35, 24.50);
+INSERT INTO #stage (item_id, item_name, stock_count, price) VALUES (103, 'Copper Bushing', 120, 3.75);
 
 -- Load data from engine staging table into SQLite database
 INSERT INTO sqlite_db.inventory (item_id, item_name, stock_count, price)
