@@ -101,6 +101,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added the server-derived tenant context contract (`ETL_SQL.Core.Multitenancy`), the foundation the
+  SaaS isolation work builds on. `TenantId` is a validated value type rather than a bare string, so a
+  server-derived tenant and a caller-supplied one are distinguishable at every call site, and
+  `TenantContext` has no public constructor and no parse-from-request factory — every construction
+  path names a server-owned origin, making "the caller told us which tenant" inexpressible rather
+  than merely discouraged. Platform-scoped access to a tenant must name the authorization that
+  permitted it. Caller-supplied identifiers are checked against the context rather than parsed into
+  one, so naming a resource you own is possible while selecting the tenant is not, and tenant-scoped
+  keys keep equal names and equal numeric ids in different tenants from colliding. Tenant
+  provisioning now shares this one definition instead of its own copy.
+
 - Added the `SaaSToEnterpriseExit` certification lane: the customer exit journey from Managed
   Dedicated SaaS to a self-hosted Enterprise deployment. It is the only lane that runs backward, and
   deliberately not a promotion — promotion preflight refuses backward moves (`DP001`) and directs the

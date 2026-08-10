@@ -58,9 +58,10 @@ internal static partial class SaasTenantOnboardingService
 
     internal static async Task<Manifest> OnboardAsync(CliContext ctx, CancellationToken ct = default)
     {
-        var tenant = ctx.SaasTenantId?.Trim();
-        if (string.IsNullOrWhiteSpace(tenant) || !TenantIdRegex().IsMatch(tenant))
+        // One definition of a valid tenant id, shared with the multitenancy contract in Core.
+        if (!ETL_SQL.Core.Multitenancy.TenantId.TryParse(ctx.SaasTenantId, out var tenantId))
             throw new ArgumentException("--tenant must contain 3-63 lowercase letters, digits, or hyphens and start/end with a letter or digit.");
+        var tenant = tenantId.Value;
         var sourceProfile = ctx.SaasSourceProfile?.Trim();
         if (sourceProfile is not ("Solo" or "Enterprise"))
             throw new ArgumentException("--source-profile must be Solo or Enterprise.");
@@ -247,8 +248,6 @@ internal static partial class SaasTenantOnboardingService
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-    [GeneratedRegex(@"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$", RegexOptions.CultureInvariant)]
-    private static partial Regex TenantIdRegex();
     [GeneratedRegex(@"\b(?:PASSWORD|API_KEY|TOKEN|CLIENT_SECRET|PRIVATE_KEY)\s*=\s*'(?!SECRET:|ENC:|ENV\()[^'$][^']*'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RawCredentialRegex();
 }

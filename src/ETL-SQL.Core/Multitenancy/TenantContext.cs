@@ -1,0 +1,110 @@
+namespace ETL_SQL.Core.Multitenancy;
+
+/// <summary>Where a tenant context came from. Recorded so evidence can say, not infer.</summary>
+public enum TenantContextOrigin
+{
+    /// <summary>A deployment serving exactly one tenant; identity comes from host configuration.</summary>
+    HostFixed,
+
+    /// <summary>A verified credential — an authenticated token claim or service identity.</summary>
+    VerifiedCredential,
+
+    /// <summary>Platform automation acting on a tenant it was authorized for out of band.</summary>
+    PlatformAuthorization
+}
+
+/// <summary>
+/// The server-derived tenant scope for a unit of work
+/// (<c>docs/architecture/SaaSTenantIsolation.md</c> §6).
+/// </summary>
+/// <remarks>
+/// <para>
+/// There is deliberately no way to build one of these from a request. Every constructor path names a
+/// server-owned origin, so "the caller told us which tenant" is not expressible rather than merely
+/// discouraged. That is the whole invariant of this domain: a caller-supplied tenant, alias, gateway,
+/// resource, run, object, or storage identifier must not be able to widen scope.
+/// </para>
+/// <para>
+/// This matters even where a tenant has its own deployment. A dedicated boundary makes cross-tenant
+/// reach unlikely, not impossible: provisioning, platform automation, and support tooling all still
+/// span tenants, and each is a surface that can be handed an identifier.
+/// </para>
+/// </remarks>
+public sealed record TenantContext
+{
+    private TenantContext(TenantId tenant, TenantContextOrigin origin)
+    {
+        Tenant = tenant;
+        Origin = origin;
+    }
+
+    public TenantId Tenant { get; }
+
+    public TenantContextOrigin Origin { get; }
+
+    /// <summary>A single-tenant deployment: the host configuration is the authority.</summary>
+    public static TenantContext FromHostConfiguration(string configuredTenantId) =>
+        new(TenantId.FromTrustedSource(configuredTenantId), TenantContextOrigin.HostFixed);
+
+    /// <summary>
+    /// A verified credential. The caller supplies the credential, never the tenant — the claim is
+    /// read only after the credential's signature and issuer have been checked upstream.
+    /// </summary>
+    public static TenantContext FromVerifiedCredential(string verifiedTenantClaim) =>
+        new(TenantId.FromTrustedSource(verifiedTenantClaim), TenantContextOrigin.VerifiedCredential);
+
+    /// <summary>
+    /// Platform automation acting on one tenant. Requires the caller to state the authorization
+    /// reference that permitted it, so an audit record can name why platform scope touched a tenant
+    /// instead of recording only that it did.
+    /// </summary>
+    public static TenantContext FromPlatformAuthorization(string tenantId, string authorizationReference)
+    {
+        if (string.IsNullOrWhiteSpace(authorizationReference))
+        {
+            throw new ArgumentException(
+                "Platform-scoped access to a tenant must name the authorization that permitted it. " +
+                "Unattributed platform access is the impersonation path this boundary exists to stop.",
+                nameof(authorizationReference));
+        }
+
+        return new(TenantId.FromTrustedSource(tenantId), TenantContextOrigin.PlatformAuthorization);
+    }
+
+    /// <summary>
+    /// Confirms a caller-supplied identifier refers to this tenant, and returns it only when it does.
+    /// </summary>
+    /// <remarks>
+    /// The shape matters. A caller may legitimately name a resource it already holds — a run id, an
+    /// alias — and the server must be able to accept that name without letting it *select* the
+    /// tenant. So the identifier is checked against the context rather than parsed into one, and a
+    /// mismatch is refused rather than silently rescoped.
+    /// </remarks>
+    public string RequireOwned(string callerSuppliedIdentifier, string identifierKind)
+    {
+        if (string.IsNullOrWhiteSpace(callerSuppliedIdentifier))
+            throw new ArgumentException($"A {identifierKind} is required.", nameof(callerSuppliedIdentifier));
+
+        var expectedPrefix = $"{Tenant.Value}/";
+        if (!callerSuppliedIdentifier.StartsWith(expectedPrefix, StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException(
+                $"The {identifierKind} '{callerSuppliedIdentifier}' does not belong to tenant " +
+                $"'{Tenant.Value}'. A caller-supplied identifier cannot widen scope.");
+        }
+
+        return callerSuppliedIdentifier;
+    }
+
+    /// <summary>
+    /// Derives a tenant-scoped key for a logical resource, so two tenants using the same name or the
+    /// same numeric id never collide in a shared store, cache, queue, or path.
+    /// </summary>
+    public string ScopeKey(string logicalId)
+    {
+        if (string.IsNullOrWhiteSpace(logicalId))
+            throw new ArgumentException("A logical id is required.", nameof(logicalId));
+
+        return $"{Tenant.Value}/{logicalId}";
+    }
+}

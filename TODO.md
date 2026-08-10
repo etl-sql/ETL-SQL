@@ -768,11 +768,37 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
 
 ##### 1. Tenant context and authority
 
-- [ ] **Dedicated.** Derive tenant context server-side even where the tenant has its own deployment
+- [x] **Dedicated.** Derive tenant context server-side even where the tenant has its own deployment
       boundary. A deployment per tenant makes cross-tenant reach unlikely, not impossible: the
       provisioning control plane, platform automation, and support tooling all still span tenants,
       and each is an entry point that can be handed a caller-supplied identifier.
-      **Gap — Phase C carried this alone, as though a dedicated boundary settled the question.**
+
+      **Contract shipped (v0.18.0).** The gap was real and larger than "a missing bullet": there was
+      **no tenant context type in the codebase at all**. Host-fixed isolation worked because tenant
+      identity was implicit in *which process you were talking to*, so nothing existed to derive
+      context *from* on a surface that spans tenants.
+
+      `ETL_SQL.Core.Multitenancy` now has `TenantId` (a validated value type, not a bare string, so
+      server-derived and caller-supplied are distinguishable at every call site) and `TenantContext`.
+      Every construction path names a server-owned origin — `HostFixed`, `VerifiedCredential`,
+      `PlatformAuthorization` — and there is **no public constructor and no parse-from-request
+      factory**, so "the caller told us which tenant" is not expressible rather than merely
+      discouraged. A test asserts that stays true.
+
+      Three behaviours worth knowing: platform-scoped access must name the authorization that
+      permitted it, because unattributed platform access is the impersonation path this boundary
+      exists to stop; `RequireOwned` *checks* a caller-supplied identifier against the context rather
+      than parsing a tenant out of it, so a caller can still name a resource it owns without being
+      able to select the tenant; and `ScopeKey` makes equal names and equal numeric ids in different
+      tenants land on different keys, which is what the shared-store domains will depend on.
+
+      21 tests, including the prefix trap — `acme-evil/run-1` starts with `acme` and must still be
+      refused. `SaasTenantOnboardingService`'s duplicate tenant-id regex was replaced by `TenantId`
+      so there is one definition rather than two that can drift.
+
+      **Not yet done: adoption.** The contract exists and nothing consumes it yet. Threading it
+      through the surfaces that span tenants — provisioning, platform automation, support tooling —
+      is the follow-on, and it is where the Dedicated cell actually earns its evidence.
 - [ ] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
       test per surface that a caller-supplied tenant, alias, gateway, resource, run, object, or
       storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
