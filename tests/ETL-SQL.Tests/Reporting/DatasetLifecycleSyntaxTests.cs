@@ -10,10 +10,9 @@ using Xunit;
 namespace ETL_SQL.Tests.Reporting
 {
     /// <summary>
-    /// Phase 3 DATASET tests: USE DATASET, SHOW DATASETS, REFRESH DATASET parsing,
-    /// and the UseDatasetRedundantRule lint hint.
+    /// Dataset lifecycle syntax and redundant-use lint behavior.
     /// </summary>
-    public class DatasetPhase3Tests
+    public class DatasetLifecycleSyntaxTests
     {
         private static Script Parse(string sql)
         {
@@ -182,7 +181,7 @@ namespace ETL_SQL.Tests.Reporting
             var linter = new Linter();
             linter.AddRule(new UseDatasetRedundantRule());
 
-            // USE before CREATE — Phase 4 will add a warning for this, but Phase 3 is silent
+            // This rule reports only redundant uses; ordering is handled by UseBeforeCreateRule.
             var sql = @"
                 USE DATASET &sales;
                 CREATE DATASET &sales AS (SELECT 1 AS v FROM t);";

@@ -16,7 +16,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests
 {
-    public class SubqueryCacheTests
+    public class VariableSensitiveSubqueryCacheTests
     {
         [Fact]
         public async Task Subquery_ShouldReevaluate_WhenGlobalVariableChanges()

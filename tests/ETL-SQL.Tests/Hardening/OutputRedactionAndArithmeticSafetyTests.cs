@@ -8,7 +8,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class HardeningWave2Tests
+    public class OutputRedactionAndArithmeticSafetyTests
     {
         [Fact]
         public async Task MathOverflow_ReturnsNull()
@@ -49,16 +49,5 @@ namespace ETL_SQL.Tests.Hardening
             Assert.DoesNotContain("aGVsbG8=", msg);
         }
 
-        [Fact]
-        public async Task TempTableWarning_TriggersOnLargeCount()
-        {
-            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.RedirectOutput = true;
-
-            // Loop to create > 1M rows
-            // We'll use a smaller threshold for the test if we had one, but let's just mock the logger or trust the code.
-            // Since we can't easily wait for 1M rows in a unit test, we'll verify the logic via a smaller threshold in a custom evaluator if needed.
-            // But let's trust the unit test for now or skip the 1M row test in the interest of speed.
-        }
     }
 }

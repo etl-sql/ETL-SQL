@@ -9,7 +9,7 @@ namespace ETL_SQL.Tests.Reporting
     {
         [Fact]
         [Trait("Category", "Smoke.Reporting")]
-        public void SharedRuntime_IncludesPhase5InteractionLayoutAndMaximizeHooks()
+        public void SharedRuntime_IncludesInteractionLayoutAndMaximizeHooks()
         {
             var root = FindRepoRoot();
             var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));

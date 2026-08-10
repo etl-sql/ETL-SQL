@@ -10,7 +10,7 @@ namespace ETL_SQL.Tests.Scale;
 public sealed class BillionRowOperatorManifestTests
 {
     [Fact]
-    public void Phase4Manifest_DefinesSortAndJoinAdmissionAndSuccessCriteria()
+    public void OperatorManifest_DefinesSortAndJoinAdmissionAndSuccessCriteria()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
         var scenarios = document.RootElement.GetProperty("scenarios").EnumerateArray().ToArray();
@@ -35,7 +35,7 @@ public sealed class BillionRowOperatorManifestTests
     }
 
     [Fact]
-    public void Phase4Manifest_DoesNotAdvertiseUnprovenLaterOperatorsAsCertified()
+    public void OperatorManifest_DoesNotAdvertiseUnprovenOperatorsAsCertified()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
         var scenarios = document.RootElement.GetProperty("scenarios").EnumerateArray().ToArray();
@@ -56,7 +56,7 @@ public sealed class BillionRowOperatorManifestTests
     }
 
     [Fact]
-    public void Phase4Manifest_DistinguishesRunnableCandidatesFromNonCertifiedShapes()
+    public void OperatorManifest_DistinguishesRunnableCandidatesFromNonCertifiedShapes()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
         var scenarios = document.RootElement.GetProperty("scenarios").EnumerateArray().ToArray();

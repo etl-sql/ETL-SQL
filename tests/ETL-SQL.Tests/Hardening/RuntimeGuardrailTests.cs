@@ -11,7 +11,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class HardeningWave3Tests
+    public class RuntimeGuardrailTests
     {
         [Fact]
         public async Task SetMaxParallelDegree_Unauthorized_ThrowsSecurityException()

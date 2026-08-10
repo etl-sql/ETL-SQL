@@ -11,10 +11,9 @@ using Xunit;
 namespace ETL_SQL.Tests.Reporting
 {
     /// <summary>
-    /// Phase 2 DATASET tests: machine-bound crypto, EncryptionOptions MACHINE mode,
-    /// and the DatasetEncryptionModeRule lint rule.
+    /// Dataset machine-bound cryptography, encryption options, and encryption lint policy.
     /// </summary>
-    public class DatasetPhase2Tests
+    public class DatasetEncryptionTests
     {
         // ── MachineBoundCrypto ────────────────────────────────────────────────────
 

@@ -18,10 +18,9 @@ using Xunit;
 namespace ETL_SQL.Tests.Reporting
 {
     /// <summary>
-    /// Phase 4 DATASET tests: ACCESS PUBLIC|PRIVATE syntax, UseBeforeCreateRule lint warning,
-    /// and private access violation enforcement in UseDatasetStatementHandler.
+    /// Dataset access syntax, ordering lint, ACL enforcement, encryption, and portable export/publish.
     /// </summary>
-    public class DatasetPhase4Tests
+    public class DatasetAccessAndPortabilityTests
     {
         private static Script Parse(string sql)
         {
@@ -181,7 +180,7 @@ namespace ETL_SQL.Tests.Reporting
             var sql = "USE DATASET &external;";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
-            // No warning — we can't know whether &external exists; cross-file analysis is Phase 5+
+            // No warning: without cross-file analysis, the linter cannot know whether &external exists.
             Assert.Empty(results);
         }
 

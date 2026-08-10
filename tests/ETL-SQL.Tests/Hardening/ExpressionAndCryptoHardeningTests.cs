@@ -10,9 +10,9 @@ using ETL_SQL.Data;
 using Moq;
 using Xunit;
 
-namespace ETL_SQL.Engine.Tests
+namespace ETL_SQL.Tests.Hardening
 {
-    public class SecurityHardeningTests
+    public class ExpressionAndCryptoHardeningTests
     {
         [Fact]
         public void CryptoUtils_Throws_On_Empty_Password()

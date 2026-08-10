@@ -11,11 +11,11 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
-    public class OrchestrationEnhancementTests : IDisposable
+    public class ScriptCompositionTests : IDisposable
     {
         private readonly string _testDir;
 
-        public OrchestrationEnhancementTests()
+        public ScriptCompositionTests()
         {
             _testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_OrchTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_testDir);
