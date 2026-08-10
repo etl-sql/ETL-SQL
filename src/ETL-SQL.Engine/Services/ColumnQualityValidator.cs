@@ -664,7 +664,7 @@ public sealed class ColumnQualityValidator
                 return CastablePasses(castable, value);
 
             case MatchesRule matches:
-                return GetRegex(matches).IsMatch(Stringify(value));
+                return GetRegex(matches).IsMatch(Stringify(value)) != matches.Negated;
 
             case ComparisonRule comparison:
                 if (!TryToDecimal(value, out var numeric)) return false;
@@ -678,11 +678,12 @@ public sealed class ColumnQualityValidator
                 };
 
             case InListRule inList:
-                for (var index = 0; index < inList.Values.Count; index++)
                 {
-                    if (ValuesEqual(inList.Values[index], value)) return true;
+                    var found = false;
+                    for (var index = 0; index < inList.Values.Count && !found; index++)
+                        found = ValuesEqual(inList.Values[index], value);
+                    return found != inList.Negated;
                 }
-                return false;
 
             case ExistsInRule existsIn:
                 return ExistsInPasses(existsIn, value, projected);

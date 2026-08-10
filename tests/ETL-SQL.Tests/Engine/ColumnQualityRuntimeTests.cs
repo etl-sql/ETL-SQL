@@ -1080,6 +1080,56 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task NotInRule_RejectsThePlaceholderValues()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'Retail'), (2, 'UNKNOWN'), (3, 'N/A'), (4, NULL)");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN', 'N/A')""; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));   // 'Retail' and the NULL
+            Assert.Equal(2, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task NotMatchesRule_RejectsValuesContainingThePattern()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'plain text'), (2, 'hi <script>alert(1)</script>')");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: 'NOT MATCHES <script[^>]*>'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            var clean = Assert.Single(await ReadRows(eval, "#clean"));
+            Assert.Equal("plain text", clean["Name"]);
+            Assert.Equal(1, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task NegatedRules_HonorCaseSensitivitySetting()
+        {
+            var insensitive = NewEvaluator();
+            await Seed(insensitive, "(1, 'unknown')");
+            await Run(insensitive, @"
+                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN')""; @fail: 'WARN'; */
+                INTO #clean FROM #src ON FAILURE WARN;");
+            Assert.Equal(1, insensitive.DataQuality.TotalFailures);
+
+            var sensitive = NewEvaluator();
+            await Seed(sensitive, "(1, 'unknown')");
+            await Run(sensitive, @"
+                SET CASE_SENSITIVE = ON;
+                SELECT Id, Name /* @expect: ""NOT IN ('UNKNOWN')""; @fail: 'WARN'; */
+                INTO #clean FROM #src ON FAILURE WARN;");
+            Assert.Equal(0, sensitive.DataQuality.TotalFailures);
+        }
+
+        [Fact]
         public async Task ExprRule_EvaluatesAcrossTheProjectedRow()
         {
             var eval = NewEvaluator();

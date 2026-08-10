@@ -170,15 +170,16 @@ public static partial class ColumnRuleParser
             return new UniqueRule(mode, orderKey, null) { Text = text };
         }
 
+        // NOT MATCHES / NOT IN reuse the positive forms' parsing with the verdict inverted, so the
+        // two directions cannot drift in what they accept. NOT NULL and NOT BLANK are matched
+        // above; EXISTS IN never reaches here because NOT is required immediately before IN.
+        var negated = Regex.Match(text, @"^NOT\s+(?<body>MATCHES\b.*|IN\s*\(.*)$",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (negated.Success)
+            return ParsePatternOrListRule(negated.Groups["body"].Value.Trim(), text, negated: true);
+
         if (upper.StartsWith("MATCHES", StringComparison.Ordinal))
-        {
-            var pattern = text["MATCHES".Length..].Trim();
-            if (pattern.Length == 0)
-                throw new ColumnRuleParseException("MATCHES requires a regex pattern.");
-            var rule = new MatchesRule(pattern) { Text = text };
-            rule.Compile(caseSensitive: true); // validate now: syntax + NonBacktracking support
-            return rule;
-        }
+            return ParsePatternOrListRule(text, text, negated: false);
 
         var existsWith = Regex.Match(
             text,
@@ -204,9 +205,8 @@ public static partial class ColumnRuleParser
                 $"EXISTS expects the form 'EXISTS IN table(KeyColumn)' or " +
                 $"'EXISTS WITH (col, …) IN table(KeyColumn, …)', got '{text}'.");
 
-        var inList = Regex.Match(text, @"^IN\s*(?<list>\(.+\))$", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        if (inList.Success)
-            return new InListRule(ParseInList(inList.Groups["list"].Value)) { Text = text };
+        if (Regex.IsMatch(text, @"^IN\s*\(", RegexOptions.IgnoreCase))
+            return ParsePatternOrListRule(text, text, negated: false);
 
         if (upper.StartsWith("EXPR", StringComparison.Ordinal))
         {
@@ -238,7 +238,8 @@ public static partial class ColumnRuleParser
             $"Unknown @expect rule '{text}'. Supported: NOT NULL, NOT BLANK, UNIQUE, " +
             "UNIQUE WITH (cols), UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), " +
             "EXISTS IN table(col), EXISTS WITH (cols) IN table(cols), LENGTH BETWEEN <min> AND <max>, " +
-            "LENGTH <compare> <n>, CASTABLE AS <type>, EXPR <predicate>, and numeric >= <= > < = compares.");
+            "LENGTH <compare> <n>, CASTABLE AS <type>, NOT IN (<list>), NOT MATCHES <regex>, " +
+            "EXPR <predicate>, and numeric >= <= > < = compares.");
     }
 
     /// <summary>
@@ -280,6 +281,33 @@ public static partial class ColumnRuleParser
         throw new ColumnRuleParseException(
             $"LENGTH expects the form 'LENGTH BETWEEN <min> AND <max>' or a comparison such as " +
             $"'LENGTH >= 5', got '{text}'.");
+    }
+
+    /// <summary>
+    /// Parses <c>MATCHES &lt;regex&gt;</c> or <c>IN (&lt;list&gt;)</c> from <paramref name="body"/>,
+    /// which is the rule with any leading <c>NOT</c> already removed. One parser serves both
+    /// directions so the negative form cannot accept something the positive form rejects.
+    /// <paramref name="text"/> is the rule as written, kept for diagnostics.
+    /// </summary>
+    private static ColumnRule ParsePatternOrListRule(string body, string text, bool negated)
+    {
+        if (body.StartsWith("MATCHES", StringComparison.OrdinalIgnoreCase))
+        {
+            var pattern = body["MATCHES".Length..].Trim();
+            if (pattern.Length == 0)
+                throw new ColumnRuleParseException("MATCHES requires a regex pattern.");
+            var rule = new MatchesRule(pattern, negated) { Text = text };
+            rule.Compile(caseSensitive: true); // validate now: syntax + NonBacktracking support
+            return rule;
+        }
+
+        var inList = Regex.Match(body, @"^IN\s*(?<list>\(.+\))$", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (inList.Success)
+            return new InListRule(ParseInList(inList.Groups["list"].Value), negated) { Text = text };
+
+        throw new ColumnRuleParseException(
+            $"'{text}' is not a valid MATCHES or IN rule. Expected 'MATCHES <regex>' or 'IN (<list>)', "
+            + "optionally prefixed with NOT.");
     }
 
     /// <summary>

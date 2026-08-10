@@ -38,11 +38,14 @@ public sealed record UniqueRule(
     IReadOnlyList<string>? CompositeColumns) : ColumnRule;
 
 /// <summary>
-/// <c>MATCHES &lt;regex&gt;</c>. Patterns compile with <see cref="RegexOptions.NonBacktracking"/> —
+/// <c>MATCHES &lt;regex&gt;</c>, or <c>NOT MATCHES &lt;regex&gt;</c> for the value that must *not*
+/// contain a pattern. Patterns compile with <see cref="RegexOptions.NonBacktracking"/> —
 /// a per-row user-supplied regex is otherwise a ReDoS vector — so constructs NonBacktracking
 /// cannot compile (backreferences, lookaround) are rejected at parse/lint time.
 /// </summary>
-public sealed record MatchesRule(string Pattern) : ColumnRule
+/// <param name="Pattern">The regular expression, unanchored: it searches rather than matches whole.</param>
+/// <param name="Negated">True for <c>NOT MATCHES</c>, inverting the verdict.</param>
+public sealed record MatchesRule(string Pattern, bool Negated = false) : ColumnRule
 {
     /// <summary>
     /// Compiles the pattern with NonBacktracking (plus IgnoreCase when <paramref name="caseSensitive"/>
@@ -108,8 +111,12 @@ public sealed record CastableRule(
 /// <summary>Numeric comparison (<c>&gt;= 0</c>, <c>&lt;= 120</c>, …). Compares as decimal at runtime.</summary>
 public sealed record ComparisonRule(CompareOp Op, decimal Value) : ColumnRule;
 
-/// <summary><c>IN ('NA','EMEA',…)</c> — membership in a literal list.</summary>
-public sealed record InListRule(IReadOnlyList<object?> Values) : ColumnRule;
+/// <summary>
+/// <c>IN ('NA','EMEA',…)</c> — membership in a literal list — or <c>NOT IN (…)</c> for the
+/// placeholder values a column must never carry, such as <c>'UNKNOWN'</c> or <c>'N/A'</c>.
+/// </summary>
+/// <param name="Negated">True for <c>NOT IN</c>, inverting the verdict.</param>
+public sealed record InListRule(IReadOnlyList<object?> Values, bool Negated = false) : ColumnRule;
 
 /// <summary>
 /// <c>EXISTS IN table(column)</c> — relationship/FK check against a reference table's key set — or

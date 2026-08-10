@@ -261,7 +261,8 @@ public class LanguageService : ILanguageService
             || System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^expect_\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
             values = ["NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
-                      "UNIQUE_LAST BY ", "MATCHES ", "IN (", "EXISTS IN ", "EXISTS WITH (",
+                      "UNIQUE_LAST BY ", "MATCHES ", "NOT MATCHES ", "IN (", "NOT IN (",
+                      "EXISTS IN ", "EXISTS WITH (",
                       "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ", "CASTABLE AS ",
                       "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
         }
@@ -310,7 +311,8 @@ public class LanguageService : ILanguageService
         "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
         "expect" => "**@expect** `'<rule>[, <rule>...]'` — Enforced data-quality rule on this column. "
             + "Rules: `NOT NULL`, `NOT BLANK`, `UNIQUE`, `UNIQUE WITH (cols)`, "
-            + "`UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, `MATCHES <regex>`, `IN (<list>)`, "
+            + "`UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, `MATCHES <regex>`, `NOT MATCHES <regex>`, "
+            + "`IN (<list>)`, `NOT IN (<list>)`, "
             + "`EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
             + "`LENGTH BETWEEN <min> AND <max>`, `LENGTH <compare> <n>`, `CASTABLE AS <type>`, "
             + "`EXPR <predicate>`, and `>= <= > < =` compares. "

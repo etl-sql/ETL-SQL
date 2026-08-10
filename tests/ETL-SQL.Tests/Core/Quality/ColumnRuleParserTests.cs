@@ -118,6 +118,47 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_NegatedMembershipAndPattern()
+        {
+            var notIn = Assert.IsType<InListRule>(
+                ColumnRuleParser.Parse("\"NOT IN ('UNKNOWN', 'N/A')\"").Single());
+            Assert.True(notIn.Negated);
+            Assert.Equal(new object?[] { "UNKNOWN", "N/A" }, notIn.Values);
+
+            var notMatches = Assert.IsType<MatchesRule>(
+                ColumnRuleParser.Parse("'NOT MATCHES <script[^>]*>'").Single());
+            Assert.True(notMatches.Negated);
+            Assert.Equal("<script[^>]*>", notMatches.Pattern);
+            Assert.Equal("NOT MATCHES <script[^>]*>", notMatches.Text);
+        }
+
+        [Fact]
+        public void PositiveFormsStayUnnegated()
+        {
+            Assert.False(Assert.IsType<InListRule>(ColumnRuleParser.Parse("\"IN ('NA')\"").Single()).Negated);
+            Assert.False(Assert.IsType<MatchesRule>(ColumnRuleParser.Parse("'MATCHES ^a+$'").Single()).Negated);
+        }
+
+        [Fact]
+        public void NegatedForms_RejectWhatThePositiveFormsReject()
+        {
+            // Both directions run through one parser, so an invalid pattern or list is invalid
+            // either way rather than only when written positively.
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse(@"'NOT MATCHES (a)\1'"));
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'NOT IN (NULL)'"));
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'NOT MATCHES'"));
+        }
+
+        [Fact]
+        public void NotIn_DoesNotSwallowExistsIn()
+        {
+            // 'NOT' only negates when MATCHES or IN( follows immediately.
+            var exists = Assert.IsType<ExistsInRule>(
+                ColumnRuleParser.Parse("'EXISTS IN dim_region(Id)'").Single());
+            Assert.Equal("dim_region", exists.Table);
+        }
+
+        [Fact]
         public void Parses_UniqueWith_CompositeTuple()
         {
             var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE WITH (TenantId, Region)'").Single());

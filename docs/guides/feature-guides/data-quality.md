@@ -266,6 +266,20 @@ Both composite forms reject a column the statement does not project. A missing c
 NULL, and a NULL key part skips the rule, so a typo would otherwise silently disable the check
 rather than fail it.
 
+## Saying what a value must *not* be
+
+```sql
+-- The placeholders an upstream system writes when it does not know
+Status /* @expect: "NOT IN ('UNKNOWN', 'N/A')"; @fail: 'QUARANTINE'; */
+
+-- Content that must never reach a rendered surface
+Notes  /* @expect: 'NOT MATCHES <script[^>]*>'; @fail: 'QUARANTINE'; */
+```
+
+Both are expressible with `EXPR`, but as rules they carry the intent into lineage, diagnostics and
+policy review. They parse through the same code as their positive forms, so an invalid pattern or
+list is invalid in either direction, and they honor `SET CASE_SENSITIVE` the same way.
+
 ## Validating text that has not been typed yet
 
 During ingestion everything can arrive as text, and the useful question is whether it *would*

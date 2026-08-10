@@ -39,7 +39,9 @@ or an `EXPR` function call are literal.
 | `UNIQUE_FIRST BY <expr>` | Keep only the row with the smallest `<expr>` per duplicate group. |
 | `UNIQUE_LAST BY <expr>` | Keep only the row with the largest `<expr>` per duplicate group. |
 | `MATCHES <regex>` | Value must match the regular expression. |
+| `NOT MATCHES <regex>` | Value must **not** match the regular expression. |
 | `IN (<list>)` | Value must be one of the listed string or numeric literals. |
+| `NOT IN (<list>)` | Value must be none of them — the placeholders a column should never carry. |
 | `EXISTS IN <table>(<column>)` | Value must exist in the reference table's key column (relationship / FK check). |
 | `EXISTS WITH (<col>, …) IN <table>(<col>, …)` | The tuple of projected columns must exist as a tuple in the reference table (composite / scoped FK check). |
 | `LENGTH BETWEEN <min> AND <max>` | Character count within an inclusive range. |
