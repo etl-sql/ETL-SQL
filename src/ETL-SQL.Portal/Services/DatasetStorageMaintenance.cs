@@ -42,7 +42,7 @@ public static class DatasetStorageMaintenance
         var root = Path.GetFullPath(config.DatasetRootPath);
         Directory.CreateDirectory(root);
 
-        foreach (var path in Directory.EnumerateFiles(root, ".*", SearchOption.TopDirectoryOnly)
+        foreach (var path in Directory.EnumerateFiles(root, ".*", SearchOption.AllDirectories)
                      .Where(p => Path.GetFileName(p).Contains(".tmp-", StringComparison.OrdinalIgnoreCase)
                               || Path.GetFileName(p).Contains(".bak-", StringComparison.OrdinalIgnoreCase)
                               || Path.GetFileName(p).StartsWith(".rotate-", StringComparison.OrdinalIgnoreCase)))
@@ -63,7 +63,7 @@ public static class DatasetStorageMaintenance
                 .AsNoTracking()
                 .Where(d => d.Id > lastId)
                 .OrderBy(d => d.Id)
-                .Select(d => new { d.Id, d.ParquetFilePath })
+                .Select(d => new { d.Id, d.TenantId, d.ParquetFilePath })
                 .Take(pageSize)
                 .ToListAsync();
             if (datasets.Count == 0)
@@ -79,7 +79,8 @@ public static class DatasetStorageMaintenance
                     continue;
                 }
 
-                if (!PortalPathGuard.TryResolveDataset(config, dataset.ParquetFilePath, out var resolved))
+                if (!DatasetTenantScope.TryResolveDatasetPath(
+                        config, dataset.TenantId, dataset.ParquetFilePath, out var resolved))
                     continue;
 
                 if (File.Exists(resolved))
@@ -108,7 +109,7 @@ public static class DatasetStorageMaintenance
         if (!deepOrphanScan || referenced is null)
             return;
 
-        foreach (var path in Directory.EnumerateFiles(root, "*.parquet", SearchOption.TopDirectoryOnly))
+        foreach (var path in Directory.EnumerateFiles(root, "*.parquet", SearchOption.AllDirectories))
         {
             var fullPath = Path.GetFullPath(path);
             if (ManagedFileName.IsMatch(Path.GetFileName(fullPath)) && !referenced.Contains(fullPath))

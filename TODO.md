@@ -611,17 +611,52 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
 
 ##### 4. Storage, paths, and artifacts
 
-- [ ] **Enterprise contract first.** Extend the existing `ResolvePath` boundary into
+- [x] **Enterprise contract first.** Extend the existing `ResolvePath` boundary into
       provider-neutral, server-derived tenant storage capabilities for file/directory connectors and
       operations such as `FLATFILE`, `DIRECTORY`, and `SEND FILE`.
-- [ ] **Dedicated.** Tenant-specific artifact roots and object prefixes, with canonical paths,
+
+      **Completed (2026-08-10).** `TenantStorageCapability` binds an immutable server-derived
+      `TenantContext`, run identifier, object prefix, canonical filesystem roots, and read/write
+      grants. `IExecutionContext.ResolvePath` enforces root containment for every connector and
+      handler path, while `FileSystemPolicyAuthorizer` enforces the operation-specific grant after
+      canonical/symlink resolution and before I/O. Caller object identifiers are assertions against
+      the issued tenant/run prefix and cannot select another prefix. Contract tests prove outside
+      paths, cross-tenant object keys, traversal segments, and writes through read-only grants fail.
+- [x] **Dedicated.** Tenant-specific artifact roots and object prefixes, with canonical paths,
       symlinks, archives, caches, checkpoints, and spill all remaining inside the authorized
       tenant/run root. Do not treat `chroot` or a container filesystem alone as authority.
       **Gap — previously implicit inside the quality bullet's trailing "and artifact roots".**
+
+      **Completed (2026-08-10).** Dedicated Portal artifact storage
+      now transparently prefixes every provider key with the host-fixed tenant while preserving
+      logical keys at service boundaries; a caller naming another tenant only creates a nested key
+      inside its own prefix. Report execution receives canonical read-only script/map grants,
+      read/write dataset/snapshot grants, and a disposable tenant/run scratch root. Spill files use
+      and delete that scratch grant; report and non-report checkpoints use the tenant's dedicated
+      session root and key scope. Archive extraction reauthorizes every target through the capability,
+      and dataset preview cache identities include server-derived tenant scope. Startup fails visibly
+      on legacy unprefixed or foreign artifacts so an upgrade cannot silently shadow data or invent
+      ownership; operators must migrate or quarantine those artifacts explicitly. Capability,
+      symlink/path, archive, cache, checkpoint, spill, prefix-isolation, and legacy-collision tests pin
+      the boundary.
 - [ ] **Shared.** Server-derived storage identifiers with a negative test that a caller-supplied
       object, prefix, or path identifier cannot widen scope, and no reuse of volumes, directories,
       object prefixes, or encryption data keys across tenants or sandbox assignments.
       **Gap — no phase bullet covered shared storage scope.**
+
+      **Control-plane and run-capability slice completed (2026-08-10).** Shared Portal artifact
+      operations now require the request's verified `TenantContext`; scripts, maps, snapshots, and
+      key artifacts are mapped below provider-neutral tenant prefixes, while background snapshot
+      work uses its persisted server-owned tenant binding. Dataset files and decrypted-preview
+      scratch use tenant-specific directories, and published/generated script paths are resolved
+      against the same tenant root. Report and ad-hoc execution receive tenant/run-specific scratch,
+      spill, checkpoint, script/map, dataset, and snapshot grants. Equal logical keys coexist, tenant
+      enumeration strips and filters physical prefixes, another tenant's absolute path is refused,
+      and a caller spelling another tenant in a relative object name remains nested below its own
+      prefix. Snapshot packages are separated by both Artifact encryption-key scope and storage
+      prefix. This cell remains open until the Hardened execution slice in domain 5 proves worker
+      volume/mount non-reuse, destructive cleanup, and no residue across successive sandbox
+      assignments.
 
 *Absorbs the retained discovery item **Tenant-Scoped Virtual Filesystem and Object Storage**.*
 

@@ -33,6 +33,17 @@ public sealed class SharedDatasetTenantIsolationTests : IDisposable
         var alphaId = await alpha.RegisterOrUpdate(Metadata("sales"));
         var betaId = await beta.RegisterOrUpdate(Metadata("sales"));
 
+        var alphaPath = alpha.BuildDatasetFilePath(alphaId, "sales");
+        var betaPath = beta.BuildDatasetFilePath(betaId, "sales");
+        Assert.StartsWith(Path.Combine(_root, "tenant-alpha") + Path.DirectorySeparatorChar, alphaPath);
+        Assert.StartsWith(Path.Combine(_root, "tenant-beta") + Path.DirectorySeparatorChar, betaPath);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => alpha.RegisterOrUpdate(
+            new DatasetMetadata
+            {
+                Name = "foreign-path",
+                ParquetFilePath = betaPath
+            }));
+
         Assert.NotEqual(alphaId, betaId);
         Assert.Equal(2, await db.Datasets.CountAsync());
         Assert.Equal("sales", (await alpha.Lookup("sales", "IsAdmin=true"))!.Name);

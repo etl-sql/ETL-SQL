@@ -140,7 +140,8 @@ public sealed class AccessSimulationService(
         Report report, PortalUser user, bool isAdmin, CancellationToken ct)
     {
         string? scriptText = null;
-        if (PortalPathGuard.TryResolveScript(config, report.ScriptPath, out var resolved)
+        if (PortalPathGuard.TryResolveScript(
+                config, datasetScope.TenantId, report.ScriptPath, out var resolved)
             && File.Exists(resolved))
         {
             try { scriptText = await File.ReadAllTextAsync(resolved, ct); }

@@ -14,6 +14,7 @@ using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Security;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
@@ -25,7 +26,8 @@ public sealed class SnapshotPackageService(
     PortalConfig config,
     IArtifactStorage artifacts,
     Microsoft.Extensions.Logging.ILogger<SnapshotPackageService> logger,
-    IKeyMaterialProvider? keyProvider = null)
+    IKeyMaterialProvider? keyProvider = null,
+    ITenantArtifactStorageFactory? tenantArtifacts = null)
 {
     public const string Extension = ".etlsnap";
     internal const int ArrowRowThreshold = 10_000;
@@ -74,7 +76,8 @@ public sealed class SnapshotPackageService(
 
         var compressedPackage = await CreateCompressedPackageAsync(manifest, ct);
         var encryptedPackage = await EncryptAsync(compressedPackage, ct, keyScope);
-        await artifacts.WriteAllBytesAsync(ArtifactArea.Snapshots, key, encryptedPackage, ct: ct);
+        await ScopedArtifacts(keyScope).WriteAllBytesAsync(
+            ArtifactArea.Snapshots, key, encryptedPackage, ct: ct);
     }
 
     public async Task<ReportManifest?> LoadAsync(
@@ -96,13 +99,13 @@ public sealed class SnapshotPackageService(
         if (IsLegacyJsonKey(key))
         {
             RejectSharedLegacySnapshot();
-            return await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
+            return await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
         }
 
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         var manifest = await ReadManifestFromPackageAsync(compressedPackage, ct);
         return JsonSerializer.Serialize(manifest, JsonOptions);
@@ -120,13 +123,13 @@ public sealed class SnapshotPackageService(
         if (IsLegacyJsonKey(key))
         {
             RejectSharedLegacySnapshot();
-            return await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
+            return await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
         }
 
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         var manifest = await ReadLightweightManifestFromPackageAsync(compressedPackage, rowsUrlFactory, arrowUrlFactory, ct);
         return JsonSerializer.Serialize(manifest, JsonOptions);
@@ -146,7 +149,7 @@ public sealed class SnapshotPackageService(
         if (IsLegacyJsonKey(key))
         {
             RejectSharedLegacySnapshot();
-            var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
+            var json = await ScopedArtifacts(keyScope).ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
             var legacyManifest = JsonSerializer.Deserialize<ReportManifest>(json, JsonOptions);
             if (legacyManifest is null || visualIndex >= legacyManifest.Visuals.Count)
                 return null;
@@ -158,7 +161,7 @@ public sealed class SnapshotPackageService(
         if (!IsPackageKey(key))
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
@@ -195,7 +198,7 @@ public sealed class SnapshotPackageService(
         if (visualIndex < 0 || !IsPackageKey(key))
             return null;
 
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
@@ -217,7 +220,7 @@ public sealed class SnapshotPackageService(
         CancellationToken ct = default,
         string? keyScope = null)
     {
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
@@ -229,7 +232,7 @@ public sealed class SnapshotPackageService(
         CancellationToken ct = default,
         string? keyScope = null)
     {
-        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var encryptedPackage = await ScopedArtifacts(keyScope).ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = await DecryptAsync(encryptedPackage, ct, keyScope);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
@@ -244,7 +247,8 @@ public sealed class SnapshotPackageService(
         CancellationToken ct = default,
         string? keyScope = null)
     {
-        if (!IsLegacyJsonKey(legacyKey) || !await artifacts.ExistsAsync(ArtifactArea.Snapshots, legacyKey, ct))
+        if (!IsLegacyJsonKey(legacyKey)
+            || !await ScopedArtifacts(keyScope).ExistsAsync(ArtifactArea.Snapshots, legacyKey, ct))
             return null;
 
         var targetKey = ToPackageKey(legacyKey);
@@ -253,7 +257,7 @@ public sealed class SnapshotPackageService(
             return null;
 
         await SaveAsync(manifest, targetKey, ct, keyScope);
-        await artifacts.DeleteAsync(ArtifactArea.Snapshots, legacyKey, ct);
+        await ScopedArtifacts(keyScope).DeleteAsync(ArtifactArea.Snapshots, legacyKey, ct);
         logger.LogInformation("Migrated legacy plaintext snapshot {LegacySnapshot} to encrypted package {SnapshotPackage}",
             legacyKey, targetKey);
         return targetKey;
@@ -376,6 +380,27 @@ public sealed class SnapshotPackageService(
             throw new UnauthorizedAccessException(
                 "Shared snapshot encryption requires an explicit server-derived tenant scope.");
         return string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
+    }
+
+    public Task<bool> ExistsAsync(
+        string key,
+        CancellationToken ct = default,
+        string? keyScope = null) =>
+        ScopedArtifacts(keyScope).ExistsAsync(ArtifactArea.Snapshots, key, ct);
+
+    public Task<bool> DeleteAsync(
+        string key,
+        CancellationToken ct = default,
+        string? keyScope = null) =>
+        ScopedArtifacts(keyScope).DeleteAsync(ArtifactArea.Snapshots, key, ct);
+
+    private IArtifactStorage ScopedArtifacts(string? keyScope)
+    {
+        if (!config.SharedTenancy.Enabled)
+            return artifacts;
+
+        var tenant = TenantContext.FromVerifiedCredential(ResolveKeyScope(keyScope));
+        return (tenantArtifacts ?? new TenantArtifactStorageFactory(artifacts)).ForTenant(tenant);
     }
 
     private void RequireSharedKeyProvider()

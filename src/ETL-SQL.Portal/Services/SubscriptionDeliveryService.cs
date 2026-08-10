@@ -202,7 +202,8 @@ public class SubscriptionDeliveryService(
             return SubscriptionDeliveryResult.Denied(denial);
         }
 
-        if (!PortalPathGuard.TryResolveScript(config, sub.Report.ScriptPath, out var reportScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                config, sub.User.TenantId, sub.Report.ScriptPath, out var reportScriptPath))
             return await RecordFailureAsync(sub,
                 recipient, "Report script path is outside the configured script root.", correlationId, ct);
         if (!File.Exists(reportScriptPath))

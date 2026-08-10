@@ -73,7 +73,8 @@ public sealed class DatasetKeyPostureService(
         foreach (var dataset in resolved)
         {
             var isCurrent = string.Equals(dataset.Version, currentVersion, StringComparison.OrdinalIgnoreCase);
-            var fileMissing = !PortalPathGuard.TryResolveDataset(config, dataset.ParquetFilePath, out var path)
+            var fileMissing = !_tenantScope.TryResolveDatasetPath(
+                    config, dataset.ParquetFilePath, out var path)
                 || !File.Exists(path);
             if (fileMissing) missingFiles++;
 

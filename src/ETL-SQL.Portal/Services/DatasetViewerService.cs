@@ -249,7 +249,7 @@ public class DatasetViewerService(
     {
         var dataset = await LoadDatasetAsync(id);
         var columns = ParseColumnSchema(dataset.ColumnSchema);
-        string cacheKey = DatasetCacheKey(dataset);
+        string cacheKey = DatasetCacheKey(dataset, _tenantScope.TenantId);
 
         if (cache.TryGetValue(cacheKey, out (List<Dictionary<string, object?>> Rows, List<DatasetColumnDto> Columns) cached))
             return cached;
@@ -265,8 +265,12 @@ public class DatasetViewerService(
         var dataset = await _tenantScope.Query(db).AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
             ?? throw new InvalidOperationException($"Dataset {id} not found.");
 
-        if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath) || !File.Exists(dataset.ParquetFilePath))
+        if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath)
+            || !_tenantScope.TryResolveDatasetPath(config, dataset.ParquetFilePath, out var datasetPath)
+            || !File.Exists(datasetPath))
             throw new InvalidOperationException($"Parquet file for dataset '{dataset.Name}' is not available.");
+
+        dataset.ParquetFilePath = datasetPath;
 
         return dataset;
     }
@@ -304,14 +308,24 @@ public class DatasetViewerService(
         {
             try
             {
-                tempFile = Path.GetTempFileName();
+                var previewScratch = Path.Combine(
+                    Path.GetTempPath(),
+                    "ETL-SQL-Runs",
+                    _tenantScope.TenantId,
+                    $"dataset-preview-{Guid.NewGuid():N}");
+                Directory.CreateDirectory(previewScratch);
+                tempFile = Path.Combine(previewScratch, "cache.parquet");
                 var enc = new EncryptionOptions(atRestDecryptOptions);
                 enc.DecryptFile(dataset.ParquetFilePath, tempFile);
                 effectivePath = tempFile;
             }
             catch (Exception ex) when (ex is not InvalidOperationException)
             {
-                if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
+                if (tempFile != null)
+                {
+                    try { Directory.Delete(Path.GetDirectoryName(tempFile)!, recursive: true); }
+                    catch { /* best effort */ }
+                }
                 keyLease?.Dispose();
                 throw new InvalidOperationException($"Failed to decrypt dataset '{dataset.Name}': {ex.Message}", ex);
             }
@@ -328,17 +342,22 @@ public class DatasetViewerService(
         }
         finally
         {
-            if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
+            if (tempFile != null)
+            {
+                try { Directory.Delete(Path.GetDirectoryName(tempFile)!, recursive: true); }
+                catch { /* best effort */ }
+            }
             keyLease?.Dispose();
         }
 
         return rows;
     }
 
-    private static string DatasetCacheKey(Dataset dataset)
+    private static string DatasetCacheKey(Dataset dataset, string tenantId)
     {
         var identity = string.Join(
             "|",
+            tenantId,
             dataset.Id,
             dataset.Version,
             dataset.RowCount,

@@ -118,7 +118,7 @@ public sealed class DatasetAtRestKeyRotationService(
         string targetVersion,
         CancellationToken cancellationToken)
     {
-        if (!PortalPathGuard.TryResolveDataset(config, dataset.ParquetFilePath, out var path)
+        if (!_tenantScope.TryResolveDatasetPath(config, dataset.ParquetFilePath, out var path)
             || !File.Exists(path))
         {
             throw new InvalidOperationException("The managed dataset file is missing or outside DatasetRootPath.");

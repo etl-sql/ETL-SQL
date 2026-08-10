@@ -46,8 +46,12 @@ public sealed class SnapshotPackageServiceTests
                 .Visuals[0].Rows[0][0]);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             service.LoadAsync("shared.etlsnap"));
-        await Assert.ThrowsAnyAsync<CryptographicException>(() =>
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
             service.LoadAsync("shared.etlsnap", keyScope: "tenant-beta"));
+        Assert.True(await storage.ExistsAsync(
+            ArtifactArea.Snapshots, "tenant-alpha/shared.etlsnap"));
+        Assert.False(await storage.ExistsAsync(
+            ArtifactArea.Snapshots, "shared.etlsnap"));
 
         await storage.WriteAllTextAsync(
             ArtifactArea.Snapshots, "legacy.snapshot.json", "{}");

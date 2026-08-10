@@ -497,6 +497,37 @@ Storage access is granted through narrow capabilities. A sandbox cannot enumerat
 shared bucket. Path canonicalization, symlink handling, archive extraction, object-prefix validation,
 and provider redirects are checked after resolution and before I/O.
 
+The engine contract is `TenantStorageCapability`: a trusted host issues it from `TenantContext`, a
+single run identifier, a tenant/run object prefix, and named canonical roots with explicit read/write
+grants. Scripts can propose a path or object identifier only as an assertion against that immutable
+authority. `IExecutionContext.ResolvePath` applies root containment to file and directory connectors
+and file operations; `FileSystemPolicyAuthorizer` applies the exact access grant after canonical and
+symlink resolution. Forked evaluator branches retain the same immutable capability. Provider-specific
+root allocation, disjoint Dedicated provisioning, and Shared per-attempt volume/prefix assignment are
+separate topology obligations built on this contract.
+
+The first Dedicated binding wraps Portal artifact storage in `TenantScopedArtifactStorage` whenever
+the host has a fixed `TenantId`. Logical service keys are mapped below that immutable tenant prefix
+for local and SMB providers, and enumeration strips the physical prefix before returning results.
+Report and general execution receive the host tenant's script/map, dataset/snapshot, and disposable
+tenant/run scratch grants; spill uses and cleans the assigned scratch root, and named checkpoints use
+the tenant's dedicated session root and key scope. Archive extraction is reauthorized entry by entry
+against the same run capability, and dataset preview cache identities include the server-derived
+tenant. Dedicated startup enumerates tenant artifact areas and fails visibly if legacy unprefixed or
+foreign artifacts remain: operators must migrate or quarantine them rather than silently assigning
+ownership or shadowing data after an upgrade.
+
+Shared control-plane storage uses the same provider backend only through tenant views derived from
+verified request context or a persisted server-owned work binding. Scripts, maps, snapshots, and key
+artifacts receive physical tenant prefixes; dataset caches and decrypted-preview scratch receive
+tenant directories. Snapshot storage and Artifact-purpose encryption resolve the same tenant
+independently, so defeating either boundary does not select another tenant's object. Published and
+generated script paths, report execution roots, checkpoint roots, spill, and run scratch are scoped
+to that tenant before I/O. Relative identifiers containing another tenant name remain ordinary
+segments below the current prefix, while absolute foreign paths fail containment. Hardened worker
+mount non-reuse, destructive teardown, and assignment-residue certification remain part of the open
+execution boundary rather than being inferred from these control-plane guarantees.
+
 Dedicated stores reduce collision risk but do not remove application authorization. Shared stores
 require negative tests against tenant swaps, equal object names, stale cache entries, backup/restore,
 and index rebuild.

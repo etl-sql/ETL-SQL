@@ -36,6 +36,7 @@ namespace ETL_SQL.ReportHosting
         private readonly int? _datasetOwningReportId;
         private readonly string? _datasetAtRestKey;
         private readonly string? _keyScope;
+        private readonly string _storageRunId = $"report-{Guid.NewGuid():N}";
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private IServiceScope? _currentScope;
@@ -363,6 +364,19 @@ namespace ETL_SQL.ReportHosting
                 _currentScope = _scopeFactory.CreateScope();
                 var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
                 evaluator.ExecutionIdentity = _executionIdentity;
+                var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
+                var persistedTenant = portalConfig?.SharedTenancy.Enabled == true
+                    && !string.IsNullOrWhiteSpace(_keyScope)
+                        ? ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(_keyScope)
+                        : null;
+                var storageAuthority = _currentScope.ServiceProvider
+                    .GetService<ETL_SQL.Core.Multitenancy.ITenantStorageHostAuthorityProvider>()
+                    ?.GetAuthority(persistedTenant);
+                if (storageAuthority is not null)
+                {
+                    evaluator.StorageCapability = storageAuthority.CreateRunCapability(_storageRunId);
+                    evaluator.SessionRoot = storageAuthority.CheckpointRoot;
+                }
                 var registry = _currentScope.ServiceProvider.GetService<IDatasetRegistry>();
                 if (registry != null)
                 {
@@ -372,7 +386,6 @@ namespace ETL_SQL.ReportHosting
                     evaluator.DatasetAtRestKey = _datasetAtRestKey;
                     evaluator.DatasetKeyMaterialProvider =
                         _currentScope.ServiceProvider.GetService<IKeyMaterialProvider>();
-                    var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
                     evaluator.DatasetKeyScope = _keyScope
                         ?? (string.IsNullOrWhiteSpace(portalConfig?.TenantId)
                             ? "portal-host"

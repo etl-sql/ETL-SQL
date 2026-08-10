@@ -368,7 +368,7 @@ namespace ETL_SQL.Portal.Services
                 name.TrimStart('&', '#'), @"[^\w\-]", "_", RegexOptions.None).ToLowerInvariant();
 
             // Suffix with the stable Id so moving/renaming a dataset never rewrites its file.
-            var rootPath = Path.GetFullPath(_config.DatasetRootPath);
+            var rootPath = _tenantScope.DatasetStorageRoot(_config);
             Directory.CreateDirectory(rootPath);
             return Path.Combine(rootPath, $"{safeName}_{datasetId}.parquet");
         }
@@ -378,8 +378,9 @@ namespace ETL_SQL.Portal.Services
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;
 
-            if (!PortalPathGuard.TryResolveDataset(_config, path, out var resolved))
-                throw new InvalidOperationException("Dataset file path must be within the configured DatasetRootPath.");
+            if (!_tenantScope.TryResolveDatasetPath(_config, path, out var resolved))
+                throw new InvalidOperationException(
+                    "Dataset file path must be within the server-derived tenant dataset root.");
 
             return resolved;
         }
@@ -403,7 +404,7 @@ namespace ETL_SQL.Portal.Services
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;
 
-            return PortalPathGuard.TryResolveDataset(_config, path, out var resolved)
+            return _tenantScope.TryResolveDatasetPath(_config, path, out var resolved)
                 ? resolved
                 : null;
         }

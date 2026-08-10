@@ -78,16 +78,18 @@ public class SessionStateManager : ISessionStateManager
         return root;
     }
 
-    private string GetSessionDirectory(string sessionId)
+    private string GetSessionDirectory(string sessionId, string? storageRoot = null)
     {
-        var sessionDir = Path.GetFullPath(Path.Combine(SessionRoot, sessionId));
-        if (!SafePath.IsWithinRoot(SessionRoot, sessionDir))
+        var root = storageRoot ?? SessionRoot;
+        var sessionDir = Path.GetFullPath(Path.Combine(root, sessionId));
+        if (!SafePath.IsWithinRoot(root, sessionDir))
             throw new ExecutionException($"Invalid session id: {sessionId}");
 
         return sessionDir;
     }
 
-    private string GetSessionDbPath(string sessionId) => Path.Combine(GetSessionDirectory(sessionId), "metadata.db");
+    private string GetSessionDbPath(string sessionId, string? storageRoot = null) =>
+        Path.Combine(GetSessionDirectory(sessionId, storageRoot), "metadata.db");
 
     /// <summary>Saves the current evaluator state to a persistent SQLite-backed session.</summary>
     public async Task SaveSession(string sessionId, object evaluatorObj, string? scriptSource = null)
@@ -103,8 +105,10 @@ public class SessionStateManager : ISessionStateManager
         }
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
+        var storageRoot = evaluator.SessionRoot;
+        evaluator.StorageCapability?.RequirePath(storageRoot, write: true);
         using var store = _metadataStoreFactory.Create(
-            sessionId, SessionRoot, entropyKey, evaluator.CheckpointKeyScope);
+            sessionId, storageRoot, entropyKey, evaluator.CheckpointKeyScope);
         await store.InitializeAsync();
 
         var sessionLock = GetSessionLock(sessionId);
@@ -139,10 +143,10 @@ public class SessionStateManager : ISessionStateManager
             // 6. Save Temp Tables
             var savedTables = (await evaluator.DataSourceManager.GetTempTablesToSave()).ToList();
             await store.SaveTempTablesAsync(savedTables);
-            PurgeUnreferencedSpillChunks(sessionId, savedTables);
+            PurgeUnreferencedSpillChunksAtRoot(sessionId, savedTables, storageRoot);
 
             // Write job name file if running as an Orchestrator job
-            var sessionDir = GetSessionDirectory(sessionId);
+            var sessionDir = GetSessionDirectory(sessionId, storageRoot);
             var jobNameFile = Path.Combine(sessionDir, "job.name");
             if (!string.IsNullOrEmpty(evaluator.JobName))
             {
@@ -175,12 +179,16 @@ public class SessionStateManager : ISessionStateManager
     }
 
     /// <summary>Loads existing session state from the SQLite store.</summary>
-    public async Task<SessionState?> LoadSession(string sessionId, string? keyScope = null)
+    public async Task<SessionState?> LoadSession(
+        string sessionId,
+        string? keyScope = null,
+        string? storageRoot = null)
     {
-        if (!File.Exists(GetSessionDbPath(sessionId))) return null;
+        var root = storageRoot ?? SessionRoot;
+        if (!File.Exists(GetSessionDbPath(sessionId, root))) return null;
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
-        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey, keyScope);
+        using var store = _metadataStoreFactory.Create(sessionId, root, entropyKey, keyScope);
         await store.InitializeAsync();
 
         try
@@ -287,9 +295,17 @@ public class SessionStateManager : ISessionStateManager
         => Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
             .Sum(file => new FileInfo(file).Length);
 
-    private void PurgeUnreferencedSpillChunks(string sessionId, IReadOnlyCollection<SavedTempTable> savedTables)
+    private void PurgeUnreferencedSpillChunks(
+        string sessionId,
+        IReadOnlyCollection<SavedTempTable> savedTables) =>
+        PurgeUnreferencedSpillChunksAtRoot(sessionId, savedTables, SessionRoot);
+
+    private void PurgeUnreferencedSpillChunksAtRoot(
+        string sessionId,
+        IReadOnlyCollection<SavedTempTable> savedTables,
+        string storageRoot)
     {
-        var spillDir = Path.Combine(GetSessionDirectory(sessionId), "spill");
+        var spillDir = Path.Combine(GetSessionDirectory(sessionId, storageRoot), "spill");
         if (!Directory.Exists(spillDir))
             return;
 

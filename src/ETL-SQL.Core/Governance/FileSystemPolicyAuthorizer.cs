@@ -47,6 +47,7 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
             RejectNonCanonicalWindowsForms(canonical);
             securityService.ValidatePath(canonical);
             if (IsMutation(access)) securityService.ValidateWriteAccess(canonical);
+            context.StorageCapability?.RequirePath(canonical, IsMutation(access));
             if (validateFileType) securityService.ValidateFileType(canonical,
                 context.AllowUnknownFileTypes, context.AllowedFileTypeOverrides);
             EnforceEnterpriseRoots(snapshot, canonical, access);

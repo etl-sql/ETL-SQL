@@ -92,7 +92,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         IArtifactStorage? artifacts = null,
         INodeCapacityMonitor? capacityMonitor = null,
         SnapshotPackageService? snapshotPackages = null,
-        PortalAlertEvaluationService? alertEvaluation = null)
+        PortalAlertEvaluationService? alertEvaluation = null,
+        ITenantArtifactStorageFactory? tenantArtifacts = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
@@ -103,7 +104,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _snapshotPackages = snapshotPackages ?? new SnapshotPackageService(
             config,
             _artifacts,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance,
+            tenantArtifacts: tenantArtifacts);
         _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         _alertEvaluation = alertEvaluation;
         _admission = new WeightedExecutionAdmission(
@@ -385,7 +387,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             await UpdateReportRefreshStatusAsync(job, "Running", null);
             _log.LogInformation("Execution job {JobId} started for report {ReportId}", job.Id, job.ReportId);
 
-            if (!PortalPathGuard.TryResolveScript(_config, scriptPath, out var resolvedScriptPath))
+            if (!PortalPathGuard.TryResolveScript(
+                    _config, job.KeyScope, scriptPath, out var resolvedScriptPath))
                 throw new UnauthorizedAccessException("Report script path is outside the configured script root.");
             scriptPath = resolvedScriptPath;
 
@@ -434,7 +437,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                                 ?? throw new InvalidOperationException("Remote orchestrator returned an invalid report manifest.");
                             await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
                         }
-                        else if (!await _artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey, cts.Token))
+                        else if (!await _snapshotPackages.ExistsAsync(
+                            manifestKey, cts.Token, job.KeyScope))
                         {
                             throw new InvalidOperationException(
                                 "Remote orchestrator completed the report without returning or writing a snapshot manifest.");
@@ -542,7 +546,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
             try
             {
-                await PruneSnapshotsAsync(db, job.ReportId);
+                await PruneSnapshotsAsync(db, job.ReportId, job.KeyScope);
             }
             catch (Exception ex)
             {
@@ -921,7 +925,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     /// <summary>Keeps the newest <see cref="ResourcesConfig.SnapshotRetentionPerReport"/>
     /// snapshots for the report; older rows and their manifest files are removed. File
     /// deletion is restricted to names the path guard resolves inside the snapshot directory.</summary>
-    internal async Task PruneSnapshotsAsync(PortalDbContext db, int reportId)
+    internal async Task PruneSnapshotsAsync(
+        PortalDbContext db,
+        int reportId,
+        string? keyScope = null)
     {
         var keep = Math.Max(1, _config.Resources.SnapshotRetentionPerReport);
         var stale = await db.ReportSnapshots
@@ -940,7 +947,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             {
                 var key = PortalPathGuard.ToSnapshotKey(_config, snapshot.ManifestPath);
                 if (key is not null)
-                    await _artifacts.DeleteAsync(ArtifactArea.Snapshots, key);
+                    await _snapshotPackages.DeleteAsync(key, keyScope: keyScope);
             }
             catch (Exception ex)
             {
@@ -1114,8 +1121,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
     }
 
-    private static IArtifactStorage CreateDefaultArtifactStorage(PortalConfig config) =>
-        new LocalArtifactStorage(new Dictionary<ArtifactArea, string>
+    private static IArtifactStorage CreateDefaultArtifactStorage(PortalConfig config)
+    {
+        IArtifactStorage storage = new LocalArtifactStorage(new Dictionary<ArtifactArea, string>
         {
             [ArtifactArea.Scripts] = config.ScriptRootPath,
             [ArtifactArea.Snapshots] = config.SnapshotDirectory,
@@ -1125,6 +1133,14 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath))!, ".portal-keys")
                 : Path.GetFullPath(config.Storage.KeyRingPath)
         });
+        if (!config.SharedTenancy.Enabled && !string.IsNullOrWhiteSpace(config.TenantId))
+        {
+            storage = new TenantScopedArtifactStorage(
+                storage,
+                ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(config.TenantId));
+        }
+        return storage;
+    }
 }
 
 internal sealed class WeightedExecutionAdmission

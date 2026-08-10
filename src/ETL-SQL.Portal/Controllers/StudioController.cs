@@ -27,8 +27,10 @@ public sealed partial class StudioController(
     IArtifactStorage artifacts,
     PortalConfig portalConfig,
     PortalScriptSourceControlService sourceControl,
-    AuditService audit) : ControllerBase
+    AuditService audit,
+    DatasetTenantScope? tenantScope = null) : ControllerBase
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
@@ -124,7 +126,8 @@ public sealed partial class StudioController(
 
         sourceControl.ValidateScriptTextForCommit(request.ScriptText);
         var scriptKey = $"studio/{folder.Id}/{Slugify(name)}-{Guid.NewGuid():N}.rptsql";
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptKey, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _tenantScope.TenantId, scriptKey, out var resolvedScriptPath))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
                 new { error = "The Studio script storage root is unavailable." });
 

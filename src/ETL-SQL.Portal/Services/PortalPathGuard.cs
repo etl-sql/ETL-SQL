@@ -9,6 +9,13 @@ public static class PortalPathGuard
     public static bool TryResolveScript(PortalConfig config, string path, out string resolved) =>
         TryResolveWithinRoot(config.ScriptRootPath, path, out resolved);
 
+    public static bool TryResolveScript(
+        PortalConfig config,
+        string tenantId,
+        string path,
+        out string resolved) =>
+        TryResolveWithinRoot(TenantAreaRoot(config, config.ScriptRootPath, tenantId), path, out resolved);
+
     public static bool TryResolveSnapshot(PortalConfig config, string path, out string resolved) =>
         TryResolveWithinRoot(config.SnapshotDirectory, path, out resolved);
 
@@ -25,6 +32,15 @@ public static class PortalPathGuard
 
     public static string? ToScriptKey(PortalConfig config, string? path) =>
         ToAreaKey(config.ScriptRootPath, path, TryResolveScript, config);
+
+    public static string? ToScriptKey(PortalConfig config, string tenantId, string? path)
+    {
+        var root = TenantAreaRoot(config, config.ScriptRootPath, tenantId);
+        if (string.IsNullOrWhiteSpace(path)
+            || !TryResolveWithinRoot(root, path, out var resolved))
+            return null;
+        return Path.GetRelativePath(root, resolved).Replace('\\', '/');
+    }
 
     public static string? ToSnapshotKey(PortalConfig config, string? path) =>
         ToAreaKey(config.SnapshotDirectory, path, TryResolveSnapshot, config);
@@ -51,6 +67,15 @@ public static class PortalPathGuard
         Regex.IsMatch(path, @"^[A-Za-z]:[\\/]")
         || path.StartsWith(@"\\", StringComparison.Ordinal)
         || path.StartsWith("//", StringComparison.Ordinal);
+
+    public static string TenantAreaRoot(PortalConfig config, string configuredRoot, string tenantId)
+    {
+        var root = Path.GetFullPath(configuredRoot);
+        if (!config.SharedTenancy.Enabled)
+            return root;
+        var tenant = ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(tenantId);
+        return Path.Combine(root, tenant.Value);
+    }
 
     private static string? ToAreaKey(string? root, string? path, Resolver resolver, PortalConfig config)
     {

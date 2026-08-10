@@ -43,6 +43,9 @@ public partial class Evaluator
         // If the path contains a placeholder, we skip full-path resolution to avoid breaking the placeholder
         if (resolved.Contains("${"))
         {
+            if (StorageCapability is not null)
+                throw new ETL_SQL.Services.SecurityException(
+                    "Tenant-scoped execution cannot authorize a path with unresolved placeholders.");
             return resolved;
         }
 
@@ -73,6 +76,8 @@ public partial class Evaluator
             // Internal test fallback: Log a warning if the service is missing
             _logger.Debug("Security validation skipped for path {Path}; SecurityService not initialized", fullPath);
         }
+
+        StorageCapability?.RequirePath(fullPath);
 
         return fullPath;
     }

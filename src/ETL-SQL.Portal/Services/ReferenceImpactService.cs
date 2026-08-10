@@ -19,8 +19,10 @@ public sealed class ReferenceImpactService(
     PortalDbContext db,
     PortalConfig portalConfig,
     IJobHistoryStore jobHistory,
-    ILogger<ReferenceImpactService> logger)
+    ILogger<ReferenceImpactService> logger,
+    DatasetTenantScope? tenantScope = null)
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
     private const int MaxScriptBytes = 1024 * 1024;
 
     public async Task<ImpactReport> ForSharedConnectionAsync(string alias, CancellationToken ct = default)
@@ -105,11 +107,17 @@ public sealed class ReferenceImpactService(
         var reports = await db.Reports
             .AsNoTracking()
             .Where(r => !r.IsDeleted)
+            .Join(
+                db.Users.AsNoTracking().Where(user => user.TenantId == _tenantScope.TenantId),
+                report => report.CreatedBy,
+                user => user.Id,
+                (report, _) => report)
             .Select(r => new { r.Id, r.Name, r.ScriptPath })
             .ToListAsync(ct);
         foreach (var report in reports)
         {
-            if (PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved)
+            if (PortalPathGuard.TryResolveScript(
+                    portalConfig, _tenantScope.TenantId, report.ScriptPath, out var resolved)
                 && ContainsReference(await ReadBoundedAsync(resolved, ct), reference))
             {
                 consumers.Add(new ImpactConsumer("Report", report.Name, report.ScriptPath, null, null));
@@ -118,12 +126,13 @@ public sealed class ReferenceImpactService(
 
         var subscriptions = await db.Subscriptions
             .AsNoTracking()
-            .Where(s => s.ScriptPath != null)
+            .Where(s => s.ScriptPath != null && s.User.TenantId == _tenantScope.TenantId)
             .Select(s => new { s.Id, s.ReportId, s.ScriptPath })
             .ToListAsync(ct);
         foreach (var subscription in subscriptions)
         {
-            if (PortalPathGuard.TryResolveScript(portalConfig, subscription.ScriptPath!, out var resolved)
+            if (PortalPathGuard.TryResolveScript(
+                    portalConfig, _tenantScope.TenantId, subscription.ScriptPath!, out var resolved)
                 && ContainsReference(await ReadBoundedAsync(resolved, ct), reference))
             {
                 consumers.Add(new ImpactConsumer(

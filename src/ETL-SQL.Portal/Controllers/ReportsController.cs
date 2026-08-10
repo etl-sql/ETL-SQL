@@ -327,7 +327,7 @@ public class ReportsController : ControllerBase
         if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
             return NotFound("Folder not found");
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
         var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
@@ -391,7 +391,7 @@ public class ReportsController : ControllerBase
     [RequireStudioCapability(StudioCapabilities.ScriptPreview, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> ValidateScript([FromBody] ValidateReportScriptRequest req)
     {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, req.ScriptPath, out var resolved))
             return BadRequest(new ReportScriptValidationDto(
                 false,
                 req.ScriptPath,
@@ -758,7 +758,7 @@ public class ReportsController : ControllerBase
             if (string.IsNullOrWhiteSpace(scriptRoot))
                 return BadRequest(new { error = "ScriptRootPath is not configured." });
 
-            if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
+            if (!PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, req.ScriptPath, out var resolved))
                 return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
             if (!System.IO.File.Exists(resolved))

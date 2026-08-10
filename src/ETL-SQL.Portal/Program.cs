@@ -127,6 +127,7 @@ ETL_SQL.Orchestrator.Scheduling.NodeHeartbeatServiceCollectionExtensions.AddNode
 // A fatal startup error is raised via IHostApplicationLifetime if the secret is missing/short.
 
 builder.Services.AddSingleton(portalConfig);
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.RequestTenantContextAccessor>();
 if (portalConfig.SharedTenancy.Enabled || !string.IsNullOrWhiteSpace(portalConfig.TenantId))
 {
@@ -136,6 +137,9 @@ if (portalConfig.SharedTenancy.Enabled || !string.IsNullOrWhiteSpace(portalConfi
 builder.Services.AddSingleton(new ETL_SQL.Core.Security.KeyMaterialHostScope(
     string.IsNullOrWhiteSpace(portalConfig.TenantId) ? "portal-host" : portalConfig.TenantId,
     RequireExplicitScope: portalConfig.SharedTenancy.Enabled));
+builder.Services.AddSingleton<ETL_SQL.Core.Multitenancy.ITenantStorageHostAuthorityProvider,
+    ETL_SQL.Portal.Services.DedicatedTenantStorageAuthorityProvider>();
+builder.Services.AddHostedService<ETL_SQL.Portal.Services.DedicatedArtifactIsolationValidator>();
 if (portalConfig.KeyManagement.Enabled)
 {
     var bindings = portalConfig.KeyManagement.Bindings.Select(binding =>
@@ -175,7 +179,7 @@ var keyRingPath = string.IsNullOrWhiteSpace(portalConfig.Storage.KeyRingPath)
 // directory beside the portal database. Writes pass through FencedArtifactStorage (P1.8) and then the
 // outer GuardedArtifactStorage enforces SecurityService path-traversal / executable /
 // script-immutability guardrails before any epoch is stamped (P1.6).
-builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalArtifactStorageBackend>(sp =>
 {
     // Resolve PortalConfig from DI (not the startup-bound local) so any later override — e.g. a test
     // host that replaces the PortalConfig singleton — drives the storage roots too.
@@ -183,7 +187,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
     var keysRoot = string.IsNullOrWhiteSpace(cfg.Storage.KeyRingPath)
         ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(cfg.DatabasePath))!, ".portal-keys")
         : Path.GetFullPath(cfg.Storage.KeyRingPath);
-    var inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
+    ETL_SQL.Core.Storage.IArtifactStorage inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
         cfg.Storage.Provider,
         new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
         {
@@ -198,8 +202,15 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
     var fenced = new ETL_SQL.Core.Storage.FencedArtifactStorage(
         inner, epochs, locks);
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
-    return new ETL_SQL.Core.Storage.GuardedArtifactStorage(fenced, security);
+    return new ETL_SQL.Portal.Services.PortalArtifactStorageBackend(
+        new ETL_SQL.Core.Storage.GuardedArtifactStorage(fenced, security));
 });
+builder.Services.AddSingleton<ETL_SQL.Core.Storage.ITenantArtifactStorageFactory>(sp =>
+    new ETL_SQL.Core.Storage.TenantArtifactStorageFactory(
+        sp.GetRequiredService<ETL_SQL.Portal.Services.PortalArtifactStorageBackend>().Storage,
+        requireExclusiveBackend: !sp.GetRequiredService<PortalConfig>().SharedTenancy.Enabled));
+builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage,
+    ETL_SQL.Portal.Services.PortalTenantArtifactStorage>();
 
 // ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);

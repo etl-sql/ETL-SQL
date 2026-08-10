@@ -406,6 +406,12 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     /// </summary>
     Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
 
+    /// <summary>
+    /// Optional server-issued tenant/run storage authority. When present, every path resolved by
+    /// the engine and every filesystem policy authorization must remain within one of its grants.
+    /// </summary>
+    Multitenancy.TenantStorageCapability? StorageCapability { get; set; }
+
     // Property-based access to sub-contexts for better interface segregation (TODO-91)
     IVariableContext VarContext { get; }
     IReportContext ReportContext { get; }

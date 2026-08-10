@@ -24,7 +24,8 @@ public class ReportScriptInspectionService(
     {
         // Resolve within the configured script root like the sibling methods, so a caller passing
         // a request-derived path cannot read arbitrary files (path traversal / arbitrary read).
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _datasetScope.TenantId, scriptPath, out var resolvedScriptPath))
         {
             logger.LogWarning("Rejected script metadata read outside the configured script root: {ScriptPath}", scriptPath);
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -160,7 +161,8 @@ public class ReportScriptInspectionService(
 
     public async Task<IReadOnlyList<string>> ReadScriptSourceTablesAsync(string scriptPath)
     {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _datasetScope.TenantId, scriptPath, out var resolvedScriptPath))
             return Array.Empty<string>();
         if (!System.IO.File.Exists(resolvedScriptPath))
             return Array.Empty<string>();
@@ -170,7 +172,8 @@ public class ReportScriptInspectionService(
 
     public async Task<IReadOnlyList<ReportDependencyLineageDto>> ReadScriptLineageAsync(string scriptPath)
     {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _datasetScope.TenantId, scriptPath, out var resolvedScriptPath))
             return Array.Empty<ReportDependencyLineageDto>();
         if (!System.IO.File.Exists(resolvedScriptPath))
             return Array.Empty<ReportDependencyLineageDto>();
@@ -207,7 +210,8 @@ public class ReportScriptInspectionService(
 
     public async Task<string?> ReadCurrentScriptHashAsync(string scriptPath)
     {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _datasetScope.TenantId, scriptPath, out var resolvedScriptPath))
             return null;
         if (!System.IO.File.Exists(resolvedScriptPath))
             return null;

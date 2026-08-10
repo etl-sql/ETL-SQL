@@ -48,6 +48,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 {
     public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
     public ExecutionIdentity? ExecutionIdentity { get; set; }
+    public ETL_SQL.Core.Multitenancy.TenantStorageCapability? StorageCapability { get; set; }
     /// <summary>
     /// Process-wide by default; settable so tests (and future per-tenant hosting) can bound an
     /// evaluator with an isolated budget instead of mutating <see cref="MemoryGrantArbiter.Shared"/>.
@@ -487,11 +488,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     /// <summary>
     /// The root directory for the current session (metadata, logs, and spills).
-    /// Defaults to the standard AppData path if not explicitly provided.
+    /// Defaults to the configured session-manager root if not explicitly provided.
     /// </summary>
     public string SessionRoot
     {
-        get => _sessionRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId ?? "DEFAULT");
+        get => _sessionRoot ?? _sessionStateManager.SessionRoot;
         set => _sessionRoot = value;
     }
     private string? _sessionRoot;
@@ -1718,6 +1719,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MaxGroupingSets = MaxGroupingSets,
             ExecutionPolicy = ExecutionPolicy,
             ExecutionIdentity = ExecutionIdentity,
+            StorageCapability = StorageCapability,
             MemoryArbiter = MemoryArbiter,
             _adaptiveController = _adaptiveController,
             _adaptiveAdvisor = _adaptiveAdvisor,

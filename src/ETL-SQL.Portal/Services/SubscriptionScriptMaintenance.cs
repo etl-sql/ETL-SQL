@@ -55,11 +55,12 @@ public static class SubscriptionScriptMaintenance
 
         var subscriptions = await db.Subscriptions
             .Include(s => s.Report)
+            .Include(s => s.User)
             .ToListAsync();
         var liveIds = subscriptions.Select(s => s.Id).ToHashSet();
 
         await ReconcileScriptsAsync(db, config, subscriptions, logger);
-        CleanSubscriptionDirectory(config, liveIds, logger);
+        CleanSubscriptionDirectories(config, subscriptions, liveIds, logger);
         await ReconcileOrchestratorJobsAsync(subscriptions, liveIds, orchestratorDbPath, logger, storeFactory);
     }
 
@@ -84,11 +85,13 @@ public static class SubscriptionScriptMaintenance
 
                 var fileName = SubscriptionOrchestration.ScriptFileName(sub.Id, sub.Report.Name);
                 if (!PortalPathGuard.TryResolveScript(
-                        config, Path.Combine("subscriptions", fileName), out resolved))
+                        config, sub.User.TenantId,
+                        Path.Combine("subscriptions", fileName), out resolved))
                     continue;
                 healedPaths++;
             }
-            else if (!PortalPathGuard.TryResolveScript(config, sub.ScriptPath, out resolved))
+            else if (!PortalPathGuard.TryResolveScript(
+                         config, sub.User.TenantId, sub.ScriptPath, out resolved))
             {
                 logger.LogWarning(
                     "Subscription {SubscriptionId} script path is outside the script root and was not reconciled: {Path}",
@@ -127,9 +130,29 @@ public static class SubscriptionScriptMaintenance
                 "Regenerated {Count} missing subscription script path(s) from row state.", healedPaths);
     }
 
-    private static void CleanSubscriptionDirectory(PortalConfig config, HashSet<int> liveIds, ILogger logger)
+    private static void CleanSubscriptionDirectories(
+        PortalConfig config,
+        IReadOnlyList<Subscription> subscriptions,
+        HashSet<int> liveIds,
+        ILogger logger)
     {
-        if (!PortalPathGuard.TryResolveScript(config, "subscriptions", out var subscriptionDir)
+        var tenants = config.SharedTenancy.Enabled
+            ? subscriptions.Select(subscription => subscription.User.TenantId)
+                .Distinct(StringComparer.Ordinal).ToArray()
+            : [string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId];
+
+        foreach (var tenant in tenants)
+            CleanSubscriptionDirectory(config, tenant, liveIds, logger);
+    }
+
+    private static void CleanSubscriptionDirectory(
+        PortalConfig config,
+        string tenantId,
+        HashSet<int> liveIds,
+        ILogger logger)
+    {
+        if (!PortalPathGuard.TryResolveScript(
+                config, tenantId, "subscriptions", out var subscriptionDir)
             || !Directory.Exists(subscriptionDir))
             return;
 

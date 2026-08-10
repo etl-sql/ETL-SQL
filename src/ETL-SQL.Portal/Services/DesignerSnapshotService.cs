@@ -61,7 +61,8 @@ public sealed class DesignerSnapshotService(
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, user);
         if (permission is null) return new Result(SnapshotOutcome.Forbidden, null);
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
+        if (!PortalPathGuard.TryResolveScript(
+                portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
             return new Result(SnapshotOutcome.Forbidden, null);
 
         var snapshot = await db.ReportSnapshots

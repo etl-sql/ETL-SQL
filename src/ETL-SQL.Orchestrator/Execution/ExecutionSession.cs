@@ -116,6 +116,18 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.CheckpointKeyScope = string.IsNullOrWhiteSpace(_ctx.SaasTenantId)
                     ? null
                     : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(_ctx.SaasTenantId).Value;
+                var storageAuthority = _serviceProvider
+                    .GetService<ETL_SQL.Core.Multitenancy.ITenantStorageHostAuthorityProvider>()
+                    ?.GetAuthority();
+                if (storageAuthority is not null)
+                {
+                    var storageRunId = string.IsNullOrWhiteSpace(_ctx.SessionId)
+                        ? $"run-{Guid.NewGuid():N}"
+                        : _ctx.SessionId;
+                    evaluator.StorageCapability = storageAuthority.CreateRunCapability(storageRunId);
+                    evaluator.SessionRoot = storageAuthority.CheckpointRoot;
+                    evaluator.CheckpointKeyScope = storageAuthority.Tenant.Tenant.Value;
+                }
                 evaluator.JobName = jobName;
                 evaluator.ExecutionIdentity = executionIdentity;
                 evaluator.Telemetry.IsProfiling = true;
@@ -128,13 +140,12 @@ namespace ETL_SQL.Orchestrator.Execution
                         throw new InvalidOperationException("Named-checkpoint resume requires a session id.");
 
                     var sessionState = await evaluator.SessionStateManager.LoadSession(
-                        _ctx.SessionId, evaluator.CheckpointKeyScope);
+                        _ctx.SessionId, evaluator.CheckpointKeyScope, evaluator.SessionRoot);
                     if (sessionState is null)
                         throw new InvalidOperationException(
                             $"No saved persistent session exists for '{_ctx.SessionId}'.");
 
                     evaluator.IsPersistentSession = true;
-                    evaluator.SessionRoot = evaluator.SessionStateManager.SessionRoot;
                     await evaluator.LoadSessionState(sessionState);
                     evaluator.IsResuming = true;
                 }

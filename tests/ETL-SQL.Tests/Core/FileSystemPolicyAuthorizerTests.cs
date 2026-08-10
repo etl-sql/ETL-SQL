@@ -2,6 +2,7 @@ using System.IO.Compression;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Moq;
@@ -513,6 +514,54 @@ public sealed class FileSystemPolicyAuthorizerTests
         {
             EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
             try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SafeZipExtractor_RejectsDestinationOutsideTenantRunCapability()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"tenant_zip_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"tenant_zip_outside_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        var archivePath = Path.Combine(root, "payload.zip");
+        var destination = Path.Combine(outside, "output");
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("data.csv");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write("blocked");
+            }
+
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            security.ApprovedSafeZones.Add(outside);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            context.SetupProperty(value => value.StorageCapability,
+                TenantStorageCapability.FromServerAuthority(
+                    TenantContext.FromHostConfiguration("tenant-alpha"),
+                    "run-archive",
+                    [("run", root, TenantStorageAccess.All)]));
+
+            Assert.Throws<FileSystemPolicyDeniedException>(() => SafeZipExtractor.Extract(
+                archivePath, destination, overwrite: false, context.Object,
+                new FileSystemPolicyAuthorizer(security)));
+            Assert.False(Directory.Exists(destination));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
         }
     }
 

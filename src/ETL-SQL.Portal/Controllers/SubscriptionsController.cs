@@ -25,8 +25,11 @@ public class SubscriptionsController(
     PortalConnectionCatalogService connectionCatalog,
     IDatasetRegistry datasetRegistry,
     SubscriptionScriptService subscriptionScripts,
-    SubscriptionQueryService subscriptionQueries) : ControllerBase
+    SubscriptionQueryService subscriptionQueries,
+    DatasetTenantScope? tenantScope = null) : ControllerBase
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope
+        ?? throw new InvalidOperationException("Subscription routes require tenant scope.");
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
 
@@ -203,7 +206,7 @@ public class SubscriptionsController(
         // Row first (it is the source of truth and carries everything needed to rebuild the
         // rest), then script, then ScriptPath, then the Orchestrator job. A crash anywhere in
         // between is healed by SubscriptionScriptMaintenance at the next startup.
-        var scriptPath = subscriptionScripts.WriteTriggerScript(sub, report);
+        var scriptPath = subscriptionScripts.WriteTriggerScript(sub, report, _tenantScope.TenantId);
         sub.ScriptPath = scriptPath;
         await db.SaveChangesAsync();
 
@@ -282,12 +285,12 @@ public class SubscriptionsController(
 
         if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath))
         {
-            if (!subscriptionScripts.TryResolve(sub.ScriptPath, out _))
+            if (!subscriptionScripts.TryResolve(sub.ScriptPath, out _, _tenantScope.TenantId))
                 return Forbid();
 
             // Format/parameter/recipient changes live in the subscription row and are read by
             // the delivery service at send time; rewriting just heals any legacy script content.
-            subscriptionScripts.WriteTriggerScript(sub, sub.Report);
+            subscriptionScripts.WriteTriggerScript(sub, sub.Report, _tenantScope.TenantId);
         }
 
         try
@@ -434,7 +437,8 @@ public class SubscriptionsController(
         var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
         string? resolvedScriptPath = null;
         if (!string.IsNullOrEmpty(sub.ScriptPath)
-            && !subscriptionScripts.TryResolve(sub.ScriptPath, out resolvedScriptPath))
+            && !subscriptionScripts.TryResolve(
+                sub.ScriptPath, out resolvedScriptPath, _tenantScope.TenantId))
             return Forbid();
 
         var orchDbPath = dbLocator.Resolve();

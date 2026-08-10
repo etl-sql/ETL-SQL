@@ -58,7 +58,7 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         string? scriptHash = null;
@@ -103,7 +103,7 @@ public class ExecutionController(
         var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
         if (target is null) return NotFound(new { error = "Target user not found." });
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var jobId = await jobService.EnqueueExecutionAsync(
@@ -176,7 +176,7 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var snapshot = await db.ReportSnapshots
@@ -276,7 +276,7 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return (null, null, null, Forbid());
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
             return (null, null, null, Forbid());
 
         var snapshot = await db.ReportSnapshots
@@ -325,7 +325,7 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.AtLeast(FolderPermission.Execute)) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
@@ -361,7 +361,7 @@ public class ExecutionController(
 
         if (perm.Value.AtLeast(FolderPermission.Execute))
         {
-            if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
                 return Forbid();
 
             string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
@@ -413,7 +413,7 @@ public class ExecutionController(
         if (string.IsNullOrWhiteSpace(req.Name))
             return BadRequest(new { error = "name is required" });
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
@@ -437,7 +437,7 @@ public class ExecutionController(
         if (req.Params is null && req.IsInteraction)
             return BadRequest(new { error = "params array is required" });
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
@@ -463,7 +463,7 @@ public class ExecutionController(
         if (string.IsNullOrWhiteSpace(req.VisualName))
             return BadRequest(new { error = "visualName is required" });
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
@@ -488,7 +488,7 @@ public class ExecutionController(
         if (req.Visuals is null || req.Visuals.Count == 0 || req.Visuals.All(string.IsNullOrWhiteSpace))
             return BadRequest(new { error = "visuals is required" });
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);

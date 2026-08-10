@@ -90,7 +90,12 @@ public partial class SpillStore : ISpillStore
             if (IsPersistent)
             {
                 // Stable path in the session directory
-                _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
+                _cachedRootPath = _context.StorageCapability?.TryGetGrantRoot(
+                    "checkpoint",
+                    ETL_SQL.Core.Multitenancy.TenantStorageAccess.Write,
+                    out var checkpointRoot) == true
+                    ? Path.Combine(checkpointRoot!, "spill")
+                    : Path.Combine(_context.SessionRoot, "spill");
 
                 // Deterministic Key based on MachineKey + SessionId (Centralized)
                 _cachedSessionKey = NormalizeAesKey(
@@ -101,7 +106,12 @@ public partial class SpillStore : ISpillStore
             else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
             {
                 // Disposable temp path
-                _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
+                _cachedRootPath = _context.StorageCapability?.TryGetGrantRoot(
+                    "scratch",
+                    ETL_SQL.Core.Multitenancy.TenantStorageAccess.Write,
+                    out var scratchRoot) == true
+                    ? scratchRoot
+                    : Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
                 _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
                 _usingTemporaryFallback = false;
             }

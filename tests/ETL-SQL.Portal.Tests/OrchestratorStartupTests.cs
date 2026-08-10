@@ -263,7 +263,10 @@ public class OrchestratorStartupTests
         public string SessionRoot => string.Empty;
         public byte[] GetSpillKey(string sessionId) => new byte[32];
         public Task SaveSession(string sessionId, object evaluator, string? scriptSource = null) => Task.CompletedTask;
-        public Task<SessionState?> LoadSession(string sessionId, string? keyScope = null) =>
+        public Task<SessionState?> LoadSession(
+            string sessionId,
+            string? keyScope = null,
+            string? storageRoot = null) =>
             Task.FromResult<SessionState?>(null);
         public void ClearSession(string sessionId) { }
         public IEnumerable<SessionSummary> GetSessions(bool includeSize = false) => [];

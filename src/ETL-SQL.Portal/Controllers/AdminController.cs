@@ -582,7 +582,8 @@ public class AdminController(
                 if (jobStore is not null)
                     await jobStore.DeleteJobAsync(SubscriptionOrchestration.JobName(sub.Id, sub.ReportName));
                 if (!string.IsNullOrWhiteSpace(sub.ScriptPath)
-                    && PortalPathGuard.TryResolveScript(config, sub.ScriptPath, out var script)
+                    && PortalPathGuard.TryResolveScript(
+                        config, TenantId, sub.ScriptPath, out var script)
                     && System.IO.File.Exists(script))
                     System.IO.File.Delete(script);
             }
