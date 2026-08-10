@@ -114,6 +114,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added non-mutating bundle preflight with distinct exit codes per failure kind, so a runbook can
   tell an inauthentic bundle from one that merely needs bindings the target has not supplied yet.
 
+- Added tenant bundle import. The Portal half is applied by the engine executing the bundle's
+  declarative script — the path an operator already uses — rather than through a new mutating Portal
+  endpoint. Nothing mutates until preflight passes, so an inauthentic, tampered, or under-bound
+  bundle cannot half-apply, and imported Orchestrator objects always arrive disabled, which is not
+  configurable. Encrypted bundles are verified after decryption against the plaintext hash recorded
+  at export. Collisions refuse by default; `proceed` is the only alternative, because a script
+  executed as a whole offers no seam at which a single colliding object could be skipped or renamed.
+
 - Tenant portability bundles are now composed from the exports that already exist — the Portal
   configuration export, the Orchestrator promotion package, and portable source artifacts — rather
   than leaving an operator to correlate three formats by hand. The reviewed export plan is carried

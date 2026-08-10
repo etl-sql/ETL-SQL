@@ -141,7 +141,7 @@ function Get-TransitionPhases {
         "SaaSToEnterpriseExit" {
             @(
                 New-Phase "SaaS to Enterprise exit journey" $CoreTests "FullyQualifiedName~TenantExitJourneyTests" "A tenant leaves SaaS with a signed, tenant-encrypted bundle that verifies and decrypts with no contact with the source operator, and target preflight states every binding the target owes before anything mutates."
-                New-Phase "Portability bundle contract" $CoreTests "FullyQualifiedName~TenantBundleTests|FullyQualifiedName~TenantBundleComposerTests|FullyQualifiedName~TenantPortabilityInspectorTests" "Bundle format, composition from the existing exports, and non-mutating preflight hold, including tamper, truncation, path-escape, and unencrypted-SaaS refusal."
+                New-Phase "Portability bundle contract" $CoreTests "FullyQualifiedName~TenantBundleTests|FullyQualifiedName~TenantBundleComposerTests|FullyQualifiedName~TenantPortabilityInspectorTests|FullyQualifiedName~TenantBundleImporterTests" "Bundle format, composition, non-mutating preflight, and import hold: tamper, truncation, path-escape, unencrypted-SaaS refusal, collision refusal, and import leaving executing objects disabled."
             )
         }
         "Upgrade" {

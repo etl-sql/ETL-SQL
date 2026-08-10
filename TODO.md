@@ -643,17 +643,32 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
         second is a to-do list. Six tests, including case-insensitive binding satisfaction and a
         tampered bundle reporting as invalid rather than as missing bindings.
 
-        **Still outstanding, and neither should be waved through:**
-        - *CLI wiring.* The verbs are not registered in `CliOrchestrator`; the inspection logic has
-          no `admin tenant ...` entry point yet. Needs `CliContext` options and the credential
-          handling the identity verbs already established (environment or `SECRET:`, never argv).
-        - *`import`.* Deliberately not started rather than half-built. It is the only mutating verb,
-          and the design question is real: the Portal side of a bundle is a declarative *script*, so
-          importing means executing it against the target Portal's authority — a different path from
-          the Orchestrator package, which has an `ImportAsync` already. That needs deciding before
-          code, together with the §5.2 collision policy (preserve, map, create, rename, skip, fail)
-          and the rule that import leaves jobs, schedules, subscriptions, and service accounts
-          disabled.
+        **`import` now exists (v0.18.0).** Decided first, then built: the Portal half is applied by
+        the **engine executing the bundle's declarative script** through a Portal connection — the
+        same path an operator uses by hand today — rather than by adding a mutating Portal endpoint.
+        Collision *detection* stays the Portal's existing `Create`/`Collision`/`Match`; the import
+        verb carries the *policy*, keeping detection and policy separate.
+
+        Two rules shape `TenantBundleImporter`, and both are asserted: nothing mutates until
+        preflight passes, so an inauthentic, tampered, or under-bound bundle cannot half-apply; and
+        Orchestrator objects always arrive **disabled**, which is not configurable, because an import
+        that starts running the tenant's pipelines against a freshly bound environment is the failure
+        this guards. Encrypted bundles verify the decrypted plaintext against the hash recorded at
+        export, which is the half of integrity that the stored-bytes hash cannot cover.
+
+        **§5.2's `skip` and `rename` are not available on this path, and that is a consequence of
+        the apply decision rather than an omission.** The script executes as a whole, so there is no
+        seam at which one colliding object could be skipped while the rest proceeds. Only `fail`
+        (default) and `proceed` can keep their promise here. Per-object policy needs the server-side
+        import endpoint that was considered and not chosen; revisit together if real migrations show
+        the need.
+
+        **Still outstanding:** *CLI wiring.* The verbs are not registered in `CliOrchestrator`, so
+        `export`, `validate`, `preflight`, and `import` have no `admin tenant ...` entry point yet —
+        the logic is reachable only in-process. Needs `CliContext` options and the credential
+        handling the identity verbs already established (environment or `SECRET:`, never argv). Also
+        still unwired: the two production adapters behind `IPortalConfigurationTarget` (engine
+        execution) and `IOrchestratorPackageTarget` (over `OrchestratorPromotionPackageService.ImportAsync`).
       - [x] *Slice 4 — the SaaS → self-hosted Enterprise journey.* **Done (v0.18.0)** as the
         `SaaSToEnterpriseExit` certification lane, verified by a real run (3/3 phases, concrete
         `SaaSToEnterpriseExit` scenario evidence).
