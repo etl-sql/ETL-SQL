@@ -883,6 +883,9 @@ public partial class SpillStore : ISpillStore
             // the round-trip representation as UTF-8 so spill/reload retains both pieces of information.
             if (elementType == typeof(DateTimeOffset)) return StringType.Default;
             if (elementType == typeof(Guid)) return StringType.Default;
+            // A TIME column is a TimeSpan, which may be negative or exceed 24 hours; Arrow's time
+            // types model a time of day and can represent neither.
+            if (elementType == typeof(TimeSpan)) return StringType.Default;
             if (elementType == typeof(string)) return StringType.Default;
             throw new NotSupportedException($"Native spill writing does not support '{elementType.Name}' columns.");
         }
@@ -913,6 +916,7 @@ public partial class SpillStore : ISpillStore
             bool => "Boolean",
             DateTime => "Timestamp",
             DateTimeOffset => "DateTimeOffset",
+            TimeSpan => "TIME",
             Guid => "UUID",
             _ => "Json"
         };
@@ -1000,6 +1004,17 @@ public partial class SpillStore : ISpillStore
                 for (var i = 0; i < guids.Count; i++)
                     if (guids.IsNull(i)) builder.AppendNull();
                     else builder.Append(guids.Values.Span[i].ToString("D"));
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<TimeSpan> times)
+            {
+                // "c" is the round-trip format, and it is why this is text rather than an Arrow
+                // time type: a TIME column here holds a TimeSpan, which may be negative or exceed
+                // 24 hours, and neither is representable as a time-of-day.
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < times.Count; i++)
+                    if (times.IsNull(i)) builder.AppendNull();
+                    else builder.Append(times.Values.Span[i].ToString("c", System.Globalization.CultureInfo.InvariantCulture));
                 return builder.Build();
             }
             if (column is Utf8ColumnBuffer strings)

@@ -100,6 +100,74 @@ namespace ETL_SQL.Tests.Core
                 Assert.True(row["JoinDate"] is null or DBNull);
         }
 
+        [Fact]
+        public void EveryPhysicalTypeTheAdapterCanProduce_HasAColumnBuffer()
+        {
+            // GetPhysicalType is the set of CLR types a spilled column can arrive as. The spill
+            // writer has to handle all of them, and it silently did not handle TimeSpan — a TIME
+            // column failed the whole write with "Native spill writing does not support 'TimeSpan'
+            // columns", the same shape as the earlier UUID gap. Enumerating the map here means the
+            // next type added to one side cannot quietly go missing from the other.
+            string[] logicalTypes =
+            [
+                "TINYINT", "SMALLINT", "INT", "BIGINT", "DOUBLE", "DECIMAL",
+                "BOOLEAN", "DATETIME", "DATETIMEOFFSET", "TIME", "UUID", "VARCHAR"
+            ];
+
+            foreach (var logicalType in logicalTypes)
+            {
+                var physical = ColumnBatchAdapter.GetPhysicalType(logicalType);
+                var table = new DataTable();
+                table.SetColumns(["Value"]);
+                var row = table.NewRow();
+                row["Value"] = SampleFor(physical);
+                table.Rows.Add(row);
+
+                using var batch = ColumnBatchAdapter.FromDataTable(table);
+                Assert.Equal(1, batch.RowCount);
+            }
+        }
+
+        [Fact]
+        public void ATimeSpanColumn_SurvivesTheColumnarRoundTrip()
+        {
+            // Negative and over-24-hour spans are why this is stored as text rather than an Arrow
+            // time type, so they are the cases worth pinning.
+            var table = new DataTable();
+            table.SetColumns(["Elapsed"]);
+            TimeSpan[] spans =
+            [
+                TimeSpan.FromMinutes(90),
+                TimeSpan.FromHours(49) + TimeSpan.FromSeconds(7),
+                TimeSpan.FromMinutes(-30)
+            ];
+            foreach (var span in spans)
+            {
+                var row = table.NewRow();
+                row["Elapsed"] = span;
+                table.Rows.Add(row);
+            }
+
+            using var batch = ColumnBatchAdapter.FromDataTable(table);
+            var restored = ColumnBatchAdapter.ToDataTable(batch);
+
+            for (var i = 0; i < spans.Length; i++)
+                Assert.Equal(spans[i], restored.Rows[i]["Elapsed"]);
+        }
+
+        private static object SampleFor(Type physical) =>
+            physical == typeof(byte) ? (byte)1
+            : physical == typeof(short) ? (short)1
+            : physical == typeof(int) ? 1
+            : physical == typeof(long) ? 1L
+            : physical == typeof(double) ? 1.5d
+            : physical == typeof(decimal) ? 1.5m
+            : physical == typeof(DateTime) ? new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            : physical == typeof(DateTimeOffset) ? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            : physical == typeof(TimeSpan) ? TimeSpan.FromMinutes(5)
+            : physical == typeof(Guid) ? Guid.NewGuid()
+            : "text";
+
         private static DataTable BuildTable(bool withValues, string? nulledColumn)
         {
             var table = new DataTable();
