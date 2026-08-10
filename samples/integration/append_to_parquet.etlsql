@@ -1,4 +1,8 @@
-﻿-- ==============================================================================
+-- A PUBLIC dataset must carry complete stewardship metadata. This is enforced at runtime as well
+-- as in lint, so without these tags the hourly job fails wherever it runs, not just locally.
+/* @owner: 'Manufacturing Analytics'; @steward: 'Manufacturing Analytics';
+   @contact: 'manufacturing-analytics@example.test'; @classification: 'public'; @quality: 'gold'; */
+-- ==============================================================================
 -- append_to_parquet.etlsql
 -- Reads the CSV generated in the last hour and appends it to a master Parquet file.
 -- Intended to be run hourly via Orchestrator at 5 minutes past the top of the hour.
@@ -32,7 +36,7 @@ PRINT 'Append complete.';
 -- This dataset acts as the semantic layer for the report visuals.
 CREATE OR ALTER CONNECTION parquet_conn AS PARQUET(PATH='/app/data/manufacturing_master.parquet');
 
-CREATE OR ALTER DATASET &manufacturing_data 
+CREATE OR ALTER DATASET &manufacturing_data
     ACCESS PUBLIC
     AS (
         SELECT * FROM parquet_conn

@@ -51,7 +51,8 @@ DECLARE @diag_var2 STRING = 'test';
 SELECT * FROM eng.variables;
 SELECT * INTO #vars FROM eng.variables;
 SELECT * FROM #vars;
-SHOW LOCAL VARIABLES;
+-- SHOW LOCAL VARIABLES was retired; eng.variables carries the scope instead.
+SELECT variable_name, data_type, scope FROM eng.variables WHERE scope = 'Local';
 
 -- 6. Lineage Tagging & eng.tags
 PRINT 'Testing Lineage Tags...';

@@ -1,4 +1,4 @@
-﻿-- VARIABLES & ENGINE CONFIG Kitchen Sink
+-- VARIABLES & ENGINE CONFIG Kitchen Sink
 -- Covers: DECLARE types, SET, USE PASSWORD, REQUIRE VERSION, CLEAR SESSION,
 --         EXPECT SCHEMA, ASSERT, CREATE SETS/USE SETS, INPUT/OUTPUT variables,
 --         ALTER/DROP CONNECTION, eng.connections/variables/version, SET WHAT_IF,
@@ -73,7 +73,8 @@ DROP CONNECTION IF EXISTS tmp_conn;
 PRINT 'Testing SHOW statements...';
 SELECT * FROM eng.connections;
 SELECT * FROM eng.variables;
-SHOW LOCAL VARIABLES;
+-- SHOW LOCAL VARIABLES was retired; eng.variables carries the scope instead.
+SELECT variable_name, data_type, scope FROM eng.variables WHERE scope = 'Local';
 SELECT * FROM eng.version;
 
 -- 9. ASSERT
