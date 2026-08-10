@@ -333,9 +333,16 @@ legacy `portal-host` partition is not allowed in Shared mode.
 
 [`SharedTenantStoreIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantStoreIsolationTests.cs)
 prove equal policy versions, secret names, connection aliases, and differing key versions coexist
-without cross-tenant reads or deletes. This is store-layer evidence only. Shared runtime
-certification still requires the verified multi-issuer identity work to inject the context and the
-remaining dataset, artifact, and checkpoint key consumers to stop using host-fixed scope.
+without cross-tenant reads or deletes. Shared host key bindings also require a validated explicit
+tenant scope. Equal version names are indexed independently by `(scope, purpose, version)`, while
+Dedicated bindings must agree with their host-fixed tenant. Startup validation walks every
+configured Shared scope and requires independently resolvable Dataset, Credential, Artifact, and
+Checkpoint keys for each. This is pinned by
+[`SharedKeyManagementBindingTests`](../../tests/ETL-SQL.Portal.Tests/SharedKeyManagementBindingTests.cs).
+
+Shared identity now injects the verified context into request services. Runtime certification still
+requires dataset catalog partitioning and the remaining dataset, artifact, and checkpoint consumers
+to derive key scope from that tenant instead of the host fallback.
 
 ### 6.4 Short-Lived Capabilities
 

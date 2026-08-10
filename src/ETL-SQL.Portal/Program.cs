@@ -137,9 +137,6 @@ builder.Services.AddSingleton(new ETL_SQL.Core.Security.KeyMaterialHostScope(
     string.IsNullOrWhiteSpace(portalConfig.TenantId) ? "portal-host" : portalConfig.TenantId));
 if (portalConfig.KeyManagement.Enabled)
 {
-    var keyScope = string.IsNullOrWhiteSpace(portalConfig.TenantId)
-        ? "portal-host"
-        : portalConfig.TenantId;
     var bindings = portalConfig.KeyManagement.Bindings.Select(binding =>
     {
         if (!Enum.TryParse<ETL_SQL.Core.Security.KeyPurpose>(binding.Purpose, true, out var purpose))
@@ -149,7 +146,7 @@ if (portalConfig.KeyManagement.Enabled)
             new ETL_SQL.Core.Security.KeyMaterialDescriptor(
                 "environment",
                 binding.KeyId,
-                keyScope,
+                ETL_SQL.Portal.Services.KeyManagementBindingScope.Resolve(portalConfig, binding),
                 purpose,
                 binding.Version,
                 binding.IsCurrent));

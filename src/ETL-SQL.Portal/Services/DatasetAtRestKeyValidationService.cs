@@ -30,16 +30,24 @@ public class DatasetAtRestKeyValidationService(
                 lifetime.StopApplication();
                 return;
             }
-            var scope = string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
-            var providerResult = await DatasetAtRestKeyValidator.ValidateProviderAsync(keyProvider, scope, ct);
-            if (!providerResult.IsValid)
+            var scopes = KeyManagementBindingScope.ConfiguredScopes(config);
+            var errors = new List<string>();
+            if (scopes.Count == 0)
+                errors.Add("No key-management binding scopes are configured.");
+            foreach (var scope in scopes)
             {
-                Console.Error.WriteLine("FATAL: " + string.Join(" ", providerResult.Errors));
+                var providerValidation = await DatasetAtRestKeyValidator.ValidateProviderAsync(
+                    keyProvider, scope, ct);
+                errors.AddRange(providerValidation.Errors.Select(error => $"Scope '{scope}': {error}"));
+            }
+            if (errors.Count > 0)
+            {
+                Console.Error.WriteLine("FATAL: " + string.Join(" ", errors));
                 lifetime.StopApplication();
             }
             BackgroundServiceObservability.CompleteRun(
                 activity, "portal", "dataset-key-validation", "startup_validation",
-                providerResult.IsValid ? "success" : "failure", sw.ElapsedMilliseconds);
+                errors.Count == 0 ? "success" : "failure", sw.ElapsedMilliseconds);
             return;
         }
 

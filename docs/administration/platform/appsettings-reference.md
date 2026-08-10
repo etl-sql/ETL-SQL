@@ -358,6 +358,30 @@ never from a request or job. Previous versions remain as additional bindings wit
 `IsCurrent: false`; exactly one current binding is required per purpose. Configuration exports carry
 only the non-secret binding metadata and environment-variable names.
 
+In Shared mode, each binding instead requires a server-configured `Scope` naming its tenant. Every
+tenant must have independently resolvable current bindings for all four purposes; startup fails if
+any tenant/purpose is absent. Equal version names are safe because scope is part of the provider key:
+
+```json
+{
+  "Portal": {
+    "SharedTenancy": { "Enabled": true },
+    "KeyManagement": {
+      "Enabled": true,
+      "Bindings": [
+        { "Scope": "tenant-alpha", "Purpose": "Dataset", "Version": "v1", "KeyId": "alpha-dataset", "EnvironmentVariable": "ETLSQL_ALPHA_DATASET_V1", "IsCurrent": true },
+        { "Scope": "tenant-beta", "Purpose": "Dataset", "Version": "v1", "KeyId": "beta-dataset", "EnvironmentVariable": "ETLSQL_BETA_DATASET_V1", "IsCurrent": true }
+      ]
+    }
+  }
+}
+```
+
+The shortened example shows the namespace rule only; production configuration must also provide
+Credential, Artifact, and Checkpoint bindings for both tenants. `Scope` is deployment configuration,
+not a request, token, route, or job-payload selector. Dedicated deployments may omit `Scope`; if
+present, it must exactly match `Portal:TenantId`.
+
 ### Portal Identity Providers (`Portal:Identity`)
 
 Defines authentication configuration. Supported providers: `Local`, `Oidc` (OpenID Connect), and `Ldap`.

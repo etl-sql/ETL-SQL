@@ -59,6 +59,11 @@ public class KeyManagementConfig
 
 public class KeyManagementBindingConfig
 {
+    /// <summary>
+    /// Server-configured tenant key namespace. Required for Shared deployments; Dedicated and
+    /// standalone deployments derive their namespace from the host and reject a conflicting value.
+    /// </summary>
+    public string? Scope { get; set; }
     public string Purpose { get; set; } = "";
     public string Version { get; set; } = "v1";
     public string KeyId { get; set; } = "";

@@ -585,6 +585,15 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       runtime scopes and dataset, artifact, and checkpoint consumers resolve tenant—not host—key
       scope end to end.
 
+      **Host key namespaces partitioned (2026-08-10).** Shared `Portal:KeyManagement` bindings now
+      require an explicit validated server-configured `Scope`; the environment provider indexes
+      equal key versions independently by tenant and purpose. Dedicated/standalone hosts still
+      derive scope from host identity and reject a conflicting binding scope. Startup validation
+      enumerates every configured Shared tenant and requires the complete Dataset, Credential,
+      Artifact, and Checkpoint purpose set for each, rather than validating only `portal-host`.
+      This remains open for dataset catalog partitioning and tenant-derived dataset, snapshot, and
+      checkpoint runtime resolution.
+
 *Absorbs the retained discovery item **Tenant-Scoped Encryption Keys (BYOK)**.*
 
 ##### 4. Storage, paths, and artifacts
