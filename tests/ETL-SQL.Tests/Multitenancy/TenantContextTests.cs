@@ -98,6 +98,28 @@ public sealed class TenantContextTests
     }
 
     [Fact]
+    public void ScopePrefixIsDelimitedSoOneTenantIsNotAPrefixOfAnother()
+    {
+        var acme = TenantContext.FromHostConfiguration("acme");
+        var acmeEvil = TenantContext.FromHostConfiguration("acme-evil");
+
+        Assert.Equal("acme/", acme.ScopePrefix);
+        // The reason this is a property rather than ScopeKey(""): a range scan on the bare name
+        // "acme" would also match every "acme-evil/..." key.
+        Assert.False(acmeEvil.ScopePrefix.StartsWith(acme.ScopePrefix, StringComparison.Ordinal));
+        Assert.StartsWith(acme.ScopePrefix, acme.ScopeKey("job/1"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnEmptyLogicalIdIsStillACallerBug()
+    {
+        var acme = TenantContext.FromHostConfiguration("acme");
+
+        Assert.Throws<ArgumentException>(() => acme.ScopeKey(""));
+        Assert.Throws<ArgumentException>(() => acme.ScopeKey("   "));
+    }
+
+    [Fact]
     public void AScopedKeyIsAcceptedBackByTheTenantThatMintedItAndNoOther()
     {
         var acme = TenantContext.FromHostConfiguration("acme");

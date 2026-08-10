@@ -804,6 +804,32 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
       across tenants.
 
+      **The guard exists; the surfaces do not (v0.18.0).** Checked before writing anything: the
+      product is host-fixed today — the only tenant runtime isolation test is
+      `HostFixedPortalInstances_IsolateAuditOutboxesAndSecurityCaches` — so there is no shared
+      control plane, store, queue, or index to point a negative test at. Writing "a negative test per
+      shared surface" would have meant inventing the surfaces first.
+
+      What ships instead is the thing that makes those tests unavoidable later:
+      `SharedTenantSurfaceContractTests`, an abstract contract following the
+      `ArtifactStorageContractTests` pattern already used here. The first shared surface's test class
+      inherits it and cannot ship without answering all six cases — a caller naming another tenant's
+      scoped id, an unscoped name resolving across tenants, equal logical ids colliding, a write
+      overwriting another tenant's row of the same name, enumeration leaking, and the
+      `acme`/`acme-evil` prefix trap. A reference in-memory implementation keeps the contract
+      executable rather than aspirational. Writing the guard *after* the first shared surface is how
+      a boundary ends up certified by whoever was in a hurry.
+
+      **The contract immediately earned its keep.** Its enumeration case failed on the first run
+      against `TenantContext` as shipped the day before: `ScopeKey` correctly rejects an empty
+      logical id, so there was no way to derive a tenant's key prefix for a scan — something every
+      shared store needs. `ScopePrefix` was added in response, delimited, with a test showing why it
+      is not `ScopeKey("")`: a range scan on the bare name `acme` also matches every `acme-evil/…`
+      key.
+
+      This cell stays **open**: a contract with no shared implementations is not evidence that shared
+      isolation holds. It closes when real surfaces exist and inherit it.
+
 ##### 2. Identity and delegated administration
 
 - [ ] **Dedicated.** Establish platform/tenant identity separation and delegated tenant

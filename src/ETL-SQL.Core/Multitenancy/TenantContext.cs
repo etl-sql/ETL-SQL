@@ -107,4 +107,17 @@ public sealed record TenantContext
 
         return $"{Tenant.Value}/{logicalId}";
     }
+
+    /// <summary>
+    /// The prefix every key for this tenant starts with, for partitioning an enumeration, scan, or
+    /// range read over a shared store.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="ScopeKey"/> rather than <c>ScopeKey("")</c>, because an empty logical
+    /// id is a caller bug and must keep throwing. The shared-surface contract test found this the
+    /// first time an implementation tried to enumerate: without it, the obvious workaround is string
+    /// concatenation at each call site, and one of those eventually forgets the delimiter — which is
+    /// precisely the <c>acme</c> / <c>acme-evil</c> prefix collision.
+    /// </remarks>
+    public string ScopePrefix => $"{Tenant.Value}/";
 }

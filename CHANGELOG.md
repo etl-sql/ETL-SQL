@@ -101,6 +101,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added a cross-tenant negative-test contract that every future shared, multi-tenant surface must
+  satisfy before it ships, following the abstract-contract pattern already used for artifact storage.
+  It covers a caller naming another tenant's scoped identifier, an unscoped name resolving across
+  tenants, colliding logical ids, cross-tenant overwrite, enumeration leakage, and the case where one
+  tenant name is a prefix of another. The product is host-fixed today, so there is nothing shared to
+  point it at yet; the guard exists first deliberately. Writing it found a gap in the tenant context
+  API on its first run — there was no way to derive a tenant's key prefix for an enumeration, since
+  scoping a key correctly rejects an empty id — so `ScopePrefix` was added.
+
 - Added the server-derived tenant context contract (`ETL_SQL.Core.Multitenancy`), the foundation the
   SaaS isolation work builds on. `TenantId` is a validated value type rather than a bare string, so a
   server-derived tenant and a caller-supplied one are distinguishable at every call site, and
