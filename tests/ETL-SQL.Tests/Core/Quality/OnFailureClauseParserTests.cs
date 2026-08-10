@@ -125,6 +125,77 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void QuarantineHandling_DefaultsToSteward()
+        {
+            var select = ParseSelect("SELECT A INTO t FROM src ON FAILURE QUARANTINE TO q;");
+
+            Assert.Equal(QuarantineHandling.Steward, select.OnFailureActions!.Single().Handling);
+        }
+
+        [Theory]
+        [InlineData("SCRIPT", QuarantineHandling.Script)]
+        [InlineData("script", QuarantineHandling.Script)]
+        [InlineData("STEWARD", QuarantineHandling.Steward)]
+        public void Parses_QuarantineHandling(string written, QuarantineHandling expected)
+        {
+            var select = ParseSelect(
+                $"SELECT A INTO t FROM src ON FAILURE QUARANTINE TO q WITH (HANDLING = {written});");
+
+            Assert.Equal(expected, select.OnFailureActions!.Single().Handling);
+        }
+
+        [Fact]
+        public void Parses_RetentionAndHandling_Together()
+        {
+            var select = ParseSelect(
+                "SELECT A INTO t FROM src ON FAILURE QUARANTINE TO q WITH (RETENTION = '7 DAYS', HANDLING = SCRIPT);");
+
+            var clause = Assert.Single(select.OnFailureActions!);
+            Assert.Equal(new RetentionInterval(7, RetentionUnit.Days), clause.Retention);
+            Assert.Equal(QuarantineHandling.Script, clause.Handling);
+        }
+
+        [Fact]
+        public void HandlingOnANonQuarantineClause_IsSyntaxError()
+        {
+            // HANDLING says who owns diverted rows; WARN diverts none.
+            Assert.Throws<SyntaxException>(() => ParseSelect(
+                "SELECT A INTO t FROM src ON FAILURE WARN TO w WITH (HANDLING = SCRIPT);"));
+        }
+
+        [Fact]
+        public void UnknownHandlingMode_IsSyntaxError()
+        {
+            Assert.Throws<SyntaxException>(() => ParseSelect(
+                "SELECT A INTO t FROM src ON FAILURE QUARANTINE TO q WITH (HANDLING = NOBODY);"));
+        }
+
+        [Fact]
+        public void OnFailureClauses_SurviveAFormatterRoundTrip()
+        {
+            // The formatter used to drop them, which turns a valid script into one whose
+            // @fail: 'QUARANTINE' tags route nowhere — a hard error on the next run.
+            var select = ParseSelect(@"
+                SELECT A INTO t FROM src
+                ON FAILURE QUARANTINE TO q WITH (RETENTION = '7 DAYS', HANDLING = SCRIPT)
+                ON FAILURE WARN TO w
+                ON FAILURE THROW;");
+
+            var reparsed = ParseSelect(select.ToSql());
+
+            Assert.Collection(reparsed.OnFailureActions!,
+                c =>
+                {
+                    Assert.Equal(FailAction.Quarantine, c.Action);
+                    Assert.Equal("q", c.Target);
+                    Assert.Equal(new RetentionInterval(7, RetentionUnit.Days), c.Retention);
+                    Assert.Equal(QuarantineHandling.Script, c.Handling);
+                },
+                c => { Assert.Equal(FailAction.Warn, c.Action); Assert.Equal("w", c.Target); },
+                c => { Assert.Equal(FailAction.Throw, c.Action); Assert.Null(c.Target); });
+        }
+
+        [Fact]
         public void JoinOnClause_IsNotMistakenForOnFailure()
         {
             var select = ParseSelect(

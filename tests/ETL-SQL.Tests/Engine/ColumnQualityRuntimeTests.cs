@@ -539,6 +539,117 @@ namespace ETL_SQL.Tests.Engine
             Assert.Empty(await ReadRows(eval, "#q2"));
         }
 
+        // ── HANDLING = SCRIPT ──────────────────────────────────────────────
+
+        [Fact]
+        public async Task ScriptHandledQuarantine_DivertsRowsAndExposesThemToLaterStatements()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(1, 'keep'), (NULL, 'divert')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
+
+            // Still removed from the main output.
+            var clean = Assert.Single(await ReadRows(eval, "#clean"));
+            Assert.Equal(1m, clean["Id"]);
+
+            // Still carrying the __dq_* context, so the script can act on them.
+            var diverted = Assert.Single(await ReadRows(eval, "#handled"));
+            Assert.Equal("divert", diverted["Name"]);
+            Assert.Equal("NOT NULL", diverted[DataQualityColumns.Rule]);
+            Assert.Equal("Id", diverted[DataQualityColumns.Column]);
+
+            // And readable by a later statement in the same run.
+            await Run(eval, @"
+                SELECT Name INTO #remediated FROM #handled
+                WHERE __dq_rule = 'NOT NULL';");
+            Assert.Single(await ReadRows(eval, "#remediated"));
+        }
+
+        [Fact]
+        public async Task ScriptHandledQuarantine_RecordsCountsButNoReplayManifest()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
+
+            Assert.Empty(provider.Manifests);
+            Assert.Equal(1, eval.DataQuality.RowsQuarantined);
+            Assert.Equal(1, eval.DataQuality.TotalFailures);
+        }
+
+        [Fact]
+        public async Task ScriptHandledQuarantine_LeavesTheTargetUnreplayable()
+        {
+            // No manifest means no Portal steward queue item and no REPLAY QUARANTINE: the two
+            // things the mode exists to stay out of, asserted through the surface a user reaches.
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
+            await Run(eval,
+                "UPDATE #handled SET __dq_status = 'released' WHERE __dq_status = 'quarantined';");
+
+            await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, "REPLAY QUARANTINE #handled;"));
+        }
+
+        [Fact]
+        public async Task ScriptHandledQuarantine_NeedsNoSectionLabel()
+        {
+            // The steward-managed mode requires one as the replay re-entry point. There is no
+            // replay here, so requiring a label would be asking for a hand-off that never happens.
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = new CapturingMetricsProvider();
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
+
+            Assert.Single(await ReadRows(eval, "#handled"));
+        }
+
+        [Fact]
+        public async Task ExplicitStewardHandling_KeepsTheDurableBehavior()
+        {
+            var provider = new CapturingMetricsProvider();
+            var eval = NewEvaluator();
+            eval.JobName = "nightly_import";
+            eval.JobMetrics = provider;
+            await Seed(eval, "(NULL, 'divert')");
+
+            await Run(eval, @"
+                import_rows:
+                SELECT Id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #q WITH (RETENTION = '30 DAYS', HANDLING = STEWARD);");
+
+            var manifest = Assert.Single(provider.Manifests);
+            Assert.True(manifest.IsReplayable);
+            Assert.Equal("import_rows", manifest.SectionLabel);
+        }
+
         [Fact]
         public async Task ReplayQuarantine_RejectsAnUnresolvedReplayClaim()
         {

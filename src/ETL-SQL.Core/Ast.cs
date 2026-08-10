@@ -417,7 +417,16 @@ public sealed record SampleClause(decimal Count, bool IsPercent, int? Seed) : As
 /// symmetric (design decision 5): a <c>@fail</c> action without its clause and a clause without any
 /// matching <c>@fail</c> rule are both hard errors.
 /// </summary>
-public sealed record FailureActionClause(FailAction Action, string? Target, RetentionInterval? Retention) : AstNode;
+/// <param name="Handling">
+/// QUARANTINE only: who owns the diverted rows. Defaults to <see cref="QuarantineHandling.Steward"/>,
+/// the durable-evidence behavior; <see cref="QuarantineHandling.Script"/> marks rows the running
+/// script will handle itself.
+/// </param>
+public sealed record FailureActionClause(
+    FailAction Action,
+    string? Target,
+    RetentionInterval? Retention,
+    QuarantineHandling Handling = QuarantineHandling.Steward) : AstNode;
 
 public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
 

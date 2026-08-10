@@ -10,6 +10,28 @@ public enum UniqueMode { All, First, Last }
 /// <summary>What happens to a row when a rule fails (bound via the <c>@fail</c> tag).</summary>
 public enum FailAction { Throw, Warn, Quarantine }
 
+/// <summary>
+/// Who owns a quarantined row, selected by <c>WITH (HANDLING = …)</c> on the
+/// <c>ON FAILURE QUARANTINE</c> clause.
+/// </summary>
+public enum QuarantineHandling
+{
+    /// <summary>
+    /// The default. Rows outlive the run as durable evidence: a replay manifest is persisted and
+    /// the rows become a Portal steward-queue item to be corrected and replayed later.
+    /// </summary>
+    Steward,
+
+    /// <summary>
+    /// The script remediates, reroutes, or discards the rows during this run. They still leave the
+    /// main output and still carry their <c>__dq_*</c> context, so later statements can read them —
+    /// but nothing is published for a human to act on afterwards, because by the end of the run
+    /// there is nothing left to act on. Recording a steward queue item here would ask someone to
+    /// remediate rows the script already handled.
+    /// </summary>
+    Script
+}
+
 /// <summary>Comparison operators supported by numeric <c>@expect</c> rules.</summary>
 public enum CompareOp { GreaterOrEqual, LessOrEqual, Greater, Less, Equal }
 

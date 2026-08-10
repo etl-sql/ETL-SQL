@@ -14,7 +14,7 @@ SELECT
     <column> /* @expect: '<rule>[, <rule>...]'; @fail: 'THROW' | 'WARN' | 'QUARANTINE'; */
 INTO <target>
 FROM <source>
-ON FAILURE QUARANTINE TO <table> [WITH (RETENTION = '<interval>')]
+ON FAILURE QUARANTINE TO <table> [WITH (RETENTION = '<interval>' [, HANDLING = SCRIPT | STEWARD])]
 ON FAILURE WARN [TO <table>] [WITH (RETENTION = '<interval>')]
 ON FAILURE THROW;
 
@@ -109,6 +109,41 @@ The trailing `ON FAILURE` clause supplies the routing target for each action. Up
 optionally (omit for diagnostic-only mode, where the aggregated warning fires but no row is
 stored); `THROW` never takes one.
 
+### Who owns a quarantined row — `HANDLING`
+
+`ON FAILURE QUARANTINE TO <table> WITH (HANDLING = SCRIPT | STEWARD)` says what happens to the
+diverted rows after they leave the output. `STEWARD` is the default and the behavior described
+throughout this page.
+
+| Handling | Rows leave the output | Replay manifest | Portal steward queue | Section label required | `#temp` target |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `STEWARD` (default) | Yes | Written | Yes | Yes | Linter recommends a durable table |
+| `SCRIPT` | Yes | No | No | No | Expected |
+
+Use `SCRIPT` when the running script remediates, reroutes, or discards the rows itself — the rows
+still carry their `__dq_*` context, so a later statement in the same run can read the capture table
+and act on them:
+
+```sql
+SELECT CustomerId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Region
+INTO clean_orders
+FROM raw_orders
+ON FAILURE QUARANTINE TO #needs_default WITH (HANDLING = SCRIPT);
+
+-- Same run: give the rows a default rather than losing them
+INSERT INTO clean_orders (CustomerId, Region)
+SELECT 0, Region FROM #needs_default WHERE __dq_rule = 'NOT NULL';
+```
+
+Nothing is published for a human to act on afterwards, because by the end of the run there is
+nothing left to act on — recording a steward-queue item would ask someone to remediate rows the
+script already handled. For the same reason `REPLAY QUARANTINE` cannot target a script-handled
+capture table: with no manifest, replay fails before it starts.
+
+The section-label and durable-target requirements both exist to serve remediation *after* the run,
+so neither applies under `SCRIPT`. Per-run quality metrics are recorded either way — counts, never
+sample values.
+
 **Validation is symmetric.** A `@fail: 'QUARANTINE'` with no matching `ON FAILURE QUARANTINE TO`
 clause is an error, *and* an `ON FAILURE` clause with no matching `@fail` rule is equally an error.
 This is deliberate: if a formatter or tool strips the comment tags, the orphaned clause breaks the
@@ -167,10 +202,11 @@ Retention applies only to terminal `warned`, `replayed`, or `discarded` rows in 
 ## Requirements and limits
 
 - **A quarantining statement must sit inside a section label** (e.g. `import_users:`). The label
-  identifies the re-entry point for remediation.
-- **Quarantine targets should be durable.** A `#temp` target is legal for in-script triage but
-  evaporates when the run ends; the linter emits an informational diagnostic recommending a durable
-  table.
+  identifies the re-entry point for remediation. Not required under `HANDLING = SCRIPT`, which has
+  no later re-entry.
+- **Quarantine targets should be durable.** A `#temp` target evaporates when the run ends; the
+  linter emits an informational diagnostic recommending a durable table. Not emitted under
+  `HANDLING = SCRIPT`, where a `#temp` target is the expected choice.
 - **Warn tables have no natural pruning**, so the linter suggests `WITH (RETENTION = '30 DAYS')` on
   every `WARN TO` target. Retention accepts `<n> MINUTES|HOURS|DAYS|WEEKS`.
 - **`QUARANTINE` is only legal at a sink boundary** — a top-level SELECT, `INSERT … SELECT`, or

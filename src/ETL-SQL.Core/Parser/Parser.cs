@@ -742,34 +742,65 @@ public class Parser : IParser
             }
 
             ETL_SQL.Core.Quality.RetentionInterval? retention = null;
+            var handling = ETL_SQL.Core.Quality.QuarantineHandling.Steward;
             if (Current.Type == TokenType.WITH && Peek.Type == TokenType.LPAREN)
             {
                 if (target == null)
                     throw new SyntaxException(
-                        "WITH (RETENTION = ...) requires a TO <table> target on the ON FAILURE clause",
+                        "WITH (...) requires a TO <table> target on the ON FAILURE clause",
                         Current.Line, Current.Column);
                 Advance(); // WITH
                 Advance(); // (
-                var optionName = ConsumeIdentifier("Expected option name inside ON FAILURE WITH (...)").Value;
-                if (!optionName.Equals("RETENTION", StringComparison.OrdinalIgnoreCase))
-                    throw new SyntaxException(
-                        $"Unknown ON FAILURE option '{optionName}' — only RETENTION is supported",
-                        Previous.Line, Previous.Column);
-                Consume(TokenType.EQUALS, "Expected '=' after RETENTION");
-                var intervalToken = Consume(TokenType.STRING_LITERAL,
-                    "Expected an interval string after RETENTION = (e.g. '30 DAYS')");
-                if (!ETL_SQL.Core.Quality.RetentionInterval.TryParse(intervalToken.Value, out retention))
-                    throw new SyntaxException(
-                        $"RETENTION interval '{intervalToken.Value}' is not valid — use '<n> MINUTES|HOURS|DAYS|WEEKS'",
-                        intervalToken.Line, intervalToken.Column);
-                Consume(TokenType.RPAREN, "Expected ')' after RETENTION option");
+                do
+                {
+                    var optionToken = ConsumeIdentifier("Expected option name inside ON FAILURE WITH (...)");
+                    var optionName = optionToken.Value;
+                    Consume(TokenType.EQUALS, $"Expected '=' after {optionName}");
+
+                    if (optionName.Equals("RETENTION", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var intervalToken = Consume(TokenType.STRING_LITERAL,
+                            "Expected an interval string after RETENTION = (e.g. '30 DAYS')");
+                        if (!ETL_SQL.Core.Quality.RetentionInterval.TryParse(intervalToken.Value, out retention))
+                            throw new SyntaxException(
+                                $"RETENTION interval '{intervalToken.Value}' is not valid — use '<n> MINUTES|HOURS|DAYS|WEEKS'",
+                                intervalToken.Line, intervalToken.Column);
+                    }
+                    else if (optionName.Equals("HANDLING", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (action != ETL_SQL.Core.Quality.FailAction.Quarantine)
+                            throw new SyntaxException(
+                                "HANDLING applies only to ON FAILURE QUARANTINE — it says who owns the diverted rows",
+                                optionToken.Line, optionToken.Column);
+                        // Matched on token text, not token type: SCRIPT is a keyword elsewhere
+                        // (RUN SCRIPT), so the lexer does not hand it back as an identifier.
+                        var modeToken = Current;
+                        handling = modeToken.Value.ToUpperInvariant() switch
+                        {
+                            "SCRIPT" => ETL_SQL.Core.Quality.QuarantineHandling.Script,
+                            "STEWARD" => ETL_SQL.Core.Quality.QuarantineHandling.Steward,
+                            _ => throw new SyntaxException(
+                                $"HANDLING '{modeToken.Value}' is not recognized — use SCRIPT or STEWARD",
+                                modeToken.Line, modeToken.Column)
+                        };
+                        Advance();
+                    }
+                    else
+                    {
+                        throw new SyntaxException(
+                            $"Unknown ON FAILURE option '{optionName}' — supported options are RETENTION and HANDLING",
+                            optionToken.Line, optionToken.Column);
+                    }
+                }
+                while (Match(TokenType.COMMA));
+                Consume(TokenType.RPAREN, "Expected ')' after ON FAILURE options");
             }
 
             clauses ??= new List<FailureActionClause>();
             if (clauses.Any(c => c.Action == action))
                 throw new SyntaxException($"Duplicate ON FAILURE {action.ToString().ToUpperInvariant()} clause — " +
                     "at most one routing clause per action", clauseToken.Line, clauseToken.Column);
-            clauses.Add(new FailureActionClause(action, target, retention)
+            clauses.Add(new FailureActionClause(action, target, retention, handling)
             {
                 Line = clauseToken.Line,
                 Column = clauseToken.Column,

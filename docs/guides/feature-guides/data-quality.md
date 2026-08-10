@@ -266,6 +266,28 @@ Both composite forms reject a column the statement does not project. A missing c
 NULL, and a NULL key part skips the rule, so a typo would otherwise silently disable the check
 rather than fail it.
 
+## Handling bad rows inside the run instead of handing them off
+
+Quarantine normally means "a person will look at this later": the rows are recorded as durable
+evidence, appear in the Portal steward queue, and can be replayed once corrected. Sometimes the
+script already knows what to do with them, and there is no later.
+
+```sql
+SELECT CustomerId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */, Region
+INTO clean_orders
+FROM raw_orders
+ON FAILURE QUARANTINE TO #needs_default WITH (HANDLING = SCRIPT);
+
+-- Same run: give them a default rather than losing them
+INSERT INTO clean_orders (CustomerId, Region)
+SELECT 0, Region FROM #needs_default WHERE __dq_rule = 'NOT NULL';
+```
+
+The rows still leave the main output and still carry their `__dq_*` context, and the run still
+records how many were diverted. What `HANDLING = SCRIPT` removes is the hand-off: no replay
+manifest, no steward-queue item, no section label required, and no nagging about the `#temp`
+target — asking someone to remediate rows the script already fixed is worse than not asking.
+
 ## Ranges that move with the run
 
 ```sql

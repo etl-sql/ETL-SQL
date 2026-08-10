@@ -117,9 +117,16 @@ public class QuarantineBoundaryRule : ILintRule
                 "If a tool stripped the comment tags, the data-quality rules are gone — restore them or remove the clause.");
         }
 
+        // Both requirements below exist to serve remediation *after* the run: the label is the
+        // replay re-entry point, and a durable target is what lets rows survive to be replayed.
+        // HANDLING = SCRIPT says there is no "after" — the script handles the rows now — so
+        // demanding either would be asking the author to prepare for a hand-off that never happens.
+        bool scriptHandled = clauses.Any(c =>
+            c.Action == FailAction.Quarantine && c.Handling == QuarantineHandling.Script);
+
         bool quarantines = actions.Contains(FailAction.Quarantine)
                            || clauses.Any(c => c.Action == FailAction.Quarantine);
-        if (quarantines && string.IsNullOrEmpty(currentLabel))
+        if (quarantines && !scriptHandled && string.IsNullOrEmpty(currentLabel))
         {
             Report(results, LintSeverity.Error, select,
                 "A quarantining statement must sit inside a section label (e.g. 'import_users:') — the label is the replay re-entry point for quarantine remediation.");
@@ -127,10 +134,12 @@ public class QuarantineBoundaryRule : ILintRule
 
         foreach (var clause in clauses)
         {
-            if (clause.Action == FailAction.Quarantine && clause.Target!.StartsWith('#'))
+            if (clause.Action == FailAction.Quarantine
+                && clause.Handling == QuarantineHandling.Steward
+                && clause.Target!.StartsWith('#'))
             {
                 Report(results, LintSeverity.Info, select,
-                    $"Quarantine target '{clause.Target}' is a #temp table that evaporates when the run ends — quarantine to a durable table so rows survive for remediation.");
+                    $"Quarantine target '{clause.Target}' is a #temp table that evaporates when the run ends — quarantine to a durable table so rows survive for remediation, or declare WITH (HANDLING = SCRIPT) if this run handles them itself.");
             }
             if (clause.Action == FailAction.Warn && clause.Target != null && clause.Retention == null)
             {

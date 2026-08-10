@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Quality;
 
 namespace ETL_SQL.Core.Formatting;
 /// <summary>
@@ -460,7 +461,35 @@ public static class AstSerializer
         var sample = s.Sample != null
             ? $" USING SAMPLE {s.Sample.Count}{(s.Sample.IsPercent ? " PERCENT" : " ROWS")}" + (s.Sample.Seed.HasValue ? $" REPEATABLE ({s.Sample.Seed})" : "")
             : "";
-        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{window}{qualify}{order}{limit}{offset}{sample}{forCl};";
+        var onFailure = FormatOnFailureClauses(s.OnFailureActions);
+        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{window}{qualify}{order}{limit}{offset}{sample}{forCl}{onFailure};";
+    }
+
+    /// <summary>
+    /// Re-emits the trailing <c>ON FAILURE</c> routing blocks. Dropping them would produce a script
+    /// whose <c>@fail: 'QUARANTINE'</c> tags have nowhere to route — the mirror image of the
+    /// comment-stripping failure the symmetric check exists to catch, and equally silent at the
+    /// point where it happens.
+    /// </summary>
+    private static string FormatOnFailureClauses(IReadOnlyList<FailureActionClause>? clauses)
+    {
+        if (clauses is not { Count: > 0 }) return "";
+
+        var parts = new List<string>();
+        foreach (var clause in clauses)
+        {
+            var text = $" ON FAILURE {clause.Action.ToString().ToUpperInvariant()}";
+            if (clause.Target != null) text += $" TO {clause.Target}";
+
+            var options = new List<string>();
+            if (clause.Retention != null) options.Add($"RETENTION = '{clause.Retention}'");
+            if (clause.Handling != QuarantineHandling.Steward)
+                options.Add($"HANDLING = {clause.Handling.ToString().ToUpperInvariant()}");
+            if (options.Count > 0) text += $" WITH ({string.Join(", ", options)})";
+
+            parts.Add(text);
+        }
+        return string.Concat(parts);
     }
 
     private static string FormatSetOperation(SetOperationStatement s)

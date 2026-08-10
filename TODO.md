@@ -230,7 +230,7 @@ an arbitrary connection/target from the browser.
 
 ### Engine — Script-Handled Data Quality Quarantine
 
-- [ ] Add an explicit `ON FAILURE QUARANTINE TO <table> WITH (HANDLING = SCRIPT)` mode for rows the
+- [x] Add an explicit `ON FAILURE QUARANTINE TO <table> WITH (HANDLING = SCRIPT)` mode for rows the
       script will remediate, reroute, or discard during the current run. It must still remove failed
       rows from the main output, expose the captured row and `__dq_*` context to later statements, and
       record counts-only quality metrics, but it must not persist a replay manifest or publish a Portal
@@ -238,6 +238,84 @@ an arbitrary connection/target from the browser.
       diagnostic for this mode; retain the current steward-managed behavior when `HANDLING` is omitted
       and support explicit `HANDLING = STEWARD`. Update parser/AST/formatter, lint and autocomplete,
       runtime tests, reference documentation, and samples together.
+
+      **Completed (2026-08-10).** The manifest is the single control point: it is what makes a
+      target visible to the Portal queue *and* what `REPLAY QUARANTINE` resolves, so not writing
+      one keeps the mode out of both without a second switch to keep in sync. The section-label and
+      durable-target requirements are skipped for the same reason they exist — both serve
+      remediation after the run, and `SCRIPT` says there is no after. Sample:
+      `samples/05_Security_Diagnostics/Data_Quality_Script_Handled.etlsql`.
+
+      **Found while doing it: the formatter dropped every `ON FAILURE` clause.** `ToSql()` on a
+      quarantining SELECT returned a script whose `@fail: 'QUARANTINE'` tags routed nowhere, which
+      is a hard error on the next run. It is the mirror image of the comment-stripping failure the
+      symmetric clause/rule check was written to catch, and it was equally silent where it
+      happened. Fixed with a round-trip test over all three clause forms.
+
+### Engine — Additional Data Quality Rules
+
+The current handler covers the fundamentals well. It already exceeds dbt’s four built-ins—not_null, unique, accepted_values, and relationships—with regex, numeric comparisons, deduplication modes, and arbitrary EXPR predicates. dbt’s official data-test documentation (https://docs.getdbt.com/docs/build/data-tests) confirms those four as its core set.
+
+**All six shipped (2026-08-10), in the priority order below.** Notes worth keeping, because each was
+found by building the thing rather than by reading:
+
+- **Three silent-pass holes closed on the way through.** A composite rule naming an unprojected
+  column read as NULL and skipped every row, so a typo in `UNIQUE WITH` disabled the rule instead of
+  failing it. `TypeConverter.Cast` returns the value unchanged for a type it does not know, so
+  `CASTABLE AS BANANA` would have accepted everything. And both per-row rule switches ended in a
+  `default` that returned "passed", so a new `ColumnRule` record without its runtime arm would have
+  reported clean data. All three now fail loudly. This is the same shape as the Portal defect
+  pattern: the control exists, looks implemented, and is never asserted end to end.
+- **`EXISTS IN` probed its key set with `Enumerable.Contains` and an explicit comparer**, which
+  bypasses the `HashSet` and scans linearly — O(rows × keys) per statement. Fixed while adding the
+  composite form.
+- **`CASTABLE AS DECIMAL(18,2)` had to enforce the width itself.** The shared converter ignores
+  precision, scale and string length, so sharing `TRY_CAST` semantics verbatim would have shipped a
+  declaration that reads as a constraint and checks only "is a number".
+- **The two rule switches were collapsed into one predicate** plus a thin async wrapper for the two
+  forms that need the evaluator (`EXPR`, `BETWEEN`), rather than adding six rules to each of two
+  copies.
+
+The original recommendation, kept for the reasoning:
+
+1.  **Composite referential integrity**
+    ```sql
+    TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId)
+                           IN dim_customer(TenantId, CustomerId)'; */
+    ```
+    The current `EXISTS IN table(column)` implementation is single-column in `src/ETL-SQL.Core/Quality/ColumnRule.cs:76`. That can incorrectly accept CustomerId when it exists under a different tenant. This is the most important correctness and isolation gap.
+
+2.  **NOT BLANK**
+    ```sql
+    Name /* @expect: 'NOT NULL, NOT BLANK'; */
+    ```
+    It should reject empty and whitespace-only strings while retaining the existing rule that NULL skips everything except NOT NULL. This is common enough that users should not need a regex or repeat the column name in EXPR.
+
+3.  **String-length rules**
+    ```sql
+    PostalCode /* @expect: 'LENGTH BETWEEN 5 AND 10'; */
+    ```
+    Length checks are a standard validity category in both Great Expectations (https://greatexpectations.io/expectations/expect_column_value_lengths_to_be_between/) and Soda (https://docs.soda.io/sodacl-reference/validity-metrics). They can currently be written with `EXPR LEN(...)`, but a native rule gives clearer diagnostics and autocomplete.
+
+4.  **Semantic type/castability**
+    ```sql
+    RawDate   /* @expect: 'CASTABLE AS DATE'; */
+    RawAmount /* @expect: 'CASTABLE AS DECIMAL(18,2)'; */
+    ```
+    This is particularly useful during ingestion, where everything may arrive as text. It should share behavior with the existing `docs/reference/functions/conversion/try_cast.md:8`, not independently invent conversion semantics.
+
+5.  **Negative membership and matching**
+    ```sql
+    Status /* @expect: "NOT IN ('UNKNOWN', 'N/A')"; */
+    Notes  /* @expect: 'NOT MATCHES <script[^>]*>'; */
+    ```
+    These are expressible with EXPR, but explicit rules produce better lineage, diagnostics, and policy review. Great Expectations similarly provides both positive and negative set membership (https://greatexpectations.io/expectations/expect_column_values_to_not_be_in_set/).
+
+6.  **Typed and relative ranges**
+    ```sql
+    EventDate /* @expect: 'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate'; */
+    ```
+    Current comparisons only accept decimal literals, as documented in `docs/reference/statements/dml/data-quality-rules.md:44`. A general BETWEEN rule could support numbers, dates, variables, and expressions.
 
 ### Orchestrator — Operations Triage and Run Flight Recorder
 

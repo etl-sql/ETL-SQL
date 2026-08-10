@@ -876,6 +876,17 @@ public sealed class ColumnQualityValidator
         if (_quarantineManifestRecorded) return;
         _quarantineManifestRecorded = true;
 
+        // HANDLING = SCRIPT: the script deals with these rows inside this run, so there is nothing
+        // for a steward to pick up afterwards. The manifest is what makes a quarantine target
+        // visible to the Portal queue and replayable by REPLAY QUARANTINE, so not writing one is
+        // how the mode stays out of both. Counts still reach the run's quality metrics.
+        if (_routing[FailAction.Quarantine].Handling == QuarantineHandling.Script)
+        {
+            _logger.Debug(
+                "[DQ] Quarantine target '{Target}' is script-handled; no replay manifest recorded.", target);
+            return;
+        }
+
         var provider = _context.JobMetrics;
         if (provider == null || string.IsNullOrWhiteSpace(_context.JobName)) return;
 

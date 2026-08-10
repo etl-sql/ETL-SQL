@@ -132,6 +132,33 @@ namespace ETL_SQL.Tests.Analysis
         }
 
         [Fact]
+        public async Task ScriptHandledQuarantine_NeedsNoSectionLabelAndAcceptsATempTarget()
+        {
+            // Both requirements serve remediation after the run. HANDLING = SCRIPT says the script
+            // handles the rows now, so neither applies — and a #temp target is the natural choice.
+            var results = await Lint<QuarantineBoundaryRule>(@"
+                SELECT UserId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                INTO clean FROM raw_users
+                ON FAILURE QUARANTINE TO #handled WITH (HANDLING = SCRIPT);");
+
+            Assert.DoesNotContain(results, r => r.Severity == LintSeverity.Error);
+            Assert.DoesNotContain(results, r => r.Message.Contains("evaporates"));
+        }
+
+        [Fact]
+        public async Task StewardHandledQuarantine_StillWantsADurableTarget()
+        {
+            var results = await Lint<QuarantineBoundaryRule>(@"
+                import_users:
+                SELECT UserId /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+                INTO clean FROM raw_users
+                ON FAILURE QUARANTINE TO #q_users;");
+
+            Assert.Contains(results, r =>
+                r.Severity == LintSeverity.Info && r.Message.Contains("evaporates"));
+        }
+
+        [Fact]
         public async Task Quarantine_OnNestedSubqueryColumn_IsError()
         {
             var results = await Lint<QuarantineBoundaryRule>(@"

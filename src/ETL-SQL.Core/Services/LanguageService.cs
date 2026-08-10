@@ -321,7 +321,9 @@ public class LanguageService : ILanguageService
             + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",
         "fail" => "**@fail** `THROW|WARN|QUARANTINE` — What happens to a row failing the paired `@expect` rule. "
             + "`THROW` aborts the statement; `WARN` lets the row through and aggregates a warning; "
-            + "`QUARANTINE` diverts the row to the `ON FAILURE QUARANTINE TO <table>` target. "
+            + "`QUARANTINE` diverts the row to the `ON FAILURE QUARANTINE TO <table>` target — add "
+            + "`WITH (HANDLING = SCRIPT)` there when this run remediates the rows itself, so no "
+            + "replay manifest or steward-queue item is recorded. "
             + "Defaults to `WARN` when omitted. `QUARANTINE` and `WARN TO` require a matching trailing `ON FAILURE` clause.",
         _ => null
     };
