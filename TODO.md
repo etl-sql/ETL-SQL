@@ -590,10 +590,22 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
       using only an in-process `OrchestratorWebFactory`, so this security boundary is excluded from
       the standard CI run. Not changed here — retagging it is a test-lane decision, not a
       certification one — but it is why the prerequisite needed an explicit lane phase.
-- [ ] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
+- [x] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
       Managed Dedicated SaaS general availability. The
       [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
       migration contract; this gate owns its release sequencing, and domain 9 owns its delivery.
+
+      **Gate met (v0.18.0).** Both halves this item actually gates on exist and are certified: the
+      minimum configuration/artifact bundle (`etl-sql.tenant-bundle/v1`, signed and tenant-encrypted,
+      composed from the Portal configuration export and Orchestrator promotion package) and the
+      SaaS → self-hosted Enterprise journey as the `SaaSToEnterpriseExit` certification lane, run for
+      real at 3/3 phases with concrete scenario evidence.
+
+      **What remains is delivery depth, not the gate, and it moves to domain 9** so this phase stops
+      reading as blocked: the `export` and `import` CLI verbs. `validate` and `preflight` — the
+      customer-side verbs, and the ones the exit guarantee actually rests on — are shipped. The
+      importer itself is built and tested; it lacks only its production adapters and an entry point.
+      Do not read this checkbox as "portability is finished".
 
       **Slice 1 of 4 done (v0.18.0): the bundle format and its standalone validator.**
       `ETL_SQL.Core.Portability` now has the `etl-sql.tenant-bundle/v1` manifest contract, a writer
@@ -679,10 +691,12 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
           replay. So `IPortalConfigurationTarget` is a new execution path — running a declarative
           script against a live Portal from the CLI — not an adapter over something existing. That
           is the most security-sensitive code in this track and should be built deliberately.
-        - **`OrchestratorPromotionPackageService.ImportAsync` has no `leaveDisabled` parameter.** It
-          takes bindings. The importer's non-negotiable "arrives disabled" rule therefore needs
-          either a new parameter on that shipped method or a post-import disable pass — and whether
-          imported jobs currently arrive enabled needs checking before either.
+        - ~~`OrchestratorPromotionPackageService.ImportAsync` needs a `leaveDisabled` parameter.~~
+          **Checked against the code and withdrawn.** `ImportAsync` already sets `IsEnabled = false`
+          on every imported job and is create-only (`if (existing is null)`), so the "arrives
+          disabled" rule and collision safety are both already honoured. The production
+          `IOrchestratorPackageTarget` is a thin wrapper over it, not a change to it. Recorded
+          because the earlier note claimed otherwise.
 
         `export` additionally needs the Portal credential flow the identity verbs established
         (environment or `SECRET:`, never argv), which is a known pattern but still real work.
@@ -906,6 +920,18 @@ checked off meaningfully. Split:
       tenant-partitioned ledger; it cannot read payload content or become execution authorization.
 - [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
       **Gap — Phase C carried no managed-operations bullet at all.**
+- [ ] **Finish the `admin tenant` verb family** — `export` and `import`. Carried here from Phase A,
+      which no longer gates on them. The importer and composer are built and tested; what is missing
+      is an entry point and two production adapters. One of those is a real piece of work, not
+      plumbing: **nothing in the codebase executes a Portal bootstrap script programmatically**
+      (`SaasTenantOnboardingService` stages it to `imports/portal-bootstrap.etlsql` for manual
+      replay), so `IPortalConfigurationTarget` is a new execution path — the generated script wraps
+      its statements in `EXECUTE portal BEGIN … END;`, so applying it means supplying a `portal`
+      connection and running the script through the engine. That is the most security-sensitive code
+      in this track and wants building deliberately. `IOrchestratorPackageTarget`, by contrast, is a
+      thin wrapper: `OrchestratorPromotionPackageService.ImportAsync` already forces
+      `IsEnabled = false` and is create-only. `export` additionally needs the Portal credential flow
+      the identity verbs established (environment or `SECRET:`, never argv).
 - [ ] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
       promotion package, source artifacts, and optional evidence/content into the one open,
       versioned, signed, tenant-encrypted format defined in
