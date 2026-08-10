@@ -33,6 +33,7 @@ or an `EXPR` function call are literal.
 | Rule | Meaning |
 | :--- | :--- |
 | `NOT NULL` | Value must not be NULL. The only rule that fails on NULL. |
+| `NOT BLANK` | Value must contain a non-whitespace character. Skips NULL — pair with `NOT NULL`. |
 | `UNIQUE` | Value must not repeat anywhere in the result. Every row in a duplicated group fails. |
 | `UNIQUE WITH (<col>, …)` | Uniqueness over the column tuple rather than the single column. |
 | `UNIQUE_FIRST BY <expr>` | Keep only the row with the smallest `<expr>` per duplicate group. |
@@ -41,6 +42,8 @@ or an `EXPR` function call are literal.
 | `IN (<list>)` | Value must be one of the listed string or numeric literals. |
 | `EXISTS IN <table>(<column>)` | Value must exist in the reference table's key column (relationship / FK check). |
 | `EXISTS WITH (<col>, …) IN <table>(<col>, …)` | The tuple of projected columns must exist as a tuple in the reference table (composite / scoped FK check). |
+| `LENGTH BETWEEN <min> AND <max>` | Character count within an inclusive range. |
+| `LENGTH >= <n>` (`<=` `>` `<` `=`) | Character count compared against a whole, non-negative bound. |
 | `EXPR <predicate>` | Boolean predicate over the whole projected row, e.g. `EXPR StartDate <= EndDate`. |
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
@@ -59,6 +62,10 @@ Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
 - **String comparisons honor `SET CASE_SENSITIVE`** for `MATCHES`, `IN`, and `EXISTS IN`. Column
   *names* in composite rules always match case-insensitively — the setting governs values, not
   identifiers.
+- **`LENGTH` measures the rendered value**, matching the `LEN` function — so a number is measured
+  as it would print. Every form lowers onto one inclusive range (`LENGTH > 5` becomes a minimum of
+  6), and a range no value can satisfy (`LENGTH BETWEEN 10 AND 5`, `LENGTH < 0`) is a parse error
+  rather than a rule that quarantines the whole table.
 - **`EXISTS WITH` pairs its two column lists positionally**, so the reference table's columns need
   not share the source's names: `EXISTS WITH (TenantId, CustomerId) IN dim_customer(Tenant, Id)`.
   The two lists must have the same arity, and a mismatch is a parse error.

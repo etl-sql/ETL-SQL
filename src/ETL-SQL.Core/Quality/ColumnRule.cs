@@ -66,6 +66,24 @@ public sealed record MatchesRule(string Pattern) : ColumnRule
     }
 }
 
+/// <summary>
+/// <c>NOT BLANK</c> — the value must contain a non-whitespace character. Like every rule except
+/// <see cref="NotNullRule"/> it skips NULL, so <c>'NOT NULL, NOT BLANK'</c> is the full
+/// "a name is required" check. Distinct from a <c>MATCHES</c> pattern only in that the intent is
+/// legible in diagnostics, autocomplete and policy review.
+/// </summary>
+public sealed record NotBlankRule : ColumnRule;
+
+/// <summary>
+/// <c>LENGTH BETWEEN &lt;min&gt; AND &lt;max&gt;</c>, or a <c>LENGTH</c> comparison such as
+/// <c>LENGTH &gt;= 5</c>. Every accepted form lowers to this inclusive character-count range —
+/// <c>LENGTH &gt; 5</c> becomes a minimum of 6 — so the runtime has one predicate rather than one
+/// per operator. Length is the rendered value's character count, matching the <c>LEN</c> function.
+/// </summary>
+/// <param name="MinLength">Inclusive lower bound; 0 when the form set no lower bound.</param>
+/// <param name="MaxLength">Inclusive upper bound, or null when the form set no upper bound.</param>
+public sealed record LengthRule(int MinLength, int? MaxLength) : ColumnRule;
+
 /// <summary>Numeric comparison (<c>&gt;= 0</c>, <c>&lt;= 120</c>, …). Compares as decimal at runtime.</summary>
 public sealed record ComparisonRule(CompareOp Op, decimal Value) : ColumnRule;
 

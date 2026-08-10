@@ -942,6 +942,70 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task NotBlankRule_RejectsEmptyAndWhitespaceOnly_ButSkipsNull()
+        {
+            // NULL still skips it — 'NOT NULL, NOT BLANK' is the full "a name is required" check.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'Ada'), (2, ''), (3, '   '), (4, NULL)");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: 'NOT BLANK'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));   // 'Ada' and the NULL row
+            Assert.Equal(2, await CountRows(eval, "#bad"));     // '' and '   '
+        }
+
+        [Fact]
+        public async Task NotBlankRule_PairedWithNotNull_RejectsTheNullToo()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'Ada'), (2, '  '), (3, NULL)");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: 'NOT NULL, NOT BLANK'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(1, await CountRows(eval, "#clean"));
+            Assert.Equal(2, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task LengthRule_BoundsAreInclusive()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, '1234'), (2, '12345'), (3, '1234567890'), (4, '12345678901')");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: 'LENGTH BETWEEN 5 AND 10'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            var clean = await ReadRows(eval, "#clean");
+            Assert.Equal(new object?[] { 2m, 3m }, clean.Select(r => r["Id"]).ToArray());
+            Assert.Equal(2, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task LengthRule_MeasuresTheRenderedValue_ForNonStrings()
+        {
+            // Rules validate the projected value; a number is measured the way LEN would render it.
+            var eval = NewEvaluator();
+            await Seed(eval, "(7, 'a'), (1234567, 'b')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'LENGTH <= 3'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+
+            var failure = Assert.Single(eval.DataQuality.Failures);
+            Assert.Equal(1, failure.Count);
+            Assert.Equal("1234567", failure.Samples.Single());
+        }
+
+        [Fact]
         public async Task ExprRule_EvaluatesAcrossTheProjectedRow()
         {
             var eval = NewEvaluator();

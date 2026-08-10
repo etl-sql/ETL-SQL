@@ -129,6 +129,12 @@ public static partial class ColumnRuleParser
         if (Regex.IsMatch(upper, @"^NOT\s+NULL$"))
             return new NotNullRule { Text = text };
 
+        if (Regex.IsMatch(upper, @"^NOT\s+BLANK$"))
+            return new NotBlankRule { Text = text };
+
+        if (upper.StartsWith("LENGTH", StringComparison.Ordinal))
+            return ParseLengthRule(text);
+
         if (upper == "UNIQUE")
             return new UniqueRule(UniqueMode.All, null, null) { Text = text };
 
@@ -225,9 +231,59 @@ public static partial class ColumnRuleParser
         }
 
         throw new ColumnRuleParseException(
-            $"Unknown @expect rule '{text}'. Supported: NOT NULL, UNIQUE, UNIQUE WITH (cols), " +
-            "UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), EXISTS IN table(col), " +
-            "EXISTS WITH (cols) IN table(cols), EXPR <predicate>, and numeric >= <= > < = compares.");
+            $"Unknown @expect rule '{text}'. Supported: NOT NULL, NOT BLANK, UNIQUE, " +
+            "UNIQUE WITH (cols), UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), " +
+            "EXISTS IN table(col), EXISTS WITH (cols) IN table(cols), LENGTH BETWEEN <min> AND <max>, " +
+            "LENGTH <compare> <n>, EXPR <predicate>, and numeric >= <= > < = compares.");
+    }
+
+    /// <summary>
+    /// Lowers every <c>LENGTH</c> form onto one inclusive range. <c>&gt;</c> and <c>&lt;</c> shift
+    /// the bound by one rather than getting their own runtime predicate, which is only sound
+    /// because a character count is an integer.
+    /// </summary>
+    private static ColumnRule ParseLengthRule(string text)
+    {
+        var between = Regex.Match(
+            text, @"^LENGTH\s+BETWEEN\s+(?<min>-?\d+)\s+AND\s+(?<max>-?\d+)$", RegexOptions.IgnoreCase);
+        if (between.Success)
+        {
+            var min = ParseLengthBound(between.Groups["min"].Value, text);
+            var max = ParseLengthBound(between.Groups["max"].Value, text);
+            if (min > max)
+                throw new ColumnRuleParseException(
+                    $"LENGTH rule '{text}' has a minimum above its maximum, so no value can satisfy it.");
+            return new LengthRule(min, max) { Text = text };
+        }
+
+        var comparison = Regex.Match(
+            text, @"^LENGTH\s*(?<op>>=|<=|=|>|<)\s*(?<value>-?\d+)$", RegexOptions.IgnoreCase);
+        if (comparison.Success)
+        {
+            var bound = ParseLengthBound(comparison.Groups["value"].Value, text);
+            return comparison.Groups["op"].Value switch
+            {
+                ">=" => new LengthRule(bound, null) { Text = text },
+                ">" => new LengthRule(bound + 1, null) { Text = text },
+                "<=" => new LengthRule(0, bound) { Text = text },
+                "<" when bound == 0 => throw new ColumnRuleParseException(
+                    $"LENGTH rule '{text}' can never be satisfied — no value is shorter than zero characters."),
+                "<" => new LengthRule(0, bound - 1) { Text = text },
+                _ => new LengthRule(bound, bound) { Text = text }
+            };
+        }
+
+        throw new ColumnRuleParseException(
+            $"LENGTH expects the form 'LENGTH BETWEEN <min> AND <max>' or a comparison such as " +
+            $"'LENGTH >= 5', got '{text}'.");
+    }
+
+    private static int ParseLengthBound(string raw, string text)
+    {
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var bound) || bound < 0)
+            throw new ColumnRuleParseException(
+                $"LENGTH rule '{text}' requires whole, non-negative character counts.");
+        return bound;
     }
 
     /// <summary>

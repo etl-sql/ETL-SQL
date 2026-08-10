@@ -611,7 +611,7 @@ public sealed class ColumnQualityValidator
                     // rule is a pure per-row predicate.
                     bool passed = rule is UniqueRule unique
                         ? !ViolatesUnique(unique, ruleSet, projected, rowOrdinal)
-                        : await RulePassesAsync(rule, value, projected, cancellationToken);
+                        : await RulePassesAsync(rule, value, projected);
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
@@ -637,6 +637,12 @@ public sealed class ColumnQualityValidator
         return decided;
     }
 
+    /// <summary>
+    /// The per-row verdict for every rule except UNIQUE, which the whole-input pre-pass decides.
+    ///
+    /// <para>NOT NULL is the only rule that fails on NULL; every other rule skips NULL values (the
+    /// SQL CHECK-constraint convention) -- pair with NOT NULL explicitly to reject them.</para>
+    /// </summary>
     private bool RulePassesSynchronously(ColumnRule rule, object? value, Row projected)
     {
         if (rule is NotNullRule) return value is not null and not DBNull;
@@ -644,6 +650,16 @@ public sealed class ColumnQualityValidator
 
         switch (rule)
         {
+            case NotBlankRule:
+                return !string.IsNullOrWhiteSpace(Stringify(value));
+
+            case LengthRule length:
+                {
+                    var characters = Stringify(value).Length;
+                    return characters >= length.MinLength
+                        && (length.MaxLength is not { } max || characters <= max);
+                }
+
             case MatchesRule matches:
                 return GetRegex(matches).IsMatch(Stringify(value));
 
@@ -668,57 +684,26 @@ public sealed class ColumnQualityValidator
             case ExistsInRule existsIn:
                 return ExistsInPasses(existsIn, value, projected);
 
+            // A rule form the runtime does not implement must not report the data as clean. This
+            // is unreachable through the parser; it exists so that adding a ColumnRule record and
+            // forgetting this switch fails loudly instead of passing every row.
             default:
-                return true;
+                throw new ExecutionException(
+                    $"Data-quality rule \"{rule.Text}\" parsed as {rule.GetType().Name}, which this "
+                    + "engine version does not enforce.");
         }
     }
 
-    private ValueTask<bool> RulePassesAsync(
-        ColumnRule rule,
-        object? value,
-        Row projected,
-        CancellationToken cancellationToken)
-    {
-        // NOT NULL is the only rule that fails on NULL; every other rule skips NULL values
-        // (SQL CHECK-constraint convention) — pair with NOT NULL explicitly to reject them.
-        if (rule is NotNullRule) return ValueTask.FromResult(value is not null and not DBNull);
-        if (rule is ExprRule expr)
-            return _context.EvaluateCondition(expr.Predicate, projected);
-        if (value is null or DBNull) return ValueTask.FromResult(true);
+    /// <summary>
+    /// EXPR is the only rule that needs the evaluator, so this path handles that one form and
+    /// defers the rest to <see cref="RulePassesSynchronously"/> rather than restating them -- two
+    /// copies of the rule semantics is two places for them to drift.
+    /// </summary>
+    private ValueTask<bool> RulePassesAsync(ColumnRule rule, object? value, Row projected) =>
+        rule is ExprRule expr
+            ? _context.EvaluateCondition(expr.Predicate, projected)
+            : ValueTask.FromResult(RulePassesSynchronously(rule, value, projected));
 
-        switch (rule)
-        {
-            case MatchesRule matches:
-                return ValueTask.FromResult(GetRegex(matches).IsMatch(Stringify(value)));
-
-            case ComparisonRule comparison:
-                {
-                    if (!TryToDecimal(value, out var numeric)) return ValueTask.FromResult(false);
-                    return ValueTask.FromResult(comparison.Op switch
-                    {
-                        CompareOp.GreaterOrEqual => numeric >= comparison.Value,
-                        CompareOp.LessOrEqual => numeric <= comparison.Value,
-                        CompareOp.Greater => numeric > comparison.Value,
-                        CompareOp.Less => numeric < comparison.Value,
-                        _ => numeric == comparison.Value
-                    });
-                }
-
-            case InListRule inList:
-                for (var index = 0; index < inList.Values.Count; index++)
-                {
-                    if (ValuesEqual(inList.Values[index], value))
-                        return ValueTask.FromResult(true);
-                }
-                return ValueTask.FromResult(false);
-
-            case ExistsInRule existsIn:
-                return ValueTask.FromResult(ExistsInPasses(existsIn, value, projected));
-
-            default:
-                return ValueTask.FromResult(true);
-        }
-    }
 
     // ── EXISTS IN key sets ─────────────────────────────────────────────────
 

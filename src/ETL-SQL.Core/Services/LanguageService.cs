@@ -260,8 +260,9 @@ public class LanguageService : ILanguageService
         if (tagName.Equals("expect", StringComparison.OrdinalIgnoreCase)
             || System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^expect_\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
-            values = ["NOT NULL", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ", "UNIQUE_LAST BY ",
-                      "MATCHES ", "IN (", "EXISTS IN ", "EXISTS WITH (", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
+            values = ["NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
+                      "UNIQUE_LAST BY ", "MATCHES ", "IN (", "EXISTS IN ", "EXISTS WITH (",
+                      "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
         }
         else
         {
@@ -307,8 +308,10 @@ public class LanguageService : ILanguageService
         "source_column" => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
         "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
         "expect" => "**@expect** `'<rule>[, <rule>...]'` — Enforced data-quality rule on this column. "
-            + "Rules: `NOT NULL`, `UNIQUE`, `UNIQUE WITH (cols)`, `UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, "
-            + "`MATCHES <regex>`, `IN (<list>)`, `EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
+            + "Rules: `NOT NULL`, `NOT BLANK`, `UNIQUE`, `UNIQUE WITH (cols)`, "
+            + "`UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, `MATCHES <regex>`, `IN (<list>)`, "
+            + "`EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
+            + "`LENGTH BETWEEN <min> AND <max>`, `LENGTH <compare> <n>`, "
             + "`EXPR <predicate>`, and `>= <= > < =` compares. "
             + "Quote the value; NULL skips every rule except `NOT NULL`. Pair with `@fail` (default `WARN`). "
             + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",

@@ -33,6 +33,46 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_NotBlank()
+        {
+            var rules = ColumnRuleParser.Parse("'NOT NULL, NOT BLANK'");
+
+            Assert.Collection(rules,
+                r => Assert.IsType<NotNullRule>(r),
+                r => Assert.Equal("NOT BLANK", Assert.IsType<NotBlankRule>(r).Text));
+        }
+
+        [Theory]
+        // Every form lowers onto one inclusive range, so > and < shift the bound by one.
+        [InlineData("LENGTH BETWEEN 5 AND 10", 5, 10)]
+        [InlineData("LENGTH >= 5", 5, null)]
+        [InlineData("LENGTH > 5", 6, null)]
+        [InlineData("LENGTH <= 10", 0, 10)]
+        [InlineData("LENGTH < 10", 0, 9)]
+        [InlineData("LENGTH = 5", 5, 5)]
+        [InlineData("length between 0 and 0", 0, 0)]
+        public void Parses_Length_OntoAnInclusiveRange(string text, int expectedMin, int? expectedMax)
+        {
+            var rule = Assert.IsType<LengthRule>(ColumnRuleParser.Parse($"'{text}'").Single());
+
+            Assert.Equal(expectedMin, rule.MinLength);
+            Assert.Equal(expectedMax, rule.MaxLength);
+            Assert.Equal(text, rule.Text);
+        }
+
+        [Theory]
+        [InlineData("LENGTH BETWEEN 10 AND 5")]  // no value can satisfy it
+        [InlineData("LENGTH < 0")]               // nothing is shorter than zero characters
+        [InlineData("LENGTH >= -1")]
+        [InlineData("LENGTH >= 2.5")]
+        [InlineData("LENGTH BETWEEN 5")]
+        [InlineData("LENGTH")]
+        public void Length_Unsatisfiable_Or_Malformed_IsHardError(string text)
+        {
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+        }
+
+        [Fact]
         public void Parses_UniqueWith_CompositeTuple()
         {
             var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE WITH (TenantId, Region)'").Single());

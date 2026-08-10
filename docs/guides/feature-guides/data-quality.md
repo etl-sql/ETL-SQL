@@ -268,7 +268,9 @@ rather than fail it.
 
 ## Two behaviors that surprise people
 
-**NULL skips every rule except `NOT NULL`.** A NULL `Age` does *not* fail `>= 0`. This follows the
+**NULL skips every rule except `NOT NULL`.** A NULL `Age` does *not* fail `>= 0`. `NOT BLANK` is no
+exception — `'NOT NULL, NOT BLANK'` is the full "a name is required" check, where `NOT BLANK` alone
+rejects `''` and `'   '` but lets NULL through. This follows the
 SQL `CHECK`-constraint convention: if it were otherwise, every nullable column would fail twice for
 the same underlying problem. If NULL is unacceptable, say so:
 
