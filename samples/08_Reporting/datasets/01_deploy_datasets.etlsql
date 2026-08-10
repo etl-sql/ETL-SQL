@@ -1,5 +1,10 @@
 -- Deploy this producer script to portal folder /Dataset Deck/Producer.
 -- The portal persists both snapshots with its configured at-rest key.
+--
+-- A PUBLIC dataset must carry complete stewardship metadata. That is enforced by the linter *and*
+-- at runtime, so without these tags this script fails in the portal too, not just locally.
+/* @owner: 'Sales Analytics'; @steward: 'Sales Analytics'; @contact: 'sales-analytics@example.test';
+   @classification: 'public'; @quality: 'gold'; */
 
 CREATE DATASET &sales_public
     ACCESS PUBLIC

@@ -1087,6 +1087,32 @@ contract and explicitly deferred reusable-subreport boundary remain in
       expected exit code and assertion message. Validator session/outbox state is isolated from the
       user's machine state so an interrupted run cannot manufacture unrelated startup failures.
 
+      **Second triage cluster (2026-08-10).**
+
+      *Portal dataset deck — five samples, two different causes.* `samples/08_Reporting/datasets/`
+      is a portal deployment deck, and `sample-guide.md` already said so ("requires portal
+      execution … local tests parser-check all five scripts"), but nothing told the sample runner.
+      `02`–`05` now carry `-- @requires: portal`, the mechanism the runner already had; parser
+      coverage stays in `DatasetExampleDeckTests`. `01` was a **real defect**: a PUBLIC dataset must
+      carry complete stewardship metadata, and that is enforced at runtime as well as in lint, so
+      the script would have failed *in the portal too*, not merely locally. It now carries the tags
+      and passes standalone, so it keeps its CLI coverage rather than being skipped.
+
+      *Columnar spill type instability — one engine defect behind three samples.* `flatfile_sink`,
+      `window_sink` and `ddl_dml_sink` all die with
+      `Column batch field N ('X', utf8) does not match spill field 'X' (timestamp|decimal128)`.
+
+      - [ ] **Fix it.** `SpillStore` infers its Arrow schema from the **first** batch and then
+            rejects any later batch whose element type maps differently. The element type comes from
+            `ColumnBatchAdapter.InferLogicalType`, which takes *the first non-null value in that
+            batch* — and its `null` case returns `"VARCHAR"`. So a column that happens to be
+            **all-NULL in one batch** silently changes physical type for that batch and the spill
+            write fails. The `null` case means "no evidence", not "string", and that is the bug:
+            with no evidence the batch must adopt the already-established schema rather than invent
+            one. `FromDataTable` already accepts a `logicalSchema`; the spilling path does not pass
+            the established one. Affects any spilling query with a nullable column, not just these
+            three samples.
+
       Two idempotency failures found by the second pass are already fixed:
       `Sqlite_Operations.etlsql` (fixed primary keys into a persistent database) and
       `register_schedule.etlsql` (`CREATE SCHEDULE`/`CREATE JOB` into the persistent Orchestrator
