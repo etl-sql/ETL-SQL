@@ -119,8 +119,9 @@ public sealed class SharedOidcFlowStateServiceTests : IDisposable
     private static async Task<SharedIdentityAuthorityService> RegisterAsync(
         PortalDbContext db, PortalConfig config)
     {
-        var admin = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var accessor = new RequestTenantContextAccessor(config);
+        accessor.SetVerifiedCredential(TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var admin = new SharedIdentityAuthorityService(db, config, accessor);
         await admin.SetAsync("primary", Definition());
         return admin;
     }

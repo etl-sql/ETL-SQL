@@ -16,8 +16,14 @@ public sealed class ServiceAccountsController(
     PortalDbContext db,
     UserManager<PortalUser> users,
     IPasswordHasher<ServiceAccount> passwordHasher,
-    AuditService audit) : ControllerBase
+    AuditService audit,
+    PortalConfig config,
+    RequestTenantContextAccessor tenantAccessor) : ControllerBase
 {
+    private string TenantId => config.SharedTenancy.Enabled
+        ? tenantAccessor.RequireCurrent().Tenant.Value
+        : string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
+
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     private bool IsServiceIdentity =>
@@ -26,7 +32,7 @@ public sealed class ServiceAccountsController(
     [HttpGet]
     public async Task<IReadOnlyList<ServiceAccountDto>> List(CancellationToken ct)
     {
-        var query = db.ServiceAccounts.AsNoTracking();
+        var query = db.ServiceAccounts.AsNoTracking().Where(value => value.TenantId == TenantId);
         if (IsServiceIdentity)
             query = query.Where(value => value.OwnerUserId == CurrentUserId);
         return await query.OrderBy(value => value.Name).Select(value => ToDto(value)).ToListAsync(ct);
@@ -46,11 +52,13 @@ public sealed class ServiceAccountsController(
                 validation.Roles, request.StudioCapabilities ?? []))
             return Forbid();
         var normalizedName = request.Name.Trim().ToUpperInvariant();
-        if (await db.ServiceAccounts.AnyAsync(value => value.NormalizedName == normalizedName, ct))
+        if (await db.ServiceAccounts.AnyAsync(
+                value => value.TenantId == TenantId && value.NormalizedName == normalizedName, ct))
             return Conflict(new { error = "A service account with this name already exists." });
 
         var account = new ServiceAccount
         {
+            TenantId = TenantId,
             Name = request.Name.Trim(),
             NormalizedName = normalizedName,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
@@ -74,7 +82,8 @@ public sealed class ServiceAccountsController(
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, UpdateServiceAccountRequest request, CancellationToken ct)
     {
-        var account = await db.ServiceAccounts.FindAsync([id], ct);
+        var account = await db.ServiceAccounts.SingleOrDefaultAsync(
+            value => value.Id == id && value.TenantId == TenantId, ct);
         if (account is null) return NotFound();
         if (IsServiceIdentity && (!CanManage(account)
                 || !CanDelegate(account.OwnerUserId, request.Scopes, Roles(account),
@@ -107,7 +116,8 @@ public sealed class ServiceAccountsController(
     [HttpPost("{id}/rotate-secret")]
     public async Task<IActionResult> Rotate(string id, CancellationToken ct)
     {
-        var account = await db.ServiceAccounts.FindAsync([id], ct);
+        var account = await db.ServiceAccounts.SingleOrDefaultAsync(
+            value => value.Id == id && value.TenantId == TenantId, ct);
         if (account is null) return NotFound();
         if (IsServiceIdentity && !CanManage(account)) return Forbid();
         var concurrency = PrepareMutation(account);
@@ -126,7 +136,8 @@ public sealed class ServiceAccountsController(
     [HttpPost("{id}/revoke")]
     public async Task<IActionResult> Revoke(string id, CancellationToken ct)
     {
-        var account = await db.ServiceAccounts.FindAsync([id], ct);
+        var account = await db.ServiceAccounts.SingleOrDefaultAsync(
+            value => value.Id == id && value.TenantId == TenantId, ct);
         if (account is null) return NotFound();
         if (IsServiceIdentity && !CanManage(account)) return Forbid();
         var concurrency = PrepareMutation(account);
@@ -164,7 +175,8 @@ public sealed class ServiceAccountsController(
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
-            var current = await db.ServiceAccounts.AsNoTracking().SingleAsync(value => value.Id == account.Id, ct);
+            var current = await db.ServiceAccounts.AsNoTracking().SingleAsync(
+                value => value.Id == account.Id && value.TenantId == TenantId, ct);
             return OptimisticConcurrency.Conflict(this, ToDto(current));
         }
     }
@@ -174,7 +186,8 @@ public sealed class ServiceAccountsController(
     {
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 100)
             return ("Name is required and must not exceed 100 characters.", []);
-        var owner = await users.FindByIdAsync(ownerId.ToString());
+        var owner = await db.Users.SingleOrDefaultAsync(
+            value => value.Id == ownerId && value.TenantId == TenantId);
         if (owner is null || !owner.IsActive) return ("Owner must be an active portal user.", []);
         if (expiresAt <= DateTime.UtcNow) return ("Expiry must be in the future.", []);
         var normalizedScopes = ServiceAccountScopes.Normalize(scopes);

@@ -28,9 +28,9 @@ public sealed record SharedIdentityAuthorityBinding(
 public sealed class SharedIdentityAuthorityService(
     PortalDbContext db,
     PortalConfig config,
-    TenantContext tenantContext)
+    RequestTenantContextAccessor tenantAccessor)
 {
-    private readonly string _tenantId = RequireSharedTenant(config, tenantContext);
+    private readonly string _tenantId = RequireSharedTenant(config, tenantAccessor.RequireCurrent());
 
     public async Task<SharedIdentityAuthorityBinding> SetAsync(
         string authorityId,

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +24,8 @@ public class AuthController(
     PortalConfig config,
     ILdapService ldapService,
     StudioCapabilityStore studioCapabilities,
-    SharedIdentityAuthorityResolver sharedIdentityAuthorities) : ControllerBase
+    SharedIdentityAuthorityResolver sharedIdentityAuthorities,
+    RequestTenantContextAccessor tenantAccessor) : ControllerBase
 {
     /// <summary>Advertises the effective identity configuration so the login page can offer the right
     /// affordances (e.g. an SSO button) without hardcoding deployment posture. Anonymous and
@@ -243,14 +245,18 @@ public class AuthController(
             }
         }
 
+        var sessionTenant = string.IsNullOrWhiteSpace(config.TenantId)
+            ? null
+            : TenantContext.FromHostConfiguration(config.TenantId);
         var roles = await userManager.GetRolesAsync(user);
         var jwt = tokenService.GenerateJwt(user, roles,
-            await studioCapabilities.ResolveForUserAsync(user.Id));
+            await studioCapabilities.ResolveForUserAsync(user.Id), sessionTenant);
         var rawRefresh = tokenService.GenerateRefreshToken();
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
         db.RefreshTokens.Add(new RefreshToken
         {
+            TenantId = sessionTenant?.Tenant.Value ?? "portal-host",
             UserId = user.Id,
             Token = TokenService.HashRefreshToken(rawRefresh),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
@@ -272,6 +278,27 @@ public class AuthController(
 
         if (token is null)
             return Unauthorized(new { error = "Invalid or expired refresh token" });
+
+        TenantContext? sessionTenant = null;
+        if (config.SharedTenancy.Enabled)
+        {
+            if (token.User is null
+                || !string.Equals(token.TenantId, token.User.TenantId, StringComparison.Ordinal))
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+            try
+            {
+                sessionTenant = TenantContext.FromVerifiedCredential(token.TenantId);
+                tenantAccessor.SetVerifiedCredential(sessionTenant);
+            }
+            catch (ArgumentException)
+            {
+                return Unauthorized(new { error = "Invalid or expired refresh token" });
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(config.TenantId))
+        {
+            sessionTenant = TenantContext.FromHostConfiguration(config.TenantId);
+        }
 
         if (token.RevokedAt is not null)
         {
@@ -298,7 +325,10 @@ public class AuthController(
         {
             var disabledRevokedAt = DateTime.UtcNow;
             await db.RefreshTokens
-                .Where(t => t.Id == token.Id && t.Token == tokenHash && t.RevokedAt == null)
+                .Where(t => t.Id == token.Id
+                    && t.TenantId == token.TenantId
+                    && t.Token == tokenHash
+                    && t.RevokedAt == null)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, disabledRevokedAt));
             await transaction.CommitAsync();
             return Unauthorized(new { error = "User account is disabled" });
@@ -307,6 +337,7 @@ public class AuthController(
         var revokedAt = DateTime.UtcNow;
         var consumed = await db.RefreshTokens
             .Where(t => t.Id == token.Id &&
+                        t.TenantId == token.TenantId &&
                         t.Token == tokenHash &&
                         t.RevokedAt == null &&
                         t.ExpiresAt > revokedAt)
@@ -320,6 +351,7 @@ public class AuthController(
         var newRaw = tokenService.GenerateRefreshToken();
         db.RefreshTokens.Add(new RefreshToken
         {
+            TenantId = token.TenantId,
             UserId = token.UserId,
             Token = TokenService.HashRefreshToken(newRaw),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
@@ -332,7 +364,7 @@ public class AuthController(
         // Refresh re-resolves group capabilities, so a grant changed since sign-in takes effect on
         // the next refresh rather than lingering for the life of the session.
         var jwt = tokenService.GenerateJwt(user, roles,
-            await studioCapabilities.ResolveForUserAsync(user.Id));
+            await studioCapabilities.ResolveForUserAsync(user.Id), sessionTenant);
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
         return Ok(new LoginResponse(jwt, newRaw, expiresAt));

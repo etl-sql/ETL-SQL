@@ -273,6 +273,16 @@ builder.Services.AddAuthentication(opt =>
         OnTokenValidated = async context =>
         {
             var services = context.HttpContext.RequestServices;
+            var credentialConfig = services.GetRequiredService<PortalConfig>();
+            ETL_SQL.Core.Multitenancy.TenantContext? tenantContext = null;
+            string? tenantError = null;
+            if (context.Principal is null || !ETL_SQL.Portal.Services.TenantCredentialBinding.TryResolve(
+                    context.Principal, credentialConfig, out tenantContext, out tenantError))
+            {
+                context.Fail(tenantError ?? "Invalid tenant credential.");
+                return;
+            }
+            var tenantId = tenantContext?.Tenant.Value ?? "portal-host";
             if (context.Principal?.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType)
             {
                 var accountId = context.Principal.FindFirstValue(TokenService.ServiceAccountIdClaim);
@@ -283,7 +293,7 @@ builder.Services.AddAuthentication(opt =>
                 }
                 var db = services.GetRequiredService<PortalDbContext>();
                 var state = await services.GetRequiredService<ETL_SQL.Portal.Services.ServiceAccountSecurityStateCache>()
-                    .GetAsync(accountId, db);
+                    .GetAsync(accountId, tenantId, db);
                 var serviceIssuedStamp = context.Principal.FindFirstValue(TokenService.SecurityStampClaim);
                 if (state is null || !state.IsEnabled || state.RevokedAt is not null
                     || (state.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
@@ -293,7 +303,7 @@ builder.Services.AddAuthentication(opt =>
                     return;
                 }
                 var owner = await services.GetRequiredService<ETL_SQL.Portal.Services.UserSecurityStateCache>()
-                    .GetAsync(state.OwnerUserId, db);
+                    .GetAsync(tenantId, state.OwnerUserId, db);
                 if (owner is null || !owner.IsActive)
                     context.Fail("Service account owner is disabled.");
                 return;
@@ -308,7 +318,7 @@ builder.Services.AddAuthentication(opt =>
 
             var user = await services
                 .GetRequiredService<ETL_SQL.Portal.Services.UserSecurityStateCache>()
-                .GetAsync(userId, services.GetRequiredService<PortalDbContext>());
+                .GetAsync(tenantId, userId, services.GetRequiredService<PortalDbContext>());
             if (user is null || !user.IsActive)
             {
                 context.Fail("User account is disabled.");

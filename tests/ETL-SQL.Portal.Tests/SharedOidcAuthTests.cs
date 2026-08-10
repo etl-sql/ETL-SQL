@@ -1,7 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -25,11 +29,19 @@ public sealed class SharedOidcAuthTests : IClassFixture<SharedOidcAuthTests.Shar
         var alpha = Client("alpha.portal.test");
         var beta = Client("beta.portal.test");
 
-        var alphaToken = await SignInAsync(alpha);
-        var betaToken = await SignInAsync(beta);
+        var alphaSession = await SignInAsync(alpha);
+        var betaSession = await SignInAsync(beta);
 
-        Assert.Equal("tenant-alpha", TenantClaim(alphaToken));
-        Assert.Equal("tenant-beta", TenantClaim(betaToken));
+        Assert.Equal("tenant-alpha", TenantClaim(alphaSession.AccessToken));
+        Assert.Equal("tenant-beta", TenantClaim(betaSession.AccessToken));
+        var alphaRefresh = await alpha.PostAsJsonAsync(
+            "/api/auth/refresh", new { refreshToken = alphaSession.RefreshToken });
+        var betaRefresh = await beta.PostAsJsonAsync(
+            "/api/auth/refresh", new { refreshToken = betaSession.RefreshToken });
+        Assert.Equal(HttpStatusCode.OK, alphaRefresh.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, betaRefresh.StatusCode);
+        Assert.Equal("tenant-alpha", TenantClaim(await AccessTokenAsync(alphaRefresh)));
+        Assert.Equal("tenant-beta", TenantClaim(await AccessTokenAsync(betaRefresh)));
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var users = await db.Users.Where(x => x.ExternalSubject == "equal-subject").OrderBy(x => x.TenantId).ToListAsync();
@@ -47,9 +59,101 @@ public sealed class SharedOidcAuthTests : IClassFixture<SharedOidcAuthTests.Shar
             Assert.Equal(user.TenantId, membership.TenantId);
         });
         var refreshTokens = await db.RefreshTokens.Where(x => users.Select(u => u.Id).Contains(x.UserId)).ToListAsync();
-        Assert.Equal(2, refreshTokens.Count);
+        Assert.True(refreshTokens.Count >= 4);
         Assert.All(refreshTokens, token =>
             Assert.Equal(users.Single(x => x.Id == token.UserId).TenantId, token.TenantId));
+    }
+
+    [Fact]
+    public async Task ServiceCredentialAndSignedRuntimeStateRemainTenantBound()
+    {
+        await _factory.SeedAsync();
+        var client = Client("alpha.portal.test");
+        await SignInAsync(client);
+        string secret = ServiceAccountCredentials.NewSecret();
+        ServiceAccount account;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var user = await db.Users.SingleAsync(x =>
+                x.TenantId == "tenant-alpha" && x.ExternalSubject == "equal-subject");
+            account = new ServiceAccount
+            {
+                TenantId = "tenant-alpha",
+                Name = "shared-agent",
+                NormalizedName = "SHARED-AGENT",
+                ClientId = ServiceAccountCredentials.NewClientId(),
+                OwnerUserId = user.Id,
+                Scopes = ServiceAccountScopes.PortalRead
+            };
+            account.SecretHash = scope.ServiceProvider.GetRequiredService<IPasswordHasher<ServiceAccount>>()
+                .HashPassword(account, secret);
+            db.ServiceAccounts.Add(account);
+            await db.SaveChangesAsync();
+        }
+
+        var exchange = await client.PostAsJsonAsync(
+            "/api/auth/service-token", new { clientId = account.ClientId, clientSecret = secret });
+        Assert.Equal(HttpStatusCode.OK, exchange.StatusCode);
+        var serviceToken = await AccessTokenAsync(exchange);
+        Assert.Equal("tenant-alpha", TenantClaim(serviceToken));
+        Assert.Equal(HttpStatusCode.OK, (await GetWithTokenAsync(client, serviceToken)).StatusCode);
+
+        var config = _factory.Services.GetRequiredService<PortalConfig>();
+        var wrongTenantToken = new TokenService(config).GenerateServiceJwt(
+            account, [], [ServiceAccountScopes.PortalRead],
+            tenantContext: TenantContext.FromVerifiedCredential("tenant-beta"));
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await GetWithTokenAsync(client, wrongTenantToken)).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var stored = await db.ServiceAccounts.SingleAsync(x => x.Id == account.Id);
+            stored.TenantId = "tenant-beta";
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync(
+                "/api/auth/service-token", new { clientId = account.ClientId, clientSecret = secret })).StatusCode);
+    }
+
+    [Fact]
+    public async Task RefreshAndUserJwtRejectPersistedTenantMismatch()
+    {
+        await _factory.SeedAsync();
+        var client = Client("alpha.portal.test");
+        var session = await SignInAsync(client);
+        PortalUser user;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            user = await db.Users.SingleAsync(x =>
+                x.TenantId == "tenant-alpha" && x.ExternalSubject == "equal-subject");
+            var hash = TokenService.HashRefreshToken(session.RefreshToken);
+            var refresh = await db.RefreshTokens.SingleAsync(x => x.Token == hash);
+            refresh.TenantId = "tenant-beta";
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync(
+                "/api/auth/refresh", new { refreshToken = session.RefreshToken })).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var hash = TokenService.HashRefreshToken(session.RefreshToken);
+            var refresh = await db.RefreshTokens.SingleAsync(x => x.Token == hash);
+            refresh.TenantId = "tenant-alpha";
+            await db.SaveChangesAsync();
+        }
+
+        var config = _factory.Services.GetRequiredService<PortalConfig>();
+        var wrongTenantToken = new TokenService(config).GenerateJwt(
+            user, [], tenantContext: TenantContext.FromVerifiedCredential("tenant-beta"));
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await GetWithTokenAsync(client, wrongTenantToken)).StatusCode);
     }
 
     [Fact]
@@ -66,7 +170,7 @@ public sealed class SharedOidcAuthTests : IClassFixture<SharedOidcAuthTests.Shar
         BaseAddress = new Uri($"https://{host}")
     });
 
-    private static async Task<string> SignInAsync(HttpClient client)
+    private static async Task<(string AccessToken, string RefreshToken)> SignInAsync(HttpClient client)
     {
         var login = await client.GetAsync("/api/auth/oidc/login");
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
@@ -77,7 +181,25 @@ public sealed class SharedOidcAuthTests : IClassFixture<SharedOidcAuthTests.Shar
         var start = html.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length;
         var end = html.IndexOf("</script>", start, StringComparison.Ordinal);
         using var json = System.Text.Json.JsonDocument.Parse(html[start..end]);
-        return json.RootElement.GetProperty("token").GetString()!;
+        return (
+            json.RootElement.GetProperty("token").GetString()!,
+            json.RootElement.GetProperty("refreshToken").GetString()!);
+    }
+
+    private static async Task<string> AccessTokenAsync(HttpResponseMessage response)
+    {
+        using var json = await System.Text.Json.JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync());
+        return json.RootElement.TryGetProperty("token", out var token)
+            ? token.GetString()!
+            : json.RootElement.GetProperty("accessToken").GetString()!;
+    }
+
+    private static Task<HttpResponseMessage> GetWithTokenAsync(HttpClient client, string token)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/folders");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client.SendAsync(request);
     }
 
     private static string TenantClaim(string token) =>

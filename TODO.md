@@ -465,10 +465,9 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       Onboarding can bootstrap one tenant-owned credential-free HTTPS OIDC authority/client through
       the Enterprise identity contract; its client secret is never accepted or persisted and is
       injected into the tenant process before activation. The topology-specific release review
-      links the delegated-admin, OIDC, platform-audit, and non-impersonation evidence. Shared remains
-      explicitly `NotCertified` until refresh/service-token validation and delegated administration
-      complete the tenant-qualified identity lifecycle described below.
-- [ ] **Shared.** Extend identity and delegated administration to shared stores with tenant
+      links the delegated-admin, OIDC, platform-audit, and non-impersonation evidence. Shared follows
+      the same separation rule through the independently certified tenant-qualified lifecycle below.
+- [x] **Shared.** Extend identity and delegated administration to shared stores with tenant
       predicates/partitioning enforced below controller code. Add dynamic, server-verified
       tenant/issuer/domain discovery without trusting a caller-selected tenant or issuer, and
       without allowing platform administrators to impersonate tenant users.
@@ -482,8 +481,8 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       routing with tenant-scoped administration, `SECRET:`-only client credentials, exact enabled-host
       anonymous lookup, and post-validation issuer binding. Its discovery API accepts an `HttpRequest`,
       not a tenant, issuer, authority id, or caller domain selector. The authorization-code controller
-      and user/group persistence now consume this binding; this stays open until refresh/service-token
-      validation and delegated administration preserve it throughout their lifecycles.
+      and user/group persistence now consume this binding. Later slices preserve the same binding
+      through credential rotation and delegated administration.
 
       **Protected flow binding added (2026-08-10).** A ten-minute Data Protection envelope now pins
       the server-routed authority id/version, Portal host, HTTPS redirect URI, state, nonce, and PKCE
@@ -498,8 +497,8 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       names, and service-account names in different tenants while legacy rows backfill to
       `portal-host`. A verified-context store proves tenant-scoped lookups, group enumeration,
       membership writes, and refresh-session attachment, including refusal of foreign numeric IDs.
-      This remains open until OIDC provisioning, refresh/service-token validation, and delegated
-      administration use these predicates end to end.
+      The following slices apply these predicates end to end through OIDC provisioning,
+      refresh/service-token validation, and delegated administration.
 
       **Shared OIDC provisioning completed (2026-08-10).** Anonymous provider discovery and login
       now select an exact enabled authority from the routed Portal host. The protected flow pins that
@@ -510,7 +509,27 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       profile updates, group reconciliation, JWT tenant claims, and refresh-session creation. An HTTP
       integration test proves two routed tenants can provision equal usernames and subjects into
       separate users, memberships, tokens, and issuer bindings, while an unknown host cannot start
-      login. This remains open for refresh/service-token validation and delegated administration.
+      login. Credential lifecycle and delegated administration are completed below.
+
+      **Credential lifecycle partitioned (2026-08-10).** Refresh-token possession may identify its
+      persisted partition, but rotation now proceeds only when refresh row and user carry the same
+      tenant; every compare-and-consume predicate, successor row, and replacement JWT preserves that
+      binding. Service clients establish tenant context only after constant-work secret verification
+      and an account/owner tenant match. JWT validation then rechecks user, owner, and service-account
+      state with tenant-qualified queries and cache keys, while session invalidation scopes user,
+      group, and refresh revocation to the verified tenant. HTTP evidence covers successful isolated
+      rotation for two tenants plus refusal of altered refresh rows, service ownership, and otherwise
+      valid user/service JWTs carrying another tenant.
+
+      **Delegated identity administration completed (2026-08-10).** Shared Admin routes now derive
+      their partition only from the verified request context and tenant-qualify user, group,
+      membership/provider-mapping, session, service-account, authority, and identity-diagnostics
+      operations. Equal usernames and resource names remain valid in separate tenants; foreign
+      numeric identifiers return not-found and cannot become write selectors. Authority changes are
+      tenant scoped, while anonymous discovery remains exact-host and server routed. Cross-tenant
+      HTTP evidence covers enumeration, mutation, membership creation, session/service-account
+      visibility, authority disablement, and equal-name creation. Platform grants still cannot mint
+      tenant user or service credentials, so completion does not introduce impersonation.
 
 *Absorbs the retained discovery item **SaaS Multi-Tenant Identity (Multi-IdP)**.*
 

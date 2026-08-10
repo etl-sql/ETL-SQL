@@ -58,10 +58,19 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         if (!int.TryParse(ownerId, out var userId)) return false;
 
         var db = context.RequestServices.GetService<PortalDbContext>();
-        if (db is null) return false;
+        var accessor = context.RequestServices.GetService<RequestTenantContextAccessor>();
+        var config = context.RequestServices.GetService<PortalConfig>();
+        var tenantId = accessor?.Current?.Tenant.Value
+            ?? (config?.SharedTenancy.Enabled != true
+                ? string.IsNullOrWhiteSpace(config?.TenantId) ? "portal-host" : config.TenantId
+                : null);
+        if (db is null || tenantId is null) return false;
 
         return await db.UserRoles
-            .Join(db.Roles, userRole => userRole.RoleId, role => role.Id, (userRole, role) => new { userRole.UserId, role.Name })
+            .Join(db.Users.Where(user => user.TenantId == tenantId),
+                userRole => userRole.UserId, user => user.Id, (userRole, user) => userRole)
+            .Join(db.Roles, userRole => userRole.RoleId, role => role.Id,
+                (userRole, role) => new { userRole.UserId, role.Name })
             .AnyAsync(entry => entry.UserId == userId && entry.Name == "Admin");
     }
 

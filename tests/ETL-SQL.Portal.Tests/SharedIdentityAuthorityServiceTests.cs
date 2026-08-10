@@ -19,10 +19,8 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
     {
         await using var db = await CreateDbAsync();
         var config = SharedConfig();
-        var alpha = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
-        var beta = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-beta"));
+        var alpha = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var beta = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-beta"));
 
         await alpha.SetAsync("primary", new(
             "alpha.portal.test", "alpha.example", "https://idp.test/alpha",
@@ -55,8 +53,7 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
     {
         await using var db = await CreateDbAsync();
         var config = SharedConfig();
-        var service = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var service = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
         await service.SetAsync("primary", new(
             "alpha.portal.test", "alpha.example", "https://idp.test/alpha/",
             "alpha-client", null));
@@ -79,8 +76,7 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
     {
         await using var db = await CreateDbAsync();
         var config = SharedConfig();
-        var service = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var service = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
         await service.SetAsync("primary", new(
             "alpha.portal.test", "alpha.example", "https://idp.test/alpha",
             "alpha-client", null));
@@ -99,10 +95,8 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
     {
         await using var db = await CreateDbAsync();
         var config = SharedConfig();
-        var alpha = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
-        var beta = new SharedIdentityAuthorityService(
-            db, config, TenantContext.FromVerifiedCredential("tenant-beta"));
+        var alpha = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-alpha"));
+        var beta = CreateService(db, config, TenantContext.FromVerifiedCredential("tenant-beta"));
 
         await Assert.ThrowsAsync<ArgumentException>(() => alpha.SetAsync("raw-secret", new(
             "raw.portal.test", "raw.example", "https://idp.test/raw",
@@ -125,7 +119,7 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
             "tenant-alpha", "operator@example.test", "approval-1", "support",
             now.AddMinutes(5), now);
 
-        Assert.Throws<UnauthorizedAccessException>(() => new SharedIdentityAuthorityService(
+        Assert.Throws<UnauthorizedAccessException>(() => CreateService(
             db, SharedConfig(), TenantContext.FromPlatformGrant(grant, now)));
     }
 
@@ -143,6 +137,16 @@ public sealed class SharedIdentityAuthorityServiceTests : IDisposable
     {
         SharedTenancy = new SharedTenancyConfig { Enabled = true }
     };
+
+    private static SharedIdentityAuthorityService CreateService(
+        PortalDbContext db,
+        PortalConfig config,
+        TenantContext context)
+    {
+        var accessor = new RequestTenantContextAccessor(config);
+        accessor.SetVerifiedCredential(context);
+        return new SharedIdentityAuthorityService(db, config, accessor);
+    }
 
     public void Dispose()
     {

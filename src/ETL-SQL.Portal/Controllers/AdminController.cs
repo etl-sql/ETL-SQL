@@ -27,8 +27,18 @@ public class AdminController(
     DatasetAtRestKeyRotationService datasetKeyRotation,
     OrchestratorDbLocator orchestratorDb,
     IOrchestratorStoreFactory orchestratorStoreFactory,
-    IHostApplicationLifetime lifetime) : ControllerBase
+    IHostApplicationLifetime lifetime,
+    RequestTenantContextAccessor tenantAccessor) : ControllerBase
 {
+    private string TenantId => config.SharedTenancy.Enabled
+        ? tenantAccessor.RequireCurrent().Tenant.Value
+        : string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
+
+    private IQueryable<PortalUser> TenantUsers => db.Users.Where(user => user.TenantId == TenantId);
+    private IQueryable<Group> TenantGroups => db.Groups.Where(group => group.TenantId == TenantId);
+    private IQueryable<UserGroup> TenantMemberships =>
+        db.UserGroups.Where(membership => membership.TenantId == TenantId);
+
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -75,7 +85,7 @@ public class AdminController(
 
         var groupRows = await db.UserGroups
             .AsNoTracking()
-            .Where(ug => userIds.Contains(ug.UserId))
+            .Where(ug => ug.TenantId == TenantId && userIds.Contains(ug.UserId))
             .Select(ug => new { ug.UserId, GroupName = ug.Group.Name })
             .OrderBy(row => row.GroupName)
             .ToListAsync(cancellationToken);
@@ -139,9 +149,9 @@ public class AdminController(
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = userManager.Users.AsNoTracking().OrderBy(u => u.UserName);
+        var query = TenantUsers.AsNoTracking().OrderBy(u => u.UserName);
         var total = await query.CountAsync(cancellationToken);
-        var users = await userManager.Users
+        var users = await TenantUsers
             .AsNoTracking()
             .OrderBy(u => u.UserName)
             .Skip((page - 1) * pageSize)
@@ -167,7 +177,7 @@ public class AdminController(
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = userManager.Users.AsQueryable();
+        var query = TenantUsers;
 
         if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
             query = query.Where(u => u.IsActive);
@@ -226,6 +236,7 @@ public class AdminController(
         var provider = req.Provider ?? "Local";
         var user = new PortalUser
         {
+            TenantId = TenantId,
             UserName = req.Username,
             Email = req.Email,
             FirstName = req.FirstName,
@@ -236,7 +247,32 @@ public class AdminController(
         };
 
         IdentityResult result;
-        if (provider == "LDAP")
+        if (config.SharedTenancy.Enabled)
+        {
+            var normalizedName = userManager.NormalizeName(user.UserName!);
+            if (await TenantUsers.AnyAsync(candidate => candidate.NormalizedUserName == normalizedName))
+                return Conflict(new { error = $"User '{req.Username}' already exists" });
+            user.NormalizedUserName = normalizedName;
+            user.NormalizedEmail = userManager.NormalizeEmail(user.Email);
+            user.SecurityStamp = Guid.NewGuid().ToString();
+            user.ConcurrencyStamp = Guid.NewGuid().ToString();
+            if (provider != "LDAP")
+            {
+                if (string.IsNullOrWhiteSpace(req.Password))
+                    return BadRequest(new { errors = new[] { "Password is required for local users." } });
+                foreach (var validator in userManager.PasswordValidators)
+                {
+                    var validation = await validator.ValidateAsync(userManager, user, req.Password);
+                    if (!validation.Succeeded)
+                        return BadRequest(new { errors = validation.Errors.Select(error => error.Description) });
+                }
+                user.PasswordHash = userManager.PasswordHasher.HashPassword(user, req.Password);
+            }
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+            result = IdentityResult.Success;
+        }
+        else if (provider == "LDAP")
         {
             result = await userManager.CreateAsync(user);
         }
@@ -262,7 +298,7 @@ public class AdminController(
     [HttpGet("users/{id:int}")]
     public async Task<IActionResult> GetUser(int id)
     {
-        var user = await userManager.Users
+        var user = await TenantUsers
             .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return NotFound();
@@ -279,7 +315,7 @@ public class AdminController(
     {
         if (DenyIfTokenIsElevatingToAdmin(req.Role) is { } denied) return denied;
 
-        var user = await userManager.FindByIdAsync(id.ToString());
+        var user = await TenantUsers.SingleOrDefaultAsync(value => value.Id == id);
         if (user is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -309,7 +345,27 @@ public class AdminController(
 
         // Staged before the final save so the mutation and its audit row share the transaction.
         audit.Stage(CurrentUserId, "UPDATE_USER", "User", id.ToString());
-        var result = await userManager.UpdateAsync(user);
+        IdentityResult result;
+        if (config.SharedTenancy.Enabled)
+        {
+            try
+            {
+                await db.SaveChangesAsync();
+                result = IdentityResult.Success;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                result = IdentityResult.Failed(new IdentityError
+                {
+                    Code = "ConcurrencyFailure",
+                    Description = "The user changed after it was read."
+                });
+            }
+        }
+        else
+        {
+            result = await userManager.UpdateAsync(user);
+        }
         if (!result.Succeeded)
         {
             await transaction.RollbackAsync();
@@ -343,7 +399,7 @@ public class AdminController(
         // tracked; the per-user SaveChangesAsync below is intentional so one optimistic-concurrency
         // conflict does not fail the whole batch.
         var requestedIds = items.Select(item => item.Id).ToList();
-        var usersById = await db.Users.Where(u => requestedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
+        var usersById = await TenantUsers.Where(u => requestedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
         foreach (var item in items)
         {
             if (!usersById.TryGetValue(item.Id, out var user))
@@ -384,7 +440,7 @@ public class AdminController(
     public async Task<IActionResult> DeleteUser(
         int id, [FromQuery] bool cascade = false, [FromQuery] int? reassignTo = null)
     {
-        var user = await userManager.Users
+        var user = await TenantUsers
             .Include(u => u.Subscriptions.Where(s => s.IsActive))
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return NotFound();
@@ -419,7 +475,7 @@ public class AdminController(
                     ownedDatasets
                 });
 
-            var target = await db.Users.FirstOrDefaultAsync(u => u.Id == reassignTo && u.IsActive);
+            var target = await TenantUsers.FirstOrDefaultAsync(u => u.Id == reassignTo && u.IsActive);
             if (target is null || target.Id == id)
                 return BadRequest(new { error = "reassignTo must identify a different, active user." });
 
@@ -479,15 +535,26 @@ public class AdminController(
             .ToListAsync();
 
         // Revoke all tokens and remove group memberships
-        var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
+        var tokens = await db.RefreshTokens.Where(
+            t => t.TenantId == TenantId && t.UserId == id && t.RevokedAt == null).ToListAsync();
         foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
 
-        var memberships = await db.UserGroups.Where(ug => ug.UserId == id).ToListAsync();
+        var memberships = await TenantMemberships.Where(ug => ug.UserId == id).ToListAsync();
         db.UserGroups.RemoveRange(memberships);
 
         audit.Stage(CurrentUserId, "DELETE_USER", "User", id.ToString(), user.UserName);
         await db.SaveChangesAsync();
-        var deleteResult = await userManager.DeleteAsync(user);
+        IdentityResult deleteResult;
+        if (config.SharedTenancy.Enabled)
+        {
+            db.Users.Remove(user);
+            await db.SaveChangesAsync();
+            deleteResult = IdentityResult.Success;
+        }
+        else
+        {
+            deleteResult = await userManager.DeleteAsync(user);
+        }
         if (!deleteResult.Succeeded)
         {
             await transaction.RollbackAsync();
@@ -528,7 +595,7 @@ public class AdminController(
     [HttpPost("users/{id:int}/reset-password")]
     public async Task<IActionResult> ResetPassword(int id, [FromBody] ResetPasswordRequest req)
     {
-        var user = await userManager.FindByIdAsync(id.ToString());
+        var user = await TenantUsers.SingleOrDefaultAsync(value => value.Id == id);
         if (user is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -536,15 +603,33 @@ public class AdminController(
         if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
 
-        var token = await userManager.GeneratePasswordResetTokenAsync(user);
-        var result = await userManager.ResetPasswordAsync(user, token, req.NewPassword);
+        IdentityResult result;
+        if (config.SharedTenancy.Enabled)
+        {
+            var errors = new List<IdentityError>();
+            foreach (var validator in userManager.PasswordValidators)
+            {
+                var validation = await validator.ValidateAsync(userManager, user, req.NewPassword);
+                if (!validation.Succeeded) errors.AddRange(validation.Errors);
+            }
+            if (errors.Count > 0)
+                return BadRequest(new { errors = errors.Select(error => error.Description) });
+            user.PasswordHash = userManager.PasswordHasher.HashPassword(user, req.NewPassword);
+            user.SecurityStamp = Guid.NewGuid().ToString();
+            result = IdentityResult.Success;
+        }
+        else
+        {
+            var token = await userManager.GeneratePasswordResetTokenAsync(user);
+            result = await userManager.ResetPasswordAsync(user, token, req.NewPassword);
+        }
         if (!result.Succeeded)
         {
             if (result.Errors.Any(error => error.Code == "ConcurrencyFailure"))
             {
                 db.ChangeTracker.Clear();
                 return OptimisticConcurrency.Conflict(
-                    this, await ToUserDtoAsync((await userManager.FindByIdAsync(id.ToString()))!));
+                    this, await ToUserDtoAsync((await TenantUsers.SingleAsync(value => value.Id == id))));
             }
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
         }
@@ -552,7 +637,8 @@ public class AdminController(
         user.MustChangePassword = true;
         // Staged so the flag write and the audit row share the Identity update's commit.
         audit.Stage(CurrentUserId, "RESET_PASSWORD", "User", id.ToString());
-        await userManager.UpdateAsync(user);
+        if (config.SharedTenancy.Enabled) await db.SaveChangesAsync();
+        else await userManager.UpdateAsync(user);
         await securitySessions.InvalidateUserAsync(id);
         OptimisticConcurrency.SetETag(Response, user.Version);
         return NoContent();
@@ -561,7 +647,7 @@ public class AdminController(
     [HttpPost("users/{id:int}/revoke-tokens")]
     public async Task<IActionResult> RevokeTokens(int id)
     {
-        var user = await db.Users.FindAsync(id);
+        var user = await TenantUsers.SingleOrDefaultAsync(value => value.Id == id);
         if (user is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -574,7 +660,7 @@ public class AdminController(
         {
             db.ChangeTracker.Clear();
             return OptimisticConcurrency.Conflict(
-                this, await ToUserDtoAsync((await db.Users.FindAsync(id))!));
+                this, await ToUserDtoAsync((await TenantUsers.SingleAsync(value => value.Id == id))));
         }
         await securitySessions.InvalidateUserAsync(id);
         OptimisticConcurrency.SetETag(Response, user.Version);
@@ -587,7 +673,9 @@ public class AdminController(
         var now = DateTime.UtcNow;
         var sessions = await db.RefreshTokens
             .Include(t => t.User)
-            .Where(t => t.RevokedAt == null && t.ExpiresAt > now)
+            .Where(t => t.TenantId == TenantId
+                && t.User.TenantId == TenantId
+                && t.RevokedAt == null && t.ExpiresAt > now)
             .OrderBy(t => t.ExpiresAt)
             .Select(t => new
             {
@@ -604,10 +692,11 @@ public class AdminController(
     [HttpPost("users/{id:int}/disconnect")]
     public async Task<IActionResult> DisconnectUser(int id)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == id)) return NotFound();
+        if (!await TenantUsers.AnyAsync(u => u.Id == id)) return NotFound();
 
         var tokens = await db.RefreshTokens
-            .Where(t => t.UserId == id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+            .Where(t => t.TenantId == TenantId
+                && t.UserId == id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ToListAsync();
         await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "DISCONNECT_USER", "User", id.ToString());
@@ -617,7 +706,7 @@ public class AdminController(
     [HttpGet("users/{userId:int}/favorites")]
     public async Task<IActionResult> GetUserFavorites(int userId, [FromQuery] int limit = 50)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == userId)) return NotFound();
+        if (!await TenantUsers.AnyAsync(u => u.Id == userId)) return NotFound();
         limit = Math.Clamp(limit, 1, 100);
 
         var reports = await db.ReportFavorites
@@ -651,7 +740,7 @@ public class AdminController(
     [HttpPost("users/{userId:int}/favorites/{reportId:int}")]
     public async Task<IActionResult> FavoriteReportForUser(int userId, int reportId)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == userId)) return NotFound(new { error = "User not found" });
+        if (!await TenantUsers.AnyAsync(u => u.Id == userId)) return NotFound(new { error = "User not found" });
         if (!await db.Reports.AnyAsync(r => r.Id == reportId && !r.IsDeleted)) return NotFound(new { error = "Report not found" });
         if (!await db.ReportFavorites.AnyAsync(f => f.UserId == userId && f.ReportId == reportId))
         {
@@ -680,9 +769,10 @@ public class AdminController(
     [HttpGet("groups")]
     public async Task<IActionResult> GetGroups()
     {
-        var groups = await db.Groups
+        var groups = await TenantGroups
             .Select(g => new GroupDto(g.Id, g.Name, g.Description,
-                g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
+                g.UserGroups.Count(membership => membership.TenantId == TenantId),
+                g.Provider, g.AdGroup, g.Version))
             .ToListAsync();
         return Ok(groups);
     }
@@ -696,7 +786,7 @@ public class AdminController(
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = db.Groups.AsQueryable();
+        var query = TenantGroups;
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = $"%{q.Trim()}%";
@@ -714,7 +804,8 @@ public class AdminController(
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(g => new GroupDto(g.Id, g.Name, g.Description,
-                g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
+                g.UserGroups.Count(membership => membership.TenantId == TenantId),
+                g.Provider, g.AdGroup, g.Version))
             .ToListAsync();
         return Ok(new PagedResult<GroupDto>(items, total, page, pageSize));
     }
@@ -722,11 +813,12 @@ public class AdminController(
     [HttpPost("groups")]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest req)
     {
-        if (await db.Groups.AnyAsync(g => g.Name == req.Name))
+        if (await TenantGroups.AnyAsync(g => g.Name == req.Name))
             return Conflict(new { error = $"Group '{req.Name}' already exists" });
 
         var group = new Group
         {
+            TenantId = TenantId,
             Name = req.Name,
             Description = req.Description,
             Provider = req.Provider ?? "Local",
@@ -742,9 +834,11 @@ public class AdminController(
     [HttpGet("groups/{id:int}")]
     public async Task<IActionResult> GetGroup(int id)
     {
-        var group = await db.Groups
+        var group = await TenantGroups
             .Where(g => g.Id == id)
-            .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
+            .Select(g => new GroupDto(g.Id, g.Name, g.Description,
+                g.UserGroups.Count(membership => membership.TenantId == TenantId),
+                g.Provider, g.AdGroup, g.Version))
             .FirstOrDefaultAsync();
         if (group is null) return NotFound();
         OptimisticConcurrency.SetETag(Response, group.Version);
@@ -754,18 +848,18 @@ public class AdminController(
     [HttpPut("groups/{id:int}")]
     public async Task<IActionResult> UpdateGroup(int id, [FromBody] UpdateGroupRequest req)
     {
-        var group = await db.Groups.FindAsync(id);
+        var group = await TenantGroups.SingleOrDefaultAsync(value => value.Id == id);
         if (group is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
 
         if (req.Name is not null)
         {
-            if (await db.Groups.AnyAsync(g => g.Name == req.Name && g.Id != id))
+            if (await TenantGroups.AnyAsync(g => g.Name == req.Name && g.Id != id))
                 return Conflict(new { error = $"Group '{req.Name}' already exists" });
             group.Name = req.Name;
         }
@@ -788,17 +882,17 @@ public class AdminController(
         {
             await db.Entry(group).ReloadAsync();
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
         }
         OptimisticConcurrency.SetETag(Response, group.Version);
-        return Ok(ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        return Ok(ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
     }
 
     [HttpDelete("groups/{id:int}")]
     public async Task<IActionResult> DeleteGroup(int id, [FromQuery] bool cascade = false)
     {
-        var group = await db.Groups
-            .Include(g => g.UserGroups)
+        var group = await TenantGroups
+            .Include(g => g.UserGroups.Where(membership => membership.TenantId == TenantId))
             .Include(g => g.FolderAcls)
             .FirstOrDefaultAsync(g => g.Id == id);
         if (group is null) return NotFound();
@@ -836,8 +930,8 @@ public class AdminController(
         // SaveChangesAsync below is intentional so one optimistic-concurrency conflict does not fail the
         // whole batch. AsSplitQuery avoids a cartesian explosion across the two collection includes.
         var requestedIds = items.Select(item => item.Id).ToList();
-        var groupsById = await db.Groups
-            .Include(value => value.UserGroups)
+        var groupsById = await TenantGroups
+            .Include(value => value.UserGroups.Where(membership => membership.TenantId == TenantId))
             .Include(value => value.FolderAcls)
             .Where(value => requestedIds.Contains(value.Id))
             .AsSplitQuery()
@@ -879,7 +973,7 @@ public class AdminController(
                 db.Entry(group).State = EntityState.Detached;
                 foreach (var membership in group.UserGroups) db.Entry(membership).State = EntityState.Detached;
                 foreach (var acl in group.FolderAcls) db.Entry(acl).State = EntityState.Detached;
-                var currentVersion = await db.Groups
+                var currentVersion = await TenantGroups
                     .Where(value => value.Id == item.Id)
                     .Select(value => (long?)value.Version)
                     .FirstOrDefaultAsync();
@@ -1132,6 +1226,7 @@ public class AdminController(
         [FromQuery] int? datasetId = null,
         CancellationToken ct = default)
     {
+        if (!await TenantUsers.AnyAsync(user => user.Id == userId, ct)) return NotFound();
         var simulation = await simulator.SimulateAsync(userId, reportId, datasetId, ct);
         if (simulation is null) return NotFound();
 
@@ -1150,7 +1245,7 @@ public class AdminController(
     public async Task<IActionResult> GetGroupStudioCapabilities(
         int id, [FromServices] StudioCapabilityStore capabilities, CancellationToken ct)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id, ct)) return NotFound();
+        if (!await TenantGroups.AnyAsync(g => g.Id == id, ct)) return NotFound();
         return Ok(new GroupStudioCapabilitiesDto(
             id,
             await capabilities.ResolveForGroupAsync(id, ct),
@@ -1171,7 +1266,7 @@ public class AdminController(
         [FromServices] StudioCapabilityStore capabilities,
         CancellationToken ct)
     {
-        var group = await db.Groups.FirstOrDefaultAsync(g => g.Id == id, ct);
+        var group = await TenantGroups.FirstOrDefaultAsync(g => g.Id == id, ct);
         if (group is null) return NotFound();
 
         var unknown = await capabilities.ReplaceForGroupAsync(id, request.Capabilities ?? [], ct);
@@ -1198,10 +1293,10 @@ public class AdminController(
     [HttpGet("groups/{id:int}/members")]
     public async Task<IActionResult> GetMembers(int id)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound();
-        var members = await db.UserGroups
+        if (!await TenantGroups.AnyAsync(g => g.Id == id)) return NotFound();
+        var members = await TenantMemberships
             .Where(ug => ug.GroupId == id)
-            .Join(db.Users, ug => ug.UserId, u => u.Id,
+            .Join(TenantUsers, ug => ug.UserId, u => u.Id,
                   (ug, u) => new { u.Id, u.UserName })
             .ToListAsync();
         return Ok(members);
@@ -1214,12 +1309,12 @@ public class AdminController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound();
+        if (!await TenantGroups.AnyAsync(g => g.Id == id)) return NotFound();
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = db.UserGroups
+        var query = TenantMemberships
             .Where(ug => ug.GroupId == id)
-            .Join(db.Users, ug => ug.UserId, u => u.Id,
+            .Join(TenantUsers, ug => ug.UserId, u => u.Id,
                 (ug, u) => u);
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -1255,32 +1350,35 @@ public class AdminController(
     [HttpPost("groups/{id:int}/members")]
     public async Task<IActionResult> AddMember(int id, [FromBody] AddUserToGroupRequest req)
     {
-        var group = await db.Groups.FindAsync(id);
+        var group = await TenantGroups.SingleOrDefaultAsync(value => value.Id == id);
         if (group is null) return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
 
         PortalUser? user = req.UserId.HasValue
-            ? await userManager.FindByIdAsync(req.UserId.Value.ToString())
-            : req.Username is not null ? await userManager.FindByNameAsync(req.Username) : null;
+            ? await TenantUsers.SingleOrDefaultAsync(value => value.Id == req.UserId.Value)
+            : req.Username is not null
+                ? await TenantUsers.SingleOrDefaultAsync(value =>
+                    value.NormalizedUserName == userManager.NormalizeName(req.Username))
+                : null;
 
         if (user is null) return NotFound("User not found");
 
-        if (await db.UserGroups.AnyAsync(ug => ug.UserId == user.Id && ug.GroupId == id))
+        if (await TenantMemberships.AnyAsync(ug => ug.UserId == user.Id && ug.GroupId == id))
             return Conflict(new { error = "User is already a member" });
 
-        db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = id });
+        db.UserGroups.Add(new UserGroup { TenantId = TenantId, UserId = user.Id, GroupId = id });
         audit.Stage(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto((await db.Groups.FindAsync(id))!,
-                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto((await TenantGroups.SingleAsync(value => value.Id == id)),
+                    await TenantMemberships.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUserAsync(user.Id);
         OptimisticConcurrency.SetETag(Response, group.Version);
@@ -1290,25 +1388,26 @@ public class AdminController(
     [HttpPost("groups/{id:int}/members/bulk-add")]
     public async Task<IActionResult> BulkAddMembers(int id, [FromBody] BulkGroupMembershipRequest req)
     {
-        var group = await db.Groups.FindAsync(id);
+        var group = await TenantGroups.SingleOrDefaultAsync(value => value.Id == id);
         if (group is null) return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
         var ids = req.UserIds.Distinct().ToList();
         if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
 
-        var existingIds = await db.UserGroups
+        var existingIds = await TenantMemberships
             .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
             .Select(ug => ug.UserId)
             .ToListAsync();
-        var validIds = await db.Users
+        var validIds = await TenantUsers
             .Where(u => ids.Contains(u.Id) && !existingIds.Contains(u.Id))
             .Select(u => u.Id)
             .ToListAsync();
-        db.UserGroups.AddRange(validIds.Select(userId => new UserGroup { GroupId = id, UserId = userId }));
+        db.UserGroups.AddRange(validIds.Select(userId => new UserGroup
+            { TenantId = TenantId, GroupId = id, UserId = userId }));
         audit.Stage(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
             $"{validIds.Count} users added");
         try { await db.SaveChangesAsync(); }
@@ -1316,8 +1415,8 @@ public class AdminController(
         {
             db.ChangeTracker.Clear();
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto((await db.Groups.FindAsync(id))!,
-                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto((await TenantGroups.SingleAsync(value => value.Id == id)),
+                    await TenantMemberships.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUsersAsync(validIds);
         OptimisticConcurrency.SetETag(Response, group.Version);
@@ -1327,17 +1426,17 @@ public class AdminController(
     [HttpPost("groups/{id:int}/members/bulk-remove")]
     public async Task<IActionResult> BulkRemoveMembers(int id, [FromBody] BulkGroupMembershipRequest req)
     {
-        var group = await db.Groups.FindAsync(id);
+        var group = await TenantGroups.SingleOrDefaultAsync(value => value.Id == id);
         if (group is null) return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
         var ids = req.UserIds.Distinct().ToList();
         if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
 
-        var memberships = await db.UserGroups
+        var memberships = await TenantMemberships
             .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
             .ToListAsync();
         db.UserGroups.RemoveRange(memberships);
@@ -1348,8 +1447,8 @@ public class AdminController(
         {
             db.ChangeTracker.Clear();
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto((await db.Groups.FindAsync(id))!,
-                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto((await TenantGroups.SingleAsync(value => value.Id == id)),
+                    await TenantMemberships.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUsersAsync(memberships.Select(membership => membership.UserId));
         OptimisticConcurrency.SetETag(Response, group.Version);
@@ -1359,14 +1458,14 @@ public class AdminController(
     [HttpDelete("groups/{id:int}/members/{userId:int}")]
     public async Task<IActionResult> RemoveMember(int id, int userId)
     {
-        var group = await db.Groups.FindAsync(id);
+        var group = await TenantGroups.SingleOrDefaultAsync(value => value.Id == id);
         if (group is null) return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
-        var ug = await db.UserGroups.FirstOrDefaultAsync(x => x.GroupId == id && x.UserId == userId);
+                this, ToGroupDto(group, await TenantMemberships.CountAsync(value => value.GroupId == id)));
+        var ug = await TenantMemberships.FirstOrDefaultAsync(x => x.GroupId == id && x.UserId == userId);
         if (ug is null) return NotFound();
 
         db.UserGroups.Remove(ug);
@@ -1376,8 +1475,8 @@ public class AdminController(
         {
             db.ChangeTracker.Clear();
             return OptimisticConcurrency.Conflict(
-                this, ToGroupDto((await db.Groups.FindAsync(id))!,
-                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+                this, ToGroupDto((await TenantGroups.SingleAsync(value => value.Id == id)),
+                    await TenantMemberships.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUserAsync(userId);
         OptimisticConcurrency.SetETag(Response, group.Version);
@@ -1416,7 +1515,7 @@ public class AdminController(
     [HttpGet("permissions/effective/user/{userId:int}")]
     public async Task<IActionResult> GetEffectivePermissionsForUser(int userId)
     {
-        var user = await userManager.Users
+        var user = await TenantUsers
             .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
             .FirstOrDefaultAsync(u => u.Id == userId);
         if (user is null) return NotFound();
@@ -1485,7 +1584,7 @@ public class AdminController(
             .FirstOrDefaultAsync(f => f.Id == folderId);
         if (folder is null) return NotFound();
 
-        var users = await userManager.Users
+        var users = await TenantUsers
             .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
             .OrderBy(u => u.UserName)
             .ToListAsync();
@@ -1505,7 +1604,7 @@ public class AdminController(
             .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return NotFound();
 
-        var users = await userManager.Users
+        var users = await TenantUsers
             .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
             .OrderBy(u => u.UserName)
             .ToListAsync();

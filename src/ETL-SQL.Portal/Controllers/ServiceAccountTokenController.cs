@@ -1,6 +1,7 @@
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.Core.Multitenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,9 @@ public sealed class ServiceAccountTokenController(
     TokenService tokens,
     AuditService audit,
     StudioCapabilityStore studioCapabilities,
-    StudioAuthorizationService studio) : ControllerBase
+    StudioAuthorizationService studio,
+    PortalConfig config,
+    RequestTenantContextAccessor tenantAccessor) : ControllerBase
 {
     private static readonly string DummyHash = new PasswordHasher<ServiceAccount>().HashPassword(null!, "dummy_secret_for_timing_protection");
 
@@ -41,6 +44,25 @@ public sealed class ServiceAccountTokenController(
             return Unauthorized(new { error = "invalid_client" });
 
         var activeAccount = account!;
+        TenantContext? tenantContext = null;
+        if (config.SharedTenancy.Enabled)
+        {
+            if (!string.Equals(activeAccount.TenantId, activeAccount.OwnerUser.TenantId, StringComparison.Ordinal))
+                return Unauthorized(new { error = "invalid_client" });
+            try
+            {
+                tenantContext = TenantContext.FromVerifiedCredential(activeAccount.TenantId);
+                tenantAccessor.SetVerifiedCredential(tenantContext);
+            }
+            catch (ArgumentException)
+            {
+                return Unauthorized(new { error = "invalid_client" });
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(config.TenantId))
+        {
+            tenantContext = TenantContext.FromHostConfiguration(config.TenantId);
+        }
         var currentOwnerRoles = await users.GetRolesAsync(activeAccount.OwnerUser);
         var cappedRoles = activeAccount.RoleNames.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Intersect(currentOwnerRoles, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -64,7 +86,7 @@ public sealed class ServiceAccountTokenController(
         await db.SaveChangesAsync(ct);
 
         return Ok(new ServiceAccountTokenResponse(
-            tokens.GenerateServiceJwt(activeAccount, cappedRoles, scopes, cappedCapabilities),
+            tokens.GenerateServiceJwt(activeAccount, cappedRoles, scopes, cappedCapabilities, tenantContext),
             "Bearer", tokens.ServiceTokenLifetimeSeconds));
     }
 

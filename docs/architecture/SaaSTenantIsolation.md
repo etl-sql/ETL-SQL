@@ -196,8 +196,9 @@ or generated file; the tenant deployment supplies
 Evidence is [`SaasTenantOnboardingTests`](../../tests/ETL-SQL.Tests/Orchestration/SaasTenantOnboardingTests.cs),
 [`AdminIdentityScopeIntegrationTests`](../../tests/ETL-SQL.Portal.Tests/AdminIdentityScopeIntegrationTests.cs),
 [`OidcAuthTests`](../../tests/ETL-SQL.Portal.Tests/OidcAuthTests.cs), and
-[`TenantContextTests`](../../tests/ETL-SQL.Tests/Multitenancy/TenantContextTests.cs). This certifies
-Managed Dedicated only; shared issuer discovery and shared identity stores remain `NotCertified`.
+[`TenantContextTests`](../../tests/ETL-SQL.Tests/Multitenancy/TenantContextTests.cs). This section
+certifies Managed Dedicated; the separately implemented Shared identity boundary is certified in
+section 6.2.2.
 
 ### 6.2.1 Managed Dedicated policy and key authority
 
@@ -246,8 +247,8 @@ cover the claim and impersonation contract, while
 prove an authenticated request cannot replace its signed tenant with spoofed header, query, or
 issuer values and cannot enumerate another tenant's equal shared-store surface.
 
-This is the internal shared-credential boundary, not multi-IdP certification. Shared identity
-also has the first authority-registry boundary: `SharedIdentityAuthorities` stores normalized Portal
+This shared-credential boundary is the root of the multi-IdP certification. Shared identity also
+has an authority-registry boundary: `SharedIdentityAuthorities` stores normalized Portal
 hosts, login domains, issuers, client identifiers, and `SECRET:` credential references with globally
 unique host/domain routing and tenant-scoped administration. Anonymous resolution accepts an
 `HttpRequest` and performs one exact enabled-host lookup; it exposes no tenant, issuer, authority-id,
@@ -282,6 +283,25 @@ and creation, mutable profile updates, OIDC-group reconciliation, JWT issuance, 
 creation then use that tenant partition. The anonymous provider-advertisement endpoint applies the
 same exact-host lookup, so an unregistered shared host does not advertise or start SSO.
 
+Refresh and service credentials preserve the partition after initial login. A refresh secret is a
+high-entropy credential and may locate its own row, but rotation fails unless that row and its user
+have the same canonical tenant. Consumption predicates include the tenant, the successor retains it,
+and the replacement JWT is minted from the resulting verified context. A service client binds no
+tenant from its public client id: only successful constant-work secret verification followed by an
+account/owner tenant match establishes the context. Runtime JWT validation uses the signed tenant
+claim to re-read user, service-account, and service-owner security state through tenant-qualified
+queries and tenant-qualified cache keys. Session invalidation likewise constrains user stamps,
+refresh revocation, and group membership selection to the verified tenant.
+
+Delegated administration completes the boundary. User, group, provider-mapping, membership,
+session, service-account, identity-authority, and identity-diagnostics operations derive their
+tenant only from the verified request context and apply that predicate to enumeration and mutation.
+Foreign numeric identifiers are treated as not found, equal local usernames and resource names may
+exist in separate tenants, and membership writes require both endpoints to belong to the current
+tenant. Tenant authority administration does not broaden anonymous discovery: login still starts
+from one exact server-routed host. Platform grants remain unable to mint tenant-user or
+tenant-service credentials.
+
 Evidence is
 [`SharedIdentityAuthorityServiceTests`](../../tests/ETL-SQL.Portal.Tests/SharedIdentityAuthorityServiceTests.cs)
 and
@@ -292,9 +312,9 @@ and routed HTTP callback evidence in
 [`SharedOidcAuthTests`](../../tests/ETL-SQL.Portal.Tests/SharedOidcAuthTests.cs). Dynamic discovery
 and routed client/issuer selection are pinned by
 [`SharedOidcAuthenticationServiceTests`](../../tests/ETL-SQL.Portal.Tests/SharedOidcAuthenticationServiceTests.cs).
-Shared identity remains `NotCertified` because delegated-administration controllers still use legacy
-global lookups, and refresh/service token validation does not yet reapply the persisted tenant
-binding.
+Delegated HTTP isolation is pinned by
+[`SharedDelegatedIdentityAdminTests`](../../tests/ETL-SQL.Portal.Tests/SharedDelegatedIdentityAdminTests.cs).
+Together these tests certify the Shared identity and delegated-administration cell.
 
 ### 6.3 Collision Safety
 

@@ -19,8 +19,13 @@ public sealed class IdentityDiagnosticsService(
     PortalDbContext db,
     PortalConfig config,
     IOidcDiscoveryProvider discovery,
-    ILogger<IdentityDiagnosticsService> log)
+    ILogger<IdentityDiagnosticsService> log,
+    RequestTenantContextAccessor tenantAccessor)
 {
+    private string TenantId => config.SharedTenancy.Enabled
+        ? tenantAccessor.RequireCurrent().Tenant.Value
+        : string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
+
     public async Task<IdentityDiagnosticsDto> BuildAsync(CancellationToken ct = default)
     {
         var oidc = config.Identity.Oidc;
@@ -112,13 +117,13 @@ public sealed class IdentityDiagnosticsService(
     private async Task<IReadOnlyList<IdentityGroupMappingDto>> BuildGroupMappingsAsync(CancellationToken ct)
     {
         var groups = await db.Groups
-            .Where(group => group.Provider != "Local")
+            .Where(group => group.TenantId == TenantId && group.Provider != "Local")
             .Select(group => new
             {
                 group.Id,
                 group.Name,
                 group.AdGroup,
-                MemberCount = group.UserGroups.Count
+                MemberCount = group.UserGroups.Count(membership => membership.TenantId == TenantId)
             })
             .ToListAsync(ct);
 
@@ -138,11 +143,15 @@ public sealed class IdentityDiagnosticsService(
 
     private async Task<IdentitySyncHealthDto> BuildSyncHealthAsync(CancellationToken ct)
     {
-        var federated = await db.Users.Where(user => user.Provider != "Local").ToListAsync(ct);
+        var federated = await db.Users
+            .Where(user => user.TenantId == TenantId && user.Provider != "Local")
+            .ToListAsync(ct);
         var federatedIds = federated.Select(user => user.Id).ToList();
 
         var withMappedGroup = await db.UserGroups
-            .Where(membership => federatedIds.Contains(membership.UserId)
+            .Where(membership => membership.TenantId == TenantId
+                && federatedIds.Contains(membership.UserId)
+                && membership.Group.TenantId == TenantId
                 && membership.Group.Provider != "Local")
             .Select(membership => membership.UserId)
             .Distinct()
@@ -152,7 +161,8 @@ public sealed class IdentityDiagnosticsService(
             federated.Count,
             federated.Count(user => user.IsActive),
             federated.Count - withMappedGroup,
-            await db.Groups.CountAsync(group => group.Provider != "Local", ct));
+            await db.Groups.CountAsync(
+                group => group.TenantId == TenantId && group.Provider != "Local", ct));
     }
 
     private async Task<IdentityBreakGlassDto> BuildBreakGlassAsync(CancellationToken ct)
@@ -162,7 +172,7 @@ public sealed class IdentityDiagnosticsService(
                 (membership, role) => new { membership.UserId, role.Name })
             .Where(entry => entry.Name == "Admin")
             .Join(db.Users, entry => entry.UserId, user => user.Id, (entry, user) => user)
-            .Where(user => user.IsActive && user.Provider == "Local")
+            .Where(user => user.TenantId == TenantId && user.IsActive && user.Provider == "Local")
             .Select(user => user.UserName!)
             .OrderBy(name => name)
             .ToListAsync(ct);

@@ -53,8 +53,8 @@ public sealed class ServiceAccountSecurityStateCache
     public sealed record State(bool IsEnabled, DateTime? ExpiresAt, DateTime? RevokedAt,
         string SecurityStamp, int OwnerUserId);
 
-    public Task<State?> GetAsync(string id, PortalDbContext db) => db.ServiceAccounts
-        .Where(value => value.Id == id)
+    public Task<State?> GetAsync(string id, string tenantId, PortalDbContext db) => db.ServiceAccounts
+        .Where(value => value.Id == id && value.TenantId == tenantId)
         .Select(value => new State(value.IsEnabled, value.ExpiresAt, value.RevokedAt,
             value.SecurityStamp, value.OwnerUserId))
         .FirstOrDefaultAsync();

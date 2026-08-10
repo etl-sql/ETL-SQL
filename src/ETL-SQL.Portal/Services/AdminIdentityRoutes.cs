@@ -72,6 +72,12 @@ public static class AdminIdentityRoutes
         ("POST",   "service-accounts/*/rotate-secret"),
         ("POST",   "service-accounts/*/revoke"),
 
+        // Shared multi-IdP routing. Returned bindings expose only a client-secret presence flag;
+        // the underlying SECRET: reference remains inside the tenant-scoped service.
+        ("GET",    "identity/authorities"),
+        ("PUT",    "identity/authorities/*"),
+        ("POST",   "identity/authorities/*/disable"),
+
         // Read-only introspection of a single user's access. Answers "why can this person see
         // this" without a browser. Folder- and report-keyed effective permissions are not identity
         // administration and are deliberately absent.
