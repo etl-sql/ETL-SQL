@@ -431,6 +431,25 @@ Scheduled jobs receive a fresh sandbox per attempt. A generic sandbox may be pre
 tenant material enters it the sandbox is single-use. Interactive sandboxes may survive briefly only
 while bound to the same tenant, authenticated session, artifact, and policy, with a hard lifetime.
 
+The provider-neutral writable-state boundary is `ISandboxWorkspaceProvider`. A scheduler supplies a
+server-owned `SandboxAssignmentIdentity` containing verified tenant, run, and fenced attempt identity;
+the filesystem implementation returns a cryptographically identified root that has never previously
+existed. Its input, scratch, and staged-output directories belong to exactly that assignment. Before
+destructive teardown the provider rechecks both root containment and a cryptographic ownership marker,
+then deletes without following reparse points and verifies that no writable root remains. Marker loss
+or alteration fails closed instead of risking deletion of an unowned path. This contract is not the
+Hardened compute boundary: an OCI/microVM provider must consume it, mount only the returned assignment,
+and certify abnormal-exit cleanup and mount non-reuse.
+
+`SandboxExecutionCoordinator` binds that workspace lifecycle to the provider-neutral execution
+contract. `ISandboxExecutionProvider.PrepareAsync` must return a non-executing attempt with provider,
+runtime, image, host-policy, and isolation-tier evidence. The coordinator rejects incomplete or
+insufficient evidence before calling `ISandboxAttempt.RunAsync`. Every terminal path then destroys
+the runtime before deleting its workspace, including execution exceptions, caller cancellation, and
+ambiguous outcomes. `ISandboxAttempt.DestroyAsync` is the provider's assertion that the sandbox is
+stopped and mounts are detached. If that assertion fails, the coordinator raises a teardown failure
+and retains writable state for fenced reconciliation rather than deleting a possibly live mount.
+
 ### 8.4 Sandbox Baseline
 
 - Minimal read-only signed image and locked dependencies
@@ -526,7 +545,11 @@ generated script paths, report execution roots, checkpoint roots, spill, and run
 to that tenant before I/O. Relative identifiers containing another tenant name remain ordinary
 segments below the current prefix, while absolute foreign paths fail containment. Hardened worker
 mount non-reuse, destructive teardown, and assignment-residue certification remain part of the open
-execution boundary rather than being inferred from these control-plane guarantees.
+execution boundary rather than being inferred from these control-plane guarantees. The first
+provider-neutral workspace implementation now proves fresh tenant/run/attempt directory allocation,
+tamper-evident owned teardown, no reparse-point traversal during deletion, and no ordinary filesystem
+residue across successive assignments. Actual Hardened-provider mount behavior and forced-termination
+cleanup remain certification requirements.
 
 Dedicated stores reduce collision risk but do not remove application authorization. Shared stores
 require negative tests against tenant swaps, equal object names, stale cache entries, backup/restore,
@@ -663,6 +686,23 @@ Scheduling provides fair or weighted admission plus global reserve capacity. One
 its allocation cannot starve, evict, or degrade another tenant's committed capacity. Dedicated
 placement never silently falls back to shared placement, and Hardened requirements never silently
 fall back to Standard isolation.
+
+The first provider-neutral admission implementation is `FairShareSandboxAdmissionController`.
+Server-resolved policy selects an exact capacity pool, tenant weight, concurrent maximum, and queue
+maximum. Unknown pools fail closed instead of borrowing from another isolation or service tier.
+Within each pool, bounded weighted round-robin prevents an unbounded tenant queue from monopolizing
+newly available slots, while per-tenant concurrency limits allow another tenant to use remaining pool
+capacity. Cancellation removes queued demand and queue limits apply immediate backpressure. The
+execution coordinator releases a reservation only after the runtime is proven detached; uncertain
+teardown retains the reservation and exposes its admission ID for explicit provider reconciliation.
+This implementation is process-local. Durable HA queue ordering, leases, fencing, and restart
+reconciliation are represented by `RelationalSandboxAdmissionLedger` through the established
+SQLite/PostgreSQL Orchestrator dialect. It persists tenant/pool policy, FIFO sequence, cancellation,
+active owner/expiry, monotonic fence token, terminal state, and retained reconciliation reason.
+Only one node can activate a queued admission, and every renew/complete/retain mutation carries owner
+and fence. Lease expiry moves an active attempt to `Retained`; it never means that capacity or storage
+is safe to reuse. Queue order and active/retained reservations can be rebuilt after restart. Direct
+fair-dispatch integration with this ledger and PostgreSQL certification remain open scheduler work.
 
 ## 14. Observability, Audit, and Support
 

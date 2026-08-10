@@ -655,8 +655,13 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       and a caller spelling another tenant in a relative object name remains nested below its own
       prefix. Snapshot packages are separated by both Artifact encryption-key scope and storage
       prefix. This cell remains open until the Hardened execution slice in domain 5 proves worker
-      volume/mount non-reuse, destructive cleanup, and no residue across successive sandbox
-      assignments.
+      volume/mount non-reuse and forced-termination cleanup. The provider-neutral workspace layer
+      now allocates a cryptographically identified, single-use tenant/run/attempt root, verifies a
+      tamper-evident ownership marker before destructive teardown, refuses path-shaping identifiers,
+      and deletes without following reparse points. Tests prove ordinary teardown removes nested and
+      read-only residue and that a successive assignment cannot observe or reuse the prior root. The
+      cell remains open until a certified Hardened provider consumes this contract and proves its
+      actual mounts and abnormal-exit cleanup obey the same lifecycle.
 
 *Absorbs the retained discovery item **Tenant-Scoped Virtual Filesystem and Object Storage**.*
 
@@ -671,6 +676,29 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       weighted/fair admission so one tenant cannot cause head-of-line blocking or starvation; enforce
       reservations, maximums, backpressure, and Dedicated placement without silently borrowing across
       an isolation or service-tier boundary.
+
+      **Workspace-lifecycle slice completed (2026-08-10).** `ISandboxWorkspaceProvider` now gives a
+      provider one fresh, server-owned tenant/run/attempt writable root per assignment. Assignment
+      roots are unique even when logical IDs repeat, carry a cryptographic ownership marker, reject
+      caller path shaping, and fail closed rather than deleting on marker mismatch. Verified teardown
+      removes nested/read-only content without following reparse points, and residue tests pin
+      non-reuse across successive and cross-tenant assignments. `SandboxExecutionCoordinator` now
+      requires providers to prepare a non-executing attempt, validates complete runtime evidence and
+      the requested isolation tier before running tenant code, and destroys the runtime before its
+      workspace on success, failure, cancellation, or ambiguous outcome. If runtime detach cannot be
+      proven, it retains writable state for fenced reconciliation instead of deleting a potentially
+      live mount. `FairShareSandboxAdmissionController` now enforces disjoint provider capacity pools,
+      per-tenant concurrent/queued maximums, queue backpressure, and bounded weighted round-robin
+      admission. Shared and Dedicated pools cannot borrow from one another; an uncertain teardown
+      retains its admission reservation until an external provider reconciler releases the fenced ID.
+      `RelationalSandboxAdmissionLedger` now persists tenant/pool policy, FIFO queue sequence, active
+      ownership, expiry, monotonic fence token, cancellation, completion, and retained reconciliation
+      state through the existing provider-neutral SQLite/PostgreSQL dialect. Competing nodes cannot
+      activate the same queued admission; owner/fence mismatches cannot renew or complete it; lease
+      expiry becomes `Retained` rather than silently freeing capacity; queue order and reservations
+      survive store recreation. Wiring fair dispatch directly to this durable ledger, PostgreSQL
+      integration certification, scheduler job metadata, and an actual Hardened OCI/microVM provider
+      remain open.
 - [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security

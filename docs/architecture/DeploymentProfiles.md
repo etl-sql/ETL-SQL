@@ -418,7 +418,7 @@ credentials or reusable capabilities.
 
 ## 10. Execution and Checkpoint Contract
 
-All execution providers consume the same conceptual request:
+All execution providers consume the same `SandboxWorkloadRequest` contract:
 
 - Server-derived organization/tenant and actor or service identity
 - Immutable artifact identity and hash
@@ -429,8 +429,21 @@ All execution providers consume the same conceptual request:
 - Required isolation tier and runtime compatibility
 - Optional named-checkpoint reference
 
-The request is a design contract, not permission to expose every field directly to the workload.
-Providers translate it into the minimum platform-specific authority needed for the attempt.
+The request is not permission to expose every field directly to the workload. Providers translate it
+into the minimum platform-specific authority needed for the attempt. The provider first implements
+`PrepareAsync`, leaving tenant code stopped while `SandboxExecutionCoordinator` validates runtime,
+image, host-policy, and isolation-tier evidence. Only then does the coordinator call `RunAsync`.
+Runtime destruction and mount detach must succeed before assignment-local writable state is removed;
+an uncertain detach retains the workspace and its capacity reservation for fenced reconciliation.
+`ResolvedSandboxAdmissionPolicy` selects an exact provider-owned pool plus tenant weight and bounded
+running/queued limits. `FairShareSandboxAdmissionController` supplies process-local weighted fair
+admission without cross-pool borrowing; production HA bindings must persist queue order, reservations,
+leases, and reconciliation state in the profile's authoritative scheduler store.
+`RelationalSandboxAdmissionLedger` supplies that provider-neutral SQLite/PostgreSQL persistence model:
+queued order, tenant/pool policy, active owner and expiry, monotonic fencing, cancellation, terminal
+state, and retained ambiguous teardown. Expiry moves work to retained reconciliation rather than
+making a possibly live sandbox eligible for silent replacement. The fair dispatcher must consume this
+ledger in the production scheduler; persistence alone does not perform placement.
 
 ### 10.1 Isolation Tiers
 
