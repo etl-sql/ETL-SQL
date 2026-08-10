@@ -54,22 +54,30 @@ public sealed record TenantContext
         new(TenantId.FromTrustedSource(verifiedTenantClaim), TenantContextOrigin.VerifiedCredential);
 
     /// <summary>
-    /// Platform automation acting on one tenant. Requires the caller to state the authorization
-    /// reference that permitted it, so an audit record can name why platform scope touched a tenant
-    /// instead of recording only that it did.
+    /// Platform operation against one tenant, under a live <see cref="PlatformAccessGrant"/>.
     /// </summary>
-    public static TenantContext FromPlatformAuthorization(string tenantId, string authorizationReference)
+    /// <remarks>
+    /// Takes a grant rather than a reference string so expiry is checked at the point of use, not at
+    /// the point of issue. A grant that was valid when it was written and is not valid now must not
+    /// produce a usable context, and a caller that only had to pass a string could never be told so.
+    /// The resulting context still carries no tenant-user identity: the operator acts as itself.
+    /// </remarks>
+    public static TenantContext FromPlatformGrant(PlatformAccessGrant grant, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(authorizationReference))
+        ArgumentNullException.ThrowIfNull(grant);
+
+        if (grant.IsExpiredAt(now))
         {
-            throw new ArgumentException(
-                "Platform-scoped access to a tenant must name the authorization that permitted it. " +
-                "Unattributed platform access is the impersonation path this boundary exists to stop.",
-                nameof(authorizationReference));
+            throw new UnauthorizedAccessException(
+                $"The platform access grant for tenant '{grant.Tenant.Value}' expired at " +
+                $"{grant.ExpiresUtc:O}. Expired authorization is not authorization.");
         }
 
-        return new(TenantId.FromTrustedSource(tenantId), TenantContextOrigin.PlatformAuthorization);
+        return new(grant.Tenant, TenantContextOrigin.PlatformAuthorization) { Grant = grant };
     }
+
+    /// <summary>The grant this context rests on, when it came from platform scope.</summary>
+    public PlatformAccessGrant? Grant { get; private init; }
 
     /// <summary>
     /// Confirms a caller-supplied identifier refers to this tenant, and returns it only when it does.

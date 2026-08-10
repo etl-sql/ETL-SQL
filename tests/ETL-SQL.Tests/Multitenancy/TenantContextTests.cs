@@ -40,20 +40,14 @@ public sealed class TenantContextTests
         Assert.Equal(TenantContextOrigin.VerifiedCredential,
             TenantContext.FromVerifiedCredential("acme").Origin);
         Assert.Equal(TenantContextOrigin.PlatformAuthorization,
-            TenantContext.FromPlatformAuthorization("acme", "support-ticket-42").Origin);
+            TenantContext.FromPlatformGrant(
+                PlatformAccessGrant.Issue("acme", "op@platform.test", "ticket-42", "support",
+                    DateTimeOffset.UtcNow.AddHours(1), DateTimeOffset.UtcNow),
+                DateTimeOffset.UtcNow).Origin);
 
         // There is no path that takes an unverified caller value: the type has no public constructor
         // and no parse-from-request factory. This asserts that stays true.
         Assert.Empty(typeof(TenantContext).GetConstructors());
-    }
-
-    [Fact]
-    public void PlatformAccessToATenantMustNameItsAuthorization()
-    {
-        var ex = Assert.Throws<ArgumentException>(
-            () => TenantContext.FromPlatformAuthorization("acme", "  "));
-
-        Assert.Contains("impersonation", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

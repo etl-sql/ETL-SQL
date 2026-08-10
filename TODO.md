@@ -836,6 +836,31 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       administration, and prove platform administration is separately audited and cannot implicitly
       impersonate a tenant user even when the tenant has its own deployment boundary. Supports one
       tenant-owned IdP configuration through the Enterprise identity contract.
+
+      **Separation contract shipped (v0.18.0); adoption and delegated administration are not.**
+      Checked first: the product has exactly one `Admin` role, which in a host-fixed deployment *is*
+      the tenant's own administrator. There was no platform principal at all, so "platform
+      administration is separately audited" had nothing to audit.
+
+      `PlatformAccessGrant` introduces that principal, with authority over **no** tenant by default.
+      A grant names the operator, the authorization it hangs off, a reason, and an expiry; all four
+      are required, because an unattributed, unexplained, or open-ended grant is what turns platform
+      operation into standing access to customer data. `TenantContext.FromPlatformGrant` takes the
+      grant rather than a reference string so **expiry is checked at the point of use, not of issue**
+      — a grant valid when written and stale when acted on must not produce a usable context.
+
+      The impersonation property is structural rather than enforced: there is no factory that takes a
+      platform principal and yields a tenant-user origin, so "act as this tenant's user" is
+      unrepresentable. A test pins the complete set of public factories so a fourth one cannot be
+      added quietly. Platform scope and a tenant's own user are distinguishable on the resulting
+      context (`Origin`, `Grant`), which is what lets an audit record tell a support operator from
+      the customer.
+
+      **Still open, and why this stays unchecked:** nothing consumes `PlatformAccessGrant` yet — no
+      Portal role, no endpoint, no audit sink writes one. Delegated *tenant* administration (a tenant
+      admin managing their own users/groups without platform involvement) and the tenant-owned IdP
+      configuration are both untouched. The contract makes the right thing expressible; it is not yet
+      evidence that any surface does it.
 - [ ] **Shared.** Extend identity and delegated administration to shared stores with tenant
       predicates/partitioning enforced below controller code. Add dynamic, server-verified
       tenant/issuer/domain discovery without trusting a caller-selected tenant or issuer, and

@@ -101,6 +101,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added the platform/tenant identity separation contract. The product had one `Admin` role, which in
+  a host-fixed deployment is the tenant's own administrator, so there was no platform principal to
+  separate or audit. `PlatformAccessGrant` introduces one that holds authority over no tenant by
+  default: a grant must name the operator, the authorization it hangs off, a reason, and an expiry,
+  and expiry is checked when the grant is used rather than when it was issued. Impersonation is
+  structural rather than policed — no factory takes a platform principal and yields a tenant-user
+  identity, so "act as this tenant's user" cannot be expressed, and platform scope stays
+  distinguishable from a tenant's own users in the resulting context.
+
 - Added a cross-tenant negative-test contract that every future shared, multi-tenant surface must
   satisfy before it ships, following the abstract-contract pattern already used for artifact storage.
   It covers a caller naming another tenant's scoped identifier, an unscoped name resolving across
