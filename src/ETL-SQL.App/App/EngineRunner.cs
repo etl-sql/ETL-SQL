@@ -346,7 +346,12 @@ namespace ETL_SQL.App
                         logger.WriteLine("Linting failed:", ConsoleColor.Red);
                         foreach (var err in lintErrors)
                         {
-                            logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
+                            // Reported at Error level, not as a yellow detail line. WriteLine
+                            // derives its level from the colour, and --silent keeps only Error —
+                            // so a yellow line here meant a silent run printed "Linting failed:"
+                            // and then discarded every reason it failed. These lines *are* the
+                            // error; anything consuming the output has nothing else to go on.
+                            logger.Error($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}");
                         }
                     }
                     await EmitQualityEvidenceAsync(ctx, null, 1, "FAILED", "Script linting failed.");
