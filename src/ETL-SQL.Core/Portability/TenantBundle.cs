@@ -17,6 +17,18 @@ public static class TenantBundle
 
     /// <summary>The canonical manifest file name at the bundle root.</summary>
     public const string ManifestFileName = "manifest.json";
+
+    /// <summary>Detached operator signature over <see cref="ManifestFileName"/> (§13.1).</summary>
+    public const string SignatureFileName = "signatures/manifest.asc";
+
+    /// <summary>The only payload protection this release implements.</summary>
+    public const string EncryptionAlgorithm = "openpgp";
+
+    /// <summary>
+    /// Source profile that makes payload encryption mandatory. §13.1 requires it for SaaS-sourced
+    /// exports and leaves it optional-but-recorded for an operator moving their own tenant.
+    /// </summary>
+    public const string EncryptionRequiredSourceProfile = "SaaS";
 }
 
 /// <summary>
@@ -37,6 +49,15 @@ public enum TenantBundleExportMode
 /// One included object. <paramref name="LogicalId"/> is the stable identity that survives migration;
 /// a display name is not an identity and may collide at the target (§5.2).
 /// </summary>
+/// <param name="Sha256">
+/// Hash of the bytes <em>as stored</em>. When the payload is encrypted this is the ciphertext hash,
+/// so a customer can verify the bundle is intact without holding the recipient key.
+/// </param>
+/// <param name="PlaintextSha256">
+/// Hash of the payload before encryption, null when the bundle is unencrypted. Verified after
+/// decryption. OpenPGP encryption is non-deterministic — a fresh session key per run — so the
+/// ciphertext hash says nothing about whether two exports carry the same tenant state; this does.
+/// </param>
 public sealed record TenantBundleComponent(
     string LogicalId,
     string ResourceClass,
@@ -44,7 +65,17 @@ public sealed record TenantBundleComponent(
     long ByteLength,
     string Sha256,
     string Path,
-    IReadOnlyList<string> DependsOn);
+    IReadOnlyList<string> DependsOn,
+    string? PlaintextSha256 = null);
+
+/// <summary>
+/// How the payloads are protected (§13.1). Required when the source profile is SaaS; recorded either
+/// way so "unencrypted" is a stated fact rather than an absence a reader has to interpret.
+/// </summary>
+public sealed record TenantBundleEncryption(
+    bool Encrypted,
+    string? Algorithm,
+    string? RecipientKeyDigest);
 
 /// <summary>
 /// Something eligible-looking that did not travel. Every non-portable item carries a reason and, when
@@ -90,4 +121,6 @@ public sealed record TenantBundleManifest(
     IReadOnlyList<TenantBundleComponent> Components,
     IReadOnlyList<TenantBundleRequiredBinding> RequiredBindings,
     IReadOnlyList<TenantBundleExclusion> Exclusions,
-    TenantBundleCounts Counts);
+    TenantBundleCounts Counts,
+    TenantBundleEncryption? Encryption = null,
+    string? SignatureFile = null);

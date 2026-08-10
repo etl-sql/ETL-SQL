@@ -101,6 +101,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Tenant portability bundles are now signed and encrypted. The exporting operator signs the manifest
+  with a detached OpenPGP signature — an authenticity claim, verifiable offline against a published
+  key — while payloads are encrypted to the tenant's own recipient key, which is the separate
+  confidentiality claim. Verification runs before the manifest is parsed, so a bundle that fails it
+  yields no metadata at all rather than findings derived from content that was never trustworthy. A
+  SaaS-sourced export cannot be written unencrypted. Components carry both a stored-bytes hash, so a
+  customer can verify integrity without holding any key, and a plaintext hash for after decryption.
+
 - Added the `etl-sql.tenant-bundle/v1` portability bundle format and its standalone validator, the
   first slice of the tenant portability contract. The validator is the piece that makes a customer
   exit real: it verifies a bundle's schema, payload hashes and lengths, dependency graph, and

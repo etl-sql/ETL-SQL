@@ -35,9 +35,23 @@ public static class TenantBundleValidator
         "-----BEGIN", "PRIVATE KEY", "password=", "pwd=", "access_token", "refresh_token"
     ];
 
-    public static TenantBundleValidationResult Validate(string bundleRoot)
+    /// <param name="OperatorPublicKeyFile">Published operator key used to verify the signature.</param>
+    /// <param name="RequireSignature">
+    /// When true, a bundle with no valid operator signature fails. Callers importing from an
+    /// untrusted source must set this: a stripped signature is indistinguishable from an unsigned
+    /// export unless the caller states that it expected one.
+    /// </param>
+    public sealed record Options(string? OperatorPublicKeyFile = null, bool RequireSignature = false);
+
+    public static Task<TenantBundleValidationResult> ValidateAsync(
+        string bundleRoot, CancellationToken ct = default) =>
+        ValidateAsync(bundleRoot, new Options(), ct);
+
+    public static async Task<TenantBundleValidationResult> ValidateAsync(
+        string bundleRoot, Options options, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleRoot);
+        ArgumentNullException.ThrowIfNull(options);
         var findings = new List<TenantBundleFinding>();
         var root = Path.GetFullPath(bundleRoot);
         var manifestPath = Path.Combine(root, TenantBundle.ManifestFileName);
@@ -50,7 +64,36 @@ public static class TenantBundleValidator
                 "directory can be attributed to a tenant, a source version, or a consistency point.")]);
         }
 
-        var manifestJson = File.ReadAllText(manifestPath);
+        // §13 requires signature verification to precede any trust in payload metadata, so this runs
+        // before the manifest is parsed rather than after.
+        var signaturePath = Path.Combine(root, TenantBundle.SignatureFileName);
+        var signaturePresent = File.Exists(signaturePath);
+        if (!string.IsNullOrWhiteSpace(options.OperatorPublicKeyFile))
+        {
+            var verified = await TenantBundleCrypto
+                .VerifyDetachedAsync(manifestPath, signaturePath, options.OperatorPublicKeyFile!, ct)
+                .ConfigureAwait(false);
+            if (!verified)
+            {
+                findings.Add(new TenantBundleFinding(
+                    "bundle.signature.invalid", "Error", TenantBundle.SignatureFileName,
+                    signaturePresent
+                        ? "The operator signature does not verify against the supplied key. The " +
+                          "manifest was altered after signing, or it was signed by someone else."
+                        : "No operator signature is present, but a verification key was supplied."));
+                return new TenantBundleValidationResult(null, findings);
+            }
+        }
+        else if (options.RequireSignature)
+        {
+            findings.Add(new TenantBundleFinding(
+                "bundle.signature.unverified", "Error", TenantBundle.SignatureFileName,
+                "A signature was required but no operator public key was supplied to verify it " +
+                "against. The presence of a signature file proves nothing on its own."));
+            return new TenantBundleValidationResult(null, findings);
+        }
+
+        var manifestJson = await File.ReadAllTextAsync(manifestPath, ct).ConfigureAwait(false);
         foreach (var marker in ForbiddenManifestMarkers)
         {
             if (manifestJson.Contains(marker, StringComparison.OrdinalIgnoreCase))
@@ -101,6 +144,23 @@ public static class TenantBundleValidator
                 "release. The bundle may be incomplete relative to what its mode promises."));
         }
 
+        if (string.Equals(manifest.SourceProfile, TenantBundle.EncryptionRequiredSourceProfile,
+                StringComparison.OrdinalIgnoreCase) && manifest.Encryption?.Encrypted != true)
+        {
+            findings.Add(new TenantBundleFinding(
+                "bundle.encryption.required", "Error", manifest.SourceProfile,
+                "This bundle declares a SaaS source but its payloads are not encrypted to a tenant " +
+                "recipient key (§13.1). Tenant data must not travel in the clear out of SaaS."));
+        }
+
+        if (manifest.SignatureFile is not null && !signaturePresent)
+        {
+            findings.Add(new TenantBundleFinding(
+                "bundle.signature.missing", "Error", manifest.SignatureFile,
+                "The manifest says it was signed, but the signature file is absent. Someone removed " +
+                "it after export."));
+        }
+
         foreach (var component in manifest.Components)
         {
             string resolved;
@@ -124,7 +184,7 @@ public static class TenantBundleValidator
                 continue;
             }
 
-            var content = File.ReadAllBytes(resolved);
+            var content = await File.ReadAllBytesAsync(resolved, ct).ConfigureAwait(false);
             if (content.LongLength != component.ByteLength)
             {
                 findings.Add(new TenantBundleFinding(

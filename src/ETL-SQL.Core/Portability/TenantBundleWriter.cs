@@ -22,6 +22,12 @@ public sealed record TenantBundlePayload(
 }
 
 /// <summary>Everything the caller supplies for one export.</summary>
+/// <param name="RecipientPublicKeyFile">
+/// Tenant-supplied OpenPGP recipient key. Required when <paramref name="SourceProfile"/> is SaaS.
+/// </param>
+/// <param name="SigningPrivateKeyFile">
+/// Operator signing key. When supplied, a detached signature over the canonical manifest is written.
+/// </param>
 public sealed record TenantBundleRequest(
     string BundleId,
     DateTimeOffset CreatedUtc,
@@ -32,7 +38,10 @@ public sealed record TenantBundleRequest(
     string ConsistencyPoint,
     IReadOnlyList<TenantBundlePayload> Payloads,
     IReadOnlyList<TenantBundleRequiredBinding> RequiredBindings,
-    IReadOnlyList<TenantBundleExclusion> Exclusions);
+    IReadOnlyList<TenantBundleExclusion> Exclusions,
+    string? RecipientPublicKeyFile = null,
+    string? SigningPrivateKeyFile = null,
+    string? SigningPassphrase = null);
 
 /// <summary>
 /// Writes the unified bundle described in <c>docs/architecture/TenantPortability.md</c> §5.
@@ -55,7 +64,8 @@ public static class TenantBundleWriter
     /// The request declares an unsupported export mode, a duplicate logical id, or a payload path
     /// that escapes the bundle root.
     /// </exception>
-    public static TenantBundleManifest Write(string bundleRoot, TenantBundleRequest request)
+    public static async Task<TenantBundleManifest> WriteAsync(
+        string bundleRoot, TenantBundleRequest request, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleRoot);
         ArgumentNullException.ThrowIfNull(request);
@@ -81,24 +91,50 @@ public static class TenantBundleWriter
                 nameof(request));
         }
 
+        var encrypting = !string.IsNullOrWhiteSpace(request.RecipientPublicKeyFile);
+        if (!encrypting && string.Equals(request.SourceProfile,
+                TenantBundle.EncryptionRequiredSourceProfile, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "A SaaS-sourced bundle must be encrypted to a tenant-supplied recipient key " +
+                "(TenantPortability.md §13.1). Refusing to write tenant payloads in the clear.",
+                nameof(request));
+        }
+
         var root = Path.GetFullPath(bundleRoot);
         Directory.CreateDirectory(root);
 
         var components = new List<TenantBundleComponent>(request.Payloads.Count);
         foreach (var payload in request.Payloads)
         {
+            ct.ThrowIfCancellationRequested();
             var destination = ResolveInside(root, payload.RelativePath, payload.LogicalId);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.WriteAllBytes(destination, payload.Content);
+
+            var plaintextHash = Convert.ToHexString(SHA256.HashData(payload.Content)).ToLowerInvariant();
+            byte[] stored;
+            if (encrypting)
+            {
+                stored = await TenantBundleCrypto
+                    .EncryptAsync(payload.Content, request.RecipientPublicKeyFile!, ct)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                stored = payload.Content;
+            }
+
+            await File.WriteAllBytesAsync(destination, stored, ct).ConfigureAwait(false);
 
             components.Add(new TenantBundleComponent(
                 payload.LogicalId,
                 payload.ResourceClass,
                 payload.ContentType,
-                payload.Content.LongLength,
-                Convert.ToHexString(SHA256.HashData(payload.Content)).ToLowerInvariant(),
+                stored.LongLength,
+                Convert.ToHexString(SHA256.HashData(stored)).ToLowerInvariant(),
                 NormalizePath(payload.RelativePath),
-                [.. payload.DependsOn.OrderBy(d => d, StringComparer.Ordinal)]));
+                [.. payload.DependsOn.OrderBy(d => d, StringComparer.Ordinal)],
+                encrypting ? plaintextHash : null));
         }
 
         var manifest = new TenantBundleManifest(
@@ -115,12 +151,31 @@ public static class TenantBundleWriter
             [.. request.Exclusions.OrderBy(e => e.LogicalId, StringComparer.Ordinal)],
             new TenantBundleCounts(
                 CountByClass(request.Payloads.Select(p => p.ResourceClass)),
-                CountByClass(request.Exclusions.Select(e => e.ResourceClass))));
+                CountByClass(request.Exclusions.Select(e => e.ResourceClass))),
+            new TenantBundleEncryption(
+                encrypting,
+                encrypting ? TenantBundle.EncryptionAlgorithm : null,
+                encrypting ? TenantBundleCrypto.Fingerprint(request.RecipientPublicKeyFile!) : null),
+            string.IsNullOrWhiteSpace(request.SigningPrivateKeyFile)
+                ? null
+                : TenantBundle.SignatureFileName);
 
-        File.WriteAllText(
-            Path.Combine(root, TenantBundle.ManifestFileName),
+        var manifestPath = Path.Combine(root, TenantBundle.ManifestFileName);
+        await File.WriteAllTextAsync(
+            manifestPath,
             JsonSerializer.Serialize(manifest, JsonOptions),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), ct).ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(request.SigningPrivateKeyFile))
+        {
+            // Signed last: the signature covers the manifest exactly as written, and the manifest
+            // names every payload by hash, so one operator signature transitively covers the bundle.
+            var signaturePath = ResolveInside(root, TenantBundle.SignatureFileName, "signature");
+            Directory.CreateDirectory(Path.GetDirectoryName(signaturePath)!);
+            await TenantBundleCrypto.SignDetachedAsync(
+                manifestPath, signaturePath, request.SigningPrivateKeyFile!,
+                request.SigningPassphrase, ct).ConfigureAwait(false);
+        }
 
         return manifest;
     }
@@ -133,11 +188,35 @@ public static class TenantBundleWriter
     public static string ComputeDeterministicDigest(TenantBundleManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
-        var comparable = manifest with
+
+        // Projected rather than taken from the record, because ciphertext is not comparable.
+        // OpenPGP uses a fresh session key per run, so an encrypted export's stored hash and byte
+        // length differ every time even when the tenant state is identical. The plaintext hash is
+        // the only thing that answers "is this the same state?", so the projection prefers it and
+        // drops the stored length.
+        var comparable = new
         {
-            BundleId = string.Empty,
-            CreatedUtc = DateTimeOffset.UnixEpoch
+            manifest.SchemaVersion,
+            manifest.SourceProductVersion,
+            manifest.SourceProfile,
+            manifest.TenantExportIdentity,
+            manifest.ExportMode,
+            manifest.ConsistencyPoint,
+            Components = manifest.Components.Select(c => new
+            {
+                c.LogicalId,
+                c.ResourceClass,
+                c.ContentType,
+                c.Path,
+                c.DependsOn,
+                ContentHash = c.PlaintextSha256 ?? c.Sha256
+            }),
+            manifest.RequiredBindings,
+            manifest.Exclusions,
+            manifest.Counts,
+            Encrypted = manifest.Encryption?.Encrypted ?? false
         };
+
         return Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(comparable, JsonOptions))))
             .ToLowerInvariant();

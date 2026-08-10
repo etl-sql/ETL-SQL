@@ -633,12 +633,30 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
       block, encryption envelope) and whether payloads sit on disk as plaintext. Retrofitting after
       composition means rewriting the writer, the validator, and their tests.
 
-      - [ ] Slice 1b. `CryptoUtils` already has `EncryptFileWithPgp`/`DecryptFileWithPgp`; there is
-            **no PGP sign/verify helper**, so that is new code. Add the detached operator signature
-            over the canonical manifest, the recipient-key payload encryption, the SaaS-source
-            requirement, and validator support for verify-before-trust. Negative coverage: a valid
-            signature over a *different* manifest, an unsigned bundle presented as signed, and a
-            SaaS-sourced bundle that is unencrypted.
+      - [x] Slice 1b. **Done (v0.18.0).** `TenantBundleCrypto` adds detached operator signing and
+            verification over `PgpCore`'s `SignDetachedAsync`/`VerifyDetachedAsync`, plus
+            recipient-key payload encryption. Writer and validator are now async, per the engine
+            async rule. Signature verification runs **before the manifest is parsed**, so a bundle
+            that fails it returns no manifest at all rather than findings computed from metadata
+            that was never trustworthy. A SaaS-sourced export cannot be written unencrypted, and one
+            that claims a SaaS source without encryption fails validation.
+
+            21 tests. The negatives that make a signature mean something are all covered and all
+            load-bearing: a genuine signature over a *since-altered* manifest, a signature from a
+            different key, a stripped signature (caught with the key by verification and without it
+            by the manifest's own claim), and requiring a signature while supplying no key.
+
+            **One design consequence worth knowing.** OpenPGP uses a fresh session key per run, so an
+            encrypted export's stored bytes differ every time even when tenant state is identical.
+            The stored hash therefore cannot answer "is this the same state?". Components now carry
+            both hashes — `Sha256` over the bytes as stored, so a customer can verify integrity with
+            no key at all, and `PlaintextSha256` for after decryption — and the determinism digest is
+            computed from a projection that prefers the plaintext hash and drops the stored length.
+            Pinned by a test asserting the stored hashes differ across two encrypted exports while
+            the deterministic digest matches.
+
+            `RecipientKeyDigest` is SHA-256 over the armored recipient key, deliberately not the
+            OpenPGP fingerprint, and is named so nobody compares it against a keyring.
 
       Key-rotation policy and published-key distribution are still open, but neither blocks slice 1b.
 
