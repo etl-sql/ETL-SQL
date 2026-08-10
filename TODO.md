@@ -259,6 +259,35 @@ blocked on hostile-tenant certification that it does not need.
       `branding.js`); they work, so replacing them needs per-page browser coverage of their dialogs
       first rather than a blind swap.
 
+### Portal — Quarantine Row Access
+
+The authoritative design and rejected alternatives remain in
+[ROADMAP.md](ROADMAP.md#portal--quarantine-row-access). The first usable slice is catalog-backed,
+manifest-bound preview; it must not rehydrate every connection from the producing session or accept
+an arbitrary connection/target from the browser.
+
+- [ ] Extend `QuarantineReplayManifest` with nullable target connection alias, connector type, and
+      catalog-backed provenance written at capture time. Existing manifests without provenance remain
+      view-only.
+- [ ] Decide and document preview authority: require the steward's ordinary connection permission, or
+      make `DataQualityStewardAccess` plus the manifest-bound target sufficient. Then make
+      `QuarantineTargetReadability` resolve enabled catalog entries using the caller's verified identity.
+- [ ] Bootstrap the bounded preview session from the manifest's `SHARED:` alias, preserving the 15-second
+      timeout, row cap, RLS identity, connector policy, secret resolution, and redacted errors. Gate the
+      capability behind `Portal:DataQuality:AllowConnectionPreview`, default off.
+- [ ] Audit every raw quarantine preview and add positive and negative coverage for readable targets,
+      catalog misses, disabled entries, switch-off, unauthorized callers, request tampering, and error
+      redaction.
+- [ ] Document the administration and audit behavior, and extend the data-quality UI sandbox story so
+      readable catalog-backed and view-only targets remain independently testable.
+
+### Portal — Data Quality Follow-through
+
+- [ ] Before quarantine preview becomes a polled or dashboard-refreshed surface, profile the per-request
+      `ExecutionSession` cost and replace the full lexer/parser/linter/evaluator startup with a bounded
+      reusable preview path if the measurements require it. Preserve identical policy, identity,
+      redaction, timeout, and cancellation behavior.
+
 ### Orchestrator — Per-Object Authorization
 
 Trigger this track when a second client is introduced or an Orchestrator is shared across teams or
@@ -528,10 +557,39 @@ Portal UX and Deployment-profile certification sections above).
 
 Gates every domain below; nothing in Managed Dedicated ships before these.
 
-- [ ] Complete the Enterprise prerequisites used by hosted deployments: verifiable caller identity,
+- [x] Complete the Enterprise prerequisites used by hosted deployments: verifiable caller identity,
       per-object authorization, shared PostgreSQL/artifact providers, scoped secret/policy authority,
       durable audit, HA, backup/restore, and upgrade/promotion evidence. Track implementation in the
       existing Enterprise and Orchestrator sections; this item proves the joined hosted prerequisite.
+
+      **Done (v0.18.0).** All eight were already implemented — the gap was that nothing proved them
+      *together*. The Enterprise profile certification lane covered three (policy authority, OIDC,
+      HA fencing); the other five had passing tests wired into no lane, and upgrade/promotion was
+      proven only inside the `Upgrade` and `TeamToEnterprise` *transition* lanes. A hosted claim
+      therefore required correlating three lanes by hand, which is the inferred claim this framework
+      refuses everywhere else.
+
+      `Test-DeploymentProfileCertification.ps1 -Profile Enterprise` now runs twelve phases tagged
+      with the eight prerequisites, emits a `hostedPrerequisites` array in `certification.json` and a
+      table in `certification.md`, and **fails the lane naming any prerequisite that is unproven** —
+      including one whose phases never ran because an earlier phase broke the loop. It also now
+      requires the concrete `EnterpriseUpgrade` scenario evidence rather than accepting a green
+      phase. `DeploymentProfileCertificationScriptContractTests` pins the list, the enforcement, and
+      that every declared prerequisite is actually attached to a phase, so the lane cannot quietly
+      narrow what "Enterprise certified" means.
+
+      Verified by running the real lane (2026-08-09, commit `bfcae8ac`): 13/13 phases passed and all
+      eight prerequisites reported `True`. That run was against a dirty worktree, so it correctly
+      reported `releaseEligible = False` — it is development evidence, not a release claim. The lane
+      now needs **Docker** because it exercises shared PostgreSQL providers, matching the
+      Team-to-Enterprise precedent; the release checklist says so.
+
+      Two side findings: `certification-results/deployment-profiles/` was not gitignored, unlike its
+      sibling evidence directories, so every local run left a commitable pile — now ignored. And
+      `OrchestratorPerObjectAuthorizationIntegrationTests` is tagged `Category=Integration` despite
+      using only an in-process `OrchestratorWebFactory`, so this security boundary is excluded from
+      the standard CI run. Not changed here — retagging it is a test-lane decision, not a
+      certification one — but it is why the prerequisite needed an explicit lane phase.
 - [ ] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
       Managed Dedicated SaaS general availability. The
       [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
@@ -723,6 +781,143 @@ Tenant Portability Bundle**.*
       cross-tenant evidence across database, artifact, cache, queue, audit, PII, lineage/quality,
       path, key, checkpoint, Gateway, sandbox, telemetry, support, restore, and resource-exhaustion
       surfaces.
+
+### Language — Dialect Standardization and Drift Prevention
+
+The five deliverables below implement the portability contract in
+[ROADMAP.md](ROADMAP.md#language--dialect-standardization-and-drift-prevention).
+
+- [ ] Publish a machine-readable canonical EBNF grammar for the accepted ETL-SQL language, with working
+      examples for every documented syntax form and an explicit process for keeping it synchronized with
+      `Parser.cs`.
+- [ ] Expand the shared SqlLogicTests corpus under `tests/slt_data/` to cover exact results, boundary
+      behavior, mathematical/date offsets, standard-library functions, and representative cross-dialect
+      cases.
+- [ ] Add the syntax-addition checklist to `CONTRIBUTING.md`: parser/runtime, EBNF, docs/help/snippets,
+      lint/autocomplete, connector pushdown mappings, compatibility, and regression tests must move
+      together.
+- [ ] Build an EBNF-to-parser conformance runner that generates valid and invalid sequences and proves the
+      execution parser accepts/rejects them consistently. Keep this in its own deterministic fuzz/release
+      lane rather than slowing smoke or fast tests.
+- [ ] Move provider-specific SQL rewrites out of `QueryCompiler` and scattered connector code into a
+      centralized, registered dialect abstraction with focused translation and unsupported-feature tests.
+
+### Connectors — Transactional File Staging
+
+- [ ] Define and implement the `TRANSACTIONAL=TRUE` connector contract, including parser/help/snippet
+      coverage, collision-safe engine-owned staging names, canonical `ResolvePath` enforcement, and the
+      connector types that can truthfully support atomic publication.
+- [ ] Commit completed output by atomic rename where the destination guarantees it; otherwise fail
+      preflight or use a documented provider-specific commit protocol rather than claiming false
+      atomicity.
+- [ ] On failure, cancellation, retry, or process loss, remove or reconcile staged artifacts without
+      deleting a previously published target. Define checkpoint/resume and multi-output behavior
+      explicitly.
+- [ ] Certify local files and supported remote-transfer connectors for success, mid-stream failure,
+      cancellation, overwrite policy, concurrent writers, cleanup failure, path/symlink escape, and
+      crash residue. Keep network-backed certification in the integration/release lanes.
+
+### Extensions — Governed Custom Tool Runner
+
+The authoritative trust, catalog, runtime, protocol, checkpoint, and certification contract remains in
+[ROADMAP.md](ROADMAP.md#extensions--governed-custom-tool-runner). This is a governed escape hatch, not a
+raw `CMD` connector or arbitrary shell execution.
+
+#### P1 — Pure-transform foundation
+
+- [ ] Define the language/AST contract for invoking an approved logical tool operation with typed
+      parameters, input schema, and output schema. Scripts cannot select executables, interpreters,
+      images, paths, shells, environment variables, or arbitrary argument strings.
+- [ ] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
+      immutable artifact digest/signature verification, publisher/approver separation, tenant/environment
+      ownership, grants, promotion preflight, and portable logical aliases.
+- [ ] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
+      allowlisted environment, dedicated identity, canonical scratch root, process-tree containment,
+      bounded CPU/memory/process/time/output limits, cancellation, and cleanup.
+- [ ] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a
+      path to a high-volume framed format. Specify handshake, schemas, null/decimal/time/binary/Unicode,
+      size limits, compression, backpressure, stderr diagnostics, cancellation, and terminal outcome.
+- [ ] Validate every returned value and stage output until protocol completion, schema/type/size/row
+      limits, and data-quality rules all pass. Stream with bounded memory and never publish partial output.
+- [ ] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
+      execution, capability access, cancellation, denial, and publication without retaining payloads or
+      secret values.
+
+#### P2 — Hardened and side-effecting operation support
+
+- [ ] Add OCI Hardened/Dedicated bindings with pinned images, read-only roots, non-root identity,
+      capability/seccomp restrictions, isolated scratch, default-deny network, no runtime socket, and
+      metadata/control-plane protections. Keep runtime binding environment-owned so scripts remain
+      portable.
+- [ ] Add declared file, network, Gateway-resource, and just-in-time named-secret capabilities bound to
+      tenant, environment, tool digest, operation, actor, run/attempt, limits, policy version, expiry, and
+      nonce. Pure transforms receive none by default.
+- [ ] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
+      fully validated staged output. Replacement sandboxes reauthorize on resume; they never serialize a
+      process, handle, live connection, resolved secret, or reusable capability.
+- [ ] Introduce side-effecting action tools only after a durable operation ledger and explicit
+      idempotency/reconciliation contract exist. Ambiguous external effects must not be retried as if
+      process exit proved the outcome.
+- [ ] Provide tenant-admin catalog/binding/grant workflows with platform-policy revocation but no implicit
+      platform data authority, plus promotion and preflight diagnostics for unavailable profile bindings.
+- [ ] Retain adversarial certification evidence for injection, sandbox escape, unauthorized data/secret/
+      network access, artifact substitution, protocol confusion, resource exhaustion, cancellation,
+      cross-tenant isolation, checkpoint replacement, and cross-profile portability. Keep hardened,
+      hostile-tool, and scale cases in targeted release lanes.
+
+### Reporting — Paginated Print Layout & PDF Rendering
+
+The physical-page contract is defined in
+[ROADMAP.md](ROADMAP.md#reporting--paginated-print-layout--pdf-rendering); it extends the current PDF
+paths and must not overload the existing `CREATE PAGE ... AS PAGINATED` meaning.
+
+- [ ] Define `PRINT_LAYOUT`/`PAGE_LAYOUT` syntax and AST for page size, custom dimensions, orientation,
+      units, margins, overflow, split/scale, page breaks, keep-together, and print-layout overrides, with
+      lint/help/snippet/reference coverage.
+- [ ] Compile responsive report definitions and runtime data into one renderer-neutral physical-page
+      model consumed by static and browser-backed exporters instead of duplicating pagination rules.
+- [ ] Implement complete table flow with repeating column/row headers, group headers/footers, group-break
+      controls, parent/header orphan prevention, and explicit wide/long-table behavior without silent
+      row or column truncation.
+- [ ] Add true print page-header/footer regions, report metadata and parameter fields, culture/timezone,
+      page number and total-page placeholders, and deterministic first/last/odd/even/empty-page behavior.
+- [ ] Make the deterministic server-side renderer canonical for paginated documents while retaining the
+      browser renderer for dashboard snapshots. Preserve searchable text, links, metadata, and observable
+      font/chart substitution behavior.
+- [ ] Add Report Builder print preview using the same page model, and define the immutable parameter,
+      filter, data-snapshot, culture, timezone, and renderer state captured by interactive and unattended
+      exports.
+- [ ] Enforce row/page/image/byte/layout-pass/time limits, cancellation cleanup, tenant/path/network
+      policy, atomic publication, deterministic retry/HA behavior, and no successful partial artifact.
+- [ ] Retain Windows and Linux layout/page regression evidence covering Letter/A4, orientation, headers,
+      groups, page totals, wide/long/oversized content, fonts, cancellation, and authorization. Keep
+      rendered cross-platform certification in a targeted release lane.
+
+### Reporting — Expandable Master/Detail Rows
+
+This is prepared-data master/detail, not execution of a separately published subreport. The complete
+contract and explicitly deferred reusable-subreport boundary remain in
+[ROADMAP.md](ROADMAP.md#reporting--expandable-masterdetail-rows).
+
+- [ ] Define structural `TABLE` row-detail syntax/AST with child visual or container targets, explicit
+      typed parent-to-child bindings, composite/null/duplicate/missing/type behavior, defaults, nesting,
+      open-row limits, and validation/cycle/dependency/lineage rules.
+- [ ] Preserve raw typed binding metadata before display mapping and build a bounded child index over data
+      prepared by the same report script. Expansion must not construct browser SQL or issue N+1 connector
+      queries.
+- [ ] Render an accessible row-header button and owned detail region with keyboard support,
+      `aria-expanded`, loading/empty/error/retry/denied states, and scoped interaction context.
+- [ ] Preserve expansion state by stable raw key across sorting, filtering, paging, virtualization,
+      refresh, parameter changes, and data-version changes; recycled visible row indexes are never keys.
+- [ ] Enforce nesting, open-row, detail-row/byte, manifest/index, cancellation, authorization, tenant, and
+      malicious-value boundaries before detail reaches the browser. JavaScript filtering is not a
+      security boundary.
+- [ ] Define deterministic PDF/HTML/CSV/spreadsheet behavior: omit, include-all, expression-selected,
+      flatten, or separate-data as supported. Paginated inclusion keeps the parent with its first child
+      and cooperates with the shared print-layout/group-break contract.
+- [ ] Add runtime, browser accessibility, export, security, cardinality, virtualization, refresh-race,
+      composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
+      their targeted lanes.
 
 ### Testing — retire the wall-clock flake class (scheduled for v0.19.0)
 

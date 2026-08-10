@@ -35,6 +35,35 @@ The Team-to-Enterprise lane includes PostgreSQL migration proof and therefore re
 Docker/provider prerequisites as its focused suite. Missing prerequisites are a failed certification,
 not a pass or an inferred claim.
 
+## Enterprise hosted prerequisites
+
+The Enterprise profile lane is also the gate a hosted (SaaS) deployment builds on, so it proves eight
+prerequisites in **one run against one commit**:
+
+| Prerequisite | What the lane proves |
+| :--- | :--- |
+| `verifiable-caller-identity` | Federated OIDC identity and signed Orchestrator assertions carry a verifiable principal; an unsigned actor header carries no authority. |
+| `per-object-authorization` | Reaching an Orchestrator confers no authority over another principal's objects, and `CREATE OR ALTER` cannot take over a shared name. |
+| `shared-state-and-artifact-providers` | Portal and Orchestrator state resolve against shared PostgreSQL across processes; artifact storage honours its guarded contract. |
+| `scoped-secret-and-policy-authority` | Typed organization policy, the encrypted audited catalog secret store, and signed policy distribution guard execution and publishing. |
+| `durable-audit` | The remote audit outbox retains, redacts, and recovers mutation records instead of dropping them when the collector is unreachable. |
+| `high-availability` | Database leases and write epochs fence stale owners. |
+| `backup-and-restore` | Portal and engine backup/restore round-trip to a usable state and validate before claiming success. |
+| `upgrade-and-promotion-evidence` | The Enterprise profile completes an N→N+1 lifecycle with a scheduler-safe rollback point, and promotion preserves bindings and ownership. |
+
+Because it exercises shared PostgreSQL providers, **the Enterprise profile lane requires Docker**, as
+the Team-to-Enterprise lane already did.
+
+`certification.json` records a `hostedPrerequisites` array and `certification.md` renders it as a
+table. A prerequisite whose phases never ran — the runner stops at the first failure — is reported by
+name as unproven and fails the lane. This matters because the alternative was assembling the hosted
+claim by correlating the Enterprise, Upgrade, and Team-to-Enterprise lanes by hand, which is the
+inferred claim this framework refuses everywhere else.
+
+The joined table is a prerequisite gate, not a SaaS isolation claim. It says the foundation a hosted
+deployment stands on holds for this commit; it says nothing about tenant isolation in either SaaS
+topology, which each domain must certify with its own topology evidence.
+
 For a release candidate, run both aggregate lanes against the clean candidate commit:
 
 ```powershell

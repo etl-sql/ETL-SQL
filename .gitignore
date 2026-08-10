@@ -171,6 +171,10 @@ certification-results/baseline-*-runs/
 certification-results/commit-comparison/
 # Local HA/enterprise certification evidence is retained for release packaging, not source control.
 certification-results/enterprise-hardening/
+# Deployment-profile lanes write a timestamped bundle per run. Release evidence goes to
+# artifacts/release-evidence/<version>/ via -ReleaseVersion (already ignored); a local run is
+# development evidence and is never release eligible, so it does not belong in source control.
+certification-results/deployment-profiles/
 certification-results/postgres-ha-soak/ha-overnight-*/
 certification-results/ha-large-job-soak/ha-overnight-*/
 certification-results/ha-fault-injection/ha-overnight-*/

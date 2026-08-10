@@ -101,6 +101,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- The Enterprise certification lane now proves the eight prerequisites a hosted deployment builds on
+  — verifiable caller identity, per-object authorization, shared PostgreSQL/artifact providers,
+  scoped secret and policy authority, durable audit, HA fencing, backup/restore, and
+  upgrade/promotion — in one run against one commit. All eight were already implemented, but the
+  lane covered three; the rest had passing tests wired into no lane, or were proven only inside a
+  transition lane, so a hosted claim meant correlating three lanes by hand. `certification.json`
+  gains a `hostedPrerequisites` array and `certification.md` a table, and the lane **fails naming
+  any prerequisite left unproven**, including one whose phases never ran because an earlier phase
+  stopped the run. Because it now exercises shared PostgreSQL providers, the Enterprise profile lane
+  requires Docker, as the Team-to-Enterprise lane already did.
+
 - Added fail-closed deployment-profile certification bundles. Profile, transition, upgrade, and
   Managed Dedicated lifecycle tests now emit concrete scenario evidence; the runner aggregates
   topology, artifact hashes, target-owned mappings, continuity identifiers/counts, negative proof,
@@ -359,6 +370,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- **Release coverage and test-lane ownership are now enforceable locally.** CI and both pre-release
+  drivers use one fail-closed 70% line-coverage gate instead of duplicating YAML logic or allowing an
+  unparseable report to skip enforcement. Engine routing now depends only on explicit categories;
+  scale, billion-row, and deployment certification stay in focused release runners. A structural
+  audit rejects lane gaps, milestone-era test names, and feature tests stranded at the project root,
+  and the existing suite has been reorganized under durable product areas.
 - **Sample certification now distinguishes intended failures from regressions.** Samples that
   demonstrate a fail-closed guardrail can declare both an expected exit code and an exact error
   fragment; the Windows and POSIX runners require both to match. Validator processes also use

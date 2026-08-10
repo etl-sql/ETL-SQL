@@ -44,9 +44,26 @@ $CoreTests = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $PortalTests = "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
 
 function New-Phase {
-    param([string]$Name, [string]$Project, [string]$Filter, [string]$Proof)
-    [ordered]@{ name = $Name; project = $Project; filter = $Filter; proof = $Proof }
+    param([string]$Name, [string]$Project, [string]$Filter, [string]$Proof, [string]$Prerequisite)
+    $phase = [ordered]@{ name = $Name; project = $Project; filter = $Filter; proof = $Proof }
+    if (-not [string]::IsNullOrWhiteSpace($Prerequisite)) { $phase["prerequisite"] = $Prerequisite }
+    $phase
 }
+
+# The eight Enterprise prerequisites a hosted (SaaS) deployment builds on, per the Progressive SaaS
+# Phase A gate in TODO.md. The Enterprise profile lane must prove all of them in one run against one
+# commit: a hosted claim assembled by correlating three lanes by hand is an inferred claim, which is
+# exactly what this framework refuses elsewhere.
+$EnterpriseHostedPrerequisites = @(
+    "verifiable-caller-identity",
+    "per-object-authorization",
+    "shared-state-and-artifact-providers",
+    "scoped-secret-and-policy-authority",
+    "durable-audit",
+    "high-availability",
+    "backup-and-restore",
+    "upgrade-and-promotion-evidence"
+)
 
 function Get-ProfilePhases {
     param([string]$Name)
@@ -67,9 +84,18 @@ function Get-ProfilePhases {
         }
         "Enterprise" {
             @(
-                New-Phase "Enterprise policy and enrollment" $CoreTests "FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests" "Typed organization policy and authority boundaries are enforced."
-                New-Phase "Enterprise OIDC and publishing policy" $PortalTests "FullyQualifiedName~OidcAuthTests|FullyQualifiedName~ReportPublishingPolicyTests|FullyQualifiedName~PortalInteractiveRunPolicyTests|FullyQualifiedName~PolicyDistributionApiTests" "Federated identity and signed organization metadata policy guard Portal execution and publishing."
-                New-Phase "Enterprise HA fencing" $CoreTests "FullyQualifiedName~FencingTokenTests|FullyQualifiedName~WriteEpochFencingTests" "Database leases and write epochs fence stale owners."
+                New-Phase "Enterprise verifiable caller identity" $PortalTests "FullyQualifiedName~OidcAuthTests|FullyQualifiedName~OrchestratorIdentityAssertionTests" "Federated OIDC identity and short-lived signed Orchestrator assertions carry a verifiable principal across the service boundary; an unsigned actor header carries no authority." "verifiable-caller-identity"
+                New-Phase "Enterprise per-object authorization" $PortalTests "FullyQualifiedName~OrchestratorPerObjectAuthorizationIntegrationTests" "Reaching an Orchestrator does not confer authority over another principal's job, schedule, or notification, and CREATE OR ALTER cannot silently take over a shared name." "per-object-authorization"
+                New-Phase "Enterprise shared Portal state provider" $PortalTests "FullyQualifiedName~PortalPostgresProviderTests|FullyQualifiedName~PortalMultiProcessPostgresTests" "Portal state resolves against shared PostgreSQL across multiple processes rather than node-local storage." "shared-state-and-artifact-providers"
+                New-Phase "Enterprise shared Orchestrator store and artifact roots" $CoreTests "FullyQualifiedName~OrchestratorPostgresStoreTests|FullyQualifiedName~FileSystemArtifactStorageTests|FullyQualifiedName~GuardedArtifactStorageTests" "Orchestrator durable state uses the shared PostgreSQL dialect, and artifact storage honours its guarded contract on a shared root." "shared-state-and-artifact-providers"
+                New-Phase "Enterprise policy authority" $CoreTests "FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests" "Typed organization policy and authority boundaries are enforced." "scoped-secret-and-policy-authority"
+                New-Phase "Enterprise secret authority and publishing policy" $PortalTests "FullyQualifiedName~PortalSecretStoreServiceTests|FullyQualifiedName~PortalSecretsApiTests|FullyQualifiedName~KeyAndCredentialPostureTests|FullyQualifiedName~ReportPublishingPolicyTests|FullyQualifiedName~PortalInteractiveRunPolicyTests|FullyQualifiedName~PolicyDistributionApiTests" "The encrypted, audited, RBAC'd catalog secret store and signed organization metadata policy guard Portal execution and publishing." "scoped-secret-and-policy-authority"
+                New-Phase "Enterprise durable audit" $PortalTests "FullyQualifiedName~AuditOutboxTransportTests|FullyQualifiedName~AuditRedactionTests|FullyQualifiedName~AuditCollectorHealthTests|FullyQualifiedName~GovernanceRecoveryCertificationTests" "The durable remote audit outbox retains, redacts, and recovers mutation records rather than dropping them when the collector is unreachable." "durable-audit"
+                New-Phase "Enterprise HA fencing" $CoreTests "FullyQualifiedName~FencingTokenTests|FullyQualifiedName~WriteEpochFencingTests" "Database leases and write epochs fence stale owners." "high-availability"
+                New-Phase "Enterprise Portal backup and restore" $PortalTests "FullyQualifiedName~BackupRestoreDrillTests" "A coordinated Portal backup restores to a usable state rather than a partially converged one." "backup-and-restore"
+                New-Phase "Enterprise engine backup and restore" $CoreTests "FullyQualifiedName~BackupRestoreServiceTests" "Engine-side backup and restore round-trips durable state and validates before claiming success." "backup-and-restore"
+                New-Phase "Enterprise upgrade lifecycle" $CoreTests "FullyQualifiedName~DeploymentProfileUpgradeLifecycleTests.Enterprise" "The Enterprise profile executes backup/export, scheduler fencing, cutover proof, and a scheduler-safe rollback point across N to N+1." "upgrade-and-promotion-evidence"
+                New-Phase "Enterprise configuration promotion" $PortalTests "FullyQualifiedName~ConfigurationPromotionTests|FullyQualifiedName~ConfigurationPromotionValidationTests" "Target bindings and catalog ownership survive promotion, and collisions fail before mutation." "upgrade-and-promotion-evidence"
             )
         }
         "SaaS" {
@@ -160,6 +186,10 @@ function Get-ExpectedScenarioIds {
     $expected = New-Object System.Collections.Generic.List[string]
     foreach ($name in $Names) {
         switch ($name) {
+            # The Enterprise lane runs the Enterprise upgrade lifecycle for its
+            # upgrade-and-promotion-evidence prerequisite, so it must produce that concrete scenario
+            # evidence rather than only a green phase.
+            "Enterprise" { $expected.Add("EnterpriseUpgrade") }
             "SaaS" { $expected.Add("SaaSManagedDedicatedIsolation") }
             "SoloToTeam" { $expected.Add("SoloToTeam") }
             "TeamToEnterprise" { $expected.Add("TeamToEnterprise") }
@@ -334,6 +364,7 @@ try {
             $results.Add([ordered]@{
                 lane = $phase.lane
                 phase = $phase.name
+                prerequisite = $phase.prerequisite
                 proof = $phase.proof
                 command = "dotnet " + ($arguments -join " ")
                 startedUtc = $started.ToString("O")
@@ -365,11 +396,29 @@ try {
         $null -eq $_.mappingDecisions -or $null -eq $_.continuity -or
         $null -eq $_.negativeIsolation -or $null -eq $_.rollback
     })
-    $passed = $phasesPassed -and $missingScenarioIds.Count -eq 0 -and $scenarioSchemaFailures.Count -eq 0
+    # Progressive SaaS Phase A: the Enterprise lane must prove all eight hosted prerequisites in this
+    # one run. A prerequisite whose phases never ran — because an earlier phase failed and the loop
+    # broke — is reported by name rather than inferred from the lane summary, so the operator learns
+    # which prerequisite is unproven instead of only that the lane went red.
+    $hostedPrerequisites = @()
+    if ($laneKind -eq "Profile" -and $laneNames -contains "Enterprise") {
+        $hostedPrerequisites = @(foreach ($prerequisite in $EnterpriseHostedPrerequisites) {
+            $covering = @($results | Where-Object { $_.lane -eq "Enterprise" -and $_.prerequisite -eq $prerequisite })
+            [ordered]@{
+                prerequisite = $prerequisite
+                proven = ($covering.Count -gt 0 -and @($covering | Where-Object { $_.status -ne "Passed" }).Count -eq 0)
+                phases = @($covering | ForEach-Object { $_.phase })
+            }
+        })
+    }
+    $unprovenPrerequisites = @($hostedPrerequisites | Where-Object { -not $_.proven })
+    $passed = $phasesPassed -and $missingScenarioIds.Count -eq 0 -and $scenarioSchemaFailures.Count -eq 0 -and
+        $unprovenPrerequisites.Count -eq 0
     $releaseEligible = $passed -and $dirtyLines.Count -eq 0
     $uncovered = New-Object System.Collections.Generic.List[string]
     foreach ($missing in $missingScenarioIds) { $uncovered.Add("Missing required scenario evidence: $missing") }
     foreach ($invalid in $scenarioSchemaFailures) { $uncovered.Add("Invalid scenario evidence contract: $($invalid.scenarioId)") }
+    foreach ($unproven in $unprovenPrerequisites) { $uncovered.Add("Enterprise hosted prerequisite not proven: $($unproven.prerequisite)") }
     if ($laneNames -contains "SaaS" -or $laneNames -contains "EnterpriseToSaaS" -or
         $laneNames -contains "SoloToSaaS" -or $laneNames -contains "Upgrade") {
         $uncovered.Add("Shared SaaS is not certified; SaaS evidence in this lane is Managed Dedicated only.")
@@ -395,6 +444,7 @@ try {
         topologyClaims = @($laneNames | ForEach-Object { Get-TopologyClaim $_ })
         journeyFixture = [ordered]@{ path = "tests/fixtures/deployment-profile-journeys.json"; sha256 = $script:journeyFixtureHash }
         journeyCoverage = $journeyCoverage
+        hostedPrerequisites = $hostedPrerequisites
         scenarioEvidence = $scenarioEvidence
         phases = $results.ToArray()
         uncovered = $uncovered.ToArray()
@@ -424,6 +474,20 @@ try {
     foreach ($claim in $evidence.topologyClaims) {
         $shared = if ($null -eq $claim.sharedSaaS) { "N/A" } else { $claim.sharedSaaS }
         $markdown.Add("| $($claim.lane) | $($claim.topology) | $($claim.claim) | $shared |")
+    }
+    if ($hostedPrerequisites.Count -gt 0) {
+        $markdown.Add("")
+        $markdown.Add("## Enterprise hosted prerequisites (Progressive SaaS Phase A)")
+        $markdown.Add("")
+        $markdown.Add("A Managed Dedicated SaaS claim builds on all eight. This table is the joined proof for")
+        $markdown.Add("this commit; it is not a substitute for each domain's own topology evidence.")
+        $markdown.Add("")
+        $markdown.Add("| Prerequisite | Proven | Proving phases |")
+        $markdown.Add("| :--- | :---: | :--- |")
+        foreach ($entry in $hostedPrerequisites) {
+            $phaseList = if ($entry.phases.Count -eq 0) { "_not run_" } else { $entry.phases -join "; " }
+            $markdown.Add("| $($entry.prerequisite) | $($entry.proven) | $phaseList |")
+        }
     }
     $markdown.Add("")
     $markdown.Add("## Concrete scenario evidence")

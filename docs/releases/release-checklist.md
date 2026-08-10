@@ -145,6 +145,12 @@ cross-platform and operator-run certifications below.
       Set-Location .worktrees\release-gate-x.y.z
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
+- [ ] Confirm the **Engine lane and coverage gate** phase passed with line coverage **>= 70%**.
+      `Test-PreRelease.ps1` invokes the same fail-closed `Test-CoverageGate.ps1` policy as CI; missing
+      or unparseable coverage is a failure. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
+      `coverage-gate.json` beneath the timestamped release-validation run.
+- [ ] Confirm the **Test structure audit** phase passed. This proves expensive/release-only categories
+      still have targeted ownership and that file reorganization did not change lane membership.
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
@@ -167,6 +173,10 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       ```powershell
       .\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion x.y.z
       ```
+      **Needs Docker**: the Enterprise lane proves the eight hosted prerequisites, including shared
+      PostgreSQL providers. Check `certification.md`'s *Enterprise hosted prerequisites* table — every
+      row must read `True`. A prerequisite that never ran is reported unproven by name and fails the
+      lane, so a green summary with an unproven row is not a possible state.
 - [ ] **Deployment transitions and upgrades:** all supported transitions and N→N+1 profile upgrades
       pass:
       ```powershell
