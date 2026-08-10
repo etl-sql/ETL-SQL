@@ -37,7 +37,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         int reportId,
         int userId,
         string scriptPath,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string? keyScope = null)
     {
         var key = new SessionKey(reportId, userId);
         // Interactive viewing runs as the real user so dataset ACLs (CanReadAsync) are enforced;
@@ -58,7 +59,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
                     return existing.Service;
                 }
 
-                var replacement = CreateEntry(reportId, scriptPath, callerContext);
+                var replacement = CreateEntry(reportId, scriptPath, callerContext, keyScope);
                 if (_sessions.TryUpdate(key, replacement, existing))
                 {
                     _ = existing.Service.DisposeAsync();
@@ -71,7 +72,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
                 continue;
             }
 
-            var entry = CreateEntry(reportId, scriptPath, callerContext);
+            var entry = CreateEntry(reportId, scriptPath, callerContext, keyScope);
             if (_sessions.TryAdd(key, entry))
             {
                 Evict();
@@ -83,7 +84,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         }
     }
 
-    private Entry CreateEntry(int reportId, string scriptPath, string callerContext)
+    private Entry CreateEntry(int reportId, string scriptPath, string callerContext, string? keyScope)
     {
         var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         var svc = new DashboardService(
@@ -92,7 +93,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             timeout,
             callerContext,
             reportId,
-            _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey);
+            _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey,
+            keyScope: keyScope);
         return new Entry(svc, scriptPath, callerContext);
     }
 

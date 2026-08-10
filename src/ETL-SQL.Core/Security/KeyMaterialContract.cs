@@ -84,7 +84,7 @@ public interface IKeyMaterialProvider
 }
 
 /// <summary>Host-fixed scope used by persistence factories; never accepted from job payloads.</summary>
-public sealed record KeyMaterialHostScope(string Value);
+public sealed record KeyMaterialHostScope(string Value, bool RequireExplicitScope = false);
 
 /// <summary>Non-secret binding from a key authority tuple to an environment secret name.</summary>
 public sealed record EnvironmentKeyMaterialBinding(

@@ -10,7 +10,7 @@ public interface ISessionStateManager
     byte[] GetSpillKey(string sessionId);
 
     Task SaveSession(string sessionId, object evaluator, string? scriptSource = null);
-    Task<SessionState?> LoadSession(string sessionId);
+    Task<SessionState?> LoadSession(string sessionId, string? keyScope = null);
     void ClearSession(string sessionId);
     IEnumerable<SessionSummary> GetSessions(bool includeSize = false);
     bool IsSessionInUse(string sessionId);

@@ -103,7 +103,8 @@ public class SessionStateManager : ISessionStateManager
         }
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
-        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey);
+        using var store = _metadataStoreFactory.Create(
+            sessionId, SessionRoot, entropyKey, evaluator.CheckpointKeyScope);
         await store.InitializeAsync();
 
         var sessionLock = GetSessionLock(sessionId);
@@ -174,12 +175,12 @@ public class SessionStateManager : ISessionStateManager
     }
 
     /// <summary>Loads existing session state from the SQLite store.</summary>
-    public async Task<SessionState?> LoadSession(string sessionId)
+    public async Task<SessionState?> LoadSession(string sessionId, string? keyScope = null)
     {
         if (!File.Exists(GetSessionDbPath(sessionId))) return null;
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
-        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey);
+        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey, keyScope);
         await store.InitializeAsync();
 
         try

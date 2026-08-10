@@ -421,16 +421,25 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
 public sealed class SqliteSessionMetadataStoreFactory(
     IKeyMaterialProvider? keyProvider = null,
-    KeyMaterialHostScope? keyScope = null) : ISessionMetadataStoreFactory
+    KeyMaterialHostScope? hostScope = null) : ISessionMetadataStoreFactory
 {
     public ISessionMetadataStore Create(
         string sessionId,
         string sessionRoot,
-        string machineKeyEntropy) =>
-        new SqliteSessionMetadataStore(
+        string machineKeyEntropy,
+        string? keyScope = null)
+    {
+        if (hostScope?.RequireExplicitScope == true && string.IsNullOrWhiteSpace(keyScope))
+            throw new UnauthorizedAccessException(
+                "Shared checkpoint persistence requires an explicit server-derived tenant scope.");
+        var resolvedScope = string.IsNullOrWhiteSpace(keyScope)
+            ? hostScope?.Value ?? "engine-host"
+            : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(keyScope).Value;
+        return new SqliteSessionMetadataStore(
             sessionId,
             sessionRoot,
             machineKeyEntropy,
             keyProvider,
-            keyScope?.Value ?? "engine-host");
+            resolvedScope);
+    }
 }

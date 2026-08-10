@@ -30,7 +30,11 @@ public interface ISessionMetadataStore : IDisposable
 
 public interface ISessionMetadataStoreFactory
 {
-    ISessionMetadataStore Create(string sessionId, string sessionRoot, string machineKeyEntropy);
+    ISessionMetadataStore Create(
+        string sessionId,
+        string sessionRoot,
+        string machineKeyEntropy,
+        string? keyScope = null);
 }
 
 public record SavedTempTable(string TableName, List<ColumnDefinition> Schema, List<string> ChunkNames);

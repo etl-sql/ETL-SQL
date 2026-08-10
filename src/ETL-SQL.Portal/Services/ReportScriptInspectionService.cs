@@ -16,8 +16,10 @@ public class ReportScriptInspectionService(
     PortalConfig portalConfig,
     ILogger<ReportScriptInspectionService> logger,
     IArtifactStorage artifacts,
-    SnapshotPackageService snapshotPackages)
+    SnapshotPackageService snapshotPackages,
+    DatasetTenantScope? datasetScope = null)
 {
+    private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     public async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
     {
         // Resolve within the configured script root like the sibling methods, so a caller passing
@@ -136,7 +138,8 @@ public class ReportScriptInspectionService(
 
         try
         {
-            var manifest = await snapshotPackages.LoadAsync(manifestKey);
+            var manifest = await snapshotPackages.LoadAsync(
+                manifestKey, keyScope: _datasetScope.TenantId);
             if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
 
             return manifest.Datasets

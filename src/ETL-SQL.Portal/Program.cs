@@ -134,7 +134,8 @@ if (portalConfig.SharedTenancy.Enabled || !string.IsNullOrWhiteSpace(portalConfi
         sp.GetRequiredService<ETL_SQL.Portal.Services.RequestTenantContextAccessor>().RequireCurrent());
 }
 builder.Services.AddSingleton(new ETL_SQL.Core.Security.KeyMaterialHostScope(
-    string.IsNullOrWhiteSpace(portalConfig.TenantId) ? "portal-host" : portalConfig.TenantId));
+    string.IsNullOrWhiteSpace(portalConfig.TenantId) ? "portal-host" : portalConfig.TenantId,
+    RequireExplicitScope: portalConfig.SharedTenancy.Enabled));
 if (portalConfig.KeyManagement.Enabled)
 {
     var bindings = portalConfig.KeyManagement.Bindings.Select(binding =>
@@ -483,6 +484,10 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.ISubscriptionScriptRunner,
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetPermissionService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetTenantScope>(sp =>
+    new ETL_SQL.Portal.Services.DatasetTenantScope(
+        sp.GetRequiredService<PortalConfig>(),
+        sp.GetService<ETL_SQL.Core.Multitenancy.TenantContext>()));
 builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalConnectionCatalogService>();

@@ -14,7 +14,7 @@ namespace ETL_SQL.Portal.Services;
 /// omitted. Runtime/security artifacts (hashes, tokens, sessions, history, audit rows, snapshots,
 /// dataset caches) are configuration non-goals and are listed as runtime-only.
 /// </summary>
-public sealed class ConfigurationExportService(PortalDbContext db)
+public sealed class ConfigurationExportService(PortalDbContext db, DatasetTenantScope datasetScope)
 {
     public sealed record ExportResult(string Script, IReadOnlyList<string> RequiredSecrets,
         IReadOnlyList<string> Skipped, IReadOnlyList<string> Emitted,
@@ -216,14 +216,19 @@ public sealed class ConfigurationExportService(PortalDbContext db)
 
         // ── Dataset metadata + ACLs (datasets materialize when their report runs) ─
         var datasetCount = 0;
+        var tenantDatasetIds = await datasetScope.Query(db)
+            .Select(dataset => dataset.Id)
+            .ToListAsync(ct);
         var datasetAclsByDataset = (await (
             from acl in db.DatasetAcls.AsNoTracking()
-            join g in db.Groups on acl.GroupId equals g.Id
+            join g in db.Groups.Where(candidate => candidate.TenantId == datasetScope.TenantId)
+                on acl.GroupId equals g.Id
+            where tenantDatasetIds.Contains(acl.DatasetId)
             orderby g.Name
             select new { acl.DatasetId, Group = g.Name, acl.Permission }).ToListAsync(ct))
             .GroupBy(acl => acl.DatasetId)
             .ToDictionary(group => group.Key, group => group.OrderBy(acl => acl.Group).ToList());
-        var datasets = db.Datasets.AsNoTracking()
+        var datasets = datasetScope.Query(db).AsNoTracking()
             .OrderBy(d => d.Name)
             .Select(d => new
             {

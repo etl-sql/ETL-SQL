@@ -32,6 +32,13 @@ public sealed class SnapshotMigrationService(
             using var scope = scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+            if (config.SharedTenancy.Enabled)
+            {
+                logger.LogInformation(
+                    "Skipping legacy snapshot migration on a shared host because legacy artifacts do not carry a certifiable tenant owner.");
+                CompleteMigration(activity, sw, "skipped", 0);
+                return;
+            }
             var artifacts = scope.ServiceProvider.GetRequiredService<IArtifactStorage>();
             var packages = scope.ServiceProvider.GetRequiredService<SnapshotPackageService>();
             var keyValidation = DatasetAtRestKeyValidator.Validate(config.Dataset);

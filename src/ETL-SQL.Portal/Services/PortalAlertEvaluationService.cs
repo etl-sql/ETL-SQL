@@ -21,6 +21,7 @@ public sealed class PortalAlertEvaluationService(
         string portalJobId,
         string manifestPath,
         DateTime completedAt,
+        string? keyScope = null,
         CancellationToken ct = default)
     {
         var key = PortalPathGuard.ToSnapshotKey(config, manifestPath);
@@ -35,7 +36,7 @@ public sealed class PortalAlertEvaluationService(
         ReportManifest? manifest;
         try
         {
-            manifest = await snapshots.LoadAsync(key, ct);
+            manifest = await snapshots.LoadAsync(key, ct, keyScope);
         }
         catch (Exception ex)
         {

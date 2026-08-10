@@ -46,6 +46,7 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         await using var db = NewDb();
         db.Datasets.Add(new Dataset
         {
+            TenantId = "tenant-alpha",
             Name = "#provider",
             FolderPath = "/",
             ParquetFilePath = path,

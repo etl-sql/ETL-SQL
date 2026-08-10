@@ -451,6 +451,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     /// </summary>
     public ETL_SQL.Core.Security.IKeyMaterialProvider? DatasetKeyMaterialProvider { get; set; }
     public string DatasetKeyScope { get; set; } = "standalone-host";
+    public string? CheckpointKeyScope { get; set; }
 
     public async ValueTask<ETL_SQL.Core.Security.ResolvedKeyMaterial?> ResolveDatasetKeyAsync(
         string? version = null,

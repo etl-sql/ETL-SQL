@@ -26,8 +26,10 @@ public class ExecutionController(
     FolderPermissionService folderPermissions,
     ETL_SQL.Core.Storage.IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
-    LineageStewardNotificationService stewardNotifications) : ControllerBase
+    LineageStewardNotificationService stewardNotifications,
+    DatasetTenantScope? datasetScope = null) : ControllerBase
 {
+    private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -196,7 +198,8 @@ public class ExecutionController(
         object? manifest = null;
         if (includeManifest && await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
         {
-            var json = await snapshotPackages.LoadLayoutJsonAsync(manifestKey);
+            var json = await snapshotPackages.LoadLayoutJsonAsync(
+                manifestKey, keyScope: _datasetScope.TenantId);
             manifest = JsonDocument.Parse(json).RootElement;
         }
 
@@ -225,7 +228,8 @@ public class ExecutionController(
             visualIndex => Url.Action(nameof(GetSnapshotRows), new { id, visualIndex })
                 ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}",
             visualIndex => Url.Action(nameof(GetSnapshotArrowRows), new { id, visualIndex })
-                ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}.arrow");
+                ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}.arrow",
+            keyScope: _datasetScope.TenantId);
         json = EnrichManifestMetadata(json, resolved.Report!, resolved.Snapshot!);
         return Content(json, "application/json");
     }
@@ -240,7 +244,8 @@ public class ExecutionController(
         var resolved = await ResolveReadableSnapshotKeyAsync(id);
         if (resolved.Error is not null) return resolved.Error;
 
-        var rows = await snapshotPackages.LoadRowsAsync(resolved.Key!, visualIndex, HttpContext.RequestAborted);
+        var rows = await snapshotPackages.LoadRowsAsync(
+            resolved.Key!, visualIndex, HttpContext.RequestAborted, _datasetScope.TenantId);
         return rows is null
             ? NotFound(new { error = "Snapshot visual rows are not available." })
             : Ok(rows);
@@ -256,7 +261,8 @@ public class ExecutionController(
         var resolved = await ResolveReadableSnapshotKeyAsync(id);
         if (resolved.Error is not null) return resolved.Error;
 
-        var table = await snapshotPackages.LoadArrowTableAsync(resolved.Key!, visualIndex, HttpContext.RequestAborted);
+        var table = await snapshotPackages.LoadArrowTableAsync(
+            resolved.Key!, visualIndex, HttpContext.RequestAborted, _datasetScope.TenantId);
         return table is null
             ? NotFound(new { error = "Snapshot Arrow table is not available." })
             : File(table, "application/vnd.apache.arrow.stream");
@@ -535,7 +541,8 @@ public class ExecutionController(
             reportId,
             CurrentUserId,
             scriptPath,
-            isAdministrator: IsAdmin);
+            isAdministrator: IsAdmin,
+            keyScope: _datasetScope.TenantId);
 
         // If session was just created and there is a snapshot, verify it is available from shared
         // artifact storage. DashboardService doesn't expose a direct seed-from-manifest API, so

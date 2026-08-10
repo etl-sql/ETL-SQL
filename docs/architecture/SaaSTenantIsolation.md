@@ -341,8 +341,20 @@ Checkpoint keys for each. This is pinned by
 [`SharedKeyManagementBindingTests`](../../tests/ETL-SQL.Portal.Tests/SharedKeyManagementBindingTests.cs).
 
 Shared identity now injects the verified context into request services. Runtime certification still
-requires dataset catalog partitioning and the remaining dataset, artifact, and checkpoint consumers
-to derive key scope from that tenant instead of the host fallback.
+uses that context through `DatasetTenantScope`: dataset rows are unique by `(TenantId, Name)`, legacy
+rows backfill to `portal-host`, catalog enumeration and mutation are tenant-filtered below
+controllers, foreign IDs are not found, and dataset preview/rotation resolves the matching tenant's
+Dataset-purpose key. Dependent ACL, report-structure/dependency, lineage-impact, configuration-export,
+and access-simulation paths use the same catalog partition. Evidence is
+[`SharedDatasetTenantIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedDatasetTenantIsolationTests.cs).
+Snapshot package operations now require that same explicit scope on Shared hosts and resolve the
+tenant's Artifact-purpose key. Interactive and queued report execution pass their verified or
+persisted-owner tenant into dataset and checkpoint resolution; the Shared checkpoint factory rejects
+missing scope, and Orchestrator execution/resume carries its trusted SaaS tenant through the session
+store. Legacy plaintext snapshot migration is skipped on Shared hosts because its artifacts have no
+certifiable tenant owner. Equal-version cross-tenant failure is pinned by
+[`SnapshotPackageServiceTests`](../../tests/ETL-SQL.Portal.Tests/SnapshotPackageServiceTests.cs) and
+[`SqliteSessionMetadataStoreTests`](../../tests/ETL-SQL.Tests/Core/SqliteSessionMetadataStoreTests.cs).
 
 ### 6.4 Short-Lived Capabilities
 

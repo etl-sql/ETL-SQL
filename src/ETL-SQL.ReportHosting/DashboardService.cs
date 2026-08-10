@@ -35,6 +35,7 @@ namespace ETL_SQL.ReportHosting
         private readonly string? _datasetCallerContext;
         private readonly int? _datasetOwningReportId;
         private readonly string? _datasetAtRestKey;
+        private readonly string? _keyScope;
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private IServiceScope? _currentScope;
@@ -46,7 +47,7 @@ namespace ETL_SQL.ReportHosting
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
-        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null, string? keyScope = null)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
@@ -55,6 +56,9 @@ namespace ETL_SQL.ReportHosting
             _datasetOwningReportId = datasetOwningReportId;
             _datasetAtRestKey = datasetAtRestKey;
             _executionIdentity = executionIdentity;
+            _keyScope = string.IsNullOrWhiteSpace(keyScope)
+                ? null
+                : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(keyScope).Value;
         }
 
         private readonly ETL_SQL.Core.Governance.ExecutionIdentity? _executionIdentity;
@@ -369,10 +373,13 @@ namespace ETL_SQL.ReportHosting
                     evaluator.DatasetKeyMaterialProvider =
                         _currentScope.ServiceProvider.GetService<IKeyMaterialProvider>();
                     var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
-                    evaluator.DatasetKeyScope = string.IsNullOrWhiteSpace(portalConfig?.TenantId)
-                        ? "portal-host"
-                        : portalConfig.TenantId;
+                    evaluator.DatasetKeyScope = _keyScope
+                        ?? (string.IsNullOrWhiteSpace(portalConfig?.TenantId)
+                            ? "portal-host"
+                            : portalConfig.TenantId);
                 }
+
+                evaluator.CheckpointKeyScope = _keyScope;
 
                 evaluator.RedirectOutput = true;
 

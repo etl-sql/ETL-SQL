@@ -30,7 +30,8 @@ public sealed class AccessSimulationService(
     PortalConnectionCatalogService connections,
     StudioAuthorizationService studio,
     StudioCapabilityStore studioCapabilities,
-    PortalConfig config)
+    PortalConfig config,
+    DatasetTenantScope datasetScope)
 {
     public async Task<AccessSimulationDto?> SimulateAsync(
         int userId, int? reportId, int? datasetId, CancellationToken ct = default)
@@ -178,7 +179,7 @@ public sealed class AccessSimulationService(
     private async Task<AccessSimulationDatasetDto?> BuildDatasetAsync(
         int datasetId, int userId, bool isAdmin, ISet<int> groupIds, CancellationToken ct)
     {
-        var dataset = await db.Datasets
+        var dataset = await datasetScope.Query(db)
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
             .Include(d => d.UserAcls)

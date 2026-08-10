@@ -39,8 +39,9 @@ public class ReportsController : ControllerBase
     private readonly ReportDependencyService reportDependencies;
     private readonly LineageImpactService lineageImpact;
     private readonly ReportPublishingPolicyService publishingPolicy;
+    private readonly DatasetTenantScope datasetScope;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null)
     {
         this.db = db;
         this.audit = audit;
@@ -56,6 +57,7 @@ public class ReportsController : ControllerBase
         this.reportDependencies = reportDependencies;
         this.lineageImpact = lineageImpact;
         this.publishingPolicy = publishingPolicy;
+        this.datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     }
 
     private int CurrentUserId =>
@@ -1554,7 +1556,7 @@ public class ReportsController : ControllerBase
             foreach (var sub in report.Subscriptions)
                 sub.IsActive = false;
 
-        var datasetNames = await db.Datasets
+        var datasetNames = await datasetScope.Query(db)
             .Where(d => d.OwningReportId == report.Id)
             .Select(d => d.Name)
             .ToListAsync();

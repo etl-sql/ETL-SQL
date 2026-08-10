@@ -12,7 +12,10 @@ namespace ETL_SQL.Portal.Services;
 /// lookup, authorization, and HTTP mapping. Dataset visibility is decided from the caller's identity
 /// passed in by the controller (<paramref name="isAdmin"/> / <paramref name="currentUserId"/>).
 /// </summary>
-public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInspectionService scriptInspection)
+public sealed class ReportDependencyService(
+    PortalDbContext db,
+    ReportScriptInspectionService scriptInspection,
+    DatasetTenantScope datasetScope)
 {
     /// <summary>
     /// Build the dependency DTO for an already-loaded <paramref name="report"/> (its <c>Folder</c>
@@ -34,11 +37,11 @@ public sealed class ReportDependencyService(PortalDbContext db, ReportScriptInsp
         List<int> datasetGroupIds = isAdmin
             ? []
             : await db.UserGroups
-                .Where(ug => ug.UserId == currentUserId)
+                .Where(ug => ug.TenantId == datasetScope.TenantId && ug.UserId == currentUserId)
                 .Select(ug => ug.GroupId)
                 .ToListAsync();
 
-        var registeredDatasets = (await db.Datasets
+        var registeredDatasets = (await datasetScope.Query(db)
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
             .Include(d => d.UserAcls)

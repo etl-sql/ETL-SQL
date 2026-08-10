@@ -47,7 +47,7 @@ public class DatasetMetadata
 public interface IDatasetRegistry
 {
     /// <summary>
-    /// Inserts or updates the dataset (keyed by globally unique <see cref="DatasetMetadata.Name"/>)
+    /// Inserts or updates the dataset (keyed by tenant and <see cref="DatasetMetadata.Name"/>)
     /// and returns its stable database Id. The returned Id is used to derive the on-disk
     /// Parquet filename via <see cref="BuildDatasetFilePath"/>.
     /// </summary>

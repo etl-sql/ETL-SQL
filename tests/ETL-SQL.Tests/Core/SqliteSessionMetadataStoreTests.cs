@@ -1,12 +1,50 @@
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Security;
+using System.Security.Cryptography;
 
 namespace ETL_SQL.Tests.Core;
 
 public sealed class SqliteSessionMetadataStoreTests
 {
     private static readonly SqliteSessionMetadataStoreFactory StoreFactory = new();
+
+    [Fact]
+    public async Task SharedFactoryRequiresExplicitScopeAndSeparatesCheckpointKeys()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "etlsql-shared-checkpoint-" + Guid.NewGuid().ToString("N"));
+        var provider = new ResolvedKeyMaterialProvider("vault",
+        [
+            (new KeyMaterialDescriptor("vault", "alpha-checkpoint", "tenant-alpha", KeyPurpose.Checkpoint, "v1"),
+                Enumerable.Repeat((byte)31, 32).ToArray()),
+            (new KeyMaterialDescriptor("vault", "beta-checkpoint", "tenant-beta", KeyPurpose.Checkpoint, "v1"),
+                Enumerable.Repeat((byte)73, 32).ToArray())
+        ]);
+        var factory = new SqliteSessionMetadataStoreFactory(
+            provider, new KeyMaterialHostScope("portal-host", RequireExplicitScope: true));
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                factory.Create("session-a", root, "legacy-entropy"));
+
+            using (var alpha = factory.Create("session-a", root, "legacy-entropy", "tenant-alpha"))
+            {
+                await alpha.InitializeAsync();
+                await alpha.SaveVariablesAsync(
+                    new Dictionary<string, object?> { ["secret"] = "tenant-alpha-only" },
+                    new Dictionary<string, VariableMetadata>());
+            }
+
+            using var beta = factory.Create("session-a", root, "legacy-entropy", "tenant-beta");
+            await beta.InitializeAsync();
+            await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
+                await beta.LoadVariablesAsync());
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 
     [Fact]
     public async Task ProviderBackedCheckpointEncryptsAllPersistedPayloadsAndRoundTrips()

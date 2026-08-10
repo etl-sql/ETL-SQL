@@ -463,7 +463,8 @@ public class AdminController(
         // become reachable only by administrators.
         var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);
         var ownedReports = await db.Reports.CountAsync(r => r.CreatedBy == id);
-        var ownedDatasets = await db.Datasets.CountAsync(d => d.CreatedBy == id);
+        var ownedDatasets = await db.Datasets.CountAsync(
+            d => d.TenantId == TenantId && d.CreatedBy == id);
         if (ownedFolders + ownedReports + ownedDatasets > 0)
         {
             if (reassignTo is null)
@@ -488,11 +489,11 @@ public class AdminController(
                 .SetProperty(r => r.Version, r => r.Version + 1));
             // Capture before the update, because afterwards these rows no longer match `id`.
             var transferredDatasetIds = await db.Datasets
-                .Where(d => d.CreatedBy == id)
+                .Where(d => d.TenantId == TenantId && d.CreatedBy == id)
                 .Select(d => d.Id)
                 .ToListAsync();
 
-            await db.Datasets.Where(d => d.CreatedBy == id).ExecuteUpdateAsync(s => s
+            await db.Datasets.Where(d => d.TenantId == TenantId && d.CreatedBy == id).ExecuteUpdateAsync(s => s
                 .SetProperty(d => d.CreatedBy, (int?)target.Id)
                 .SetProperty(d => d.Version, d => d.Version + 1));
 

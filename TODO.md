@@ -572,7 +572,7 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       material reused across tenant or purpose namespaces. Dedicated HTTP, stale foreign-row,
       portable-bundle, and execution-artifact tests prove cross-tenant policy/key access, raw key
       export, and provider-binding disclosure are refused.
-- [ ] **Shared.** Extend policy, connections, secrets, keys, and catalog bindings to shared stores
+- [x] **Shared.** Extend policy, connections, secrets, keys, and catalog bindings to shared stores
       with tenant predicates/partitioning enforced below controller code, and prove tenant, key, and
       key-version separation.
 
@@ -581,9 +581,7 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       uniqueness is composite by tenant in matching SQLite/PostgreSQL migrations. Equal-name
       collision tests prove tenant-scoped policy, secret lifecycle, connection export/delete, and
       distinct credential-key versions. `Portal:SharedTenancy:Enabled` fails closed when no verified
-      `TenantContext` is injected. This remains open until shared identity supplies that context to
-      runtime scopes and dataset, artifact, and checkpoint consumers resolve tenant—not host—key
-      scope end to end.
+      `TenantContext` is injected.
 
       **Host key namespaces partitioned (2026-08-10).** Shared `Portal:KeyManagement` bindings now
       require an explicit validated server-configured `Scope`; the environment provider indexes
@@ -591,8 +589,23 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       derive scope from host identity and reject a conflicting binding scope. Startup validation
       enumerates every configured Shared tenant and requires the complete Dataset, Credential,
       Artifact, and Checkpoint purpose set for each, rather than validating only `portal-host`.
-      This remains open for dataset catalog partitioning and tenant-derived dataset, snapshot, and
-      checkpoint runtime resolution.
+
+      **Dataset catalog and key scope partitioned (2026-08-10).** Dataset rows now carry `TenantId`
+      with composite `(TenantId, Name)` uniqueness in SQLite and PostgreSQL; legacy rows backfill to
+      `portal-host`. A verified-context `DatasetTenantScope` owns catalog queries below controllers.
+      Registration, lookup/list/delete, preview/export reads, key posture/rotation, ACL group checks,
+      report dependency/structure, lineage impact, configuration export, and access simulation use
+      that partition. Equal names coexist, foreign numeric IDs resolve as not-found, and provider
+      requests use the verified tenant's Dataset key namespace.
+
+      **Completed (2026-08-10).** Snapshot package reads and writes now require the verified tenant
+      scope on Shared hosts and resolve only that tenant's `Artifact` key; missing scope, a
+      host-wide fallback, and another tenant's equal-version key all fail closed. Interactive and
+      background report execution carry the server-derived tenant into dataset and checkpoint key
+      resolution. Shared checkpoint factories require an explicit scope, and Portal/Orchestrator
+      execution and resume paths pass it through rather than selecting `portal-host`. Legacy
+      plaintext snapshot migration is refused on Shared hosts because those artifacts do not carry
+      certifiable ownership. Cross-tenant Artifact and Checkpoint encryption tests pin the boundary.
 
 *Absorbs the retained discovery item **Tenant-Scoped Encryption Keys (BYOK)**.*
 

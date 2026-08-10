@@ -22,8 +22,10 @@ public class ExportController(
     PortalConfig portalConfig,
     AuditService audit,
     IArtifactStorage artifacts,
-    SnapshotPackageService snapshotPackages) : ControllerBase
+    SnapshotPackageService snapshotPackages,
+    DatasetTenantScope? datasetScope = null) : ControllerBase
 {
+    private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
     private const int PdfRateLimit = 5;
@@ -69,7 +71,8 @@ public class ExportController(
         if (!await artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey))
             return (null, "No snapshot available", false);
 
-        var manifest = await snapshotPackages.LoadAsync(manifestKey);
+        var manifest = await snapshotPackages.LoadAsync(
+            manifestKey, keyScope: _datasetScope.TenantId);
         return manifest is null ? (null, "Failed to load snapshot", false) : (manifest, null, false);
     }
 

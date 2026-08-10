@@ -16,15 +16,19 @@ namespace ETL_SQL.Portal.Services;
 /// <b>No key material appears anywhere here.</b> Key versions are non-secret identifiers and are
 /// named freely; keys themselves are reported only as configured or not.
 /// </summary>
-public sealed class DatasetKeyPostureService(PortalDbContext db, PortalConfig config)
+public sealed class DatasetKeyPostureService(
+    PortalDbContext db,
+    PortalConfig config,
+    DatasetTenantScope? tenantScope = null)
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(config);
     public async Task<DatasetKeyPostureDto> BuildAsync(CancellationToken ct = default)
     {
         var currentVersion = config.Dataset.AtRestKeyVersion;
         var currentConfigured = !string.IsNullOrWhiteSpace(config.Dataset.AtRestKey);
 
         // Only encrypted caches carry a key version; a dataset with no cache file has nothing to rotate.
-        var datasets = await db.Datasets
+        var datasets = await _tenantScope.Query(db)
             .AsNoTracking()
             .Where(dataset => dataset.ParquetFilePath != "")
             .Select(dataset => new

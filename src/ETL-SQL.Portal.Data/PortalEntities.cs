@@ -737,6 +737,7 @@ public class RefreshToken
 public class Dataset : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string Name { get; set; } = "";
     public string FolderPath { get; set; } = "";   // display metadata (logical or filesystem path)
     public int? FolderId { get; set; }         // portal folder for PUBLIC access checks; resolved from OwningReport.FolderId

@@ -480,9 +480,10 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Dataset>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.OwningReport).WithMany().HasForeignKey(x => x.OwningReportId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Folder>().WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.SetNull);
-            e.HasIndex(x => x.Name).IsUnique();   // Names are globally unique portal-wide; USE DATASET resolves by name.
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
         });
 
         builder.Entity<DatasetAcl>(e =>

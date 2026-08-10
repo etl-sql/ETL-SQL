@@ -26,7 +26,8 @@ public record ExecutionJob(
     string ActorType = "User",
     string? ActorId = null,
     string? EffectiveScopes = null,
-    string? CorrelationId = null)
+    string? CorrelationId = null,
+    string KeyScope = "portal-host")
 {
     public JobStatus Status { get; set; } = JobStatus.Pending;
 
@@ -219,10 +220,12 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string? correlationId = null, int? impersonatedUserId = null)
     {
         EvictExpiredJobs();
+        var keyScope = await ResolveKeyScopeAsync(reportId, userId);
         var jobId = Guid.NewGuid().ToString("N");
         var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator,
             ActorType: actorType, ActorId: actorId, EffectiveScopes: effectiveScopes,
-            CorrelationId: correlationId)
+            CorrelationId: correlationId,
+            KeyScope: keyScope)
         {
             ImpersonatedUserId = impersonatedUserId
         };
@@ -247,6 +250,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string? correlationId = null)
     {
         EvictExpiredJobs();
+        var keyScope = await ResolveKeyScopeAsync(reportId, userId);
 
         // A scheduled/background refresh exists to update the shared snapshot. An identity-sensitive
         // report has no shared snapshot (it runs per viewer and is never cached), so a trusted
@@ -283,7 +287,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             ActorType: actorType,
             ActorId: actorId,
             EffectiveScopes: effectiveScopes,
-            CorrelationId: correlationId);
+            CorrelationId: correlationId,
+            KeyScope: keyScope);
         _jobs[jobId] = job;
 
         if (!await TryPersistRefreshJobAsync(job))
@@ -427,7 +432,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                             var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
                                 status.ReportManifestJson)
                                 ?? throw new InvalidOperationException("Remote orchestrator returned an invalid report manifest.");
-                            await SaveSnapshotManifestAsync(manifest, manifestKey, cts.Token);
+                            await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
                         }
                         else if (!await _artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey, cts.Token))
                         {
@@ -460,7 +465,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     job.DatasetCallerContext,
                     job.ReportId,
                     datasetAtRestKey: _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey,
-                    executionIdentity: executionIdentity);
+                    executionIdentity: executionIdentity,
+                    keyScope: job.KeyScope);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
@@ -472,7 +478,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 job.CpuTimeSeconds = Math.Max(0, process.TotalProcessorTime.TotalSeconds - startCpuSeconds);
                 await PersistReportLineageAsync(job, scriptPath, svc.CurrentLineageTracker);
 
-                await SaveSnapshotManifestAsync(manifest, manifestKey, cts.Token);
+                await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
             }
 
             // Persist to DB
@@ -553,6 +559,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                         job.Id,
                         manifestPath,
                         DateTime.UtcNow,
+                        job.KeyScope,
                         cts.Token);
                 }
                 catch (Exception ex)
@@ -989,9 +996,39 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             gate.Dispose();
     }
 
-    private Task SaveSnapshotManifestAsync(ReportManifest manifest, string manifestKey, CancellationToken ct)
+    private Task SaveSnapshotManifestAsync(
+        ReportManifest manifest,
+        string manifestKey,
+        string keyScope,
+        CancellationToken ct)
     {
-        return _snapshotPackages.SaveAsync(manifest, manifestKey, ct);
+        return _snapshotPackages.SaveAsync(manifest, manifestKey, ct, keyScope);
+    }
+
+    private async Task<string> ResolveKeyScopeAsync(int reportId, int userId)
+    {
+        if (!_config.SharedTenancy.Enabled)
+            return string.IsNullOrWhiteSpace(_config.TenantId)
+                ? "portal-host"
+                : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(_config.TenantId).Value;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var tenantId = userId > 0
+            ? await db.Users.AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.TenantId)
+                .SingleOrDefaultAsync()
+            : await db.Reports.AsNoTracking()
+                .Where(report => report.Id == reportId)
+                .Join(db.Users.AsNoTracking(), report => report.CreatedBy, user => user.Id,
+                    (_, user) => user.TenantId)
+                .SingleOrDefaultAsync();
+
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new UnauthorizedAccessException(
+                "Shared report execution requires a server-owned tenant binding.");
+        return ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(tenantId).Value;
     }
 
     /// <summary>

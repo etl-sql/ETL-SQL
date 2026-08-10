@@ -8,11 +8,12 @@ namespace ETL_SQL.Portal.Services;
 
 public sealed class DatasetQueryService(
     PortalDbContext db,
-    DatasetPermissionService datasetPermissions)
+    DatasetPermissionService datasetPermissions,
+    DatasetTenantScope tenantScope)
 {
     public async Task<IReadOnlyList<DatasetDto>> GetAllAsync(int currentUserId, bool isAdmin)
     {
-        var datasets = await db.Datasets
+        var datasets = await tenantScope.Query(db)
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
@@ -28,7 +29,7 @@ public sealed class DatasetQueryService(
     }
 
     public async Task<Dataset?> LoadDatasetAsync(int id) =>
-        await db.Datasets
+        await tenantScope.Query(db)
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
             .Include(d => d.UserAcls)
@@ -36,7 +37,7 @@ public sealed class DatasetQueryService(
 
     public async Task<Dataset?> LoadDatasetWithAclGroupsAsync(int id)
     {
-        return await db.Datasets
+        return await tenantScope.Query(db)
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls).ThenInclude(a => a.Group)

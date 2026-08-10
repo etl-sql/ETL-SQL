@@ -23,7 +23,10 @@ public sealed class ReportStructureParseException(string message, Exception inne
 /// Extracted from <c>ReportsController.GetStructure</c> so the controller only handles report
 /// lookup, authorization, script resolution, and HTTP mapping.
 /// </summary>
-public sealed class ReportStructureService(PortalDbContext db, ILineageCatalogStore lineageCatalog)
+public sealed class ReportStructureService(
+    PortalDbContext db,
+    ILineageCatalogStore lineageCatalog,
+    DatasetTenantScope datasetScope)
 {
     /// <summary>
     /// Parse <paramref name="scriptText"/> and build the visual/dataset/table DAG for report
@@ -348,7 +351,9 @@ public sealed class ReportStructureService(PortalDbContext db, ILineageCatalogSt
     // lineage with the resolved cross-script lineage.
     private async Task BridgeDatasetLineageAsync(int reportId, List<DagNodeDto> nodes, List<DagEdgeDto> edges)
     {
-        var reportDatasets = await db.Datasets.Where(d => d.OwningReportId == reportId).ToListAsync();
+        var reportDatasets = await datasetScope.Query(db)
+            .Where(d => d.OwningReportId == reportId)
+            .ToListAsync();
         if (reportDatasets.Count == 0) return;
 
         var dsByNorm = reportDatasets

@@ -22,7 +22,7 @@ public sealed class DatasetAclService(
         if (!Enum.TryParse<DatasetPermission>(permission, ignoreCase: true, out var granted))
             return DatasetAclMutationResult.InvalidPermission();
 
-        if (!await db.Groups.AnyAsync(g => g.Id == groupId))
+        if (!await db.Groups.AnyAsync(g => g.Id == groupId && g.TenantId == dataset.TenantId))
             return DatasetAclMutationResult.GroupNotFound();
 
         var existing = await db.DatasetAcls

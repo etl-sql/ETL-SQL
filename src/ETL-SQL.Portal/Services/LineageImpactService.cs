@@ -9,7 +9,8 @@ public sealed class LineageImpactService(
     PortalDbContext db,
     ILineageCatalogStore lineageCatalog,
     IJobHistoryStore jobs,
-    DatasetPermissionService datasetPermissions)
+    DatasetPermissionService datasetPermissions,
+    DatasetTenantScope datasetScope)
 {
     public async Task<LineageImpactDto> AnalyzeAsync(
         string kind,
@@ -57,7 +58,7 @@ public sealed class LineageImpactService(
             .ToListAsync(cancellationToken);
 
         var reportIdSet = reports.Select(r => r.Id).ToHashSet();
-        var datasetCandidates = await db.Datasets
+        var datasetCandidates = await datasetScope.Query(db)
             .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
@@ -181,7 +182,7 @@ public sealed class LineageImpactService(
 
         if (kind == "dataset")
         {
-            return (await db.Datasets
+            return (await datasetScope.Query(db)
                     .AsNoTracking()
                     .Where(d => d.Name == name && d.OwningReportId.HasValue)
                     .Join(VisibleReports(isAdmin, currentUserId).AsNoTracking(),

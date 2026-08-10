@@ -113,6 +113,9 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.BatchSize = _ctx.BatchSize;
                 evaluator.IsVerbose = _ctx.IsVerbose;
                 evaluator.SessionId = _ctx.SessionId;
+                evaluator.CheckpointKeyScope = string.IsNullOrWhiteSpace(_ctx.SaasTenantId)
+                    ? null
+                    : ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(_ctx.SaasTenantId).Value;
                 evaluator.JobName = jobName;
                 evaluator.ExecutionIdentity = executionIdentity;
                 evaluator.Telemetry.IsProfiling = true;
@@ -124,7 +127,8 @@ namespace ETL_SQL.Orchestrator.Execution
                     if (string.IsNullOrWhiteSpace(_ctx.SessionId))
                         throw new InvalidOperationException("Named-checkpoint resume requires a session id.");
 
-                    var sessionState = await evaluator.SessionStateManager.LoadSession(_ctx.SessionId);
+                    var sessionState = await evaluator.SessionStateManager.LoadSession(
+                        _ctx.SessionId, evaluator.CheckpointKeyScope);
                     if (sessionState is null)
                         throw new InvalidOperationException(
                             $"No saved persistent session exists for '{_ctx.SessionId}'.");

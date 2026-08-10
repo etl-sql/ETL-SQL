@@ -15,8 +15,10 @@ public sealed class DatasetAtRestKeyRotationService(
     PortalDbContext db,
     PortalConfig config,
     ILogger<DatasetAtRestKeyRotationService> log,
-    IKeyMaterialProvider? keyProvider = null)
+    IKeyMaterialProvider? keyProvider = null,
+    DatasetTenantScope? tenantScope = null)
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(config);
     public async Task<DatasetKeyRotationResult> RotateAsync(CancellationToken cancellationToken = default)
     {
         string targetKey;
@@ -37,7 +39,7 @@ public sealed class DatasetAtRestKeyRotationService(
             targetKey = Convert.ToBase64String(target.Bytes.Span);
             targetVersion = target.Descriptor.Version;
         }
-        var datasets = await db.Datasets
+        var datasets = await _tenantScope.Query(db)
             .Where(d => d.ParquetFilePath != "")
             .OrderBy(d => d.Id)
             .ToListAsync(cancellationToken);
@@ -107,9 +109,7 @@ public sealed class DatasetAtRestKeyRotationService(
         throw new InvalidOperationException($"No at-rest key is configured for dataset key version '{version}'.");
     }
 
-    private string KeyScope => string.IsNullOrWhiteSpace(config.TenantId)
-        ? "portal-host"
-        : config.TenantId;
+    private string KeyScope => _tenantScope.TenantId;
 
     private async Task RotateOneAsync(
         Dataset dataset,

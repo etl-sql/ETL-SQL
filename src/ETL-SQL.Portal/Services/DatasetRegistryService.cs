@@ -17,24 +17,32 @@ namespace ETL_SQL.Portal.Services
         private readonly ILogger<DatasetRegistryService> _log;
         private readonly PortalConfig _config;
         private readonly DatasetPermissionService _permissions;
+        private readonly DatasetTenantScope _tenantScope;
 
-        public DatasetRegistryService(PortalDbContext db, ILogger<DatasetRegistryService> log, PortalConfig config, DatasetPermissionService permissions)
+        public DatasetRegistryService(
+            PortalDbContext db,
+            ILogger<DatasetRegistryService> log,
+            PortalConfig config,
+            DatasetPermissionService permissions,
+            DatasetTenantScope? tenantScope = null)
         {
             _db = db;
             _log = log;
             _config = config;
             _permissions = permissions;
+            _tenantScope = tenantScope ?? new DatasetTenantScope(config);
         }
 
         public async Task<int> RegisterOrUpdate(DatasetMetadata metadata)
         {
-            var existing = await _db.Datasets
+            var existing = await _tenantScope.Query(_db)
                 .FirstOrDefaultAsync(d => d.Name == metadata.Name);
 
             if (existing == null)
             {
                 existing = new Dataset
                 {
+                    TenantId = _tenantScope.TenantId,
                     Name = metadata.Name,
                     FolderPath = metadata.FolderPath
                 };
@@ -110,7 +118,10 @@ namespace ETL_SQL.Portal.Services
             var distinct = authorIds.Distinct().ToList();
             // A grant for a user that no longer exists would violate the foreign key, and an author
             // whose account was deleted has nothing to be granted anyway.
-            var live = await _db.Users.Where(u => distinct.Contains(u.Id)).Select(u => u.Id).ToListAsync();
+            var live = await _db.Users
+                .Where(u => u.TenantId == _tenantScope.TenantId && distinct.Contains(u.Id))
+                .Select(u => u.Id)
+                .ToListAsync();
             var already = await _db.DatasetUserAcls
                 .Where(a => a.DatasetId == dataset.Id && live.Contains(a.UserId))
                 .Select(a => a.UserId)
@@ -134,7 +145,7 @@ namespace ETL_SQL.Portal.Services
 
         public async Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "")
         {
-            var d = await _db.Datasets
+            var d = await _tenantScope.Query(_db)
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
                 .Include(x => x.UserAcls)
@@ -148,12 +159,12 @@ namespace ETL_SQL.Portal.Services
 
         public async Task<bool> Exists(string name)
         {
-            return await _db.Datasets.AnyAsync(x => x.Name == name);
+            return await _tenantScope.Query(_db).AnyAsync(x => x.Name == name);
         }
 
         public async Task<bool> CanEditAsync(string name, string callerPermissions)
         {
-            var d = await _db.Datasets
+            var d = await _tenantScope.Query(_db)
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
                 .Include(x => x.UserAcls)
@@ -165,7 +176,7 @@ namespace ETL_SQL.Portal.Services
 
         public async Task<bool> CanRefreshAsync(string name, string callerPermissions)
         {
-            var d = await _db.Datasets
+            var d = await _tenantScope.Query(_db)
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
                 .Include(x => x.UserAcls)
@@ -182,7 +193,7 @@ namespace ETL_SQL.Portal.Services
 
         public async Task SetStale(string name)
         {
-            var d = await _db.Datasets
+            var d = await _tenantScope.Query(_db)
                 .FirstOrDefaultAsync(x => x.Name == name);
             if (d != null)
             {
@@ -195,7 +206,7 @@ namespace ETL_SQL.Portal.Services
         public async Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
         {
             var caller = CallerContext.Parse(callerPermissions);
-            var list = await _db.Datasets
+            var list = await _tenantScope.Query(_db)
                 .Include(d => d.OwningReport)
                 .Include(d => d.Acls)
                 .Include(d => d.UserAcls)
@@ -212,7 +223,7 @@ namespace ETL_SQL.Portal.Services
 
         public async Task Delete(string name)
         {
-            var d = await _db.Datasets
+            var d = await _tenantScope.Query(_db)
                 .FirstOrDefaultAsync(x => x.Name == name);
             if (d != null)
             {

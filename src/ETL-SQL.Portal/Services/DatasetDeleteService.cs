@@ -7,7 +7,8 @@ namespace ETL_SQL.Portal.Services;
 public sealed class DatasetDeleteService(
     PortalDbContext db,
     IDatasetRegistry registry,
-    AuditService audit)
+    AuditService audit,
+    DatasetTenantScope tenantScope)
 {
     public async Task<DatasetDeleteResult> DeleteAsync(
         Dataset dataset,
@@ -26,7 +27,7 @@ public sealed class DatasetDeleteService(
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
-            var current = await db.Datasets
+            var current = await tenantScope.Query(db)
                 .Include(d => d.OwningReport)
                 .Include(d => d.Acls)
                 .Include(d => d.UserAcls)

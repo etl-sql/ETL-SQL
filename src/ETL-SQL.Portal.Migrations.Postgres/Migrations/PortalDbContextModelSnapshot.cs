@@ -297,6 +297,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("Ttl")
                         .HasColumnType("text");
 
@@ -311,10 +316,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasIndex("FolderId");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
-
                     b.HasIndex("OwningReportId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
 
                     b.ToTable("Datasets");
                 });

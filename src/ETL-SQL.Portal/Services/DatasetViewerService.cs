@@ -115,8 +115,10 @@ public class DatasetViewerService(
     PortalDbContext db,
     DatasetPreviewCache cache,
     PortalConfig config,
-    ETL_SQL.Core.Security.IKeyMaterialProvider? keyProvider = null)
+    ETL_SQL.Core.Security.IKeyMaterialProvider? keyProvider = null,
+    DatasetTenantScope? tenantScope = null)
 {
+    private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(config);
     // ── Public API ────────────────────────────────────────────────────────────
 
     public async Task<DatasetRowsDto> QueryAsync(
@@ -260,7 +262,7 @@ public class DatasetViewerService(
 
     private async Task<Dataset> LoadDatasetAsync(int id)
     {
-        var dataset = await db.Datasets.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
+        var dataset = await _tenantScope.Query(db).AsNoTracking().FirstOrDefaultAsync(d => d.Id == id)
             ?? throw new InvalidOperationException($"Dataset {id} not found.");
 
         if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath) || !File.Exists(dataset.ParquetFilePath))
@@ -281,7 +283,7 @@ public class DatasetViewerService(
             var version = dataset.AtRestKeyVersion ?? config.Dataset.LegacyAtRestKeyVersion;
             keyLease = await keyProvider.ResolveAsync(
                 new ETL_SQL.Core.Security.KeyMaterialRequest(
-                    string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId,
+                    _tenantScope.TenantId,
                     ETL_SQL.Core.Security.KeyPurpose.Dataset,
                     version));
             atRestDecryptOptions = new Dictionary<string, string>

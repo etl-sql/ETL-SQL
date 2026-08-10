@@ -9,7 +9,8 @@ namespace ETL_SQL.Portal.Services;
 /// </summary>
 public sealed class DatasetPermissionService(
     PortalDbContext db,
-    FolderPermissionService folderPermissions)
+    FolderPermissionService folderPermissions,
+    DatasetTenantScope? tenantScope = null)
 {
     public static bool CanView(DatasetPermission? permission) =>
         permission is not null;
@@ -26,7 +27,8 @@ public sealed class DatasetPermissionService(
     public async Task<ISet<int>> GetUserGroupIdsAsync(int userId)
     {
         return (await db.UserGroups
-                .Where(ug => ug.UserId == userId)
+                .Where(ug => ug.UserId == userId
+                    && (tenantScope == null || ug.TenantId == tenantScope.TenantId))
                 .Select(ug => ug.GroupId)
                 .ToListAsync())
             .ToHashSet();
@@ -38,6 +40,8 @@ public sealed class DatasetPermissionService(
         bool isAdmin,
         ISet<int>? groupIds = null)
     {
+        if (tenantScope is not null && dataset.TenantId != tenantScope.TenantId)
+            return null;
         if (isAdmin)
             return DatasetPermission.Owner;
 
@@ -63,6 +67,9 @@ public sealed class DatasetPermissionService(
         bool isAdmin)
     {
         var result = new Dictionary<int, DatasetPermission?>(datasets.Count);
+
+        if (tenantScope is not null && datasets.Any(dataset => dataset.TenantId != tenantScope.TenantId))
+            throw new UnauthorizedAccessException("A dataset permission batch crossed the tenant boundary.");
 
         if (isAdmin)
         {

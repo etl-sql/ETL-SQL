@@ -247,7 +247,9 @@ public sealed class DatasetViewerServiceTests : IDisposable
         config.TenantId = "tenant-alpha";
         config.KeyManagement.Enabled = true;
         var id = AddDataset(db, "#provider", parquet, DatasetEncryptionMode.MachineBound);
-        (await db.Datasets.SingleAsync(d => d.Id == id)).AtRestKeyVersion = "v5";
+        var dataset = await db.Datasets.SingleAsync(d => d.Id == id);
+        dataset.TenantId = "tenant-alpha";
+        dataset.AtRestKeyVersion = "v5";
         await db.SaveChangesAsync();
         var provider = new ResolvedKeyMaterialProvider("test-vault",
         [

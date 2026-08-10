@@ -37,8 +37,10 @@ public sealed class DesignerSnapshotService(
     PortalConfig portalConfig,
     FolderPermissionService folderPermissions,
     IArtifactStorage artifacts,
-    SnapshotPackageService snapshotPackages)
+    SnapshotPackageService snapshotPackages,
+    DatasetTenantScope? datasetScope = null)
 {
+    private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     /// <summary>
     /// Rows kept per visual. The canvas draws thumbnails a few hundred pixels tall, so more than this
     /// changes nothing visible while making the payload and the browser's job worse.
@@ -74,7 +76,8 @@ public sealed class DesignerSnapshotService(
         if (!await artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey))
             return new Result(SnapshotOutcome.NoSnapshot, null);
 
-        var manifest = await snapshotPackages.LoadAsync(manifestKey, ct);
+        var manifest = await snapshotPackages.LoadAsync(
+            manifestKey, ct, _datasetScope.TenantId);
         if (manifest is null) return new Result(SnapshotOutcome.NoSnapshot, null);
 
         var sampleRows = new Dictionary<string, IReadOnlyList<IReadOnlyList<string?>>>(StringComparer.OrdinalIgnoreCase);
@@ -92,7 +95,8 @@ public sealed class DesignerSnapshotService(
             var key = string.IsNullOrWhiteSpace(visual.Name) ? $"visual{i}" : visual.Name;
             if (sampleRows.ContainsKey(key)) continue;
 
-            var visualRows = await snapshotPackages.LoadRowsAsync(manifestKey, i, ct);
+            var visualRows = await snapshotPackages.LoadRowsAsync(
+                manifestKey, i, ct, _datasetScope.TenantId);
 
             // Rows live inline on the visual for small tables and are offloaded for large ones, so
             // fall back to the inline copy when there is no separate row artifact.

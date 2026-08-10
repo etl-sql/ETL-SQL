@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Observability;
@@ -17,6 +18,43 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Portal")]
 public sealed class SnapshotPackageServiceTests
 {
+    [Fact]
+    public async Task SharedSnapshotsRequireExplicitScopeAndSeparateArtifactKeys()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig
+        {
+            SharedTenancy = new SharedTenancyConfig { Enabled = true }
+        };
+        var provider = new ResolvedKeyMaterialProvider("vault",
+        [
+            (new KeyMaterialDescriptor("vault", "alpha-artifact", "tenant-alpha", KeyPurpose.Artifact, "v1"),
+                Enumerable.Repeat((byte)19, 32).ToArray()),
+            (new KeyMaterialDescriptor("vault", "beta-artifact", "tenant-beta", KeyPurpose.Artifact, "v1"),
+                Enumerable.Repeat((byte)89, 32).ToArray())
+        ]);
+        var service = new SnapshotPackageService(
+            config, storage, NullLogger<SnapshotPackageService>.Instance, provider);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.SaveAsync(CreateManifest("alpha-only"), "shared.etlsnap"));
+        await service.SaveAsync(
+            CreateManifest("alpha-only"), "shared.etlsnap", keyScope: "tenant-alpha");
+
+        Assert.Equal("alpha-only",
+            (await service.LoadAsync("shared.etlsnap", keyScope: "tenant-alpha"))!
+                .Visuals[0].Rows[0][0]);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.LoadAsync("shared.etlsnap"));
+        await Assert.ThrowsAnyAsync<CryptographicException>(() =>
+            service.LoadAsync("shared.etlsnap", keyScope: "tenant-beta"));
+
+        await storage.WriteAllTextAsync(
+            ArtifactArea.Snapshots, "legacy.snapshot.json", "{}");
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            service.LoadAsync("legacy.snapshot.json", keyScope: "tenant-alpha"));
+    }
+
     [Fact]
     public async Task ProviderBackedArtifactEncryptionUsesArtifactPurposeAndSafeVersionEnvelope()
     {
