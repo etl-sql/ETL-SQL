@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "fuzz-smoke", "fuzz")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "release", "full", "benchmarks", "slt", "spill", "fuzz-smoke", "fuzz")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -181,6 +181,51 @@ switch ($Lane) {
 
         & $PSCommandPath -Lane "slt" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    "spill" {
+        # Re-runs the engine and SLT suites with the spill/batch thresholds set to a handful of
+        # rows, so the columnar spill path executes on ordinary test data.
+        #
+        # It exists because that path was otherwise unreachable by any lane. The thresholds default
+        # to 10k-1M rows; the fuzzer runs against a three-row table, SLT files insert two to five
+        # rows, and unit tests use inline literals. Nothing in the suite was large enough to spill,
+        # so a spill defect could only ever be found by a customer or a sample. Lowering the
+        # thresholds turns every query the corpus already contains into spill coverage, which is
+        # far more surface than any spill tests we would sit down and write.
+        $previous = @{}
+        $overrides = @{
+            "Engine__BatchSize"                   = "7"
+            "Engine__JoinSpillThreshold"          = "10"
+            "Engine__ExternalSortChunkSize"       = "10"
+            "Engine__WindowSpillThreshold"        = "10"
+            "Engine__TempTableSpillThresholdRows" = "25"
+            "Engine__MaxInMemoryBatches"          = "2"
+        }
+        # BatchSize is deliberately not a round number and not a multiple of the row counts in the
+        # corpus: batch boundaries that always land between logical groups hide exactly the
+        # cross-batch defects this lane is for.
+        try {
+            foreach ($key in $overrides.Keys) {
+                $previous[$key] = [Environment]::GetEnvironmentVariable($key)
+                [Environment]::SetEnvironmentVariable($key, $overrides[$key])
+            }
+
+            Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
+
+            $previousRunSlt = $env:ETL_SQL_RUN_SLT
+            try {
+                $env:ETL_SQL_RUN_SLT = "1"
+                Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
+            }
+            finally {
+                $env:ETL_SQL_RUN_SLT = $previousRunSlt
+            }
+        }
+        finally {
+            foreach ($key in $previous.Keys) {
+                [Environment]::SetEnvironmentVariable($key, $previous[$key])
+            }
+        }
     }
     "slt" {
         $previousRunSlt = $env:ETL_SQL_RUN_SLT

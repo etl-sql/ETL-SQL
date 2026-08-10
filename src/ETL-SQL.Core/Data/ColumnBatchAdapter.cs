@@ -74,9 +74,35 @@ public static class ColumnBatchAdapter
         _ => throw new NotSupportedException($"Logical type '{logicalType}' does not yet have a native column buffer.")
     };
 
+    /// <summary>
+    /// Captures a batch's logical schema so later batches of the same stream can be built against
+    /// it instead of re-inferring their own.
+    ///
+    /// <para>Inference reads the first non-null value in the batch it is given, so a column that
+    /// happens to be entirely NULL in one batch yields no evidence and would otherwise default to
+    /// a string column — a different physical type from the batch before it. Every consumer that
+    /// requires a stable schema across batches (the columnar spill writers do; they lock their
+    /// Arrow schema on the first batch and reject the rest) must carry this forward.</para>
+    /// </summary>
+    public static Dictionary<string, ColumnDefinition> LogicalSchemaOf(ColumnBatch batch)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        var schema = new Dictionary<string, ColumnDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in batch.Schema.Fields)
+            schema[field.Name] = new ColumnDefinition(field.Name, field.LogicalType, isIdentity: false);
+        return schema;
+    }
+
+    /// <param name="noEvidenceFallback">
+    /// Types to adopt only for columns this batch has no evidence for — every value NULL. Distinct
+    /// from <paramref name="logicalSchema"/>, which is authoritative for every column: a batch that
+    /// *does* carry values must keep inferring from them, or a column whose contents genuinely
+    /// differ from an earlier batch would be forced into a type its values do not fit.
+    /// </param>
     public static ColumnBatch FromDataTable(
         DataTable table,
-        IReadOnlyDictionary<string, ColumnDefinition>? logicalSchema = null)
+        IReadOnlyDictionary<string, ColumnDefinition>? logicalSchema = null,
+        IReadOnlyDictionary<string, ColumnDefinition>? noEvidenceFallback = null)
     {
         ArgumentNullException.ThrowIfNull(table);
         if (table.Schema.ColumnCount == 0)
@@ -89,9 +115,22 @@ public static class ColumnBatchAdapter
             for (var ordinal = 0; ordinal < table.Schema.ColumnCount; ordinal++)
             {
                 var name = table.Schema.GetName(ordinal);
-                var logicalType = logicalSchema != null && logicalSchema.TryGetValue(name, out var definition)
-                    ? definition.DataType
-                    : InferLogicalType(table.Rows, ordinal);
+                string logicalType;
+                if (logicalSchema != null && logicalSchema.TryGetValue(name, out var definition))
+                {
+                    logicalType = definition.DataType;
+                }
+                else
+                {
+                    logicalType = InferLogicalType(table.Rows, ordinal, out var hasEvidence);
+                    // No non-NULL value in this batch means no evidence, not "it is a string".
+                    if (!hasEvidence
+                        && noEvidenceFallback != null
+                        && noEvidenceFallback.TryGetValue(name, out var established))
+                    {
+                        logicalType = established.DataType;
+                    }
+                }
                 var column = BuildColumn(table.Rows, ordinal, logicalType, out var physicalType);
                 fields.Add(new ColumnBatchField(name, physicalType, logicalType, IsNullable(table.Rows, ordinal)));
                 columns.Add(column);
@@ -383,8 +422,16 @@ public static class ColumnBatchAdapter
     }
 
     private static string InferLogicalType(IReadOnlyList<Row> rows, int ordinal)
+        => InferLogicalType(rows, ordinal, out _);
+
+    /// <param name="hasEvidence">
+    /// False when every value in this batch is NULL. The returned type is then a default, not a
+    /// conclusion — callers that need a stable type across batches must supply their own.
+    /// </param>
+    private static string InferLogicalType(IReadOnlyList<Row> rows, int ordinal, out bool hasEvidence)
     {
         var value = rows.Select(row => row[ordinal]).FirstOrDefault(candidate => candidate != null && candidate != DBNull.Value);
+        hasEvidence = value != null;
         return value switch
         {
             byte => "TINYINT",

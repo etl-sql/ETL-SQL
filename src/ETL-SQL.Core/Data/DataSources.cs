@@ -1020,6 +1020,10 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         ISpillWriter? extentWriter = null;
         string? extentName = null;
         long extentEstimatedBytes = 0;
+        // Established by the first batch and reused by every later one, across extents: per-batch
+        // inference would give a column that is entirely NULL in some batch a different physical
+        // type, which the columnar writer rejects and a reader would see as a schema change.
+        Dictionary<string, ColumnDefinition>? spillColumnSchema = null;
         Task? pendingSpillWrite = null;
         var currentExtentIndexedBatches = new List<DataTable>();
 
@@ -1319,7 +1323,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
 
                 if (extentWriter is IColumnarSpillWriter columnarWriter)
                 {
-                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
+                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch, spillColumnSchema);
+                    spillColumnSchema ??= ColumnBatchAdapter.LogicalSchemaOf(columnBatch);
                     await columnarWriter.WriteBatchAsync(columnBatch);
                 }
                 else
@@ -1416,6 +1421,9 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         string? currentName = null;
         long extentBytes = 0;
         long totalBytes = 0;
+        // See the note on the streaming spill path: the schema is established once for the whole
+        // relation, not re-inferred per batch.
+        Dictionary<string, ColumnDefinition>? columnSchema = null;
 
         try
         {
@@ -1430,7 +1438,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
 
                 if (writer is IColumnarSpillWriter columnarWriter)
                 {
-                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
+                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch, columnSchema);
+                    columnSchema ??= ColumnBatchAdapter.LogicalSchemaOf(columnBatch);
                     await columnarWriter.WriteBatchAsync(columnBatch);
                 }
                 else
