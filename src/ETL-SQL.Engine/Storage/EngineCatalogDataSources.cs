@@ -232,7 +232,12 @@ public sealed class VariablesDataSource : IDataSource
             rows.Add(new Row
             {
                 ["variable_name"] = name,
-                ["value"] = value,
+                // Rendered, not the raw value. Variables are heterogeneous by nature, so emitting
+                // them raw made this a column holding a number in one row and a string in the next
+                // — which any columnar materialization of the view (SELECT ... INTO, a spill) then
+                // fails on. The column is documented as text and already carries "*******" for a
+                // masked value; data_type is what reports the original type.
+                ["value"] = RenderCatalogValue(value),
                 ["data_type"] = GetDataTypeName(value),
                 ["scope"] = scope,
                 ["is_sensitive"] = isSensitive
@@ -260,6 +265,19 @@ public sealed class VariablesDataSource : IDataSource
     public void Restore(object? snapshot) { }
     public IDataSource WithTable(string tableName) => this;
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    /// <summary>
+    /// Renders a variable's value for the catalog's text <c>value</c> column. Invariant formatting
+    /// so the view reads the same regardless of the host's culture — a decimal must not come back
+    /// with a comma separator on one machine and a point on another.
+    /// </summary>
+    private static string? RenderCatalogValue(object? value) => value switch
+    {
+        null => null,
+        string text => text,
+        IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => value.ToString()
+    };
 
     private static string GetDataTypeName(object? value)
     {

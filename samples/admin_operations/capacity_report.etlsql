@@ -1,3 +1,8 @@
+-- @expected-exit-code: 1
+-- @expected-error: Decryption error
+-- Run as shipped, this template must fail: the SMTP password is still the
+-- ENC: placeholder. A placeholder credential being rejected rather than quietly used
+-- is the property worth asserting; replace it and the script runs.
 -- =============================================================================
 --  Capacity Report  (administrator template — run as-is or adapt)
 -- =============================================================================

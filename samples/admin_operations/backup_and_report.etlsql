@@ -1,3 +1,7 @@
+-- @expected-exit-code: 1
+-- @expected-error: Variable '@backup_target' is used but not declared
+-- Run bare (no --var), this template must fail: the whole point is that an uninjected
+-- variable is an error rather than a silent default. Asserting that is the coverage.
 -- =============================================================================
 --  Backup Outcome Recorder + Alert  (administrator template — run as-is or adapt)
 -- =============================================================================
