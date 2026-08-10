@@ -40,6 +40,7 @@ public interface ISandboxAdmissionLedger
     Task<long?> TryActivateAsync(
         string admissionId,
         string leaseOwner,
+        int poolCapacity,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
@@ -135,16 +136,33 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
     public async Task<long?> TryActivateAsync(
         string admissionId,
         string leaseOwner,
+        int poolCapacity,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
     {
         ValidateLeaseArguments(admissionId, leaseOwner, leaseDuration);
+        if (poolCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(poolCapacity));
         await EnsureInitializedAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
         await using var connection = dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var queued = await ReadEntryAsync(connection, transaction, admissionId, "Queued", cancellationToken);
+        if (queued is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        if (!await TryReserveCapacityAsync(
+                connection, transaction, queued.PoolId, queued.TenantId,
+                poolCapacity, queued.MaxConcurrentAttempts, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
         await using var update = connection.CreateCommand();
         update.Transaction = transaction;
         update.CommandText = """
@@ -201,15 +219,9 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
     {
         ValidateOwnedMutation(admissionId, leaseOwner, fenceToken);
         await EnsureInitializedAsync(cancellationToken);
-        return await ExecuteOwnedUpdateAsync(
-            """
-            UPDATE SandboxAdmissions
-               SET State = 'Completed', LeaseOwner = NULL, LeaseExpiresUtc = NULL,
-                   UpdatedUtc = @now, ReconciliationReason = NULL
-             WHERE AdmissionId = @id AND State = 'Active'
-               AND LeaseOwner = @owner AND FenceToken = @fence;
-            """,
-            admissionId, leaseOwner, fenceToken, DateTimeOffset.UtcNow, null, null, cancellationToken);
+        return await TryTransitionAndReleaseCapacityAsync(
+            admissionId, "Active", "Completed", leaseOwner, fenceToken,
+            clearReason: true, cancellationToken);
     }
 
     public async Task<bool> TryRetainAsync(
@@ -262,18 +274,9 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         ArgumentException.ThrowIfNullOrWhiteSpace(admissionId);
         if (fenceToken <= 0) throw new ArgumentOutOfRangeException(nameof(fenceToken));
         await EnsureInitializedAsync(cancellationToken);
-        await using var connection = dialect.CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Completed', UpdatedUtc = @now, ReconciliationReason = NULL
-             WHERE AdmissionId = @id AND State = 'Retained' AND FenceToken = @fence;
-            """;
-        command.AddParam("@id", admissionId);
-        command.AddParam("@fence", fenceToken);
-        command.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        return await TryTransitionAndReleaseCapacityAsync(
+            admissionId, "Retained", "Completed", null, fenceToken,
+            clearReason: true, cancellationToken);
     }
 
     public async Task<SandboxAdmissionLedgerEntry?> ReadAsync(
@@ -381,6 +384,16 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
                         ON SandboxAdmissions (PoolId, State, Sequence);
                     CREATE INDEX IF NOT EXISTS IX_SandboxAdmissions_TenantState
                         ON SandboxAdmissions (TenantId, State);
+                    CREATE TABLE IF NOT EXISTS SandboxAdmissionPools (
+                        PoolId       TEXT PRIMARY KEY,
+                        ActiveCount  INTEGER NOT NULL DEFAULT 0
+                    );
+                    CREATE TABLE IF NOT EXISTS SandboxAdmissionTenantCapacity (
+                        PoolId       TEXT NOT NULL,
+                        TenantId     TEXT NOT NULL,
+                        ActiveCount  INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (PoolId, TenantId)
+                    );
                     """;
                 await create.ExecuteNonQueryAsync(cancellationToken);
                 _initialized = true;
@@ -422,6 +435,159 @@ public sealed class RelationalSandboxAdmissionLedger(IOrchestratorStoreDialect d
         if (expires.HasValue) command.AddParam("@expires", expires.Value.ToString("O"));
         if (reason is not null) command.AddParam("@reason", reason);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    private static async Task<SandboxAdmissionLedgerEntry?> ReadEntryAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string admissionId,
+        string expectedState,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            "SELECT * FROM SandboxAdmissions WHERE AdmissionId = @id AND State = @state;";
+        command.AddParam("@id", admissionId);
+        command.AddParam("@state", expectedState);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? ReadEntry(reader) : null;
+    }
+
+    private static async Task<bool> TryReserveCapacityAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        string poolId,
+        string tenantId,
+        int poolCapacity,
+        int tenantCapacity,
+        CancellationToken cancellationToken)
+    {
+        await using (var ensurePool = connection.CreateCommand())
+        {
+            ensurePool.Transaction = transaction;
+            ensurePool.CommandText = """
+                INSERT INTO SandboxAdmissionPools (PoolId, ActiveCount)
+                VALUES (@pool, 0)
+                ON CONFLICT (PoolId) DO NOTHING;
+                """;
+            ensurePool.AddParam("@pool", poolId);
+            await ensurePool.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var reservePool = connection.CreateCommand())
+        {
+            reservePool.Transaction = transaction;
+            reservePool.CommandText = """
+                UPDATE SandboxAdmissionPools
+                   SET ActiveCount = ActiveCount + 1
+                 WHERE PoolId = @pool AND ActiveCount < @capacity;
+                """;
+            reservePool.AddParam("@pool", poolId);
+            reservePool.AddParam("@capacity", poolCapacity);
+            if (await reservePool.ExecuteNonQueryAsync(cancellationToken) != 1)
+                return false;
+        }
+
+        await using (var ensureTenant = connection.CreateCommand())
+        {
+            ensureTenant.Transaction = transaction;
+            ensureTenant.CommandText = """
+                INSERT INTO SandboxAdmissionTenantCapacity (PoolId, TenantId, ActiveCount)
+                VALUES (@pool, @tenant, 0)
+                ON CONFLICT (PoolId, TenantId) DO NOTHING;
+                """;
+            ensureTenant.AddParam("@pool", poolId);
+            ensureTenant.AddParam("@tenant", tenantId);
+            await ensureTenant.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var reserveTenant = connection.CreateCommand();
+        reserveTenant.Transaction = transaction;
+        reserveTenant.CommandText = """
+            UPDATE SandboxAdmissionTenantCapacity
+               SET ActiveCount = ActiveCount + 1
+             WHERE PoolId = @pool AND TenantId = @tenant AND ActiveCount < @capacity;
+            """;
+        reserveTenant.AddParam("@pool", poolId);
+        reserveTenant.AddParam("@tenant", tenantId);
+        reserveTenant.AddParam("@capacity", tenantCapacity);
+        return await reserveTenant.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    private async Task<bool> TryTransitionAndReleaseCapacityAsync(
+        string admissionId,
+        string expectedState,
+        string targetState,
+        string? leaseOwner,
+        long fenceToken,
+        bool clearReason,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var entry = await ReadEntryAsync(
+            connection, transaction, admissionId, expectedState, cancellationToken);
+        if (entry is null || entry.FenceToken != fenceToken ||
+            (leaseOwner is not null && entry.LeaseOwner != leaseOwner))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        await using (var transition = connection.CreateCommand())
+        {
+            transition.Transaction = transaction;
+            transition.CommandText = $"""
+                UPDATE SandboxAdmissions
+                   SET State = @target, LeaseOwner = NULL, LeaseExpiresUtc = NULL,
+                       UpdatedUtc = @now{(clearReason ? ", ReconciliationReason = NULL" : string.Empty)}
+                 WHERE AdmissionId = @id AND State = @expected AND FenceToken = @fence
+                       {(leaseOwner is null ? string.Empty : "AND LeaseOwner = @owner")};
+                """;
+            transition.AddParam("@target", targetState);
+            transition.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
+            transition.AddParam("@id", admissionId);
+            transition.AddParam("@expected", expectedState);
+            transition.AddParam("@fence", fenceToken);
+            if (leaseOwner is not null) transition.AddParam("@owner", leaseOwner);
+            if (await transition.ExecuteNonQueryAsync(cancellationToken) != 1)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+        }
+
+        await using (var releasePool = connection.CreateCommand())
+        {
+            releasePool.Transaction = transaction;
+            releasePool.CommandText = """
+                UPDATE SandboxAdmissionPools
+                   SET ActiveCount = ActiveCount - 1
+                 WHERE PoolId = @pool AND ActiveCount > 0;
+                """;
+            releasePool.AddParam("@pool", entry.PoolId);
+            if (await releasePool.ExecuteNonQueryAsync(cancellationToken) != 1)
+                throw new InvalidOperationException("Sandbox pool capacity ledger is inconsistent.");
+        }
+
+        await using (var releaseTenant = connection.CreateCommand())
+        {
+            releaseTenant.Transaction = transaction;
+            releaseTenant.CommandText = """
+                UPDATE SandboxAdmissionTenantCapacity
+                   SET ActiveCount = ActiveCount - 1
+                 WHERE PoolId = @pool AND TenantId = @tenant AND ActiveCount > 0;
+                """;
+            releaseTenant.AddParam("@pool", entry.PoolId);
+            releaseTenant.AddParam("@tenant", entry.TenantId);
+            if (await releaseTenant.ExecuteNonQueryAsync(cancellationToken) != 1)
+                throw new InvalidOperationException("Sandbox tenant capacity ledger is inconsistent.");
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     private static SandboxAdmissionLedgerEntry ReadEntry(DbDataReader reader) => new(

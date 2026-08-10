@@ -701,8 +701,25 @@ SQLite/PostgreSQL Orchestrator dialect. It persists tenant/pool policy, FIFO seq
 active owner/expiry, monotonic fence token, terminal state, and retained reconciliation reason.
 Only one node can activate a queued admission, and every renew/complete/retain mutation carries owner
 and fence. Lease expiry moves an active attempt to `Retained`; it never means that capacity or storage
-is safe to reuse. Queue order and active/retained reservations can be rebuilt after restart. Direct
-fair-dispatch integration with this ledger and PostgreSQL certification remain open scheduler work.
+is safe to reuse. Pool and tenant capacity counters change in the same relational transaction as
+activation and terminal release. Therefore two nodes claiming different admissions cannot each
+observe and consume the same last slot, and retained attempts continue occupying both counters until
+fenced reconciliation. Queue order and active/retained reservations can be rebuilt after restart.
+A real PostgreSQL/Testcontainers scenario pins two-node final-slot contention, retained capacity, and
+fresh-ledger recovery on the HA provider. `LedgerBackedSandboxAdmissionController` writes queue intent
+before local weighted waiting, requires fenced relational activation before returning an admission,
+and heartbeats that lease for the attempt lifetime. Lease renewal loss cancels the same execution token
+the coordinator passes to workspace preparation and runtime execution. Normal completion is committed
+durably before local capacity is returned; explicit reconciliation releases both durable and local
+reservations. Weighted choice is still process-local. Cluster-wide weighted selection, queued-work
+rebuild after process loss, and hosted-service wiring remain open scheduler work.
+
+`SandboxAdmissionReconciliationService` performs the expiry pass without treating time as teardown
+proof. It first moves expired active leases to retained state, then asks the environment-owned
+`ISandboxRuntimeReconciler` to locate the provider runtime by admission identity. Capacity is released
+only for `Detached`. `Running`, `Unknown`, provider exceptions, and fence conflicts remain retained and
+continue consuming pool/tenant counters for a later pass. This keeps an unavailable control plane or
+ambiguous runtime from becoming accidental overcommit.
 
 ## 14. Observability, Audit, and Support
 

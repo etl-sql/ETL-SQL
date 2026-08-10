@@ -442,8 +442,22 @@ leases, and reconciliation state in the profile's authoritative scheduler store.
 `RelationalSandboxAdmissionLedger` supplies that provider-neutral SQLite/PostgreSQL persistence model:
 queued order, tenant/pool policy, active owner and expiry, monotonic fencing, cancellation, terminal
 state, and retained ambiguous teardown. Expiry moves work to retained reconciliation rather than
-making a possibly live sandbox eligible for silent replacement. The fair dispatcher must consume this
-ledger in the production scheduler; persistence alone does not perform placement.
+making a possibly live sandbox eligible for silent replacement. Transactional pool and tenant
+capacity counters prevent separate nodes from consuming the same final slot even when they activate
+different admissions; retained work keeps its counters. The fair dispatcher must consume this ledger
+in the production scheduler; persistence alone does not perform placement. SQLite concurrency tests
+and a real PostgreSQL/Testcontainers HA contention scenario certify the transactional counter and
+retained-recovery behavior on both supported relational providers.
+
+`LedgerBackedSandboxAdmissionController` is the first live bridge: it persists admission before local
+weighted waiting, obtains relational capacity/fence authority before execution, renews ownership, and
+cancels execution on lease loss. Completion reaches the relational ledger before local capacity is
+returned. This does not yet make weighted ordering cluster-global; the production scheduler must also
+rebuild queued work and coordinate weighted selection across nodes.
+
+Expired admission leases are handled by `SandboxAdmissionReconciliationService`. The service changes
+expired work to retained and delegates runtime discovery to the environment binding. Only positive
+detachment proof releases capacity; running, unknown, failed probes, or fence conflicts remain retained.
 
 ### 10.1 Isolation Tiers
 

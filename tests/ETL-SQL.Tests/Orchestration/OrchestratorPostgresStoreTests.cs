@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
@@ -28,6 +29,9 @@ namespace ETL_SQL.Tests.Orchestration
         public Task DisposeAsync() => _pg.DisposeAsync().AsTask();
 
         private RelationalJobHistoryStore NewStore() =>
+            new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
+
+        private RelationalSandboxAdmissionLedger NewAdmissionLedger() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 
         private JobThrottle NewThrottle()
@@ -235,6 +239,48 @@ namespace ETL_SQL.Tests.Orchestration
             var active = (await store.GetActiveJobsAsync()).Select(j => j.Name).ToList();
             Assert.Contains("cc-job", active);
             Assert.DoesNotContain("disabled-job", active);
+        }
+
+        [Fact]
+        public async Task SandboxAdmissionLedger_FencesCapacityAndRetainedState_OnPostgres()
+        {
+            var first = NewAdmissionLedger();
+            var second = NewAdmissionLedger();
+            var policy = new ResolvedSandboxAdmissionPolicy
+            {
+                PoolId = "pg-shared-hardened",
+                TenantWeight = 1,
+                MaxConcurrentAttempts = 1,
+                MaxQueuedAttempts = 8
+            };
+            await first.EnqueueAsync(
+                "pg-admission-a", TenantContext.FromVerifiedCredential("tenant-a"), policy);
+            await first.EnqueueAsync(
+                "pg-admission-b", TenantContext.FromVerifiedCredential("tenant-b"), policy);
+
+            var claims = await Task.WhenAll(
+                first.TryActivateAsync(
+                    "pg-admission-a", "pg-node-a", 1, TimeSpan.FromMinutes(5)),
+                second.TryActivateAsync(
+                    "pg-admission-b", "pg-node-b", 1, TimeSpan.FromMinutes(5)));
+
+            Assert.Single(claims, token => token.HasValue);
+            var firstWon = claims[0].HasValue;
+            var activeId = firstWon ? "pg-admission-a" : "pg-admission-b";
+            var queuedId = firstWon ? "pg-admission-b" : "pg-admission-a";
+            var owner = firstWon ? "pg-node-a" : "pg-node-b";
+            var token = claims.First(value => value.HasValue)!.Value;
+            Assert.True(await first.TryRetainAsync(
+                activeId, owner, token, "runtime detach unconfirmed"));
+            Assert.Null(await second.TryActivateAsync(
+                queuedId, "pg-node-c", 1, TimeSpan.FromMinutes(5)));
+
+            var restarted = NewAdmissionLedger();
+            var retained = await restarted.ReadAsync(activeId);
+            Assert.Equal(SandboxAdmissionState.Retained, retained!.State);
+            Assert.True(await restarted.ReleaseRetainedAsync(activeId, token));
+            Assert.NotNull(await restarted.TryActivateAsync(
+                queuedId, "pg-node-c", 1, TimeSpan.FromMinutes(5)));
         }
     }
 }

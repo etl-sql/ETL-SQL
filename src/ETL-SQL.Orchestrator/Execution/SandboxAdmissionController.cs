@@ -42,17 +42,21 @@ public sealed class SandboxAdmissionLease
         string admissionId,
         TenantId tenant,
         string poolId,
-        Func<ValueTask> release)
+        Func<ValueTask> release,
+        CancellationToken leaseLost = default)
     {
         AdmissionId = admissionId;
         Tenant = tenant;
         PoolId = poolId;
         _release = release;
+        LeaseLost = leaseLost;
     }
 
     public string AdmissionId { get; }
     public TenantId Tenant { get; }
     public string PoolId { get; }
+    /// <summary>Cancelled when durable ownership can no longer be renewed.</summary>
+    public CancellationToken LeaseLost { get; }
 
     public ValueTask ReleaseAsync() =>
         Interlocked.Exchange(ref _released, 1) == 0 ? _release() : ValueTask.CompletedTask;

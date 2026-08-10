@@ -156,13 +156,16 @@ public sealed class SandboxExecutionCoordinator(
             request.Assignment.Tenant,
             request.AdmissionPolicy,
             cancellationToken);
+        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, admission.LeaseLost);
+        var executionToken = executionCancellation.Token;
         SandboxWorkspaceAssignment? workspace = null;
         ISandboxAttempt? attempt = null;
         var runtimeDestroyed = false;
         try
         {
-            workspace = await workspaces.AssignAsync(request.Assignment, cancellationToken);
-            attempt = await provider.PrepareAsync(request, workspace, cancellationToken);
+            workspace = await workspaces.AssignAsync(request.Assignment, executionToken);
+            attempt = await provider.PrepareAsync(request, workspace, executionToken);
             if (attempt is null)
                 throw new InvalidOperationException("The sandbox provider prepared no attempt.");
 
@@ -171,7 +174,7 @@ public sealed class SandboxExecutionCoordinator(
             try
             {
                 ValidateEvidence(attempt.Evidence, request.RequiredIsolationTier);
-                outcome = await attempt.RunAsync(cancellationToken);
+                outcome = await attempt.RunAsync(executionToken);
                 if (outcome is null)
                     throw new InvalidOperationException("The sandbox provider returned no terminal outcome.");
             }

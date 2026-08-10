@@ -696,9 +696,21 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       state through the existing provider-neutral SQLite/PostgreSQL dialect. Competing nodes cannot
       activate the same queued admission; owner/fence mismatches cannot renew or complete it; lease
       expiry becomes `Retained` rather than silently freeing capacity; queue order and reservations
-      survive store recreation. Wiring fair dispatch directly to this durable ledger, PostgreSQL
-      integration certification, scheduler job metadata, and an actual Hardened OCI/microVM provider
-      remain open.
+      survive store recreation. Pool and tenant capacity counters are now reserved and released in
+      the same relational transaction as admission activation/completion, so competing nodes claiming
+      different work cannot oversubscribe either boundary. Retained attempts continue consuming both
+      counters until fenced reconciliation. A real PostgreSQL/Testcontainers test proves the same
+      two-node final-slot contention, retained-capacity behavior, and fresh-instance recovery on the HA
+      provider. `LedgerBackedSandboxAdmissionController` now persists queue intent before entering the
+      local weighted dispatcher, requires a fenced relational activation before returning authority,
+      renews the lease while work runs, and cancels the coordinator's execution token if renewal loses
+      ownership. Normal release commits the durable terminal state before returning local capacity;
+      reconciliation releases both ledgers. `SandboxAdmissionReconciliationService` now sweeps expired
+      active leases into retained state and calls an environment-owned runtime probe; only an explicit
+      `Detached` result releases fenced capacity. `Running`, `Unknown`, probe failures, and fence races
+      remain retained for a later pass. Global/durable weighted selection and queued-work rebuild,
+      hosted-service wiring, scheduler job metadata, and an actual Hardened OCI/microVM provider remain
+      open.
 - [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
