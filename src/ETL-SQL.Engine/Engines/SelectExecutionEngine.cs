@@ -592,8 +592,9 @@ public class SelectExecutionEngine
             else
             {
                 // Temporarily add aliases to rows so QUALIFY can reference them by alias (e.g., QUALIFY rnk <= 1)
+                var qualifyAliases = BuildQualifyAliasMap(stmt.Columns);
                 foreach (var row in allRows)
-                    AddQualifyAliases(row, stmt.Columns);
+                    AddQualifyAliases(row, qualifyAliases);
 
                 var filtered = new List<Row>();
                 var compiledQualify = RowExpressionCompiler.TryCompilePredicate(_context, stmt.QualifyClause, out var qualifyPredicate)
@@ -1325,9 +1326,10 @@ public class SelectExecutionEngine
         var compiledQualify = RowExpressionCompiler.TryCompilePredicate(_context, stmt.QualifyClause, out var qualifyPredicate)
             ? qualifyPredicate
             : null;
+        var aliasMap = BuildQualifyAliasMap(stmt.Columns);
         await foreach (var row in source)
         {
-            AddQualifyAliases(row, stmt.Columns);
+            AddQualifyAliases(row, aliasMap);
             var passesQualify = compiledQualify != null
                 ? compiledQualify(row)
                 : await _context.EvaluateCondition(stmt.QualifyClause!, row);
@@ -1335,8 +1337,18 @@ public class SelectExecutionEngine
         }
     }
 
-    private static void AddQualifyAliases(Row row, List<SelectColumn> columns)
+    /// <summary>
+    /// Resolves, once per statement, the alias → window-result-column pairs QUALIFY needs so it can
+    /// reference a windowed column by its alias (<c>QUALIFY rnk &lt;= 1</c>).
+    ///
+    /// <para>Every step here depends only on the SELECT list, never on the row. Deriving them
+    /// per row — which is what this replaces — walked each column's expression tree and
+    /// re-serialized the window call back to SQL text, then upper-cased it, once per row per
+    /// windowed column, to arrive at the same constant string every time.</para>
+    /// </summary>
+    private static (string Alias, string WindowKey)[] BuildQualifyAliasMap(List<SelectColumn> columns)
     {
+        List<(string, string)>? pairs = null;
         foreach (var col in columns)
         {
             if (col.Alias == null || !WindowEngine.ContainsWindowFunction(col.Expression))
@@ -1346,9 +1358,18 @@ public class SelectExecutionEngine
             if (winCalls.Count != 1)
                 continue;
 
-            var winKey = $"WINDOW_{winCalls[0].ToSql().ToUpperInvariant()}";
-            if (row.HasColumn(winKey))
-                row[col.Alias] = row[winKey];
+            (pairs ??= []).Add((col.Alias, $"WINDOW_{winCalls[0].ToSql().ToUpperInvariant()}"));
+        }
+        return pairs?.ToArray() ?? [];
+    }
+
+    private static void AddQualifyAliases(Row row, (string Alias, string WindowKey)[] aliasMap)
+    {
+        for (var i = 0; i < aliasMap.Length; i++)
+        {
+            var (alias, windowKey) = aliasMap[i];
+            if (row.HasColumn(windowKey))
+                row[alias] = row[windowKey];
         }
     }
 

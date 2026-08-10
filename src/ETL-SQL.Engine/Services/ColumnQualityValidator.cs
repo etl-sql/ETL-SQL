@@ -184,7 +184,15 @@ public sealed class ColumnQualityValidator
             var orderKey = entry.Rule.OrderKey != null
                 ? await _context.EvaluateValue(entry.Rule.OrderKey, projected)
                 : null;
-            var identity = RowIdentity(projected, rowOrdinal);
+
+            // Only UNIQUE_FIRST/LAST need a row identity, to break ties on the order key. Plain
+            // UNIQUE fails every row of a duplicated group, so it never asks which one to keep —
+            // and the identity is a rendering of the whole row, so computing and spilling one per
+            // row roughly doubled what the pre-pass writes to disk in exchange for nothing.
+            var identity = entry.Rule.Mode == UniqueMode.All
+                ? string.Empty
+                : RowIdentity(projected, rowOrdinal);
+
             _uniqueKeySpill ??= await UniqueKeySpill.CreateAsync(_context, _context.ExternalHashPartitions);
             await _uniqueKeySpill.WriteAsync(entry.Id, key, identity, orderKey, _context.CaseSensitiveComparison);
         }
@@ -241,10 +249,24 @@ public sealed class ColumnQualityValidator
         return entries;
     }
 
-    private UniqueRuleEntry FindUniqueEntry(ColumnRuleSet ruleSet, UniqueRule rule) =>
-        UniqueRules().First(entry =>
-            ReferenceEquals(entry.RuleSet, ruleSet)
-            && (ReferenceEquals(entry.Rule, rule) || entry.Rule.Equals(rule)));
+    private Dictionary<object, UniqueRuleEntry>? _uniqueEntryByRule;
+
+    /// <summary>
+    /// Resolves a rule back to its pre-pass entry. Keyed on the rule *instance*: this runs once per
+    /// row per UNIQUE rule, and the previous linear scan compared records by value, so two rules
+    /// that happened to be written identically cost a deep <c>Expression</c> comparison every row.
+    /// Parsing yields a distinct instance per column, so reference identity is exact here.
+    /// </summary>
+    private UniqueRuleEntry FindUniqueEntry(ColumnRuleSet ruleSet, UniqueRule rule)
+    {
+        if (_uniqueEntryByRule == null)
+        {
+            _uniqueEntryByRule = new Dictionary<object, UniqueRuleEntry>(ReferenceEqualityComparer.Instance);
+            foreach (var entry in UniqueRules())
+                _uniqueEntryByRule[entry.Rule] = entry;
+        }
+        return _uniqueEntryByRule[rule];
+    }
 
     private void ReduceUniquePartition(IReadOnlyList<Row> records)
     {
