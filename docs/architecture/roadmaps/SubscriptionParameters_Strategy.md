@@ -386,9 +386,9 @@ These are pure engine changes with no UI surface. They can be built and unit-tes
 - [ ] `DeclareStatementHandler.cs` (or equivalent): Recognize `INPUT` modifier and store it on the variable descriptor.
 
 **Tests**
-- [ ] `RelDateResolverTests.cs`: Exhaustive coverage — all anchors, both arithmetic directions, all N/NU units, period-shift rule, fixed passthrough, error paths.
-- [ ] `SetWeekStartDayTests.cs`: All 7 valid days, case-insensitive, invalid value → error.
-- [ ] `WeekStartArithmeticTests.cs`: `W-1`, `WE-1`, `WE`, `W` with each of the 7 start days and representative calendar dates.
+- [ ] `tests/ETL-SQL.Tests/Functions/RelDateResolverTests.cs`: Exhaustive coverage — all anchors, both arithmetic directions, all N/NU units, period-shift rule, fixed passthrough, error paths.
+- [ ] `tests/ETL-SQL.Tests/Functions/SetWeekStartDayTests.cs`: All 7 valid days, case-insensitive, invalid value → error.
+- [ ] `tests/ETL-SQL.Tests/Functions/WeekStartArithmeticTests.cs`: `W-1`, `WE-1`, `WE`, `W` with each of the 7 start days and representative calendar dates.
 
 ---
 

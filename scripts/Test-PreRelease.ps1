@@ -62,6 +62,8 @@ $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDir = Join-Path $ValidationRoot $RunId
 $ReportJsonPath = Join-Path $RunDir "pre-release-report.json"
 $ReportMarkdownPath = Join-Path $RunDir "pre-release-report.md"
+$CoverageResultsRelative = Join-Path $OutDir "$RunId\coverage"
+$CoverageReportDir = Join-Path $RunDir "coverage\report"
 
 $EffectiveSkipNode = $SkipNode -or $Quick
 $EffectiveSkipScale = $SkipScale -or $Quick
@@ -91,12 +93,13 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
     $phases.Add([ordered]@{ Phase = "Changelog compilation"; Command = ".\scripts\Compile-Changelog.ps1"; Reason = "Any feature-branch changelog fragments are compiled into CHANGELOG.md." })
     $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
-    $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
+    $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx; dotnet tool restore"; Reason = "Package graph and repository-local release tools resolve before build, tests, and coverage reporting." })
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
     $phases.Add([ordered]@{ Phase = "SBOM generation"; Command = "node scripts/generate-sbom.js"; Reason = "The released SBOM generates and its component version matches Directory.Build.props." })
     $phases.Add([ordered]@{ Phase = "Third-party inventory drift"; Command = "node scripts/generate-third-party-inventory.js --check"; Reason = "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
+    $phases.Add([ordered]@{ Phase = "Test structure audit"; Command = ".\scripts\Get-TestLaneInventory.ps1 -FailOnIssues"; Reason = "Lane ownership is category-based, release-only suites have targeted runners, and milestone-era/root-level test naming cannot drift back in." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     if (-not $EffectiveSkipScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
@@ -109,7 +112,7 @@ function Get-PlannedPreReleasePhases {
     }
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
-    $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine"; Reason = "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane." })
+    $phases.Add([ordered]@{ Phase = "Engine lane and coverage gate"; Command = ".\scripts\Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70"; Reason = "Broad engine/parser/evaluator regression coverage is collected once and must meet the fail-closed 70% line-coverage release threshold." })
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the release-acceptance journeys: the role/permission authorization matrix (every grant against every operation, both directions), departmental environment isolation across two deployments, policy authority and distribution, module gating, Studio capabilities, and the browser API contract checked against the same file the browser validates with." })
     $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey (first-run sign-in, user, folder, publish, run); Viewer/Publisher/Steward/Operator role journeys, asserting that surfaces a role cannot use are absent rather than merely guarded; accessibility and responsive checks at 1440px and 390px (computed accessible names, no page overflow at phone width or 200% text, closed dialogs unreachable, both colour schemes, reduced motion, forced colours); accessibility-tree snapshots of critical surfaces; and every UI-sandbox story mounting cleanly." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
@@ -396,10 +399,11 @@ function Get-PreReleasePhaseDependencies {
 
     switch ($Name) {
         "Dotnet build" { return @("Dotnet restore") }
+        "Test structure audit" { return @("Dotnet build") }
         "Format verify" { return @("Dotnet restore") }
         "Smoke lane" { return @("Dotnet build") }
         "Fast lane" { return @("Dotnet build") }
-        "Engine lane" { return @("Dotnet build") }
+        "Engine lane and coverage gate" { return @("Dotnet build") }
         "Portal lane" { return @("Dotnet build") }
         "Browser lane" { return @("Dotnet build") }
         "N->N+1 upgrade-path drill" { return @("Dotnet build") }
@@ -732,8 +736,13 @@ try {
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Dotnet restore" `
-        "dotnet restore ETL-SQL.slnx" `
-        { & dotnet restore "ETL-SQL.slnx" } `
+        "dotnet restore ETL-SQL.slnx; dotnet tool restore" `
+        {
+            & dotnet restore "ETL-SQL.slnx"
+            if ($LASTEXITCODE -ne 0) { throw "Solution restore failed with exit code $LASTEXITCODE." }
+            & dotnet tool restore
+            if ($LASTEXITCODE -ne 0) { throw "Local tool restore failed with exit code $LASTEXITCODE." }
+        } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Dependency-audit self-test" `
@@ -784,6 +793,11 @@ try {
     Invoke-LoggedPhase "Dotnet build" `
         "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore" `
         { & dotnet build "ETL-SQL.slnx" "--configuration" $Configuration "--no-restore" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Test structure audit" `
+        ".\scripts\Get-TestLaneInventory.ps1 -FailOnIssues" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Get-TestLaneInventory.ps1" "-FailOnIssues" } `
         $previousPhaseMap $fingerprint $results
 
     # Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally
@@ -847,10 +861,14 @@ try {
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "fast" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
-    Invoke-LoggedPhase "Engine lane" `
-        ".\scripts\test-lane.ps1 -Lane engine -Configuration $Configuration -NoRestore -NoBuild" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "engine" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
-        $previousPhaseMap $fingerprint $results
+    Invoke-LoggedPhase "Engine lane and coverage gate" `
+        ".\scripts\Test-CoverageGate.ps1 -RunEngineLane -CoverageDirectory $CoverageResultsRelative -MinimumLineCoverage 70 -Configuration $Configuration -NoRestore -NoBuild" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-CoverageGate.ps1" "-RunEngineLane" "-CoverageDirectory" $CoverageResultsRelative "-MinimumLineCoverage" "70" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        $previousPhaseMap $fingerprint $results @(
+            (Join-Path $CoverageReportDir "Summary.txt"),
+            (Join-Path $CoverageReportDir "coverage-gate.json"),
+            (Join-Path $CoverageReportDir "Cobertura.xml")
+        )
 
     Invoke-LoggedPhase "Portal lane" `
         ".\scripts\test-lane.ps1 -Lane portal -Configuration $Configuration -NoRestore -NoBuild" `

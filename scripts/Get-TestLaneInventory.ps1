@@ -21,7 +21,9 @@ param(
     [ValidateSet("Markdown", "Json")]
     [string]$Format = "Markdown",
 
-    [string]$OutFile = ""
+    [string]$OutFile = "",
+
+    [switch]$FailOnIssues
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,13 +91,13 @@ function Get-TestRecords {
                     $categories = @("(none)")
                 }
 
-                $fastExclusionReasons = @(Get-FastExclusionReasons -Project $project -File $relative -Categories $categories)
+                $engineExclusionReasons = @(Get-EngineExclusionReasons -Project $project -Categories $categories)
                 $records.Add([ordered]@{
                     project = $project
                     file = $relative
                     method = $methodName
                     categories = @($categories)
-                    fastExclusionReasons = @($fastExclusionReasons)
+                    engineExclusionReasons = @($engineExclusionReasons)
                     lanes = @(Get-LanesForTest -Project $project -File $relative -Categories $categories)
                 })
             }
@@ -114,16 +116,9 @@ function Test-HasCategory {
     return $Categories -contains $Category
 }
 
-function Test-IsIntegrationName {
-    param([string]$File)
-
-    return $File -match "\\Integration\\|IntegrationTests?\.cs$|\\Integration\\w*Tests\.cs$"
-}
-
-function Get-FastExclusionReasons {
+function Get-EngineExclusionReasons {
     param(
         [string]$Project,
-        [string]$File,
         [string[]]$Categories
     )
 
@@ -132,20 +127,12 @@ function Get-FastExclusionReasons {
         return @()
     }
 
-    foreach ($category in @("Integration", "Performance", "ScaleCertification")) {
+    foreach ($category in @("Integration", "Performance", "ScaleCertification", "ScaleAssessment", "BillionRowCertification", "DeploymentProfile")) {
         if (Test-HasCategory $Categories $category) {
             $reasons.Add("Category=$category")
         }
     }
-    if (Test-IsIntegrationName $File) { $reasons.Add("FullyQualifiedName~Integration") }
-    if (Test-IsPerformanceName $File) { $reasons.Add("FullyQualifiedName~Performance") }
     return @($reasons | Select-Object -Unique)
-}
-
-function Test-IsPerformanceName {
-    param([string]$File)
-
-    return $File -match "\\Performance\\|PerformanceTests?\.cs$|\\Hardening\\Performance\\"
 }
 
 function Get-LanesForTest {
@@ -159,8 +146,11 @@ function Get-LanesForTest {
     $isSlt = Test-HasCategory $Categories "SLT"
     $isPerf = Test-HasCategory $Categories "Performance"
     $isIntegration = Test-HasCategory $Categories "Integration"
+    $isHosted = Test-HasCategory $Categories "HostedServices"
+    $isBrowser = Test-HasCategory $Categories "Browser"
+    $isFuzz = Test-HasCategory $Categories "Fuzz"
     $isSmoke = @($Categories | Where-Object { $_ -like "Smoke.*" }).Count -gt 0
-    $fastExclusionReasons = @(Get-FastExclusionReasons -Project $Project -File $File -Categories $Categories)
+    $engineExclusionReasons = @(Get-EngineExclusionReasons -Project $Project -Categories $Categories)
 
     if ($isSmoke) { $lanes.Add("smoke") }
     if ($isSlt) {
@@ -168,6 +158,13 @@ function Get-LanesForTest {
         return $lanes
     }
     if ($isIntegration) { $lanes.Add("integration") }
+    if ($isHosted) { $lanes.Add("portal-hosted") }
+    if ($isBrowser) { $lanes.Add("browser") }
+    if ($isFuzz) { $lanes.Add("fuzz") }
+    if (Test-HasCategory $Categories "ScaleAssessment") { $lanes.Add("scale-assessment") }
+    if (Test-HasCategory $Categories "ScaleCertification") { $lanes.Add("scale-certification") }
+    if (Test-HasCategory $Categories "BillionRowCertification") { $lanes.Add("billion-row-certification") }
+    if (Test-HasCategory $Categories "DeploymentProfile") { $lanes.Add("deployment-certification") }
     if (($Project -like "tests\ETL-SQL.Tests\*" -or $Project -like "tests\ETL-SQL.PerfTests\*") -and $isPerf) {
         $lanes.Add("perf")
     }
@@ -179,15 +176,18 @@ function Get-LanesForTest {
         $lanes.Add("fast")
     }
 
-    if ($Project -like "tests\ETL-SQL.Tests\*" -and $fastExclusionReasons.Count -eq 0) {
+    if ($Project -like "tests\ETL-SQL.Tests\*" -and $engineExclusionReasons.Count -eq 0) {
         $lanes.Add("engine")
     }
 
-    if ($Project -like "tests\ETL-SQL.Portal.Tests\*") {
+    if ($Project -like "tests\ETL-SQL.Portal.Tests\*" -and -not $isIntegration -and -not $isHosted) {
         $lanes.Add("portal")
     }
 
-    if (-not $isSlt -and $Project -notlike "tests\ETL-SQL.Benchmarks\*") {
+    if ($Project -like "tests\ETL-SQL.Tests\*" `
+        -or $Project -like "tests\ETL-SQL.LanguageServer.Tests\*" `
+        -or ($Project -like "tests\ETL-SQL.Portal.Tests\*" -and -not $isIntegration) `
+        -or $Project -like "tests\ETL-SQL.PerfTests\*") {
         $lanes.Add("full")
     }
 
@@ -210,6 +210,22 @@ function Group-Count {
 }
 
 $records = @(Get-TestRecords)
+$sourceFiles = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -Filter "*.cs" -File |
+    Where-Object { $_.FullName -notmatch "\\(bin|obj)\\|\\\.vscode-test\\" })
+$staleMilestoneNames = New-Object System.Collections.Generic.List[string]
+foreach ($file in $sourceFiles) {
+    $relative = $file.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/')
+    if ($file.BaseName -match '(?i)(Phase|Wave|Sprint)\d+') {
+        $staleMilestoneNames.Add($relative)
+        continue
+    }
+    if ([IO.File]::ReadAllText($file.FullName) -match '(?i)\b(class|record|void|Task)\s+[A-Za-z0-9_]*(Phase|Wave|Sprint)\d+[A-Za-z0-9_]*') {
+        $staleMilestoneNames.Add($relative)
+    }
+}
+$misplacedRootFiles = @(Get-ChildItem -LiteralPath (Join-Path $TestsRoot "ETL-SQL.Tests") -File -Filter "*.cs" |
+    Where-Object { $_.Name -ne "GlobalUsings.cs" } |
+    ForEach-Object { $_.FullName.Substring($RepoRoot.Path.Length).TrimStart('\', '/') })
 $byProject = Group-Count -Items $records -KeySelector { param($r) $r.project }
 
 $categoryRows = New-Object System.Collections.Generic.List[object]
@@ -228,11 +244,11 @@ foreach ($record in $records) {
 }
 $byLane = Group-Count -Items $laneRows.ToArray() -KeySelector { param($r) $r.lane }
 
-$fastExclusionRows = New-Object System.Collections.Generic.List[object]
+$engineExclusionRows = New-Object System.Collections.Generic.List[object]
 $targetedLaneGapRows = New-Object System.Collections.Generic.List[object]
 foreach ($record in $records) {
-    foreach ($reason in $record.fastExclusionReasons) {
-        $fastExclusionRows.Add([PSCustomObject]@{ reason = $reason; file = $record.file })
+    foreach ($reason in $record.engineExclusionReasons) {
+        $engineExclusionRows.Add([PSCustomObject]@{ reason = $reason; file = $record.file })
     }
 
     $hasTargetedLane =
@@ -241,18 +257,24 @@ foreach ($record in $records) {
         ($record.lanes -contains "slt") -or
         ($record.lanes -contains "smoke") -or
         ($record.lanes -contains "portal") -or
-        ($record.categories -contains "ScaleCertification")
+        ($record.lanes -contains "portal-hosted") -or
+        ($record.lanes -contains "browser") -or
+        ($record.lanes -contains "fuzz") -or
+        ($record.lanes -contains "scale-assessment") -or
+        ($record.lanes -contains "scale-certification") -or
+        ($record.lanes -contains "deployment-certification") -or
+        ($record.lanes -contains "billion-row-certification")
 
-    if ($record.fastExclusionReasons.Count -gt 0 -and -not $hasTargetedLane) {
+    if ($record.engineExclusionReasons.Count -gt 0 -and -not $hasTargetedLane) {
         $targetedLaneGapRows.Add([PSCustomObject]@{
             file = $record.file
             method = $record.method
-            reasons = $record.fastExclusionReasons
+            reasons = $record.engineExclusionReasons
             categories = $record.categories
         })
     }
 }
-$byFastExclusionReason = Group-Count -Items $fastExclusionRows.ToArray() -KeySelector { param($r) $r.reason }
+$byEngineExclusionReason = Group-Count -Items $engineExclusionRows.ToArray() -KeySelector { param($r) $r.reason }
 $targetedLaneGapFiles = @($targetedLaneGapRows | Group-Object file | Sort-Object @{ Expression = "Count"; Descending = $true }, Name)
 
 $inventory = [ordered]@{
@@ -261,8 +283,10 @@ $inventory = [ordered]@{
     byProject = $byProject
     byCategory = $byCategory
     byLane = $byLane
-    byFastExclusionReason = $byFastExclusionReason
+    byEngineExclusionReason = $byEngineExclusionReason
     targetedLaneGaps = $targetedLaneGapRows
+    staleMilestoneNames = $staleMilestoneNames
+    misplacedRootFiles = $misplacedRootFiles
     tests = $records
 }
 
@@ -281,7 +305,7 @@ else {
     $lines.Add("")
     $lines.Add("| Lane | Tests |")
     $lines.Add("| :--- | ---: |")
-    foreach ($lane in @("smoke", "fast", "engine", "portal", "integration", "perf", "slt", "full")) {
+    foreach ($lane in @("smoke", "fast", "engine", "portal", "portal-hosted", "browser", "integration", "perf", "slt", "fuzz", "scale-assessment", "scale-certification", "deployment-certification", "billion-row-certification", "full")) {
         $count = if ($byLane.Contains($lane)) { $byLane[$lane] } else { 0 }
         $lines.Add(("| `{0}` | {1} |" -f $lane, $count))
     }
@@ -290,7 +314,7 @@ else {
     $lines.Add("")
     $lines.Add("| Reason | Tests |")
     $lines.Add("| :--- | ---: |")
-    foreach ($entry in $byFastExclusionReason.GetEnumerator() | Sort-Object Name) {
+    foreach ($entry in $byEngineExclusionReason.GetEnumerator() | Sort-Object Name) {
         $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
     }
     $lines.Add("")
@@ -305,6 +329,16 @@ else {
         if ($targetedLaneGapFiles.Count -gt 20) {
             $lines.Add(("| ...and {0} more files | |" -f ($targetedLaneGapFiles.Count - 20)))
         }
+    }
+    $lines.Add("")
+    $lines.Add("## Structure Audit")
+    $lines.Add("")
+    $lines.Add(("Milestone-named test files/types/methods: **{0}**" -f $staleMilestoneNames.Count))
+    $lines.Add(("Feature tests left at the ETL-SQL.Tests project root: **{0}**" -f $misplacedRootFiles.Count))
+    $structureFindings = @($staleMilestoneNames) + @($misplacedRootFiles)
+    $structureFindings = @($structureFindings | Select-Object -Unique)
+    foreach ($file in $structureFindings) {
+        $lines.Add(('- `{0}`' -f $file))
     }
     $lines.Add("")
     $lines.Add("## By Category")
@@ -323,7 +357,7 @@ else {
         $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
     }
     $lines.Add("")
-    $lines.Add("> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` filters, while the gap section highlights tests that name-based filters exclude from engine but targeted lanes do not select. Run the lane to get authoritative pass/fail results.")
+    $lines.Add('> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` category filters. Certification labels identify focused release runners rather than implying that every certification is part of the ordinary `release` lane. Run the lane or focused certification script for authoritative pass/fail results.')
     $output = $lines -join [Environment]::NewLine
 }
 
@@ -335,4 +369,8 @@ if ($OutFile) {
 }
 else {
     Write-Output $output
+}
+
+if ($FailOnIssues -and ($targetedLaneGapRows.Count -gt 0 -or $staleMilestoneNames.Count -gt 0 -or $misplacedRootFiles.Count -gt 0)) {
+    throw "Test structure audit failed: $($targetedLaneGapRows.Count) lane gaps, $($staleMilestoneNames.Count) milestone names, $($misplacedRootFiles.Count) misplaced root files."
 }

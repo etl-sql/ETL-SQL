@@ -107,12 +107,13 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
     print_plan_phase "$i" "Shell script line endings check" "node scripts/check-shell-line-endings.js" "Shell scripts (.sh) must use LF line endings to avoid bash syntax errors."; i=$((i + 1))
     print_plan_phase "$i" "Secret scan" "node scripts/scan-secrets.js" "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian."; i=$((i + 1))
-    print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
+    print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx; dotnet tool restore" "Package graph and repository-local release tools resolve before build, tests, and coverage reporting."; i=$((i + 1))
     print_plan_phase "$i" "Dependency-audit self-test" "./scripts/Test-DependencyAudit.ps1 (via pwsh)" "The dependency-audit helpers behave correctly (reliable fallback + hard failure)."; i=$((i + 1))
     print_plan_phase "$i" "NuGet dependency audit" "scripts/lib/DependencyAudit.ps1 Invoke-NuGetDependencyAudit (via pwsh)" "Release should not ship known vulnerable or deprecated packages."; i=$((i + 1))
     print_plan_phase "$i" "SBOM generation" "node scripts/generate-sbom.js" "The released SBOM generates and its component version matches Directory.Build.props."; i=$((i + 1))
     print_plan_phase "$i" "Third-party inventory drift" "node scripts/generate-third-party-inventory.js --check" "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
+    print_plan_phase "$i" "Test structure audit" "./scripts/Get-TestLaneInventory.ps1 -FailOnIssues (via pwsh)" "Lane ownership and semantic test organization remain explicit."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
@@ -125,7 +126,7 @@ show_pre_release_plan() {
     fi
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Bounded quick-feedback lane: smoke coverage plus language-server tests."; i=$((i + 1))
-    print_plan_phase "$i" "Engine lane" "./scripts/test-lane.sh --lane engine" "Broad engine/parser/evaluator regression coverage, kept out of the default quick lane."; i=$((i + 1))
+    print_plan_phase "$i" "Engine lane and coverage gate" "./scripts/Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70 (via pwsh)" "Broad engine/parser/evaluator coverage is collected once and must meet the fail-closed 70% release threshold."; i=$((i + 1))
     print_plan_phase "$i" "Portal lane" "./scripts/test-lane.sh --lane portal" "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
@@ -632,9 +633,14 @@ run_phase "Secret scan" \
     "node scripts/scan-secrets.js" \
     node scripts/scan-secrets.js
 
-run_phase "Dotnet restore" \
-    "dotnet restore ETL-SQL.slnx" \
+restore_dotnet_phase() {
     dotnet restore "ETL-SQL.slnx"
+    dotnet tool restore
+}
+
+run_phase "Dotnet restore" \
+    "dotnet restore ETL-SQL.slnx; dotnet tool restore" \
+    restore_dotnet_phase
 
 run_phase "Dependency-audit self-test" \
     "./scripts/Test-DependencyAudit.ps1 (via pwsh)" \
@@ -655,6 +661,10 @@ run_phase "Third-party inventory drift" \
 run_phase "Dotnet build" \
     "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" \
     dotnet build "ETL-SQL.slnx" "--configuration" "$CONFIGURATION" "--no-restore"
+
+run_phase "Test structure audit" \
+    "./scripts/Get-TestLaneInventory.ps1 -FailOnIssues" \
+    pwsh -NoProfile -File "./scripts/Get-TestLaneInventory.ps1" -FailOnIssues
 
 # Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally
 # (a fast static check) before the long test lanes run. On drift, format_verify_phase applies the
@@ -695,9 +705,9 @@ run_phase "Fast lane" \
     "./scripts/test-lane.sh --lane fast --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "fast" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
-run_phase "Engine lane" \
-    "./scripts/test-lane.sh --lane engine --configuration $CONFIGURATION --no-restore --no-build" \
-    bash "./scripts/test-lane.sh" "--lane" "engine" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+run_phase "Engine lane and coverage gate" \
+    "./scripts/Test-CoverageGate.ps1 -RunEngineLane -CoverageDirectory $OUT_DIR/$RUN_ID/coverage -MinimumLineCoverage 70 -Configuration $CONFIGURATION -NoRestore -NoBuild" \
+    pwsh -NoProfile -File "./scripts/Test-CoverageGate.ps1" -RunEngineLane -CoverageDirectory "$OUT_DIR/$RUN_ID/coverage" -MinimumLineCoverage 70 -Configuration "$CONFIGURATION" -NoRestore -NoBuild
 
 run_phase "Portal lane" \
     "./scripts/test-lane.sh --lane portal --configuration $CONFIGURATION --no-restore --no-build" \

@@ -53,44 +53,21 @@ jobs:
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
+      - name: Audit test lanes and structure
+        shell: pwsh
+        run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues
+
       - name: Run smoke lanes
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
 
-      - name: Run tests with coverage
+      - name: Run engine tests and enforce coverage
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane engine -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
-        continue-on-error: false
-
-      - name: Generate coverage report
-        run: >
-          dotnet reportgenerator
-          -reports:"./coverage/**/coverage.cobertura.xml"
-          -targetdir:"./coverage/report"
-          -reporttypes:"Html;Cobertura;TextSummary"
-          -assemblyfilters:"+ETL-SQL;+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests;-ETL-SQL.Portal.Migrations.*"
+        run: .\scripts\Test-CoverageGate.ps1 -RunEngineLane -Configuration Release -NoRestore -NoBuild -CoverageDirectory coverage -MinimumLineCoverage 70
 
       - name: Print coverage summary
         run: cat ./coverage/report/Summary.txt
         shell: bash
-
-      - name: Check coverage threshold
-        shell: pwsh
-        run: |
-          $summaryPath = "./coverage/report/Summary.txt"
-          $content = Get-Content $summaryPath -Raw
-          if ($content -match "Line coverage:\s+([\d.]+)%") {
-            $lineCoverage = [double]$Matches[1]
-            Write-Host "Line coverage: $lineCoverage%"
-            # Baseline measured 2026-04-12: 70.5% line coverage.
-            $threshold = 70.0
-            if ($lineCoverage -lt $threshold) {
-              Write-Error "Coverage $lineCoverage% is below threshold $threshold%"
-              exit 1
-            }
-          } else {
-            Write-Warning "Could not parse coverage from summary — skipping gate"
-          }
 
   build-vscode:
     name: Build VS Code Extension

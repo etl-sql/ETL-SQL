@@ -32,34 +32,14 @@ jobs:
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
+      - name: Audit test lanes and structure
+        shell: pwsh
+        run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues
+
       - name: Smoke lane
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
 
-      - name: Engine lane with coverage
+      - name: Engine lane with coverage gate
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane engine -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
-
-      - name: Generate coverage report
-        run: >
-          dotnet reportgenerator
-          -reports:"./coverage/**/coverage.cobertura.xml"
-          -targetdir:"./coverage/report"
-          -reporttypes:"Html;Cobertura;TextSummary"
-          -assemblyfilters:"+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests"
-
-      - name: Check coverage threshold
-        shell: pwsh
-        run: |
-          $summaryPath = "./coverage/report/Summary.txt"
-          $content = Get-Content $summaryPath -Raw
-          if ($content -match "Line coverage:\s+([\d.]+)%") {
-            $lineCoverage = [double]$Matches[1]
-            if ($lineCoverage -lt 70.0) {
-              Write-Error "Coverage $lineCoverage% is below threshold 70.0%"
-              exit 1
-            }
-          } else {
-            Write-Error "Could not parse coverage from $summaryPath"
-            exit 1
-          }
+        run: .\scripts\Test-CoverageGate.ps1 -RunEngineLane -Configuration Release -NoRestore -NoBuild -CoverageDirectory coverage -MinimumLineCoverage 70

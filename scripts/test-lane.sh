@@ -43,7 +43,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-FAST_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+ENGINE_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)"
 PORTAL_FILTER="(Category!=Integration)&(Category!=HostedServices)"
 
 invoke_dotnet_test() {
@@ -79,6 +79,23 @@ invoke_lineage_ui_smoke() {
     node "$REPO_ROOT/scripts/test-subscription-history-ui.mjs"
     node "$REPO_ROOT/scripts/test-result-grid-ui.mjs"
     node "$REPO_ROOT/scripts/test-admin-catalog-ui.mjs"
+    node "$REPO_ROOT/scripts/test-dataset-acl-ui.mjs"
+}
+
+invoke_fuzz_lane() {
+    local seed="$1" iterations="$2" strict_exec="$3"
+    local previous_seed="${ETLSQL_FUZZ_SEED-}"
+    local previous_iterations="${ETLSQL_FUZZ_ITERATIONS-}"
+    local previous_strict="${ETLSQL_FUZZ_STRICT_EXEC-}"
+    ETLSQL_FUZZ_SEED="$seed"
+    ETLSQL_FUZZ_ITERATIONS="$iterations"
+    ETLSQL_FUZZ_STRICT_EXEC="$strict_exec"
+    export ETLSQL_FUZZ_SEED ETLSQL_FUZZ_ITERATIONS ETLSQL_FUZZ_STRICT_EXEC
+    invoke_dotnet_test "tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj" "Category=Fuzz"
+    ETLSQL_FUZZ_SEED="$previous_seed"
+    ETLSQL_FUZZ_ITERATIONS="$previous_iterations"
+    ETLSQL_FUZZ_STRICT_EXEC="$previous_strict"
+    export ETLSQL_FUZZ_SEED ETLSQL_FUZZ_ITERATIONS ETLSQL_FUZZ_STRICT_EXEC
 }
 
 case "$LANE" in
@@ -97,7 +114,7 @@ case "$LANE" in
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         ;;
     engine)
-        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
+        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$ENGINE_FILTER"
         ;;
     portal)
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
@@ -107,6 +124,9 @@ case "$LANE" in
         ;;
     portal-hosted)
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
+        ;;
+    browser)
+        invoke_dotnet_test "tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj" "Category=Browser"
         ;;
     integration)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Integration"
@@ -146,6 +166,11 @@ case "$LANE" in
         if [ "$NO_BUILD" = true ]; then portal_args+=(--no-build); fi
         bash "$SCRIPT_DIR/test-lane.sh" "${portal_args[@]}"
 
+        fuzz_args=(--lane fuzz-smoke --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then fuzz_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then fuzz_args+=(--no-build); fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${fuzz_args[@]}"
+
         slt_args=(--lane slt --configuration "$CONFIGURATION")
         if [ "$NO_RESTORE" = true ]; then slt_args+=(--no-restore); fi
         if [ "$NO_BUILD" = true ]; then slt_args+=(--no-build); fi
@@ -156,6 +181,13 @@ case "$LANE" in
         export ETL_SQL_RUN_SLT="1"
         invoke_dotnet_test "tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
         export ETL_SQL_RUN_SLT="$PREVIOUS_RUN_SLT"
+        ;;
+    fuzz-smoke)
+        invoke_fuzz_lane "12345" "2000" "1"
+        ;;
+    fuzz)
+        FUZZ_ITERATIONS="${ETLSQL_FUZZ_ITERATIONS:-100000}"
+        invoke_fuzz_lane "" "$FUZZ_ITERATIONS" "${ETLSQL_FUZZ_STRICT_EXEC-}"
         ;;
     benchmarks)
         args=("run" "--project" "$REPO_ROOT/tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj" "--configuration" "$CONFIGURATION")

@@ -17,10 +17,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$fastFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+$engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)"
 # Portal lanes run the whole Portal project (its WebApplicationFactory tests have
-# "Integration" in their names but need no Docker), so they can't use the name-based
-# fastFilter. Exclude only Docker-backed tests by category instead.
+# "Integration" in their names but need no Docker). Exclude only Docker-backed and
+# hosted-service tests by category instead of inferring ownership from names.
 $portalFilter = "(Category!=Integration)&(Category!=HostedServices)"
 
 function Invoke-DotNetTest {
@@ -133,7 +133,7 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
     }
     "engine" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
