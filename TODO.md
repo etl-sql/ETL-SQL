@@ -228,6 +228,17 @@ an arbitrary connection/target from the browser.
       reusable preview path if the measurements require it. Preserve identical policy, identity,
       redaction, timeout, and cancellation behavior.
 
+### Engine — Script-Handled Data Quality Quarantine
+
+- [ ] Add an explicit `ON FAILURE QUARANTINE TO <table> WITH (HANDLING = SCRIPT)` mode for rows the
+      script will remediate, reroute, or discard during the current run. It must still remove failed
+      rows from the main output, expose the captured row and `__dq_*` context to later statements, and
+      record counts-only quality metrics, but it must not persist a replay manifest or publish a Portal
+      steward-queue item. Do not require a replay section label or emit the durable-target linter
+      diagnostic for this mode; retain the current steward-managed behavior when `HANDLING` is omitted
+      and support explicit `HANDLING = STEWARD`. Update parser/AST/formatter, lint and autocomplete,
+      runtime tests, reference documentation, and samples together.
+
 ### Orchestrator — Operations Triage and Run Flight Recorder
 
 #### Deployment-profile portability review
