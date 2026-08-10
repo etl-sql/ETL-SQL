@@ -595,6 +595,36 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
       [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
       migration contract; this gate owns its release sequencing, and domain 9 owns its delivery.
 
+      **Slice 1 of 4 done (v0.18.0): the bundle format and its standalone validator.**
+      `ETL_SQL.Core.Portability` now has the `etl-sql.tenant-bundle/v1` manifest contract, a writer
+      for the minimum configuration/artifact mode, and the reference validator §16 requires — the
+      one that must work with no contact with the source operator, so it depends on nothing but the
+      bundle on disk. Twelve tests cover round trip, determinism, tamper, truncation, path escape,
+      unknown schema, secret material, unimplemented mode, duplicate logical id, missing dependency,
+      and a missing manifest.
+
+      Two deliberate refusals rather than stubs: an export mode that is declared but unimplemented
+      throws at write time and leaves no manifest behind, and a duplicate logical id is rejected
+      because logical ids are what the target reconciles against, so a duplicate silently drops an
+      object. Determinism is asserted through a digest that excludes bundle id and creation time,
+      which §5.1 names as generation metadata.
+
+      **Not yet built, in dependency order:**
+      - *Slice 2 — composition.* Feed the bundle from the real sources: the Portal
+        `admin/configuration/export` plan+export pair (`ConfigurationExportService`) and
+        `OrchestratorPromotionPackageService` (`etl-sql.orchestrator-promotion/v1`). Note the
+        constraint: `ETL-SQL.App` does not reference the Portal, so the CLI must read Portal state
+        over HTTP through the `PortalAdminClient` precedent, not a shared `DbContext`.
+      - *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16), with target
+        preflight and the explicit collision policy from §5.2 (preserve, map, create, rename, skip,
+        fail). Import leaves jobs, schedules, subscriptions, and service accounts disabled.
+      - *Slice 4 — the SaaS → self-hosted Enterprise journey* as a certification lane, which is the
+        half of this gate that actually proves a customer can leave.
+
+      Signing and tenant encryption (§13) are not in any slice above and remain open: a package
+      encrypted only to a provider-owned key is not a usable exit artifact, so that decision needs
+      making before GA rather than after.
+
 #### Isolation domains
 
 Each domain states its **Dedicated** obligation and its **Shared** obligation, plus the Enterprise

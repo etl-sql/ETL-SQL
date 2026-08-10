@@ -101,6 +101,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added the `etl-sql.tenant-bundle/v1` portability bundle format and its standalone validator, the
+  first slice of the tenant portability contract. The validator is the piece that makes a customer
+  exit real: it verifies a bundle's schema, payload hashes and lengths, dependency graph, and
+  reconciliation counts with no contact with the source deployment, so an export stays checkable
+  after access to it is gone. It rejects tampered payloads, truncated bundles, manifest paths that
+  escape the bundle root, unknown schema versions, and resolved secret material. Only the minimum
+  configuration/artifact export mode is implemented; a declared-but-unimplemented mode throws at
+  write time rather than producing a bundle whose mode overstates its contents.
+
 - The Enterprise certification lane now proves the eight prerequisites a hosted deployment builds on
   — verifiable caller identity, per-object authorization, shared PostgreSQL/artifact providers,
   scoped secret and policy authority, durable audit, HA fencing, backup/restore, and
