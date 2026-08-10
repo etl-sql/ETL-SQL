@@ -288,11 +288,13 @@ Before opening a PR, verify:
 
 For contributions that introduce or modify language syntax, keywords, or functions:
 
-- [ ] **Cross-Dialect Compatibility**: Verify that the new syntax or function signature does not conflict with existing keywords or operator precedence in supported dialects (e.g., Postgres, Oracle, MSSQL).
-- [ ] **Pushdown Translation**: Provide AST-to-dialect translation mappings in `QueryCompiler` to compile the expression or function down to provider-specific SQL where supported.
-- [ ] **Autocomplete & Diagnostics**: Register the new tokens or state transitions in `DefaultGrammar.cs` to ensure IDE autocompletion and compiler linting align with the execution parser.
-- [ ] **EBNF Reference**: Update the canonical `grammar.ebnf` specification to reflect the updated language syntax.
-- [ ] **SqlLogicTests (SLT)**: Add regression test cases under `tests/slt_data/` covering the execution behavior and error boundaries of the new syntax.
+- [ ] **Parser & Runtime**: Update the execution parser, immutable AST records, and runtime handlers or evaluators together; cover both accepted syntax and rejected or unsupported forms.
+- [ ] **EBNF Reference**: Update the canonical `grammar.ebnf` specification so it describes exactly what the execution parser accepts.
+- [ ] **Documentation, Help & Snippets**: Update the syntax index and relevant guides, `docs/reference/` help pages, and `snippets/` templates, including a minimal working example for every new syntax form.
+- [ ] **Lint & Autocomplete**: Register the new tokens or state transitions in `DefaultGrammar.cs` and update diagnostics so editor guidance agrees with the execution parser.
+- [ ] **Connector Pushdown**: Add connector/dialect translation mappings where pushdown is supported and explicit unsupported-feature behavior where it is not.
+- [ ] **Compatibility**: Check keyword, function-signature, and operator-precedence compatibility across supported dialects and document any intentional breaking change through the breaking-change process.
+- [ ] **Regression Tests**: Add focused parser/runtime tests plus representative SqlLogicTests under `tests/slt_data/` for successful execution, boundary behavior, and rejection paths.
 
 ---
 

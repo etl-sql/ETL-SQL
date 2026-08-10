@@ -854,7 +854,7 @@ The five deliverables below implement the portability contract in
 - [ ] Expand the shared SqlLogicTests corpus under `tests/slt_data/` to cover exact results, boundary
       behavior, mathematical/date offsets, standard-library functions, and representative cross-dialect
       cases.
-- [ ] Add the syntax-addition checklist to `CONTRIBUTING.md`: parser/runtime, EBNF, docs/help/snippets,
+- [x] Add the syntax-addition checklist to `CONTRIBUTING.md`: parser/runtime, EBNF, docs/help/snippets,
       lint/autocomplete, connector pushdown mappings, compatibility, and regression tests must move
       together.
 - [ ] Build an EBNF-to-parser conformance runner that generates valid and invalid sequences and proves the
