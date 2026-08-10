@@ -702,12 +702,7 @@ public sealed class ColumnQualityValidator
                 };
 
             case InListRule inList:
-                {
-                    var found = false;
-                    for (var index = 0; index < inList.Values.Count && !found; index++)
-                        found = ValuesEqual(inList.Values[index], value);
-                    return found != inList.Negated;
-                }
+                return InListContains(inList, value) != inList.Negated;
 
             case ExistsInRule existsIn:
                 return ExistsInPasses(existsIn, value, projected);
@@ -1038,7 +1033,12 @@ public sealed class ColumnQualityValidator
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private readonly Dictionary<MatchesRule, Regex> _regexCache = new();
+    /// <summary>
+    /// Compiled patterns, keyed by rule <i>instance</i>. Keying on the record hashed the whole
+    /// pattern string on every lookup — that is, once per row per MATCHES rule — to find an entry
+    /// that never moves.
+    /// </summary>
+    private readonly Dictionary<object, Regex> _regexCache = new(ReferenceEqualityComparer.Instance);
 
     private Regex GetRegex(MatchesRule rule)
     {
@@ -1048,14 +1048,67 @@ public sealed class ColumnQualityValidator
         return compiled;
     }
 
-    private bool ValuesEqual(object? candidate, object? value)
+    /// <summary>
+    /// The candidate list of an <c>IN</c> rule, prepared once: each literal's rendered text and its
+    /// decimal form. Both are properties of the rule, not of the row, but the naive comparison
+    /// recomputed them per candidate *per row* — so an N-item list rendered the row's value N times.
+    /// </summary>
+    private sealed record InListCandidates(object?[] Values, string[] Text, decimal?[] Numbers, bool[] IsNumericLiteral);
+
+    private Dictionary<object, InListCandidates>? _inListCandidates;
+
+    private InListCandidates PrepareCandidates(InListRule rule)
     {
-        if (candidate is decimal || value is decimal || IsNumeric(candidate) || IsNumeric(value))
+        _inListCandidates ??= new Dictionary<object, InListCandidates>(ReferenceEqualityComparer.Instance);
+        if (_inListCandidates.TryGetValue(rule, out var cached)) return cached;
+
+        var values = rule.Values.ToArray();
+        var text = new string[values.Length];
+        var numbers = new decimal?[values.Length];
+        var isNumericLiteral = new bool[values.Length];
+        for (var i = 0; i < values.Length; i++)
         {
-            if (TryToDecimal(candidate, out var a) && TryToDecimal(value, out var b)) return a == b;
+            text[i] = Stringify(values[i]);
+            numbers[i] = TryToDecimal(values[i], out var number) ? number : null;
+            isNumericLiteral[i] = values[i] is decimal || IsNumeric(values[i]);
         }
-        return string.Equals(Stringify(candidate), Stringify(value),
-            _context.CaseSensitiveComparison ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
+        var prepared = new InListCandidates(values, text, numbers, isNumericLiteral);
+        _inListCandidates[rule] = prepared;
+        return prepared;
+    }
+
+    /// <summary>
+    /// Membership for <c>IN</c>/<c>NOT IN</c>, preserving the original pairwise rule: when either
+    /// side is a number the two are compared as decimals, and any pair that cannot both convert
+    /// falls back to a string comparison honoring SET CASE_SENSITIVE. The row's own rendered text
+    /// is materialized at most once, and only if some pair actually reaches the string path.
+    /// </summary>
+    private bool InListContains(InListRule rule, object? value)
+    {
+        var candidates = PrepareCandidates(rule);
+        var comparison = _context.CaseSensitiveComparison
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+        bool valueIsNumeric = value is decimal || IsNumeric(value);
+        bool valueIsDecimal = TryToDecimal(value, out var valueNumber);
+        string? valueText = null;
+
+        for (var i = 0; i < candidates.Values.Length; i++)
+        {
+            if ((candidates.IsNumericLiteral[i] || valueIsNumeric)
+                && candidates.Numbers[i] is { } candidateNumber
+                && valueIsDecimal)
+            {
+                if (candidateNumber == valueNumber) return true;
+                continue;
+            }
+
+            valueText ??= Stringify(value);
+            if (string.Equals(candidates.Text[i], valueText, comparison)) return true;
+        }
+        return false;
     }
 
     private static bool IsNumeric(object? value) =>

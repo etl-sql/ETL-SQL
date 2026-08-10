@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core.Parser;
@@ -26,19 +27,23 @@ namespace ETL_SQL.Tests.Hardening.Performance
         [Fact]
         public async Task ReportPerRuleShapeCost()
         {
-            var shapes = new (string Name, string Rules)[]
+            // Every rule is attached to a column whose values SATISFY it. A failing row takes a
+            // different path entirely — describe the failure, allocate a RowFailure, record a
+            // sample — so measuring rules that reject every row measures the reporting machinery
+            // rather than the cost of having the rule at all.
+            var shapes = new (string Name, string Column, string Rules)[]
             {
-                ("(no rules)", ""),
-                ("NOT NULL", "/* @expect: 'NOT NULL'; @fail: 'WARN'; */"),
-                ("NOT BLANK", "/* @expect: 'NOT BLANK'; @fail: 'WARN'; */"),
-                ("LENGTH BETWEEN", "/* @expect: 'LENGTH BETWEEN 1 AND 40'; @fail: 'WARN'; */"),
-                ("IN (list)", "/* @expect: \"IN ('a','b','c')\"; @fail: 'WARN'; */"),
-                ("MATCHES", "/* @expect: 'MATCHES ^v[0-9]+$'; @fail: 'WARN'; */"),
-                ("CASTABLE AS DECIMAL", "/* @expect: 'CASTABLE AS DECIMAL(18,2)'; @fail: 'WARN'; */"),
-                ("BETWEEN (expr)", "/* @expect: 'BETWEEN 0 AND 999999999'; @fail: 'WARN'; */"),
-                ("EXPR", "/* @expect: 'EXPR Id >= 0'; @fail: 'WARN'; */"),
-                ("UNIQUE", "/* @expect: 'UNIQUE'; @fail: 'WARN'; */"),
-                ("UNIQUE_FIRST BY", "/* @expect: 'UNIQUE_FIRST BY Id'; @fail: 'WARN'; */"),
+                ("(no rules)", "Id", ""),
+                ("NOT NULL", "Id", "/* @expect: 'NOT NULL'; @fail: 'WARN'; */"),
+                ("NOT BLANK", "Code", "/* @expect: 'NOT BLANK'; @fail: 'WARN'; */"),
+                ("LENGTH BETWEEN", "Code", "/* @expect: 'LENGTH BETWEEN 1 AND 40'; @fail: 'WARN'; */"),
+                ("IN (list)", "Bucket", "/* @expect: \"IN ('a','b','c')\"; @fail: 'WARN'; */"),
+                ("MATCHES", "Code", "/* @expect: 'MATCHES ^v[0-9]+$'; @fail: 'WARN'; */"),
+                ("CASTABLE AS DECIMAL", "Id", "/* @expect: 'CASTABLE AS DECIMAL(18,2)'; @fail: 'WARN'; */"),
+                ("BETWEEN (expr)", "Id", "/* @expect: 'BETWEEN 0 AND 999999999'; @fail: 'WARN'; */"),
+                ("EXPR", "Id", "/* @expect: 'EXPR Id >= 0'; @fail: 'WARN'; */"),
+                ("UNIQUE", "Id", "/* @expect: 'UNIQUE'; @fail: 'WARN'; */"),
+                ("UNIQUE_FIRST BY", "Id", "/* @expect: 'UNIQUE_FIRST BY Id'; @fail: 'WARN'; */"),
             };
 
             // One evaluator and one source table for every shape: building a service provider costs
@@ -71,8 +76,8 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             for (var i = 0; i < shapes.Length; i++)
             {
-                var (name, rules) = shapes[i];
-                var (elapsed, allocated) = await MeasureAsync(eval, rules, i);
+                var (name, column, rules) = shapes[i];
+                var (elapsed, allocated) = await MeasureAsync(eval, column, rules, i);
                 if (i == 0) baseline = elapsed;
                 var factor = baseline > TimeSpan.Zero
                     ? $"{elapsed.TotalMilliseconds / baseline.TotalMilliseconds:F2}x"
@@ -83,17 +88,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
         }
 
         private static async Task<(TimeSpan Elapsed, long Allocated)> MeasureAsync(
-            Evaluator eval, string ruleTag, int index)
+            Evaluator eval, string ruledColumn, string ruleTag, int index)
         {
+            string Project() => string.Join(", ",
+                new[] { "Id", "Code", "Pad1", "Pad2", "Doubled", "Bucket" }
+                    .Select(c => c == ruledColumn ? $"{c} {ruleTag}" : c));
+
             string Sql(string target) => ruleTag.Length == 0
                 ? $"measure:\nSELECT Id, Code, Pad1, Pad2, Doubled, Bucket INTO {target} FROM #src;"
-                : $@"
-                measure:
-                SELECT
-                    Id {ruleTag},
-                    Code, Pad1, Pad2, Doubled, Bucket
-                INTO {target} FROM #src
-                ON FAILURE WARN;";
+                : $"measure:\nSELECT {Project()} INTO {target} FROM #src\nON FAILURE WARN;";
 
             // Warm the path once so JIT is not charged to the shape.
             await Run(eval, Sql($"#warm{index}"));
