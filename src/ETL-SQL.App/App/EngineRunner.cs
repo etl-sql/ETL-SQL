@@ -144,6 +144,11 @@ namespace ETL_SQL.App
                 return await DatabaseMigrationService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command.StartsWith("admin-tenant-", StringComparison.Ordinal))
+            {
+                return await Portability.TenantPortabilityAdminService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command == "admin-promotion-preflight")
             {
                 return await DeploymentPromotionPreflightService.RunAsync(ctx, logger);

@@ -663,12 +663,29 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
         import endpoint that was considered and not chosen; revisit together if real migrations show
         the need.
 
-        **Still outstanding:** *CLI wiring.* The verbs are not registered in `CliOrchestrator`, so
-        `export`, `validate`, `preflight`, and `import` have no `admin tenant ...` entry point yet —
-        the logic is reachable only in-process. Needs `CliContext` options and the credential
-        handling the identity verbs already established (environment or `SECRET:`, never argv). Also
-        still unwired: the two production adapters behind `IPortalConfigurationTarget` (engine
-        execution) and `IOrchestratorPackageTarget` (over `OrchestratorPromotionPackageService.ImportAsync`).
+        **CLI: `validate` and `preflight` shipped (v0.18.0).** `etl-sql admin tenant validate|preflight`
+        are registered, routed, and covered by six tests plus a manual run confirming distinct exit
+        codes reach the process (`4` invalid, `7` not found). These are the customer-side verbs and
+        the ones that matter most: someone handed a bundle can check it with the shipped binary and a
+        published key, with no account on the deployment that produced it. `validate` states plainly
+        when it checked integrity but *not* authenticity, so a green result is never mistaken for a
+        verified signature.
+
+        **`export` and `import` verbs are not wired, and the reason is not plumbing.** Two findings
+        from wiring the others:
+
+        - **Nothing in the codebase executes a Portal bootstrap script programmatically.**
+          `SaasTenantOnboardingService` *stages* it to `imports/portal-bootstrap.etlsql` for manual
+          replay. So `IPortalConfigurationTarget` is a new execution path — running a declarative
+          script against a live Portal from the CLI — not an adapter over something existing. That
+          is the most security-sensitive code in this track and should be built deliberately.
+        - **`OrchestratorPromotionPackageService.ImportAsync` has no `leaveDisabled` parameter.** It
+          takes bindings. The importer's non-negotiable "arrives disabled" rule therefore needs
+          either a new parameter on that shipped method or a post-import disable pass — and whether
+          imported jobs currently arrive enabled needs checking before either.
+
+        `export` additionally needs the Portal credential flow the identity verbs established
+        (environment or `SECRET:`, never argv), which is a known pattern but still real work.
       - [x] *Slice 4 — the SaaS → self-hosted Enterprise journey.* **Done (v0.18.0)** as the
         `SaaSToEnterpriseExit` certification lane, verified by a real run (3/3 phases, concrete
         `SaaSToEnterpriseExit` scenario evidence).

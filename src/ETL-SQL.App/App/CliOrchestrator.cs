@@ -481,6 +481,24 @@ namespace ETL_SQL.App
             Description = "Maximum quality-history and lineage records to export (default: 10000).",
             DefaultValueFactory = _ => 10_000
         };
+        private static readonly Option<string?> TenantBundleOption = new("--bundle")
+        {
+            Description = "Path to the tenant portability bundle directory.",
+        };
+        private static readonly Option<string?> TenantOperatorKeyOption = new("--operator-key")
+        {
+            Description = "Published operator public key used to verify the bundle signature.",
+        };
+        private static readonly Option<bool> TenantRequireSignatureOption = new("--require-signature")
+        {
+            Description = "Fail unless the bundle carries a signature that verifies against --operator-key.",
+        };
+        private static readonly Option<string[]> TenantBindingOption = new("--binding")
+        {
+            Description = "A logical binding the target already supplies (repeatable), e.g. SECRET:name.",
+            AllowMultipleArgumentsPerToken = true,
+        };
+
         private static readonly Option<string?> SaasTenantOption = new("--tenant", Array.Empty<string>())
         {
             Description = "Stable tenant id (lowercase letters, digits, and hyphens).",
@@ -915,6 +933,26 @@ namespace ETL_SQL.App
             saasOnboardCommand.SetAction(context => Dispatch(context, "admin-promotion-saas-onboard", handler));
             promotionCommand.Add(saasOnboardCommand);
             adminCommand.Add(promotionCommand);
+
+            var tenantCommand = new Command("tenant", "Inspect tenant portability bundles");
+            var tenantValidateCommand = new Command("validate", "Verify a bundle's integrity and, with --operator-key, its authenticity")
+            {
+                TenantBundleOption,
+                TenantOperatorKeyOption,
+                TenantRequireSignatureOption,
+            };
+            tenantValidateCommand.SetAction(context => Dispatch(context, "admin-tenant-validate", handler));
+            tenantCommand.Add(tenantValidateCommand);
+            var tenantPreflightCommand = new Command("preflight", "Report what a target must supply before a bundle can be imported")
+            {
+                TenantBundleOption,
+                TenantOperatorKeyOption,
+                TenantRequireSignatureOption,
+                TenantBindingOption,
+            };
+            tenantPreflightCommand.SetAction(context => Dispatch(context, "admin-tenant-preflight", handler));
+            tenantCommand.Add(tenantPreflightCommand);
+            adminCommand.Add(tenantCommand);
 
             var haSoakCommand = new Command("ha-soak", "Prepare and collect PostgreSQL HA soak certification artifacts");
             var haSoakPrepareCommand = new Command("prepare", "Generate an isolated PostgreSQL HA soak topology run root")
@@ -1518,6 +1556,15 @@ namespace ETL_SQL.App
                     cliContext.ServiceAccountDisable = TryGetBool(res, ServiceAccountDisableOption);
                     cliContext.ServiceAccountSecretOutput = TryGetString(res, ServiceAccountSecretOutputOption);
                 }
+            }
+
+            if (commandName.StartsWith("admin-tenant-", StringComparison.Ordinal))
+            {
+                cliContext.TenantBundleRoot = TryGetString(res, TenantBundleOption);
+                cliContext.TenantOperatorKey = TryGetString(res, TenantOperatorKeyOption);
+                cliContext.TenantRequireSignature = TryGetBool(res, TenantRequireSignatureOption);
+                cliContext.TenantBindings = res.GetResult(TenantBindingOption) is null
+                    ? null : [.. res.GetValue(TenantBindingOption) ?? []];
             }
 
             if (commandName == "run")

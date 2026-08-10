@@ -114,6 +114,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added non-mutating bundle preflight with distinct exit codes per failure kind, so a runbook can
   tell an inauthentic bundle from one that merely needs bindings the target has not supplied yet.
 
+- Added `etl-sql admin tenant validate` and `admin tenant preflight`. These are the customer-side
+  verbs: someone handed a portability bundle can verify it with the shipped binary and a published
+  operator key, with no account on the deployment that produced it. `validate` states plainly when it
+  checked integrity but not authenticity, so a green result is never mistaken for a verified
+  signature. Exit codes are distinct per failure kind — invalid, signature unverified, bindings
+  required, not found — so a runbook can branch on them. `preflight` additionally lists what the
+  target must supply and what will not travel at all.
+
 - Added tenant bundle import. The Portal half is applied by the engine executing the bundle's
   declarative script — the path an operator already uses — rather than through a new mutating Portal
   endpoint. Nothing mutates until preflight passes, so an inauthentic, tampered, or under-bound

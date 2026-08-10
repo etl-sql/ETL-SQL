@@ -174,6 +174,12 @@ public class CliContext
     public string? PromotionPackage { get; set; }
     public string[]? PromotionBindings { get; set; }
     public int PromotionHistoryLimit { get; set; } = 10_000;
+
+    // Tenant portability bundle verbs (admin tenant ...). Key paths, never key material.
+    public string? TenantBundleRoot { get; set; }
+    public string? TenantOperatorKey { get; set; }
+    public bool TenantRequireSignature { get; set; }
+    public string[]? TenantBindings { get; set; }
     public string? SaasTenantId { get; set; }
     public string? SaasSourceProfile { get; set; }
     public string? SaasPortalBootstrap { get; set; }
