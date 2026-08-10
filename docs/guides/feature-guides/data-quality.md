@@ -250,7 +250,21 @@ StartDate /* @expect: 'EXPR StartDate <= EndDate'; @fail: 'QUARANTINE'; */
 
 -- Uniqueness over a column pair rather than one column
 TenantId /* @expect: 'UNIQUE WITH (TenantId, BookingRef)'; @fail: 'QUARANTINE'; */
+
+-- A relationship check on a column *pair*, for a key that is only unique within a scope
+TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)';
+            @fail: 'QUARANTINE'; */
 ```
+
+**Use `EXISTS WITH` whenever the key is only unique within a scope.** On a multi-tenant table,
+`EXISTS IN dim_customer(CustomerId)` passes a row whose CustomerId is real but belongs to a
+*different* tenant — the single-column check reports clean on exactly the rows a tenant boundary is
+meant to catch. The two column lists pair positionally, so the reference table's columns need not
+share the source's names.
+
+Both composite forms reject a column the statement does not project. A missing column reads as
+NULL, and a NULL key part skips the rule, so a typo would otherwise silently disable the check
+rather than fail it.
 
 ## Two behaviors that surprise people
 

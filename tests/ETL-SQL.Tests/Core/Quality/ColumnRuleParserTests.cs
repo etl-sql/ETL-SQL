@@ -131,7 +131,9 @@ namespace ETL_SQL.Tests.Core.Quality
                 ColumnRuleParser.Parse("'EXISTS IN dim_region(Id)'").Single());
 
             Assert.Equal("dim_region", rule.Table);
-            Assert.Equal("Id", rule.KeyColumn);
+            Assert.Equal(new[] { "Id" }, rule.KeyColumns);
+            Assert.Null(rule.SourceColumns);
+            Assert.False(rule.IsComposite);
 
             var temp = Assert.IsType<ExistsInRule>(ColumnRuleParser.Parse("'EXISTS IN #ref(Code)'").Single());
             Assert.Equal("#ref", temp.Table);
@@ -141,6 +143,62 @@ namespace ETL_SQL.Tests.Core.Quality
         public void ExistsIn_Malformed_IsHardError()
         {
             Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse("'EXISTS IN dim_region'"));
+        }
+
+        [Fact]
+        public void Parses_ExistsWith_CompositeTuple()
+        {
+            var rule = Assert.IsType<ExistsInRule>(
+                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)'")
+                    .Single());
+
+            Assert.True(rule.IsComposite);
+            Assert.Equal("dim_customer", rule.Table);
+            Assert.Equal(new[] { "TenantId", "CustomerId" }, rule.SourceColumns);
+            Assert.Equal(new[] { "TenantId", "CustomerId" }, rule.KeyColumns);
+        }
+
+        [Fact]
+        public void ExistsWith_MapsProbeColumnsOntoDifferentlyNamedReferenceColumns()
+        {
+            // The two tuples pair positionally, so the reference table's columns need not share
+            // the source's names.
+            var rule = Assert.IsType<ExistsInRule>(
+                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(Tenant, Id)'").Single());
+
+            Assert.Equal(new[] { "TenantId", "CustomerId" }, rule.SourceColumns);
+            Assert.Equal(new[] { "Tenant", "Id" }, rule.KeyColumns);
+        }
+
+        [Fact]
+        public void ExistsWith_ArityMismatch_IsHardError()
+        {
+            var ex = Assert.Throws<ColumnRuleParseException>(() =>
+                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, CustomerId) IN dim_customer(Id)'"));
+
+            Assert.Contains("arity", ex.Message);
+        }
+
+        [Fact]
+        public void ExistsWith_NonIdentifierColumn_IsHardError()
+        {
+            // An expression here cannot be reproduced by the reference-table read that builds the
+            // key set, so it is rejected rather than silently treated as a column name.
+            Assert.Throws<ColumnRuleParseException>(() =>
+                ColumnRuleParser.Parse("'EXISTS WITH (UPPER(TenantId)) IN dim_customer(TenantId)'"));
+
+            Assert.Throws<ColumnRuleParseException>(() =>
+                ColumnRuleParser.Parse("'EXISTS WITH (TenantId, ) IN dim_customer(TenantId, Id)'"));
+        }
+
+        [Fact]
+        public void ExistsWith_Malformed_ReportsBothSupportedForms()
+        {
+            var ex = Assert.Throws<ColumnRuleParseException>(() =>
+                ColumnRuleParser.Parse("'EXISTS WITH (TenantId) dim_customer(TenantId)'"));
+
+            Assert.Contains("EXISTS IN table(KeyColumn)", ex.Message);
+            Assert.Contains("EXISTS WITH", ex.Message);
         }
 
         [Fact]

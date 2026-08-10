@@ -835,6 +835,113 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task ExistsWithRule_RejectsAKeyThatExistsUnderADifferentTenant()
+        {
+            // The reason the composite form exists: CustomerId 7 is a real customer, but it belongs
+            // to tenant 1. A single-column EXISTS IN dim_customer(CustomerId) reports this row as
+            // clean — which is exactly the cross-tenant row the check is supposed to catch.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #orders (TenantId INT, CustomerId INT);
+                INSERT INTO #orders (TenantId, CustomerId) VALUES (1, 7), (2, 7), (1, 8);
+                CREATE TABLE #dim_customer (TenantId INT, CustomerId INT);
+                INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7), (1, 8), (2, 9);");
+
+            await Run(eval, @"
+                SELECT TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId)';
+                                   @fail: 'QUARANTINE'; */,
+                       CustomerId
+                INTO #clean FROM #orders
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));
+            var quarantined = Assert.Single(await ReadRows(eval, "#bad"));
+            Assert.Equal(2m, quarantined["TenantId"]);
+            Assert.Equal(7m, quarantined["CustomerId"]);
+        }
+
+        [Fact]
+        public async Task ExistsWithRule_SingleColumnEquivalent_StillAcceptsTheForeignTenantRow()
+        {
+            // Pins the gap the composite form closes, so a regression that quietly reverts
+            // EXISTS WITH to single-column probing fails here rather than passing silently.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #orders (TenantId INT, CustomerId INT);
+                INSERT INTO #orders (TenantId, CustomerId) VALUES (2, 7);
+                CREATE TABLE #dim_customer (TenantId INT, CustomerId INT);
+                INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7);");
+
+            await Run(eval, @"
+                SELECT TenantId, CustomerId /* @expect: 'EXISTS IN #dim_customer(CustomerId)'; @fail: 'WARN'; */
+                INTO #clean FROM #orders
+                ON FAILURE WARN;");
+
+            Assert.Equal(0, eval.DataQuality.TotalFailures);
+        }
+
+        [Fact]
+        public async Task ExistsWithRule_SkipsRowsWithANullKeyPart()
+        {
+            // A NULL part makes the tuple unknown, so the rule skips it like every non-NOT NULL
+            // rule — pair with NOT NULL to reject it.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #orders (TenantId INT, CustomerId INT);
+                INSERT INTO #orders (TenantId, CustomerId) VALUES (NULL, 7), (1, NULL);
+                CREATE TABLE #dim_customer (TenantId INT, CustomerId INT);
+                INSERT INTO #dim_customer (TenantId, CustomerId) VALUES (1, 7);");
+
+            await Run(eval, @"
+                SELECT TenantId /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN #dim_customer(TenantId, CustomerId)';
+                                   @fail: 'WARN'; */,
+                       CustomerId
+                INTO #clean FROM #orders
+                ON FAILURE WARN;");
+
+            Assert.Equal(0, eval.DataQuality.TotalFailures);
+            Assert.Equal(2, await CountRows(eval, "#clean"));
+        }
+
+        [Fact]
+        public async Task ExistsWithRule_DoesNotCollideOnConcatenatedTupleParts()
+        {
+            // ("ab", "c") must not match a reference tuple of ("a", "bc"). The delimiter is the
+            // whole reason the key is built rather than concatenated.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #orders (Part1 VARCHAR(10), Part2 VARCHAR(10));
+                INSERT INTO #orders (Part1, Part2) VALUES ('ab', 'c');
+                CREATE TABLE #dim (Part1 VARCHAR(10), Part2 VARCHAR(10));
+                INSERT INTO #dim (Part1, Part2) VALUES ('a', 'bc');");
+
+            await Run(eval, @"
+                SELECT Part1 /* @expect: 'EXISTS WITH (Part1, Part2) IN #dim(Part1, Part2)'; @fail: 'WARN'; */,
+                       Part2
+                INTO #clean FROM #orders
+                ON FAILURE WARN;");
+
+            Assert.Equal(1, eval.DataQuality.TotalFailures);
+        }
+
+        [Fact]
+        public async Task CompositeRule_NamingAnUnprojectedColumn_IsAHardError()
+        {
+            // Row lookup by name returns null for an absent column and a NULL part skips the rule,
+            // so a typo would otherwise produce a rule that reports clean because it never ran.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a')");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => Run(eval, @"
+                SELECT Id /* @expect: 'UNIQUE WITH (Id, Missing)'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN;"));
+
+            Assert.Contains("Missing", ex.Message);
+            Assert.Contains("does not project", ex.Message);
+        }
+
+        [Fact]
         public async Task ExprRule_EvaluatesAcrossTheProjectedRow()
         {
             var eval = NewEvaluator();

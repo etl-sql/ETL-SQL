@@ -38,6 +38,9 @@ public sealed class ColumnQualityValidator
     private readonly IReadOnlyDictionary<FailAction, FailureActionClause> _routing;
     private readonly bool _hasExpressionRules;
     private readonly Dictionary<string, HashSet<string>> _existsInKeys = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Delimits parts of a composite key; a unit separator cannot appear in a rendered value.</summary>
+    private const char KeyPartSeparator = '\u001F';
     private QuarantineWriter? _quarantineWriter;
     private QuarantineWriter? _warnWriter;
     private bool _quarantineManifestRecorded;
@@ -96,6 +99,8 @@ public sealed class ColumnQualityValidator
 
         if (ruleSets.Count == 0) return null;
 
+        ValidateCompositeColumns(ruleSets, outputColumnNames);
+
         var routing = (statement.OnFailureActions ?? [])
             .GroupBy(c => c.Action)
             .ToDictionary(g => g.Key, g => g.First());
@@ -114,6 +119,40 @@ public sealed class ColumnQualityValidator
         }
 
         return new ColumnQualityValidator(context, logger, statement, ruleSets, routing);
+    }
+
+    /// <summary>
+    /// Rejects a composite rule naming a column the statement does not project. Row lookup by name
+    /// yields null for an absent column, and a NULL key part skips the rule — so without this a
+    /// single typo turns <c>UNIQUE WITH</c> or <c>EXISTS WITH</c> into a rule that reports clean
+    /// because it never ran on any row. Identifier matching is case-insensitive; only *values*
+    /// honor SET CASE_SENSITIVE.
+    /// </summary>
+    private static void ValidateCompositeColumns(
+        IReadOnlyList<ColumnRuleSet> ruleSets, IReadOnlyList<string> outputColumnNames)
+    {
+        if (outputColumnNames.Count == 0) return;
+        var projectedNames = new HashSet<string>(outputColumnNames, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules))
+        {
+            (IReadOnlyList<string> Columns, string Form)? composite = rule switch
+            {
+                UniqueRule { CompositeColumns: { Count: > 0 } columns } => (columns, "UNIQUE WITH"),
+                ExistsInRule { SourceColumns: { Count: > 0 } columns } => (columns, "EXISTS WITH"),
+                _ => null
+            };
+            if (composite is not { } spec) continue;
+
+            foreach (var column in spec.Columns)
+            {
+                if (projectedNames.Contains(column)) continue;
+                throw new ExecutionException(
+                    $"Data-quality rule \"{rule.Text}\": {spec.Form} names column '{column}', which " +
+                    "this statement does not project. Add it to the SELECT list — an absent column " +
+                    "would make the rule skip every row instead of failing.");
+            }
+        }
     }
 
     /// <summary>
@@ -253,14 +292,7 @@ public sealed class ColumnQualityValidator
             return single is null or DBNull ? null : Stringify(single);
         }
 
-        var builder = new StringBuilder();
-        foreach (var column in composite)
-        {
-            var value = projected[column];
-            if (value is null or DBNull) return null;
-            builder.Append(Stringify(value)).Append('');
-        }
-        return builder.ToString();
+        return BuildKeyTuple(composite, column => projected[column]);
     }
 
     /// <summary>
@@ -530,7 +562,7 @@ public sealed class ColumnQualityValidator
                     var rule = binding.Rules[ruleIndex];
                     var passed = rule is UniqueRule unique
                         ? !ViolatesUnique(unique, ruleSet, projected, rowOrdinal)
-                        : RulePassesSynchronously(rule, value);
+                        : RulePassesSynchronously(rule, value, projected);
                     if (passed) continue;
 
                     _context.DataQuality.RecordFailure(
@@ -605,7 +637,7 @@ public sealed class ColumnQualityValidator
         return decided;
     }
 
-    private bool RulePassesSynchronously(ColumnRule rule, object? value)
+    private bool RulePassesSynchronously(ColumnRule rule, object? value, Row projected)
     {
         if (rule is NotNullRule) return value is not null and not DBNull;
         if (value is null or DBNull) return true;
@@ -634,8 +666,7 @@ public sealed class ColumnQualityValidator
                 return false;
 
             case ExistsInRule existsIn:
-                return _existsInKeys.TryGetValue(ExistsInKey(existsIn), out var keys)
-                    && keys.Contains(Stringify(value), KeyComparer(_context.CaseSensitiveComparison));
+                return ExistsInPasses(existsIn, value, projected);
 
             default:
                 return true;
@@ -682,9 +713,7 @@ public sealed class ColumnQualityValidator
                 return ValueTask.FromResult(false);
 
             case ExistsInRule existsIn:
-                return ValueTask.FromResult(
-                    _existsInKeys.TryGetValue(ExistsInKey(existsIn), out var keys)
-                    && keys.Contains(Stringify(value), KeyComparer(_context.CaseSensitiveComparison)));
+                return ValueTask.FromResult(ExistsInPasses(existsIn, value, projected));
 
             default:
                 return ValueTask.FromResult(true);
@@ -695,7 +724,8 @@ public sealed class ColumnQualityValidator
 
     /// <summary>
     /// Builds each referenced table's key set once per statement, then probes per row. Reference
-    /// tables are dimension-sized by nature; the build honors SET CASE_SENSITIVE.
+    /// tables are dimension-sized by nature; the build honors SET CASE_SENSITIVE. Composite
+    /// (<c>EXISTS WITH</c>) references build a tuple key over the reference columns in order.
     /// </summary>
     private async Task BuildExistsInKeySetsAsync(CancellationToken cancellationToken)
     {
@@ -718,17 +748,55 @@ public sealed class ColumnQualityValidator
             {
                 foreach (var row in batch.Rows)
                 {
-                    var value = row[reference.KeyColumn];
-                    if (value is not null and not DBNull) keys.Add(Stringify(value));
+                    // A reference tuple with a NULL part can never match a probe (a probe with a
+                    // NULL part skips the rule), so it never belongs in the key set.
+                    var referenceKey = BuildKeyTuple(reference.KeyColumns, column => row[column]);
+                    if (referenceKey != null) keys.Add(referenceKey);
                 }
             }
             _existsInKeys[key] = keys;
-            _logger.Debug("EXISTS IN {Table}({Column}): built key set of {Count} value(s).",
-                reference.Table, reference.KeyColumn, keys.Count);
+            _logger.Debug("EXISTS IN {Table}({Columns}): built key set of {Count} tuple(s).",
+                reference.Table, string.Join(", ", reference.KeyColumns), keys.Count);
         }
     }
 
-    private static string ExistsInKey(ExistsInRule rule) => $"{rule.Table}({rule.KeyColumn})";
+    /// <summary>
+    /// Probes one row against the reference key set. Both the single-column and composite forms
+    /// skip the rule when any probe part is NULL, like every rule except <c>NOT NULL</c>.
+    /// </summary>
+    private bool ExistsInPasses(ExistsInRule rule, object? value, Row projected)
+    {
+        var probe = rule.SourceColumns is { Count: > 0 } sources
+            ? BuildKeyTuple(sources, column => projected[column])
+            : Stringify(value);
+        if (probe == null) return true;
+
+        // Probe the HashSet's own comparer. Enumerable.Contains with an explicit comparer bypasses
+        // the set and scans linearly, which turns a dimension lookup into O(rows × keys).
+        return _existsInKeys.TryGetValue(ExistsInKey(rule), out var keys) && keys.Contains(probe);
+    }
+
+    /// <summary>
+    /// Joins the named columns' values into one tuple key, or returns null when any part is NULL.
+    /// Parts are separated rather than concatenated, so ("ab", "c") and ("a", "bc") cannot collide.
+    /// A one-column tuple renders as the bare value, which is what lets the single-column and
+    /// composite EXISTS forms share one key set and one probe path.
+    /// </summary>
+    private static string? BuildKeyTuple(IReadOnlyList<string> columns, Func<string, object?> read)
+    {
+        var builder = new StringBuilder();
+        for (var i = 0; i < columns.Count; i++)
+        {
+            var part = read(columns[i]);
+            if (part is null or DBNull) return null;
+            if (i > 0) builder.Append(KeyPartSeparator);
+            builder.Append(Stringify(part));
+        }
+        return builder.ToString();
+    }
+
+    private static string ExistsInKey(ExistsInRule rule) =>
+        $"{rule.Table}({string.Join(",", rule.KeyColumns)})";
 
     // ── Routing ────────────────────────────────────────────────────────────
 

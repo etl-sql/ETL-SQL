@@ -170,13 +170,29 @@ public static partial class ColumnRuleParser
             return rule;
         }
 
+        var existsWith = Regex.Match(
+            text,
+            @"^EXISTS\s+WITH\s*\((?<src>[^)]+)\)\s+IN\s+(?<table>[A-Za-z_#][\w.#]*)\s*\((?<keys>[^)]+)\)$",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (existsWith.Success)
+        {
+            var sourceColumns = ParseColumnList(existsWith.Groups["src"].Value, "EXISTS WITH", text);
+            var keyColumns = ParseColumnList(existsWith.Groups["keys"].Value, "EXISTS WITH reference", text);
+            if (sourceColumns.Count != keyColumns.Count)
+                throw new ColumnRuleParseException(
+                    $"EXISTS WITH '{text}' probes {sourceColumns.Count} column(s) against " +
+                    $"{keyColumns.Count} reference column(s); the tuples must have the same arity.");
+            return new ExistsInRule(existsWith.Groups["table"].Value, keyColumns, sourceColumns) { Text = text };
+        }
+
         var existsIn = Regex.Match(text, @"^EXISTS\s+IN\s+(?<table>[A-Za-z_#][\w.#]*)\s*\(\s*(?<col>[A-Za-z_]\w*)\s*\)$",
             RegexOptions.IgnoreCase);
         if (existsIn.Success)
             return new ExistsInRule(existsIn.Groups["table"].Value, existsIn.Groups["col"].Value) { Text = text };
         if (upper.StartsWith("EXISTS", StringComparison.Ordinal))
             throw new ColumnRuleParseException(
-                $"EXISTS IN expects the form 'EXISTS IN table(KeyColumn)', got '{text}'.");
+                $"EXISTS expects the form 'EXISTS IN table(KeyColumn)' or " +
+                $"'EXISTS WITH (col, …) IN table(KeyColumn, …)', got '{text}'.");
 
         var inList = Regex.Match(text, @"^IN\s*(?<list>\(.+\))$", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         if (inList.Success)
@@ -211,7 +227,21 @@ public static partial class ColumnRuleParser
         throw new ColumnRuleParseException(
             $"Unknown @expect rule '{text}'. Supported: NOT NULL, UNIQUE, UNIQUE WITH (cols), " +
             "UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), EXISTS IN table(col), " +
-            "EXPR <predicate>, and numeric >= <= > < = compares.");
+            "EXISTS WITH (cols) IN table(cols), EXPR <predicate>, and numeric >= <= > < = compares.");
+    }
+
+    /// <summary>
+    /// Parses a comma-separated parenthesized column list into identifiers. Rejects empty entries
+    /// and anything that is not a bare identifier — a rule that silently accepted an expression
+    /// here would build its key set from something the reference-table read cannot reproduce.
+    /// </summary>
+    private static List<string> ParseColumnList(string raw, string ruleName, string text)
+    {
+        var columns = raw.Split(',', StringSplitOptions.TrimEntries).ToList();
+        if (columns.Count == 0 || columns.Any(c => !Regex.IsMatch(c, @"^[A-Za-z_]\w*$")))
+            throw new ColumnRuleParseException(
+                $"{ruleName} expects a parenthesized list of column names, got '{text}'.");
+        return columns;
     }
 
     /// <summary>

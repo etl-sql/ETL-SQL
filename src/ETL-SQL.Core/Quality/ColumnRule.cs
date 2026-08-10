@@ -72,8 +72,33 @@ public sealed record ComparisonRule(CompareOp Op, decimal Value) : ColumnRule;
 /// <summary><c>IN ('NA','EMEA',…)</c> — membership in a literal list.</summary>
 public sealed record InListRule(IReadOnlyList<object?> Values) : ColumnRule;
 
-/// <summary><c>EXISTS IN table(column)</c> — relationship/FK check against a reference table's key set.</summary>
-public sealed record ExistsInRule(string Table, string KeyColumn) : ColumnRule;
+/// <summary>
+/// <c>EXISTS IN table(column)</c> — relationship/FK check against a reference table's key set — or
+/// the composite form <c>EXISTS WITH (a, b) IN table(x, y)</c>, which checks the tuple of projected
+/// columns against the same-arity tuple in the reference table.
+///
+/// The composite form is what makes a scoped foreign key expressible. A single-column check on
+/// CustomerId accepts a customer that exists under some *other* TenantId, so on a multi-tenant
+/// table the single-column rule reports as passing exactly the rows a tenant boundary is supposed
+/// to catch.
+/// </summary>
+/// <param name="Table">The reference table.</param>
+/// <param name="KeyColumns">The reference table's key columns, in tuple order.</param>
+/// <param name="SourceColumns">
+/// The projected columns forming the probe tuple, in the same order — null for the single-column
+/// form, which probes with the declaring column's own projected value.
+/// </param>
+public sealed record ExistsInRule(
+    string Table,
+    IReadOnlyList<string> KeyColumns,
+    IReadOnlyList<string>? SourceColumns = null) : ColumnRule
+{
+    /// <summary>Single-column convenience over <see cref="KeyColumns"/>.</summary>
+    public ExistsInRule(string table, string keyColumn) : this(table, [keyColumn]) { }
+
+    /// <summary>True for the composite <c>EXISTS WITH (…) IN table(…)</c> form.</summary>
+    public bool IsComposite => SourceColumns is { Count: > 0 };
+}
 
 /// <summary><c>EXPR &lt;predicate&gt;</c> — cross-column boolean evaluated over the full projected row.</summary>
 public sealed record ExprRule(Expression Predicate) : ColumnRule;

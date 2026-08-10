@@ -261,7 +261,7 @@ public class LanguageService : ILanguageService
             || System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^expect_\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
         {
             values = ["NOT NULL", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ", "UNIQUE_LAST BY ",
-                      "MATCHES ", "IN (", "EXISTS IN ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
+                      "MATCHES ", "IN (", "EXISTS IN ", "EXISTS WITH (", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
         }
         else
         {
@@ -308,7 +308,8 @@ public class LanguageService : ILanguageService
         "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
         "expect" => "**@expect** `'<rule>[, <rule>...]'` — Enforced data-quality rule on this column. "
             + "Rules: `NOT NULL`, `UNIQUE`, `UNIQUE WITH (cols)`, `UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, "
-            + "`MATCHES <regex>`, `IN (<list>)`, `EXISTS IN table(col)`, `EXPR <predicate>`, and `>= <= > < =` compares. "
+            + "`MATCHES <regex>`, `IN (<list>)`, `EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
+            + "`EXPR <predicate>`, and `>= <= > < =` compares. "
             + "Quote the value; NULL skips every rule except `NOT NULL`. Pair with `@fail` (default `WARN`). "
             + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",
         "fail" => "**@fail** `THROW|WARN|QUARANTINE` — What happens to a row failing the paired `@expect` rule. "

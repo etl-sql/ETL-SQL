@@ -40,6 +40,7 @@ or an `EXPR` function call are literal.
 | `MATCHES <regex>` | Value must match the regular expression. |
 | `IN (<list>)` | Value must be one of the listed string or numeric literals. |
 | `EXISTS IN <table>(<column>)` | Value must exist in the reference table's key column (relationship / FK check). |
+| `EXISTS WITH (<col>, …) IN <table>(<col>, …)` | The tuple of projected columns must exist as a tuple in the reference table (composite / scoped FK check). |
 | `EXPR <predicate>` | Boolean predicate over the whole projected row, e.g. `EXPR StartDate <= EndDate`. |
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
@@ -55,7 +56,16 @@ Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
 - **NULL skips every rule except `NOT NULL`** (the SQL `CHECK`-constraint convention, matching dbt's
   `accepted_values`). Pair with `NOT NULL` explicitly to reject NULLs — otherwise every nullable
   column would double-fail.
-- **String comparisons honor `SET CASE_SENSITIVE`** for `MATCHES`, `IN`, and `EXISTS IN`.
+- **String comparisons honor `SET CASE_SENSITIVE`** for `MATCHES`, `IN`, and `EXISTS IN`. Column
+  *names* in composite rules always match case-insensitively — the setting governs values, not
+  identifiers.
+- **`EXISTS WITH` pairs its two column lists positionally**, so the reference table's columns need
+  not share the source's names: `EXISTS WITH (TenantId, CustomerId) IN dim_customer(Tenant, Id)`.
+  The two lists must have the same arity, and a mismatch is a parse error.
+- **A composite rule naming a column the statement does not project is an error.** Row lookup by
+  name yields NULL for an absent column, and a NULL key part skips the rule — so a typo would
+  otherwise produce a rule that reports clean because it never ran. This applies to `UNIQUE WITH`
+  as well as `EXISTS WITH`.
 - **Numeric comparisons are decimal** at runtime.
 - **`MATCHES` patterns compile with non-backtracking regex.** A per-row user-supplied regex is
   otherwise a denial-of-service vector. Backreferences and lookaround are rejected at lint time.
@@ -218,6 +228,20 @@ SELECT
 INTO clean_bookings
 FROM raw_bookings
 ON FAILURE QUARANTINE TO quarantine_bookings WITH (RETENTION = '30 DAYS');
+```
+
+```sql
+-- Tenant-scoped foreign key. The single-column form would accept a CustomerId that is real but
+-- belongs to a different tenant, which is precisely the row this check exists to catch.
+load_orders:
+SELECT
+    TenantId   /* @expect: 'EXISTS WITH (TenantId, CustomerId) IN dim_customer(TenantId, CustomerId)';
+                  @fail: 'QUARANTINE'; */,
+    CustomerId,
+    Amount
+INTO clean_orders
+FROM raw_orders
+ON FAILURE QUARANTINE TO quarantine_orders WITH (RETENTION = '30 DAYS');
 ```
 
 ## References
