@@ -12,6 +12,15 @@
     "WarmRunnerBatchSize": 10000,
     "MaxConcurrentJobs": 8
   },
+  "Orchestration": {
+    "SandboxAdmission": {
+      "Enabled": false,
+      "PoolCapacities": {},
+      "LeaseSeconds": 120,
+      "ActivationPollMilliseconds": 100,
+      "ReconciliationSeconds": 30
+    }
+  },
   "Kestrel": {
     "Endpoints": {
       "Http": {

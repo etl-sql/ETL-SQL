@@ -13,6 +13,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
+using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Orchestrator.Storage
 {
@@ -76,7 +77,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     Description TEXT,
                     Options TEXT,
                     CreatedBy TEXT,
-                    ModifiedBy TEXT
+                    ModifiedBy TEXT,
+                    TenantId TEXT
                 );";
 
                     // Schedules, notifications, and their attachments to jobs. The Orchestrator is the
@@ -499,7 +501,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 await cmd.ExecuteNonQueryAsync();
             }
 
-            foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy" })
+            foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy", "TenantId" })
             {
                 if (columns.Contains(column)) continue;
                 using var cmd = connection.CreateCommand();
@@ -638,8 +640,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // Upsert (not INSERT OR REPLACE): REPLACE deletes and reinserts the row, which would
             // silently clear an active execution lease whenever a job definition is re-saved.
             var sql = @"
-                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy)
-                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy)
+                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
                 ON CONFLICT(Name) DO UPDATE SET
                     Script            = excluded.Script,
                     Interval          = excluded.Interval,
@@ -658,13 +660,16 @@ namespace ETL_SQL.Orchestrator.Storage
                     Description       = excluded.Description,
                     Options           = excluded.Options,
                     ModifiedBy        = excluded.ModifiedBy,
-                    Version           = Jobs.Version + 1;";
+                    TenantId          = COALESCE(Jobs.TenantId, excluded.TenantId),
+                    Version           = Jobs.Version + 1
+                WHERE Jobs.TenantId IS NULL OR excluded.TenantId IS NULL OR Jobs.TenantId = excluded.TenantId;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             AddJobParameters(command, job);
 
-            await command.ExecuteNonQueryAsync();
+            if (await command.ExecuteNonQueryAsync() != 1)
+                throw new InvalidOperationException("A scheduled job tenant binding cannot be replaced.");
         }
 
         public async Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion)
@@ -695,7 +700,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     ModifiedBy = @modifiedBy,
                     CreatedBy = COALESCE(CreatedBy, @createdBy),
                     Version = Version + 1
-                WHERE Name = @name COLLATE NOCASE AND Version = @expectedVersion;";
+                WHERE Name = @name COLLATE NOCASE AND Version = @expectedVersion
+                  AND (TenantId IS NULL OR CAST(@tenantId AS TEXT) IS NULL
+                       OR TenantId = CAST(@tenantId AS TEXT));";
             AddJobParameters(command, job);
             command.AddParam("@expectedVersion", expectedVersion);
             return await command.ExecuteNonQueryAsync() == 1;
@@ -722,6 +729,9 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@options", (object?)job.Options ?? DBNull.Value);
             command.AddParam("@createdBy", (object?)job.CreatedBy ?? DBNull.Value);
             command.AddParam("@modifiedBy", (object?)job.ModifiedBy ?? DBNull.Value);
+            command.AddParam("@tenantId", string.IsNullOrWhiteSpace(job.TenantId)
+                ? DBNull.Value
+                : TenantId.FromTrustedSource(job.TenantId).Value);
         }
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
@@ -1182,7 +1192,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 ReadOptionalString(reader, "Description"),
                 ReadOptionalString(reader, "Options"),
                 ReadOptionalString(reader, "CreatedBy"),
-                ReadOptionalString(reader, "ModifiedBy"));
+                ReadOptionalString(reader, "ModifiedBy"),
+                ReadOptionalString(reader, "TenantId"));
         }
 
         /// <summary>

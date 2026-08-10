@@ -711,8 +711,8 @@ before local weighted waiting, requires fenced relational activation before retu
 and heartbeats that lease for the attempt lifetime. Lease renewal loss cancels the same execution token
 the coordinator passes to workspace preparation and runtime execution. Normal completion is committed
 durably before local capacity is returned; explicit reconciliation releases both durable and local
-reservations. Weighted choice is still process-local. Cluster-wide weighted selection, queued-work
-rebuild after process loss, and hosted-service wiring remain open scheduler work.
+reservations. Weighted choice is still process-local. Cluster-wide weighted selection and
+scheduler-owned queued-work dispatch after process loss remain open scheduler work.
 
 `SandboxAdmissionReconciliationService` performs the expiry pass without treating time as teardown
 proof. It first moves expired active leases to retained state, then asks the environment-owned
@@ -720,6 +720,41 @@ proof. It first moves expired active leases to retained state, then asks the env
 only for `Detached`. `Running`, `Unknown`, provider exceptions, and fence conflicts remain retained and
 continue consuming pool/tenant counters for a later pass. This keeps an unavailable control plane or
 ambiguous runtime from becoming accidental overcommit.
+
+After scheduler-process loss, `LedgerBackedSandboxAdmissionController.ResumeQueuedAsync` may rebuild
+local fair waiting only from a current `Queued` ledger row. It rechecks server-derived tenant, durable
+sequence, pool, weight, and queue/concurrency limits, then adopts the same admission ID and obtains a
+new fenced activation. It rejects active, retained, completed, and cancelled rows rather than turning
+old authority into new work. Recovery cancellation does not cancel the durable row; another node may
+resume it later. Resolving the admission ID back to immutable scheduler workload metadata and hosting
+the recovery loop remain integration work.
+
+Scheduled jobs persist their requested execution class in the existing `JobDefinition.Options` JSON
+as the single `SandboxProfile` name. `SandboxWorkloadPolicyResolver` treats that value only as a
+request: it resolves the verified tenant against a server-owned policy catalog, checks that the named
+profile is entitled, and returns the catalog's physical pool, required isolation tier, resource
+limits, tenant weight, and queue/concurrency ceilings. Jobs cannot supply those authoritative values
+directly. Unknown tenants or profiles, unentitled profiles, malformed option JSON, non-string profile
+values, and case-ambiguous duplicate profile keys fail closed. Connecting this resolved policy and
+recovered admission identity to scheduler execution remains host integration work.
+
+`JobDefinition.TenantId` is the immutable scheduler tenant binding. In shared deployments the Portal
+derives it from the already-validated request `TenantContext` and includes it in the short-lived,
+HMAC-signed Orchestrator identity assertion; a fixed `Orchestrator:TenantId` supplies Dedicated host
+authority and must match any signed tenant. REST job creation, script-first `CREATE JOB`, and
+tenant-scoped subscription job generation persist the canonical value. Store upserts may bind a
+legacy null row once but cannot replace a non-null tenant, and optimistic updates cannot cross the
+binding. `SandboxWorkloadPolicyResolver` rejects legacy/unbound jobs and requires the persisted tenant
+to match the server-derived execution context before resolving any profile or capacity authority.
+
+Long-running Orchestrator hosts call `AddSandboxAdmissionHosting`. The feature is opt-in under
+`Orchestration:SandboxAdmission`; when enabled it uses the same configured SQLite/PostgreSQL authority
+as the job store, registers `LedgerBackedSandboxAdmissionController`, and runs retained-admission
+reconciliation on the configured interval. Pool capacities and all intervals must be positive. The
+environment must register `ISandboxRuntimeReconciler`; omission is a startup dependency failure, not
+an implicit `Detached` result. The feature stays disabled until a runtime provider supplies that proof
+binding, so existing in-process and process-spawn execution paths are not silently reclassified as
+hardened sandboxes.
 
 ## 14. Observability, Audit, and Support
 

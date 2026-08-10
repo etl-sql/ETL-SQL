@@ -31,7 +31,7 @@ public sealed class OrchestratorIdentityAssertionTests
     public void SignedAssertionRoundTripsIdentityRolesAndGroups()
     {
         var expected = new OrchestratorCaller(
-            "user", "42", "jsmith", ["OrchestratorManager"], ["7", "11"]);
+            "user", "42", "jsmith", ["OrchestratorManager"], ["7", "11"], "tenant-a");
         var assertion = OrchestratorIdentityAssertion.Create(expected, Secret);
 
         Assert.True(OrchestratorIdentityAssertion.TryValidate(
@@ -40,6 +40,26 @@ public sealed class OrchestratorIdentityAssertionTests
         Assert.Equal(expected.SubjectId, actual.SubjectId);
         Assert.Equal(expected.Roles, actual.Roles);
         Assert.Equal(expected.GroupIds, actual.GroupIds);
+        Assert.Equal("tenant-a", actual.TenantId);
+    }
+
+    [Fact]
+    public void SignedTenantBindingMustMatchConfiguredHostTenant()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers[OrchestratorIdentityAssertion.HeaderName] =
+            OrchestratorIdentityAssertion.Create(
+                new OrchestratorCaller("user", "42", "jsmith", ["Admin"], [], "tenant-a"), Secret);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Orchestrator:ApiKey"] = "real-key",
+            ["Orchestrator:IdentitySigningSecret"] = Secret,
+            ["Orchestrator:RequireFederatedIdentity"] = "true",
+            ["Orchestrator:TenantId"] = "tenant-b"
+        }).Build();
+
+        Assert.True(JobApiEndpoints.FederatedIdentityAccepted(ctx, config));
+        Assert.False(JobApiEndpoints.TryResolveRequestTenant(ctx, config, out _));
     }
 
     [Fact]

@@ -210,13 +210,15 @@ public class SubscriptionsController(
         sub.ScriptPath = scriptPath;
         await db.SaveChangesAsync();
 
-        var jobDef = SubscriptionOrchestration.BuildJobDefinition(sub, report.Name, scriptPath);
+        var jobDef = SubscriptionOrchestration.BuildJobDefinition(
+            sub, report.Name, scriptPath, _tenantScope.TenantId);
         var orchDbPath = dbLocator.Resolve();
         if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
-            await SubscriptionOrchestration.SaveJobAndScheduleAsync(store, sub, report.Name, scriptPath);
+            await SubscriptionOrchestration.SaveJobAndScheduleAsync(
+                store, sub, report.Name, scriptPath, _tenantScope.TenantId);
         }
 
         await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobDef.Name);
@@ -335,7 +337,7 @@ public class SubscriptionsController(
                 // Heal a missing job from row state (e.g. a crash between the portal row and
                 // the job DB during create) instead of leaving the subscription dormant.
                 await SubscriptionOrchestration.SaveJobAndScheduleAsync(
-                    store, sub, sub.Report.Name, sub.ScriptPath);
+                    store, sub, sub.Report.Name, sub.ScriptPath, _tenantScope.TenantId);
             }
         }
 

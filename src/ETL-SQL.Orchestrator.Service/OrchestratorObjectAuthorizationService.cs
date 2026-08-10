@@ -32,6 +32,11 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         string? owner,
         CancellationToken cancellationToken = default)
     {
+        // Explicit legacy mode historically grants the configured API key full catalog authority.
+        // It is available only when federated identity is disabled at startup.
+        if (caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase)
+            && caller.SubjectId.Equals("legacy-api-key", StringComparison.OrdinalIgnoreCase))
+            return true;
         if (caller.IsInRole("Admin")) return true;
         if (!string.IsNullOrWhiteSpace(owner)
             && string.Equals(owner, caller.PrincipalKey, StringComparison.OrdinalIgnoreCase))

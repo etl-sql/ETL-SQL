@@ -58,6 +58,60 @@ public sealed class LedgerBackedSandboxAdmissionController : ISandboxAdmissionCo
         if (!await _ledger.EnqueueAsync(admissionId, tenant, policy, cancellationToken))
             throw new InvalidOperationException("A unique durable sandbox admission could not be enqueued.");
 
+        return await AcquireQueuedAsync(
+            admissionId, tenant, policy, cancelQueueOnFailure: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Rebuilds process-local fair waiting for an existing durable queued admission after restart.
+    /// Active, retained, completed, or cancelled rows are never adopted as new work.
+    /// </summary>
+    public async ValueTask<SandboxAdmissionLease> ResumeQueuedAsync(
+        SandboxAdmissionLedgerEntry queued,
+        TenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(queued);
+        ArgumentNullException.ThrowIfNull(tenant);
+        tenant.RequireTenant(queued.TenantId);
+        if (queued.State != SandboxAdmissionState.Queued)
+            throw new InvalidOperationException("Only a persisted queued admission can be resumed after restart.");
+
+        var current = await _ledger.ReadAsync(queued.AdmissionId, cancellationToken);
+        if (current is null || current.State != SandboxAdmissionState.Queued ||
+            current.Sequence != queued.Sequence || current.TenantId != queued.TenantId ||
+            current.PoolId != queued.PoolId || current.TenantWeight != queued.TenantWeight ||
+            current.MaxConcurrentAttempts != queued.MaxConcurrentAttempts ||
+            current.MaxQueuedAttempts != queued.MaxQueuedAttempts)
+        {
+            throw new InvalidOperationException(
+                "The durable admission changed while restart recovery was rebuilding its queue position.");
+        }
+
+        var policy = new ResolvedSandboxAdmissionPolicy
+        {
+            PoolId = current.PoolId,
+            TenantWeight = current.TenantWeight,
+            MaxConcurrentAttempts = current.MaxConcurrentAttempts,
+            MaxQueuedAttempts = current.MaxQueuedAttempts
+        };
+        return await AcquireQueuedAsync(
+            current.AdmissionId, tenant, policy, cancelQueueOnFailure: false, cancellationToken);
+    }
+
+    private async ValueTask<SandboxAdmissionLease> AcquireQueuedAsync(
+        string admissionId,
+        TenantContext tenant,
+        ResolvedSandboxAdmissionPolicy policy,
+        bool cancelQueueOnFailure,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.PoolCapacities.TryGetValue(policy.PoolId, out var poolCapacity) || poolCapacity <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Sandbox capacity pool '{policy.PoolId}' is unavailable; admission cannot borrow another pool.");
+        }
+
         SandboxAdmissionLease? localLease = null;
         try
         {
@@ -94,7 +148,8 @@ public sealed class LedgerBackedSandboxAdmissionController : ISandboxAdmissionCo
         {
             if (localLease is not null)
                 await localLease.ReleaseAsync();
-            await _ledger.TryCancelQueuedAsync(admissionId, CancellationToken.None);
+            if (cancelQueueOnFailure)
+                await _ledger.TryCancelQueuedAsync(admissionId, CancellationToken.None);
             throw;
         }
     }

@@ -93,6 +93,15 @@ public class OrchestratorStartupTests
     }
 
     [Fact]
+    public void InvalidFixedTenantFailsStartup()
+    {
+        var cfg = Config(("Orchestrator:TenantId", "../tenant-a"));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            OrchestratorStartup.ValidateApiKeyBinding(cfg));
+        Assert.Contains("TenantId", error.Message);
+    }
+
+    [Fact]
     public void KeyWithoutFederatedIdentitySecret_NonLoopback_Throws()
     {
         var cfg = Config(("Orchestrator:ApiKey", "a-real-key"), ("urls", "http://0.0.0.0:5001"));

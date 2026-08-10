@@ -92,7 +92,8 @@ public class CreateJobStatementHandler : IStatementHandler
             Options: CatalogStatementSupport.SerializeOptions(stmt.Metadata.Options)
                      ?? (patches ? existing!.Options : null),
             CreatedBy: existing?.CreatedBy ?? identity,
-            ModifiedBy: identity);
+            ModifiedBy: identity,
+            TenantId: existing?.TenantId ?? context.ExecutionIdentity?.TenantId);
 
         if (existing is not null
             && stmt.Mode == ObjectCreationMode.CreateOrReplace

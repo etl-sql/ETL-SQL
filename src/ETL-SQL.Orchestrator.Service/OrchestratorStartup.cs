@@ -102,6 +102,20 @@ namespace ETL_SQL.Orchestrator.Service
         /// </summary>
         public static void ValidateApiKeyBinding(IConfiguration configuration)
         {
+            var configuredTenant = configuration["Orchestrator:TenantId"];
+            if (!string.IsNullOrWhiteSpace(configuredTenant))
+            {
+                try
+                {
+                    ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(configuredTenant);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException(
+                        "Orchestrator:TenantId must be a canonical tenant identifier.", ex);
+                }
+            }
+
             var maxPreviousApiKeys = Math.Max(0, configuration.GetValue<int?>("Orchestrator:MaxPreviousApiKeys") ?? 1);
             var previousApiKeys =
                 configuration.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? [];

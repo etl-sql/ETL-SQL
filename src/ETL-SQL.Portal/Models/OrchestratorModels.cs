@@ -13,7 +13,8 @@ public record JobDefinitionDto(
     int RetryDelaySeconds,
     string? ScriptHash,
     string HashPolicy,
-    long Version = 1
+    long Version = 1,
+    string? TenantId = null
 );
 
 public record JobHistoryEntryDto(

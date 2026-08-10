@@ -459,6 +459,32 @@ Expired admission leases are handled by `SandboxAdmissionReconciliationService`.
 expired work to retained and delegates runtime discovery to the environment binding. Only positive
 detachment proof releases capacity; running, unknown, failed probes, or fence conflicts remain retained.
 
+Queued restart recovery adopts the existing relational admission through `ResumeQueuedAsync`; it never
+creates a replacement ID or treats active/retained state as queued. Tenant and persisted policy must
+still match, and interrupted recovery leaves the row available for another node. The host scheduler is
+responsible for resolving that admission ID to immutable workload metadata before execution.
+
+For scheduled work, `JobDefinition.Options` may contain only a named `SandboxProfile` request.
+`SandboxWorkloadPolicyResolver` combines that durable request with the verified tenant's server-owned
+catalog entry. The catalog—not caller-controlled job metadata—sets entitlement, physical capacity
+pool, isolation tier, runtime limits, weight, and queue/concurrency ceilings. Missing tenant policy,
+unknown or unentitled profiles, and malformed or ambiguous metadata fail closed. The Orchestrator host
+still must wire the resolved policy into dispatch, restart recovery, and the selected runtime provider.
+
+Scheduled jobs carry an immutable canonical `TenantId`. The Portal places its validated request tenant
+inside the signed Orchestrator identity assertion; Dedicated Orchestrators may instead set the fixed
+`Orchestrator:TenantId`, and a signed/configured mismatch is denied. REST creation, `CREATE JOB`, and
+subscription reconciliation persist this authority. An existing non-null binding cannot be replaced;
+legacy null jobs remain manageable on their old path but are ineligible for sandbox policy resolution
+until a trusted host supplies their first binding.
+
+The Orchestrator service invokes `AddSandboxAdmissionHosting`. With
+`Orchestration:SandboxAdmission:Enabled=true`, the registration uses the same configured relational
+authority as the job store, installs the ledger-backed controller, and starts periodic retained
+capacity reconciliation. Invalid pool/interval settings fail configuration, and an enabled host with
+no environment-owned `ISandboxRuntimeReconciler` fails dependency resolution. The default remains off
+until a deployment binds a runtime capable of proving stopped processes and detached mounts.
+
 ### 10.1 Isolation Tiers
 
 | Tier | Boundary | Intended use |

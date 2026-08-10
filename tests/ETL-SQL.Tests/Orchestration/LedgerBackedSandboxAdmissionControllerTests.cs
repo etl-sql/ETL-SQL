@@ -81,6 +81,60 @@ public sealed class LedgerBackedSandboxAdmissionControllerTests : IDisposable
             (await ledger.ReadAsync(lease.AdmissionId))!.State);
     }
 
+    [Fact]
+    public async Task RestartResumeAdoptsExistingQueuedAdmissionId()
+    {
+        var ledger = Ledger();
+        await ledger.EnqueueAsync("persisted-queue", Tenant("tenant-a"), Policy());
+        var queued = await ledger.ReadAsync("persisted-queue");
+        var replacement = Controller("node-replacement", Ledger());
+
+        var lease = await replacement.ResumeQueuedAsync(queued!, Tenant("tenant-a"));
+
+        Assert.Equal("persisted-queue", lease.AdmissionId);
+        var active = await ledger.ReadAsync("persisted-queue");
+        Assert.Equal(SandboxAdmissionState.Active, active!.State);
+        Assert.Equal("node-replacement", active.LeaseOwner);
+        await lease.ReleaseAsync();
+    }
+
+    [Fact]
+    public async Task RestartResumeRejectsTenantSwapAndNonQueuedAuthority()
+    {
+        var ledger = Ledger();
+        await ledger.EnqueueAsync("tenant-bound", Tenant("tenant-a"), Policy());
+        var queued = await ledger.ReadAsync("tenant-bound");
+        var replacement = Controller("node-replacement", ledger);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+            await replacement.ResumeQueuedAsync(queued!, Tenant("tenant-b")));
+        Assert.Equal(SandboxAdmissionState.Queued, (await ledger.ReadAsync("tenant-bound"))!.State);
+
+        await ledger.TryActivateAsync(
+            "tenant-bound", "old-node", 1, TimeSpan.FromMinutes(5));
+        var active = await ledger.ReadAsync("tenant-bound");
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await replacement.ResumeQueuedAsync(active!, Tenant("tenant-a")));
+    }
+
+    [Fact]
+    public async Task InterruptedRestartRecoveryLeavesDurableQueueForAnotherNode()
+    {
+        var ledger = Ledger();
+        var holder = Controller("node-holder", ledger);
+        var active = await holder.AcquireAsync(Tenant("tenant-a"), Policy());
+        await ledger.EnqueueAsync("recover-later", Tenant("tenant-b"), Policy());
+        var queued = await ledger.ReadAsync("recover-later");
+        var replacement = Controller("node-replacement", Ledger());
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await replacement.ResumeQueuedAsync(queued!, Tenant("tenant-b"), cancellation.Token));
+
+        Assert.Equal(SandboxAdmissionState.Queued, (await ledger.ReadAsync("recover-later"))!.State);
+        await active.ReleaseAsync();
+    }
+
     private RelationalSandboxAdmissionLedger Ledger() => new(
         new SqliteOrchestratorDialect($"Data Source={_databasePath};Pooling=False"));
 

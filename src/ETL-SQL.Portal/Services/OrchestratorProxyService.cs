@@ -215,10 +215,20 @@ public class OrchestratorProxyService(
         var user = httpContext?.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true)
         {
+            var backgroundTenant = portalConfig?.SharedTenancy.Enabled == true
+                ? null
+                : string.IsNullOrWhiteSpace(portalConfig?.TenantId) ? "portal-host" : portalConfig.TenantId;
             return OrchestratorIdentityAssertion.Create(
-                new OrchestratorCaller("service", "portal-background", "Portal background service", ["PortalSystem"], []),
+                new OrchestratorCaller(
+                    "service", "portal-background", "Portal background service", ["PortalSystem"], [],
+                    backgroundTenant),
                 secret);
         }
+
+        if (portalConfig is null ||
+            !TenantCredentialBinding.TryResolve(user, portalConfig, out var tenant, out _))
+            return null;
+        var tenantId = tenant?.Tenant.Value ?? "portal-host";
 
         var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
         var name = user.FindFirstValue(ClaimTypes.Name) ?? user.Identity.Name;
@@ -249,7 +259,8 @@ public class OrchestratorProxyService(
                 subjectId,
                 name ?? subjectId,
                 roles,
-                groupIds),
+                groupIds,
+                tenantId),
             secret);
     }
 

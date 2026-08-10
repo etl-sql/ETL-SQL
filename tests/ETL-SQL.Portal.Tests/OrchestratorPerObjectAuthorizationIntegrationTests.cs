@@ -12,6 +12,35 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class OrchestratorPerObjectAuthorizationIntegrationTests
 {
     [Fact]
+    public async Task SignedTenantIsPersistedAndCannotBeReboundByAnotherTenant()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var tenantA = new OrchestratorCaller(
+            "user", "1", "owner", ["OrchestratorManager"], [], "tenant-a");
+
+        using (var create = Request(HttpMethod.Post, "/api/scheduled-jobs", tenantA, new
+        {
+            name = "tenant_bound_job",
+            scriptText = "SELECT 1 AS Value;",
+            interval = 100,
+            unit = "DAY"
+        }))
+            Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(create)).StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant_bound_job"))!.TenantId);
+
+        var tenantB = tenantA with { TenantId = "tenant-b" };
+        using var update = Request(
+            HttpMethod.Put, "/api/scheduled-jobs/tenant_bound_job", tenantB, new { isEnabled = false });
+        update.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(update)).StatusCode);
+        Assert.Equal("tenant-a", (await store.GetJobAsync("tenant_bound_job"))!.TenantId);
+    }
+
+    [Fact]
     public async Task ReachabilityDoesNotGrantAnotherPrincipalsJobOrPermitCreateOrAlterTakeover()
     {
         using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);

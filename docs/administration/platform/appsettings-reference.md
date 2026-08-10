@@ -107,6 +107,11 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | `Orchestration:JobThrottle:PollJitterRatio` | number | `0.2` | — | Symmetric jitter applied to throttle retries to prevent synchronized database polling. |
 | `Orchestration:JobThrottle:SlotLeaseSeconds` | integer | `60` | — | Expiry for an unrenewed throttle slot owned by another HA node. |
 | `Orchestration:JobThrottle:SlotHeartbeatSeconds` | integer | `20` | — | Renewal interval for an active cross-node throttle slot. Clamped below half the lease. |
+| `Orchestration:SandboxAdmission:Enabled` | boolean | `false` | — | Enables ledger-backed sandbox admission and retained-capacity reconciliation. Requires a runtime-provider `ISandboxRuntimeReconciler` binding. |
+| `Orchestration:SandboxAdmission:PoolCapacities:{pool}` | integer | — | > 0 | Provider-owned capacity for one exact isolation/service-tier pool. Unknown pools never borrow capacity. |
+| `Orchestration:SandboxAdmission:LeaseSeconds` | number | `120` | > 0 | Durable admission ownership lease. The active controller renews at one third of this duration. |
+| `Orchestration:SandboxAdmission:ActivationPollMilliseconds` | number | `100` | > 0 | Delay before retrying a durable activation when relational capacity is unavailable. |
+| `Orchestration:SandboxAdmission:ReconciliationSeconds` | number | `30` | > 0 | Interval for retaining expired leases and probing retained runtimes for proven detachment. |
 | `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | — | Memory floor threshold for scheduling new background tasks (2GB). |
 | `Orchestration:ResourceManagement:MaxStreamingCursors` | integer | `50` | — | Max open active cursors across all jobs. |
 | `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | integer | `600` | — | Duration jobs will wait in queue for RAM to free up before timing out. |
@@ -210,6 +215,7 @@ Configuration details for the background runner service.
 | `Orchestrator:FailedStatementMetricsRetentionDays` | integer | `30` | — | Retains failed-run statement detail longer; parent history pruning still removes detail with its run. |
 | `Orchestrator:Database:Provider` | string | `Sqlite` | — | Database backing storage (`Sqlite` or `Postgres`). |
 | `Orchestrator:Database:ConnectionString` | string | `""` | — | DB Connection details when `Postgres` provider is specified. |
+| `Orchestrator:TenantId` | string | `null` | — | Fixed canonical tenant authority for a Dedicated Orchestrator. If a signed Portal assertion also carries a tenant, both values must match. |
 
 ---
 

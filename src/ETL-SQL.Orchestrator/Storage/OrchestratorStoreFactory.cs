@@ -22,6 +22,10 @@ namespace ETL_SQL.Orchestrator.Storage
         /// <c>Orchestrator:Database:ConnectionString</c>.
         /// </summary>
         IJobHistoryStore Create(string? dbPath = null);
+
+        /// <summary>Creates the sandbox admission ledger on the same configured authority.</summary>
+        ISandboxAdmissionLedger CreateSandboxAdmissionLedger(string? dbPath = null) =>
+            throw new NotSupportedException("This store factory does not provide a sandbox admission authority.");
     }
 
     /// <inheritdoc />
@@ -40,16 +44,24 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public IJobHistoryStore Create(string? dbPath = null)
         {
-            if (_provider == DatabaseProvider.Postgres)
-            {
-                var conn = _connectionString;
-                if (string.IsNullOrWhiteSpace(conn))
-                    throw new InvalidOperationException(
-                        "Orchestrator:Database:Provider=Postgres requires Orchestrator:Database:ConnectionString to be set.");
-                return new RelationalJobHistoryStore(new NpgsqlOrchestratorDialect(conn!));
-            }
+            return _provider == DatabaseProvider.Postgres
+                ? new RelationalJobHistoryStore(CreateDialect(dbPath))
+                : new SQLiteJobHistoryStore(dbPath);
+        }
 
-            return new SQLiteJobHistoryStore(dbPath);
+        public ISandboxAdmissionLedger CreateSandboxAdmissionLedger(string? dbPath = null) =>
+            new RelationalSandboxAdmissionLedger(CreateDialect(dbPath));
+
+        private IOrchestratorStoreDialect CreateDialect(string? dbPath)
+        {
+            if (_provider != DatabaseProvider.Postgres)
+                return new SqliteOrchestratorDialect(
+                    $"Data Source={dbPath ?? SQLiteJobHistoryStore.DefaultDbPath()}");
+
+            if (string.IsNullOrWhiteSpace(_connectionString))
+                throw new InvalidOperationException(
+                    "Orchestrator:Database:Provider=Postgres requires Orchestrator:Database:ConnectionString to be set.");
+            return new NpgsqlOrchestratorDialect(_connectionString);
         }
     }
 }

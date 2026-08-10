@@ -100,7 +100,11 @@ public static class SubscriptionOrchestration
         $"sub_{subscriptionId}_{SanitizeName(reportName)}.etlsql";
 
     /// <summary>Builds the scheduled trigger-job definition for a subscription from row state.</summary>
-    public static JobDefinition BuildJobDefinition(Subscription sub, string reportName, string scriptPath)
+    public static JobDefinition BuildJobDefinition(
+        Subscription sub,
+        string reportName,
+        string scriptPath,
+        string tenantId)
     {
         var (interval, unit) = ParseSchedule(sub.Schedule);
         return new JobDefinition(
@@ -113,16 +117,18 @@ public static class SubscriptionOrchestration
             NextRun: null,
             IsEnabled: sub.IsActive,
             MaxRetries: 3,
-            RetryDelaySeconds: 60);
+            RetryDelaySeconds: 60,
+            TenantId: ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(tenantId).Value);
     }
 
     public static async Task SaveJobAndScheduleAsync(
         IJobHistoryStore store,
         Subscription sub,
         string reportName,
-        string scriptPath)
+        string scriptPath,
+        string tenantId)
     {
-        var job = BuildJobDefinition(sub, reportName, scriptPath);
+        var job = BuildJobDefinition(sub, reportName, scriptPath, tenantId);
         await store.SaveJobAsync(job);
         await SaveScheduleLinkAsync(store, sub, job.Name);
         await SaveNotificationLinkAsync(store, sub, job.Name);

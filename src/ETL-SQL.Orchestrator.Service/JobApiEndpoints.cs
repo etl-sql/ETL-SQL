@@ -14,6 +14,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Handlers;
@@ -182,11 +183,15 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (string.IsNullOrWhiteSpace(req.Name))
                     return Results.BadRequest(new { Error = "Name is required." });
+                if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 JobDefinition job;
                 var normalized = !string.IsNullOrWhiteSpace(req.TargetPath)
                     || !string.IsNullOrWhiteSpace(req.JobType);
                 var existing = await store.GetJobAsync(req.Name);
+                if (existing is not null && !CanAccessJobTenant(existing, requestTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var caller = RequestCaller(ctx);
                 if (existing is null && !OrchestratorObjectAuthorizationService.CanCreate(caller))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -244,7 +249,8 @@ namespace ETL_SQL.Orchestrator.Service
                         req.Description ?? (patches ? existing!.Description : null),
                         req.Options is null ? (patches ? existing!.Options : null) : JsonSerializer.Serialize(req.Options),
                         existing?.CreatedBy ?? caller.PrincipalKey,
-                        ReadActor(ctx));
+                        ReadActor(ctx),
+                        existing?.TenantId ?? requestTenant);
 
                     await store.SaveJobAsync(job);
                     if (existing is not null && mode == ObjectCreationMode.CreateOrReplace)
@@ -272,7 +278,8 @@ namespace ETL_SQL.Orchestrator.Service
                     job = new JobDefinition(
                         req.Name, scriptText, req.Interval.Value, (req.Unit ?? "HOUR").ToUpperInvariant(),
                         req.AtTime, null, null, true, req.MaxRetries ?? 0, req.RetryDelaySeconds ?? 30,
-                        null, req.HashPolicy ?? "Warn", CreatedBy: caller.PrincipalKey, ModifiedBy: ReadActor(ctx));
+                        null, req.HashPolicy ?? "Warn", CreatedBy: caller.PrincipalKey,
+                        ModifiedBy: ReadActor(ctx), TenantId: requestTenant);
                     await store.SaveJobAsync(job);
                 }
 
@@ -284,6 +291,8 @@ namespace ETL_SQL.Orchestrator.Service
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var expectedVersion = ReadExpectedVersion(ctx);
                 if (expectedVersion is null)
                     return Results.Json(
@@ -293,6 +302,8 @@ namespace ETL_SQL.Orchestrator.Service
                 var existing = await store.GetJobAsync(Uri.UnescapeDataString(name));
                 if (existing == null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
+                if (!CanAccessJobTenant(existing, requestTenant))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!await authorization.CanAsync(
                         RequestCaller(ctx), OrchestratorObjectKind.Job, existing.Name,
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
@@ -1309,6 +1320,27 @@ namespace ETL_SQL.Orchestrator.Service
                 ? caller
                 : new OrchestratorCaller("service", "unverified", "Unverified caller", [], []);
 
+        internal static bool TryResolveRequestTenant(
+            HttpContext context,
+            IConfiguration configuration,
+            out string? tenantId)
+        {
+            tenantId = RequestCaller(context).TenantId;
+            var configuredValue = configuration["Orchestrator:TenantId"];
+            if (string.IsNullOrWhiteSpace(configuredValue))
+                return true;
+
+            var configured = TenantId.FromTrustedSource(configuredValue).Value;
+            if (tenantId is not null && !string.Equals(tenantId, configured, StringComparison.Ordinal))
+                return false;
+            tenantId = configured;
+            return true;
+        }
+
+        internal static bool CanAccessJobTenant(JobDefinition job, string? requestTenant) =>
+            job.TenantId is null ||
+            string.Equals(job.TenantId, requestTenant, StringComparison.Ordinal);
+
         /// <summary>Stable, sanitized audit identity derived only from the verified assertion.</summary>
         internal static string RequestActor(HttpContext ctx)
         {
@@ -1321,6 +1353,7 @@ namespace ETL_SQL.Orchestrator.Service
             EffectiveUser = caller.PrincipalKey,
             RealUser = caller.AuditActor,
             IsAdmin = caller.IsInRole("Admin"),
+            TenantId = caller.TenantId,
             Roles = caller.Roles,
             Groups = caller.GroupIds
         };

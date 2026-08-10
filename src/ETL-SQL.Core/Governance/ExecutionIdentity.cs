@@ -24,6 +24,9 @@ public sealed record ExecutionIdentity
     public required string EffectiveUser { get; init; }
     public int? EffectiveUserId { get; init; }
 
+    /// <summary>Server-verified tenant binding for host-managed catalog and execution authority.</summary>
+    public string? TenantId { get; init; }
+
     /// <summary>The actual actor; differs from <see cref="EffectiveUser"/> only under impersonation.</summary>
     public required string RealUser { get; init; }
 

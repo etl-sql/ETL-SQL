@@ -104,7 +104,12 @@ public record JobDefinition(
     string? Description = null,
     string? Options = null,
     string? CreatedBy = null,
-    string? ModifiedBy = null
+    string? ModifiedBy = null,
+    /// <summary>
+    /// Immutable server-derived tenant binding. Null identifies a legacy/unbound job, which is not
+    /// eligible for tenant sandbox policy resolution.
+    /// </summary>
+    string? TenantId = null
 );
 
 public record JobHistoryEntry(

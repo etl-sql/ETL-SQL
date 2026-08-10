@@ -371,6 +371,33 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task SaveJob_TenantBindingRoundTripsAndCannotBeReplaced()
+        {
+            await _store.InitializeAsync();
+            var original = MakeJob("TenantBound") with { TenantId = "tenant-a" };
+            await _store.SaveJobAsync(original);
+
+            Assert.Equal("tenant-a", (await _store.GetJobAsync("TenantBound"))!.TenantId);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _store.SaveJobAsync(original with { TenantId = "tenant-b" }));
+            Assert.False(await _store.TrySaveJobAsync(
+                original with { TenantId = "tenant-b" }, expectedVersion: 1));
+            Assert.Equal("tenant-a", (await _store.GetJobAsync("TenantBound"))!.TenantId);
+        }
+
+        [Fact]
+        public async Task SaveJob_LegacyRowMayReceiveItsFirstAuthoritativeTenantBinding()
+        {
+            await _store.InitializeAsync();
+            var legacy = MakeJob("LegacyBinding");
+            await _store.SaveJobAsync(legacy);
+            Assert.Null((await _store.GetJobAsync("LegacyBinding"))!.TenantId);
+
+            await _store.SaveJobAsync(legacy with { TenantId = "tenant-a" });
+            Assert.Equal("tenant-a", (await _store.GetJobAsync("LegacyBinding"))!.TenantId);
+        }
+
+        [Fact]
         public async Task SaveJob_WithNullOptionalFields_Succeeds()
         {
             await _store.InitializeAsync();

@@ -4,6 +4,8 @@ using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -46,6 +48,38 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 // SQLite pools connections, keeping the file handle open; clear the pool, then
                 // best-effort delete (temp files are non-fatal to leave behind).
+                SqliteConnection.ClearAllPools();
+                foreach (var p in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
+                    try { if (File.Exists(p)) File.Delete(p); } catch { /* best-effort */ }
+            }
+        }
+
+        [Fact]
+        public async Task Sqlite_AdmissionLedgerSharesConfiguredAuthority()
+        {
+            var factory = new OrchestratorStoreFactory(Config("Sqlite"));
+            var dbPath = Path.Combine(Path.GetTempPath(), $"orch_admission_factory_{Guid.NewGuid():N}.db");
+            try
+            {
+                var jobs = factory.Create(dbPath);
+                await jobs.InitializeAsync();
+                var admissions = factory.CreateSandboxAdmissionLedger(dbPath);
+                var policy = new ResolvedSandboxAdmissionPolicy
+                {
+                    PoolId = "shared-hardened",
+                    TenantWeight = 1,
+                    MaxConcurrentAttempts = 1,
+                    MaxQueuedAttempts = 2
+                };
+
+                Assert.True(await admissions.EnqueueAsync(
+                    "factory-admission",
+                    TenantContext.FromVerifiedCredential("tenant-a"),
+                    policy));
+                Assert.Equal("tenant-a", (await admissions.ReadAsync("factory-admission"))!.TenantId);
+            }
+            finally
+            {
                 SqliteConnection.ClearAllPools();
                 foreach (var p in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
                     try { if (File.Exists(p)) File.Delete(p); } catch { /* best-effort */ }

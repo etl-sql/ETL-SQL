@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Core.Governance;
 
@@ -36,7 +37,8 @@ public static class OrchestratorIdentityAssertion
             caller.SubjectId,
             caller.DisplayName,
             caller.Roles,
-            caller.GroupIds);
+            caller.GroupIds,
+            caller.TenantId);
         var encodedPayload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions));
         var signature = Sign(encodedPayload, signingSecret);
         return encodedPayload + "." + Base64UrlEncode(signature);
@@ -103,12 +105,17 @@ public static class OrchestratorIdentityAssertion
                 return false;
             }
 
+            string? tenantId = null;
+            if (!string.IsNullOrWhiteSpace(payload.TenantId))
+                tenantId = TenantId.FromTrustedSource(payload.TenantId).Value;
+
             caller = new OrchestratorCaller(
                 Normalize(payload.SubjectType, 32),
                 Normalize(payload.SubjectId, 128),
                 Normalize(payload.DisplayName, 128),
                 NormalizeMany(payload.Roles, 64),
-                NormalizeMany(payload.GroupIds, 128));
+                NormalizeMany(payload.GroupIds, 128),
+                tenantId);
             return true;
         }
         catch (Exception ex) when (ex is FormatException or JsonException or ArgumentException)
@@ -176,7 +183,8 @@ public static class OrchestratorIdentityAssertion
         string SubjectId,
         string DisplayName,
         IReadOnlyList<string> Roles,
-        IReadOnlyList<string> GroupIds);
+        IReadOnlyList<string> GroupIds,
+        string? TenantId = null);
 }
 
 public sealed record OrchestratorCaller(
@@ -184,7 +192,8 @@ public sealed record OrchestratorCaller(
     string SubjectId,
     string DisplayName,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<string> GroupIds)
+    IReadOnlyList<string> GroupIds,
+    string? TenantId = null)
 {
     public string PrincipalKey => $"{SubjectType}:{SubjectId}";
     public string AuditActor => string.IsNullOrWhiteSpace(DisplayName)

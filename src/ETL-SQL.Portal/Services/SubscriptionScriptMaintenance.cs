@@ -235,7 +235,8 @@ public static class SubscriptionScriptMaintenance
             if (sub.Report is null || sub.Report.IsDeleted || string.IsNullOrWhiteSpace(sub.ScriptPath))
                 continue;
 
-            var desired = SubscriptionOrchestration.BuildJobDefinition(sub, sub.Report.Name, sub.ScriptPath);
+            var desired = SubscriptionOrchestration.BuildJobDefinition(
+                sub, sub.Report.Name, sub.ScriptPath, sub.User.TenantId);
             jobsBySubscription.TryGetValue(sub.Id, out var existing);
             var current = existing?.FirstOrDefault(j =>
                 string.Equals(j.Name, desired.Name, StringComparison.OrdinalIgnoreCase));
@@ -255,7 +256,7 @@ public static class SubscriptionScriptMaintenance
                     // NextRun starts null, so the healed occurrence runs at the next scheduler
                     // pass (at-least-once recovery, consistent with the P1.1 lease semantics).
                     await SubscriptionOrchestration.SaveJobAndScheduleAsync(
-                        store, sub, sub.Report.Name, sub.ScriptPath);
+                        store, sub, sub.Report.Name, sub.ScriptPath, sub.User.TenantId);
                     logger.LogWarning(
                         "Recreated missing Orchestrator job for subscription {SubscriptionId}.", sub.Id);
                 }

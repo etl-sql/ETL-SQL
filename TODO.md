@@ -708,9 +708,24 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       reconciliation releases both ledgers. `SandboxAdmissionReconciliationService` now sweeps expired
       active leases into retained state and calls an environment-owned runtime probe; only an explicit
       `Detached` result releases fenced capacity. `Running`, `Unknown`, probe failures, and fence races
-      remain retained for a later pass. Global/durable weighted selection and queued-work rebuild,
-      hosted-service wiring, scheduler job metadata, and an actual Hardened OCI/microVM provider remain
-      open.
+      remain retained for a later pass. Restart recovery can now call `ResumeQueuedAsync` to adopt the
+      exact persisted admission ID after revalidating tenant, queue sequence, pool, weight, and limits;
+      it refuses active/retained/terminal authority, and cancellation leaves the durable row queued for
+      another node. `SandboxWorkloadPolicyResolver` now consumes the existing durable job `Options`
+      metadata, but permits only a named `SandboxProfile` request. The verified tenant's server-owned
+      catalog entry controls profile entitlement, physical pool, required isolation, runtime limits,
+      weight, and queue/concurrency ceilings; unknown tenants, profiles, malformed or ambiguous JSON,
+      and cross-tenant entitlement attempts fail closed. `AddSandboxAdmissionHosting` now binds the
+      ledger to the configured SQLite/PostgreSQL Orchestrator authority and, when explicitly enabled,
+      registers the durable controller plus a retained-capacity reconciliation background loop.
+      Enabled hosts require positive pool/interval configuration and an environment-owned
+      `ISandboxRuntimeReconciler`; a missing provider binding fails startup instead of guessing that a
+      runtime detached. Scheduled jobs now persist an immutable canonical `TenantId` derived from the
+      Portal's signed tenant assertion or fixed Orchestrator host authority. REST creation, script-first
+      `CREATE JOB`, and tenant-scoped subscription generation carry the binding; conflicting host and
+      signed identities are denied, replacement cannot change it, and legacy/unbound jobs cannot enter
+      sandbox policy resolution. Global/durable weighted selection, scheduler-execution/restart
+      dispatch, and an actual Hardened OCI/microVM provider remain open.
 - [ ] **Both topologies.** Admission and runtime limits for CPU, memory, processes, scratch/spill,
       IOPS, network, rows, duration, connector concurrency, queue depth, and interactive sessions.
       Ordinary cgroups and containers are useful controls but are not the hostile-tenant security
