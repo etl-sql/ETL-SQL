@@ -119,6 +119,31 @@ public sealed class PortalAdminClient(HttpClient http, string baseUrl)
         return await SendAsync(request, ct);
     }
 
+    /// <summary>
+    /// GET a non-JSON body. The configuration export returns a declarative script rather than JSON,
+    /// so parsing it as JSON would fail on a perfectly good response. Error mapping is unchanged.
+    /// </summary>
+    public async Task<string> GetTextAsync(string path, CancellationToken ct)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{path}");
+        if (_token is not null)
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_token}");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.SendAsync(request, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new AdminCliException(AdminExitCode.Unreachable,
+                $"Could not reach the Portal at {baseUrl}: {ex.Message}");
+        }
+
+        if (!response.IsSuccessStatusCode) throw await ToExceptionAsync(response, ct);
+        return await response.Content.ReadAsStringAsync(ct);
+    }
+
     public Task<JsonNode?> PostAsync(string path, object? payload, CancellationToken ct, long? expectedVersion = null) =>
         SendAsync(Build(HttpMethod.Post, path, payload, expectedVersion), ct);
 

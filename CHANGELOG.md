@@ -101,6 +101,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Tenant portability bundles are now composed from the exports that already exist — the Portal
+  configuration export, the Orchestrator promotion package, and portable source artifacts — rather
+  than leaving an operator to correlate three formats by hand. The reviewed export plan is carried
+  through: the composer acknowledges the plan hash when downloading, so a configuration change
+  mid-export fails the export instead of producing a bundle that differs from what was reviewed. The
+  plan travels beside the script as its own payload, because the script does not say what was left
+  out of it: skipped resources and content-manifest entries become manifest exclusions carrying a
+  remediation, and required secrets become binding requirements the target must satisfy.
+
 - Tenant portability bundles are now signed and encrypted. The exporting operator signs the manifest
   with a detached OpenPGP signature — an authenticity claim, verifiable offline against a published
   key — while payloads are encrypted to the tenant's own recipient key, which is the separate

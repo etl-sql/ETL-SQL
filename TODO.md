@@ -610,11 +610,30 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
       which §5.1 names as generation metadata.
 
       **Not yet built, in dependency order:**
-      - *Slice 2 — composition.* Feed the bundle from the real sources: the Portal
-        `admin/configuration/export` plan+export pair (`ConfigurationExportService`) and
-        `OrchestratorPromotionPackageService` (`etl-sql.orchestrator-promotion/v1`). Note the
-        constraint: `ETL-SQL.App` does not reference the Portal, so the CLI must read Portal state
-        over HTTP through the `PortalAdminClient` precedent, not a shared `DbContext`.
+      - [x] *Slice 2 — composition.* **Done (v0.18.0).** `TenantBundleComposer` (in `ETL-SQL.App`,
+        the only tier that can see both the Orchestrator and an HTTP Portal) assembles the bundle
+        from the Portal configuration export, the Orchestrator promotion package, and portable
+        source artifacts. `PortalAdminConfigurationSource` is the production adapter over
+        `PortalAdminClient`, which gained a `GetTextAsync` because the export returns a declarative
+        script rather than JSON.
+
+        **The plan-hash acknowledgement is carried through, and that is the point of the slice.**
+        The composer fetches `configuration/export/plan`, then downloads acknowledging that hash. The
+        Portal answers a stale acknowledgement with 409, so a configuration change mid-export becomes
+        a failed export instead of a bundle whose contents differ from the plan somebody reviewed.
+        The plan itself travels beside the script as its own payload, because the script does not say
+        what was left out of it — `skipped` and `contentManifest` become manifest exclusions with
+        remediation, and required secrets become binding requirements.
+
+        Six tests, Portal faked through the interface so no Portal is needed: full composition,
+        acknowledgement propagation, mid-export change refused with no bundle written, the plan
+        travelling beside the script, a missing artifact refusing rather than quietly shrinking the
+        bundle, and an end-to-end SaaS compose that is encrypted and signed and validates against the
+        operator key.
+
+        *Untested:* `PortalAdminConfigurationSource`'s JSON mapping, which needs an HTTP fake. It is
+        thin, but it is the seam where a Portal response-shape change would break the export, so
+        slice 3's CLI coverage should exercise it rather than mock past it.
       - *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16), with target
         preflight and the explicit collision policy from §5.2 (preserve, map, create, rename, skip,
         fail). Import leaves jobs, schedules, subscriptions, and service accounts disabled.
