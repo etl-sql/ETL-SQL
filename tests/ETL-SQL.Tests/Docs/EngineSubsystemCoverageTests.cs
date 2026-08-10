@@ -102,6 +102,10 @@ public sealed class EngineSubsystemCoverageTests
             "Shared primitives (logging facade, exceptions, string helpers); described where used."),
         ["ETL-SQL.Core/Functions"] = new("ExpressionEvaluation.md", "function",
             "Function contracts shared with the engine registry."),
+        ["ETL-SQL.Core/Multitenancy"] = new("SaaSTenantIsolation.md", "TenantContext",
+            "Server-derived tenant context and identity, platform access grants, storage capability."),
+        ["ETL-SQL.Core/Portability"] = new("TenantPortability.md", "One Unified Bundle",
+            "Signed tenant-bundle composition, validation and encryption behind export/import."),
     };
 
     [Fact]
