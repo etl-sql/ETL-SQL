@@ -16,7 +16,8 @@ public sealed record PortalConfigurationPlan(
     string PlanHash,
     IReadOnlyList<string> RequiredSecrets,
     IReadOnlyList<string> Skipped,
-    IReadOnlyList<PortalContentManifestItem> ContentManifest);
+    IReadOnlyList<PortalContentManifestItem> ContentManifest,
+    string? TenantExportIdentity = null);
 
 /// <summary>
 /// The Portal side of composition, behind an interface for two reasons: <c>ETL-SQL.App</c> does not
@@ -74,6 +75,19 @@ public static class TenantBundleComposer
         // a configuration change mid-export becomes a failed export rather than a bundle whose
         // contents differ from the plan someone reviewed.
         var plan = await portal.GetPlanAsync(ct).ConfigureAwait(false);
+        var tenantExportIdentity = request.TenantExportIdentity;
+        if (string.Equals(request.SourceProfile,
+                TenantBundle.EncryptionRequiredSourceProfile, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(plan.TenantExportIdentity))
+                throw new TenantBundleCompositionException(
+                    "A SaaS source Portal did not report its server-owned tenant identity. " +
+                    "Refusing an export whose tenant would come only from caller input.");
+            var context = ETL_SQL.Core.Multitenancy.TenantContext
+                .FromHostConfiguration(plan.TenantExportIdentity);
+            context.RequireTenant(request.TenantExportIdentity);
+            tenantExportIdentity = context.Tenant.Value;
+        }
         string script;
         try
         {
@@ -165,7 +179,7 @@ public static class TenantBundleComposer
             request.CreatedUtc,
             request.SourceProductVersion,
             request.SourceProfile,
-            request.TenantExportIdentity,
+            tenantExportIdentity,
             TenantBundleExportMode.ConfigurationAndArtifacts,
             request.ConsistencyPoint,
             payloads,

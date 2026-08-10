@@ -19,6 +19,18 @@ public static class DatasetAtRestKeyValidator
     /// <summary>Minimum decoded key length: 256 bits.</summary>
     public const int MinKeyBytes = 32;
 
+    /// <summary>
+    /// Provider-neutral Enterprise validation. Unlike the legacy DatasetConfig overload, this proves
+    /// that dataset, credential, artifact, and checkpoint domains all resolve independently and
+    /// returns only non-secret descriptors.
+    /// </summary>
+    public static Task<ETL_SQL.Core.Security.KeyMaterialContractValidation> ValidateProviderAsync(
+        ETL_SQL.Core.Security.IKeyMaterialProvider provider,
+        string serverDerivedScope,
+        CancellationToken cancellationToken = default) =>
+        ETL_SQL.Core.Security.KeyMaterialContractValidator.ValidateAsync(
+            provider, serverDerivedScope, cancellationToken);
+
     public static Result Validate(DatasetConfig config)
     {
         var key = config.AtRestKey;

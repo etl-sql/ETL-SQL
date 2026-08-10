@@ -180,10 +180,22 @@ public class CliContext
     public string? TenantOperatorKey { get; set; }
     public bool TenantRequireSignature { get; set; }
     public string[]? TenantBindings { get; set; }
+    public string? TenantExportIdentity { get; set; }
+    public string? TenantSourceProfile { get; set; }
+    public string[]? TenantArtifactFiles { get; set; }
+    public string? TenantArtifactRoot { get; set; }
+    public string? TenantOrchestratorPackage { get; set; }
+    public string? TenantOrchestratorAlias { get; set; }
+    public string? TenantRecipientKey { get; set; }
+    public string? TenantSigningKey { get; set; }
+    public string? TenantCollisionPolicy { get; set; }
+    public bool TenantDryRun { get; set; }
     public string? SaasTenantId { get; set; }
     public string? SaasSourceProfile { get; set; }
     public string? SaasPortalBootstrap { get; set; }
     public string? SaasOutputRoot { get; set; }
+    public string? SaasOidcAuthority { get; set; }
+    public string? SaasOidcClientId { get; set; }
     public int SaasMaxConcurrentJobs { get; set; } = 4;
     public int SaasMaxStorageMb { get; set; } = 10_240;
     public int SaasMaxReportSessions { get; set; } = 20;

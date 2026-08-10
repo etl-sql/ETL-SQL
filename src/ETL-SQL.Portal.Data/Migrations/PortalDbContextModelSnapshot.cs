@@ -816,13 +816,18 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
                     b.ToTable("Groups");
@@ -1091,6 +1096,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -1103,7 +1113,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
                     b.ToTable("PortalSecrets");
@@ -1157,6 +1167,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<string>("Target")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
@@ -1169,7 +1184,7 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Alias")
+                    b.HasIndex("TenantId", "Alias")
                         .IsUnique();
 
                     b.ToTable("PortalSharedConnections");
@@ -1197,6 +1212,10 @@ namespace ETL_SQL.Portal.Data.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExternalIssuer")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ExternalSubject")
                         .HasColumnType("TEXT");
@@ -1246,6 +1265,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("INTEGER");
 
@@ -1263,10 +1287,14 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasDatabaseName("EmailIndex");
 
                     b.HasIndex("NormalizedUserName")
-                        .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.HasIndex("Provider", "ExternalSubject");
+                    b.HasIndex("TenantId", "NormalizedUserName")
+                        .IsUnique()
+                        .HasFilter("\"NormalizedUserName\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Provider", "ExternalIssuer", "ExternalSubject")
+                        .IsUnique();
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -1283,6 +1311,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1296,6 +1329,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -1955,6 +1990,11 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -1967,10 +2007,10 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasIndex("ClientId")
                         .IsUnique();
 
-                    b.HasIndex("NormalizedName")
-                        .IsUnique();
-
                     b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique();
 
                     b.ToTable("ServiceAccounts");
                 });
@@ -1990,11 +2030,18 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<int>("SharedConnectionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("GroupId");
 
-                    b.HasIndex("SharedConnectionId", "GroupId")
+                    b.HasIndex("SharedConnectionId");
+
+                    b.HasIndex("TenantId", "SharedConnectionId", "GroupId")
                         .IsUnique();
 
                     b.ToTable("SharedConnectionAcls");
@@ -2017,15 +2064,91 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<int>("SharedConnectionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("UseCount")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SharedConnectionId", "ConsumerUser")
+                    b.HasIndex("SharedConnectionId");
+
+                    b.HasIndex("TenantId", "SharedConnectionId", "ConsumerUser")
                         .IsUnique();
 
                     b.ToTable("SharedConnectionUsages");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.SharedIdentityAuthority", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AuthorityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientSecretReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LoginDomain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PortalHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorityId")
+                        .IsUnique();
+
+                    b.HasIndex("LoginDomain")
+                        .IsUnique();
+
+                    b.HasIndex("PortalHost")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Issuer");
+
+                    b.ToTable("SharedIdentityAuthorities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
@@ -2153,9 +2276,17 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<int>("GroupId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("UserId", "GroupId");
 
                     b.HasIndex("GroupId");
+
+                    b.HasIndex("TenantId", "UserId", "GroupId")
+                        .IsUnique();
 
                     b.ToTable("UserGroups");
                 });

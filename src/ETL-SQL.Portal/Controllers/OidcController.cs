@@ -20,7 +20,11 @@ namespace ETL_SQL.Portal.Controllers;
 public sealed class OidcController(
     PortalConfig config,
     IOidcAuthenticationService oidc,
+    ISharedOidcAuthenticationService sharedOidc,
     OidcUserProvisioningService provisioning,
+    SharedIdentityAuthorityResolver sharedAuthorities,
+    SharedOidcFlowStateService sharedFlows,
+    RequestTenantContextAccessor tenantAccessor,
     IOidcDiscoveryProvider discovery,
     IDataProtectionProvider dataProtection,
     AuditService auditService,
@@ -85,14 +89,28 @@ public sealed class OidcController(
     [AllowAnonymous]
     public async Task<IActionResult> Login(CancellationToken ct)
     {
-        if (!oidc.Enabled)
+        if (!config.SharedTenancy.Enabled && !oidc.Enabled)
             return NotFound(new { error = "oidc_not_configured" });
 
         var redirectUri = BuildRedirectUri();
-        OidcAuthorizationRequest request;
         try
         {
-            request = await oidc.BuildAuthorizationRequestAsync(redirectUri, ct);
+            if (config.SharedTenancy.Enabled)
+            {
+                var authority = await sharedAuthorities.ResolveForRequestAsync(Request, ct);
+                if (authority is null)
+                    return NotFound(new { error = "oidc_not_configured" });
+                var request = await sharedOidc.BuildAuthorizationRequestAsync(authority, redirectUri, ct);
+                var flow = sharedFlows.Begin(authority, request, redirectUri);
+                Response.Cookies.Append(FlowCookie, flow.ProtectedState, FlowCookieOptions(expires: true));
+                return Redirect(request.AuthorizationUrl);
+            }
+
+            var dedicatedRequest = await oidc.BuildAuthorizationRequestAsync(redirectUri, ct);
+            var payload = JsonSerializer.Serialize(
+                new FlowState(dedicatedRequest.State, dedicatedRequest.Nonce, dedicatedRequest.CodeVerifier), Json);
+            Response.Cookies.Append(FlowCookie, Protector.Protect(payload), FlowCookieOptions(expires: true));
+            return Redirect(dedicatedRequest.AuthorizationUrl);
         }
         catch (OidcAuthenticationException ex)
         {
@@ -100,9 +118,6 @@ public sealed class OidcController(
             return Redirect("/login.html?error=sso_unavailable");
         }
 
-        var payload = JsonSerializer.Serialize(new FlowState(request.State, request.Nonce, request.CodeVerifier), Json);
-        Response.Cookies.Append(FlowCookie, Protector.Protect(payload), FlowCookieOptions(expires: true));
-        return Redirect(request.AuthorizationUrl);
     }
 
     [HttpGet("callback")]
@@ -110,7 +125,7 @@ public sealed class OidcController(
     public async Task<IActionResult> Callback(
         [FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken ct)
     {
-        if (!oidc.Enabled)
+        if (!config.SharedTenancy.Enabled && !oidc.Enabled)
             return NotFound(new { error = "oidc_not_configured" });
 
         // Always clear the one-time flow cookie before doing anything else.
@@ -124,9 +139,7 @@ public sealed class OidcController(
             return Redirect("/login.html?error=sso_failed");
         }
 
-        FlowState? flow = ReadFlow(cookie);
-        if (flow is null || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state)
-            || !CryptoEquals(state, flow.State))
+        if (string.IsNullOrEmpty(cookie) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
         {
             // A missing/forged flow or mismatched state is a tampering/CSRF signal — audit it.
             log.LogWarning("OIDC callback rejected: missing/invalid flow state");
@@ -137,10 +150,29 @@ public sealed class OidcController(
         OidcUserProvisioningService.Result result;
         try
         {
-            var identity = await oidc.CompleteAsync(code, flow.CodeVerifier, BuildRedirectUri(), flow.Nonce, ct);
+            OidcIdentity identity;
+            if (config.SharedTenancy.Enabled)
+            {
+                var flow = await sharedFlows.ResumeAsync(cookie, state, ct);
+                identity = await sharedOidc.CompleteAsync(
+                    flow.Authority, code, flow.CodeVerifier, flow.RedirectUri, flow.Nonce, ct);
+                var tenant = sharedAuthorities.BindValidatedIssuer(
+                    flow.Authority,
+                    identity.Issuer ?? throw new OidcAuthenticationException(
+                        "The validated identity did not carry an issuer."));
+                tenantAccessor.SetVerifiedCredential(tenant);
+            }
+            else
+            {
+                var flow = ReadFlow(cookie);
+                if (flow is null || !CryptoEquals(state, flow.State))
+                    throw new OidcAuthenticationException("OIDC callback state validation failed.");
+                identity = await oidc.CompleteAsync(
+                    code, flow.CodeVerifier, BuildRedirectUri(), flow.Nonce, ct);
+            }
             result = await provisioning.SignInAsync(identity, ct);
         }
-        catch (OidcAuthenticationException ex)
+        catch (Exception ex) when (ex is OidcAuthenticationException or UnauthorizedAccessException)
         {
             log.LogWarning(ex, "OIDC authentication failed");
             await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC authentication failed: " + ex.Message);

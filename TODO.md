@@ -62,30 +62,8 @@ remaining work requires the next CodeQL run on `main`.
 
 - [ ] Confirm alert 323 closes on the next `main` scan.
 
-### The sample-scripts gate could never fail
+### Add a CI sample lane
 
-**Fixed (v0.18.0), and it invalidates every previous release's sample evidence.**
-`Test-AllSamples.ps1` printed `FAILED` per script and a red summary count, then fell off the end of
-the script and exited 0. `Invoke-LoggedPhase` judges a phase by `$LASTEXITCODE`, so the "Sample
-scripts" phase reported **Passed** no matter how many samples failed. The POSIX twin
-`test-all-samples.sh` has always had `exit 1`; only the Windows script — the one the gate actually
-runs — was missing it. CI runs no sample lane at all, so nothing else covered this.
-
-Found by running the shipped `samples/03_SQL_Engines/Sqlite_Operations.etlsql` by hand while
-building the lineage cookbook: it failed on a defect dating to the connector's introduction
-(2026-05-29), meaning it shipped broken in v0.14.0 through v0.17.0.
-
-- [x] `Test-AllSamples.ps1` exits non-zero on failure.
-- [x] `-Passes <n>` runs the suite more than once. Sample output is gitignored, so a sample that
-      writes to a persistent store passes on a clean checkout and fails for everyone who runs it
-      twice — one pass structurally cannot see that class of defect. `Test-PreRelease.ps1` now runs
-      the phase with `-Passes 2`; `test-all-samples.sh` takes the same count as its first argument.
-- [x] `Sqlite_Operations.etlsql` made idempotent, and its staging corrected — three
-      `SELECT … INTO #stage` statements read as accumulating but each replaces the table, so the
-      sample had been demonstrating one row of the three it appeared to load.
-- [x] `register_schedule.etlsql` made idempotent. Found by the second pass on its first real run:
-      it registers a schedule and a job in the persistent Orchestrator store with plain `CREATE`,
-      so it succeeded exactly once per machine and failed forever after.
 - [ ] Consider a CI sample lane. The gate is currently the only thing that runs samples, and it is
       Windows-and-PowerShell only.
 
@@ -136,35 +114,6 @@ Static checks are a useful cheap complement but are **not** a substitute: identi
 ascending `ProductVersion`, and an unchanged `MajorUpgrade` element rule out the most common cause
 and nothing else. Consider adding them as a fast unit test over the built MSI regardless.
 
-### Scale certification — make the harness incapable of false failures
-
-**Resolves a question open since v0.15.0.** There was no engine regression in v0.15.0, v0.16.0, or
-v0.17.0. Every "regression" was produced by measuring cold binaries at the end of a long gate. Full
-measurements in
-[v0.17.0-performance-results.md](docs/releases/v0.17.0-performance-results.md).
-
-The same commit measures 5013 ms warmed and 8977 ms cold — a **56% spread**, far wider than any
-threshold the gate compares against. v0.15.0 reached the right conclusion ("environmental, not
-code") but had no mechanism to prove it, so it was deferred twice more and cost v0.17.0 most of a
-release day plus a false regression alarm.
-
-Remaining work:
-
-- [x] Investigate performance improvements when data-quality allocation is active. Focus on reducing
-      per-row allocation and GC pause time without weakening `@expect`/`@fail` behavior, quarantine
-      routing, or lineage/tag capture.
-
-      **Done (v0.18.0).** The passing synchronous-rule path (`NOT NULL`, comparison, `IN`,
-      `MATCHES`, `EXISTS IN`, and prepared `UNIQUE`) no longer enters nested async `Task` state
-      machines or boxes interface enumerators per row. A focused 100,000-row measurement fell from
-      43.2 MB (432 bytes/row) to the test's ≤4 KB total noise budget. `EXPR` rules and actual
-      quarantine/warn target writes retain their asynchronous paths. The full 91-test quality
-      runtime/parser suite pins THROW/WARN/QUARANTINE, dry-run, PII, metrics, replay, lineage/tag,
-      expression, and routing behavior alongside the new allocation budget.
-
-Do **not** re-bless the baselines. `baseline-smoke.json` and `baseline-standard.json` both pass when
-measured correctly; an earlier bless of cold readings was correctly reverted in `e3fa80af`.
-
 ---
 
 ## Roadmap execution backlog
@@ -177,15 +126,6 @@ Keep the roadmap's P0/P1/P2 ordering unless a release plan explicitly changes it
 
 #### P2 — Deployment-profile certification
 
-- [x] Retain commit-bound JSON and Markdown certification evidence with topology, hashes, mappings,
-      continuity counts, negative isolation results, and rollback outcomes. SaaS evidence must name
-      Managed Dedicated or Shared topology explicitly.
-
-      **Done (v0.18.0).** The certification runner now enables scenario evidence in its child test
-      processes, validates required scenario ids and schemas, and aggregates concrete hashes,
-      mapping decisions, continuity, negative proof, and rollback results into the commit-bound JSON
-      and Markdown bundle. Dirty runs remain useful development evidence but are never release
-      eligible. Managed Dedicated is named explicitly and Shared SaaS remains `NotCertified`.
 - [ ] Add current per-profile and per-transition evidence to release claims. Report Managed Dedicated
       and Shared SaaS separately; neither inherits the other's claim status.
 - [ ] Certify that Team is a single-node provider configuration rather than a separate implementation:
@@ -288,133 +228,15 @@ an arbitrary connection/target from the browser.
       reusable preview path if the measurements require it. Preserve identical policy, identity,
       redaction, timeout, and cancellation behavior.
 
-### Orchestrator — Per-Object Authorization
-
-Trigger this track when a second client is introduced or an Orchestrator is shared across teams or
-tenants. Until then, retain v0.18.0 actor attribution as attribution—not authorization.
-
-**Interaction with Operations Triage and Run Flight Recorder (above).** Neither track blocks the
-other, but the flight recorder changes what a single coarse grant is worth, so one decision here has
-ordering pressure: **define the ACL vocabulary with a read grant distinct from a manage grant.**
-Today `OrchestratorAccess` (`Program.cs:298`) means see-the-tab *and* trigger/kill/stop-service in
-one role. Once statement-level history is persisted, that same grant also means "read the statement
-text of every job in the estate" — an analyst who should see why the nightly load failed does not
-therefore need kill and service-stop. If per-object ACLs ship with manage semantics only, adding a
-read grant afterwards is a migration rather than a definition.
-
-- [x] Federate a verifiable caller identity from Portal/OIDC; do not trust an identity header.
-- [x] Add per-object ACLs for `JOB`, `SCHEDULE`, and `NOTIFICATION` using the Portal grant
-      vocabulary, with **read** and **manage** as separate grants (see the interaction note above).
-- [x] Decide authority for a parameter-overridden trigger — an override can widen a data scope, so
-      "may this principal trigger job X" and "may they override its variables" are two questions.
-      Triage P2 is safe under `OrchestratorAccess` for a single-team Team deployment; a shared or
-      multi-team Orchestrator needs this first.
-- [x] Add enforceable ownership for shared names and prevent unauthorized `CREATE OR ALTER` takeover.
-- [x] Attribute every Orchestrator mutation audit record to a real principal rather than a service.
-- [x] Add negative tests proving a reachable Orchestrator does not imply authority over another
-      principal's objects.
-
-Done: Portal/OIDC callers now cross the service boundary in short-lived HMAC-signed assertions;
-unsigned actor headers have no authority. Durable owner plus user/group/service ACLs distinguish
-`READ`, `EXECUTE`, variable `OVERRIDE`, and `MANAGE` for jobs, schedules, and notifications. The
-same checks run in HTTP endpoints and engine catalog handlers, so ad-hoc ETL-SQL cannot take over a
-shared name. History, quality, triage, and ad-hoc status reads are filtered, and mutation security
-events use the verified principal. Negative integration tests cover forged/missing identity,
-cross-principal reads, endpoint and script `CREATE OR ALTER`, trigger versus override, and all three
-catalog object kinds.
-
 ### Orchestrator — Operations Triage and Run Flight Recorder
-
-Statement timelines are now durable across in-process, one-shot, and warm-runner execution. The
-remaining work is the joined operator drill-down, recovery controls, and cross-profile evidence.
-#### P1 — Flight recorder (persist what is already measured)
-- [x] Join the run drill-down across all three sources now available: statement timeline, the
-      normalized data-quality failures, and `ScriptHashAtRunTime`/`HashMatched` — the last of which
-      tells an operator *the script changed between the good run and the bad one*, which SSISDB
-      cannot do.
-
-      **Done (v0.18.0).** The Portal triage board now opens a run-level evidence row that joins the
-      registered/runtime hash decision, the normalized counts-only quality failures, and the
-      normalized/capped statement timeline. Run reads are direct and bounded by durable run id;
-      loading, missing, empty, and failed-read states are explicit, and the endpoint retains the
-      existing `OrchestratorAccess` authorization boundary.
-
-#### P2 — Recovery controls
-
-- [x] Thread variable overrides through `/api/scheduled-jobs/{name}/trigger` → `TriggerJobAsync` →
-      `BuildArguments` as `--var`, turning a backfill from "edit the job, run it, remember to edit it
-      back" into a form. Overrides must also apply on the `ArgumentsTemplate` branch, which currently
-      bypasses the default argument builder.
-- [x] Treat a parameter-overridden trigger as a privileged, audited mutation — an override can widen
-      a data scope — and redact override values that resolve to secrets before they reach history.
-
-      **Done (v0.18.0).** Portal operators can open a one-run form and supply up to 32 validated
-      input overrides without editing the saved job. The values reach in-process execution,
-      one-shot processes, warm runners, retries, and custom `ArgumentsTemplate` launches; scripts
-      retain their declared scheduled defaults when no override is supplied. Portal audit and the
-      Orchestrator security-event outbox record normalized names and counts only, while process and
-      operational logs never render values. A same-job concurrency race returns `409 Conflict`
-      instead of accepting and discarding an override set. API, execution-path, redaction, dynamic
-      form, and responsive UI coverage pin the contract.
-- [x] Expose resume as **"Resume from checkpoint `<label>`"**, passing `--resume` with the run's
-      session id, disabled with a stated reason when the run was not a persistent session or never
-      reached a label. Be explicit in the UI that this is opt-in on script authoring and will not
-      retroactively cover existing jobs.
-- [x] **Do not implement resume-at-statement-index.** It is unsound here: statements share the
-      evaluator's variable scope, derived/temp result sets, connection state, and open transactions,
-      so restarting at an arbitrary index either fails on an unbound variable or silently runs
-      against a half-built intermediate. SQL Agent can start at step 3 because its steps are
-      independent processes. The author-declared checkpoint label is the only safe unit, and it is
-      the one the engine already implements.
-
-      **Done (v0.18.0).** Failed or cancelled persistent runs now retain an opaque session handle
-      and the last reached top-level label without exposing the handle through history APIs. The
-      Portal offers an audited `Resume · <label>` action only while that saved state and label are
-      still valid; otherwise it shows the specific reason recovery is unavailable. Resume loads the
-      saved evaluator state and passes `--resume` plus the recorded session through in-process,
-      one-shot, warm-runner, retry, and custom-argument paths. The scheduler also verifies that the
-      current saved script still contains the label. No API, executor, or UI accepts a statement
-      index. Engine, store, scheduler, API, Portal, static UI, and responsive visual coverage pin
-      the named-checkpoint-only contract and its replay/idempotency warning.
 
 #### Deployment-profile portability review
 
 Required by [Deployment_Profile_Standards.md](docs/architecture/standards/Deployment_Profile_Standards.md#feature-design-portability-review).
 Smallest safe profile is **Solo**, and the capability must not become Portal-only.
 
-- [x] **Solo.** The smallest safe form already exists as `eng.profile` (live, in-session) — so the
-      durable table must be reachable as an `eng.*` read model, not only through the Portal inbox,
-      or Solo silently loses a capability that Team gains. Precedent: `eng.job_history`,
-      `eng.data_quality_status`, and `eng.data_quality_failures` are all already exposed this way
-      (`EngineCatalogDataSources.cs`).
-
-      **Done (v0.18.0).** `eng.job_statement_metrics` returns the live session as `CURRENT_RUN`
-      followed by persisted rows as `HISTORY`, with column names matching `eng.profile` so one query
-      shape reads either. Documented at `docs/reference/eng/job-statement-metrics.md`.
-
-**Decided: a bare CLI run stays live-only and records nothing.** That is the point of the profile —
-developing against real data should not accumulate a run history, and only production execution is
-worth retaining. `eng.profile` remains the Solo answer.
-
 - [ ] **Team.** The reference case for this track; no profile change expected. The 200-job shop above
       *is* the Team profile, and Scheduling/Observability are already Green here.
-- [x] **Enterprise.** Statement metrics must be written to the shared store, not node-local, or the
-      inbox returns different results per node behind the load balancer; the new table needs both
-      `SqliteOrchestratorDialect` and `NpgsqlOrchestratorDialect`. Retention/roll-up must be
-      leader-elected via the existing lease/`ClusterLock` machinery rather than running concurrently
-      on every node. Parameter-override triggers must reach the audit outbox.
-
-      **Partly done (v0.18.0).** The table already goes through the shared store and both dialects
-      (`Int64Type` rewrites cover the duration and byte counters, since PostgreSQL `INTEGER` is
-      32-bit). **Maintenance is now leased**: roll-up and both prunes sat behind no lock at all, so
-      behind a load balancer every node ran them concurrently against one database — duplicating
-      roll-up work and racing each other's deletes. A node that loses the race now *skips the cycle*
-      rather than waiting, because blocking a scheduler loop to redo maintenance is worse than
-      deferring it a few minutes; the lease is released rather than left to expire.
-      `Scheduler:MaintenanceLeaseMinutes` is configurable.
-
-      Parameter-override triggers now emit a sanitized `OverrideAttempt` security event into the
-      configured durable outbox, carrying variable names and count but never values.
 - [ ] **SaaS.** Observability remains **Red** until tenant telemetry and support-access separation are
       certified. Managed Dedicated must prove its tenant-specific store and tenant-approved support
       path; Shared must additionally prove server-derived scope in cross-tenant aggregation. Persisted
@@ -425,97 +247,6 @@ worth retaining. `eng.profile` remains the Solo answer.
 - [ ] Confirm no matrix cell moves backward, record Dedicated and Shared SaaS status separately, and
       record the review outcome the way
       [v0.18.0](docs/releases/v0.18.0-deployment-profile-review.md) did.
-
-### Platform — Admin CLI for Identity and Access
-
-User, group, membership, session, and access verbs are complete. The remaining identity verb family
-is service-account lifecycle, including safe handling of its one-time secret.
-#### Verb surface
-
-Nested under `admin` (`admin user list`), following the `admin ha-soak <verb>` precedent rather
-than the flat `admin set-secret` style — the identity family is ~25 verbs and flat naming stops
-scanning cleanly. Record the inconsistency in the CLI reference so it reads as a decision.
-
-- [x] **Service accounts.** `service-account list|create|update|revoke` over
-      `api/admin/service-accounts`. Sequencing trap: this is how the CLI's *own* credential is
-      minted, so the first one must be creatable interactively in the Portal — do not build a
-      bootstrap that requires a token to mint the first token.
-
-**Read verbs and the cross-cutting foundation shipped (v0.18.0).** `admin portal-whoami`,
-`admin user list|show|permissions`, `admin group list|members`, and `admin session list`, over
-`PortalAdminClient` (HTTP, no Portal project reference, asserted by an architecture test).
-Credentials come from the environment or a `SECRET:` reference and **never** from argv; the client
-id may be a flag because it is an identifier, not a credential. Exit codes are distinct per failure
-kind and documented in `docs/reference/portal-admin/admin-identity-cli.md`; not-found and
-ambiguous-match are kept apart so a runbook can create the first but must stop on the second.
-
-**Mutating verbs shipped too (v0.18.0).** `user create|delete|enable|disable|revoke-tokens`,
-`group create|delete|add-member|remove-member`, and `session disconnect`, with both properties that
-make the tool worth having over a browser:
-
-- **Idempotence** — `--if-not-exists` on create, `--if-exists` on delete. Membership changes are
-  idempotent unconditionally, because adding an existing member is exactly what a re-run does.
-- **Optimistic concurrency** — every guarded write sends the version in `If-Match`. The default
-  carries through the version just read, so a concurrent edit is a detectable conflict rather than a
-  silent overwrite; `--if-version` pins an expected value. There is no way to ask for
-  last-writer-wins. A 428 (version omitted) is reported as a conflict, since a script should react
-  the same way: re-read and retry.
-
-Passwords come only from `--password-stdin`; there is no `--password` flag, and a test asserts that
-neither it nor `--client-secret` can be added without failing.
-
-**The user, group, membership, session, and access verbs are now complete.** Added on top of the
-above: `user update`, `user reset-password`, `group update`, `group capabilities` /
-`set-capabilities`, and `access-simulate`.
-
-Two behaviours worth knowing rather than discovering: `user update` and `group update` send only the
-fields actually supplied, so changing an email cannot silently blank a name; and `set-capabilities`
-**replaces** the grant wholesale rather than adding to it, with no `--capability` meaning "revoke
-everything". Both are documented, and the second is stated plainly because "set" read as "add" is
-the kind of misunderstanding that quietly removes someone's access.
-
-**Service-account lifecycle shipped (v0.18.0).** `service-account list|create|update|rotate-secret|revoke`
-uses the same remote Portal client, idempotence, and version-guarded mutation model. Create and
-rotation require `--secret-out`; the CLI reserves a new file, never overwrites, removes an unused
-reservation on failure, and never emits the one-time secret to terminal or JSON. The first account
-remains a tenant-admin Portal bootstrap. Later service identities use constrained delegation: same
-human owner, and no scope, role, or Studio capability broader than the caller's current grant.
-
-#### Disambiguate the two secret and connection stores (do this first)
-
-- [x] `admin set-secret` writes the machine-local `Governance:Secrets` provider
-      (`SecretAdminService.cs`); the Portal Admin tab writes `PortalSecretStoreService`
-      (`SecretsAdminController.cs`) — an encrypted, audited, RBAC'd store in the catalog DB. They
-      are different stores with overlapping names. An operator who runs `admin set-secret`
-      expecting to change what the Admin tab shows silently edits the wrong one. The `set-secret`
-      help text says "(machine scope)"; nothing else does, and no `list` verb shows which store it
-      read.
-- [x] Make the scope explicit and symmetric across the secret and connection verbs — a `--scope
-      machine|portal` selector or separate verb families, decided once and applied to both. Do this
-      **before** the identity verbs land, so the new surface inherits a coherent model instead of
-      the ambiguity.
-- [x] Same audit for shared connections: `ConnectionAdminService` vs `ConnectionsAdminController`.
-
-**Store scope is explicit (v0.18.0).** Machine-local lifecycle is now nested symmetrically under
-`admin machine secret set|list|verify|rotate|disable|enable|delete` and
-`admin machine connection set|list|verify|disable|enable|delete`. The ambiguous flat verbs are
-removed rather than retained as aliases. Both list surfaces name their configured machine provider;
-the Portal Admin stores remain the encrypted, audited, tenant-admin surfaces in the catalog DB.
-
-#### Admin TUI — considered, deferred, and the condition for revisiting
-
-A terminal admin UI mirroring the Portal's Admin and Orchestrator tabs was evaluated and set aside.
-Mirroring ~60 endpoints makes every future admin feature a three-place change, and this repo already
-has a recurring defect shape where a Portal control exists, looks implemented, and is never asserted
-end to end — a TUI mirror is fertile ground for exactly that. The deciding argument, though, is that
-a TUI is not scriptable, and the operators asking for this want runbooks and CI, not keystrokes.
-
-Revisit only as a thin read-mostly browser over the verbs above, once they exist and are stable —
-scoped to discovery (`user permissions`, `access-simulate`, `group members`), where not knowing the
-ID to type makes the CLI genuinely awkward. Mutations stay in the CLI. Note that a TUI speaking HTTP
-is exactly as unavailable as the browser when the Portal is down, so it is a convenience tool, not a
-break-glass one; anything claiming break-glass needs direct store access and is a different,
-more dangerous design that must be justified separately.
 
 ### Platform — Progressive SaaS Delivery and Red Cells
 
@@ -553,100 +284,9 @@ Shared matrix cell*. Each entry now maps to exactly one cell, and an uncovered c
 track entirely — their own text already said they were not SaaS-isolation prerequisites (see the
 Portal UX and Deployment-profile certification sections above).
 
-#### Phase A — Enterprise and portability prerequisites
+#### Phase A — Remaining portability CLI work
 
-Gates every domain below; nothing in Managed Dedicated ships before these.
-
-- [x] Complete the Enterprise prerequisites used by hosted deployments: verifiable caller identity,
-      per-object authorization, shared PostgreSQL/artifact providers, scoped secret/policy authority,
-      durable audit, HA, backup/restore, and upgrade/promotion evidence. Track implementation in the
-      existing Enterprise and Orchestrator sections; this item proves the joined hosted prerequisite.
-
-      **Done (v0.18.0).** All eight were already implemented — the gap was that nothing proved them
-      *together*. The Enterprise profile certification lane covered three (policy authority, OIDC,
-      HA fencing); the other five had passing tests wired into no lane, and upgrade/promotion was
-      proven only inside the `Upgrade` and `TeamToEnterprise` *transition* lanes. A hosted claim
-      therefore required correlating three lanes by hand, which is the inferred claim this framework
-      refuses everywhere else.
-
-      `Test-DeploymentProfileCertification.ps1 -Profile Enterprise` now runs twelve phases tagged
-      with the eight prerequisites, emits a `hostedPrerequisites` array in `certification.json` and a
-      table in `certification.md`, and **fails the lane naming any prerequisite that is unproven** —
-      including one whose phases never ran because an earlier phase broke the loop. It also now
-      requires the concrete `EnterpriseUpgrade` scenario evidence rather than accepting a green
-      phase. `DeploymentProfileCertificationScriptContractTests` pins the list, the enforcement, and
-      that every declared prerequisite is actually attached to a phase, so the lane cannot quietly
-      narrow what "Enterprise certified" means.
-
-      Verified by running the real lane (2026-08-09, commit `bfcae8ac`): 13/13 phases passed and all
-      eight prerequisites reported `True`. That run was against a dirty worktree, so it correctly
-      reported `releaseEligible = False` — it is development evidence, not a release claim. The lane
-      now needs **Docker** because it exercises shared PostgreSQL providers, matching the
-      Team-to-Enterprise precedent; the release checklist says so.
-
-      Two side findings: `certification-results/deployment-profiles/` was not gitignored, unlike its
-      sibling evidence directories, so every local run left a commitable pile — now ignored. And
-      `OrchestratorPerObjectAuthorizationIntegrationTests` is tagged `Category=Integration` despite
-      using only an in-process `OrchestratorWebFactory`, so this security boundary is excluded from
-      the standard CI run. Not changed here — retagging it is a test-lane decision, not a
-      certification one — but it is why the prerequisite needed an explicit lane phase.
-- [x] Deliver the minimum tenant portability bundle and SaaS → self-hosted Enterprise journey before
-      Managed Dedicated SaaS general availability. The
-      [Tenant Portability Architecture](docs/architecture/TenantPortability.md) owns the bundle and
-      migration contract; this gate owns its release sequencing, and domain 9 owns its delivery.
-
-      **Gate met (v0.18.0).** Both halves this item actually gates on exist and are certified: the
-      minimum configuration/artifact bundle (`etl-sql.tenant-bundle/v1`, signed and tenant-encrypted,
-      composed from the Portal configuration export and Orchestrator promotion package) and the
-      SaaS → self-hosted Enterprise journey as the `SaaSToEnterpriseExit` certification lane, run for
-      real at 3/3 phases with concrete scenario evidence.
-
-      **What remains is delivery depth, not the gate, and it moves to domain 9** so this phase stops
-      reading as blocked: the `export` and `import` CLI verbs. `validate` and `preflight` — the
-      customer-side verbs, and the ones the exit guarantee actually rests on — are shipped. The
-      importer itself is built and tested; it lacks only its production adapters and an entry point.
-      Do not read this checkbox as "portability is finished".
-
-      **Slice 1 of 4 done (v0.18.0): the bundle format and its standalone validator.**
-      `ETL_SQL.Core.Portability` now has the `etl-sql.tenant-bundle/v1` manifest contract, a writer
-      for the minimum configuration/artifact mode, and the reference validator §16 requires — the
-      one that must work with no contact with the source operator, so it depends on nothing but the
-      bundle on disk. Twelve tests cover round trip, determinism, tamper, truncation, path escape,
-      unknown schema, secret material, unimplemented mode, duplicate logical id, missing dependency,
-      and a missing manifest.
-
-      Two deliberate refusals rather than stubs: an export mode that is declared but unimplemented
-      throws at write time and leaves no manifest behind, and a duplicate logical id is rejected
-      because logical ids are what the target reconciles against, so a duplicate silently drops an
-      object. Determinism is asserted through a digest that excludes bundle id and creation time,
-      which §5.1 names as generation metadata.
-
-      **Not yet built, in dependency order:**
-      - [x] *Slice 2 — composition.* **Done (v0.18.0).** `TenantBundleComposer` (in `ETL-SQL.App`,
-        the only tier that can see both the Orchestrator and an HTTP Portal) assembles the bundle
-        from the Portal configuration export, the Orchestrator promotion package, and portable
-        source artifacts. `PortalAdminConfigurationSource` is the production adapter over
-        `PortalAdminClient`, which gained a `GetTextAsync` because the export returns a declarative
-        script rather than JSON.
-
-        **The plan-hash acknowledgement is carried through, and that is the point of the slice.**
-        The composer fetches `configuration/export/plan`, then downloads acknowledging that hash. The
-        Portal answers a stale acknowledgement with 409, so a configuration change mid-export becomes
-        a failed export instead of a bundle whose contents differ from the plan somebody reviewed.
-        The plan itself travels beside the script as its own payload, because the script does not say
-        what was left out of it — `skipped` and `contentManifest` become manifest exclusions with
-        remediation, and required secrets become binding requirements.
-
-        Six tests, Portal faked through the interface so no Portal is needed: full composition,
-        acknowledgement propagation, mid-export change refused with no bundle written, the plan
-        travelling beside the script, a missing artifact refusing rather than quietly shrinking the
-        bundle, and an end-to-end SaaS compose that is encrypted and signed and validates against the
-        operator key.
-
-        *Untested:* `PortalAdminConfigurationSource`'s JSON mapping, which needs an HTTP fake. It is
-        thin, but it is the seam where a Portal response-shape change would break the export, so
-        slice 3's CLI coverage should exercise it rather than mock past it.
-      - [ ] *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16).
+- [x] *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16).
         **Partly done (v0.18.0).** `TenantPortabilityInspector` implements the non-mutating half:
         preflight resolves required bindings against what the target says it can supply, and returns
         distinct exit codes per failure kind, following the admin identity CLI precedent — a runbook
@@ -683,80 +323,22 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
         when it checked integrity but *not* authenticity, so a green result is never mistaken for a
         verified signature.
 
-        **`export` and `import` verbs are not wired, and the reason is not plumbing.** Two findings
-        from wiring the others:
-
-        - **Nothing in the codebase executes a Portal bootstrap script programmatically.**
-          `SaasTenantOnboardingService` *stages* it to `imports/portal-bootstrap.etlsql` for manual
-          replay. So `IPortalConfigurationTarget` is a new execution path — running a declarative
-          script against a live Portal from the CLI — not an adapter over something existing. That
-          is the most security-sensitive code in this track and should be built deliberately.
-        - ~~`OrchestratorPromotionPackageService.ImportAsync` needs a `leaveDisabled` parameter.~~
-          **Checked against the code and withdrawn.** `ImportAsync` already sets `IsEnabled = false`
-          on every imported job and is create-only (`if (existing is null)`), so the "arrives
-          disabled" rule and collision safety are both already honoured. The production
-          `IOrchestratorPackageTarget` is a thin wrapper over it, not a change to it. Recorded
-          because the earlier note claimed otherwise.
-
-        `export` additionally needs the Portal credential flow the identity verbs established
-        (environment or `SECRET:`, never argv), which is a known pattern but still real work.
-      - [x] *Slice 4 — the SaaS → self-hosted Enterprise journey.* **Done (v0.18.0)** as the
-        `SaaSToEnterpriseExit` certification lane, verified by a real run (3/3 phases, concrete
-        `SaaSToEnterpriseExit` scenario evidence).
-
-        **A red test corrected the design here.** The exit journey was first written as a
-        `DeploymentTransitionLifecycleTests` case, `SaaS → Enterprise`, and it failed: promotion
-        preflight refuses every backward move with `DP001`, which says to *"use an explicit
-        export/restore workflow"*. That refusal is correct — promotion carries environment authority
-        forward, while leaving SaaS means taking portable state out and rebinding it to
-        infrastructure the customer owns. The bundle **is** the workflow `DP001` names, so the exit
-        path is certified through it. Do not satisfy this lane by relaxing `DP001`; the transition
-        suite carries a comment saying so.
-
-        The journey proves what a customer actually cares about: the bundle verifies against the
-        published operator key, decrypts with their own private key, is byte-identical to what they
-        had, and states every binding the target owes before anything mutates. A second test moves
-        the bundle to cold storage and verifies it with nothing from the exporting deployment except
-        the published key — the §13 guarantee that an export outlives access to the operator.
-
-      **Signing and encryption decided (2026-08-09), recorded in
-      [TenantPortability.md §13.1](docs/architecture/TenantPortability.md).** OpenPGP via the
-      `PgpCore` dependency already in Core; manifest plaintext and signed, payloads encrypted;
-      encryption required when the source is SaaS and optional-but-recorded otherwise; the operator
-      signs with a published key. JOSE was chosen first and reversed on a fact check — no JOSE
-      library exists anywhere in the repo, so it meant a new dependency plus a license audit, or
-      hand-writing JWE key agreement.
-
-      This becomes **slice 1b**, ahead of slice 2, because it changes the manifest shape (signature
-      block, encryption envelope) and whether payloads sit on disk as plaintext. Retrofitting after
-      composition means rewriting the writer, the validator, and their tests.
-
-      - [x] Slice 1b. **Done (v0.18.0).** `TenantBundleCrypto` adds detached operator signing and
-            verification over `PgpCore`'s `SignDetachedAsync`/`VerifyDetachedAsync`, plus
-            recipient-key payload encryption. Writer and validator are now async, per the engine
-            async rule. Signature verification runs **before the manifest is parsed**, so a bundle
-            that fails it returns no manifest at all rather than findings computed from metadata
-            that was never trustworthy. A SaaS-sourced export cannot be written unencrypted, and one
-            that claims a SaaS source without encryption fails validation.
-
-            21 tests. The negatives that make a signature mean something are all covered and all
-            load-bearing: a genuine signature over a *since-altered* manifest, a signature from a
-            different key, a stripped signature (caught with the key by verification and without it
-            by the manifest's own claim), and requiring a signature while supplying no key.
-
-            **One design consequence worth knowing.** OpenPGP uses a fresh session key per run, so an
-            encrypted export's stored bytes differ every time even when tenant state is identical.
-            The stored hash therefore cannot answer "is this the same state?". Components now carry
-            both hashes — `Sha256` over the bytes as stored, so a customer can verify integrity with
-            no key at all, and `PlaintextSha256` for after decryption — and the determinism digest is
-            computed from a projection that prefers the plaintext hash and drops the stored length.
-            Pinned by a test asserting the stored hashes differ across two encrypted exports while
-            the deterministic digest matches.
-
-            `RecipientKeyDigest` is SHA-256 over the armored recipient key, deliberately not the
-            OpenPGP fingerprint, and is named so nobody compares it against a keyring.
-
-      Key-rotation policy and published-key distribution are still open, but neither blocks slice 1b.
+        **Completed (2026-08-10).** `export` now composes the reviewed Portal configuration,
+        optional Orchestrator promotion package, and portable source artifacts, then signs the
+        manifest; SaaS exports require tenant-recipient encryption. Its service token has a new
+        read-only `admin.portability` allowlist containing only the plan and hash-acknowledged export
+        routes. `import` resolves explicit `SOURCE=TARGET` bindings, plans every Portal statement,
+        rejects non-Portal execution blocks, refuses collisions by default, supports a non-mutating
+        dry run, replays the declarative bootstrap through the engine under an environment/`SECRET:`
+        interactive administrator credential, and imports Orchestrator workloads disabled. CLI,
+        adapter, bundle, and Portal-scope tests cover the path; the generated CLI reference and
+        security/portability documentation record the credential contract.
+- [x] Define the tenant-bundle signing-key rotation policy and published-key distribution process.
+      Completed 2026-08-10: the operator publishes an HTTPS OpenPGP keyring, immutable
+      per-fingerprint keys, and a lifecycle index authenticated on first use through an independent
+      channel. The runbook fixes routine prepublication and rollback windows, archival public-key
+      retention, private-key destruction, emergency revocation/re-export, customer offline custody,
+      and the rule that a manifest timestamp cannot rescue a signature made by a compromised key.
 
 #### Isolation domains
 
@@ -768,8 +350,9 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
 
 ##### 1. Tenant context and authority
 
-- [x] **Dedicated.** Derive tenant context server-side even where the tenant has its own deployment
-      boundary. A deployment per tenant makes cross-tenant reach unlikely, not impossible: the
+- [x] **Dedicated.** Adopt server-derived tenant context on every surface that spans deployments,
+      even where the tenant has its own deployment boundary. A deployment per tenant makes
+      cross-tenant reach unlikely, not impossible: the
       provisioning control plane, platform automation, and support tooling all still span tenants,
       and each is an entry point that can be handed a caller-supplied identifier.
 
@@ -796,9 +379,16 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       refused. `SaasTenantOnboardingService`'s duplicate tenant-id regex was replaced by `TenantId`
       so there is one definition rather than two that can drift.
 
-      **Not yet done: adoption.** The contract exists and nothing consumes it yet. Threading it
-      through the surfaces that span tenants — provisioning, platform automation, support tooling —
-      is the follow-on, and it is where the Dedicated cell actually earns its evidence.
+      **Adoption completed (2026-08-10).** The only mutating cross-deployment tenant selector,
+      `admin promotion saas-onboard`, now derives a short-lived attributed `PlatformAccessGrant`
+      from current signed organization policy. Its `--tenant` value is a mismatch assertion only;
+      missing, expired, or mismatched authority fails before staging, and expiry is rechecked before
+      the final move. Managed Dedicated Portal configuration supplies the host-fixed identity for
+      portability export plans, binds it into the acknowledged plan hash, and refuses a caller
+      relabel. Online support evidence derives the same host-fixed context and exposes no tenant
+      selector; fleet visibility remains server-configured and read-only. The topology-specific
+      release review links onboarding, export, support, and collision-negative evidence and keeps
+      Shared explicitly `NotCertified`.
 - [ ] **Shared.** Prove tenant context is server-derived at every shared entry point — a negative
       test per surface that a caller-supplied tenant, alias, gateway, resource, run, object, or
       storage identifier cannot widen scope, plus collision tests for equal numeric/logical IDs
@@ -830,9 +420,18 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       This cell stays **open**: a contract with no shared implementations is not evidence that shared
       isolation holds. It closes when real surfaces exist and inherit it.
 
+      **HTTP credential adoption started (2026-08-10).** Shared Portal JWTs now carry exactly one
+      canonical tenant claim minted only from a trusted `TenantContext`. After normal JWT validation,
+      middleware converts that signed claim into the request-scoped context consumed below controller
+      code; missing, duplicate, and malformed claims fail before controller activation. An HTTP
+      collision test proves spoofed tenant headers, tenant/issuer query values, and an equal shared
+      secret row cannot replace the signed tenant or widen enumeration. The cell remains open because
+      gateway, resource, run, object, storage, queue, and index surfaces still need equivalent concrete
+      adoption evidence.
+
 ##### 2. Identity and delegated administration
 
-- [ ] **Dedicated.** Establish platform/tenant identity separation and delegated tenant
+- [x] **Dedicated.** Establish platform/tenant identity separation and delegated tenant
       administration, and prove platform administration is separately audited and cannot implicitly
       impersonate a tenant user even when the tenant has its own deployment boundary. Supports one
       tenant-owned IdP configuration through the Enterprise identity contract.
@@ -856,30 +455,116 @@ infer Dedicated support from an Enterprise happy path, or Shared support from De
       context (`Origin`, `Grant`), which is what lets an audit record tell a support operator from
       the customer.
 
-      **Still open, and why this stays unchecked:** nothing consumes `PlatformAccessGrant` yet — no
-      Portal role, no endpoint, no audit sink writes one. Delegated *tenant* administration (a tenant
-      admin managing their own users/groups without platform involvement) and the tenant-owned IdP
-      configuration are both untouched. The contract makes the right thing expressible; it is not yet
-      evidence that any surface does it.
+      **Adoption completed (2026-08-10).** Managed Dedicated now keeps the two identities separate
+      by construction. A tenant `Admin` exists only inside its host-fixed Portal and owns user,
+      group, provider mapping, and service-account administration. Tenant automation is limited to
+      the explicit `admin.identity` allowlist; it cannot promote an Admin or reach unrelated Admin
+      routes. The platform operator remains an expiring signed `PlatformAccessGrant`, receives no
+      Portal role or tenant JWT, and onboarding writes a distinct `PlatformOperator` audit receipt
+      naming the tenant, actor, approval, reason, and expiry with tenant-user impersonation false.
+      Onboarding can bootstrap one tenant-owned credential-free HTTPS OIDC authority/client through
+      the Enterprise identity contract; its client secret is never accepted or persisted and is
+      injected into the tenant process before activation. The topology-specific release review
+      links the delegated-admin, OIDC, platform-audit, and non-impersonation evidence. Shared remains
+      explicitly `NotCertified` until refresh/service-token validation and delegated administration
+      complete the tenant-qualified identity lifecycle described below.
 - [ ] **Shared.** Extend identity and delegated administration to shared stores with tenant
       predicates/partitioning enforced below controller code. Add dynamic, server-verified
       tenant/issuer/domain discovery without trusting a caller-selected tenant or issuer, and
       without allowing platform administrators to impersonate tenant users.
 
+      **Credential boundary started (2026-08-10).** Internal Portal user/service tokens can now be
+      tenant-bound only from a host-fixed or verified-credential `TenantContext`; a
+      `PlatformAccessGrant` is structurally refused when minting either session type. Shared request
+      scope is restored solely from the already validated signed claim, never a request selector.
+      Existing OIDC, refresh-session, delegated-admin, policy, and connection suites remain green.
+      A shared authority registry now adds globally collision-safe normalized Portal-host/login-domain
+      routing with tenant-scoped administration, `SECRET:`-only client credentials, exact enabled-host
+      anonymous lookup, and post-validation issuer binding. Its discovery API accepts an `HttpRequest`,
+      not a tenant, issuer, authority id, or caller domain selector. The authorization-code controller
+      and user/group persistence now consume this binding; this stays open until refresh/service-token
+      validation and delegated administration preserve it throughout their lifecycles.
+
+      **Protected flow binding added (2026-08-10).** A ten-minute Data Protection envelope now pins
+      the server-routed authority id/version, Portal host, HTTPS redirect URI, state, nonce, and PKCE
+      verifier across the browser round trip. Callback restoration takes no request object and fails
+      on tampering, expiry, state mismatch, authority rotation, or disablement, so callback Host and
+      query selectors cannot re-route an in-flight login. The controller now consumes this path after
+      tenant-partitioned subject/group and refresh-token persistence removed its global fallback.
+
+      **Identity persistence partitioned (2026-08-10).** Portal users, groups, memberships, service
+      accounts, and refresh tokens now carry `TenantId`; federated users also retain their normalized
+      issuer. Composite SQLite/PostgreSQL indexes allow equal usernames, issuer/subject pairs, group
+      names, and service-account names in different tenants while legacy rows backfill to
+      `portal-host`. A verified-context store proves tenant-scoped lookups, group enumeration,
+      membership writes, and refresh-session attachment, including refusal of foreign numeric IDs.
+      This remains open until OIDC provisioning, refresh/service-token validation, and delegated
+      administration use these predicates end to end.
+
+      **Shared OIDC provisioning completed (2026-08-10).** Anonymous provider discovery and login
+      now select an exact enabled authority from the routed Portal host. The protected flow pins that
+      authority through callback; discovery metadata, client id, optional tenant-scoped `SECRET:`
+      credential, token issuer, and audience all come from the binding rather than callback input.
+      Only after cryptographic token validation and exact issuer comparison does the request receive
+      a verified tenant context. Provisioning then tenant-qualifies subject/name lookup, user creation,
+      profile updates, group reconciliation, JWT tenant claims, and refresh-session creation. An HTTP
+      integration test proves two routed tenants can provision equal usernames and subjects into
+      separate users, memberships, tokens, and issuer bindings, while an unknown host cannot start
+      login. This remains open for refresh/service-token validation and delegated administration.
+
 *Absorbs the retained discovery item **SaaS Multi-Tenant Identity (Multi-IdP)**.*
 
 ##### 3. Policy, secrets, and keys
 
-- [ ] **Enterprise contract first.** Establish one provider-neutral key contract and refactor
+- [x] **Enterprise contract first.** Establish one provider-neutral key contract and refactor
       `DatasetAtRestKeyValidator.cs`, dataset, credential, artifact, and checkpoint encryption away
       from a single global master key. Resolved keys never enter portable exports or execution images.
-- [ ] **Dedicated.** Tenant-specific policy authority with platform/tenant separation, so one
+
+      **Contract foundation started (2026-08-10).** `ETL_SQL.Core.Security.IKeyMaterialProvider`
+      now resolves a server-derived `(scope, purpose, version)` request into a disposable key lease
+      with separately serializable, non-secret provider metadata. Dataset, credential, artifact, and
+      checkpoint are distinct purposes; equal version names cannot collide across purpose or tenant
+      scope. Resolved bytes are JSON-ignored, absent from string form, copied at the provider edge,
+      and zeroed when the lease is disposed. `DatasetAtRestKeyValidator` now has a provider-neutral
+      Enterprise path that resolves all four purposes, rejects missing bindings and cross-purpose key
+      reuse, and returns only safe descriptors. Snapshot artifacts now resolve only the `Artifact`
+      purpose from the host-fixed scope, authenticate the provider version in their envelope, read
+      explicitly retained previous versions during rotation, and refuse a dataset-purpose binding
+      even when its raw bytes happen to match. Portal-managed credentials now write a versioned
+      `Credential`-purpose envelope, retain read compatibility for existing Data Protection rows,
+      and refuse a dataset-purpose binding with identical bytes. Provider-backed checkpoint stores
+      now encrypt variables, variable metadata, lineage, temp-table schemas/chunk references,
+      connection state, and Docker state under the `Checkpoint` purpose while retaining legacy
+      reads. Dataset creation, refresh, consumption, preview/export, and rotation now resolve current
+      or recorded versions just in time from the `Dataset` purpose; registry metadata carries only
+      the version and never a resolved key. The Portal environment adapter binds all four purposes
+      to host-local base64 environment variables, validates them at startup, and flows the host-fixed
+      scope into report execution and checkpoint factories. Portable-bundle and adapter tests prove
+      resolved material is absent while non-secret binding metadata remains exportable.
+- [x] **Dedicated.** Tenant-specific policy authority with platform/tenant separation, so one
       tenant's policy cannot be authored or overridden from platform scope. Disjoint tenant
       provider/key namespaces plus export proof: no cross-tenant key reuse, raw secret export, or
       provider credential in an execution artifact.
+
+      **Completed (2026-08-10).** A host-fixed `TenantContext` now scopes every policy-authority
+      service operation below the controller, while admin and machine-distribution routes enforce the
+      same tenant on policy versions, machine registration/list/revocation, and envelope retrieval.
+      Platform-scoped principals cannot mutate tenant policy. Provisioning validation rejects key
+      material reused across tenant or purpose namespaces. Dedicated HTTP, stale foreign-row,
+      portable-bundle, and execution-artifact tests prove cross-tenant policy/key access, raw key
+      export, and provider-binding disclosure are refused.
 - [ ] **Shared.** Extend policy, connections, secrets, keys, and catalog bindings to shared stores
       with tenant predicates/partitioning enforced below controller code, and prove tenant, key, and
       key-version separation.
+
+      **Store foundation started (2026-08-10).** Policy versions, Portal secrets, shared connections,
+      connection ACLs, and usage rows now have store-level tenant predicates; secret-name and alias
+      uniqueness is composite by tenant in matching SQLite/PostgreSQL migrations. Equal-name
+      collision tests prove tenant-scoped policy, secret lifecycle, connection export/delete, and
+      distinct credential-key versions. `Portal:SharedTenancy:Enabled` fails closed when no verified
+      `TenantContext` is injected. This remains open until shared identity supplies that context to
+      runtime scopes and dataset, artifact, and checkpoint consumers resolve tenant—not host—key
+      scope end to end.
 
 *Absorbs the retained discovery item **Tenant-Scoped Encryption Keys (BYOK)**.*
 
@@ -997,18 +682,11 @@ checked off meaningfully. Split:
       tenant-partitioned ledger; it cannot read payload content or become execution authorization.
 - [ ] **Shared — provisioning, upgrade, and deletion** against shared control planes.
       **Gap — Phase C carried no managed-operations bullet at all.**
-- [ ] **Finish the `admin tenant` verb family** — `export` and `import`. Carried here from Phase A,
-      which no longer gates on them. The importer and composer are built and tested; what is missing
-      is an entry point and two production adapters. One of those is a real piece of work, not
-      plumbing: **nothing in the codebase executes a Portal bootstrap script programmatically**
-      (`SaasTenantOnboardingService` stages it to `imports/portal-bootstrap.etlsql` for manual
-      replay), so `IPortalConfigurationTarget` is a new execution path — the generated script wraps
-      its statements in `EXECUTE portal BEGIN … END;`, so applying it means supplying a `portal`
-      connection and running the script through the engine. That is the most security-sensitive code
-      in this track and wants building deliberately. `IOrchestratorPackageTarget`, by contrast, is a
-      thin wrapper: `OrchestratorPromotionPackageService.ImportAsync` already forces
-      `IsEnabled = false` and is create-only. `export` additionally needs the Portal credential flow
-      the identity verbs established (environment or `SECRET:`, never argv).
+- [x] **Finish the `admin tenant` verb family** — `export` and `import`. Completed 2026-08-10 with
+      the production Portal engine-replay and Orchestrator-store adapters, signed/encrypted export
+      composition, dry-run and fail-closed collision planning, environment/`SECRET:` credentials,
+      disabled imported workloads, generated CLI documentation, and narrow read-only export scope.
+      This retained discovery entry is satisfied by Phase A Slice 3 above.
 - [ ] **Portability bundle (both).** Unify the existing Portal configuration export, Orchestrator
       promotion package, source artifacts, and optional evidence/content into the one open,
       versioned, signed, tenant-encrypted format defined in
@@ -1171,89 +849,10 @@ contract and explicitly deferred reusable-subreport boundary remain in
       composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
       their targeted lanes.
 
-### Testing — retire the wall-clock flake class (scheduled for v0.19.0)
-
-Three release cycles have now recorded flaky tests with the **same shape**, and the standing policy
-of "stabilize the minimum to ship and record it" has kept them out of the way without retiring them:
-
-| Cycle | Test | Shape |
-| :--- | :--- | :--- |
-| v0.15.0 | `SchedulerServiceTests` (8), `ClusterLockTests.RunExclusive_SerializesConcurrentCriticalSections` | fixed delay as sole synchronization — **fixed**, `WaitUntilAsync` is the reference pattern |
-| v0.17.0 | `ProcessJobExecutorChaosTests` (2), `PortalIntegrationTests.Snapshot_ConcurrentRefreshReadsAndExports_…` | wall-clock budget on process kill / concurrent refresh |
-| v0.18.0 | `HostedServiceLaneTests.MissingDatasetAtRestKey_WithoutFallback_StopsApplication`, `SubscriptionIntegrationTests.Verify_Subscription_Failure_Scenario` | wall-clock budget exceeded under full-suite load |
-
-**Why the existing guardrail does not catch these.** `scripts/check-flaky-test-delays.mjs` (CI,
-`ci.yml:45`) flags a literal `Task.Delay` used as the *sole* synchronization before a positive
-assertion, and unreviewed elapsed-time upper bounds. It deliberately **excludes** delays inside a
-polling loop or behind a deadline — which is exactly the remaining shape. These tests poll
-correctly; their *budget* is simply too small for a machine running the other ~900 tests. So the
-next pass is not more of the same lint.
-
-The failure mode is also asymmetric and worth stating: a too-small budget produces a **false
-failure**, which costs a maintainer an investigation and teaches them to ignore red. A too-large
-budget only costs wall-clock time on a run that was going to fail anyway.
-
-- [x] Establish the real distribution before changing any number. Run the Portal and Orchestrator
-      lanes N times under deliberate load and record, per waiting test, the observed time-to-satisfy
-      against its configured budget. Set budgets from that data rather than by doubling until green.
-- [x] Replace bare deadlines with a shared load-aware helper — the `WaitUntilAsync` idea extended
-      with a budget that scales from a baseline measured once per run, so a saturated agent and a
-      developer laptop do not need the same constant.
-- [x] Make a budget expiry **report what it was waiting for**. Every one of these cost an
-      investigation mostly because the failure said "expected true, got false" rather than "waited
-      15s for the host to stop; last observed state X". Diagnostics on timeout are the highest-value
-      part of this item.
-- [x] Extend the guardrail to flag a *new* bare wall-clock budget in a waiting helper, so the class
-      cannot quietly regrow once retired. Same annotation escape hatch as the existing check.
-- [x] Decide whether `HostedServiceLaneTests` should stay in the shared lane at all. It is the one
-      Portal suite that starts the full `IHostedService` pipeline, making it both the slowest to
-      reach a decision and the most sensitive to surrounding load — a separate lane may be a more
-      honest fix than a larger number.
-- [x] Retire the three tracking documents into one when the class is closed, and record the outcome
-      the way the [stability record](docs/releases/flaky-test-stability.md) records its fix, so the
-      reference pattern stays findable.
-
-**Done (v0.19.0):** `LoadAwareWait` now owns bounded observable waits, diagnostics, bounded
-per-process load calibration, and optional JSONL evidence across the known engine, Orchestrator,
-Portal, Docker, and language-server offenders. Three loaded repetitions of both sensitive lanes
-passed with the worst 15-second condition completing in 1.05 seconds; the baselines were retained.
-The static guard rejects new bare deadline helpers, scheduler tests use isolated throttle stores,
-signed subscription triggers exercise the authorization boundary, and the full Portal hosted-service
-pipeline runs in its own `portal-hosted` process. The consolidated policy and evidence are in
-[Flaky Test Stability](docs/releases/flaky-test-stability.md).
-
-**Do not** simply add retries. A retry hides a genuine intermittent product defect exactly as well
-as it hides a test-harness one, and the shared-SQLite finding in the v0.18.0 notes — where the
-browser lane's failure turned out to describe a real production sharing hazard — is the reason to
-keep failures visible.
-
 ## Bugs
 
-
-- [x] **Create a working cookbook recipe for Lineage**  It should be two parts, part one should be data
-  from a flat file into a database with some transformations in the middle.  This is an EDW load.  This
-  should also include an export of the Lineage.  Part two would be importing the lineage and taking the 
-  table from EDW and making a report from it.  Everything should work and the lineage on the report should
-  show the flat file source to the EDW to the report and all transformations that happen between.
-
-      **Done (v0.18.0).** [End-to-End Lineage](docs/cookbooks/etl/end-to-end-lineage.md), backed by two
-      runnable samples under `samples/04_Orchestration/` that the sample suite exercises. SQLite, so
-      it runs with no infrastructure.
-
-      Writing it as a *runnable* recipe rather than a written one found five defects that reading
-      could not have: the documented tag syntax `expr /* @d: … */ AS alias` was a parse error in
-      every form; `eng.lineage` dropped the transformation on every renamed column (the display
-      dedup preferred the observation carrying the physical path and discarded the one carrying the
-      classification — so the columns most likely to *have* a transformation were exactly the ones
-      that lost it); a `+` chain containing a string literal was classified as arithmetic because
-      the heuristic only inspected the immediate operands of a left-associative parse; the
-      OpenLineage round trip returned a different `transformation_kind` than it was written with,
-      because our 12 kinds map many-to-one onto OpenLineage's subtype vocabulary; and re-recording a
-      hop never filled in the physical identifier the first (pre-connection) observation lacked.
-
-- [ ] **Sweep the samples that fail.** 16 of 195 remain after the first triage cluster — see the
-      sample-runner item under the release-process RCI section for why this was invisible until now.
-      Each needs triaging individually: some will be stale syntax, some may be real engine defects.
+- [ ] **Sweep the samples that fail.** 16 of 195 remain after the first triage cluster. Each needs
+      triaging individually: some will be stale syntax, some may be real engine defects.
       Run `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2` for the current list.
 
       As of 2026-08-09: `01_deploy_datasets`, `02_report_public_consumer`,

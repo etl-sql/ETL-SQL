@@ -446,6 +446,26 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public string? DatasetAtRestKey { get; set; }
 
     /// <summary>
+    /// Host-owned key provider used to resolve dataset encryption material just in time. The
+    /// provider and server-derived scope replace long-lived raw key state in managed hosts.
+    /// </summary>
+    public ETL_SQL.Core.Security.IKeyMaterialProvider? DatasetKeyMaterialProvider { get; set; }
+    public string DatasetKeyScope { get; set; } = "standalone-host";
+
+    public async ValueTask<ETL_SQL.Core.Security.ResolvedKeyMaterial?> ResolveDatasetKeyAsync(
+        string? version = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (DatasetKeyMaterialProvider is null) return null;
+        return await DatasetKeyMaterialProvider.ResolveAsync(
+            new ETL_SQL.Core.Security.KeyMaterialRequest(
+                DatasetKeyScope,
+                ETL_SQL.Core.Security.KeyPurpose.Dataset,
+                version),
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Unique identifier for the current session.
     /// Setting this also stamps all subsequent log output from this Evaluator
     /// with the session ID for correlation across concurrent sessions.

@@ -130,6 +130,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   keys keep equal names and equal numeric ids in different tenants from colliding. Tenant
   provisioning now shares this one definition instead of its own copy.
 
+- Adopted server-derived tenant context across the shipped Managed Dedicated cross-deployment
+  surfaces. SaaS onboarding now requires a short-lived attributed authorization from current signed
+  organization policy and treats `--tenant` only as a mismatch assertion. Host-fixed Portal identity
+  is included in reviewed export-plan hashes and support evidence, so a caller cannot relabel a SaaS
+  portability bundle or select another tenant through support tooling. Shared SaaS remains explicitly
+  uncertified.
+
+- Completed Managed Dedicated identity separation and delegated administration evidence. Tenant
+  administrators retain the host-fixed Portal `Admin` role and can delegate only the narrow
+  `admin.identity` automation allowlist, while platform onboarding remains a signed, expiring grant
+  that cannot mint tenant sessions and now writes its own attributed audit receipt. SaaS onboarding
+  can bootstrap one tenant-owned HTTPS OIDC registration through the Enterprise identity contract;
+  its client secret is never accepted or persisted and must be injected at deployment.
+
 - Added the `SaaSToEnterpriseExit` certification lane: the customer exit journey from Managed
   Dedicated SaaS to a self-hosted Enterprise deployment. It is the only lane that runs backward, and
   deliberately not a promotion — promotion preflight refuses backward moves (`DP001`) and directs the
@@ -150,6 +164,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   signature. Exit codes are distinct per failure kind — invalid, signature unverified, bindings
   required, not found — so a runbook can branch on them. `preflight` additionally lists what the
   target must supply and what will not travel at all.
+
+- Completed the tenant portability CLI with `etl-sql admin tenant export` and `admin tenant import`.
+  Export composes and signs the reviewed Portal configuration, optional Orchestrator package, and
+  source artifacts; SaaS exports require tenant-recipient encryption. Import performs signature,
+  integrity, binding, and collision preflight before replaying the declarative Portal bootstrap
+  through the engine, and it always imports Orchestrator workloads disabled. Secrets and private-key
+  passphrases are accepted only from environment variables or machine `SECRET:` references, while
+  the new `admin.portability` scope exposes only the read-only reviewed export endpoints.
 
 - Added tenant bundle import. The Portal half is applied by the engine executing the bundle's
   declarative script — the path an operator already uses — rather than through a new mutating Portal
@@ -175,6 +197,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   yields no metadata at all rather than findings derived from content that was never trustworthy. A
   SaaS-sourced export cannot be written unencrypted. Components carry both a stored-bytes hash, so a
   customer can verify integrity without holding any key, and a plaintext hash for after decryption.
+
+- Defined the tenant-export signing-key lifecycle and public distribution process. Operators
+  publish an HTTPS OpenPGP keyring, immutable per-fingerprint keys, and a lifecycle index, while
+  customers authenticate first use through a second fingerprint channel and retain the exact
+  verification material with the bundle. Routine rotation has a 30-day prepublication window and
+  bounded signing rollback; emergency compromise stops exports, publishes revocation, and requires
+  re-export unless independent immutable audit evidence proves pre-compromise signing.
 
 - Added the `etl-sql.tenant-bundle/v1` portability bundle format and its standalone validator, the
   first slice of the tenant portability contract. The validator is the piece that makes a customer

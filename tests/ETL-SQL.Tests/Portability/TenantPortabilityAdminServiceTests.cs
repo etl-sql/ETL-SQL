@@ -119,6 +119,32 @@ public sealed class TenantPortabilityAdminServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task PreflightAcceptsImportStyleSourceTargetBindings()
+    {
+        await TenantBundleWriter.WriteAsync(_root, Request());
+
+        var (code, output) = await RunAsync("admin-tenant-preflight",
+            new CliContext { TenantBundleRoot = _root, TenantBindings = ["SECRET:sales=SECRET:prod-sales"] });
+
+        Assert.Equal((int)TenantPortabilityExitCode.Ok, code);
+        Assert.Contains("Preflight clean", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ImportBindingMapRequiresMappingsAndRejectsDuplicates()
+    {
+        var map = TenantPortabilityAdminService.ParseBindingMap(
+            ["SECRET:source=SECRET:target", "SHARED:dev=SHARED:prod"]);
+
+        Assert.Equal("SECRET:target", map["SECRET:source"]);
+        Assert.Throws<ArgumentException>(() =>
+            TenantPortabilityAdminService.ParseBindingMap(["SECRET:source"]));
+        Assert.Throws<ArgumentException>(() =>
+            TenantPortabilityAdminService.ParseBindingMap(
+                ["SECRET:source=SECRET:a", "SECRET:source=SECRET:b"]));
+    }
+
+    [Fact]
     public async Task AMissingBundleArgumentFailsWithoutATraceback()
     {
         var (code, output) = await RunAsync("admin-tenant-validate", new CliContext());

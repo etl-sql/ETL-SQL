@@ -223,7 +223,8 @@ public sealed class PolicyAuthorityException(string message) : Exception(message
 public sealed class PolicyAuthorityService(
     IPolicyAuthorityStore store,
     IPolicyEnvelopeSigner signer,
-    Func<DateTimeOffset>? clock = null)
+    Func<DateTimeOffset>? clock = null,
+    ETL_SQL.Core.Multitenancy.TenantContext? authorityTenant = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
@@ -242,6 +243,7 @@ public sealed class PolicyAuthorityService(
         bool staged = false,
         CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenant);
         ArgumentException.ThrowIfNullOrWhiteSpace(environment);
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -289,6 +291,7 @@ public sealed class PolicyAuthorityService(
     public async Task<PublishedPolicyVersion> ActivateStagedAsync(
         string tenant, string environment, string policyVersion, CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
         var staged = versions.FirstOrDefault(v =>
             string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal))
@@ -317,15 +320,15 @@ public sealed class PolicyAuthorityService(
 
     public Task<IReadOnlyList<PublishedPolicyVersion>> ListVersionsAsync(
         string tenant, string environment, CancellationToken ct = default) =>
-        store.ListAsync(tenant, environment, ct);
+        store.ListAsync(ScopeTenant(tenant), environment, ct);
 
     public Task<PublishedPolicyVersion?> GetActiveVersionAsync(
         string tenant, string environment, CancellationToken ct = default) =>
-        store.GetActiveAsync(tenant, environment, ct);
+        store.GetActiveAsync(ScopeTenant(tenant), environment, ct);
 
     public Task<PublishedPolicyVersion?> GetCanaryVersionAsync(
         string tenant, string environment, CancellationToken ct = default) =>
-        store.GetCanaryAsync(tenant, environment, ct);
+        store.GetCanaryAsync(ScopeTenant(tenant), environment, ct);
 
     // ── Canary rollout ────────────────────────────────────────────────────────
     // A canary version is published alongside — not over — the active version and served only to its
@@ -349,6 +352,7 @@ public sealed class PolicyAuthorityService(
         CanaryCohort cohort,
         CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenant);
         ArgumentException.ThrowIfNullOrWhiteSpace(environment);
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -397,6 +401,7 @@ public sealed class PolicyAuthorityService(
     public async Task<PublishedPolicyVersion> PromoteCanaryAsync(
         string tenant, string environment, string policyVersion, CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
         var canary = versions.FirstOrDefault(v =>
             string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal))
@@ -431,6 +436,7 @@ public sealed class PolicyAuthorityService(
         string tenant, string environment, string policyVersion,
         string author, string? reviewer, CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         ArgumentException.ThrowIfNullOrWhiteSpace(author);
         var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
         var canary = versions.FirstOrDefault(v =>
@@ -471,6 +477,7 @@ public sealed class PolicyAuthorityService(
     public async Task<SignedOrganizationPolicyEnvelope?> RetrieveActiveEnvelopeAsync(
         string tenant, string environment, CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         var active = await store.GetActiveAsync(tenant, environment, ct).ConfigureAwait(false);
         return active is null
             ? null
@@ -486,6 +493,7 @@ public sealed class PolicyAuthorityService(
         string tenant, string environment, string targetPolicyVersion, string newPolicyVersion,
         string author, string? reviewer, DateTimeOffset expiresAtUtc, CancellationToken ct = default)
     {
+        tenant = ScopeTenant(tenant);
         var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
         var target = versions.FirstOrDefault(v =>
             string.Equals(v.PolicyVersion, targetPolicyVersion, StringComparison.Ordinal))
@@ -520,6 +528,10 @@ public sealed class PolicyAuthorityService(
         };
         return envelope with { Signature = signer.Sign(envelope) };
     }
+
+    private string ScopeTenant(string tenant) => authorityTenant is null
+        ? ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(tenant).Value
+        : authorityTenant.RequireTenant(tenant).Value;
 
     private static OrganizationPolicyDocument ReadDocument(PublishedPolicyVersion version)
     {

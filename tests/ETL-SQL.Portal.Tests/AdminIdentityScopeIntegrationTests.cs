@@ -32,14 +32,14 @@ public sealed class AdminIdentityScopeIntegrationTests
         var sessions = await SendAsync(client, HttpMethod.Get, "/api/admin/sessions", token);
         Assert.Equal(HttpStatusCode.OK, sessions.StatusCode);
 
-        // Reaches nothing else, including the capabilities the scope deliberately withholds.
+        // Reaches no unrelated Admin surface. Service-account lifecycle is intentionally part of
+        // identity administration and has its own owner/authority delegation checks.
         foreach (var path in new[]
                  {
                      "/api/admin/support-bundle",
                      "/api/admin/configuration/export",
                      "/api/admin/audit",
                      "/api/admin/settings/branding",
-                     "/api/admin/service-accounts",
                      "/api/admin/metrics/usage"
                  })
         {
@@ -49,6 +49,33 @@ public sealed class AdminIdentityScopeIntegrationTests
 
         var shutdown = await SendAsync(client, HttpMethod.Post, "/api/admin/service/shutdown", token);
         Assert.Equal(HttpStatusCode.Forbidden, shutdown.StatusCode);
+    }
+
+    [Fact]
+    public async Task PortabilityScopeReadsOnlyTheReviewedConfigurationExport()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var ownerId = await GetAdminIdAsync(factory);
+        var (_, token) = await IssueIdentityTokenWithIdAsync(
+            client, adminToken, ownerId, "portability-export",
+            ["admin.identity", "admin.portability"]);
+
+        var plan = await SendAsync(client, HttpMethod.Get,
+            "/api/admin/configuration/export/plan", token);
+        Assert.Equal(HttpStatusCode.OK, plan.StatusCode);
+        var hash = (await plan.Content.ReadFromJsonAsync<JsonObject>())!["planHash"]!.GetValue<string>();
+        var export = await SendAsync(client, HttpMethod.Get,
+            $"/api/admin/configuration/export?acknowledgedPlan={hash}", token);
+        Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, "/api/admin/configuration/export", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Get, "/api/admin/audit", token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await SendAsync(client, HttpMethod.Post, "/api/admin/configuration/export", token)).StatusCode);
     }
 
     /// <summary>
@@ -224,14 +251,14 @@ public sealed class AdminIdentityScopeIntegrationTests
         (await IssueIdentityTokenWithIdAsync(client, adminToken, ownerId, name)).Token;
 
     private static async Task<(string AccountId, string Token)> IssueIdentityTokenWithIdAsync(
-        HttpClient client, string adminToken, int ownerId, string name)
+        HttpClient client, string adminToken, int ownerId, string name, string[]? scopes = null)
     {
         var response = await SendAsync(client, HttpMethod.Post, "/api/admin/service-accounts", adminToken,
             new
             {
                 name = $"{name}-{Guid.NewGuid().ToString("N")[..6]}",
                 ownerUserId = ownerId,
-                scopes = new[] { "admin.identity" },
+                scopes = scopes ?? ["admin.identity"],
                 roles = new[] { "Admin" },
                 expiresAt = DateTime.UtcNow.AddHours(1)
             });

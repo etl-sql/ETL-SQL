@@ -14,6 +14,7 @@ using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,8 @@ namespace ETL_SQL.Portal.Services;
 public sealed class SnapshotPackageService(
     PortalConfig config,
     IArtifactStorage artifacts,
-    Microsoft.Extensions.Logging.ILogger<SnapshotPackageService> logger)
+    Microsoft.Extensions.Logging.ILogger<SnapshotPackageService> logger,
+    IKeyMaterialProvider? keyProvider = null)
 {
     public const string Extension = ".etlsnap";
     internal const int ArrowRowThreshold = 10_000;
@@ -65,7 +67,7 @@ public sealed class SnapshotPackageService(
             throw new InvalidOperationException($"Snapshot packages must use the {Extension} extension.");
 
         var compressedPackage = await CreateCompressedPackageAsync(manifest, ct);
-        var encryptedPackage = Encrypt(compressedPackage);
+        var encryptedPackage = await EncryptAsync(compressedPackage, ct);
         await artifacts.WriteAllBytesAsync(ArtifactArea.Snapshots, key, encryptedPackage, ct: ct);
     }
 
@@ -84,7 +86,7 @@ public sealed class SnapshotPackageService(
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         var manifest = await ReadManifestFromPackageAsync(compressedPackage, ct);
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
@@ -102,7 +104,7 @@ public sealed class SnapshotPackageService(
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         var manifest = await ReadLightweightManifestFromPackageAsync(compressedPackage, rowsUrlFactory, arrowUrlFactory, ct);
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
@@ -127,7 +129,7 @@ public sealed class SnapshotPackageService(
             throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
 
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
         var metadata = await ReadPackageMetadataAsync(zip, ct);
@@ -158,7 +160,7 @@ public sealed class SnapshotPackageService(
             return null;
 
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
         var metadata = await ReadPackageMetadataAsync(zip, ct);
@@ -177,7 +179,7 @@ public sealed class SnapshotPackageService(
     internal async Task<IReadOnlyList<string>> ListPackageEntriesForTestsAsync(string key, CancellationToken ct = default)
     {
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
         return zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal).ToList();
@@ -186,7 +188,7 @@ public sealed class SnapshotPackageService(
     internal async Task<string> ReadStoredLayoutJsonForTestsAsync(string key, CancellationToken ct = default)
     {
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
-        var compressedPackage = Decrypt(encryptedPackage);
+        var compressedPackage = await DecryptAsync(encryptedPackage, ct);
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
         var entry = zip.GetEntry(LayoutEntryName)
@@ -212,8 +214,16 @@ public sealed class SnapshotPackageService(
         return targetKey;
     }
 
-    private byte[] Encrypt(byte[] plaintext)
+    private async Task<byte[]> EncryptAsync(byte[] plaintext, CancellationToken ct)
     {
+        if (keyProvider is not null)
+        {
+            using var lease = await keyProvider.ResolveAsync(
+                new KeyMaterialRequest(KeyScope, KeyPurpose.Artifact), ct);
+            return EncryptWithKey(
+                plaintext, lease.Descriptor.Version, SHA256.HashData(lease.Bytes.Span));
+        }
+
         // No portal-managed key: fall back to the same host-bound ENCRYPT=MACHINE protection dataset
         // caches use (DPAPI LocalMachine on Windows; authenticated AES-256-GCM keyed from the machine
         // id elsewhere). Host-bound, so the package is not portable across hosts. Detected on read by
@@ -231,11 +241,18 @@ public sealed class SnapshotPackageService(
         var keyVersion = string.IsNullOrWhiteSpace(config.Dataset.AtRestKeyVersion)
             ? "v1"
             : config.Dataset.AtRestKeyVersion;
+        var key = DeriveAesKey(config.Dataset.AtRestKey, "Portal:Dataset:AtRestKey");
+        return EncryptWithKey(plaintext, keyVersion, key);
+    }
+
+    private static byte[] EncryptWithKey(byte[] plaintext, string keyVersion, ReadOnlySpan<byte> keyMaterial)
+    {
         var keyVersionBytes = Encoding.UTF8.GetBytes(keyVersion);
         if (keyVersionBytes.Length > ushort.MaxValue)
-            throw new InvalidOperationException("Dataset at-rest key version is too long.");
-
-        var key = DeriveAesKey(config.Dataset.AtRestKey, "Portal:Dataset:AtRestKey");
+            throw new InvalidOperationException("Artifact at-rest key version is too long.");
+        if (keyMaterial.Length < 32)
+            throw new InvalidOperationException("Artifact at-rest key must contain at least 256 bits.");
+        var key = keyMaterial.ToArray();
         var nonce = RandomNumberGenerator.GetBytes(NonceLength);
         var ciphertext = new byte[plaintext.Length];
         var tag = new byte[TagLength];
@@ -254,7 +271,7 @@ public sealed class SnapshotPackageService(
         return output.ToArray();
     }
 
-    private byte[] Decrypt(byte[] package)
+    private async Task<byte[]> DecryptAsync(byte[] package, CancellationToken ct)
     {
         // Packages written without a portal-managed key carry no ETLSNAP1 keyed envelope — they are
         // host-bound machine-encrypted (see Encrypt). Route those to MachineBoundCrypto.
@@ -281,18 +298,31 @@ public sealed class SnapshotPackageService(
 
         var keyVersion = Encoding.UTF8.GetString(package, offset, keyVersionLength);
         offset += keyVersionLength;
-        var nonce = package.AsSpan(offset, NonceLength);
+        var nonce = package.AsSpan(offset, NonceLength).ToArray();
         offset += NonceLength;
-        var tag = package.AsSpan(offset, TagLength);
+        var tag = package.AsSpan(offset, TagLength).ToArray();
         offset += TagLength;
-        var ciphertext = package.AsSpan(offset);
+        var ciphertext = package.AsSpan(offset).ToArray();
         var plaintext = new byte[ciphertext.Length];
 
-        var key = ResolveReadKey(keyVersion);
+        var key = keyProvider is null
+            ? ResolveReadKey(keyVersion)
+            : await ResolveProviderReadKeyAsync(keyVersion, ct);
         using var aes = new AesGcm(key, TagLength);
         aes.Decrypt(nonce, ciphertext, tag, plaintext, Encoding.UTF8.GetBytes(keyVersion));
         return plaintext;
     }
+
+    private async Task<byte[]> ResolveProviderReadKeyAsync(string keyVersion, CancellationToken ct)
+    {
+        using var lease = await keyProvider!.ResolveAsync(
+            new KeyMaterialRequest(KeyScope, KeyPurpose.Artifact, keyVersion), ct);
+        return SHA256.HashData(lease.Bytes.Span);
+    }
+
+    private string KeyScope => string.IsNullOrWhiteSpace(config.TenantId)
+        ? "portal-host"
+        : config.TenantId;
 
     private byte[] ResolveReadKey(string keyVersion)
     {

@@ -857,13 +857,18 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
                     b.ToTable("Groups");
@@ -1142,6 +1147,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1154,7 +1164,7 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
                     b.ToTable("PortalSecrets");
@@ -1210,6 +1220,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("Target")
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1222,7 +1237,7 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Alias")
+                    b.HasIndex("TenantId", "Alias")
                         .IsUnique();
 
                     b.ToTable("PortalSharedConnections");
@@ -1252,6 +1267,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ExternalIssuer")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<string>("ExternalSubject")
                         .HasColumnType("text");
@@ -1301,6 +1320,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -1318,10 +1342,14 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .HasDatabaseName("EmailIndex");
 
                     b.HasIndex("NormalizedUserName")
-                        .IsUnique()
                         .HasDatabaseName("UserNameIndex");
 
-                    b.HasIndex("Provider", "ExternalSubject");
+                    b.HasIndex("TenantId", "NormalizedUserName")
+                        .IsUnique()
+                        .HasFilter("\"NormalizedUserName\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Provider", "ExternalIssuer", "ExternalSubject")
+                        .IsUnique();
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -1340,6 +1368,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1353,6 +1386,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "UserId");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -2036,6 +2071,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2048,10 +2088,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasIndex("ClientId")
                         .IsUnique();
 
-                    b.HasIndex("NormalizedName")
-                        .IsUnique();
-
                     b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique();
 
                     b.ToTable("ServiceAccounts");
                 });
@@ -2073,11 +2113,18 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<int>("SharedConnectionId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("GroupId");
 
-                    b.HasIndex("SharedConnectionId", "GroupId")
+                    b.HasIndex("SharedConnectionId");
+
+                    b.HasIndex("TenantId", "SharedConnectionId", "GroupId")
                         .IsUnique();
 
                     b.ToTable("SharedConnectionAcls");
@@ -2102,15 +2149,93 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<int>("SharedConnectionId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<long>("UseCount")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SharedConnectionId", "ConsumerUser")
+                    b.HasIndex("SharedConnectionId");
+
+                    b.HasIndex("TenantId", "SharedConnectionId", "ConsumerUser")
                         .IsUnique();
 
                     b.ToTable("SharedConnectionUsages");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.SharedIdentityAuthority", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AuthorityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ClientSecretReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("LoginDomain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<string>("PortalHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorityId")
+                        .IsUnique();
+
+                    b.HasIndex("LoginDomain")
+                        .IsUnique();
+
+                    b.HasIndex("PortalHost")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Issuer");
+
+                    b.ToTable("SharedIdentityAuthorities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
@@ -2242,9 +2367,17 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("UserId", "GroupId");
 
                     b.HasIndex("GroupId");
+
+                    b.HasIndex("TenantId", "UserId", "GroupId")
+                        .IsUnique();
 
                     b.ToTable("UserGroups");
                 });

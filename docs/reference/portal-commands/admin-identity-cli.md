@@ -15,8 +15,9 @@ These verbs run against the Portal's administration API over **HTTP**, using a s
 holds the `admin.identity` scope. That scope is narrow on purpose: it reaches identity
 administration and nothing else. Backup and restore, configuration export, environment promotion,
 support bundles, audit export, service restart and shutdown, and dataset key rotation are all
-unreachable by any token — see [Service Accounts](service-accounts.md) for the reachable-route list
-and the reasoning.
+unreachable through `admin.identity`. Configuration export has a separate, read-only
+`admin.portability` scope; the other surfaces remain unavailable to service tokens. See
+[Service Accounts](service-accounts.md) for both explicit route lists and the reasoning.
 
 Going over the wire is deliberate. It is what lets the CLI administer a **remote** Portal from a jump
 box; an architecture test asserts `ETL-SQL.App` never takes a project reference on the Portal, so

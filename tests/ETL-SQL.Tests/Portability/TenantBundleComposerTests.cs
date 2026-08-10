@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ETL_SQL.App.Portability;
 using ETL_SQL.Core.Portability;
+using ETL_SQL.Core.Security;
 
 namespace ETL_SQL.Tests.Portability;
 
@@ -40,7 +41,8 @@ public sealed class TenantBundleComposerTests : IDisposable
         "plan-hash-abc",
         ["sales-etl-credential"],
         ["report:legacy-crystal-import"],
-        [new PortalContentManifestItem("dataset", "dataset:sales-snapshot", "warehouse", "transfer")]);
+        [new PortalContentManifestItem("dataset", "dataset:sales-snapshot", "warehouse", "transfer")],
+        "tenant-acme");
 
     private TenantBundleCompositionRequest Request(string bundleRoot) => new(
         bundleRoot,
@@ -98,6 +100,29 @@ public sealed class TenantBundleComposerTests : IDisposable
     }
 
     [Fact]
+    public async Task EnvironmentKeyMaterialNeverEntersPortableBundle()
+    {
+        var secret = Convert.ToBase64String(Enumerable.Repeat((byte)93, 32).ToArray());
+        var binding = new EnvironmentKeyMaterialBinding(
+            "ETLSQL_DATASET_KEY_V4",
+            new("environment", "dataset-key", "tenant-acme", KeyPurpose.Dataset, "v4"));
+        var provider = new EnvironmentKeyMaterialProvider([binding], _ => secret);
+        using (var resolved = await provider.ResolveAsync(new("tenant-acme", KeyPurpose.Dataset)))
+            Assert.Equal(32, resolved.Bytes.Length);
+
+        var script = "-- key binding ETLSQL_DATASET_KEY_V4; material is host-local\nCREATE FOLDER 'Sales';";
+        var bundle = Path.Combine(_root, "key-safe-bundle");
+        await TenantBundleComposer.ComposeAsync(new FakePortal(Plan(), script), Request(bundle));
+
+        foreach (var file in Directory.EnumerateFiles(bundle, "*", SearchOption.AllDirectories))
+        {
+            var bytes = await File.ReadAllBytesAsync(file);
+            Assert.DoesNotContain(secret, Convert.ToBase64String(bytes), StringComparison.Ordinal);
+            Assert.DoesNotContain(secret, System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task ConfigurationChangingMidExportFailsInsteadOfBundlingSomethingUnreviewed()
     {
         var portal = new FakePortal(Plan(), "CREATE FOLDER 'Sales';", refuseAcknowledgement: true);
@@ -139,6 +164,34 @@ public sealed class TenantBundleComposerTests : IDisposable
             () => TenantBundleComposer.ComposeAsync(new FakePortal(Plan(), "x"), request));
 
         Assert.Contains("does_not_exist.etlsql", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaasExportRefusesCallerTenantThatDoesNotMatchThePortalHost()
+    {
+        var request = Request(Path.Combine(_root, "bundle")) with
+        {
+            SourceProfile = "SaaS",
+            TenantExportIdentity = "tenant-beta"
+        };
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            TenantBundleComposer.ComposeAsync(new FakePortal(Plan(), "x"), request));
+
+        Assert.Contains("cannot widen scope", ex.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(request.BundleRoot, TenantBundle.ManifestFileName)));
+    }
+
+    [Fact]
+    public async Task SaasExportRefusesPortalWithoutServerOwnedTenantIdentity()
+    {
+        var request = Request(Path.Combine(_root, "bundle")) with { SourceProfile = "SaaS" };
+        var plan = Plan() with { TenantExportIdentity = null };
+
+        var ex = await Assert.ThrowsAsync<TenantBundleCompositionException>(() =>
+            TenantBundleComposer.ComposeAsync(new FakePortal(plan, "x"), request));
+
+        Assert.Contains("server-owned tenant identity", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

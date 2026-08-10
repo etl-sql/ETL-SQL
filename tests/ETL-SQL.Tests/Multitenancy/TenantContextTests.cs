@@ -125,6 +125,16 @@ public sealed class TenantContextTests
     }
 
     [Fact]
+    public void CallerTenantIsAnAssertionAndCannotReplaceServerAuthority()
+    {
+        var acme = TenantContext.FromHostConfiguration("acme");
+
+        Assert.Equal(acme.Tenant, acme.RequireTenant("acme"));
+        Assert.Throws<UnauthorizedAccessException>(() => acme.RequireTenant("globex"));
+        Assert.Throws<ArgumentException>(() => acme.RequireTenant("not/a/tenant"));
+    }
+
+    [Fact]
     public void TwoContextsForTheSameTenantCompareEqualRegardlessOfHowTheyWereDerived()
     {
         // Value equality on the id, so a context is safe to use as a dictionary key when partitioning

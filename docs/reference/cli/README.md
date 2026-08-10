@@ -68,6 +68,11 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql admin session disconnect`](admin-session-disconnect.md) | Disconnect a user's Portal sessions |
 | [`etl-sql admin session list`](admin-session-list.md) | List active Portal sessions |
 | [`etl-sql admin support-bundle`](admin-support-bundle.md) | Collect a redacted support archive (config, health, logs, database metrics) |
+| [`etl-sql admin tenant`](admin-tenant.md) | Export, inspect, and import tenant portability bundles |
+| [`etl-sql admin tenant export`](admin-tenant-export.md) | Compose a signed, optionally tenant-encrypted portability bundle |
+| [`etl-sql admin tenant import`](admin-tenant-import.md) | Preflight and apply a bundle with workloads disabled |
+| [`etl-sql admin tenant preflight`](admin-tenant-preflight.md) | Report what a target must supply before a bundle can be imported |
+| [`etl-sql admin tenant validate`](admin-tenant-validate.md) | Verify a bundle's integrity and, with --operator-key, its authenticity |
 | [`etl-sql admin user`](admin-user.md) | Manage Portal users |
 | [`etl-sql admin user create`](admin-user-create.md) | Create a Portal user |
 | [`etl-sql admin user delete`](admin-user-delete.md) | Delete a Portal user |

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ETL_SQL.Core.Multitenancy;
 
 namespace ETL_SQL.Core.Governance;
 
@@ -33,6 +34,7 @@ public sealed record OrganizationPolicyDocument
     public MutationGuardrailPolicySection MutationGuardrails { get; init; } = new();
     public SecurityEventPolicySection SecurityEvents { get; init; } = new();
     public MetadataGovernancePolicySection Metadata { get; init; } = new();
+    public SaasOnboardingAuthorizationPolicySection SaasOnboarding { get; init; } = new();
 
     public IReadOnlyDictionary<string, object> ToPolicyValues()
     {
@@ -83,9 +85,31 @@ public sealed record OrganizationPolicyDocument
             values["SecurityEvents:FailClosedMaxPendingEvents"] = SecurityEvents.FailClosedMaxPendingEvents.Value;
         if (SecurityEvents.FailClosedMaxOutboxBytes.HasValue)
             values["SecurityEvents:FailClosedMaxOutboxBytes"] = SecurityEvents.FailClosedMaxOutboxBytes.Value;
+        if (SaasOnboarding.Enabled)
+        {
+            values["SaaS:Onboarding:TenantId"] = SaasOnboarding.TenantId ?? string.Empty;
+            values["SaaS:Onboarding:OperatorPrincipal"] = SaasOnboarding.OperatorPrincipal ?? string.Empty;
+            values["SaaS:Onboarding:AuthorizationReference"] = SaasOnboarding.AuthorizationReference ?? string.Empty;
+            values["SaaS:Onboarding:Reason"] = SaasOnboarding.Reason ?? string.Empty;
+            values["SaaS:Onboarding:ExpiresUtc"] = SaasOnboarding.ExpiresUtc?.ToString("O") ?? string.Empty;
+        }
 
         return values;
     }
+}
+
+/// <summary>
+/// One short-lived, signed authorization for the deployment-plane tenant onboarding operation.
+/// The CLI tenant value is checked against this policy; it never creates tenant authority.
+/// </summary>
+public sealed record SaasOnboardingAuthorizationPolicySection
+{
+    public bool Enabled { get; init; }
+    public string? TenantId { get; init; }
+    public string? OperatorPrincipal { get; init; }
+    public string? AuthorizationReference { get; init; }
+    public string? Reason { get; init; }
+    public DateTimeOffset? ExpiresUtc { get; init; }
 }
 
 public sealed record MetadataGovernancePolicySection
@@ -256,10 +280,38 @@ public static class OrganizationPolicySchema
         ValidateRemoteExecution(document.RemoteExecution, errors);
         ValidateSecurityEvents(document.SecurityEvents, errors);
         ValidateMetadata(document.Metadata, errors);
+        ValidateSaasOnboarding(document.SaasOnboarding, errors);
 
         return errors.Count == 0
             ? OrganizationPolicyValidationResult.Success
             : new OrganizationPolicyValidationResult(false, errors);
+    }
+
+    private static void ValidateSaasOnboarding(
+        SaasOnboardingAuthorizationPolicySection authorization, List<string> errors)
+    {
+        var hasDetails = !string.IsNullOrWhiteSpace(authorization.TenantId)
+                         || !string.IsNullOrWhiteSpace(authorization.OperatorPrincipal)
+                         || !string.IsNullOrWhiteSpace(authorization.AuthorizationReference)
+                         || !string.IsNullOrWhiteSpace(authorization.Reason)
+                         || authorization.ExpiresUtc.HasValue;
+        if (!authorization.Enabled)
+        {
+            if (hasDetails)
+                errors.Add("SaaS onboarding authorization details must be empty when authorization is disabled.");
+            return;
+        }
+
+        if (!TenantId.TryParse(authorization.TenantId, out _))
+            errors.Add("SaaS onboarding tenant id must be a canonical tenant id.");
+        if (string.IsNullOrWhiteSpace(authorization.OperatorPrincipal))
+            errors.Add("SaaS onboarding authorization must name the platform operator.");
+        if (string.IsNullOrWhiteSpace(authorization.AuthorizationReference))
+            errors.Add("SaaS onboarding authorization must name its approval or change record.");
+        if (string.IsNullOrWhiteSpace(authorization.Reason))
+            errors.Add("SaaS onboarding authorization must state its reason.");
+        if (!authorization.ExpiresUtc.HasValue || authorization.ExpiresUtc <= DateTimeOffset.UnixEpoch)
+            errors.Add("SaaS onboarding authorization must carry a valid expiry.");
     }
 
     private static void ValidateMetadata(MetadataGovernancePolicySection metadata, List<string> errors)

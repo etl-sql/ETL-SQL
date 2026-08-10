@@ -726,6 +726,40 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(9, parsed.SaasMaxReportSessions);
         }
 
+        [Fact]
+        public async Task CliOrchestrator_TenantExportParsesCompositionAndKeyOptions()
+        {
+            var ctx = await ParseRunAsync(
+                "admin", "tenant", "export", "--bundle", "bundle-out", "--tenant", "acme",
+                "--source-profile", "SaaS", "--portal-url", "https://portal.example.test",
+                "--client-id", "exporter", "--artifact", "daily.etlsql", "--artifact", "sales.rptsql",
+                "--artifact-root", "scripts", "--orchestrator-package", "orchestrator.json",
+                "--orchestrator-alias", "prod", "--recipient-key", "tenant-public.asc",
+                "--signing-key", "operator-private.asc");
+
+            Assert.Equal("admin-tenant-export", ctx.Command);
+            Assert.Equal("acme", ctx.TenantExportIdentity);
+            Assert.Equal("SaaS", ctx.TenantSourceProfile);
+            Assert.Equal(["daily.etlsql", "sales.rptsql"], ctx.TenantArtifactFiles);
+            Assert.Equal("operator-private.asc", ctx.TenantSigningKey);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_TenantImportParsesMappingsAndSafetyControls()
+        {
+            var ctx = await ParseRunAsync(
+                "admin", "tenant", "import", "--bundle", "bundle-in",
+                "--portal-url", "https://portal.example.test",
+                "--operator-key", "operator-public.asc", "--require-signature",
+                "--binding", "SECRET:old=SECRET:new", "--recipient-key", "tenant-private.asc",
+                "--collision", "proceed", "--dry-run");
+
+            Assert.Equal("admin-tenant-import", ctx.Command);
+            Assert.Equal(["SECRET:old=SECRET:new"], ctx.TenantBindings);
+            Assert.Equal("proceed", ctx.TenantCollisionPolicy);
+            Assert.True(ctx.TenantDryRun);
+        }
+
         [Theory]
         [InlineData(false, false, false, 0)]
         [InlineData(false, false, true, 0)]

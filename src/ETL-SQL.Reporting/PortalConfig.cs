@@ -5,6 +5,11 @@ namespace ETL_SQL.Portal;
 
 public class PortalConfig
 {
+    /// <summary>
+    /// Server-owned tenant identity for a host-fixed Managed Dedicated deployment. It is emitted in
+    /// portability export plans so a CLI assertion cannot relabel another tenant's bundle.
+    /// </summary>
+    public string? TenantId { get; set; }
     public string DatabasePath { get; set; } = "./portal.db";
     public PortalDatabaseConfig Database { get; set; } = new();
     public string ScriptRootPath { get; set; } = "./Reports";
@@ -19,6 +24,8 @@ public class PortalConfig
     public FirstRunConfig FirstRun { get; set; } = new();
     public OrchestratorConfig Orchestrator { get; set; } = new();
     public DatasetConfig Dataset { get; set; } = new();
+    public KeyManagementConfig KeyManagement { get; set; } = new();
+    public SharedTenancyConfig SharedTenancy { get; set; } = new();
     public PortalSecurityConfig Security { get; set; } = new();
     public PortalRateLimitConfig RateLimit { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
@@ -33,6 +40,30 @@ public class PortalConfig
     public PortalDesignerLimitsConfig DesignerLimits { get; set; } = new();
     public PortalFleetConfig Fleet { get; set; } = new();
     public PortalDataQualityConfig DataQuality { get; set; } = new();
+}
+
+public class SharedTenancyConfig
+{
+    /// <summary>
+    /// Enables shared-store fail-closed behavior. Every scoped service must receive a tenant context
+    /// derived from a verified credential; missing context is an authorization failure.
+    /// </summary>
+    public bool Enabled { get; set; }
+}
+
+public class KeyManagementConfig
+{
+    public bool Enabled { get; set; }
+    public List<KeyManagementBindingConfig> Bindings { get; set; } = new();
+}
+
+public class KeyManagementBindingConfig
+{
+    public string Purpose { get; set; } = "";
+    public string Version { get; set; } = "v1";
+    public string KeyId { get; set; } = "";
+    public string EnvironmentVariable { get; set; } = "";
+    public bool IsCurrent { get; set; } = true;
 }
 
 /// <summary>

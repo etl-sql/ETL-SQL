@@ -90,7 +90,7 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
                     stmt.TempTableName,
                     stmt,
                     context,
-                    existing.AtRestDecryptionKey);
+                    existing.AtRestKeyVersion);
                 RegisterReportContext(stmt, context);
                 new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
                 return;
@@ -176,6 +176,9 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
             RowCount = rowCount
         };
 
+        using var datasetKey = await DatasetKeyResolution.ResolveAsync(context);
+        metadata.AtRestKeyVersion = datasetKey.Version;
+
         var allocatedNewRow = existing == null;
         var id = existing?.Id ?? await registry.RegisterOrUpdate(metadata);
         var parquetPath = registry.BuildDatasetFilePath(id, stmt.TempTableName);
@@ -187,7 +190,8 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
                 stmt.TempTableName,
                 fileTransaction.StagingPath,
                 stmt,
-                context);
+                context,
+                datasetKey.Password);
             fileTransaction.Commit();
 
             metadata.Id = id;
@@ -248,14 +252,15 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
 
     private async Task WriteToParquet(
         string tempTableName, string parquetPath,
-        CreateDatasetStatement stmt, IExecutionContext context)
+        CreateDatasetStatement stmt, IExecutionContext context,
+        string? resolvedAtRestKey)
     {
         var connAlias = $"__ds_write_{Guid.NewGuid():N}__";
 
         var connStmt = new CreateConnectionStatement(
             connAlias, "PARQUET",
             new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-            BuildParquetOptions(stmt, includeCompression: true, (context as Evaluator)?.DatasetAtRestKey));
+            BuildParquetOptions(stmt, includeCompression: true, resolvedAtRestKey));
 
         var insertStmt = new InsertStatement(
             new TableReference("FILE", null, null, connAlias),
@@ -273,8 +278,9 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
     private async Task LoadFromParquet(
         string parquetPath, string tempTableName,
         CreateDatasetStatement stmt, IExecutionContext context,
-        string? resolvedAtRestKey = null)
+        string? atRestKeyVersion = null)
     {
+        using var datasetKey = await DatasetKeyResolution.ResolveAsync(context, atRestKeyVersion);
         var connAlias = $"__ds_load_{Guid.NewGuid():N}__";
 
         var connStmt = new CreateConnectionStatement(
@@ -283,7 +289,7 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
             BuildParquetOptions(
                 stmt,
                 includeCompression: false,
-                resolvedAtRestKey ?? (context as Evaluator)?.DatasetAtRestKey));
+                datasetKey.Password));
 
         var selectStmt = new SelectStatement(
             new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },

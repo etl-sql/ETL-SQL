@@ -105,6 +105,31 @@ public sealed record TenantContext
     }
 
     /// <summary>
+    /// Treats a caller-supplied tenant id as an assertion against this server-derived context. It
+    /// cannot select or replace the context tenant.
+    /// </summary>
+    public TenantId RequireTenant(string? callerSuppliedTenantId)
+    {
+        if (!TenantId.TryParse(callerSuppliedTenantId, out var asserted))
+            throw new ArgumentException("A canonical tenant id assertion is required.", nameof(callerSuppliedTenantId));
+        if (asserted != Tenant)
+            throw new UnauthorizedAccessException(
+                $"Caller asserted tenant '{asserted.Value}', but server authority is scoped to " +
+                $"'{Tenant.Value}'. A caller-supplied tenant cannot widen scope.");
+        return Tenant;
+    }
+
+    /// <summary>Rechecks time-limited platform authority immediately before a mutation boundary.</summary>
+    public void RequireActivePlatformGrant(DateTimeOffset now)
+    {
+        if (Origin != TenantContextOrigin.PlatformAuthorization || Grant is null)
+            throw new UnauthorizedAccessException("This operation requires attributed platform authorization.");
+        if (Grant.IsExpiredAt(now))
+            throw new UnauthorizedAccessException(
+                $"Platform authorization for tenant '{Tenant.Value}' expired at {Grant.ExpiresUtc:O}.");
+    }
+
+    /// <summary>
     /// Derives a tenant-scoped key for a logical resource, so two tenants using the same name or the
     /// same numeric id never collide in a shared store, cache, queue, or path.
     /// </summary>

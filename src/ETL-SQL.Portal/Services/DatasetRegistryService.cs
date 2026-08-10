@@ -47,7 +47,8 @@ namespace ETL_SQL.Portal.Services
             }
 
             existing.ParquetFilePath = ResolveDatasetPathOrThrow(metadata.ParquetFilePath);
-            var portalKeyConfigured = !string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey);
+            var portalKeyConfigured = _config.KeyManagement.Enabled
+                || !string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey);
             var hasCacheFile = !string.IsNullOrWhiteSpace(metadata.ParquetFilePath);
             if (hasCacheFile)
             {
@@ -459,8 +460,9 @@ namespace ETL_SQL.Portal.Services
                 FolderId = d.FolderId,
                 CreatedBy = d.CreatedBy,
                 ParquetFilePath = parquetFilePath,
-                AtRestKeyVersion = d.AtRestKeyVersion,
-                AtRestDecryptionKey = ResolveAtRestKey(d.AtRestKeyVersion),
+                AtRestKeyVersion = d.AtRestKeyVersion
+                    ?? _config.Dataset.LegacyAtRestKeyVersion
+                    ?? (_config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKeyVersion),
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,
                 AccessLevel = d.AccessLevel,
@@ -475,24 +477,5 @@ namespace ETL_SQL.Portal.Services
             };
         }
 
-        private string? ResolveAtRestKey(string? version)
-        {
-            if (string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey))
-                return null;
-
-            var effectiveVersion = version
-                ?? _config.Dataset.LegacyAtRestKeyVersion
-                ?? _config.Dataset.AtRestKeyVersion;
-            if (effectiveVersion.Equals(
-                    _config.Dataset.AtRestKeyVersion,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return _config.Dataset.AtRestKey;
-            }
-
-            return _config.Dataset.PreviousAtRestKeys.TryGetValue(effectiveVersion, out var key)
-                ? key
-                : null;
-        }
     }
 }

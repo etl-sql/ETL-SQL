@@ -3,6 +3,7 @@ using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.TestSupport;
@@ -49,17 +50,32 @@ public sealed class SaasTenantOnboardingTests : IDisposable
             PromotionSource = sourceRoot,
             PromotionPackage = packagePath,
             SaasOutputRoot = outputRoot,
+            SaasOidcAuthority = "https://login.tenant.example/etl-sql",
+            SaasOidcClientId = "etl-sql-portal",
             SaasMaxConcurrentJobs = jobs,
             SaasMaxStorageMb = 2048,
             SaasMaxReportSessions = 8
         };
+        TenantContext Authorization(string tenant) => TenantContext.FromPlatformGrant(
+            PlatformAccessGrant.Issue(tenant, "provisioner@platform.test", "change-2026-0810",
+                "Managed Dedicated tenant onboarding", DateTimeOffset.UtcNow.AddHours(1),
+                DateTimeOffset.UtcNow), DateTimeOffset.UtcNow);
 
-        var alpha = await SaasTenantOnboardingService.OnboardAsync(Context("tenant-alpha", "Solo", 2));
-        var beta = await SaasTenantOnboardingService.OnboardAsync(Context("tenant-beta", "Enterprise", 5));
+        var alpha = await SaasTenantOnboardingService.OnboardAsync(
+            Context("tenant-alpha", "Solo", 2), Authorization("tenant-alpha"));
+        var beta = await SaasTenantOnboardingService.OnboardAsync(
+            Context("tenant-beta", "Enterprise", 5), Authorization("tenant-beta"));
 
         Assert.Equal(SaasTenantOnboardingService.ManifestSchema, alpha.SchemaVersion);
         Assert.False(alpha.Activated);
         Assert.False(alpha.SupportAccessEnabled);
+        Assert.Equal(TenantContextOrigin.PlatformAuthorization, alpha.TenantContextOrigin);
+        Assert.Equal("provisioner@platform.test", alpha.PlatformOperator);
+        Assert.Equal("change-2026-0810", alpha.AuthorizationReference);
+        Assert.Equal("OIDC", alpha.IdentityProvider!.Provider);
+        Assert.Equal("https://login.tenant.example/etl-sql", alpha.IdentityProvider.Authority);
+        Assert.Equal("Portal__Identity__Oidc__ClientSecret",
+            alpha.IdentityProvider.ClientSecretConfigurationKey);
         Assert.Equal("tenant/tenant-alpha", alpha.SecretNamespace);
         Assert.Equal("etlsql.tenant.tenant-beta", beta.TelemetryNamespace);
         Assert.Equal(2, alpha.MaxConcurrentJobs);
@@ -81,6 +97,10 @@ public sealed class SaasTenantOnboardingTests : IDisposable
         var betaConfig = await File.ReadAllTextAsync(Path.Combine(betaRoot, "config", "appsettings.tenant.json"));
         Assert.Contains("\"authorityMode\": \"HostFixed\"", alphaConfig);
         Assert.Contains("\"enabled\": false", alphaConfig);
+        Assert.Contains("\"provider\": \"OIDC\"", alphaConfig);
+        Assert.Contains("\"authority\": \"https://login.tenant.example/etl-sql\"", alphaConfig);
+        Assert.Contains("\"clientId\": \"etl-sql-portal\"", alphaConfig);
+        Assert.DoesNotContain("clientSecret", alphaConfig, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("tenant-beta", alphaConfig);
         Assert.DoesNotContain("tenant-alpha", betaConfig);
 
@@ -144,6 +164,18 @@ public sealed class SaasTenantOnboardingTests : IDisposable
         Assert.Throws<InvalidDataException>(() =>
             SaasTenantOnboardingService.ResolveTenantPath(alphaRoot, "../tenant-beta/cache/catalog/entry.json"));
 
+        await using (var receiptStream = File.OpenRead(Path.Combine(
+                         alphaRoot, "queues", "audit", "platform-tenant-onboarding.json")))
+        {
+            using var receipt = await JsonDocument.ParseAsync(receiptStream);
+            var root = receipt.RootElement;
+            Assert.Equal("PlatformOperator", root.GetProperty("actorType").GetString());
+            Assert.Equal("provisioner@platform.test", root.GetProperty("actorId").GetString());
+            Assert.Equal("tenant-alpha", root.GetProperty("tenantId").GetString());
+            Assert.Equal("change-2026-0810", root.GetProperty("authorizationReference").GetString());
+            Assert.False(root.GetProperty("tenantUserImpersonation").GetBoolean());
+        }
+
         var quotaRoot = Path.Combine(_root, "quota-proof");
         Directory.CreateDirectory(quotaRoot);
         await File.WriteAllBytesAsync(Path.Combine(quotaRoot, "payload.bin"), new byte[1025]);
@@ -151,7 +183,8 @@ public sealed class SaasTenantOnboardingTests : IDisposable
             SaasTenantOnboardingService.EnsureStorageWithinQuota(quotaRoot, 1024));
 
         await Assert.ThrowsAsync<IOException>(() =>
-            SaasTenantOnboardingService.OnboardAsync(Context("tenant-alpha", "Solo", 2)));
+            SaasTenantOnboardingService.OnboardAsync(
+                Context("tenant-alpha", "Solo", 2), Authorization("tenant-alpha")));
 
         await DeploymentCertificationEvidenceWriter.WriteAsync(
             "profile-saas-managed-dedicated",
@@ -181,7 +214,10 @@ public sealed class SaasTenantOnboardingTests : IDisposable
                     new { boundary = "cache and artifact paths", result = "Passed" },
                     new { boundary = "path traversal", result = "Passed" },
                     new { boundary = "storage quota", result = "Passed" },
-                    new { boundary = "duplicate tenant activation", result = "Passed" }
+                    new { boundary = "duplicate tenant activation", result = "Passed" },
+                    new { boundary = "server-derived tenant authorization", result = "Passed" },
+                    new { boundary = "platform and tenant identity separation", result = "Passed" },
+                    new { boundary = "tenant-owned OIDC configuration", result = "Passed" }
                 },
                 rollback = new { attempted = false, result = "NotApplicableToOnboardingProfileProof" },
                 claims = new
@@ -190,5 +226,72 @@ public sealed class SaasTenantOnboardingTests : IDisposable
                     shared = "NotCertified"
                 }
             });
+    }
+
+    [Fact]
+    public void SignedPolicyTenantIsAuthorityAndCliTenantIsOnlyAnAssertion()
+    {
+        var expires = DateTimeOffset.UtcNow.AddMinutes(30);
+        var document = new OrganizationPolicyDocument
+        {
+            SaasOnboarding = new SaasOnboardingAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "provisioner@platform.test",
+                AuthorizationReference = "change-42",
+                Reason = "create dedicated boundary",
+                ExpiresUtc = expires
+            }
+        };
+        var policy = new EffectiveEnterprisePolicy(
+            true, true, "Current", "42", "Live", DateTimeOffset.UtcNow.AddMinutes(-1),
+            expires, DateTimeOffset.UtcNow, document,
+            new Dictionary<string, string?>());
+
+        var context = SaasTenantOnboardingService.ResolveAuthorizedContext(
+            new CliContext { SaasTenantId = "tenant-alpha" }, policy, DateTimeOffset.UtcNow);
+
+        Assert.Equal("tenant-alpha", context.Tenant.Value);
+        Assert.Equal(TenantContextOrigin.PlatformAuthorization, context.Origin);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            SaasTenantOnboardingService.ResolveAuthorizedContext(
+                new CliContext { SaasTenantId = "tenant-beta" }, policy, DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void OnboardingFailsClosedWithoutCurrentSignedPolicyAuthority()
+    {
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            SaasTenantOnboardingService.ResolveAuthorizedContext(
+                new CliContext { SaasTenantId = "tenant-alpha" },
+                EffectiveEnterprisePolicy.Standalone, DateTimeOffset.UtcNow));
+    }
+
+    [Theory]
+    [InlineData("https://login.tenant.example", null)]
+    [InlineData(null, "portal-client")]
+    [InlineData("http://login.tenant.example", "portal-client")]
+    [InlineData("https://user:secret@login.tenant.example", "portal-client")]
+    public async Task TenantOwnedOidcConfigurationFailsClosedWhenIncompleteOrUnsafe(
+        string? authority, string? clientId)
+    {
+        var context = new CliContext
+        {
+            SaasTenantId = "tenant-alpha",
+            SaasSourceProfile = "Enterprise",
+            PromotionSource = Path.Combine(_root, "source-unused"),
+            SaasOutputRoot = Path.Combine(_root, "output-unused"),
+            SaasOidcAuthority = authority,
+            SaasOidcClientId = clientId
+        };
+        var tenantContext = TenantContext.FromPlatformGrant(
+            PlatformAccessGrant.Issue("tenant-alpha", "platform@example.test", "approval-1",
+                "tenant identity bootstrap", DateTimeOffset.UtcNow.AddMinutes(10), DateTimeOffset.UtcNow),
+            DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            SaasTenantOnboardingService.OnboardAsync(context, tenantContext));
+        Assert.False(Directory.Exists(Path.Combine(context.SaasOutputRoot!, "tenant-alpha")));
     }
 }

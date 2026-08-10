@@ -75,6 +75,29 @@ Direct Solo/Enterprise SaaS onboarding uses `admin promotion saas-onboard`; see
 [Deployment profile transitions](profile-transitions.md) for the isolated-boundary contract and
 activation checklist.
 
+For Managed Dedicated, the signed organization-policy authorization identifies the platform
+operator and tenant. The command can also bootstrap the tenant's single Enterprise OIDC provider:
+
+```powershell
+etl-sql admin promotion saas-onboard `
+  --tenant tenant-alpha `
+  --source-profile Enterprise `
+  --source C:\work\tenant-alpha `
+  --output-root D:\etl-sql-tenants `
+  --oidc-authority https://login.customer.example/etl-sql `
+  --oidc-client-id etl-sql-portal
+```
+
+`--tenant` is only an assertion against the signed policy. The OIDC options must be supplied
+together, and the authority must be HTTPS without credentials, query, or fragment. Onboarding never
+accepts or writes the OIDC client secret; inject it into that tenant's Portal process through
+`Portal__Identity__Oidc__ClientSecret` before activation.
+
+The staged boundary includes `queues/audit/platform-tenant-onboarding.json`. This receipt records
+the platform actor, approval reference, reason, grant expiry, tenant, and time separately from the
+tenant Portal's user audit. Its `tenantUserImpersonation` value is always false: platform onboarding
+does not mint a tenant session or Portal role.
+
 Before replaying that bootstrap, an administrator submits it and the target binding map to
 `POST /api/admin/configuration/validate`. The endpoint applies bindings only to its in-memory copy,
 uses reference-shaped sentinels for unresolved password placeholders, parses the real bootstrap,

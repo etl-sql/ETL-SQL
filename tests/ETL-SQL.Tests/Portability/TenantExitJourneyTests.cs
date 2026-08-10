@@ -35,7 +35,8 @@ public sealed class TenantExitJourneyTests : IDisposable
                 "plan-exit-1",
                 ["sales-etl-credential"],
                 [],
-                [new PortalContentManifestItem("dataset", "dataset:sales-snapshot", "warehouse", "transfer")]));
+                [new PortalContentManifestItem("dataset", "dataset:sales-snapshot", "warehouse", "transfer")],
+                "tenant-acme"));
 
         public Task<string> GetScriptAsync(string acknowledgedPlanHash, CancellationToken ct) =>
             Task.FromResult("CREATE FOLDER 'Sales';\nCREATE CONNECTION sales AS MSSQL('SHARED:sales_prod');");

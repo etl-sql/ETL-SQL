@@ -13,7 +13,12 @@ namespace ETL_SQL.Portal.Services;
 public sealed record OidcAuthorizationRequest(string AuthorizationUrl, string State, string Nonce, string CodeVerifier);
 
 /// <summary>The validated identity extracted from a provider's id_token.</summary>
-public sealed record OidcIdentity(string Subject, string Username, string? Email, IReadOnlyList<string> Groups);
+public sealed record OidcIdentity(
+    string Subject,
+    string Username,
+    string? Email,
+    IReadOnlyList<string> Groups,
+    string? Issuer = null);
 
 /// <summary>Raised when a federated authentication step fails (bad code, invalid/forged token,
 /// nonce mismatch). The message is operator/log-facing; callers surface a generic failure to users.</summary>

@@ -11,6 +11,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -445,6 +446,53 @@ namespace ETL_SQL.Tests.Reporting
                 consumer.DatasetRegistry = registry;
                 consumer.DatasetCallerContext = "IsAdmin=true";
                 consumer.DatasetAtRestKey = key;
+                await consumer.Evaluate(Parse("USE DATASET &enc; SELECT COUNT(*) AS n, SUM(v) AS s FROM &enc;"));
+
+                var row = consumer.LastResult!.Rows[0];
+                Assert.Equal(2m, Convert.ToDecimal(row["n"]));
+                Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task UseDataset_KeyProvider_RoundTripsAndPersistsOnlyVersion()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_provider_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                var provider = new ResolvedKeyMaterialProvider("test-vault",
+                [
+                    (new KeyMaterialDescriptor("test-vault", "dataset-key", "tenant-alpha",
+                        KeyPurpose.Dataset, "v7"), Enumerable.Repeat((byte)61, 32).ToArray())
+                ]);
+
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                producer.DatasetKeyMaterialProvider = provider;
+                producer.DatasetKeyScope = "tenant-alpha";
+                await producer.Evaluate(Parse(@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    INSERT INTO #seed VALUES (20);
+                    CREATE DATASET &enc AS (SELECT v FROM #seed);"));
+
+                var metadata = await registry.Lookup("&enc", "IsAdmin=true");
+                Assert.NotNull(metadata);
+                Assert.Equal("v7", metadata.AtRestKeyVersion);
+                Assert.Null(metadata.AtRestDecryptionKey);
+
+                var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                consumer.DatasetRegistry = registry;
+                consumer.DatasetCallerContext = "IsAdmin=true";
+                consumer.DatasetKeyMaterialProvider = provider;
+                consumer.DatasetKeyScope = "tenant-alpha";
                 await consumer.Evaluate(Parse("USE DATASET &enc; SELECT COUNT(*) AS n, SUM(v) AS s FROM &enc;"));
 
                 var row = consumer.LastResult!.Rows[0];

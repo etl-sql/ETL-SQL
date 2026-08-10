@@ -92,7 +92,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             timeout,
             callerContext,
             reportId,
-            _config.Dataset.AtRestKey);
+            _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey);
         return new Entry(svc, scriptPath, callerContext);
     }
 

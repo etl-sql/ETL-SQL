@@ -32,7 +32,6 @@ public class RefreshDatasetStatementHandler(ILogger logger) : IStatementHandler
                 null, stmt.Line, stmt.Column);
 
         var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-        var callerAtRestKey = (context as Evaluator)?.DatasetAtRestKey;
         var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
         if (existing == null)
             throw new ExecutionException(
@@ -83,7 +82,8 @@ public class RefreshDatasetStatementHandler(ILogger logger) : IStatementHandler
         {
             ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL)
         };
-        DatasetAtRestOptions.Apply(encOptions, callerAtRestKey);
+        using var datasetKey = await DatasetKeyResolution.ResolveAsync(context);
+        DatasetAtRestOptions.Apply(encOptions, datasetKey.Password);
 
         var connStmt = new CreateConnectionStatement(
             connAlias, "PARQUET",
@@ -105,6 +105,7 @@ public class RefreshDatasetStatementHandler(ILogger logger) : IStatementHandler
 
         // ── 3. Update registry ────────────────────────────────────────────
         existing.ParquetFilePath = parquetPath;
+        existing.AtRestKeyVersion = datasetKey.Version;
         existing.LastRefresh = DateTime.UtcNow;
         existing.RowCount = rowCount;
         await registry.RegisterOrUpdate(existing);

@@ -47,6 +47,19 @@ public sealed class SupportBundleTests
     }
 
     [Fact]
+    public async Task DedicatedSupportBundleUsesHostFixedTenantContext()
+    {
+        using var factory = new TenantFixedFactory();
+        using var client = factory.CreateClient();
+        var review = await ReviewAsync(client, await GetAdminTokenAsync(client));
+        var deployment = review["sections"]!.AsArray()
+            .Single(section => section!["key"]!.GetValue<string>() == "deployment")!["payload"]!.AsObject();
+
+        Assert.Equal("tenant-alpha", deployment["tenantId"]!.GetValue<string>());
+        Assert.Equal("HostFixed", deployment["tenantContextOrigin"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task TheBundleCarriesCountsRatherThanContent()
     {
         using var factory = new PortalWebFactory();
@@ -145,6 +158,12 @@ public sealed class SupportBundleTests
             config.Studio.Mode = StudioDeploymentMode.CatalogOnly;
             config.Audit.TransportEndpoint = "https://collector.example.invalid/ingest";
         }
+    }
+
+    private sealed class TenantFixedFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config) =>
+            config.TenantId = "tenant-alpha";
     }
 
     [Fact]

@@ -211,6 +211,33 @@ parallelism, file/recursion operations, spill volume, SMTP sends, and maximum ma
 }
 ```
 
+### Managed Dedicated tenant onboarding authorization
+
+`etl-sql admin promotion saas-onboard` is a deployment-plane operation and does not trust `--tenant`
+as authority. An enrolled provisioning host must receive an active signed policy containing one
+short-lived onboarding authorization:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "saasOnboarding": {
+    "enabled": true,
+    "tenantId": "tenant-alpha",
+    "operatorPrincipal": "provisioner@platform.example",
+    "authorizationReference": "change-2026-0810",
+    "reason": "Create the approved Managed Dedicated boundary",
+    "expiresUtc": "2026-08-11T00:00:00Z"
+  }
+}
+```
+
+Every field is required when enabled. The signed policy supplies the tenant and attributed platform
+grant; `--tenant tenant-alpha` merely asserts that the runbook is acting on the intended grant.
+Missing, expired, malformed, or mismatched authority fails before any tenant directory is staged.
+The grant is checked again immediately before the staging directory becomes the final tenant root.
+Disable or remove the section after onboarding so a completed change does not leave reusable tenant
+provisioning authority.
+
 Organization policy can also make catalog metadata a hard report-publishing boundary. Configure the
 Portal authority scope explicitly on every node with `Portal:PolicyAuthority:Tenant` and
 `Portal:PolicyAuthority:Environment` (both default to `default`). Required tags support `REPORT`,

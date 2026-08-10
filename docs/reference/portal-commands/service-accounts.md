@@ -30,6 +30,7 @@ resource permissions, while the account's stored role cap and explicit scopes ca
 | `reports.execute` | Report execution and dataset refresh operations |
 | `orchestrator.execute` | Orchestrator API operations, still subject to the required portal role |
 | `admin.identity` | Identity administration only — users, groups, group membership, sessions, service accounts under constrained delegation, and read-only introspection of one user's effective access |
+| `admin.portability` | Read-only access to the reviewed configuration-export plan and its hash-acknowledged download |
 
 Scopes do not grant a role or resource permission. A request must pass the scope check and every
 existing authorization check.
@@ -37,10 +38,10 @@ existing authorization check.
 ### `admin.identity`
 
 Exists so a provisioning runbook or CI pipeline can manage users and groups without a browser. It is
-deliberately not a blanket `admin.*`: backup and restore, configuration export, environment
-promotion, support bundles, audit collection and export, operational metrics, branding and
-orchestrator settings, service restart and shutdown, and dataset at-rest key rotation all remain
-unreachable by any token.
+deliberately not a blanket `admin.*`: backup and restore, configuration export unless separately
+granted by `admin.portability`, environment promotion, support bundles, audit collection and export,
+operational metrics, branding and orchestrator settings, service restart and shutdown, and dataset
+at-rest key rotation all remain unreachable.
 
 The reachable routes are an **explicit allowlist**, not a prefix rule, so an administration endpoint
 added later is unreachable until someone opts it in on purpose:
@@ -65,6 +66,16 @@ manage only accounts under its own human owner, and the target's scopes, roles, 
 capabilities must all be subsets of the caller's current effective claims. The same rule applies
 before secret rotation, preventing a narrow provisioning account from rotating a stronger sibling
 and stealing its authority. Human tenant administrators retain the full lifecycle.
+
+### `admin.portability`
+
+This scope permits only `GET /api/admin/configuration/export/plan` and the acknowledged
+`GET /api/admin/configuration/export?acknowledgedPlan=...` download used by
+`etl-sql admin tenant export`.
+The existing `Admin` role and tenant authority checks still apply. Because an `Admin` role on a
+service account also requires `admin.identity`, an export account currently holds both narrow
+scopes; neither scope grants the other route family. The allowlist excludes configuration import,
+backup, audit, operational, and every other administration endpoint.
 
 ## Provisioning
 

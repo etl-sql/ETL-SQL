@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Observability;
+using ETL_SQL.Core.Security;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -13,13 +14,35 @@ namespace ETL_SQL.Portal.Services;
 public class DatasetAtRestKeyValidationService(
     PortalConfig config,
     IHostApplicationLifetime lifetime,
-    ILogger<DatasetAtRestKeyValidationService> log) : IHostedService
+    ILogger<DatasetAtRestKeyValidationService> log,
+    IKeyMaterialProvider? keyProvider = null) : IHostedService
 {
-    public Task StartAsync(CancellationToken ct)
+    public async Task StartAsync(CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var activity = BackgroundServiceObservability.StartRun(
             "portal", "dataset-key-validation", "startup_validation");
+        if (config.KeyManagement.Enabled)
+        {
+            if (keyProvider is null)
+            {
+                Console.Error.WriteLine("FATAL: Portal key management is enabled but no key provider is registered.");
+                lifetime.StopApplication();
+                return;
+            }
+            var scope = string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId;
+            var providerResult = await DatasetAtRestKeyValidator.ValidateProviderAsync(keyProvider, scope, ct);
+            if (!providerResult.IsValid)
+            {
+                Console.Error.WriteLine("FATAL: " + string.Join(" ", providerResult.Errors));
+                lifetime.StopApplication();
+            }
+            BackgroundServiceObservability.CompleteRun(
+                activity, "portal", "dataset-key-validation", "startup_validation",
+                providerResult.IsValid ? "success" : "failure", sw.ElapsedMilliseconds);
+            return;
+        }
+
         var result = DatasetAtRestKeyValidator.Validate(config.Dataset);
         var status = result.Severity switch
         {
@@ -47,7 +70,6 @@ public class DatasetAtRestKeyValidationService(
             "startup_validation",
             status,
             sw.ElapsedMilliseconds);
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;

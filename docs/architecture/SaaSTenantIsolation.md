@@ -153,14 +153,171 @@ Every shared entry point resolves:
 The resulting authority is passed forward as an internal immutable context. Downstream services
 validate it independently and compare it with their own resource ownership records.
 
-### 6.2 Collision Safety
+Managed Dedicated adoption is implemented on every shipped surface that can name or disclose a
+tenant across deployment boundaries:
+
+- `admin promotion saas-onboard` derives a time-limited `PlatformAccessGrant` from the current
+  signed organization policy. `--tenant` is only an assertion against that server authority; a
+  mismatch, missing policy, or expired authorization fails before staging begins, and authority is
+  rechecked before the final directory move.
+- A Managed Dedicated Portal records its host-fixed identity in `Portal:TenantId`. Configuration
+  export plans include that identity in the acknowledged plan hash, and SaaS bundle composition
+  refuses to use a caller-provided identity when the Portal omits or disagrees with it.
+- The Portal support bundle derives its tenant label from the same host-fixed configuration and
+  records `HostFixed` as the context origin. It has no caller tenant selector. Fleet visibility is
+  derived from server configuration and remains read-only.
+
+Current evidence is
+[`SaasTenantOnboardingTests`](../../tests/ETL-SQL.Tests/Orchestration/SaasTenantOnboardingTests.cs),
+[`TenantBundleComposerTests`](../../tests/ETL-SQL.Tests/Portability/TenantBundleComposerTests.cs),
+[`FleetWorkspaceAndExportPlanTests`](../../tests/ETL-SQL.Portal.Tests/FleetWorkspaceAndExportPlanTests.cs),
+and [`SupportBundleTests`](../../tests/ETL-SQL.Portal.Tests/SupportBundleTests.cs). This certifies the
+Managed Dedicated cell only; Shared remains uncertified.
+
+### 6.2 Managed Dedicated identity separation
+
+Managed Dedicated has two deliberately non-interchangeable authority paths:
+
+- A tenant `Admin` is a Portal user inside the host-fixed tenant boundary. Tenant administrators
+  manage their own users, provider-backed groups, mappings, and narrowly delegated
+  `admin.identity` service accounts. The service-account route allowlist excludes all unrelated
+  administration and refuses Admin creation or promotion.
+- A platform operator is represented only by a short-lived attributed `PlatformAccessGrant`
+  derived from signed organization policy. Onboarding writes a separate `PlatformOperator` audit
+  receipt with its approval and expiry. It does not issue a Portal JWT, create a Portal user, or
+  receive the tenant `Admin` role, so implicit tenant-user impersonation is not expressible.
+
+Onboarding accepts one tenant-owned OIDC authority/client registration and emits the existing
+Enterprise `Portal:Identity:Oidc` contract into the tenant configuration. The authority is restricted
+to a credential-free HTTPS issuer. Client secrets never enter the command, manifest, audit receipt,
+or generated file; the tenant deployment supplies
+`Portal__Identity__Oidc__ClientSecret` out of band before activation.
+
+Evidence is [`SaasTenantOnboardingTests`](../../tests/ETL-SQL.Tests/Orchestration/SaasTenantOnboardingTests.cs),
+[`AdminIdentityScopeIntegrationTests`](../../tests/ETL-SQL.Portal.Tests/AdminIdentityScopeIntegrationTests.cs),
+[`OidcAuthTests`](../../tests/ETL-SQL.Portal.Tests/OidcAuthTests.cs), and
+[`TenantContextTests`](../../tests/ETL-SQL.Tests/Multitenancy/TenantContextTests.cs). This certifies
+Managed Dedicated only; shared issuer discovery and shared identity stores remain `NotCertified`.
+
+### 6.2.1 Managed Dedicated policy and key authority
+
+When `Portal:TenantId` is configured, the Portal registers a host-fixed `TenantContext` with the
+policy authority. The service itself checks every publish, activation, rollback, canary, list, and
+retrieval operation against that context; the controller check is defense in depth, not the tenant
+boundary. Policy-machine registration, enumeration, revocation, and envelope distribution apply the
+same host tenant predicate. A request naming another tenant is refused, including when a stale
+foreign machine row already exists in the Dedicated database.
+
+Tenant administrators may author their tenant policy. A principal carrying platform authority
+scope remains a platform operator and is explicitly refused at policy mutation endpoints; platform
+scope does not imply tenant `Admin` authority or impersonation.
+
+Key-management bindings are constructed under the same host-fixed tenant scope. Provisioning may
+validate several Dedicated namespaces with
+`KeyMaterialContractValidator.ValidateTenantNamespacesAsync`; it resolves every purpose and rejects
+identical material reused across tenant or purpose boundaries. Runtime execution receives the key
+provider through host dependency injection and carries neither provider bindings nor resolved
+material in its job artifact. Portability exports retain non-secret binding requirements only.
+
+Evidence is [`PolicyAuthorityServiceTests`](../../tests/ETL-SQL.Tests/Core/PolicyAuthorityServiceTests.cs),
+[`PolicyAuthorityApiTests`](../../tests/ETL-SQL.Portal.Tests/PolicyAuthorityApiTests.cs),
+[`PolicyDistributionApiTests`](../../tests/ETL-SQL.Portal.Tests/PolicyDistributionApiTests.cs),
+[`DedicatedPolicyAuthorityGuardTests`](../../tests/ETL-SQL.Portal.Tests/DedicatedPolicyAuthorityGuardTests.cs),
+[`KeyMaterialContractTests`](../../tests/ETL-SQL.Tests/Security/KeyMaterialContractTests.cs), and
+[`TenantBundleComposerTests`](../../tests/ETL-SQL.Tests/Portability/TenantBundleComposerTests.cs).
+This certifies Managed Dedicated only; shared policy stores and shared provider namespaces remain
+`NotCertified`.
+
+### 6.2.2 Shared request credential boundary
+
+Shared Portal requests now establish tenant scope after the Portal JWT has passed signature,
+issuer, audience, and lifetime validation. The token carries exactly one canonical `tenant_id`
+claim minted from an existing `TenantContext`; middleware converts that claim into the scoped
+`TenantContext` consumed by stores and policy services below controller code. Missing, duplicate,
+or malformed tenant claims return `401` before controller activation. Dedicated tokens carrying a
+tenant claim must match the configured host tenant.
+
+Headers, query parameters, route values, aliases, and issuer strings do not participate in this
+binding. They remain caller assertions evaluated inside the resulting tenant scope. Platform access
+grants cannot mint tenant-user or tenant-service JWTs, preserving the non-impersonation boundary.
+[`SharedTenantCredentialBindingTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantCredentialBindingTests.cs)
+cover the claim and impersonation contract, while
+[`SharedTenantHttpBoundaryTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantHttpBoundaryTests.cs)
+prove an authenticated request cannot replace its signed tenant with spoofed header, query, or
+issuer values and cannot enumerate another tenant's equal shared-store surface.
+
+This is the internal shared-credential boundary, not multi-IdP certification. Shared identity
+also has the first authority-registry boundary: `SharedIdentityAuthorities` stores normalized Portal
+hosts, login domains, issuers, client identifiers, and `SECRET:` credential references with globally
+unique host/domain routing and tenant-scoped administration. Anonymous resolution accepts an
+`HttpRequest` and performs one exact enabled-host lookup; it exposes no tenant, issuer, authority-id,
+or login-domain selector. Returned bindings expose only whether a client secret is configured, not
+the `SECRET:` reference. Only after OIDC validation does `BindValidatedIssuer` compare the token's
+validated issuer with that server-routed binding and create a verified tenant context. Prefix hosts,
+disabled rows, cross-tenant authority-id updates, raw client secrets, and issuer mismatches fail.
+
+`SharedOidcFlowStateService` carries the routed choice across the browser redirect in a Data
+Protection envelope. The ten-minute envelope pins authority id and version, normalized Portal host,
+exact HTTPS redirect URI, state, nonce, and PKCE verifier. Callback restoration has no
+`HttpRequest` argument, so a callback Host header or tenant/issuer query cannot select a different
+authority. State is compared in constant time, and expiration, tampering, authority rotation, or
+authority disablement invalidates the outstanding flow.
+
+The shared identity persistence foundation adds `TenantId` to Portal users, groups, user-group
+memberships, service accounts, and refresh tokens, plus the normalized external issuer on federated
+users. Username, immutable issuer/subject, group-name, and service-account-name uniqueness is now
+tenant qualified in matching SQLite and PostgreSQL migrations; existing rows backfill to the
+explicit `portal-host` legacy partition. `SharedIdentityPartitionStore` requires a
+verified-credential context and applies it to subject/name lookup, provider-group enumeration,
+membership creation, and refresh-session attachment. Foreign numeric user or group identifiers are
+refused rather than looked up outside that predicate.
+
+The Shared authorization-code controller now consumes these boundaries end to end. The anonymous
+login endpoint resolves only the exact routed Portal host, builds discovery and authorization from
+that binding, and protects the authority version with the state/nonce/PKCE flow. The callback
+restores that same binding, resolves an optional client credential from the selected tenant's
+`SECRET:` partition, validates signature/issuer/audience/lifetime/nonce, compares the validated
+issuer to the routed authority, and only then establishes the verified request tenant. User lookup
+and creation, mutable profile updates, OIDC-group reconciliation, JWT issuance, and refresh-token
+creation then use that tenant partition. The anonymous provider-advertisement endpoint applies the
+same exact-host lookup, so an unregistered shared host does not advertise or start SSO.
+
+Evidence is
+[`SharedIdentityAuthorityServiceTests`](../../tests/ETL-SQL.Portal.Tests/SharedIdentityAuthorityServiceTests.cs)
+and
+[`SharedOidcFlowStateServiceTests`](../../tests/ETL-SQL.Portal.Tests/SharedOidcFlowStateServiceTests.cs),
+with collision and foreign-id persistence evidence in
+[`SharedIdentityPartitionStoreTests`](../../tests/ETL-SQL.Portal.Tests/SharedIdentityPartitionStoreTests.cs),
+and routed HTTP callback evidence in
+[`SharedOidcAuthTests`](../../tests/ETL-SQL.Portal.Tests/SharedOidcAuthTests.cs). Dynamic discovery
+and routed client/issuer selection are pinned by
+[`SharedOidcAuthenticationServiceTests`](../../tests/ETL-SQL.Portal.Tests/SharedOidcAuthenticationServiceTests.cs).
+Shared identity remains `NotCertified` because delegated-administration controllers still use legacy
+global lookups, and refresh/service token validation does not yet reapply the persisted tenant
+binding.
+
+### 6.3 Collision Safety
 
 Shared stores must behave safely when two tenants use the same display name, alias, numeric ID,
 resource name, report name, job name, or object hash. Tenant scope is part of every uniqueness,
 foreign-key, lookup, cache, queue, lease, idempotency, and storage-key decision. Globally unique IDs
 do not replace tenant predicates; they only reduce accidental collision.
 
-### 6.3 Short-Lived Capabilities
+The first shared governance-store slice applies this rule to organization policy versions,
+Portal-managed secrets, shared-connection definitions, ACL bindings, and usage records. Secret names
+and connection aliases use composite `(TenantId, Name/Alias)` uniqueness in both SQLite and
+PostgreSQL. Service reads, writes, lifecycle operations, exports, ACL changes, and usage updates all
+carry the server-derived tenant predicate. `Portal:SharedTenancy:Enabled=true` makes those services
+fail during construction unless a verified `TenantContext` has been injected; falling back to the
+legacy `portal-host` partition is not allowed in Shared mode.
+
+[`SharedTenantStoreIsolationTests`](../../tests/ETL-SQL.Portal.Tests/SharedTenantStoreIsolationTests.cs)
+prove equal policy versions, secret names, connection aliases, and differing key versions coexist
+without cross-tenant reads or deletes. This is store-layer evidence only. Shared runtime
+certification still requires the verified multi-issuer identity work to inject the context and the
+remaining dataset, artifact, and checkpoint key consumers to stop using host-fixed scope.
+
+### 6.4 Short-Lived Capabilities
 
 The control plane issues attempt- or operation-specific capabilities containing only the necessary
 tenant, actor/service account, run/attempt, resource, operation class, limits, policy/binding

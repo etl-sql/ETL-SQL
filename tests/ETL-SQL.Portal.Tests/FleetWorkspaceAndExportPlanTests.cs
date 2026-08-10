@@ -95,6 +95,20 @@ public sealed class FleetWorkspaceAndExportPlanTests
     }
 
     [Fact]
+    public async Task ManagedDedicatedExportPlanCarriesHostFixedTenantIdentity()
+    {
+        using var factory = new TenantFixedFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        var response = await AuthGet(client, adminToken, "/api/admin/configuration/export/plan");
+        var plan = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("tenant-alpha", plan!["tenantExportIdentity"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ExportRefusesAStalePlanAcknowledgement()
     {
         using var factory = new PortalWebFactory();
@@ -197,6 +211,12 @@ public sealed class FleetWorkspaceAndExportPlanTests
                 }
             ];
         }
+    }
+
+    private sealed class TenantFixedFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config) =>
+            config.TenantId = "tenant-alpha";
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

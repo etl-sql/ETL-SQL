@@ -1,5 +1,6 @@
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
@@ -18,6 +19,55 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public async Task ProviderBackedRotationUsesDatasetPurposeAndPreviousVersion()
+    {
+        var oldBytes = Enumerable.Repeat((byte)31, 32).ToArray();
+        var newBytes = Enumerable.Repeat((byte)32, 32).ToArray();
+        var oldKey = Convert.ToBase64String(oldBytes);
+        var newKey = Convert.ToBase64String(newBytes);
+        var path = Path.Combine(_root, "provider_1.parquet");
+        WriteEncrypted(path, oldKey, "provider-dataset-payload");
+        var config = new PortalConfig
+        {
+            TenantId = "tenant-alpha",
+            DatasetRootPath = _root,
+            Dataset = new DatasetConfig()
+        };
+        var previous = new KeyMaterialDescriptor(
+            "vault", "dataset-v1", "tenant-alpha", KeyPurpose.Dataset, "v1", IsCurrent: false);
+        var current = new KeyMaterialDescriptor(
+            "vault", "dataset-v2", "tenant-alpha", KeyPurpose.Dataset, "v2");
+        var provider = new ResolvedKeyMaterialProvider("vault",
+            [(previous, oldBytes), (current, newBytes)]);
+
+        await using var db = NewDb();
+        db.Datasets.Add(new Dataset
+        {
+            Name = "#provider",
+            FolderPath = "/",
+            ParquetFilePath = path,
+            AtRestKeyVersion = "v1",
+            EncryptionMode = DatasetEncryptionMode.Password
+        });
+        await db.SaveChangesAsync();
+
+        var result = await new DatasetAtRestKeyRotationService(
+            db, config, NullLogger<DatasetAtRestKeyRotationService>.Instance, provider).RotateAsync();
+
+        Assert.Equal(1, result.Rotated);
+        Assert.Equal("v2", result.TargetVersion);
+        Assert.Equal("provider-dataset-payload", ReadEncrypted(path, newKey));
+        Assert.ThrowsAny<Exception>(() => ReadEncrypted(path, oldKey));
+
+        var artifactOnly = new ResolvedKeyMaterialProvider("vault",
+        [
+            (current with { Purpose = KeyPurpose.Artifact }, newBytes)
+        ]);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => new DatasetAtRestKeyRotationService(
+            db, config, NullLogger<DatasetAtRestKeyRotationService>.Instance, artifactOnly).RotateAsync());
     }
 
     [Fact]

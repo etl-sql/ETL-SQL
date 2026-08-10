@@ -28,7 +28,7 @@ public class DatasetMetadata
     public int? CreatedBy { get; set; }
     public string ParquetFilePath { get; set; } = "";
     public string? AtRestKeyVersion { get; set; }
-    /// <summary>Resolved in-memory decryption key; registry implementations must never persist it.</summary>
+    /// <summary>Legacy in-memory key path. Managed registries must leave this null.</summary>
     public string? AtRestDecryptionKey { get; set; }
     public int? OwningReportId { get; set; }
     public string SourceQuery { get; set; } = "";

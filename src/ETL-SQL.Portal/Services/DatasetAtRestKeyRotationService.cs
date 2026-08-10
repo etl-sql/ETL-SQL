@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,17 +14,29 @@ public sealed record DatasetKeyRotationResult(
 public sealed class DatasetAtRestKeyRotationService(
     PortalDbContext db,
     PortalConfig config,
-    ILogger<DatasetAtRestKeyRotationService> log)
+    ILogger<DatasetAtRestKeyRotationService> log,
+    IKeyMaterialProvider? keyProvider = null)
 {
     public async Task<DatasetKeyRotationResult> RotateAsync(CancellationToken cancellationToken = default)
     {
-        var validation = DatasetAtRestKeyValidator.Validate(config.Dataset);
-        if (validation.Severity == DatasetAtRestKeyValidator.Severity.Fatal)
-            throw new InvalidOperationException(validation.Message);
-
-        var targetKey = config.Dataset.AtRestKey
-            ?? throw new InvalidOperationException("A portal at-rest key is required for rotation.");
-        var targetVersion = config.Dataset.AtRestKeyVersion;
+        string targetKey;
+        string targetVersion;
+        if (keyProvider is null)
+        {
+            var validation = DatasetAtRestKeyValidator.Validate(config.Dataset);
+            if (validation.Severity == DatasetAtRestKeyValidator.Severity.Fatal)
+                throw new InvalidOperationException(validation.Message);
+            targetKey = config.Dataset.AtRestKey
+                ?? throw new InvalidOperationException("A portal at-rest key is required for rotation.");
+            targetVersion = config.Dataset.AtRestKeyVersion;
+        }
+        else
+        {
+            using var target = await keyProvider.ResolveAsync(
+                new KeyMaterialRequest(KeyScope, KeyPurpose.Dataset), cancellationToken);
+            targetKey = Convert.ToBase64String(target.Bytes.Span);
+            targetVersion = target.Descriptor.Version;
+        }
         var datasets = await db.Datasets
             .Where(d => d.ParquetFilePath != "")
             .OrderBy(d => d.Id)
@@ -52,7 +65,7 @@ public sealed class DatasetAtRestKeyRotationService(
 
             try
             {
-                var sourceKey = ResolveKey(sourceVersion);
+                var sourceKey = await ResolveKeyAsync(sourceVersion, cancellationToken);
                 await RotateOneAsync(dataset, sourceKey, targetKey, targetVersion, cancellationToken);
                 rotated++;
             }
@@ -75,16 +88,28 @@ public sealed class DatasetAtRestKeyRotationService(
     private string ResolveSourceVersion(Dataset dataset) =>
         dataset.AtRestKeyVersion
         ?? config.Dataset.LegacyAtRestKeyVersion
-        ?? config.Dataset.AtRestKeyVersion;
+        ?? (keyProvider is null ? config.Dataset.AtRestKeyVersion : null)
+        ?? throw new InvalidOperationException(
+            "An unstamped dataset requires LegacyAtRestKeyVersion before provider-backed rotation.");
 
-    private string ResolveKey(string version)
+    private async Task<string> ResolveKeyAsync(string version, CancellationToken cancellationToken)
     {
+        if (keyProvider is not null)
+        {
+            using var lease = await keyProvider.ResolveAsync(
+                new KeyMaterialRequest(KeyScope, KeyPurpose.Dataset, version), cancellationToken);
+            return Convert.ToBase64String(lease.Bytes.Span);
+        }
         if (version.Equals(config.Dataset.AtRestKeyVersion, StringComparison.OrdinalIgnoreCase))
             return config.Dataset.AtRestKey!;
         if (config.Dataset.PreviousAtRestKeys.TryGetValue(version, out var key))
             return key;
         throw new InvalidOperationException($"No at-rest key is configured for dataset key version '{version}'.");
     }
+
+    private string KeyScope => string.IsNullOrWhiteSpace(config.TenantId)
+        ? "portal-host"
+        : config.TenantId;
 
     private async Task RotateOneAsync(
         Dataset dataset,

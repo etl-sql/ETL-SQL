@@ -127,6 +127,36 @@ ETL_SQL.Orchestrator.Scheduling.NodeHeartbeatServiceCollectionExtensions.AddNode
 // A fatal startup error is raised via IHostApplicationLifetime if the secret is missing/short.
 
 builder.Services.AddSingleton(portalConfig);
+builder.Services.AddScoped<ETL_SQL.Portal.Services.RequestTenantContextAccessor>();
+if (portalConfig.SharedTenancy.Enabled || !string.IsNullOrWhiteSpace(portalConfig.TenantId))
+{
+    builder.Services.AddScoped<ETL_SQL.Core.Multitenancy.TenantContext>(sp =>
+        sp.GetRequiredService<ETL_SQL.Portal.Services.RequestTenantContextAccessor>().RequireCurrent());
+}
+builder.Services.AddSingleton(new ETL_SQL.Core.Security.KeyMaterialHostScope(
+    string.IsNullOrWhiteSpace(portalConfig.TenantId) ? "portal-host" : portalConfig.TenantId));
+if (portalConfig.KeyManagement.Enabled)
+{
+    var keyScope = string.IsNullOrWhiteSpace(portalConfig.TenantId)
+        ? "portal-host"
+        : portalConfig.TenantId;
+    var bindings = portalConfig.KeyManagement.Bindings.Select(binding =>
+    {
+        if (!Enum.TryParse<ETL_SQL.Core.Security.KeyPurpose>(binding.Purpose, true, out var purpose))
+            throw new InvalidOperationException($"Unknown Portal:KeyManagement purpose '{binding.Purpose}'.");
+        return new ETL_SQL.Core.Security.EnvironmentKeyMaterialBinding(
+            binding.EnvironmentVariable,
+            new ETL_SQL.Core.Security.KeyMaterialDescriptor(
+                "environment",
+                binding.KeyId,
+                keyScope,
+                purpose,
+                binding.Version,
+                binding.IsCurrent));
+    }).ToArray();
+    builder.Services.AddSingleton<ETL_SQL.Core.Security.IKeyMaterialProvider>(
+        new ETL_SQL.Core.Security.EnvironmentKeyMaterialProvider(bindings));
+}
 
 // Ensure required directories exist
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!);
@@ -423,7 +453,18 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =
         : new ETL_SQL.Core.Governance.CertificatePolicyEnvelopeSigner(thumbprint);
 });
 builder.Services.AddScoped<ETL_SQL.Core.Governance.IPolicyAuthorityStore, ETL_SQL.Portal.Data.DbPolicyAuthorityStore>();
-builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>();
+builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>(sp =>
+{
+    var tenant = sp.GetService<ETL_SQL.Core.Multitenancy.TenantContext>();
+    if (portalConfig.SharedTenancy.Enabled && tenant is null)
+        throw new UnauthorizedAccessException(
+            "Shared policy-authority access requires a server-verified tenant context.");
+    return new ETL_SQL.Core.Governance.PolicyAuthorityService(
+        sp.GetRequiredService<ETL_SQL.Core.Governance.IPolicyAuthorityStore>(),
+        sp.GetRequiredService<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(),
+        authorityTenant: tenant);
+});
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportPublishingPolicyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryStatusService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionScriptService>();
@@ -480,6 +521,13 @@ builder.Services.AddHttpClient<ETL_SQL.Portal.Services.IOidcAuthenticationServic
     ETL_SQL.Portal.Services.OidcAuthenticationService>()
     .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddScoped<ETL_SQL.Portal.Services.OidcUserProvisioningService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityAuthorityService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityAuthorityResolver>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedOidcFlowStateService>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityPartitionStore>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityPartitionStoreFactory>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.ISharedOidcAuthenticationService,
+    ETL_SQL.Portal.Services.SharedOidcAuthenticationService>();
 
 // Read-only fleet health aggregation (P2.2): fans out to each environment's GET /api/fleet/status
 // with a scoped FleetReader token. Registered so an aggregator host can resolve it.
@@ -874,6 +922,7 @@ app.UseStaticFiles(staticFileOptions);
 app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<ETL_SQL.Portal.Middleware.TenantContextMiddleware>();
 app.UseMiddleware<ETL_SQL.Portal.Middleware.ServiceAccountScopeMiddleware>();
 app.Use(async (context, next) =>
 {

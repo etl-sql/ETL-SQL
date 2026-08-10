@@ -23,7 +23,8 @@ public class PolicyDistributionController(
     PortalDbContext db,
     PolicyAuthorityService authority,
     AuditService audit,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    DedicatedPolicyAuthorityGuard tenantGuard) : ControllerBase
 {
     private const string DeniedMessage = "This machine identity is not authorized for policy retrieval.";
 
@@ -43,6 +44,15 @@ public class PolicyDistributionController(
             .FirstOrDefaultAsync(m => m.MachineId == machineId, cancellationToken);
         if (machine is null)
             return await DenyAsync(machineId, "Unknown machine identity.");
+        try
+        {
+            tenantGuard.AuthorizeRead(machine.Tenant);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return await DenyAsync(machineId,
+                "Machine registration is outside this host's Dedicated tenant authority.");
+        }
         if (machine.Revoked)
             return await DenyAsync(machineId, $"Machine identity is revoked ({machine.RevokedReason ?? "no reason recorded"}).");
         if (!string.Equals(machine.EnrollmentId, enrollmentId, StringComparison.Ordinal)

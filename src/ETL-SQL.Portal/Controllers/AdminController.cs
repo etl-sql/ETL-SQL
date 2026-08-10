@@ -1708,7 +1708,8 @@ public class AdminController(
         var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
         return Ok(new
         {
-            planHash = ComputeExportPlanHash(export),
+            tenantExportIdentity = config.TenantId,
+            planHash = ComputeExportPlanHash(export, config.TenantId),
             emitted = export.Emitted,
             requiredSecrets = export.RequiredSecrets,
             skipped = export.Skipped,
@@ -1732,7 +1733,7 @@ public class AdminController(
         [FromQuery] string? acknowledgedPlan = null)
     {
         var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
-        var planHash = ComputeExportPlanHash(export);
+        var planHash = ComputeExportPlanHash(export, config.TenantId);
 
         if (!string.IsNullOrWhiteSpace(acknowledgedPlan)
             && !string.Equals(acknowledgedPlan, planHash, StringComparison.OrdinalIgnoreCase))
@@ -1762,10 +1763,12 @@ public class AdminController(
     /// text, so cosmetic churn does not invalidate a review while a real change to what would be
     /// promoted always does.
     /// </summary>
-    private static string ComputeExportPlanHash(ConfigurationExportService.ExportResult export)
+    private static string ComputeExportPlanHash(
+        ConfigurationExportService.ExportResult export, string? tenantExportIdentity)
     {
         var payload = System.Text.Json.JsonSerializer.Serialize(new
         {
+            tenantExportIdentity,
             export.Emitted,
             export.RequiredSecrets,
             export.Skipped,

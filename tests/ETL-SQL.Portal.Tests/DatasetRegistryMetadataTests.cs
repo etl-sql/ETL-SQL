@@ -45,6 +45,13 @@ public sealed class DatasetRegistryMetadataTests : IDisposable
         var row = await db.Datasets.SingleAsync(d => d.Id == id);
         Assert.Equal(ETL_SQL.Core.DatasetEncryptionMode.MachineBound, row.EncryptionMode);
         Assert.Equal("v1", row.AtRestKeyVersion);
+
+        var metadata = await registry.Lookup("#meta_portal", "IsAdmin=true");
+        Assert.NotNull(metadata);
+        Assert.Equal("v1", metadata.AtRestKeyVersion);
+        Assert.Null(metadata.AtRestDecryptionKey);
+        Assert.DoesNotContain(config.Dataset.AtRestKey!,
+            System.Text.Json.JsonSerializer.Serialize(metadata), StringComparison.Ordinal);
     }
 
     [Fact]

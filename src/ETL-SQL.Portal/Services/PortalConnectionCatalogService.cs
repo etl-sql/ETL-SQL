@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,8 +40,23 @@ public sealed record PortalSharedConnectionExport(
 /// Portal-managed shared connection catalog (SHARED:alias). Credential fields hold SECRET:
 /// references, never values — enforced on every write, including import.
 /// </summary>
-public sealed class PortalConnectionCatalogService(PortalDbContext db)
+public sealed class PortalConnectionCatalogService(
+    PortalDbContext db,
+    TenantContext? tenantContext = null,
+    PortalConfig? config = null)
 {
+    private readonly string _tenantScope = ResolveTenantScope(tenantContext, config);
+    private string TenantScope => _tenantScope;
+
+    private static string ResolveTenantScope(TenantContext? context, PortalConfig? config)
+    {
+        if (context is not null) return context.Tenant.Value;
+        if (config?.SharedTenancy.Enabled == true)
+            throw new UnauthorizedAccessException(
+                "Shared connection-catalog access requires a server-verified tenant context.");
+        return string.IsNullOrWhiteSpace(config?.TenantId) ? "portal-host" : config.TenantId;
+    }
+
     public async Task<bool> StoreAsync(
         PortalSharedConnectionExport entry,
         int? userId = null,
@@ -50,11 +66,12 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
 
         var now = DateTime.UtcNow;
         var existing = await db.PortalSharedConnections
-            .SingleOrDefaultAsync(c => c.Alias == entry.Alias, cancellationToken);
+            .SingleOrDefaultAsync(c => c.TenantId == TenantScope && c.Alias == entry.Alias, cancellationToken);
         if (existing == null)
         {
             db.PortalSharedConnections.Add(new PortalSharedConnection
             {
+                TenantId = TenantScope,
                 Alias = entry.Alias,
                 ConnectorType = entry.ConnectorType.Trim(),
                 Target = entry.Target,
@@ -99,7 +116,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         var entries = await db.PortalSharedConnections
             .AsNoTracking()
             .Include(c => c.Acls).ThenInclude(a => a.Group)
-            .Where(c => !c.Disabled)
+            .Where(c => c.TenantId == TenantScope && !c.Disabled)
             .OrderBy(c => c.Alias)
             .ToListAsync(cancellationToken);
 
@@ -132,7 +149,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     {
         var entity = await db.PortalSharedConnections
             .Include(c => c.Acls).ThenInclude(a => a.Group)
-            .SingleOrDefaultAsync(c => c.Alias == alias, cancellationToken)
+            .SingleOrDefaultAsync(c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken)
             ?? throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the Portal connection catalog.");
 
         if (entity.Disabled)
@@ -152,11 +169,13 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
             var consumer = identity?.EffectiveUser ?? "(none)";
             var usage = await db.SharedConnectionUsages
                 .SingleOrDefaultAsync(
-                    u => u.SharedConnectionId == entity.Id && u.ConsumerUser == consumer, cancellationToken);
+                    u => u.TenantId == TenantScope && u.SharedConnectionId == entity.Id
+                        && u.ConsumerUser == consumer, cancellationToken);
             if (usage == null)
             {
                 db.SharedConnectionUsages.Add(new SharedConnectionUsage
                 {
+                    TenantId = TenantScope,
                     SharedConnectionId = entity.Id,
                     ConsumerUser = consumer,
                     LastUsedAtUtc = now,
@@ -227,7 +246,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         var entity = await Require(alias, cancellationToken);
         return await db.SharedConnectionAcls
             .AsNoTracking()
-            .Where(a => a.SharedConnectionId == entity.Id)
+            .Where(a => a.TenantId == TenantScope && a.SharedConnectionId == entity.Id)
             .OrderBy(a => a.Group.Name)
             .Select(a => new SharedConnectionAclEntry(a.GroupId, a.Group.Name, a.Permission.ToString()))
             .ToListAsync(cancellationToken);
@@ -240,7 +259,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     {
         var entity = await Require(alias, cancellationToken);
         var exists = await db.SharedConnectionAcls
-            .AnyAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
+            .AnyAsync(a => a.TenantId == TenantScope && a.SharedConnectionId == entity.Id
+                && a.GroupId == groupId, cancellationToken);
         if (exists)
             return false;
 
@@ -249,6 +269,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
 
         db.SharedConnectionAcls.Add(new SharedConnectionAcl
         {
+            TenantId = TenantScope,
             SharedConnectionId = entity.Id,
             GroupId = groupId,
             Permission = SharedConnectionPermission.Use
@@ -263,7 +284,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     {
         var entity = await Require(alias, cancellationToken);
         var acl = await db.SharedConnectionAcls
-            .SingleOrDefaultAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
+            .SingleOrDefaultAsync(a => a.TenantId == TenantScope && a.SharedConnectionId == entity.Id
+                && a.GroupId == groupId, cancellationToken);
         if (acl == null)
             return false;
 
@@ -274,6 +296,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     public async Task<IReadOnlyList<PortalSharedConnectionSummary>> ListAsync(CancellationToken cancellationToken = default)
         => (await db.PortalSharedConnections
                 .AsNoTracking()
+                .Where(c => c.TenantId == TenantScope)
                 .OrderBy(c => c.Alias)
                 .ToListAsync(cancellationToken))
             .Select(ToSummary)
@@ -283,7 +306,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     {
         var entity = await db.PortalSharedConnections
             .AsNoTracking()
-            .SingleOrDefaultAsync(c => c.Alias == alias, cancellationToken);
+            .SingleOrDefaultAsync(c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken);
         if (entity == null)
             return null;
 
@@ -298,6 +321,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     public async Task<IReadOnlyList<PortalSharedConnectionExport>> ExportAsync(CancellationToken cancellationToken = default)
         => (await db.PortalSharedConnections
                 .AsNoTracking()
+                .Where(c => c.TenantId == TenantScope)
                 .OrderBy(c => c.Alias)
                 .ToListAsync(cancellationToken))
             .Select(entity => new PortalSharedConnectionExport(
@@ -314,7 +338,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     {
         var disabled = await db.PortalSharedConnections
             .AsNoTracking()
-            .Where(c => c.Alias == alias)
+            .Where(c => c.TenantId == TenantScope && c.Alias == alias)
             .Select(c => (bool?)c.Disabled)
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -377,7 +401,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     }
 
     private async Task<PortalSharedConnection> Require(string alias, CancellationToken cancellationToken)
-        => await db.PortalSharedConnections.SingleOrDefaultAsync(c => c.Alias == alias, cancellationToken)
+        => await db.PortalSharedConnections.SingleOrDefaultAsync(
+            c => c.TenantId == TenantScope && c.Alias == alias, cancellationToken)
             ?? throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the Portal connection catalog.");
 
     private static void Validate(PortalSharedConnectionExport entry)

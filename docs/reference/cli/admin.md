@@ -25,6 +25,7 @@ etl-sql admin <subcommand>
 | [`service-account`](admin-service-account.md) | Manage Portal service accounts |
 | [`session`](admin-session.md) | Inspect and disconnect Portal sign-in sessions |
 | [`support-bundle`](admin-support-bundle.md) | Collect a redacted support archive (config, health, logs, database metrics) |
+| [`tenant`](admin-tenant.md) | Export, inspect, and import tenant portability bundles |
 | [`user`](admin-user.md) | Manage Portal users |
 
 ## References

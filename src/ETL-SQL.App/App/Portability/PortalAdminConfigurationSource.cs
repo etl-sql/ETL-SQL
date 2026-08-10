@@ -33,7 +33,8 @@ public sealed class PortalAdminConfigurationSource(
             planHash,
             Strings(payload["requiredSecrets"]),
             Strings(payload["skipped"]),
-            ContentManifest(payload["contentManifest"]));
+            ContentManifest(payload["contentManifest"]),
+            payload["tenantExportIdentity"]?.GetValue<string>());
     }
 
     public Task<string> GetScriptAsync(string acknowledgedPlanHash, CancellationToken ct)

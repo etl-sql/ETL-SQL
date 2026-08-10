@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Data;
 using Microsoft.Data.Sqlite;
 
@@ -21,9 +22,16 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
     private readonly string _sessionId;
     private readonly string _dbPath;
     private readonly string _entropy;
+    private readonly IKeyMaterialProvider? _keyProvider;
+    private readonly string _keyScope;
     private SqliteConnection? _connection;
 
-    public SqliteSessionMetadataStore(string sessionId, string sessionRoot, string machineKeyEntropy)
+    public SqliteSessionMetadataStore(
+        string sessionId,
+        string sessionRoot,
+        string machineKeyEntropy,
+        IKeyMaterialProvider? keyProvider = null,
+        string keyScope = "engine-host")
     {
         _sessionId = sessionId;
         var resolvedRoot = Path.GetFullPath(sessionRoot);
@@ -31,6 +39,8 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         if (!SafePath.TryResolveWithinRoot(resolvedRoot, candidatePath, out _dbPath))
             throw new ArgumentException("Session metadata path escapes the configured session root.", nameof(sessionId));
         _entropy = machineKeyEntropy;
+        _keyProvider = keyProvider;
+        _keyScope = keyScope;
     }
 
     public async Task InitializeAsync()
@@ -81,16 +91,17 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
     public async Task SaveVariablesAsync(IDictionary<string, object?> variables, IDictionary<string, VariableMetadata> metadata)
     {
-        var rows = variables.Select(kvp =>
+        var rows = new List<object?[]>();
+        foreach (var kvp in variables)
         {
             var meta = metadata.TryGetValue(kvp.Key, out var m) ? m : new VariableMetadata();
-            return new[]
+            rows.Add(new object?[]
             {
-                (object?)kvp.Key,
-                JsonSerializer.Serialize(kvp.Value),
-                JsonSerializer.Serialize(meta)
-            };
-        }).ToList();
+                kvp.Key,
+                await ProtectCheckpointAsync(JsonSerializer.Serialize(kvp.Value)),
+                await ProtectCheckpointAsync(JsonSerializer.Serialize(meta))
+            });
+        }
 
         using var transaction = _connection!.BeginTransaction();
         await ExecuteBatchedInsertAsync(
@@ -111,8 +122,8 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         while (await reader.ReadAsync())
         {
             var name = reader.GetString(0);
-            var valJson = reader.GetString(1);
-            var metaJson = reader.GetString(2);
+            var valJson = await UnprotectCheckpointAsync(reader.GetString(1));
+            var metaJson = await UnprotectCheckpointAsync(reader.GetString(2));
 
             var rawValue = JsonSerializer.Deserialize<object?>(valJson);
             variables[name] = UnmarshalJsonValue(rawValue);
@@ -153,7 +164,7 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
             using var cmd = _connection.CreateCommand();
             cmd.Transaction = transaction;
             cmd.CommandText = "INSERT INTO lineage (entry_json) VALUES (@json)";
-            cmd.Parameters.AddWithValue("@json", JsonSerializer.Serialize(entry));
+            cmd.Parameters.AddWithValue("@json", await ProtectCheckpointAsync(JsonSerializer.Serialize(entry)));
             await cmd.ExecuteNonQueryAsync();
         }
         await transaction.CommitAsync();
@@ -167,7 +178,7 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            var entry = JsonSerializer.Deserialize<LineageEntry>(reader.GetString(0));
+            var entry = JsonSerializer.Deserialize<LineageEntry>(await UnprotectCheckpointAsync(reader.GetString(0)));
             if (entry != null) result.Add(entry);
         }
         return result;
@@ -182,7 +193,7 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
             cmd.Transaction = transaction;
             cmd.CommandText = "INSERT OR REPLACE INTO temp_tables (name, schema_json) VALUES (@name, @schema)";
             cmd.Parameters.AddWithValue("@name", table.TableName);
-            cmd.Parameters.AddWithValue("@schema", JsonSerializer.Serialize(table.Schema));
+            cmd.Parameters.AddWithValue("@schema", await ProtectCheckpointAsync(JsonSerializer.Serialize(table.Schema)));
             await cmd.ExecuteNonQueryAsync();
 
             using var clearChunks = _connection.CreateCommand();
@@ -197,7 +208,7 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
                 chunkCmd.Transaction = transaction;
                 chunkCmd.CommandText = "INSERT INTO temp_table_chunks (table_name, chunk_name) VALUES (@name, @chunk)";
                 chunkCmd.Parameters.AddWithValue("@name", table.TableName);
-                chunkCmd.Parameters.AddWithValue("@chunk", chunk);
+                chunkCmd.Parameters.AddWithValue("@chunk", await ProtectCheckpointAsync(chunk));
                 await chunkCmd.ExecuteNonQueryAsync();
             }
         }
@@ -220,13 +231,14 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
             var name = reader.GetString(0);
             if (!tables.TryGetValue(name, out var table))
             {
-                var schema = JsonSerializer.Deserialize<List<ColumnDefinition>>(reader.GetString(1)) ?? new();
+                var schema = JsonSerializer.Deserialize<List<ColumnDefinition>>(
+                    await UnprotectCheckpointAsync(reader.GetString(1))) ?? new();
                 table = new TempTableLoadRow(schema);
                 tables[name] = table;
             }
 
             if (!reader.IsDBNull(2))
-                table.ChunkNames.Add(reader.GetString(2));
+                table.ChunkNames.Add(await UnprotectCheckpointAsync(reader.GetString(2)));
         }
 
         return tables
@@ -236,16 +248,19 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
     public async Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections)
     {
-        var rows = connections.Select(conn =>
+        var rows = new List<object?[]>();
+        foreach (var conn in connections)
         {
             var json = JsonSerializer.Serialize(conn);
-            var protectedJson = ETL_SQL.Common.CryptoUtils.Protect(json, _entropy);
-            return new[]
+            var protectedJson = _keyProvider is null
+                ? ETL_SQL.Common.CryptoUtils.Protect(json, _entropy)
+                : await ProtectCheckpointAsync(json);
+            rows.Add(new object?[]
             {
-                (object?)conn.Name,
+                conn.Name,
                 protectedJson
-            };
-        }).ToList();
+            });
+        }
 
         using var transaction = _connection!.BeginTransaction();
 
@@ -270,7 +285,9 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         while (await reader.ReadAsync())
         {
             var protectedJson = reader.GetString(0);
-            var json = ETL_SQL.Common.CryptoUtils.Unprotect(protectedJson, _entropy);
+            var json = protectedJson.StartsWith(KeyMaterialEnvelope.Prefix, StringComparison.Ordinal)
+                ? await UnprotectCheckpointAsync(protectedJson)
+                : ETL_SQL.Common.CryptoUtils.Unprotect(protectedJson, _entropy);
             var info = JsonSerializer.Deserialize<ETL_SQL.Core.Data.ConnectionInfo>(json);
             if (info != null)
             {
@@ -287,7 +304,10 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         using var cmd1 = _connection.CreateCommand();
         cmd1.Transaction = transaction;
         cmd1.CommandText = "INSERT OR REPLACE INTO docker_state (key, value_json) VALUES ('last_conn', @val)";
-        cmd1.Parameters.AddWithValue("@val", JsonSerializer.Serialize(lastConn));
+        var lastJson = JsonSerializer.Serialize(lastConn);
+        cmd1.Parameters.AddWithValue("@val", _keyProvider is null
+            ? lastJson
+            : await ProtectCheckpointAsync(lastJson));
         await cmd1.ExecuteNonQueryAsync();
 
         using var cmd2 = _connection.CreateCommand();
@@ -295,7 +315,9 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         cmd2.CommandText = "INSERT OR REPLACE INTO docker_state (key, value_json) VALUES ('conn_strings', @val)";
 
         var connJson = JsonSerializer.Serialize(connStrings);
-        var protectedConnJson = ETL_SQL.Common.CryptoUtils.Protect(connJson, _entropy);
+        var protectedConnJson = _keyProvider is null
+            ? ETL_SQL.Common.CryptoUtils.Protect(connJson, _entropy)
+            : await ProtectCheckpointAsync(connJson);
         cmd2.Parameters.AddWithValue("@val", protectedConnJson);
         await cmd2.ExecuteNonQueryAsync();
 
@@ -314,16 +336,33 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         {
             var key = reader.GetString(0);
             var val = reader.GetString(1);
-            if (key == "last_conn") lastConn = JsonSerializer.Deserialize<string?>(val);
+            if (key == "last_conn")
+                lastConn = JsonSerializer.Deserialize<string?>(await UnprotectCheckpointAsync(val));
             else if (key == "conn_strings")
             {
-                var unprotectedJson = ETL_SQL.Common.CryptoUtils.Unprotect(val, _entropy);
+                var unprotectedJson = val.StartsWith(KeyMaterialEnvelope.Prefix, StringComparison.Ordinal)
+                    ? await UnprotectCheckpointAsync(val)
+                    : ETL_SQL.Common.CryptoUtils.Unprotect(val, _entropy);
                 connStrings = JsonSerializer.Deserialize<Dictionary<string, string>>(unprotectedJson) ?? new();
             }
         }
 
         return (lastConn, connStrings);
     }
+
+    private Task<string> ProtectCheckpointAsync(string value) => _keyProvider is null
+        ? Task.FromResult(value)
+        : KeyMaterialEnvelope.ProtectAsync(
+            value, _keyProvider, new KeyMaterialRequest(_keyScope, KeyPurpose.Checkpoint));
+
+    private Task<string> UnprotectCheckpointAsync(string value) =>
+        value.StartsWith(KeyMaterialEnvelope.Prefix, StringComparison.Ordinal)
+            ? _keyProvider is null
+                ? throw new InvalidOperationException(
+                    "Checkpoint metadata requires the configured key-material provider.")
+                : KeyMaterialEnvelope.UnprotectAsync(
+                    value, _keyProvider, _keyScope, KeyPurpose.Checkpoint)
+            : Task.FromResult(value);
 
     public void Dispose()
     {
@@ -380,11 +419,18 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
     }
 }
 
-public sealed class SqliteSessionMetadataStoreFactory : ISessionMetadataStoreFactory
+public sealed class SqliteSessionMetadataStoreFactory(
+    IKeyMaterialProvider? keyProvider = null,
+    KeyMaterialHostScope? keyScope = null) : ISessionMetadataStoreFactory
 {
     public ISessionMetadataStore Create(
         string sessionId,
         string sessionRoot,
         string machineKeyEntropy) =>
-        new SqliteSessionMetadataStore(sessionId, sessionRoot, machineKeyEntropy);
+        new SqliteSessionMetadataStore(
+            sessionId,
+            sessionRoot,
+            machineKeyEntropy,
+            keyProvider,
+            keyScope?.Value ?? "engine-host");
 }

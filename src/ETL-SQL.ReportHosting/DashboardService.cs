@@ -10,6 +10,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Reporting;
+using ETL_SQL.Core.Security;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportHosting
@@ -365,6 +366,12 @@ namespace ETL_SQL.ReportHosting
                     evaluator.DatasetCallerContext = _datasetCallerContext;
                     evaluator.DatasetOwningReportId = _datasetOwningReportId;
                     evaluator.DatasetAtRestKey = _datasetAtRestKey;
+                    evaluator.DatasetKeyMaterialProvider =
+                        _currentScope.ServiceProvider.GetService<IKeyMaterialProvider>();
+                    var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
+                    evaluator.DatasetKeyScope = string.IsNullOrWhiteSpace(portalConfig?.TenantId)
+                        ? "portal-host"
+                        : portalConfig.TenantId;
                 }
 
                 evaluator.RedirectOutput = true;

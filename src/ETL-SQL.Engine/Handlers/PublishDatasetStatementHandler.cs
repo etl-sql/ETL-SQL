@@ -80,7 +80,6 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 null, stmt.Line, stmt.Column);
 
         var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-        var atRestKey = (context as Evaluator)?.DatasetAtRestKey;
         var callerUserId = ParseUserId(callerCtx);
         var targetFolder = stmt.TargetFolder ?? "";
 
@@ -120,7 +119,8 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             using var fileTransaction = DatasetFileTransaction.Create(atRestPath);
 
             var transport = new EncryptionOptions(BuildTransportOptions(stmt));
-            var atRest = new EncryptionOptions(BuildAtRestOptions(atRestKey));
+            using var datasetKey = await DatasetKeyResolution.ResolveAsync(context);
+            var atRest = new EncryptionOptions(BuildAtRestOptions(datasetKey.Password));
 
             var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_publish_{Guid.NewGuid():N}.parquet");
             try
@@ -137,6 +137,7 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
 
             metadata.Id = id;
             metadata.ParquetFilePath = atRestPath;
+            metadata.AtRestKeyVersion = datasetKey.Version;
             await registry.RegisterOrUpdate(metadata);
             fileTransaction.Complete();
         }

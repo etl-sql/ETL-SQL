@@ -406,8 +406,14 @@ The algorithm and custody choices §20 left open are now fixed. They do not chan
 | When encryption is required | Required when the source is **SaaS**; optional and recorded otherwise | A self-hosted operator moving their own tenant between their own machines should not be forced into recipient-key management. The manifest always records which was used, so "unencrypted" is never ambiguous. |
 | Who signs | The **operator** (exporting deployment), with a published key | The signature is an authenticity claim — "this is what we exported for you" — and is separable from the confidentiality claim made by encrypting to the tenant. A customer can verify provenance offline against the published key. |
 
-Signature verification precedes any trust in payload metadata, as above. Key-rotation policy and the
-published-key distribution mechanism remain open.
+Signature verification precedes any trust in payload metadata, as above. The operator publishes an
+HTTPS OpenPGP keyring plus immutable per-fingerprint public-key artifacts and a lifecycle index;
+customers authenticate first use by comparing the fingerprint through an independent release or
+tenant-administration channel. Routine keys are prepublished for 30 days, exactly one key signs new
+exports, retired public keys remain available for the bundle-retention and compatibility horizon,
+and compromised keys trigger export suspension, revocation publication, tenant notification, and
+re-export unless independent immutable audit evidence proves pre-compromise signing. The complete
+operational contract is [Tenant Portability Signing Keys](../administration/platform/tenant-portability-signing-keys.md).
 
 ## 14. Versioning and Compatibility
 
@@ -450,6 +456,25 @@ The same portability contract is exposed through:
 - Administrative CLI/API operations for automation and runbooks
 - A standalone/reference bundle reader and validator that does not require contact with the source
   SaaS operator
+
+The shipped CLI surface is `etl-sql admin tenant export|validate|preflight|import`:
+
+- `export` composes the existing Portal configuration export, optional Orchestrator promotion
+  package, and portable source artifacts into a signed bundle. A SaaS-sourced bundle must also be
+  encrypted to the tenant recipient key. Portal service credentials come only from the established
+  environment/`SECRET:` flow; the narrow `admin.portability` scope reaches only the reviewed plan
+  and its hash-acknowledged download.
+- `validate` and `preflight` are offline. They can verify the published operator signature and list
+  exclusions and required logical bindings without an account on either deployment.
+- `import` requires explicit `SOURCE=TARGET` bindings, refuses collisions by default, and supports
+  `--dry-run`. Its Portal bootstrap uses an interactive administrator credential supplied only by
+  `ETLSQL_PORTAL_IMPORT_USERNAME` and `ETLSQL_PORTAL_IMPORT_PASSWORD` (the password may be a
+  `SECRET:name` reference); no mutating service-account scope exists. Imported Orchestrator objects
+  always remain disabled.
+
+Private key passphrases likewise stay out of argv: export reads
+`ETLSQL_TENANT_SIGNING_PASSPHRASE`, and import reads
+`ETLSQL_TENANT_RECIPIENT_PASSPHRASE`; each may contain a machine-local `SECRET:name` reference.
 
 UI and CLI are clients of the same server-side authorization and operation model. The browser never
 assembles authority, rewrites package manifests, or performs client-side tenant filtering.
@@ -521,8 +546,9 @@ rollback/restore result, and isolation-negative results.
 ## 20. Open Implementation Decisions
 
 - Canonical manifest/component schemas and MIME/content type registrations
-- ~~Signature algorithms, trust chain, recipient encryption formats~~ — decided, see §13.1.
-  Key-rotation policy and published-key distribution remain open.
+- ~~Signature algorithms, trust chain, recipient encryption formats, key rotation, and published-key
+  distribution~~ — decided, see §13.1 and
+  [Tenant Portability Signing Keys](../administration/platform/tenant-portability-signing-keys.md).
 - Exact stable-ID preservation and collision UX per resource class
 - Initial evidence/content classes and first large-content storage provider
 - Consistency-point mechanism across Portal database, Orchestrator state, and artifact storage

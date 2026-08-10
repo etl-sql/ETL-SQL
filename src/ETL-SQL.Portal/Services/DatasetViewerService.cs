@@ -111,7 +111,11 @@ public sealed class DatasetPreviewCache : IDisposable
     }
 }
 
-public class DatasetViewerService(PortalDbContext db, DatasetPreviewCache cache, PortalConfig config)
+public class DatasetViewerService(
+    PortalDbContext db,
+    DatasetPreviewCache cache,
+    PortalConfig config,
+    ETL_SQL.Core.Security.IKeyMaterialProvider? keyProvider = null)
 {
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -270,7 +274,26 @@ public class DatasetViewerService(PortalDbContext db, DatasetPreviewCache cache,
         List<DatasetColumnDto> columns,
         int? maxRows)
     {
-        var atRestDecryptOptions = ResolveAtRestDecryptOptions(dataset);
+        ETL_SQL.Core.Security.ResolvedKeyMaterial? keyLease = null;
+        Dictionary<string, string>? atRestDecryptOptions;
+        if (keyProvider is not null)
+        {
+            var version = dataset.AtRestKeyVersion ?? config.Dataset.LegacyAtRestKeyVersion;
+            keyLease = await keyProvider.ResolveAsync(
+                new ETL_SQL.Core.Security.KeyMaterialRequest(
+                    string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId,
+                    ETL_SQL.Core.Security.KeyPurpose.Dataset,
+                    version));
+            atRestDecryptOptions = new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "PASSWORD",
+                ["PASSWORD"] = Convert.ToBase64String(keyLease.Bytes.Span)
+            };
+        }
+        else
+        {
+            atRestDecryptOptions = ResolveAtRestDecryptOptions(dataset);
+        }
 
         string effectivePath = dataset.ParquetFilePath;
         string? tempFile = null;
@@ -287,6 +310,7 @@ public class DatasetViewerService(PortalDbContext db, DatasetPreviewCache cache,
             catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
+                keyLease?.Dispose();
                 throw new InvalidOperationException($"Failed to decrypt dataset '{dataset.Name}': {ex.Message}", ex);
             }
         }
@@ -303,6 +327,7 @@ public class DatasetViewerService(PortalDbContext db, DatasetPreviewCache cache,
         finally
         {
             if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
+            keyLease?.Dispose();
         }
 
         return rows;

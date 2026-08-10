@@ -13,6 +13,7 @@ public interface IVersionedEntity
 
 public class PortalUser : IdentityUser<int>, IVersionedEntity
 {
+    public string TenantId { get; set; } = "portal-host";
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? MiddleInitial { get; set; }
@@ -24,6 +25,8 @@ public class PortalUser : IdentityUser<int>, IVersionedEntity
     /// set only on federated accounts. Federated logins are keyed on this rather than the mutable
     /// username, so an account cannot be hijacked by a reused or attacker-chosen <c>preferred_username</c>.</summary>
     public string? ExternalSubject { get; set; }
+    /// <summary>Normalized HTTPS issuer that assigned <see cref="ExternalSubject"/>.</summary>
+    public string? ExternalIssuer { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public long Version { get; set; } = 1;
@@ -42,11 +45,33 @@ public class PortalRole : IdentityRole<int>
     public PortalRole(string roleName) : base(roleName) { }
 }
 
+/// <summary>
+/// Server-owned routing from a shared Portal host/login domain to one tenant's OIDC authority.
+/// Anonymous discovery resolves by the exact normalized Portal host; neither tenant nor issuer is
+/// accepted from the request. Client credentials remain SECRET: references.
+/// </summary>
+public class SharedIdentityAuthority : IVersionedEntity
+{
+    public int Id { get; set; }
+    public string AuthorityId { get; set; } = Guid.NewGuid().ToString("N");
+    public string TenantId { get; set; } = "";
+    public string PortalHost { get; set; } = "";
+    public string LoginDomain { get; set; } = "";
+    public string Issuer { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string? ClientSecretReference { get; set; }
+    public bool Enabled { get; set; } = true;
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public long Version { get; set; } = 1;
+}
+
 // ── Groups ────────────────────────────────────────────────────────────────────
 
 public class Group : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public string Provider { get; set; } = "Local";
@@ -83,6 +108,7 @@ public class GroupStudioCapability
 
 public class UserGroup
 {
+    public string TenantId { get; set; } = "portal-host";
     public int UserId { get; set; }
     public PortalUser User { get; set; } = null!;
     public int GroupId { get; set; }
@@ -364,6 +390,7 @@ public class PortalExecutionJob
 public class ServiceAccount : IVersionedEntity
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string TenantId { get; set; } = "portal-host";
     public string ClientId { get; set; } = "";
     public string Name { get; set; } = "";
     public string NormalizedName { get; set; } = "";
@@ -472,6 +499,7 @@ public class SubscriptionDelivery
 public class PortalSecret : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string Name { get; set; } = "";
     public string EncryptedValue { get; set; } = "";
     public bool Disabled { get; set; }
@@ -490,6 +518,7 @@ public class PortalSecret : IVersionedEntity
 public class PortalSharedConnection : IVersionedEntity
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public string Alias { get; set; } = "";
     public string ConnectorType { get; set; } = "";
     public string? Target { get; set; }
@@ -520,6 +549,7 @@ public enum SharedConnectionPermission { Use = 0 }
 public class SharedConnectionAcl
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int SharedConnectionId { get; set; }
     public PortalSharedConnection SharedConnection { get; set; } = null!;
     public int GroupId { get; set; }
@@ -535,6 +565,7 @@ public class SharedConnectionAcl
 public class SharedConnectionUsage
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int SharedConnectionId { get; set; }
     public PortalSharedConnection SharedConnection { get; set; } = null!;
     /// <summary>Effective user of the resolving execution, or "(none)" for identity-less runs.</summary>
@@ -693,6 +724,7 @@ public class ReportJobLink
 public class RefreshToken
 {
     public int Id { get; set; }
+    public string TenantId { get; set; } = "portal-host";
     public int UserId { get; set; }
     public PortalUser User { get; set; } = null!;
     public string Token { get; set; } = "";

@@ -279,5 +279,56 @@ public class OrganizationPolicySchemaTests
             error.Contains("fail-closed", StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public void SaasOnboardingAuthorizationIsTypedValidatedAndFlattened()
+    {
+        var expires = DateTimeOffset.Parse("2026-08-11T00:00:00Z");
+        var document = new OrganizationPolicyDocument
+        {
+            SaasOnboarding = new SaasOnboardingAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = "tenant-alpha",
+                OperatorPrincipal = "provisioner@platform.test",
+                AuthorizationReference = "change-42",
+                Reason = "create dedicated boundary",
+                ExpiresUtc = expires
+            }
+        };
+
+        var result = OrganizationPolicySchema.Validate(document);
+        var flat = EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues());
+
+        Assert.True(result.IsValid);
+        Assert.Equal("tenant-alpha", flat["SaaS:Onboarding:TenantId"]);
+        Assert.Equal("change-42", flat["SaaS:Onboarding:AuthorizationReference"]);
+        Assert.Equal(expires.ToString("O"), flat["SaaS:Onboarding:ExpiresUtc"]);
+    }
+
+    [Theory]
+    [InlineData("", "operator", "change", "reason")]
+    [InlineData("Tenant With Spaces", "operator", "change", "reason")]
+    [InlineData("tenant-alpha", "", "change", "reason")]
+    [InlineData("tenant-alpha", "operator", "", "reason")]
+    [InlineData("tenant-alpha", "operator", "change", "")]
+    public void SaasOnboardingAuthorizationRejectsIncompleteOrNoncanonicalAuthority(
+        string tenant, string principal, string reference, string reason)
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            SaasOnboarding = new SaasOnboardingAuthorizationPolicySection
+            {
+                Enabled = true,
+                TenantId = tenant,
+                OperatorPrincipal = principal,
+                AuthorizationReference = reference,
+                Reason = reason,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1)
+            }
+        });
+
+        Assert.False(result.IsValid);
+    }
+
     private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal);
 }

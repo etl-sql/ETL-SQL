@@ -22,19 +22,26 @@ public class AuthController(
     PortalDbContext db,
     PortalConfig config,
     ILdapService ldapService,
-    StudioCapabilityStore studioCapabilities) : ControllerBase
+    StudioCapabilityStore studioCapabilities,
+    SharedIdentityAuthorityResolver sharedIdentityAuthorities) : ControllerBase
 {
     /// <summary>Advertises the effective identity configuration so the login page can offer the right
     /// affordances (e.g. an SSO button) without hardcoding deployment posture. Anonymous and
     /// secret-free.</summary>
     [HttpGet("providers")]
     [AllowAnonymous]
-    public IActionResult Providers() => Ok(new
+    public async Task<IActionResult> Providers(CancellationToken ct)
     {
-        local = true,
-        oidcEnabled = config.Identity.Oidc.Enabled,
-        oidcLoginUrl = config.Identity.Oidc.Enabled ? "/api/auth/oidc/login" : null
-    });
+        var oidcEnabled = config.SharedTenancy.Enabled
+            ? await sharedIdentityAuthorities.ResolveForRequestAsync(Request, ct) is not null
+            : config.Identity.Oidc.Enabled;
+        return Ok(new
+        {
+            local = true,
+            oidcEnabled,
+            oidcLoginUrl = oidcEnabled ? "/api/auth/oidc/login" : null
+        });
+    }
 
     [HttpPost("login")]
     [AllowAnonymous]

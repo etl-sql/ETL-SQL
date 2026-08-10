@@ -23,3 +23,4 @@
 | [Secrets and Keys](secrets.md) | ETL-SQL supports encrypted values for secrets such as passwords, JWT secrets, certificate |
 | [Central Security Events and SIEM Delivery](security-events.md) | Security events are separate from diagnostic logs and governance audit records: a dedicated versioned contract with a durable local outbox and opti... |
 | [Portal State, Data Roots, and High Availability](state-and-ha.md) | Where the Portal keeps its state, which directories it is allowed to touch, and what a multi-node high-availability deployment requires. |
+| [Tenant Portability Signing Keys](tenant-portability-signing-keys.md) | Tenant portability manifests are signed by the exporting operator with an OpenPGP signing key. |

@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Security;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,6 +10,39 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class PortalSecretStoreServiceTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "etl-sql-portal-secrets-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public async Task ProviderBackedStoreUsesCredentialPurposeAndReadsLegacyDataProtectionRows()
+    {
+        await using var db = NewDb();
+        var dataProtection = new EphemeralDataProtectionProvider();
+        var legacy = new PortalSecretStoreService(
+            db, dataProtection, new PortalConfig { TenantId = "tenant-alpha" });
+        await legacy.StoreAsync("legacy_secret", "legacy-value");
+
+        var descriptor = new KeyMaterialDescriptor(
+            "vault", "credential-alpha", "tenant-alpha", KeyPurpose.Credential, "v1");
+        var keys = new ResolvedKeyMaterialProvider("vault",
+            [(descriptor, Enumerable.Repeat((byte)77, 32).ToArray())]);
+        var providerStore = new PortalSecretStoreService(
+            db, dataProtection, new PortalConfig { TenantId = "tenant-alpha" }, keys);
+        await providerStore.StoreAsync("provider_secret", "provider-value");
+
+        var stored = await db.PortalSecrets.SingleAsync(secret => secret.Name == "provider_secret");
+        Assert.StartsWith("km1:v1:", stored.EncryptedValue, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-value", stored.EncryptedValue, StringComparison.Ordinal);
+        Assert.Equal("provider-value", await providerStore.ResolveAsync("provider_secret"));
+        Assert.Equal("legacy-value", await providerStore.ResolveAsync("legacy_secret"));
+
+        var datasetOnly = new ResolvedKeyMaterialProvider("vault",
+        [
+            (descriptor with { KeyId = "dataset-alpha", Purpose = KeyPurpose.Dataset },
+             Enumerable.Repeat((byte)77, 32).ToArray())
+        ]);
+        var wrongPurpose = new PortalSecretStoreService(
+            db, dataProtection, new PortalConfig { TenantId = "tenant-alpha" }, datasetOnly);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => wrongPurpose.ResolveAsync("provider_secret"));
+    }
 
     [Fact]
     public async Task StoreResolveAndListNeverExposePlaintext()

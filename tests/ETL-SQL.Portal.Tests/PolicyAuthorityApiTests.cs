@@ -27,6 +27,18 @@ public class PolicyAuthorityApiTests
         }
     }
 
+    private sealed class DedicatedSigningPortalFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config) =>
+            config.TenantId = "tenant-alpha";
+
+        protected override void CustomizeServices(IServiceCollection services)
+        {
+            services.RemoveAll<IPolicyEnvelopeSigner>();
+            services.AddSingleton<IPolicyEnvelopeSigner>(new RsaPolicyEnvelopeSigner(RSA.Create(2048)));
+        }
+    }
+
     private static string DocJson(bool withExtensions = false)
     {
         var doc = new OrganizationPolicyDocument
@@ -89,6 +101,40 @@ public class PolicyAuthorityApiTests
         Assert.Equal(HttpStatusCode.BadRequest, publish.StatusCode);
         var error = await publish.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Contains("not configured", error!["error"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task DedicatedAuthorityRefusesCrossTenantPolicyMutationAndRead()
+    {
+        using var factory = new DedicatedSigningPortalFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        var foreignPublish = await AuthPost(client, adminToken,
+            "/api/admin/policy-authority/publish", new
+            {
+                tenant = "tenant-beta",
+                environment = "prod",
+                policyVersion = "1.0.0",
+                policyJson = DocJson(),
+                expiresAtUtc = DateTimeOffset.UtcNow.AddDays(30)
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, foreignPublish.StatusCode);
+
+        var foreignRead = await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/versions?tenant=tenant-beta&environment=prod");
+        Assert.Equal(HttpStatusCode.Forbidden, foreignRead.StatusCode);
+
+        var ownPublish = await AuthPost(client, adminToken,
+            "/api/admin/policy-authority/publish", new
+            {
+                tenant = "tenant-alpha",
+                environment = "prod",
+                policyVersion = "1.0.0",
+                policyJson = DocJson(),
+                expiresAtUtc = DateTimeOffset.UtcNow.AddDays(30)
+            });
+        Assert.Equal(HttpStatusCode.OK, ownPublish.StatusCode);
     }
 
     [Fact]

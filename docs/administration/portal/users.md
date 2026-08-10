@@ -9,9 +9,16 @@ Creating and managing Portal accounts, and connecting them to an enterprise iden
 | **Solo / Workstation** | **N/A.** There is one operator and no account system; the OS login is the identity. |
 | **Team / SME** | Local Portal accounts and groups, created here. Change the first-run `admin` password and remove the bootstrap value from configuration. |
 | **Enterprise / Corporate** | OIDC or LDAP as the identity source, with groups reconciled on every login. Keep at least one **local** administrator able to sign in when the provider is unreachable — `GET /api/admin/identity/diagnostics` reports whether one exists. |
-| **SaaS / Departmental** | As Enterprise, **per environment**. A token minted in one environment is refused by another, so an operator who works across departments needs an account in each. |
+| **SaaS / Departmental** | As Enterprise, **per Managed Dedicated environment**, with one tenant-owned OIDC provider. A token minted in one environment is refused by another. Tenant `Admin` users manage that environment's accounts, groups, mappings, and service-account delegation; platform onboarding receives no Portal role or tenant session. |
 
 Open **Admin → Users** to manage accounts.
+
+In Managed Dedicated SaaS, `Admin` means **tenant administrator**, not platform operator. The tenant
+administrator can manage users and groups directly or delegate the explicit `admin.identity` scope
+to a tenant-owned service account. That scope is an allowlist: it cannot reach unrelated Admin
+routes and cannot create or promote another `Admin`. Platform provisioning instead uses a
+short-lived signed `PlatformAccessGrant`, writes a separate platform audit receipt, and has no path
+that converts it into a tenant user session.
 
 The user catalog is server-paged. Use the search box and status filter to narrow large account lists, then select rows on the current page to enable or disable multiple users. Selection is page-local and is cleared when the filter or page changes.
 

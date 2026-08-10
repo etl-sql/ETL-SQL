@@ -459,8 +459,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     dashboardTimeout,
                     job.DatasetCallerContext,
                     job.ReportId,
-                    _config.Dataset.AtRestKey,
-                    executionIdentity);
+                    datasetAtRestKey: _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey,
+                    executionIdentity: executionIdentity);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));

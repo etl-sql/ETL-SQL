@@ -28,7 +28,9 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
         // is stamped at issue and a service token lives up to 15 minutes, which would otherwise let
         // a just-demoted owner keep creating users for the rest of that window. Ordinary Portal
         // routes keep the cheaper claim-only posture.
-        if (required == ServiceAccountScopes.AdminIdentity && !await OwnerIsCurrentlyAdminAsync(context))
+        if ((required == ServiceAccountScopes.AdminIdentity
+             || required == ServiceAccountScopes.AdminPortability)
+            && !await OwnerIsCurrentlyAdminAsync(context))
         {
             await DenyAsync(context, "service_account_admin_role_required", required);
             return;
@@ -71,9 +73,17 @@ public sealed class ServiceAccountScopeMiddleware(RequestDelegate next)
             // Default-deny survives: only the enumerated identity routes are reachable, and any
             // other admin endpoint — including one added after this was written — returns null and
             // is refused.
-            return AdminIdentityRoutes.IsIdentityRoute(path, request.Method)
-                ? ServiceAccountScopes.AdminIdentity
-                : null;
+            if (AdminIdentityRoutes.IsIdentityRoute(path, request.Method))
+                return ServiceAccountScopes.AdminIdentity;
+            if (HttpMethods.IsGet(request.Method)
+                && path.Equals("/api/admin/configuration/export/plan", StringComparison.OrdinalIgnoreCase))
+                return ServiceAccountScopes.AdminPortability;
+            if (HttpMethods.IsGet(request.Method)
+                && path.Equals("/api/admin/configuration/export", StringComparison.OrdinalIgnoreCase)
+                && request.Query.TryGetValue("acknowledgedPlan", out var acknowledged)
+                && !string.IsNullOrWhiteSpace(acknowledged.ToString()))
+                return ServiceAccountScopes.AdminPortability;
+            return null;
         }
         if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/api/oidc", StringComparison.OrdinalIgnoreCase)) return null;

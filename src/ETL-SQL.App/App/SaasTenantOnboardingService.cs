@@ -3,6 +3,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Orchestrator.Storage;
 
 namespace ETL_SQL.App;
@@ -16,13 +18,30 @@ internal static partial class SaasTenantOnboardingService
     internal const string ManifestSchema = "etl-sql.saas-tenant-boundary/v1";
     internal sealed record BoundaryPath(string Concern, string RelativePath);
     internal sealed record ArtifactProof(string Path, long SizeBytes, string Sha256);
+    internal sealed record TenantIdentityProvider(
+        string Provider, string Authority, string ClientId, string ClientSecretConfigurationKey);
+    internal sealed record PlatformAuditReceipt(
+        string EventType,
+        string ActorType,
+        string ActorId,
+        string TenantId,
+        string AuthorizationReference,
+        string Reason,
+        DateTimeOffset AuthorizationExpiresUtc,
+        DateTimeOffset OccurredUtc,
+        bool TenantUserImpersonation);
     internal sealed record Manifest(
         string SchemaVersion,
         string TenantId,
+        TenantContextOrigin TenantContextOrigin,
+        string PlatformOperator,
+        string AuthorizationReference,
+        DateTimeOffset AuthorizationExpiresUtc,
         string SourceProfile,
         DateTimeOffset CreatedUtc,
         bool Activated,
         bool SupportAccessEnabled,
+        TenantIdentityProvider? IdentityProvider,
         string SecretNamespace,
         string TelemetryNamespace,
         int MaxConcurrentJobs,
@@ -38,7 +57,8 @@ internal static partial class SaasTenantOnboardingService
     {
         try
         {
-            var manifest = await OnboardAsync(ctx, ct);
+            var tenantContext = ResolveAuthorizedContext(ctx, EnterprisePolicyRuntime.Current, DateTimeOffset.UtcNow);
+            var manifest = await OnboardAsync(ctx, tenantContext, ct);
             var tenantRoot = Path.Combine(Path.GetFullPath(ctx.SaasOutputRoot!), manifest.TenantId);
             logger.WriteLine($"SaaS tenant boundary staged: {tenantRoot}", ConsoleColor.Green);
             logger.WriteLine(
@@ -56,12 +76,31 @@ internal static partial class SaasTenantOnboardingService
         }
     }
 
-    internal static async Task<Manifest> OnboardAsync(CliContext ctx, CancellationToken ct = default)
+    internal static TenantContext ResolveAuthorizedContext(
+        CliContext ctx, EffectiveEnterprisePolicy policy, DateTimeOffset now)
     {
-        // One definition of a valid tenant id, shared with the multitenancy contract in Core.
-        if (!ETL_SQL.Core.Multitenancy.TenantId.TryParse(ctx.SaasTenantId, out var tenantId))
-            throw new ArgumentException("--tenant must contain 3-63 lowercase letters, digits, or hyphens and start/end with a letter or digit.");
-        var tenant = tenantId.Value;
+        ArgumentNullException.ThrowIfNull(policy);
+        if (!policy.IsAvailable || policy.Document?.SaasOnboarding.Enabled != true)
+            throw new UnauthorizedAccessException(
+                "SaaS onboarding requires an active signed organization-policy authorization.");
+
+        var authorization = policy.Document.SaasOnboarding;
+        var grant = PlatformAccessGrant.Issue(
+            authorization.TenantId!, authorization.OperatorPrincipal!,
+            authorization.AuthorizationReference!, authorization.Reason!,
+            authorization.ExpiresUtc!.Value, now);
+        var tenantContext = TenantContext.FromPlatformGrant(grant, now);
+        tenantContext.RequireTenant(ctx.SaasTenantId);
+        return tenantContext;
+    }
+
+    internal static async Task<Manifest> OnboardAsync(
+        CliContext ctx, TenantContext tenantContext, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenantContext);
+        tenantContext.RequireActivePlatformGrant(DateTimeOffset.UtcNow);
+        var tenant = tenantContext.RequireTenant(ctx.SaasTenantId).Value;
+        var grant = tenantContext.Grant!;
         var sourceProfile = ctx.SaasSourceProfile?.Trim();
         if (sourceProfile is not ("Solo" or "Enterprise"))
             throw new ArgumentException("--source-profile must be Solo or Enterprise.");
@@ -69,6 +108,7 @@ internal static partial class SaasTenantOnboardingService
             throw new ArgumentException("--source and --output-root are required.");
         if (ctx.SaasMaxConcurrentJobs < 1 || ctx.SaasMaxStorageMb < 128 || ctx.SaasMaxReportSessions < 1)
             throw new ArgumentException("Resource limits must be positive; storage must be at least 128 MiB.");
+        var identityProvider = ValidateIdentityProvider(ctx);
 
         var source = Path.GetFullPath(ctx.PromotionSource);
         var outputRoot = Path.GetFullPath(ctx.SaasOutputRoot);
@@ -129,10 +169,22 @@ internal static partial class SaasTenantOnboardingService
                 File.Copy(bootstrapPath, ResolveTenantPath(staging, "imports/portal-bootstrap.etlsql"));
             }
 
-            await WriteTenantConfigurationAsync(staging, tenant, ctx, ct);
+            await WriteTenantConfigurationAsync(staging, tenant, ctx, identityProvider, ct);
+            tenantContext.RequireActivePlatformGrant(DateTimeOffset.UtcNow);
+            var occurredUtc = DateTimeOffset.UtcNow;
+            var platformAudit = new PlatformAuditReceipt(
+                "TENANT_ONBOARDED", "PlatformOperator", grant.OperatorPrincipal, tenant,
+                grant.AuthorizationReference, grant.Reason, grant.ExpiresUtc, occurredUtc,
+                TenantUserImpersonation: false);
+            await WriteJsonAsync(
+                ResolveTenantPath(staging, "queues/audit/platform-tenant-onboarding.json"),
+                platformAudit, ct);
             var manifest = new Manifest(
-                ManifestSchema, tenant, sourceProfile, DateTimeOffset.UtcNow, Activated: false,
-                SupportAccessEnabled: false, $"tenant/{tenant}", $"etlsql.tenant.{tenant}",
+                ManifestSchema, tenant, tenantContext.Origin, grant.OperatorPrincipal,
+                grant.AuthorizationReference, grant.ExpiresUtc,
+                sourceProfile, occurredUtc, Activated: false,
+                SupportAccessEnabled: false, identityProvider,
+                $"tenant/{tenant}", $"etlsql.tenant.{tenant}",
                 ctx.SaasMaxConcurrentJobs, ctx.SaasMaxStorageMb, ctx.SaasMaxReportSessions,
                 paths, artifacts.OrderBy(a => a.Path, StringComparer.OrdinalIgnoreCase).ToArray(),
                 importedJobs, importedRuns, importedLineage);
@@ -167,7 +219,30 @@ internal static partial class SaasTenantOnboardingService
         return paths;
     }
 
-    private static async Task WriteTenantConfigurationAsync(string root, string tenant, CliContext ctx, CancellationToken ct)
+    private static TenantIdentityProvider? ValidateIdentityProvider(CliContext ctx)
+    {
+        var authority = ctx.SaasOidcAuthority?.Trim();
+        var clientId = ctx.SaasOidcClientId?.Trim();
+        if (string.IsNullOrEmpty(authority) != string.IsNullOrEmpty(clientId))
+            throw new ArgumentException("--oidc-authority and --oidc-client-id must be supplied together.");
+        if (string.IsNullOrEmpty(authority)) return null;
+        if (!Uri.TryCreate(authority, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException(
+                "--oidc-authority must be an absolute HTTPS issuer URI without credentials, query, or fragment.");
+        }
+
+        return new TenantIdentityProvider(
+            "OIDC", authority, clientId!, "Portal__Identity__Oidc__ClientSecret");
+    }
+
+    private static async Task WriteTenantConfigurationAsync(
+        string root, string tenant, CliContext ctx, TenantIdentityProvider? identityProvider,
+        CancellationToken ct)
     {
         var config = new
         {
@@ -197,18 +272,36 @@ internal static partial class SaasTenantOnboardingService
             },
             Portal = new
             {
+                TenantId = tenant,
                 DatabasePath = "../databases/portal.db",
                 Database = new { Provider = "Sqlite", ConnectionString = "" },
                 ScriptRootPath = "../artifacts/scripts",
                 DatasetRootPath = "../artifacts/datasets",
                 SnapshotDirectory = "../artifacts/snapshots",
                 Storage = new { Provider = "Local", KeyRingPath = "../keys/portal" },
-                Resources = new { MaxConcurrentReportExecutions = ctx.SaasMaxReportSessions }
+                Resources = new { MaxConcurrentReportExecutions = ctx.SaasMaxReportSessions },
+                Identity = new
+                {
+                    Provider = identityProvider?.Provider ?? "Local",
+                    Oidc = new
+                    {
+                        Enabled = identityProvider is not null,
+                        Authority = identityProvider?.Authority,
+                        ClientId = identityProvider?.ClientId
+                    }
+                }
             },
             Lineage = new { Namespace = $"etlsql.tenant.{tenant}" }
         };
         await using var stream = new FileStream(ResolveTenantPath(root, "config/appsettings.tenant.json"), FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
         await JsonSerializer.SerializeAsync(stream, config, JsonOptions, ct);
+    }
+
+    private static async Task WriteJsonAsync<T>(string path, T value, CancellationToken ct)
+    {
+        await using var stream = new FileStream(
+            path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
+        await JsonSerializer.SerializeAsync(stream, value, JsonOptions, ct);
     }
 
     internal static string ResolveTenantPath(string tenantRoot, string relativePath)

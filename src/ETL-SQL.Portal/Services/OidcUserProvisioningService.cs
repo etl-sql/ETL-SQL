@@ -1,4 +1,5 @@
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Core.Multitenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,9 @@ public sealed class OidcUserProvisioningService(
     PortalConfig config,
     AuditService auditService,
     SecuritySessionService securitySessions,
-    StudioCapabilityStore studioCapabilities)
+    StudioCapabilityStore studioCapabilities,
+    RequestTenantContextAccessor tenantAccessor,
+    SharedIdentityPartitionStoreFactory sharedStores)
 {
     public const string ProviderName = "OIDC";
 
@@ -33,11 +36,23 @@ public sealed class OidcUserProvisioningService(
 
     public async Task<Result> SignInAsync(OidcIdentity identity, CancellationToken ct = default)
     {
+        TenantContext? tenantContext = null;
+        SharedIdentityPartitionStore? sharedStore = null;
+        if (config.SharedTenancy.Enabled)
+        {
+            tenantContext = tenantAccessor.RequireCurrent();
+            sharedStore = sharedStores.Create(tenantContext);
+            if (string.IsNullOrWhiteSpace(identity.Issuer))
+                throw new OidcAuthenticationException("Shared OIDC identities require a validated issuer.");
+        }
+
         // Key federated accounts on the immutable provider subject (sub), not the mutable username:
         // a renamed or reused preferred_username can neither create a duplicate nor seize another
         // account. (Audits below run outside the transaction so they survive a refusal/rollback.)
-        var user = await db.Users.FirstOrDefaultAsync(
-            u => u.Provider == ProviderName && u.ExternalSubject == identity.Subject, ct);
+        var user = sharedStore is null
+            ? await db.Users.FirstOrDefaultAsync(
+                u => u.Provider == ProviderName && u.ExternalSubject == identity.Subject, ct)
+            : await sharedStore.FindFederatedUserAsync(identity.Issuer!, identity.Subject, ct);
 
         // A portal-disabled account stays disabled; the IdP must not resurrect it.
         if (user is not null && !user.IsActive)
@@ -52,7 +67,9 @@ public sealed class OidcUserProvisioningService(
         // is what blocks account takeover via provider confusion or username reuse.
         if (user is null)
         {
-            var existingByName = await userManager.FindByNameAsync(identity.Username);
+            var existingByName = sharedStore is null
+                ? await userManager.FindByNameAsync(identity.Username)
+                : await sharedStore.FindByNormalizedNameAsync(userManager.NormalizeName(identity.Username), ct);
             if (existingByName is not null)
             {
                 await auditService.LogAsync(existingByName.Id, "LOGIN_FAILED", "User", existingByName.Id.ToString(),
@@ -66,26 +83,38 @@ public sealed class OidcUserProvisioningService(
         {
             if (user is null)
             {
-                user = new PortalUser
+                if (sharedStore is not null)
                 {
-                    UserName = identity.Username,
-                    Email = identity.Email,
-                    IsActive = true,
-                    MustChangePassword = false,
-                    Provider = ProviderName,
-                    ExternalSubject = identity.Subject
-                };
-                var created = await userManager.CreateAsync(user);
-                if (!created.Succeeded)
-                    throw new InvalidOperationException(
-                        "Failed to provision OIDC user: " + string.Join("; ", created.Errors.Select(e => e.Description)));
+                    user = await sharedStore.AddFederatedUserAsync(
+                        identity.Issuer!, identity, userManager.NormalizeName(identity.Username), ct);
+                }
+                else
+                {
+                    user = new PortalUser
+                    {
+                        UserName = identity.Username,
+                        Email = identity.Email,
+                        IsActive = true,
+                        MustChangePassword = false,
+                        Provider = ProviderName,
+                        ExternalSubject = identity.Subject
+                    };
+                    var created = await userManager.CreateAsync(user);
+                    if (!created.Succeeded)
+                        throw new InvalidOperationException(
+                            "Failed to provision OIDC user: " + string.Join("; ", created.Errors.Select(e => e.Description)));
+                }
             }
             else
             {
-                await UpdateProfileAsync(user, identity);
+                if (sharedStore is null)
+                    await UpdateProfileAsync(user, identity);
+                else
+                    await sharedStore.UpdateFederatedProfileAsync(
+                        user, identity, userManager.NormalizeName(identity.Username), ct);
             }
 
-            var sync = await SyncGroupsAsync(user, identity.Groups, ct);
+            var sync = await SyncGroupsAsync(user, identity.Groups, sharedStore, ct);
             await db.SaveChangesAsync(ct);
             if (sync.Changed)
             {
@@ -106,7 +135,7 @@ public sealed class OidcUserProvisioningService(
             throw;
         }
 
-        var session = await IssueSessionAsync(user, ct);
+        var session = await IssueSessionAsync(user, tenantContext, sharedStore, ct);
         await auditService.LogAsync(user.Id, "LOGIN", "User", user.Id.ToString(), "OIDC");
         return new Result(session, Disabled: false, Refused: false, user.Id);
     }
@@ -140,46 +169,75 @@ public sealed class OidcUserProvisioningService(
     /// unchanged claim set yields no writes. Only OIDC-provider groups are touched, so local and LDAP
     /// memberships are preserved. Matching by group <c>AdGroup</c> (when set) else <c>Name</c>,
     /// case-insensitive.</summary>
-    private async Task<GroupSyncResult> SyncGroupsAsync(PortalUser user, IReadOnlyList<string> claimedGroups, CancellationToken ct)
+    private async Task<GroupSyncResult> SyncGroupsAsync(
+        PortalUser user,
+        IReadOnlyList<string> claimedGroups,
+        SharedIdentityPartitionStore? sharedStore,
+        CancellationToken ct)
     {
-        var oidcGroups = await db.Groups.Where(g => g.Provider == ProviderName).ToListAsync(ct);
+        var oidcGroups = sharedStore is null
+            ? await db.Groups.Where(g => g.Provider == ProviderName).ToListAsync(ct)
+            : await sharedStore.ListProviderGroupsAsync(ProviderName, ct);
         var matchingGroupIds = oidcGroups
             .Where(g => claimedGroups.Contains(
                 string.IsNullOrEmpty(g.AdGroup) ? g.Name : g.AdGroup!, StringComparer.OrdinalIgnoreCase))
             .Select(g => g.Id)
             .ToHashSet();
 
-        var current = await db.UserGroups
-            .Where(ug => ug.UserId == user.Id && ug.Group.Provider == ProviderName)
-            .ToListAsync(ct);
+        var current = sharedStore is null
+            ? await db.UserGroups.Where(ug => ug.UserId == user.Id && ug.Group.Provider == ProviderName).ToListAsync(ct)
+            : await sharedStore.ListProviderMembershipsAsync(user.Id, ProviderName, ct);
         var currentIds = current.Select(ug => ug.GroupId).ToHashSet();
 
         var toRemove = current.Where(ug => !matchingGroupIds.Contains(ug.GroupId)).ToList();
         var toAdd = matchingGroupIds.Where(id => !currentIds.Contains(id)).ToList();
 
-        if (toRemove.Count > 0) db.UserGroups.RemoveRange(toRemove);
-        foreach (var groupId in toAdd) db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
+        if (toRemove.Count > 0)
+        {
+            if (sharedStore is null) db.UserGroups.RemoveRange(toRemove);
+            else sharedStore.RemoveMemberships(toRemove);
+        }
+        foreach (var groupId in toAdd)
+        {
+            if (sharedStore is null)
+                db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
+            else
+                await sharedStore.AddMembershipAsync(user.Id, groupId, ct);
+        }
 
         return new GroupSyncResult(Added: toAdd.Count > 0, Removed: toRemove.Count > 0);
     }
 
-    private async Task<OidcSession> IssueSessionAsync(PortalUser user, CancellationToken ct)
+    private async Task<OidcSession> IssueSessionAsync(
+        PortalUser user,
+        TenantContext? tenantContext,
+        SharedIdentityPartitionStore? sharedStore,
+        CancellationToken ct)
     {
         var roles = await userManager.GetRolesAsync(user);
         // Resolved after group sync, so a federated login picks up the capabilities its freshly
         // synced groups grant rather than the previous session's.
         var jwt = tokenService.GenerateJwt(user, roles,
-            await studioCapabilities.ResolveForUserAsync(user.Id, ct));
+            await studioCapabilities.ResolveForUserAsync(user.Id, ct), tenantContext);
         var rawRefresh = tokenService.GenerateRefreshToken();
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
-        db.RefreshTokens.Add(new RefreshToken
+        var tokenHash = TokenService.HashRefreshToken(rawRefresh);
+        var refreshExpires = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays);
+        if (sharedStore is null)
         {
-            UserId = user.Id,
-            Token = TokenService.HashRefreshToken(rawRefresh),
-            ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
-        });
-        await db.SaveChangesAsync(ct);
+            db.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = user.Id,
+                Token = tokenHash,
+                ExpiresAt = refreshExpires
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            await sharedStore.AddRefreshTokenAsync(user.Id, tokenHash, refreshExpires, ct);
+        }
 
         return new OidcSession(jwt, rawRefresh, expiresAt);
     }

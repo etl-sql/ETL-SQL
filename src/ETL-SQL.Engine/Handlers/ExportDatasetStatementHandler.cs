@@ -57,8 +57,8 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
                 $"EXPORT DATASET '{stmt.DatasetName}': the dataset has not been materialised yet. Ask the owner to refresh it.",
                 null, stmt.Line, stmt.Column);
 
-        var atRest = new EncryptionOptions(BuildAtRestOptions(
-            existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey));
+        using var datasetKey = await DatasetKeyResolution.ResolveAsync(context, existing.AtRestKeyVersion);
+        var atRest = new EncryptionOptions(BuildAtRestOptions(datasetKey.Password));
         var transport = new EncryptionOptions(BuildTransportOptions(stmt));
         var targetPath = context.ResolvePath(stmt.TargetPath);
         if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))

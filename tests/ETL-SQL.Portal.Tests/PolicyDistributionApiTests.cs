@@ -25,7 +25,7 @@ public class PolicyDistributionApiTests
     private const string CertForwardHeader = "X-Test-Client-Cert";
     private const string EnvelopeUrl = "/api/policy-authority/envelope";
 
-    private sealed class DistributionPortalFactory : PortalWebFactory
+    private class DistributionPortalFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings) =>
             settings["Portal:PolicyAuthority:ClientCertificateForwardingHeader"] = CertForwardHeader;
@@ -35,6 +35,38 @@ public class PolicyDistributionApiTests
             services.RemoveAll<IPolicyEnvelopeSigner>();
             services.AddSingleton<IPolicyEnvelopeSigner>(new RsaPolicyEnvelopeSigner(RSA.Create(2048)));
         }
+    }
+
+    private sealed class DedicatedDistributionPortalFactory : DistributionPortalFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config) =>
+            config.TenantId = "tenant-alpha";
+    }
+
+    [Fact]
+    public async Task DedicatedDistributionRefusesForeignTenantRowsAlreadyInStore()
+    {
+        using var factory = new DedicatedDistributionPortalFactory();
+        using var client = factory.CreateClient();
+        var machineId = Guid.NewGuid().ToString("N");
+        var enrollmentId = Guid.NewGuid().ToString("N");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PolicyMachines.Add(new PolicyMachineEntity
+            {
+                MachineId = machineId,
+                EnrollmentId = enrollmentId,
+                Tenant = "tenant-beta",
+                Environment = "prod",
+                RegisteredAtUtc = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await MachineGet(client, "tenant-beta", enrollmentId, machineId);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

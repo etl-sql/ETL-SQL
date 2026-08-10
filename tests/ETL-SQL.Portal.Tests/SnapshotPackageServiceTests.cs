@@ -3,6 +3,7 @@ using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
 using ETL_SQL.Core.Observability;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Services;
@@ -16,6 +17,62 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Portal")]
 public sealed class SnapshotPackageServiceTests
 {
+    [Fact]
+    public async Task ProviderBackedArtifactEncryptionUsesArtifactPurposeAndSafeVersionEnvelope()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig { TenantId = "tenant-alpha" };
+        var v1 = new KeyMaterialDescriptor(
+            "test-vault", "artifact-alpha", "tenant-alpha", KeyPurpose.Artifact, "v1");
+        var writerKeys = new ResolvedKeyMaterialProvider("test-vault",
+            [(v1, Enumerable.Repeat((byte)41, 32).ToArray())]);
+        var writer = new SnapshotPackageService(
+            config, storage, NullLogger<SnapshotPackageService>.Instance, writerKeys);
+
+        await writer.SaveAsync(CreateManifest("provider-secret"), "provider.etlsnap");
+
+        var raw = await storage.ReadAllBytesAsync(ArtifactArea.Snapshots, "provider.etlsnap");
+        Assert.DoesNotContain("provider-secret", Encoding.UTF8.GetString(raw));
+        Assert.Contains(Encoding.UTF8.GetBytes("v1"), raw);
+        Assert.Equal("provider-secret", (await writer.LoadAsync("provider.etlsnap"))!.Visuals[0].Rows[0][0]);
+
+        var datasetOnly = new ResolvedKeyMaterialProvider("test-vault",
+        [
+            (new KeyMaterialDescriptor(
+                "test-vault", "dataset-alpha", "tenant-alpha", KeyPurpose.Dataset, "v1"),
+             Enumerable.Repeat((byte)41, 32).ToArray())
+        ]);
+        var wrongPurpose = new SnapshotPackageService(
+            config, storage, NullLogger<SnapshotPackageService>.Instance, datasetOnly);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => wrongPurpose.LoadAsync("provider.etlsnap"));
+    }
+
+    [Fact]
+    public async Task ProviderBackedArtifactReadsPreviousVersionDuringRotation()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig { TenantId = "tenant-alpha" };
+        var previous = new KeyMaterialDescriptor(
+            "vault", "artifact-v1", "tenant-alpha", KeyPurpose.Artifact, "v1", IsCurrent: false);
+        var current = new KeyMaterialDescriptor(
+            "vault", "artifact-v2", "tenant-alpha", KeyPurpose.Artifact, "v2");
+        var v1Bytes = Enumerable.Repeat((byte)11, 32).ToArray();
+        var writer = new SnapshotPackageService(config, storage,
+            NullLogger<SnapshotPackageService>.Instance,
+            new ResolvedKeyMaterialProvider("vault", [(previous with { IsCurrent = true }, v1Bytes)]));
+        await writer.SaveAsync(CreateManifest("rotation-secret"), "rotation.etlsnap");
+
+        var reader = new SnapshotPackageService(config, storage,
+            NullLogger<SnapshotPackageService>.Instance,
+            new ResolvedKeyMaterialProvider("vault",
+            [
+                (previous, v1Bytes),
+                (current, Enumerable.Repeat((byte)22, 32).ToArray())
+            ]));
+
+        Assert.Equal("rotation-secret", (await reader.LoadAsync("rotation.etlsnap"))!.Visuals[0].Rows[0][0]);
+    }
+
     [Fact]
     public async Task SaveAsync_WritesEncryptedPackage_AndLoadsManifest()
     {

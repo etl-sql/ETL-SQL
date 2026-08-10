@@ -79,7 +79,7 @@ public class UseDatasetStatementHandler(ILogger logger) : IStatementHandler
             existing.ParquetFilePath,
             stmt.DatasetName,
             context,
-            existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey);
+            existing.AtRestKeyVersion);
 
         if (context is IReportContext reportCtx)
         {
@@ -109,12 +109,13 @@ public class UseDatasetStatementHandler(ILogger logger) : IStatementHandler
         return ttl.HasValue && existing.LastRefresh.Value + ttl.Value > DateTime.UtcNow;
     }
 
-    private async Task LoadFromParquet(string parquetPath, string datasetName, IExecutionContext context, string? atRestKey)
+    private async Task LoadFromParquet(string parquetPath, string datasetName, IExecutionContext context, string? atRestKeyVersion)
     {
+        using var datasetKey = await DatasetKeyResolution.ResolveAsync(context, atRestKeyVersion);
         var connAlias = $"__ds_load_{Guid.NewGuid():N}__";
 
         var encOptions = new System.Collections.Generic.Dictionary<string, Expression>();
-        DatasetAtRestOptions.Apply(encOptions, atRestKey);
+        DatasetAtRestOptions.Apply(encOptions, datasetKey.Password);
 
         var connStmt = new CreateConnectionStatement(
             connAlias, "PARQUET",

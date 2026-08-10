@@ -32,6 +32,9 @@ public sealed class PortalSupportBundleService(
     public async Task<SupportBundleContentDto> BuildAsync(CancellationToken ct = default)
     {
         var sections = new List<SupportBundleSectionDto>();
+        var tenantContext = string.IsNullOrWhiteSpace(config.TenantId)
+            ? null
+            : ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration(config.TenantId);
 
         // Health: statuses and durations, never the description of a failing check verbatim —
         // those can quote a connection string.
@@ -51,6 +54,8 @@ public sealed class PortalSupportBundleService(
         sections.Add(Section("deployment", "Deployment identity and versions", new JsonObject
         {
             ["nodeId"] = nodeIdentity.NodeId,
+            ["tenantId"] = tenantContext?.Tenant.Value,
+            ["tenantContextOrigin"] = tenantContext?.Origin.ToString(),
             ["environment"] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
             ["portalVersion"] = typeof(PortalSupportBundleService).Assembly.GetName().Version?.ToString() ?? "unknown",
             ["dotnetRuntime"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,

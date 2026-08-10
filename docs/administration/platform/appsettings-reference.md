@@ -228,6 +228,7 @@ Configuration settings for the Portal UI server, shared storage, and active inte
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `Portal:DatabasePath` | string | `./portal.db` | — | Local file path for portal SQLite database. Used when provider is `Sqlite`. |
+| `Portal:TenantId` | string | unset | — | Server-owned tenant identity for a host-fixed Managed Dedicated Portal. Required for SaaS portability export identity and included in reviewed support/export evidence. |
 | `Portal:Database:Provider` | string | `Sqlite` | — | Database backing portal configuration state (`Sqlite` or `Postgres`). |
 | `Portal:Database:ConnectionString` | string | `""` | — | Database connection details when `Postgres` provider is used (required for HA). |
 | `Portal:Orchestrator:ApiUrl` | string | `http://localhost:5001` | — | Base URL of the Orchestrator Service. |
@@ -329,6 +330,33 @@ Certified topology profiles include:
 - `PreviousAtRestKeys` (default: `{}`): Map of older keys to decrypt existing historical datasets.
 - `AllowMachineFallback` (default: `false`): Permits OS-level machine key fallbacks. Disable in multi-host HA clusters.
 - `PreviewCacheMaxRows` (default: `250000`): Global row-weight budget for cached dataset previews. Each cache entry is weighted by the number of preview rows loaded.
+
+`Portal:Dataset` is the compatibility configuration for existing deployments. New Enterprise
+deployments should use `Portal:KeyManagement`, which keeps resolved material outside appsettings,
+portable exports, job payloads, and execution images:
+
+```json
+{
+  "Portal": {
+    "TenantId": "tenant-acme",
+    "KeyManagement": {
+      "Enabled": true,
+      "Bindings": [
+        { "Purpose": "Dataset", "Version": "v1", "KeyId": "dataset-key", "EnvironmentVariable": "ETLSQL_KEY_DATASET_V1", "IsCurrent": true },
+        { "Purpose": "Credential", "Version": "v1", "KeyId": "credential-key", "EnvironmentVariable": "ETLSQL_KEY_CREDENTIAL_V1", "IsCurrent": true },
+        { "Purpose": "Artifact", "Version": "v1", "KeyId": "artifact-key", "EnvironmentVariable": "ETLSQL_KEY_ARTIFACT_V1", "IsCurrent": true },
+        { "Purpose": "Checkpoint", "Version": "v1", "KeyId": "checkpoint-key", "EnvironmentVariable": "ETLSQL_KEY_CHECKPOINT_V1", "IsCurrent": true }
+      ]
+    }
+  }
+}
+```
+
+Each environment variable must contain a distinct base64 value decoding to at least 32 bytes. The
+Portal derives the scope from its configured `TenantId` (or `portal-host` for a non-tenant host),
+never from a request or job. Previous versions remain as additional bindings with
+`IsCurrent: false`; exactly one current binding is required per purpose. Configuration exports carry
+only the non-secret binding metadata and environment-variable names.
 
 ### Portal Identity Providers (`Portal:Identity`)
 

@@ -14,15 +14,22 @@ public static class ServiceAccountScopes
     /// <summary>
     /// Administration of identity only — users, groups, group membership, sessions, and read-only
     /// introspection of a user's effective access. Deliberately narrow: there is no blanket
-    /// <c>admin.*</c>, so backup and restore, configuration export, environment promotion, support
-    /// bundles, audit collection, service restart/shutdown, and at-rest key rotation stay
-    /// unreachable by any token. Granting this scope never substitutes for the <c>Admin</c> role.
+    /// <c>admin.*</c>, so backup and restore, environment promotion, support bundles, audit
+    /// collection, service restart/shutdown, at-rest key rotation, and configuration export unless
+    /// separately granted by <c>admin.portability</c> remain unreachable. Granting this scope never
+    /// substitutes for the <c>Admin</c> role.
     /// </summary>
     public const string AdminIdentity = "admin.identity";
 
+    /// <summary>
+    /// Read-only access to the reviewed tenant configuration export plan and its acknowledged
+    /// bootstrap download. It grants no other Admin route and no import/mutation authority.
+    /// </summary>
+    public const string AdminPortability = "admin.portability";
+
     public static readonly ISet<string> Allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        PortalRead, ReportsExecute, OrchestratorExecute, AdminIdentity
+        PortalRead, ReportsExecute, OrchestratorExecute, AdminIdentity, AdminPortability
     };
 
     public static string Serialize(IEnumerable<string> values) => string.Join(' ', Normalize(values));

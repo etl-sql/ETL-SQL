@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Security;
 using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
@@ -230,6 +231,34 @@ public sealed class DatasetViewerServiceTests : IDisposable
         var values = await viewer.GetColumnValuesAsync(id, "v", search: "2", limit: 10);
         Assert.Equal(2, values.TotalDistinct);
         Assert.Equal([20L], values.Values.ToList());
+    }
+
+    [Fact]
+    public async Task View_KeyProvider_ResolvesRecordedDatasetVersionOnly()
+    {
+        var bytes = Enumerable.Repeat((byte)42, 32).ToArray();
+        var password = Convert.ToBase64String(bytes);
+        var parquet = WriteParquet("ds_provider.parquet", new()
+        {
+            ["ENCRYPT"] = "PASSWORD",
+            ["PASSWORD"] = password
+        });
+        await using var db = NewDb(out var config, atRestKey: null);
+        config.TenantId = "tenant-alpha";
+        config.KeyManagement.Enabled = true;
+        var id = AddDataset(db, "#provider", parquet, DatasetEncryptionMode.MachineBound);
+        (await db.Datasets.SingleAsync(d => d.Id == id)).AtRestKeyVersion = "v5";
+        await db.SaveChangesAsync();
+        var provider = new ResolvedKeyMaterialProvider("test-vault",
+        [
+            (new KeyMaterialDescriptor("test-vault", "dataset-key", "tenant-alpha",
+                KeyPurpose.Dataset, "v5"), bytes)
+        ]);
+        var viewer = new DatasetViewerService(db, new DatasetPreviewCache(config), config, provider);
+
+        var result = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
+
+        AssertSeedRows(result.Rows.ToList());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

@@ -11,6 +11,25 @@ namespace ETL_SQL.Tests.Core;
 /// </summary>
 public sealed class PolicyAuthorityServiceTests
 {
+    [Fact]
+    public async Task DedicatedAuthorityScopesBelowControllerCode()
+    {
+        var service = new PolicyAuthorityService(
+            new InMemoryPolicyAuthorityStore(),
+            new RsaPolicyEnvelopeSigner(RSA.Create(2048)),
+            authorityTenant: ETL_SQL.Core.Multitenancy.TenantContext
+                .FromHostConfiguration("tenant-alpha"));
+
+        await service.PublishAsync(SampleDoc(), "tenant-alpha", "prod", "1.0.0",
+            "alice", null, DateTimeOffset.UtcNow.AddDays(30));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            service.PublishAsync(SampleDoc(), "tenant-beta", "prod", "1.0.0",
+                "platform", null, DateTimeOffset.UtcNow.AddDays(30)));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(async () =>
+            await service.ListVersionsAsync("tenant-beta", "prod"));
+    }
+
     private static (PolicyAuthorityService svc, RsaPolicyEnvelopeSigner signer) NewAuthority()
     {
         var signer = new RsaPolicyEnvelopeSigner(RSA.Create(2048));

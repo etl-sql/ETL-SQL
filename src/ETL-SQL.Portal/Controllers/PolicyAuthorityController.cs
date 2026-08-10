@@ -23,12 +23,35 @@ public class PolicyAuthorityController(
     PolicyAuthorityService authority,
     IPolicyEnvelopeSigner signer,
     PortalDbContext db,
-    AuditService audit) : ControllerBase
+    AuditService audit,
+    DedicatedPolicyAuthorityGuard tenantGuard) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     private string CurrentUserName => User.Identity?.Name ?? $"user:{CurrentUserId}";
+
+    private IActionResult? AuthorizeTenant(
+        string? assertedTenant, bool mutation, out string tenant)
+    {
+        try
+        {
+            tenant = mutation
+                ? tenantGuard.AuthorizeMutation(User, assertedTenant)
+                : tenantGuard.AuthorizeRead(assertedTenant);
+            return null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            tenant = "";
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            tenant = "";
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 
     /// <summary>True when the previously active envelope no longer verifies under the currently
     /// configured signing key — i.e. this publish is the first after a signing-key rotation. The
@@ -76,8 +99,9 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> ListVersions(
         [FromQuery] string tenant, [FromQuery] string environment, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+        if (string.IsNullOrWhiteSpace(environment))
             return BadRequest(new { error = "tenant and environment are required." });
+        if (AuthorizeTenant(tenant, mutation: false, out tenant) is { } denied) return denied;
         var versions = await authority.ListVersionsAsync(tenant, environment, cancellationToken);
         return Ok(versions.Select(PolicyVersionDto.From));
     }
@@ -86,8 +110,9 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> GetActive(
         [FromQuery] string tenant, [FromQuery] string environment, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+        if (string.IsNullOrWhiteSpace(environment))
             return BadRequest(new { error = "tenant and environment are required." });
+        if (AuthorizeTenant(tenant, mutation: false, out tenant) is { } denied) return denied;
         var active = await authority.GetActiveVersionAsync(tenant, environment, cancellationToken);
         if (active is null)
             return NotFound(new { error = $"No active policy for {tenant}/{environment}." });
@@ -102,6 +127,7 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> Publish(
         [FromBody] PolicyPublishRequest request, CancellationToken cancellationToken)
     {
+        if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
         OrganizationPolicyDocument document;
         try
         {
@@ -115,13 +141,13 @@ public class PolicyAuthorityController(
         try
         {
             var previousActive = await authority.GetActiveVersionAsync(
-                request.Tenant, request.Environment, cancellationToken);
+                tenant, request.Environment, cancellationToken);
             var version = await authority.PublishAsync(
-                document, request.Tenant, request.Environment, request.PolicyVersion,
+                document, tenant, request.Environment, request.PolicyVersion,
                 CurrentUserName, request.Reviewer, request.ExpiresAtUtc, request.Staged,
                 cancellationToken);
             await audit.LogAsync(CurrentUserId, "PUBLISH_ORG_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"Version={version.PolicyVersion}; Staged={request.Staged}; " +
                 $"Hash={version.PolicyHash}; Superseded={version.SupersededVersion ?? "none"}; " +
                 $"SigningKeyRotated={SigningKeyRotatedSince(previousActive)}");
@@ -139,10 +165,11 @@ public class PolicyAuthorityController(
     {
         try
         {
+            if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
             var version = await authority.ActivateStagedAsync(
-                request.Tenant, request.Environment, request.PolicyVersion, cancellationToken);
+                tenant, request.Environment, request.PolicyVersion, cancellationToken);
             await audit.LogAsync(CurrentUserId, "ACTIVATE_ORG_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"Version={version.PolicyVersion}; PromotedFromStaged=true");
             return Ok(PolicyVersionDto.From(version));
         }
@@ -171,8 +198,9 @@ public class PolicyAuthorityController(
         [FromQuery] string? version = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+        if (string.IsNullOrWhiteSpace(environment))
             return BadRequest(new { error = "tenant and environment are required." });
+        if (AuthorizeTenant(tenant, mutation: false, out tenant) is { } denied) return denied;
 
         var result = await impact.BuildAsync(tenant, environment, version, cancellationToken);
         return result is null
@@ -184,6 +212,11 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> ListMachines(
         [FromQuery] string? tenant, [FromQuery] string? environment, CancellationToken cancellationToken)
     {
+        if (tenantGuard.IsDedicated)
+        {
+            if (AuthorizeTenant(tenant, mutation: false, out var scopedTenant) is { } denied) return denied;
+            tenant = scopedTenant;
+        }
         var query = db.PolicyMachines.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(tenant))
             query = query.Where(m => m.Tenant == tenant);
@@ -200,8 +233,9 @@ public class PolicyAuthorityController(
         if (!Guid.TryParseExact(request.MachineId, "N", out _)
             || !Guid.TryParseExact(request.EnrollmentId, "N", out _))
             return BadRequest(new { error = "Machine and enrollment IDs must be 32-character GUIDs." });
-        if (string.IsNullOrWhiteSpace(request.Tenant) || string.IsNullOrWhiteSpace(request.Environment))
+        if (string.IsNullOrWhiteSpace(request.Environment))
             return BadRequest(new { error = "tenant and environment are required." });
+        if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
 
         string? thumbprint = null;
         if (!string.IsNullOrWhiteSpace(request.ClientCertificateThumbprint))
@@ -214,6 +248,14 @@ public class PolicyAuthorityController(
 
         var existing = await db.PolicyMachines
             .FirstOrDefaultAsync(m => m.MachineId == request.MachineId, cancellationToken);
+        if (existing is not null && tenantGuard.IsDedicated
+            && !existing.Tenant.Equals(tenant, StringComparison.Ordinal))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "This machine identity is outside the Dedicated tenant policy authority."
+            });
+        }
         if (existing is not null && !existing.Revoked)
             return BadRequest(new
             {
@@ -228,7 +270,7 @@ public class PolicyAuthorityController(
             db.PolicyMachines.Add(existing);
         }
         existing.EnrollmentId = request.EnrollmentId;
-        existing.Tenant = request.Tenant;
+        existing.Tenant = tenant;
         existing.Environment = request.Environment;
         existing.ClientCertificateThumbprint = thumbprint;
         existing.CanaryGroup = string.IsNullOrWhiteSpace(request.CanaryGroup)
@@ -242,7 +284,7 @@ public class PolicyAuthorityController(
 
         await audit.LogAsync(CurrentUserId, "REGISTER_POLICY_MACHINE", "PolicyMachine",
             request.MachineId,
-            $"Tenant={request.Tenant}; Environment={request.Environment}; " +
+            $"Tenant={tenant}; Environment={request.Environment}; " +
             $"ClientCertRequired={thumbprint is not null}; CanaryGroup={existing.CanaryGroup ?? "none"}; " +
             $"ReRegistered={reRegistered}");
         return Ok(PolicyMachineDto.From(existing));
@@ -252,8 +294,14 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> RevokeMachine(
         string machineId, [FromBody] PolicyMachineRevokeRequest request, CancellationToken cancellationToken)
     {
+        string? hostTenant = null;
+        if (tenantGuard.IsDedicated)
+        {
+            if (AuthorizeTenant(null, mutation: true, out hostTenant) is { } denied) return denied;
+        }
         var machine = await db.PolicyMachines
-            .FirstOrDefaultAsync(m => m.MachineId == machineId, cancellationToken);
+            .FirstOrDefaultAsync(m => m.MachineId == machineId
+                && (hostTenant == null || m.Tenant == hostTenant), cancellationToken);
         if (machine is null)
             return NotFound(new { error = $"Machine '{machineId}' is not registered." });
         if (!machine.Revoked)
@@ -275,12 +323,13 @@ public class PolicyAuthorityController(
     {
         try
         {
+            if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
             var version = await authority.RollbackToAsync(
-                request.Tenant, request.Environment, request.TargetPolicyVersion,
+                tenant, request.Environment, request.TargetPolicyVersion,
                 request.NewPolicyVersion, CurrentUserName, request.Reviewer,
                 request.ExpiresAtUtc, cancellationToken);
             await audit.LogAsync(CurrentUserId, "ROLLBACK_ORG_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"Target={request.TargetPolicyVersion}; RepublishedAs={version.PolicyVersion}; " +
                 $"Hash={version.PolicyHash}");
             return Ok(PolicyVersionDto.From(version));
@@ -299,8 +348,9 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> GetCanary(
         [FromQuery] string tenant, [FromQuery] string environment, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+        if (string.IsNullOrWhiteSpace(environment))
             return BadRequest(new { error = "tenant and environment are required." });
+        if (AuthorizeTenant(tenant, mutation: false, out tenant) is { } denied) return denied;
         var canary = await authority.GetCanaryVersionAsync(tenant, environment, cancellationToken);
         if (canary is null)
             return NotFound(new { error = $"No canary in progress for {tenant}/{environment}." });
@@ -311,6 +361,7 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> PublishCanary(
         [FromBody] PolicyCanaryPublishRequest request, CancellationToken cancellationToken)
     {
+        if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
         OrganizationPolicyDocument document;
         try
         {
@@ -334,10 +385,10 @@ public class PolicyAuthorityController(
         try
         {
             var version = await authority.PublishCanaryAsync(
-                document, request.Tenant, request.Environment, request.PolicyVersion,
+                document, tenant, request.Environment, request.PolicyVersion,
                 CurrentUserName, request.Reviewer, request.ExpiresAtUtc, cohort, cancellationToken);
             await audit.LogAsync(CurrentUserId, "PUBLISH_CANARY_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"Version={version.PolicyVersion}; Cohort={CohortLabel(cohort)}; Hash={version.PolicyHash}");
             return Ok(PolicyVersionDto.From(version));
         }
@@ -353,10 +404,11 @@ public class PolicyAuthorityController(
     {
         try
         {
+            if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
             var version = await authority.PromoteCanaryAsync(
-                request.Tenant, request.Environment, request.PolicyVersion, cancellationToken);
+                tenant, request.Environment, request.PolicyVersion, cancellationToken);
             await audit.LogAsync(CurrentUserId, "PROMOTE_CANARY_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"Version={version.PolicyVersion}; PromotedToFleetWide=true");
             return Ok(PolicyVersionDto.From(version));
         }
@@ -372,11 +424,12 @@ public class PolicyAuthorityController(
     {
         try
         {
+            if (AuthorizeTenant(request.Tenant, mutation: true, out var tenant) is { } denied) return denied;
             var reissued = await authority.HaltCanaryAsync(
-                request.Tenant, request.Environment, request.PolicyVersion,
+                tenant, request.Environment, request.PolicyVersion,
                 CurrentUserName, request.Reviewer, cancellationToken);
             await audit.LogAsync(CurrentUserId, "HALT_CANARY_POLICY", "OrganizationPolicy",
-                $"{request.Tenant}/{request.Environment}",
+                $"{tenant}/{request.Environment}",
                 $"HaltedVersion={request.PolicyVersion}; ReissuedActive={reissued.PolicyVersion}");
             return Ok(PolicyVersionDto.From(reissued));
         }

@@ -495,13 +495,55 @@ namespace ETL_SQL.App
         };
         private static readonly Option<string[]> TenantBindingOption = new("--binding")
         {
-            Description = "A logical binding the target already supplies (repeatable), e.g. SECRET:name.",
+            Description = "Target binding as SOURCE=TARGET (repeatable); preflight also accepts a supplied logical id.",
             AllowMultipleArgumentsPerToken = true,
+        };
+        private static readonly Option<string?> TenantExportIdentityOption = new("--tenant")
+        {
+            Description = "Stable tenant export identity recorded in the bundle manifest."
+        };
+        private static readonly Option<string?> TenantSourceProfileOption = new("--source-profile")
+        {
+            Description = "Source profile: Solo, Team, Enterprise, or SaaS."
+        };
+        private static readonly Option<string[]> TenantArtifactOption = new("--artifact")
+        {
+            Description = "Portable source artifact to include (repeatable).",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        private static readonly Option<string?> TenantArtifactRootOption = new("--artifact-root")
+        {
+            Description = "Root used to preserve relative artifact paths."
+        };
+        private static readonly Option<string?> TenantOrchestratorPackageOption = new("--orchestrator-package")
+        {
+            Description = "Optional existing Orchestrator promotion package to include."
+        };
+        private static readonly Option<string?> TenantOrchestratorAliasOption = new("--orchestrator-alias")
+        {
+            Description = "Portal Orchestrator alias recorded by configuration export."
+        };
+        private static readonly Option<string?> TenantRecipientKeyOption = new("--recipient-key")
+        {
+            Description = "Recipient public key for export or tenant private key for import."
+        };
+        private static readonly Option<string?> TenantSigningKeyOption = new("--signing-key")
+        {
+            Description = "Operator private key used to sign an exported bundle."
+        };
+        private static readonly Option<string?> TenantCollisionOption = new("--collision")
+        {
+            Description = "Import collision policy: fail (default) or proceed.",
+            DefaultValueFactory = _ => "fail"
+        };
+        private static readonly Option<bool> TenantDryRunOption = new("--dry-run")
+        {
+            Description = "Compute and print the import plan without changing the target."
         };
 
         private static readonly Option<string?> SaasTenantOption = new("--tenant", Array.Empty<string>())
         {
-            Description = "Stable tenant id (lowercase letters, digits, and hyphens).",
+            Description = "Tenant assertion; must match the active signed onboarding authorization.",
             Arity = ArgumentArity.ExactlyOne
         };
         private static readonly Option<string?> SaasSourceProfileOption = new("--source-profile", Array.Empty<string>())
@@ -518,6 +560,14 @@ namespace ETL_SQL.App
         {
             Description = "Deployment-plane root under which the isolated tenant boundary is created.",
             Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SaasOidcAuthorityOption = new("--oidc-authority", Array.Empty<string>())
+        {
+            Description = "Tenant-owned OIDC issuer HTTPS authority. Must be paired with --oidc-client-id."
+        };
+        private static readonly Option<string?> SaasOidcClientIdOption = new("--oidc-client-id", Array.Empty<string>())
+        {
+            Description = "Tenant-owned OIDC client id. Its secret is injected at Portal__Identity__Oidc__ClientSecret."
         };
         private static readonly Option<int> SaasMaxConcurrentJobsOption = new("--max-concurrent-jobs", Array.Empty<string>())
         {
@@ -925,6 +975,8 @@ namespace ETL_SQL.App
                 PromotionPackageOption,
                 SaasPortalBootstrapOption,
                 SaasOutputRootOption,
+                SaasOidcAuthorityOption,
+                SaasOidcClientIdOption,
                 PromotionBindingOption,
                 SaasMaxConcurrentJobsOption,
                 SaasMaxStorageMbOption,
@@ -934,7 +986,23 @@ namespace ETL_SQL.App
             promotionCommand.Add(saasOnboardCommand);
             adminCommand.Add(promotionCommand);
 
-            var tenantCommand = new Command("tenant", "Inspect tenant portability bundles");
+            var tenantCommand = new Command("tenant", "Export, inspect, and import tenant portability bundles");
+            var tenantExportCommand = new Command("export", "Compose a signed, optionally tenant-encrypted portability bundle")
+            {
+                TenantBundleOption,
+                PortalUrlOption,
+                PortalClientIdOption,
+                TenantExportIdentityOption,
+                TenantSourceProfileOption,
+                TenantArtifactOption,
+                TenantArtifactRootOption,
+                TenantOrchestratorPackageOption,
+                TenantOrchestratorAliasOption,
+                TenantRecipientKeyOption,
+                TenantSigningKeyOption,
+            };
+            tenantExportCommand.SetAction(context => Dispatch(context, "admin-tenant-export", handler));
+            tenantCommand.Add(tenantExportCommand);
             var tenantValidateCommand = new Command("validate", "Verify a bundle's integrity and, with --operator-key, its authenticity")
             {
                 TenantBundleOption,
@@ -952,6 +1020,19 @@ namespace ETL_SQL.App
             };
             tenantPreflightCommand.SetAction(context => Dispatch(context, "admin-tenant-preflight", handler));
             tenantCommand.Add(tenantPreflightCommand);
+            var tenantImportCommand = new Command("import", "Preflight and apply a bundle with workloads disabled")
+            {
+                TenantBundleOption,
+                PortalUrlOption,
+                TenantOperatorKeyOption,
+                TenantRequireSignatureOption,
+                TenantBindingOption,
+                TenantRecipientKeyOption,
+                TenantCollisionOption,
+                TenantDryRunOption,
+            };
+            tenantImportCommand.SetAction(context => Dispatch(context, "admin-tenant-import", handler));
+            tenantCommand.Add(tenantImportCommand);
             adminCommand.Add(tenantCommand);
 
             var haSoakCommand = new Command("ha-soak", "Prepare and collect PostgreSQL HA soak certification artifacts");
@@ -1565,6 +1646,17 @@ namespace ETL_SQL.App
                 cliContext.TenantRequireSignature = TryGetBool(res, TenantRequireSignatureOption);
                 cliContext.TenantBindings = res.GetResult(TenantBindingOption) is null
                     ? null : [.. res.GetValue(TenantBindingOption) ?? []];
+                cliContext.TenantExportIdentity = TryGetString(res, TenantExportIdentityOption);
+                cliContext.TenantSourceProfile = TryGetString(res, TenantSourceProfileOption);
+                cliContext.TenantArtifactFiles = res.GetResult(TenantArtifactOption) is null
+                    ? null : [.. res.GetValue(TenantArtifactOption) ?? []];
+                cliContext.TenantArtifactRoot = TryGetString(res, TenantArtifactRootOption);
+                cliContext.TenantOrchestratorPackage = TryGetString(res, TenantOrchestratorPackageOption);
+                cliContext.TenantOrchestratorAlias = TryGetString(res, TenantOrchestratorAliasOption);
+                cliContext.TenantRecipientKey = TryGetString(res, TenantRecipientKeyOption);
+                cliContext.TenantSigningKey = TryGetString(res, TenantSigningKeyOption);
+                cliContext.TenantCollisionPolicy = TryGetString(res, TenantCollisionOption);
+                cliContext.TenantDryRun = TryGetBool(res, TenantDryRunOption);
             }
 
             if (commandName == "run")
@@ -1695,6 +1787,8 @@ namespace ETL_SQL.App
                 cliContext.PromotionPackage = res.GetValue(PromotionPackageOption);
                 cliContext.SaasPortalBootstrap = res.GetValue(SaasPortalBootstrapOption);
                 cliContext.SaasOutputRoot = res.GetValue(SaasOutputRootOption);
+                cliContext.SaasOidcAuthority = res.GetValue(SaasOidcAuthorityOption);
+                cliContext.SaasOidcClientId = res.GetValue(SaasOidcClientIdOption);
                 cliContext.PromotionBindings = res.GetValue(PromotionBindingOption);
                 cliContext.SaasMaxConcurrentJobs = res.GetValue(SaasMaxConcurrentJobsOption);
                 cliContext.SaasMaxStorageMb = res.GetValue(SaasMaxStorageMbOption);

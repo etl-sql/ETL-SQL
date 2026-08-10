@@ -17,6 +17,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     }
 
     public DbSet<Group> Groups => Set<Group>();
+    public DbSet<SharedIdentityAuthority> SharedIdentityAuthorities => Set<SharedIdentityAuthority>();
     public DbSet<UserGroup> UserGroups => Set<UserGroup>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<FolderAcl> FolderAcls => Set<FolderAcl>();
@@ -71,9 +72,27 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         var piiConverter = new EncryptedDbConverter(protector);
         var piiNullableConverter = new EncryptedDbNullableConverter(protector);
 
+        builder.Entity<SharedIdentityAuthority>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => x.AuthorityId).IsUnique();
+            e.HasIndex(x => x.PortalHost).IsUnique();
+            e.HasIndex(x => x.LoginDomain).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Issuer });
+            e.Property(x => x.AuthorityId).HasMaxLength(64);
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.PortalHost).HasMaxLength(253);
+            e.Property(x => x.LoginDomain).HasMaxLength(253);
+            e.Property(x => x.Issuer).HasMaxLength(2048);
+            e.Property(x => x.ClientId).HasMaxLength(512);
+            e.Property(x => x.ClientSecretReference).HasMaxLength(256);
+        });
+
         builder.Entity<UserGroup>(e =>
         {
             e.HasKey(x => new { x.UserId, x.GroupId });
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.UserId, x.GroupId }).IsUnique();
             e.HasOne(x => x.User).WithMany(u => u.UserGroups).HasForeignKey(x => x.UserId);
             e.HasOne(x => x.Group).WithMany(g => g.UserGroups).HasForeignKey(x => x.GroupId);
         });
@@ -123,6 +142,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<RefreshToken>(e =>
         {
             e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.UserId });
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
         });
 
@@ -130,9 +151,10 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.ClientId).IsUnique();
-            e.HasIndex(x => x.NormalizedName).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.NormalizedName }).IsUnique();
             e.HasIndex(x => x.OwnerUserId);
             e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.ClientId).HasMaxLength(35);
             e.Property(x => x.Name).HasMaxLength(100);
             e.Property(x => x.NormalizedName).HasMaxLength(100);
@@ -236,14 +258,16 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<PortalSecret>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
-            e.HasIndex(x => x.Name).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Name).HasMaxLength(200);
         });
 
         builder.Entity<PortalSharedConnection>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
-            e.HasIndex(x => x.Alias).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Alias }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.Alias).HasMaxLength(200);
             e.Property(x => x.ConnectorType).HasMaxLength(100);
             e.Property(x => x.EnvironmentScope).HasMaxLength(100);
@@ -253,14 +277,16 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<SharedConnectionAcl>(e =>
         {
-            e.HasIndex(x => new { x.SharedConnectionId, x.GroupId }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.SharedConnectionId, x.GroupId }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasOne(x => x.SharedConnection).WithMany(c => c.Acls).HasForeignKey(x => x.SharedConnectionId);
             e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
         });
 
         builder.Entity<SharedConnectionUsage>(e =>
         {
-            e.HasIndex(x => new { x.SharedConnectionId, x.ConsumerUser }).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.SharedConnectionId, x.ConsumerUser }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
             e.Property(x => x.ConsumerUser).HasMaxLength(256);
             e.HasOne(x => x.SharedConnection).WithMany().HasForeignKey(x => x.SharedConnectionId);
         });
@@ -413,14 +439,26 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Group>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
-            e.HasIndex(x => x.Name).IsUnique();
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
         });
 
         builder.Entity<PortalUser>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            // ASP.NET Identity's default global username index is incompatible with a shared store.
+            // Preserve its lookup index but move uniqueness to the tenant-qualified key.
+            e.HasIndex(x => x.NormalizedUserName)
+                .HasDatabaseName("UserNameIndex")
+                .IsUnique(false);
+            e.HasIndex(x => new { x.TenantId, x.NormalizedUserName })
+                .IsUnique()
+                .HasFilter("\"NormalizedUserName\" IS NOT NULL");
             // Federated accounts are looked up by their immutable provider subject.
-            e.HasIndex(x => new { x.Provider, x.ExternalSubject });
+            e.HasIndex(x => new { x.TenantId, x.Provider, x.ExternalIssuer, x.ExternalSubject })
+                .IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.ExternalIssuer).HasMaxLength(2048);
             e.Property(x => x.Email).HasConversion(piiNullableConverter);
             e.Property(x => x.NormalizedEmail).HasConversion(piiNullableConverter);
             e.Property(x => x.FirstName).HasConversion(piiNullableConverter);
@@ -470,4 +508,3 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         });
     }
 }
-
