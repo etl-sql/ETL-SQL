@@ -621,9 +621,26 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
       - *Slice 4 — the SaaS → self-hosted Enterprise journey* as a certification lane, which is the
         half of this gate that actually proves a customer can leave.
 
-      Signing and tenant encryption (§13) are not in any slice above and remain open: a package
-      encrypted only to a provider-owned key is not a usable exit artifact, so that decision needs
-      making before GA rather than after.
+      **Signing and encryption decided (2026-08-09), recorded in
+      [TenantPortability.md §13.1](docs/architecture/TenantPortability.md).** OpenPGP via the
+      `PgpCore` dependency already in Core; manifest plaintext and signed, payloads encrypted;
+      encryption required when the source is SaaS and optional-but-recorded otherwise; the operator
+      signs with a published key. JOSE was chosen first and reversed on a fact check — no JOSE
+      library exists anywhere in the repo, so it meant a new dependency plus a license audit, or
+      hand-writing JWE key agreement.
+
+      This becomes **slice 1b**, ahead of slice 2, because it changes the manifest shape (signature
+      block, encryption envelope) and whether payloads sit on disk as plaintext. Retrofitting after
+      composition means rewriting the writer, the validator, and their tests.
+
+      - [ ] Slice 1b. `CryptoUtils` already has `EncryptFileWithPgp`/`DecryptFileWithPgp`; there is
+            **no PGP sign/verify helper**, so that is new code. Add the detached operator signature
+            over the canonical manifest, the recipient-key payload encryption, the SaaS-source
+            requirement, and validator support for verify-before-trust. Negative coverage: a valid
+            signature over a *different* manifest, an unsigned bundle presented as signed, and a
+            SaaS-sourced bundle that is unencrypted.
+
+      Key-rotation policy and published-key distribution are still open, but neither blocks slice 1b.
 
 #### Isolation domains
 

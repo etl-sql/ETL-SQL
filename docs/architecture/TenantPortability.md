@@ -395,6 +395,20 @@ must not preserve reusable tenant authority or be represented as customer-restor
 
 The bundle can be retained and verified by a customer after source SaaS access is unavailable.
 
+### 13.1 Decided formats (2026-08-09)
+
+The algorithm and custody choices §20 left open are now fixed. They do not change the policy above.
+
+| Decision | Choice | Why |
+| :--- | :--- | :--- |
+| Signature and encryption stack | **OpenPGP**, via the `PgpCore` dependency already in `ETL-SQL.Core` | It is the "encrypt to a recipient public key" model this section already describes, it is license-cleared and shipping, and `CREATE PGP KEY PAIR` means a customer may already hold a usable key because the product told them to make one. JOSE was chosen first and reversed: no JOSE library is present anywhere in the repository, so it meant either a new dependency plus a license audit, or hand-writing JWE key agreement — hand-rolled key derivation is the wrong trade in an artifact whose purpose is surviving unopened for years. |
+| What is encrypted | Manifest **plaintext and signed**; payloads encrypted | §5 wants ordinary inspectable formats, and preflight must verify structure, hashes, counts, and the dependency graph *without* the recipient key. The validator already refuses resolved secret material in the manifest, so a plaintext manifest carries no secret. |
+| When encryption is required | Required when the source is **SaaS**; optional and recorded otherwise | A self-hosted operator moving their own tenant between their own machines should not be forced into recipient-key management. The manifest always records which was used, so "unencrypted" is never ambiguous. |
+| Who signs | The **operator** (exporting deployment), with a published key | The signature is an authenticity claim — "this is what we exported for you" — and is separable from the confidentiality claim made by encrypting to the tenant. A customer can verify provenance offline against the published key. |
+
+Signature verification precedes any trust in payload metadata, as above. Key-rotation policy and the
+published-key distribution mechanism remain open.
+
 ## 14. Versioning and Compatibility
 
 Bundle and component schemas evolve independently. The manifest declares required capabilities and
@@ -507,7 +521,8 @@ rollback/restore result, and isolation-negative results.
 ## 20. Open Implementation Decisions
 
 - Canonical manifest/component schemas and MIME/content type registrations
-- Signature algorithms, trust chain, recipient encryption formats, and key-rotation policy
+- ~~Signature algorithms, trust chain, recipient encryption formats~~ — decided, see §13.1.
+  Key-rotation policy and published-key distribution remain open.
 - Exact stable-ID preservation and collision UX per resource class
 - Initial evidence/content classes and first large-content storage provider
 - Consistency-point mechanism across Portal database, Orchestrator state, and artifact storage
