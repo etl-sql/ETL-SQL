@@ -1006,6 +1006,80 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task CastableRule_SeparatesParseableFromUnparseableText()
+        {
+            // The ingestion case: everything arrived as text and only some of it is a date.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #raw (RawDate VARCHAR(50));
+                INSERT INTO #raw (RawDate) VALUES ('2026-08-10'), ('not a date'), ('2026-13-45'), (NULL);");
+
+            await Run(eval, @"
+                SELECT RawDate /* @expect: 'CASTABLE AS DATE'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #raw
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));   // the real date and the NULL
+            Assert.Equal(2, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task CastableRule_EnforcesADeclaredDecimalWidth()
+        {
+            // DECIMAL(5,2) allows three digits before the point and two after. The shared converter
+            // ignores the width, so this is the assertion that it is not merely decorative.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #raw (RawAmount VARCHAR(50));
+                INSERT INTO #raw (RawAmount) VALUES ('123.45'), ('12'), ('1234.5'), ('1.234'), ('abc');");
+
+            await Run(eval, @"
+                SELECT RawAmount /* @expect: 'CASTABLE AS DECIMAL(5,2)'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #raw
+                ON FAILURE QUARANTINE TO #bad;");
+
+            var clean = await ReadRows(eval, "#clean");
+            Assert.Equal(new object?[] { "123.45", "12" }, clean.Select(r => r["RawAmount"]).ToArray());
+            Assert.Equal(3, await CountRows(eval, "#bad"));     // too wide, too precise, not a number
+        }
+
+        [Fact]
+        public async Task CastableRule_EnforcesADeclaredStringWidth()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'short'), (2, 'far too long for the declared width')");
+
+            await Run(eval, @"
+                SELECT Id, Name /* @expect: 'CASTABLE AS VARCHAR(10)'; @fail: 'WARN'; */
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+
+            var failure = Assert.Single(eval.DataQuality.Failures);
+            Assert.Equal(1, failure.Count);
+        }
+
+        [Fact]
+        public async Task CastableRule_AgreesWithTryCastOnTheSameValue()
+        {
+            // The rule and a later cast of the same value must not disagree; they share one
+            // conversion so that this holds by construction rather than by coincidence.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #raw (RawDate VARCHAR(50));
+                INSERT INTO #raw (RawDate) VALUES ('2026-08-10'), ('not a date');");
+
+            await Run(eval, @"
+                SELECT RawDate /* @expect: 'CASTABLE AS DATE'; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #raw
+                ON FAILURE QUARANTINE TO #bad;");
+
+            await Run(eval, "SELECT TRY_CAST(RawDate AS DATE) AS Converted INTO #cast FROM #clean;");
+
+            var converted = await ReadRows(eval, "#cast");
+            Assert.All(converted, row => Assert.NotNull(row["Converted"]));
+        }
+
+        [Fact]
         public async Task ExprRule_EvaluatesAcrossTheProjectedRow()
         {
             var eval = NewEvaluator();

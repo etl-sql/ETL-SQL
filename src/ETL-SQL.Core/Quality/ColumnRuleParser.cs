@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core.Quality;
@@ -135,6 +136,9 @@ public static partial class ColumnRuleParser
         if (upper.StartsWith("LENGTH", StringComparison.Ordinal))
             return ParseLengthRule(text);
 
+        if (upper.StartsWith("CASTABLE", StringComparison.Ordinal))
+            return ParseCastableRule(text);
+
         if (upper == "UNIQUE")
             return new UniqueRule(UniqueMode.All, null, null) { Text = text };
 
@@ -234,7 +238,7 @@ public static partial class ColumnRuleParser
             $"Unknown @expect rule '{text}'. Supported: NOT NULL, NOT BLANK, UNIQUE, " +
             "UNIQUE WITH (cols), UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), " +
             "EXISTS IN table(col), EXISTS WITH (cols) IN table(cols), LENGTH BETWEEN <min> AND <max>, " +
-            "LENGTH <compare> <n>, EXPR <predicate>, and numeric >= <= > < = compares.");
+            "LENGTH <compare> <n>, CASTABLE AS <type>, EXPR <predicate>, and numeric >= <= > < = compares.");
     }
 
     /// <summary>
@@ -276,6 +280,55 @@ public static partial class ColumnRuleParser
         throw new ColumnRuleParseException(
             $"LENGTH expects the form 'LENGTH BETWEEN <min> AND <max>' or a comparison such as " +
             $"'LENGTH >= 5', got '{text}'.");
+    }
+
+    /// <summary>
+    /// Parses <c>CASTABLE AS &lt;type&gt;</c>, optionally with a declared width. The type name is
+    /// checked against the engine's converter registry here rather than at runtime: an unregistered
+    /// type makes the shared cast return the value unchanged, so the rule would pass every row —
+    /// the failure mode a validity check must not have.
+    /// </summary>
+    private static ColumnRule ParseCastableRule(string text)
+    {
+        var match = Regex.Match(
+            text,
+            @"^CASTABLE\s+AS\s+(?<type>[A-Za-z_]\w*)\s*(\(\s*(?<precision>\d+)\s*(,\s*(?<scale>\d+)\s*)?\))?$",
+            RegexOptions.IgnoreCase);
+        if (!match.Success)
+            throw new ColumnRuleParseException(
+                $"CASTABLE expects the form 'CASTABLE AS <type>', optionally with a width such as " +
+                $"'CASTABLE AS DECIMAL(18,2)', got '{text}'.");
+
+        var baseType = match.Groups["type"].Value.ToUpperInvariant();
+        if (!TypeConverter.IsRegistered(baseType))
+            throw new ColumnRuleParseException(
+                $"CASTABLE AS '{baseType}' names a type this engine has no conversion for, so the " +
+                "rule would accept every value. Use a type CAST accepts.");
+
+        int? precision = match.Groups["precision"].Success
+            ? int.Parse(match.Groups["precision"].Value, CultureInfo.InvariantCulture)
+            : null;
+        int? scale = match.Groups["scale"].Success
+            ? int.Parse(match.Groups["scale"].Value, CultureInfo.InvariantCulture)
+            : null;
+
+        if (precision is 0)
+            throw new ColumnRuleParseException(
+                $"CASTABLE rule '{text}' declares a width of zero, which no value can satisfy.");
+        if (precision is { } p && scale is { } s && s > p)
+            throw new ColumnRuleParseException(
+                $"CASTABLE rule '{text}' declares more decimal places than total digits.");
+
+        // Rebuilt from the captured groups rather than sliced out of the rule text, so the width
+        // reaches the converter in the canonical form it parses — the forms it interprets itself,
+        // such as DATETIME(3) truncating to a precision, keep behaving as they do in a CAST.
+        var declaredType = precision switch
+        {
+            { } width when scale is { } places => $"{baseType}({width},{places})",
+            { } width => $"{baseType}({width})",
+            _ => baseType
+        };
+        return new CastableRule(declaredType, baseType, precision, scale) { Text = text };
     }
 
     private static int ParseLengthBound(string raw, string text)

@@ -44,6 +44,7 @@ or an `EXPR` function call are literal.
 | `EXISTS WITH (<col>, …) IN <table>(<col>, …)` | The tuple of projected columns must exist as a tuple in the reference table (composite / scoped FK check). |
 | `LENGTH BETWEEN <min> AND <max>` | Character count within an inclusive range. |
 | `LENGTH >= <n>` (`<=` `>` `<` `=`) | Character count compared against a whole, non-negative bound. |
+| `CASTABLE AS <type>` | Value must convert to the type, e.g. `CASTABLE AS DATE`, `CASTABLE AS DECIMAL(18,2)`. |
 | `EXPR <predicate>` | Boolean predicate over the whole projected row, e.g. `EXPR StartDate <= EndDate`. |
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
@@ -62,6 +63,12 @@ Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
 - **String comparisons honor `SET CASE_SENSITIVE`** for `MATCHES`, `IN`, and `EXISTS IN`. Column
   *names* in composite rules always match case-insensitively — the setting governs values, not
   identifiers.
+- **`CASTABLE AS` uses the engine's own conversion**, the one behind `TRY_CAST`, so the rule and a
+  later cast of the same value always agree. A declared width is checked on top of it —
+  `DECIMAL(18,2)` allows 16 digits before the point and 2 after, `VARCHAR(50)` at most 50
+  characters — because the shared converter ignores widths and an unchecked one would read as a
+  constraint while verifying nothing. A type the engine has no conversion for is a parse error, not
+  a rule that accepts everything.
 - **`LENGTH` measures the rendered value**, matching the `LEN` function — so a number is measured
   as it would print. Every form lowers onto one inclusive range (`LENGTH > 5` becomes a minimum of
   6), and a range no value can satisfy (`LENGTH BETWEEN 10 AND 5`, `LENGTH < 0`) is a parse error

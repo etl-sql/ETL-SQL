@@ -73,6 +73,51 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_Castable_WithAndWithoutADeclaredWidth()
+        {
+            var date = Assert.IsType<CastableRule>(ColumnRuleParser.Parse("'CASTABLE AS DATE'").Single());
+            Assert.Equal("DATE", date.BaseType);
+            Assert.Equal("DATE", date.DeclaredType);
+            Assert.Null(date.Precision);
+            Assert.Null(date.Scale);
+
+            var money = Assert.IsType<CastableRule>(
+                ColumnRuleParser.Parse("'CASTABLE AS DECIMAL(18,2)'").Single());
+            Assert.Equal("DECIMAL", money.BaseType);
+            Assert.Equal("DECIMAL(18,2)", money.DeclaredType);
+            Assert.Equal(18, money.Precision);
+            Assert.Equal(2, money.Scale);
+
+            var name = Assert.IsType<CastableRule>(
+                ColumnRuleParser.Parse("'castable as varchar(50)'").Single());
+            Assert.Equal("VARCHAR", name.BaseType);
+            Assert.Equal(50, name.Precision);
+            Assert.Null(name.Scale);
+        }
+
+        [Fact]
+        public void Castable_UnknownType_IsHardError()
+        {
+            // An unregistered type makes the shared cast a no-op, so the rule would accept every
+            // value. Catching it at parse time is the difference between a rule and a decoration.
+            var ex = Assert.Throws<ColumnRuleParseException>(
+                () => ColumnRuleParser.Parse("'CASTABLE AS BANANA'"));
+
+            Assert.Contains("BANANA", ex.Message);
+            Assert.Contains("every value", ex.Message);
+        }
+
+        [Theory]
+        [InlineData("CASTABLE AS DECIMAL(2,5)")]  // more decimals than total digits
+        [InlineData("CASTABLE AS VARCHAR(0)")]
+        [InlineData("CASTABLE AS")]
+        [InlineData("CASTABLE DATE")]
+        public void Castable_Malformed_Or_Unsatisfiable_IsHardError(string text)
+        {
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+        }
+
+        [Fact]
         public void Parses_UniqueWith_CompositeTuple()
         {
             var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE WITH (TenantId, Region)'").Single());

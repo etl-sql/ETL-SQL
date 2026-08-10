@@ -262,7 +262,8 @@ public class LanguageService : ILanguageService
         {
             values = ["NOT NULL", "NOT BLANK", "UNIQUE", "UNIQUE WITH (", "UNIQUE_FIRST BY ",
                       "UNIQUE_LAST BY ", "MATCHES ", "IN (", "EXISTS IN ", "EXISTS WITH (",
-                      "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ", "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
+                      "LENGTH BETWEEN ", "LENGTH >= ", "LENGTH <= ", "CASTABLE AS ",
+                      "EXPR ", ">= ", "<= ", "> ", "< ", "= "];
         }
         else
         {
@@ -311,7 +312,7 @@ public class LanguageService : ILanguageService
             + "Rules: `NOT NULL`, `NOT BLANK`, `UNIQUE`, `UNIQUE WITH (cols)`, "
             + "`UNIQUE_FIRST|UNIQUE_LAST BY <expr>`, `MATCHES <regex>`, `IN (<list>)`, "
             + "`EXISTS IN table(col)`, `EXISTS WITH (cols) IN table(cols)`, "
-            + "`LENGTH BETWEEN <min> AND <max>`, `LENGTH <compare> <n>`, "
+            + "`LENGTH BETWEEN <min> AND <max>`, `LENGTH <compare> <n>`, `CASTABLE AS <type>`, "
             + "`EXPR <predicate>`, and `>= <= > < =` compares. "
             + "Quote the value; NULL skips every rule except `NOT NULL`. Pair with `@fail` (default `WARN`). "
             + "Numbered variants `@expect_1`, `@expect_2`, ... declare additional rules on the same column.",

@@ -660,6 +660,9 @@ public sealed class ColumnQualityValidator
                         && (length.MaxLength is not { } max || characters <= max);
                 }
 
+            case CastableRule castable:
+                return CastablePasses(castable, value);
+
             case MatchesRule matches:
                 return GetRegex(matches).IsMatch(Stringify(value));
 
@@ -704,6 +707,56 @@ public sealed class ColumnQualityValidator
             ? _context.EvaluateCondition(expr.Predicate, projected)
             : ValueTask.FromResult(RulePassesSynchronously(rule, value, projected));
 
+
+    // ── CASTABLE AS ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Runs the engine's own conversion — the one behind <c>TRY_CAST</c> — and treats a throw or a
+    /// null result as a failure, then checks the declared width. Sharing the conversion is the
+    /// point: a rule that accepted a value a later <c>CAST</c> rejects would be worse than no rule.
+    /// </summary>
+    private bool CastablePasses(CastableRule rule, object? value)
+    {
+        object? converted;
+        try
+        {
+            converted = _context.CastToType(value, rule.DeclaredType);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (converted is null or DBNull) return false;
+        if (rule.Precision is not { } precision) return true;
+
+        // The shared converter ignores DECIMAL(p,s) and VARCHAR(n) widths, so they are checked here.
+        // Leaving them unchecked would let a declaration that reads as a constraint verify nothing.
+        return rule.Scale is { } scale
+            ? converted is decimal number && FitsPrecisionScale(number, precision, scale)
+            : Stringify(converted).Length <= precision;
+    }
+
+    /// <summary>
+    /// SQL's <c>DECIMAL(p, s)</c>: at most <paramref name="scale"/> digits after the point and at
+    /// most <c>p - s</c> before it. Trailing zeros do not count — the DECIMAL converter normalizes
+    /// 123 to 123.0, so counting the stored scale would reject a whole number against a scale of 0.
+    /// </summary>
+    private static bool FitsPrecisionScale(decimal value, int precision, int scale)
+    {
+        var text = Math.Abs(StripTrailingZeros(value)).ToString(CultureInfo.InvariantCulture);
+        var point = text.IndexOf('.');
+
+        var fractionDigits = point < 0 ? 0 : text.Length - point - 1;
+        var integerText = point < 0 ? text : text[..point];
+        var integerDigits = integerText == "0" ? 0 : integerText.Length;
+
+        return fractionDigits <= scale && integerDigits <= precision - scale;
+    }
+
+    /// <summary>Dividing by one at maximum scale drops insignificant trailing zeros.</summary>
+    private static decimal StripTrailingZeros(decimal value) =>
+        value / 1.000000000000000000000000000000m;
 
     // ── EXISTS IN key sets ─────────────────────────────────────────────────
 

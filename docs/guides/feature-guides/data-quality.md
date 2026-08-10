@@ -266,6 +266,21 @@ Both composite forms reject a column the statement does not project. A missing c
 NULL, and a NULL key part skips the rule, so a typo would otherwise silently disable the check
 rather than fail it.
 
+## Validating text that has not been typed yet
+
+During ingestion everything can arrive as text, and the useful question is whether it *would*
+convert:
+
+```sql
+RawDate   /* @expect: 'CASTABLE AS DATE'; @fail: 'QUARANTINE'; */
+RawAmount /* @expect: 'CASTABLE AS DECIMAL(18,2)'; @fail: 'QUARANTINE'; */
+PostalCode /* @expect: 'NOT BLANK, LENGTH BETWEEN 5 AND 10'; @fail: 'WARN'; */
+```
+
+`CASTABLE AS` runs the same conversion `TRY_CAST` does, so a row this rule accepts cannot fail a
+later cast. The declared width is enforced as well: `DECIMAL(18,2)` rejects `1.234` and `1234.5` is
+fine only while it fits the 16 integer digits the declaration leaves.
+
 ## Two behaviors that surprise people
 
 **NULL skips every rule except `NOT NULL`.** A NULL `Age` does *not* fail `>= 0`. `NOT BLANK` is no

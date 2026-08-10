@@ -84,6 +84,27 @@ public sealed record NotBlankRule : ColumnRule;
 /// <param name="MaxLength">Inclusive upper bound, or null when the form set no upper bound.</param>
 public sealed record LengthRule(int MinLength, int? MaxLength) : ColumnRule;
 
+/// <summary>
+/// <c>CASTABLE AS &lt;type&gt;</c> — the value must convert to the named type. Conversion is the
+/// engine's own, the one behind <c>TRY_CAST</c>, so a rule and a later cast of the same value agree
+/// by construction rather than by two implementations happening to match.
+///
+/// A declared width is enforced on top of that conversion, because the shared converter ignores it:
+/// <c>DECIMAL(18,2)</c> and <c>VARCHAR(50)</c> would otherwise read as constraints while checking
+/// nothing beyond "is a number" and "is a string".
+/// </summary>
+/// <param name="DeclaredType">The type as written, passed to the converter verbatim so forms it
+/// does interpret — <c>DATETIME(3)</c> — keep working.</param>
+/// <param name="BaseType">The type name without its width, upper-cased.</param>
+/// <param name="Precision">Total digits for DECIMAL/NUMERIC, or maximum characters for the string
+/// types; null when no width was declared.</param>
+/// <param name="Scale">Digits after the decimal point; null unless declared.</param>
+public sealed record CastableRule(
+    string DeclaredType,
+    string BaseType,
+    int? Precision,
+    int? Scale) : ColumnRule;
+
 /// <summary>Numeric comparison (<c>&gt;= 0</c>, <c>&lt;= 120</c>, …). Compares as decimal at runtime.</summary>
 public sealed record ComparisonRule(CompareOp Op, decimal Value) : ColumnRule;
 

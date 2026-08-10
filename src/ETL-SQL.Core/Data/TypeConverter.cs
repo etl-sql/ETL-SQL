@@ -139,6 +139,15 @@ public static class TypeConverter
     /// <summary>Registers a custom type converter.</summary>
     public static void Register(string typeName, Func<object, object?> converter) => _converters[typeName] = converter;
 
+    /// <summary>
+    /// True when a converter is registered for the type's base name, so <see cref="Cast"/> will
+    /// actually convert rather than return the value unchanged. Callers that treat a failed cast as
+    /// a verdict — the <c>CASTABLE AS</c> quality rule — need this: an unrecognized type name is
+    /// silently a no-op, which would make such a rule pass every row.
+    /// </summary>
+    public static bool IsRegistered(string? typeName) =>
+        !string.IsNullOrWhiteSpace(typeName) && _converters.ContainsKey(typeName.Split('(')[0].Trim());
+
     private static MinMaxValue ConvertToMinMax(object value)
     {
         if (value is MinMaxValue mm) return mm;
