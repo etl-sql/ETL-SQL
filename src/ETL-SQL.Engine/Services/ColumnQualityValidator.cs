@@ -57,8 +57,10 @@ public sealed class ColumnQualityValidator
         _statement = statement;
         _ruleSets = ruleSets;
         _routing = routing;
+        // The rules that need the evaluator, and so force the async validation path. Everything
+        // else is a pure per-row predicate that costs no state machine.
         _hasExpressionRules = ruleSets.Any(rs =>
-            rs.Bindings.Any(binding => binding.Rules.Any(rule => rule is ExprRule)));
+            rs.Bindings.Any(binding => binding.Rules.Any(rule => rule is ExprRule or BetweenRule)));
     }
 
     /// <summary>True when at least one rule needs the whole-input UNIQUE pre-pass.</summary>
@@ -699,14 +701,34 @@ public sealed class ColumnQualityValidator
     }
 
     /// <summary>
-    /// EXPR is the only rule that needs the evaluator, so this path handles that one form and
-    /// defers the rest to <see cref="RulePassesSynchronously"/> rather than restating them -- two
-    /// copies of the rule semantics is two places for them to drift.
+    /// EXPR and BETWEEN are the only rules that need the evaluator, so this path handles those two
+    /// forms and defers the rest to <see cref="RulePassesSynchronously"/> rather than restating
+    /// them — two copies of the rule semantics is two places for them to drift.
     /// </summary>
-    private ValueTask<bool> RulePassesAsync(ColumnRule rule, object? value, Row projected) =>
-        rule is ExprRule expr
-            ? _context.EvaluateCondition(expr.Predicate, projected)
-            : ValueTask.FromResult(RulePassesSynchronously(rule, value, projected));
+    private ValueTask<bool> RulePassesAsync(ColumnRule rule, object? value, Row projected) => rule switch
+    {
+        ExprRule expr => _context.EvaluateCondition(expr.Predicate, projected),
+        BetweenRule between when value is not null and not DBNull => BetweenPassesAsync(between, value, projected),
+        BetweenRule => ValueTask.FromResult(true), // NULL skips it, like every rule but NOT NULL
+        _ => ValueTask.FromResult(RulePassesSynchronously(rule, value, projected))
+    };
+
+    /// <summary>
+    /// Evaluates both bounds against the projected row and compares with the engine's type-aware
+    /// comparison, so a date range compares as dates rather than as rendered text. A NULL bound
+    /// makes the range unknown and the rule skips the row, which is how SQL's own BETWEEN behaves
+    /// — a rule that failed every row because <c>@RunDate</c> was unset would report the data as
+    /// broken when the script is.
+    /// </summary>
+    private async ValueTask<bool> BetweenPassesAsync(BetweenRule rule, object? value, Row projected)
+    {
+        var lower = await _context.EvaluateValue(rule.Lower, projected);
+        var upper = await _context.EvaluateValue(rule.Upper, projected);
+        if (lower is null or DBNull || upper is null or DBNull) return true;
+
+        return _context.CompareConstants(value, lower) >= 0
+            && _context.CompareConstants(value, upper) <= 0;
+    }
 
 
     // ── CASTABLE AS ────────────────────────────────────────────────────────

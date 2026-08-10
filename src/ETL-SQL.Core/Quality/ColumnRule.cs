@@ -146,6 +146,17 @@ public sealed record ExistsInRule(
     public bool IsComposite => SourceColumns is { Count: > 0 };
 }
 
+/// <summary>
+/// <c>BETWEEN &lt;lower&gt; AND &lt;upper&gt;</c> — an inclusive range whose bounds are full
+/// expressions, so a rule can be typed (<c>BETWEEN '2020-01-01' AND '2030-01-01'</c>) or relative
+/// (<c>BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate</c>). The numeric comparison rules accept
+/// only decimal literals, which cannot express either.
+///
+/// Bounds are evaluated per row against the projected row, and comparison is the engine's
+/// type-aware one — the same used to order UNIQUE keys — so dates compare as dates.
+/// </summary>
+public sealed record BetweenRule(Expression Lower, Expression Upper) : ColumnRule;
+
 /// <summary><c>EXPR &lt;predicate&gt;</c> — cross-column boolean evaluated over the full projected row.</summary>
 public sealed record ExprRule(Expression Predicate) : ColumnRule;
 

@@ -208,6 +208,25 @@ public static partial class ColumnRuleParser
         if (Regex.IsMatch(text, @"^IN\s*\(", RegexOptions.IgnoreCase))
             return ParsePatternOrListRule(text, text, negated: false);
 
+        if (upper.StartsWith("BETWEEN", StringComparison.Ordinal))
+        {
+            var body = text["BETWEEN".Length..];
+            var separator = FindTopLevelAnd(body);
+            if (separator < 0)
+                throw new ColumnRuleParseException(
+                    $"BETWEEN expects the form 'BETWEEN <lower> AND <upper>', got '{text}'.");
+
+            var lowerBound = body[..separator].Trim();
+            var upperBound = body[(separator + 3)..].Trim();
+            if (lowerBound.Length == 0 || upperBound.Length == 0)
+                throw new ColumnRuleParseException($"BETWEEN rule '{text}' is missing a bound.");
+
+            return new BetweenRule(
+                ParseSqlExpression(lowerBound, "BETWEEN lower bound"),
+                ParseSqlExpression(upperBound, "BETWEEN upper bound"))
+            { Text = text };
+        }
+
         if (upper.StartsWith("EXPR", StringComparison.Ordinal))
         {
             var predicateText = text["EXPR".Length..].Trim();
@@ -239,7 +258,7 @@ public static partial class ColumnRuleParser
             "UNIQUE WITH (cols), UNIQUE_FIRST/UNIQUE_LAST BY <key>, MATCHES <regex>, IN (<list>), " +
             "EXISTS IN table(col), EXISTS WITH (cols) IN table(cols), LENGTH BETWEEN <min> AND <max>, " +
             "LENGTH <compare> <n>, CASTABLE AS <type>, NOT IN (<list>), NOT MATCHES <regex>, " +
-            "EXPR <predicate>, and numeric >= <= > < = compares.");
+            "BETWEEN <lower> AND <upper>, EXPR <predicate>, and numeric >= <= > < = compares.");
     }
 
     /// <summary>
@@ -281,6 +300,52 @@ public static partial class ColumnRuleParser
         throw new ColumnRuleParseException(
             $"LENGTH expects the form 'LENGTH BETWEEN <min> AND <max>' or a comparison such as " +
             $"'LENGTH >= 5', got '{text}'.");
+    }
+
+    /// <summary>
+    /// Index of the <c>AND</c> separating a BETWEEN rule's two bounds, or -1. Only an <c>AND</c>
+    /// outside parentheses and quotes separates them — <c>DATEADD(DAY, -30, @RunDate)</c> may
+    /// itself contain one, and a naive first-match split would cut the bound in half.
+    /// </summary>
+    private static int FindTopLevelAnd(string value)
+    {
+        var depth = 0;
+        var quote = '\0';
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (quote != '\0')
+            {
+                if (c == quote)
+                {
+                    if (i + 1 < value.Length && value[i + 1] == quote) i++;
+                    else quote = '\0';
+                }
+                continue;
+            }
+
+            switch (c)
+            {
+                case '\'' or '"':
+                    quote = c;
+                    continue;
+                case '(' or '[':
+                    depth++;
+                    continue;
+                case ')' or ']':
+                    depth--;
+                    continue;
+            }
+
+            if (depth != 0 || i == 0) continue;
+            if (!char.IsWhiteSpace(value[i - 1])) continue;
+            if (i + 3 > value.Length) continue;
+            if (!value.AsSpan(i, 3).Equals("AND", StringComparison.OrdinalIgnoreCase)) continue;
+            if (i + 3 < value.Length && !char.IsWhiteSpace(value[i + 3])) continue;
+            return i;
+        }
+        return -1;
     }
 
     /// <summary>

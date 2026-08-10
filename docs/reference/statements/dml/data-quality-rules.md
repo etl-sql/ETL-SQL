@@ -47,6 +47,7 @@ or an `EXPR` function call are literal.
 | `LENGTH BETWEEN <min> AND <max>` | Character count within an inclusive range. |
 | `LENGTH >= <n>` (`<=` `>` `<` `=`) | Character count compared against a whole, non-negative bound. |
 | `CASTABLE AS <type>` | Value must convert to the type, e.g. `CASTABLE AS DATE`, `CASTABLE AS DECIMAL(18,2)`. |
+| `BETWEEN <lower> AND <upper>` | Inclusive range whose bounds are expressions — literals, dates, variables, or function calls. |
 | `EXPR <predicate>` | Boolean predicate over the whole projected row, e.g. `EXPR StartDate <= EndDate`. |
 | `>=` `<=` `>` `<` `=` | Numeric comparison against a literal bound, e.g. `>= 0`. |
 
@@ -65,6 +66,12 @@ Backslash escaping is *not* used, so `MATCHES` patterns pass through untouched.
 - **String comparisons honor `SET CASE_SENSITIVE`** for `MATCHES`, `IN`, and `EXISTS IN`. Column
   *names* in composite rules always match case-insensitively — the setting governs values, not
   identifiers.
+- **`BETWEEN` takes expressions, not just numbers.** Bounds are evaluated per row against the
+  projected row and compared with the engine's type-aware comparison, so dates compare as dates and
+  a variable or function call is a legal bound: `BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate`.
+  A NULL bound makes the range unknown and the rule skips the row, as SQL's own `BETWEEN` does — a
+  rule that failed every row because a variable was unset would report the data as broken when the
+  script is. The bare `>=`/`<=` comparison rules remain literal-only and decimal.
 - **`CASTABLE AS` uses the engine's own conversion**, the one behind `TRY_CAST`, so the rule and a
   later cast of the same value always agree. A declared width is checked on top of it —
   `DECIMAL(18,2)` allows 16 digits before the point and 2 after, `VARCHAR(50)` at most 50

@@ -159,6 +159,48 @@ namespace ETL_SQL.Tests.Core.Quality
         }
 
         [Fact]
+        public void Parses_Between_WithExpressionBounds()
+        {
+            var rule = Assert.IsType<BetweenRule>(
+                ColumnRuleParser.Parse("'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate'").Single());
+
+            Assert.NotNull(rule.Lower);
+            Assert.NotNull(rule.Upper);
+            Assert.Equal("BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate", rule.Text);
+        }
+
+        [Fact]
+        public void Between_SplitsOnTheTopLevelAnd_NotTheFirstOne()
+        {
+            // The lower bound contains its own AND inside a function call; splitting on the first
+            // one would cut the bound in half and parse neither side.
+            var rule = Assert.IsType<BetweenRule>(
+                ColumnRuleParser.Parse("'BETWEEN IIF(1 = 1 AND 2 = 2, 5, 10) AND 100'").Single());
+
+            Assert.NotNull(rule.Lower);
+            Assert.NotNull(rule.Upper);
+        }
+
+        [Fact]
+        public void Between_CombinesWithOtherRules_TheCommaStillSeparates()
+        {
+            var rules = ColumnRuleParser.Parse("'NOT NULL, BETWEEN 1 AND 10'");
+
+            Assert.Collection(rules,
+                r => Assert.IsType<NotNullRule>(r),
+                r => Assert.IsType<BetweenRule>(r));
+        }
+
+        [Theory]
+        [InlineData("BETWEEN 1")]
+        [InlineData("BETWEEN AND 10")]
+        [InlineData("BETWEEN 1 AND")]
+        public void Between_Malformed_IsHardError(string text)
+        {
+            Assert.Throws<ColumnRuleParseException>(() => ColumnRuleParser.Parse($"'{text}'"));
+        }
+
+        [Fact]
         public void Parses_UniqueWith_CompositeTuple()
         {
             var rule = Assert.IsType<UniqueRule>(ColumnRuleParser.Parse("'UNIQUE WITH (TenantId, Region)'").Single());

@@ -266,6 +266,20 @@ Both composite forms reject a column the statement does not project. A missing c
 NULL, and a NULL key part skips the rule, so a typo would otherwise silently disable the check
 rather than fail it.
 
+## Ranges that move with the run
+
+```sql
+-- Anything older than 30 days is late-arriving data, not a valid event
+EventDate /* @expect: 'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate'; @fail: 'QUARANTINE'; */
+```
+
+`BETWEEN` bounds are expressions — literals, dates, variables, function calls — evaluated per row
+and compared by value, so dates compare as dates. The bare `>=` and `<=` rules accept only decimal
+literals and cannot express this.
+
+If a bound evaluates to NULL (an unset variable, say) the range is unknown and the rule skips the
+row rather than failing all of them: a broken script should not read as broken data.
+
 ## Saying what a value must *not* be
 
 ```sql

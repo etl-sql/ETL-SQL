@@ -1130,6 +1130,95 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task BetweenRule_ComparesDatesAsDates_NotAsText()
+        {
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                CREATE TABLE #events (EventDate DATETIME);
+                INSERT INTO #events (EventDate) VALUES
+                    ('2026-08-01'), ('2026-08-10'), ('2025-01-01'), ('2027-01-01');");
+
+            await Run(eval, @"
+                SELECT EventDate /* @expect: ""BETWEEN '2026-07-01' AND '2026-09-01'""; @fail: 'QUARANTINE'; */
+                INTO #clean FROM #events
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(2, await CountRows(eval, "#clean"));
+            Assert.Equal(2, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task BetweenRule_OrdersByValue_WhereTextOrderWouldDisagree()
+        {
+            // 9 is inside [2, 10] numerically but outside it as text, since '9' sorts after '10'.
+            // ISO dates happen to sort the same either way, so this is what pins the comparison.
+            var eval = NewEvaluator();
+            await Seed(eval, "(9, 'a'), (1, 'b')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'BETWEEN 2 AND 10'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            var clean = Assert.Single(await ReadRows(eval, "#clean"));
+            Assert.Equal(9m, clean["Id"]);
+        }
+
+        [Fact]
+        public async Task BetweenRule_AcceptsARelativeBoundFromAVariable()
+        {
+            // The case the numeric comparison rules cannot express: a window relative to the run.
+            var eval = NewEvaluator();
+            await Run(eval, @"
+                DECLARE @RunDate DATETIME = '2026-08-10';
+                CREATE TABLE #events (EventDate DATETIME);
+                INSERT INTO #events (EventDate) VALUES ('2026-08-05'), ('2026-01-01');");
+
+            await Run(eval, @"
+                DECLARE @RunDate DATETIME = '2026-08-10';
+                SELECT EventDate /* @expect: 'BETWEEN DATEADD(DAY, -30, @RunDate) AND @RunDate';
+                                    @fail: 'WARN'; */
+                INTO #clean FROM #events
+                ON FAILURE WARN;");
+
+            var failure = Assert.Single(eval.DataQuality.Failures);
+            Assert.Equal(1, failure.Count);
+        }
+
+        [Fact]
+        public async Task BetweenRule_BoundsAreInclusive_AndNullsSkip()
+        {
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (10, 'b'), (11, 'c'), (NULL, 'd')");
+
+            await Run(eval, @"
+                SELECT Id /* @expect: 'BETWEEN 1 AND 10'; @fail: 'QUARANTINE'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE QUARANTINE TO #bad;");
+
+            Assert.Equal(3, await CountRows(eval, "#clean"));   // 1, 10 and the NULL
+            Assert.Equal(1, await CountRows(eval, "#bad"));
+        }
+
+        [Fact]
+        public async Task BetweenRule_WithAnUnknownBound_SkipsRatherThanFailingEveryRow()
+        {
+            // An unset variable makes the range unknown. Failing every row would report the data
+            // as broken when the script is.
+            var eval = NewEvaluator();
+            await Seed(eval, "(1, 'a'), (500, 'b')");
+
+            await Run(eval, @"
+                DECLARE @Ceiling INT;
+                SELECT Id /* @expect: 'BETWEEN 1 AND @Ceiling'; @fail: 'WARN'; */, Name
+                INTO #clean FROM #src
+                ON FAILURE WARN;");
+
+            Assert.Equal(0, eval.DataQuality.TotalFailures);
+            Assert.Equal(2, await CountRows(eval, "#clean"));
+        }
+
+        [Fact]
         public async Task ExprRule_EvaluatesAcrossTheProjectedRow()
         {
             var eval = NewEvaluator();
