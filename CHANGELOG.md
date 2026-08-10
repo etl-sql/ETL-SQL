@@ -101,6 +101,19 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Added the `SaaSToEnterpriseExit` certification lane: the customer exit journey from Managed
+  Dedicated SaaS to a self-hosted Enterprise deployment. It is the only lane that runs backward, and
+  deliberately not a promotion — promotion preflight refuses backward moves (`DP001`) and directs the
+  operator to an explicit export/restore workflow, which is the portable tenant bundle. The lane
+  certifies that workflow end to end: a signed, tenant-encrypted bundle that verifies against the
+  published operator key and decrypts with the customer's own key, byte-identical to the source, with
+  target preflight stating every binding the target owes before anything mutates. A companion test
+  verifies a bundle moved to cold storage using nothing from the exporting deployment but its
+  published key.
+
+- Added non-mutating bundle preflight with distinct exit codes per failure kind, so a runbook can
+  tell an inauthentic bundle from one that merely needs bindings the target has not supplied yet.
+
 - Tenant portability bundles are now composed from the exports that already exist — the Portal
   configuration export, the Orchestrator promotion package, and portable source artifacts — rather
   than leaving an operator to correlate three formats by hand. The reviewed export plan is carried

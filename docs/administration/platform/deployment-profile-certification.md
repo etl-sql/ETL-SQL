@@ -27,6 +27,7 @@ Use `-NoBuild` only after the selected test projects have been built at the requ
 ./scripts/Test-DeploymentProfileCertification.ps1 -Transition TeamToEnterprise
 ./scripts/Test-DeploymentProfileCertification.ps1 -Transition EnterpriseToSaaS
 ./scripts/Test-DeploymentProfileCertification.ps1 -Transition SoloToSaaS
+./scripts/Test-DeploymentProfileCertification.ps1 -Transition SaaSToEnterpriseExit
 ./scripts/Test-DeploymentProfileCertification.ps1 -Transition Upgrade
 ./scripts/Test-DeploymentProfileCertification.ps1 -Transition All
 ```
@@ -34,6 +35,13 @@ Use `-NoBuild` only after the selected test projects have been built at the requ
 The Team-to-Enterprise lane includes PostgreSQL migration proof and therefore requires the same
 Docker/provider prerequisites as its focused suite. Missing prerequisites are a failed certification,
 not a pass or an inferred claim.
+
+`SaaSToEnterpriseExit` is the customer exit journey and is the only lane that runs *backward*. It is
+not a promotion: promotion preflight refuses any backward move (`DP001`) and directs the operator to
+an explicit export/restore workflow, which is the portable tenant bundle. The lane certifies that
+workflow — a signed, tenant-encrypted bundle that verifies and decrypts with no contact with the
+source operator, and a target preflight that states every binding the target owes before anything
+mutates. Do not satisfy it by relaxing `DP001`.
 
 ## Enterprise hosted prerequisites
 

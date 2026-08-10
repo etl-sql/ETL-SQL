@@ -22,7 +22,7 @@ param(
     [string]$Profile = "All",
 
     [Parameter(Mandatory = $true, ParameterSetName = "Transition")]
-    [ValidateSet("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "Upgrade", "All")]
+    [ValidateSet("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "SaaSToEnterpriseExit", "Upgrade", "All")]
     [string]$Transition,
 
     [ValidateSet("Debug", "Release")]
@@ -138,6 +138,12 @@ function Get-TransitionPhases {
                 New-Phase "Solo to SaaS onboarding" $CoreTests "FullyQualifiedName~SaasTenantOnboardingTests|FullyQualifiedName~DeploymentPromotionPreflightTests" "Direct portable onboarding creates the same isolated boundary without profile rewriting."
             )
         }
+        "SaaSToEnterpriseExit" {
+            @(
+                New-Phase "SaaS to Enterprise exit journey" $CoreTests "FullyQualifiedName~TenantExitJourneyTests" "A tenant leaves SaaS with a signed, tenant-encrypted bundle that verifies and decrypts with no contact with the source operator, and target preflight states every binding the target owes before anything mutates."
+                New-Phase "Portability bundle contract" $CoreTests "FullyQualifiedName~TenantBundleTests|FullyQualifiedName~TenantBundleComposerTests|FullyQualifiedName~TenantPortabilityInspectorTests" "Bundle format, composition from the existing exports, and non-mutating preflight hold, including tamper, truncation, path-escape, and unencrypted-SaaS refusal."
+            )
+        }
         "Upgrade" {
             @(
                 New-Phase "All-profile upgrade lifecycle" $CoreTests "FullyQualifiedName~DeploymentProfileUpgradeLifecycleTests" "Solo, Team, Enterprise, and SaaS execute backup/export, scheduler fencing, cutover proof, and scheduler-safe rollback."
@@ -175,6 +181,9 @@ function Get-TopologyClaim {
         "SoloToSaaS" {
             [ordered]@{ lane = $Name; topology = "Solo to Managed Dedicated SaaS"; claim = "Solo to Managed Dedicated"; sharedSaaS = "NotCertified" }
         }
+        "SaaSToEnterpriseExit" {
+            [ordered]@{ lane = $Name; topology = "Managed Dedicated SaaS to customer-operated self-hosted Enterprise, via the portable tenant bundle"; claim = "Customer exit from Managed Dedicated"; sharedSaaS = "NotCertified" }
+        }
         "Upgrade" {
             [ordered]@{ lane = $Name; topology = "In-place profile-preserving N to N+1 upgrade"; claim = "Solo, Team, Enterprise, and Managed Dedicated"; sharedSaaS = "NotCertified" }
         }
@@ -195,6 +204,7 @@ function Get-ExpectedScenarioIds {
             "TeamToEnterprise" { $expected.Add("TeamToEnterprise") }
             "EnterpriseToSaaS" { $expected.Add("EnterpriseToSaaS") }
             "SoloToSaaS" { $expected.Add("SoloToSaaS") }
+            "SaaSToEnterpriseExit" { $expected.Add("SaaSToEnterpriseExit") }
             "Upgrade" {
                 @("SoloUpgrade", "TeamUpgrade", "EnterpriseUpgrade", "SaaSUpgrade") |
                     ForEach-Object { $expected.Add($_) }
@@ -297,7 +307,7 @@ function Update-ReleaseClaimsIndex {
 }
 
 $laneNames = if ($PSCmdlet.ParameterSetName -eq "Transition") {
-    if ($Transition -eq "All") { @("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "Upgrade") } else { @($Transition) }
+    if ($Transition -eq "All") { @("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "SaaSToEnterpriseExit", "Upgrade") } else { @($Transition) }
 } else {
     if ($Profile -eq "All") { @("Solo", "Team", "Enterprise", "SaaS") } else { @($Profile) }
 }

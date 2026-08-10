@@ -25,6 +25,11 @@ public sealed class DeploymentTransitionLifecycleTests : IDisposable
     [Fact] public Task EnterpriseToSaas_BackupFenceCutoverProofAndRollback() => RunAsync("Enterprise", "SaaS");
     [Fact] public Task SoloToSaas_BackupFenceCutoverProofAndRollback() => RunAsync("Solo", "SaaS");
 
+    // The SaaS -> self-hosted Enterprise exit journey is deliberately NOT here. Promotion preflight
+    // refuses any backward move (DP001) and says to use an explicit export/restore workflow instead;
+    // that workflow is the tenant portability bundle, so the exit path is certified in
+    // TenantExitJourneyTests rather than by relaxing DP001.
+
     private async Task RunAsync(string sourceProfile, string targetProfile)
     {
         var transition = $"{sourceProfile}-to-{targetProfile}";

@@ -634,11 +634,44 @@ Gates every domain below; nothing in Managed Dedicated ships before these.
         *Untested:* `PortalAdminConfigurationSource`'s JSON mapping, which needs an HTTP fake. It is
         thin, but it is the seam where a Portal response-shape change would break the export, so
         slice 3's CLI coverage should exercise it rather than mock past it.
-      - *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16), with target
-        preflight and the explicit collision policy from §5.2 (preserve, map, create, rename, skip,
-        fail). Import leaves jobs, schedules, subscriptions, and service accounts disabled.
-      - *Slice 4 — the SaaS → self-hosted Enterprise journey* as a certification lane, which is the
-        half of this gate that actually proves a customer can leave.
+      - [ ] *Slice 3 — `etl-sql admin tenant export|validate|preflight|import`* (§16).
+        **Partly done (v0.18.0).** `TenantPortabilityInspector` implements the non-mutating half:
+        preflight resolves required bindings against what the target says it can supply, and returns
+        distinct exit codes per failure kind, following the admin identity CLI precedent — a runbook
+        must tell "this bundle is not authentic" (`SignatureUnverified`) from "this bundle needs
+        bindings you have not supplied" (`BindingsRequired`), because the first is a stop and the
+        second is a to-do list. Six tests, including case-insensitive binding satisfaction and a
+        tampered bundle reporting as invalid rather than as missing bindings.
+
+        **Still outstanding, and neither should be waved through:**
+        - *CLI wiring.* The verbs are not registered in `CliOrchestrator`; the inspection logic has
+          no `admin tenant ...` entry point yet. Needs `CliContext` options and the credential
+          handling the identity verbs already established (environment or `SECRET:`, never argv).
+        - *`import`.* Deliberately not started rather than half-built. It is the only mutating verb,
+          and the design question is real: the Portal side of a bundle is a declarative *script*, so
+          importing means executing it against the target Portal's authority — a different path from
+          the Orchestrator package, which has an `ImportAsync` already. That needs deciding before
+          code, together with the §5.2 collision policy (preserve, map, create, rename, skip, fail)
+          and the rule that import leaves jobs, schedules, subscriptions, and service accounts
+          disabled.
+      - [x] *Slice 4 — the SaaS → self-hosted Enterprise journey.* **Done (v0.18.0)** as the
+        `SaaSToEnterpriseExit` certification lane, verified by a real run (3/3 phases, concrete
+        `SaaSToEnterpriseExit` scenario evidence).
+
+        **A red test corrected the design here.** The exit journey was first written as a
+        `DeploymentTransitionLifecycleTests` case, `SaaS → Enterprise`, and it failed: promotion
+        preflight refuses every backward move with `DP001`, which says to *"use an explicit
+        export/restore workflow"*. That refusal is correct — promotion carries environment authority
+        forward, while leaving SaaS means taking portable state out and rebinding it to
+        infrastructure the customer owns. The bundle **is** the workflow `DP001` names, so the exit
+        path is certified through it. Do not satisfy this lane by relaxing `DP001`; the transition
+        suite carries a comment saying so.
+
+        The journey proves what a customer actually cares about: the bundle verifies against the
+        published operator key, decrypts with their own private key, is byte-identical to what they
+        had, and states every binding the target owes before anything mutates. A second test moves
+        the bundle to cold storage and verifies it with nothing from the exporting deployment except
+        the published key — the §13 guarantee that an export outlives access to the operator.
 
       **Signing and encryption decided (2026-08-09), recorded in
       [TenantPortability.md §13.1](docs/architecture/TenantPortability.md).** OpenPGP via the
