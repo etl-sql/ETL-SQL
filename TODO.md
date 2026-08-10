@@ -252,6 +252,24 @@ an arbitrary connection/target from the browser.
       symmetric clause/rule check was written to catch, and it was equally silent where it
       happened. Fixed with a round-trip test over all three clause forms.
 
+### Engine — Hoist row-invariant BETWEEN bounds
+
+Measured 2026-08-10 (`ColumnQualityCostTests`, 50k rows, rules attached to columns they pass):
+per-row `@expect` rules are essentially free — `NOT NULL`, `NOT BLANK`, `LENGTH`, `IN`, `MATCHES`
+all land within ~1 MB of a rule-free statement. What costs is calling the evaluator per row:
+`BETWEEN` +28 MB, `EXPR` +61 MB. (`UNIQUE` +380 MB is the spill, and is by design.)
+
+- [ ] `BETWEEN`'s bounds are usually row-invariant — `BETWEEN DATEADD(DAY, -30, @RunDate) AND
+      @RunDate` names no column — so they could be evaluated once per statement instead of per row.
+      **Blocked on a design decision, not on effort:** hoisting a function call means deciding which
+      functions are safe to evaluate once, and the codebase has no determinism classification for
+      functions. Evaluating `GETDATE()` once per statement is arguably *more* correct than per row;
+      `NEWID()`/`RAND()` clearly are not. Introduce the classification deliberately or restrict the
+      hoist to literals, variables and parameters (which misses the headline case).
+
+      A conservative whitelist walker is the safe shape either way: an unrecognized node means "not
+      hoistable", so a missed node type costs performance, never correctness.
+
 ### Engine — Additional Data Quality Rules
 
 The current handler covers the fundamentals well. It already exceeds dbt’s four built-ins—not_null, unique, accepted_values, and relationships—with regex, numeric comparisons, deduplication modes, and arbitrary EXPR predicates. dbt’s official data-test documentation (https://docs.getdbt.com/docs/build/data-tests) confirms those four as its core set.
@@ -1069,17 +1087,97 @@ contract and explicitly deferred reusable-subreport boundary remain in
       composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
       their targeted lanes.
 
+### Testing — reachability and silent-pass coverage
+
+Opened 2026-08-10 after five defects in one session shared a shape the suite cannot see. Diagnosis
+first, because it is not "add more tests": **every lane varies the query and holds the data
+constant.** The fuzzer runs against one table of three rows
+(`ParserFuzzTests.cs:70,74`), SLT files insert two to five rows, and unit tests use inline literals.
+Spill thresholds start at 10,000 rows. So the entire columnar/spill layer was **unreachable by any
+lane** — the spill defect was not missed, it could not be executed.
+
+The NULL bugs are also not NULL-*semantics* bugs; those are well covered (`null_edge_cases.test`,
+`nulls.test`). They are **NULL as absence of evidence**: a wholly-NULL column has no type, and a
+column the statement does not project reads as NULL. In both cases "we don't know" and "genuinely
+absent" take the same branch, and it is always the benign one.
+
+- [x] **A low-threshold spill lane.** `scripts/test-lane.ps1 -Lane spill` re-runs the engine and SLT
+      suites with spill/sort/batch thresholds set to a handful of rows, turning every query already
+      in the corpus into spill coverage. `BatchSize` is 7 deliberately — not round, not a divisor of
+      the corpus row counts — so batch boundaries fall inside logical groups.
+- [x] **State the schema-stability invariant where it is established.**
+      `ColumnBatchSchemaStabilityTests` covers both divergence modes against hand-built batches, in
+      milliseconds, instead of relying on an exception thrown by the spill writer on data large
+      enough to spill.
+- [ ] **Make the corpus batch-size-agnostic so the spill lane can become a gate.** Its first run:
+      5,971 tests, 8 failures, 6 of them caused by the lane — and **none of the six was a product
+      defect**. They are tests silently coupled to default thresholds:
+
+      - `Scale_Aggregate_100kRows_CorrectResults` and `Scale_Join_SpillToDisk_CorrectResults`
+        (`HardeningScaleTests.cs:85`) call `.FirstAsync()` and assert on the **first batch**, not the
+        result. So neither has ever verified what its name claims across batch boundaries; they pass
+        because the default batch size happens to exceed the result — the join one expects exactly
+        10,000 rows, which *is* the default `BatchSize`. Fix by draining all batches.
+      - `InteractiveOutputShouldOnlyRenderCappedRows` — same shape.
+      - `JoinEngine_StreamingUnqualifiedEquality_UsesHashJoin` and
+        `ExternalWindowEngine_PartitionSampleIncreasesFanOutWithoutLosingRows` assert plan and
+        fan-out choices that thresholds drive. Pin their thresholds explicitly rather than
+        inheriting the ambient ones.
+      - `MockDataTests.TestGenerateWithSeed` — not yet traced.
+
+      Until this is done the lane cannot be green, so do not add it to the `release` lane.
+- [ ] **Give the lane a `-ContinueOnFailure` switch.** `Invoke-DotNetTest` exits on the first failing
+      project (correct for a gate), so SLT never ran and one pass cannot produce a full triage list.
+- [ ] **Vary data shape in the fuzzer.** Keep the grammar walk; add a seeded generator varying row
+      count across the batch/spill boundaries, null density per column (0%, sparse, one entire
+      batch, 100%), and type mix — including a column whose CLR type differs between batches, which
+      is what the spill defect actually was.
+- [ ] **A rule-catalogue property test.** Reflect over every `ColumnRule` and assert each can fail on
+      a crafted row, and that misconfiguration (unknown type, unprojected column, arity mismatch) is
+      a hard error rather than a rule that passes everything. Design decision 5 already states this
+      as a principle; nothing enforces it across the set. Same shape as
+      `EngineSubsystemCoverageTests`.
+- [ ] **A general AST round-trip property.** Existing round-trip tests are per-feature, written with
+      the feature, so `ON FAILURE` — added later — had none and the formatter dropped it silently.
+      Enumerate `Statement` subclasses and assert parse → `ToSql` → parse preserves.
+
+### Test baseline — pre-existing failures on `release/v0.18.0`
+
+- [ ] **12 tests fail on the release branch itself**, verified by checking out `release/v0.18.0`
+      clean (2026-08-10), so they are not regressions from any feature branch and release evidence
+      cannot be collected until they are resolved or explicitly accepted:
+      `SpillEncryptionTests.SpillEncryption_ShouldPersistAcrossSessions`,
+      `AuthorshipPermissionBoundaryTests.AuthorshipComparisons_AreAllInventoried`, and ten in
+      `ETL-SQL.Portal.Tests` (`ArchitectureDocReconciliationTests` ×2, `PolicyAuthorityApiTests`,
+      `FleetWorkspaceAndExportPlanTests`, `PortalIntegrationTests`, `SharedDelegatedIdentityAdminTests`,
+      `SharedTenantHttpBoundaryTests` ×2, `SupportBundleTests`, `UpgradePathDrillTests`).
+
 ## Bugs
 
-- [ ] **Sweep the samples that fail.** 16 of 195 remain after the first triage cluster. Each needs
+- [ ] **Sweep the samples that fail.** **6 of 195 remain** (2026-08-10; was 16). Each needs
       triaging individually: some will be stale syntax, some may be real engine defects.
       Run `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2` for the current list.
 
-      As of 2026-08-09: `01_deploy_datasets`, `02_report_public_consumer`,
-      `03_report_private_allowed`, `04_report_private_denied`, `05_export_then_publish`,
-      `append_to_parquet`, `backup_and_report`, `capacity_report`, `daily_failure_digest`, `ddl_dml_sink`,
-      `diagnostics_ssh_sink`, `flatfile_sink`, `golden_workflow.rptsql`, `parameterized_exec_test`,
-      `variables_config_sink`, `window_sink`.
+      Still open, with what each is actually blocked on:
+
+      - [ ] `ddl_dml_sink` — a column holds non-coercible mixed types (`'HR'` where the batch schema
+            established a number). Was masked by the spill-schema error until that was fixed; see
+            the columnar note below, this is the residue that carry-forward cannot resolve.
+      - [ ] `golden_workflow.rptsql` — `Native spill writing does not support 'TimeSpan' columns`.
+            `ColumnBatchAdapter.InferLogicalType` maps TimeSpan to `TIME`, but
+            `SpillStore.GetArrowType(Type)` has no TimeSpan case and throws. Exact sibling of the
+            UUID gap in the first triage cluster, so check the same function for other holes rather
+            than adding one case.
+      - [ ] `diagnostics_ssh_sink` — `The input string 'test' was not in a correct format`. Revealed
+            after the retired `SHOW LOCAL VARIABLES` was replaced; a separate defect underneath.
+      - [ ] `backup_and_report` — lint: `@backup_target` and `@backup_exit_code` used but never
+            declared. Likely a sample that lost its DECLAREs.
+      - [ ] `capacity_report`, `daily_failure_digest` — both fail with
+            `Decryption error: The input is not a valid Base-64 string`. Shared cause; triage together.
+
+      Cleared 2026-08-10: `01_deploy_datasets`, `02`–`05` (portal deck), `append_to_parquet`,
+      `variables_config_sink`, `flatfile_sink`, `window_sink`. `parameterized_exec_test` no longer
+      appears in the run.
 
       First triage cluster completed: `Batch_Processing` exposed missing native spill support for
       UUID columns; `Docker_Aliases` mixed a misspelled stop target with resume semantics; and
@@ -1099,19 +1197,26 @@ contract and explicitly deferred reusable-subreport boundary remain in
       and passes standalone, so it keeps its CLI coverage rather than being skipped.
 
       *Columnar spill type instability — one engine defect behind three samples.* `flatfile_sink`,
-      `window_sink` and `ddl_dml_sink` all die with
+      `window_sink` and `ddl_dml_sink` all died with
       `Column batch field N ('X', utf8) does not match spill field 'X' (timestamp|decimal128)`.
 
-      - [ ] **Fix it.** `SpillStore` infers its Arrow schema from the **first** batch and then
-            rejects any later batch whose element type maps differently. The element type comes from
-            `ColumnBatchAdapter.InferLogicalType`, which takes *the first non-null value in that
-            batch* — and its `null` case returns `"VARCHAR"`. So a column that happens to be
-            **all-NULL in one batch** silently changes physical type for that batch and the spill
-            write fails. The `null` case means "no evidence", not "string", and that is the bug:
-            with no evidence the batch must adopt the already-established schema rather than invent
-            one. `FromDataTable` already accepts a `logicalSchema`; the spilling path does not pass
-            the established one. Affects any spilling query with a nullable column, not just these
-            three samples.
+      - [x] **Fixed (2026-08-10).** `SpillStore` locks its Arrow schema on the first batch and
+            rejects any later batch that disagrees, while `ColumnBatchAdapter` inferred each batch
+            independently from its own values. Both spilling paths now establish the logical schema
+            once for the whole relation. `flatfile_sink` and `window_sink` pass.
+
+            **The first diagnosis written here was wrong, and the correction is the useful part.**
+            It said the cause was a column being *all-NULL in a batch*, leaving no type evidence and
+            defaulting to VARCHAR. That is a real way to break the invariant, but it is not what
+            these samples hit — and a fix scoped precisely to it did not fix them. The actual cause
+            is broader: **engine rows are dynamically typed**, so the same column arrives as a
+            `DateTime` in one batch and as a formatted string in the next. Only the unscoped
+            carry-forward fixes that. The lesson is the one already recorded for v0.17.0 — a red
+            test beat a careful read, and the narrow fix was disproved by running the samples rather
+            than by more reasoning.
+
+            `ddl_dml_sink` is *not* fixed by this: it holds genuinely non-coercible mixed types, so
+            forcing the established type raises a conversion error instead. Tracked above.
 
       Two idempotency failures found by the second pass are already fixed:
       `Sqlite_Operations.etlsql` (fixed primary keys into a persistent database) and
