@@ -1274,47 +1274,40 @@ absent" take the same branch, and it is always the benign one.
       a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
       equal counts in the wrong order corrupt just as silently.
 
-- [ ] **P0 — the streaming join re-wraps its own enumerator, and deep rebuffering overflows the
-      stack.** Diagnosed from a crash dump (`dotnet test --blame-crash`, then `dotnet-dump`): the
-      faulting thread carries `System.StackOverflowException` on a threadpool worker, which is why
-      the run reports only `Test host process crashed` — a stack overflow cannot be caught, so no
-      assertion or handler ever names it.
+- [ ] **P0 — the engine exhausts a thread stack under low spill thresholds.** The SLT host dies
+      with `System.StackOverflowException` on a threadpool worker (confirmed from a crash dump via
+      `dotnet test --blame-crash`, then `dotnet-dump analyze -c clrthreads`). A stack overflow
+      cannot be caught, so the only symptom is `Test host process crashed` with no message.
 
-      The stack shows a closed cycle in `JoinEngine`, each turn adding permanent layers to the
-      enumerator chain:
+      **Exact location.** `tests/ETL-SQL.SqlLogicTests/.../slt_progress.log` — which exists for
+      precisely this — names the last statement started:
+      `[2649] select3.test L32135: SELECT d-e, ...`. Triggered by
+      `Engine__TempTableSpillThresholdRows=25` or `Engine__MaxInMemoryBatches=2`, each alone; the
+      other four thresholds the spill lane sets leave SLT green.
 
-      ```
-      PerformNestedLoopJoinStream (JoinEngine.cs:836)
-        -> StreamSingleJoin (537)
-          -> ContinueStream (550)
-            -> PrependRows (544)
-              -> PerformNestedLoopJoinStream (828)   // and round again
-      ```
+      **What has been ruled out, by running it rather than reasoning:**
+      - Not that query. Its setup plus that statement through the CLI exits 0.
+      - Not cumulative session state. The **entire** select3.test — all 3,351 statements — through
+        the CLI at the same threshold exits 0, peak 63 MB.
+      - Not NULL handling, and not the spill itself: CLI repros where the spill demonstrably fires
+        (`Disk Spilled 0.01 MB`) do not crash.
+      - Not visible in the dump stacks. Deepest managed stack is 67 frames even in a **full** dump,
+        because the runtime tears the overflowing stack down before the collector runs. Do not
+        spend time reading dump stacks for this.
 
-      `StreamSingleJoin` peeks one left row to read the schema, then rebuilds its input as
-      `PrependRows(firstLeft, ContinueStream(leftEnumerator))` (JoinEngine.cs:496) — one wrapper
-      pair per invocation, not per row.
+      **Two earlier diagnoses here were wrong** and are recorded so they are not retried: "row 25
+      of the corpus meets the row-25 threshold" (coincidence — a direct INSERT at that threshold
+      does not crash, and `MaxInMemoryBatches` reproduces it with no row 25 involved), and "the
+      join adds an enumerator layer per rebuffering event" (`PrependRows` runs once per
+      `StreamSingleJoin`, JoinEngine.cs:496, not per rebuffer).
 
-      **What drives the depth is not yet pinned, and the first guess was wrong.** Written up
-      earlier as "a layer per rebuffering event"; the call site shows `PrependRows` runs once per
-      `StreamSingleJoin`, so that cannot be it. The cycle in the dump returns to
-      `PerformNestedLoopJoinStream` through `PrependRows`, so the chain is re-entering the join
-      stream — candidates are the depth of a join chain (each join wrapping the previous join's
-      output) and nested-loop re-enumerating a left side that is itself a join stream. Establish
-      which before changing anything: the two obvious readings imply different fixes, and the
-      visible dump frames are truncated so frame counts there prove nothing.
-      **Not a test-only fault.** Low spill thresholds make rebuffering frequent, which is why the
-      spill lane finds it in seconds, but nothing bounds the chain at the defaults either — a join
-      over enough data reaches the same place. It presents as a process death with no error, which
-      is the worst possible diagnostic.
-
-      Fix by making the rebuffer flat rather than nested: hand the buffered rows and the remainder
-      to a single iterator that yields the buffer and then drains the source, instead of wrapping
-      the previous stream each time. The chain must not grow per rebuffer.
-
-      Reproduce: `ETL_SQL_RUN_SLT=1 Engine__TempTableSpillThresholdRows=25 dotnet test
-      tests/ETL-SQL.SqlLogicTests --filter Category=SLT --blame-crash`.
-      `Engine__MaxInMemoryBatches=2` reproduces it equally.
+      **What the evidence now points at.** Both triggering thresholds increase the number of
+      pipeline stages, and each stage is another nested `IAsyncEnumerable` whose `MoveNextAsync`
+      the whole chain walks. The CLI survives what the test host does not, so the difference is
+      stack headroom, not behaviour. **Next experiment:** run the same corpus on a thread created
+      with an explicitly small stack (`new Thread(work, 256 * 1024)`). If it reproduces, this is
+      pipeline nesting depth against available stack, and the fix is to bound or flatten the
+      enumerator chain rather than to change any single operator.
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
