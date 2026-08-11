@@ -107,12 +107,26 @@ AS (
 SELECT * FROM #GenData;
 
 -- 12. BULK INSERT (from a file written by flatfile tests — may fail if file missing)
+--
+-- Loads into a target shaped like the file. This used to target #GenData's
+-- (id, category, price, qty), but std.csv is ID,Name,Dept,Salary,JoinDate — so the columns
+-- paired positionally and 'HR' landed in the decimal price column. The load reported success
+-- ("0 errors skipped", with MAXERRORS = 0), and the run then died at session save with
+-- "The input string 'HR' was not in a correct format" — far from the cause.
 PRINT 'Testing BULK INSERT (may fail if CSV not present)...';
 BEGIN TRY
-    BULK INSERT #GenData (id, category, price, qty)
+    CREATE TABLE #BulkStaff (
+        emp_id    INT,
+        name      VARCHAR(100),
+        dept      VARCHAR(50),
+        salary    DECIMAL(18,2),
+        join_date VARCHAR(50)
+    );
+    BULK INSERT #BulkStaff (emp_id, name, dept, salary, join_date)
     FROM 'samples/output/std.csv'
     WITH (FORMAT = 'CSV', FIRSTROW = 2, BATCHSIZE = 1000, MAXERRORS = 0);
     PRINT 'BULK INSERT succeeded.';
+    SELECT COUNT(*) AS BulkRowCount FROM #BulkStaff;
 END TRY
 BEGIN CATCH
     PRINT 'BULK INSERT failed (expected if std.csv missing): ' + ERROR_MESSAGE();
