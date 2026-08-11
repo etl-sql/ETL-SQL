@@ -1125,6 +1125,36 @@ absent" take the same branch, and it is always the benign one.
       `ColumnBatchSchemaStabilityTests` covers both divergence modes against hand-built batches, in
       milliseconds, instead of relying on an exception thrown by the spill writer on data large
       enough to spill.
+- [x] **An engine-surface corpus, for what SLT structurally cannot express (2026-08-11).**
+      `tests/engine_corpus/*.etest`, run by `EngineCorpusTests` (one xUnit test per file, fresh
+      evaluator and temp directory each, standard lane — not gated behind `ETL_SQL_RUN_SLT`).
+
+      *Why it exists.* SLT is a conformance corpus for a **database**: it asks whether `SELECT a+b`
+      returns the right values, and it is good at that. It has no way to express a file, a
+      connector, or a load, so `BULK INSERT`, `EXPORT`, `DATASET`, quarantine routing and `@expect`
+      have **zero** occurrences between them across all 45 corpus files — measured, not assumed —
+      and that surface is most of what makes this an engine rather than a database.
+
+      *Format.* Deliberately mirrors SLT (`statement ok`, `statement error [substring]`, `query`
+      with results after a `----` rule) so the two read alike, plus one addition: a `file <name>`
+      record embeds a fixture inline, which is what makes a load testable without a checked-in
+      binary or a fixture directory to keep in sync. `${dir}` in any SQL body expands to the run
+      directory, escaped for a SQL literal. Parser and runner are in
+      `tests/ETL-SQL.Tests/EngineCorpus/`.
+
+      *Covered so far:* `bulk_insert.etest` (positional mapping, `FIRSTROW`, terminators, empty
+      fields, count mismatches, missing file), `quality_routing.etest` (`QUARANTINE` partitioning
+      the input, `WARN`, `THROW`, numbered rules, and a clean input leaving the quarantine target
+      empty rather than absent), `flatfile_roundtrip.etest` (write-then-read identity, values that
+      merely look numeric, quoted delimiters, header on/off, NULL).
+
+- [ ] **Extend the engine-surface corpus to the rest of the surface.** Still uncovered:
+      `EXPORT DATASET` and `EXPORT LINEAGE`, `DATASET` publication and stewardship enforcement,
+      `MERGE` against a file source, `TRANSFORM`, connector-backed targets (as opposed to temp
+      tables — the `BULK INSERT` type-check finding below suggests those two paths may not behave
+      alike), and compression/encoding variants of the flat-file round trip. Each is a place where
+      a defect currently has nothing to catch it.
+
 - [ ] **Make the corpus batch-size-agnostic so the spill lane can become a gate.** Its first run:
       5,971 tests, 8 failures, 6 of them caused by the lane. **One of the six is a real P0
       correctness defect** — bucket-wide window values under `PARTITION BY`, recorded in Bugs —
@@ -1320,10 +1350,13 @@ absent" take the same branch, and it is always the benign one.
       into a serializer with no bound at all. A guard that covers one shape of depth reads as
       covering both.
 
-      **Still open from this:** two other tree walks were found by the same test and fixed here, but
-      nothing proves there is not a third. A walk over every `AstNode` visitor asserting each is
-      iterative — or a shared iterative traversal helper they all use — would close the class rather
-      than the instances.
+      **Class partly closed.** `ExpressionDepthTests` now drives a 500-term chain through **all 48
+      lint rules** (reflected over, so rules added later are included automatically) and through
+      `EXPLAIN`, both green — so no third recursive walk is reachable by those paths. 38 source
+      files mention `BinaryExpression`, so this is evidence rather than proof; the paths not yet
+      driven this way are pushdown/SQL compilation and the lineage analyzer. A shared iterative
+      traversal helper that all visitors used would close the class outright rather than the
+      instances.
 
       **The instrument was broken, and every earlier conclusion here was drawn through it.** Two
       defects in the corpus harness, both now fixed, invalidated the whole investigation:
@@ -1364,6 +1397,51 @@ absent" take the same branch, and it is always the benign one.
       could not report what it claimed — and all five were about spilling, because the broken
       instrument's only signal was a threshold setting that was never applied. Verify that a
       diagnostic actually observes the thing it names before spending experiments on what it says.
+- [x] **`BULK INSERT` from a missing file silently loaded zero rows and reported success.**
+      Found and fixed 2026-08-11 (`bd8a107d`) by the first engine-corpus file. The flat-file reader
+      yields no batches for a path that does not exist, so a typo or an absent daily drop produced
+      an empty table and a green run — an empty result is harder to notice downstream than an
+      error, and indistinguishable from a file that was legitimately empty. `BulkInsertStatementHandler`
+      now checks existence after path authorization and throws `ExecutionException`; T-SQL refuses
+      this case too.
+
+      **Worth remembering how it survived:** `TestBulkInsertMissingFile` *asserted* the silent
+      success, and its own comment showed it was written to whatever the code did rather than to a
+      decision — *"Should not throw, but RowsProcessed should be 0 (or it might throw if engine
+      enforces existence)"*. A test written by observing behaviour converts a defect into a
+      specification. When a test's comment expresses uncertainty about intent, that is the signal.
+
+      **Not yet checked:** whether `SELECT` from a missing flat file is silent in the same way. The
+      `yield break` is in the shared read path, so it probably is; only the `BULK INSERT` boundary
+      was fixed.
+
+- [ ] **DECIDED 2026-08-11 (owner's call) — implement both, then reconcile with T-SQL.**
+      1. **Header mapping is by name.** When the source file has a header, map its columns to the
+         target by name rather than by position.
+      2. **Blank or empty is NULL**, on both the load and the read-back side.
+
+      **Divergence to flag before implementing — T-SQL does *not* do (1).** SQL Server's
+      `BULK INSERT` maps strictly by **ordinal position**; the header row is data to be skipped with
+      `FIRSTROW = 2` and its names are never consulted. Name-based mapping in SQL Server requires a
+      **format file** (or `OPENROWSET(BULK ...)` with one). So decision (1) is a deliberate
+      divergence, not a compatibility fix. That is defensible — positional mapping is exactly what
+      makes a transposed file load silently, which is the defect that prompted this — but it must be
+      a **documented, opt-out-able** divergence rather than a surprise, because a script ported from
+      SQL Server would change meaning without changing text. Recommended shape: map by name when a
+      header is present and every target column is matched; fall back to positional with a warning
+      otherwise; provide an explicit option to force positional for T-SQL parity.
+
+      For (2), T-SQL is closer to the decision: `KEEPNULLS` makes empty fields import as NULL
+      instead of the column's default, so NULL-for-empty is a supported T-SQL behaviour — it is just
+      opt-in there and would be the default here.
+
+      **Verify both claims against current Microsoft documentation before writing code** — they are
+      stated here from knowledge, not from a checked source, and the whole point of this item is
+      parity. Then: update `tests/engine_corpus/bulk_insert.etest` (which currently pins the
+      *old* behaviour — empty text field becomes `''`, empty numeric field is a hard error) and
+      `flatfile_roundtrip.etest` (NULL currently returns as `''`), and reconcile with
+      `TestBulkInsert_EmptyFieldsInSource_MappedAsNull`.
+
 - [ ] **NULL does not survive a flat-file round trip.** Writing a table with a NULL to CSV and
       reading it back yields an empty string, so `IS NULL` finds nothing afterwards — verified in
       `tests/engine_corpus/flatfile_roundtrip.etest`. Everything else round trips intact, including
