@@ -1423,10 +1423,15 @@ absent" take the same branch, and it is always the benign one.
       whitespace-only fields become NULL regardless of target type. `bulk_insert.etest` pins all of
       it, including the reordered-file case that previously loaded transposed without error.
 
-      **Still to do:** the read side. A flat file *read back* still yields `''` for an empty field,
-      so `flatfile_roundtrip.etest` still records NULL as lost on the round trip. The two ends are
-      now inconsistent in the other direction, which is worse than before for anyone comparing them
-      — finish this before the next release.
+      **Read side done the same day.** `FlatFileDataSource.CreateRow` now reads a blank, empty or
+      whitespace-only field as NULL, on top of any `NULL_AS` sentinels. NULL therefore survives a
+      flat-file round trip: written as an empty field, read back as NULL.
+
+      **The cost of the convention, stated plainly because it is real:** a genuine empty string
+      cannot be distinguished from NULL through a flat file, so `''` does not round trip. CSV has no
+      native NULL and something had to give; `NULL_AS` remains available for anyone who needs to
+      tell them apart. Both directions are now consistent, which is the property that matters — the
+      previous state had the load and the read disagreeing.
       1. **Header mapping is by name.** When the source file has a header, map its columns to the
          target by name rather than by position.
       2. **Blank or empty is NULL**, on both the load and the read-back side.
@@ -1475,7 +1480,9 @@ absent" take the same branch, and it is always the benign one.
       [Map Table Columns to Data-File Fields with a Format File](https://learn.microsoft.com/en-us/sql/relational-databases/import-export/use-a-format-file-to-map-table-columns-to-data-file-fields-sql-server?view=sql-server-ver16),
       [SqlBulkCopyColumnMapping](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlbulkcopycolumnmapping?view=sqlclient-dotnet-standard-5.2).
 
-- [ ] **NULL does not survive a flat-file round trip.** Writing a table with a NULL to CSV and
+- [x] **NULL does not survive a flat-file round trip.** **Fixed 2026-08-11** — see the decision item
+      above; a blank field now reads as NULL, so write-then-read is identity for nullable columns.
+      Original finding retained below for the record. Writing a table with a NULL to CSV and
       reading it back yields an empty string, so `IS NULL` finds nothing afterwards — verified in
       `tests/engine_corpus/flatfile_roundtrip.etest`. Everything else round trips intact, including
       values that merely look numeric (`00123`, `1e5`), decimals, and values containing the
@@ -1487,7 +1494,10 @@ absent" take the same branch, and it is always the benign one.
       Pairs with the `BULK INSERT` empty-field item below — the same distinction, drawn
       inconsistently at each end. Worth settling once, for both directions, rather than twice.
 
-- [ ] **An empty numeric field fails the whole load.** `1,,Engineering` into `(id INT, score INT,
+- [x] **An empty numeric field fails the whole load.** **Fixed 2026-08-11** by the blank-is-NULL
+      decision — an empty field is now NULL for every target type, so the load succeeds and the
+      column is NULL rather than the statement failing. Original finding retained below.
+      `1,,Engineering` into `(id INT, score INT,
       dept VARCHAR)` raises `cannot be converted to target type INT`; the same bytes into a text
       column produce an empty string, which is not NULL and so `IS NULL` does not find it. Loud is
       the safe direction and this is not a silent-wrong-answer defect, but an empty numeric field is

@@ -818,7 +818,14 @@ namespace ETL_SQL.Connectors.FlatFile
                 {
                     string val = _trim ? values[srcIdx].Trim() : values[srcIdx];
 
-                    if (_nullAsValues != null && IsNullSentinel(val, _nullAsValues))
+                    // A blank field is an absent value, not an empty string. A flat file has no way
+                    // to write NULL, so a NULL written out arrives back as an empty field; reading
+                    // it as "" made the round trip lossy in a way nothing reported — IS NULL stopped
+                    // finding the row, while the value still failed conversion to any numeric
+                    // column. Matches the load side, which applies T-SQL's KEEPNULLS by default.
+                    // NULL_AS still adds explicit sentinels on top of this.
+                    if (string.IsNullOrWhiteSpace(val)
+                        || (_nullAsValues != null && IsNullSentinel(val, _nullAsValues)))
                     {
                         row[i] = null;
                     }

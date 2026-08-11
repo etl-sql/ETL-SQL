@@ -68,12 +68,12 @@ SELECT id, code FROM mixed_out.FILE ORDER BY id;
 3|4.50
 4|1e5
 
-# NULL does NOT survive the round trip: it is written as an empty field and read back
-# as an empty string, so IS NULL finds nothing afterwards. CSV has no native NULL, so
-# some convention has to be chosen (a NULL_STRING option, or quoted-empty meaning ""
-# against bare-empty meaning NULL) — until one is, a flat-file round trip is not
-# identity for any nullable column, and a pipeline that stages through CSV loses the
-# distinction silently. Recorded as behaviour, flagged in TODO.md as a decision.
+# NULL survives the round trip: written as an empty field, read back as NULL. CSV has
+# no native NULL, so this is a convention rather than a fact about the format — a blank
+# field means "no value", matching the load side. The cost of the convention, and it is
+# a real one: an actual empty string cannot be distinguished from NULL through a flat
+# file, so '' does not round trip. NULL_AS adds explicit sentinels on top for anyone
+# who needs to tell them apart.
 
 statement ok
 CREATE TABLE #nulls (id INT, note VARCHAR(50));
@@ -90,13 +90,13 @@ INSERT INTO nulls_out.FILE SELECT * FROM #nulls;
 query
 SELECT id, note FROM nulls_out.FILE ORDER BY id;
 ----
-1|
+1|NULL
 2|present
 
 query
 SELECT COUNT(*) FROM nulls_out.FILE WHERE note IS NULL;
 ----
-0
+1
 
 # Values containing the delimiter must be quoted on write and unquoted on read, or the
 # round trip silently gains a column.
