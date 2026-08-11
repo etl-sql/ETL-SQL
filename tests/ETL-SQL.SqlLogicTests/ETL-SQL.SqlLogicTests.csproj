@@ -23,6 +23,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Moq" />
+    <!-- Lets the corpus honour Engine__* overrides; without it every threshold is the built-in default. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
   </ItemGroup>
 
   <ItemGroup>

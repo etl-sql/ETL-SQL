@@ -213,6 +213,22 @@ SET TELEMETRY = OFF;";
                 $"({totalMB}MB total, limit={limitMB}MB). Aborted at query {_queryCount}.");
         }
 
+        /// <summary>
+        /// Crash-forensics breadcrumb for this runner's file: always holds the statement that was
+        /// about to run. Named per test file so concurrent workers cannot overwrite each other.
+        /// </summary>
+        private string ProgressFilePath
+        {
+            get
+            {
+                var name = CurrentFile != null
+                    ? System.IO.Path.GetFileNameWithoutExtension(CurrentFile)
+                    : "unknown";
+                return System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, $"slt_progress.{name}.log");
+            }
+        }
+
         private void LogProgress(SltRecord record)
         {
             // Always print the about-to-run line so the last output before a crash/cancel is informative.
@@ -223,8 +239,11 @@ SET TELEMETRY = OFF;";
 
             try
             {
-                var progressFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "slt_progress.log");
-                System.IO.File.WriteAllText(progressFile, prefix + Environment.NewLine);
+                // One progress file per test file. The corpus runs several files concurrently, so a
+                // single shared log would only ever hold whichever worker wrote last — after a crash
+                // that names an arbitrary survivor rather than the statement that died. Keeping them
+                // separate means every worker's last statement is still on disk to compare.
+                System.IO.File.WriteAllText(ProgressFilePath, prefix + Environment.NewLine);
             }
             catch { }
 
@@ -419,6 +438,14 @@ SET TELEMETRY = OFF;";
 
             var connectors = new ConnectorRegistry();
             connectors.Register(new ETL_SQL.Connectors.MockDb.MockDbConnector());
+
+            // Without this the evaluator resolves no IConfiguration, DefaultThresholds falls back to
+            // its built-in constants, and every Engine__* override the lane sets is silently ignored —
+            // so a run configured to spill at 25 rows would quietly execute at 1,000,000 and exercise
+            // none of the spill paths it claimed to. Environment variables only: the corpus needs no
+            // appsettings.json, and reading one would couple these tests to the shipped defaults.
+            var configuration = new ConfigurationBuilder().AddEnvironmentVariables().Build();
+            services.AddSingleton<IConfiguration>(configuration);
 
             services.AddSingleton(l);
             services.AddSingleton(security);

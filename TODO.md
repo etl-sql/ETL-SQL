@@ -1279,35 +1279,44 @@ absent" take the same branch, and it is always the benign one.
       `dotnet test --blame-crash`, then `dotnet-dump analyze -c clrthreads`). A stack overflow
       cannot be caught, so the only symptom is `Test host process crashed` with no message.
 
-      **Exact location.** `tests/ETL-SQL.SqlLogicTests/.../slt_progress.log` — which exists for
-      precisely this — names the last statement started:
-      `[2649] select3.test L32135: SELECT d-e, ...`. Triggered by
-      `Engine__TempTableSpillThresholdRows=25` or `Engine__MaxInMemoryBatches=2`, each alone; the
-      other four thresholds the spill lane sets leave SLT green.
+      **The instrument was broken, and every earlier conclusion here was drawn through it.** Two
+      defects in the corpus harness, both now fixed, invalidated the whole investigation:
 
-      **What has been ruled out, by running it rather than reasoning:**
-      - Not that query. Its setup plus that statement through the CLI exits 0.
-      - Not cumulative session state. The **entire** select3.test — all 3,351 statements — through
-        the CLI at the same threshold exits 0, peak 63 MB.
-      - Not NULL handling, and not the spill itself: CLI repros where the spill demonstrably fires
-        (`Disk Spilled 0.01 MB`) do not crash.
-      - Not visible in the dump stacks. Deepest managed stack is 67 frames even in a **full** dump,
-        because the runtime tears the overflowing stack down before the collector runs. Do not
-        spend time reading dump stacks for this.
+      1. **`SltRunner` registered no `IConfiguration`.** It builds its own `ServiceCollection`
+         instead of using the production composition root, so `DefaultThresholds` received `null`
+         and returned its built-in constants. Every `Engine__*` override the lane set was accepted
+         and ignored: a run configured to spill at 25 rows executed at 1,000,000. Verified directly
+         — with `Engine__TempTableSpillThresholdRows=25` set, the evaluator resolved `1000000`.
+         **The corpus has never once run at a low threshold**, so the spill paths the lane claims
+         to cover were never reached. Fixed by registering an environment-variable configuration;
+         `SltRunnerConfigurationTests` now asserts an override reaches the evaluator, and that the
+         unconfigured default is still 1,000,000.
+      2. **`slt_progress.log` was a single shared file under 4-way parallelism.** `LogProgress` did
+         `File.WriteAllText` to one path while `Parallel.ForEachAsync` ran four files at once, so
+         the surviving line named whichever worker wrote last — a 1-in-4 chance of naming the one
+         that died. Now written per test file as `slt_progress.<name>.log`.
 
-      **Two earlier diagnoses here were wrong** and are recorded so they are not retried: "row 25
-      of the corpus meets the row-25 threshold" (coincidence — a direct INSERT at that threshold
-      does not crash, and `MaxInMemoryBatches` reproduces it with no row 25 involved), and "the
-      join adds an enumerator layer per rebuffering event" (`PrependRows` runs once per
-      `StreamSingleJoin`, JoinEngine.cs:496, not per rebuffer).
+      **Therefore retracted:** the "exact location" `select3.test L32135` (an arbitrary worker's
+      last statement, which is why it never reproduced standalone), and the claim that
+      `TempTableSpillThresholdRows=25` or `MaxInMemoryBatches=2` each trigger it — neither was ever
+      applied. With the threshold genuinely set to 25, select3.test runs all 3,351 records clean in
+      34s. The pass/fail pattern that bisection produced was noise.
 
-      **What the evidence now points at.** Both triggering thresholds increase the number of
-      pipeline stages, and each stage is another nested `IAsyncEnumerable` whose `MoveNextAsync`
-      the whole chain walks. The CLI survives what the test host does not, so the difference is
-      stack headroom, not behaviour. **Next experiment:** run the same corpus on a thread created
-      with an explicitly small stack (`new Thread(work, 256 * 1024)`). If it reproduces, this is
-      pipeline nesting depth against available stack, and the fix is to bound or flatten the
-      enumerator chain rather than to change any single operator.
+      **What still stands:** the crash is a real `System.StackOverflowException` on a threadpool
+      worker (crash dump via `dotnet test --blame-crash`, then `dotnet-dump analyze -c clrthreads`).
+      A stack overflow cannot be caught, so the only symptom is `Test host process crashed` with no
+      message. Dump stacks are useless here — deepest managed stack is 67 frames even in a **full**
+      dump, because the runtime tears the overflowing stack down before the collector runs. Do not
+      spend time reading them.
+
+      **Next step:** re-run the corpus now that thresholds actually apply and progress is attributed
+      per file. If it crashes, the per-file logs name the real statement for the first time. If it
+      does not, the original crash needs re-reproducing from scratch before anything is concluded —
+      note that under 4-way parallelism a stack overflow may itself be a concurrency artifact.
+
+      **Lesson worth keeping:** four hypotheses were tested and disproved against an instrument that
+      could not report what it claimed. Verify that a diagnostic actually observes the thing it
+      names before spending experiments on what it says.
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
