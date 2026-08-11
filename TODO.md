@@ -1156,20 +1156,31 @@ absent" take the same branch, and it is always the benign one.
       - `MockDataTests.TestGenerateWithSeed` — not yet traced.
 
       Until this is done the lane cannot be green, so do not add it to the `release` lane.
-- [ ] **Give the lane a `-ContinueOnFailure` switch.** `Invoke-DotNetTest` exits on the first failing
+
+      **The lane's SLT half was inert until 2026-08-11.** Everything above concerns
+      `ETL-SQL.Tests`, which resolves configuration through the production composition root and so
+      genuinely ran at the lane's thresholds — that is where the P0 was found. The SLT corpus did
+      not: `SltRunner` registered no `IConfiguration` and silently used built-in defaults, so the
+      lane's low thresholds never applied to it. Now that they do, the corpus is exercising spill
+      paths for the first time and its results are not comparable to any previous run.
+- [x] **Give the lane a `-ContinueOnFailure` switch.** `Invoke-DotNetTest` exits on the first failing
       project (correct for a gate), so SLT never ran and one pass cannot produce a full triage list.
+      Done — `scripts/test-lane.ps1` accumulates `$script:LaneFailures` and defers the exit code.
 - [ ] **Vary data shape in the fuzzer.** Keep the grammar walk; add a seeded generator varying row
       count across the batch/spill boundaries, null density per column (0%, sparse, one entire
       batch, 100%), and type mix — including a column whose CLR type differs between batches, which
       is what the spill defect actually was.
-- [ ] **A rule-catalogue property test.** Reflect over every `ColumnRule` and assert each can fail on
+- [x] **A rule-catalogue property test.** Reflect over every `ColumnRule` and assert each can fail on
       a crafted row, and that misconfiguration (unknown type, unprojected column, arity mismatch) is
       a hard error rather than a rule that passes everything. Design decision 5 already states this
       as a principle; nothing enforces it across the set. Same shape as
-      `EngineSubsystemCoverageTests`.
-- [ ] **A general AST round-trip property.** Existing round-trip tests are per-feature, written with
+      `EngineSubsystemCoverageTests`. Done — `ColumnRuleCatalogPropertyTests`: a reflection test
+      fails the build when a new `ColumnRule` has no violating-row case, plus a per-rule theory.
+- [x] **A general AST round-trip property.** Existing round-trip tests are per-feature, written with
       the feature, so `ON FAILURE` — added later — had none and the formatter dropped it silently.
-      Enumerate `Statement` subclasses and assert parse → `ToSql` → parse preserves.
+      Enumerate `Statement` subclasses and assert parse → `ToSql` → parse preserves. Done —
+      `AstRoundTripPropertyTests` asserts every keyword survives serialization and that the output
+      reparses, with a short documented allowlist for forms the serializer normalizes.
 
 ### Test baseline — pre-existing failures on `release/v0.18.0`
 
