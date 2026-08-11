@@ -1255,6 +1255,35 @@ absent" take the same branch, and it is always the benign one.
       the sibling `ProcessBucketDeepSpill` achieves by sorting on the partition keys and resetting
       its state at each boundary.
 
+- [ ] **`BULK INSERT` maps by position and ignores the file's header, and a count mismatch is
+      tolerated.** `for (i = 0; i < mapping.Count && i < batch.ColumnNames.Count; i++)` pairs the
+      i-th file column with the i-th target name, so loading `ID,Name,Dept,Salary,JoinDate` into
+      `(id, category, price, qty)` put the text `'HR'` into a decimal column and reported
+      `165 rows loaded. 0 errors skipped` with `MAXERRORS = 0`. The run then died in session save
+      naming neither the column nor the statement.
+
+      **Do not simply reject a count mismatch — that was tried and reverted.**
+      `StmtBulkInsertColsTests.TestBulkInsert_SourceFewerColumnsThanMapping_ExtraColumnsAreNull`
+      documents the short-source case as intended, with its own fixture: the loop stops at
+      `min(mapping, source)` so unmatched targets are left NULL. Rejecting mismatches breaks that,
+      and making it pass would mean weakening a deliberate assertion to fit the change.
+
+      The question to settle first is **what the mapping means**, not what to do on mismatch: a
+      header-bearing CSV could map by name, which is what the sample author assumed and what makes
+      positional misalignment impossible. Options are name-based mapping when a header is present,
+      a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
+      equal counts in the wrong order corrupt just as silently.
+
+- [ ] **The SLT lane aborts under spill thresholds.** With the spill lane's configuration the
+      SqlLogicTests host reports 6 tests passed and then `Test Run Aborted.` — a host crash rather
+      than a test failure, so no assertion names it. Found only because `-ContinueOnFailure` let
+      the lane reach SLT at all; the default stops at the failing engine project first.
+
+      **Cause not isolated.** The output stops mid-corpus at an `INSERT` around row 25, which
+      matches the lane's `TempTableSpillThresholdRows = 25` — but a direct 40-row INSERT into a
+      temp table at that threshold exits 0 and spills nothing, so that correlation did not hold.
+      Reproduce by running the SLT lane alone under those thresholds and bisecting the corpus.
+
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each

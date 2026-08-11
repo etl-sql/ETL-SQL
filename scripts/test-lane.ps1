@@ -11,10 +11,19 @@ param(
 
     [switch]$CollectCoverage,
 
-    [string]$ResultsDirectory = "coverage"
+    [string]$ResultsDirectory = "coverage",
+
+    # Run every project even after one fails, then exit non-zero at the end. A gate wants the
+    # first failure and nothing further; triage wants the whole picture in one pass, which the
+    # default cannot give -- the spill lane stops before SLT runs, so one run never lists
+    # everything that lane broke.
+    [switch]$ContinueOnFailure
 )
 
 $ErrorActionPreference = "Stop"
+
+$script:LaneFailures = @()
+$script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)"
@@ -49,6 +58,11 @@ function Invoke-DotNetTest {
 
     & dotnet @args
     if ($LASTEXITCODE -ne 0) {
+        if ($ContinueOnFailure) {
+            $script:LaneFailures += "$Project $Filter".Trim()
+            $script:LaneExitCode = $LASTEXITCODE
+            return
+        }
         exit $LASTEXITCODE
     }
 }
@@ -262,4 +276,12 @@ switch ($Lane) {
         & dotnet @args
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
+}
+
+
+if ($ContinueOnFailure -and $script:LaneExitCode -ne 0) {
+    Write-Host ""
+    Write-Host "Lane completed with failures in:" -ForegroundColor Red
+    foreach ($failure in $script:LaneFailures) { Write-Host "  - $failure" -ForegroundColor Red }
+    exit $script:LaneExitCode
 }
