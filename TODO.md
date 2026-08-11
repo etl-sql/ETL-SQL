@@ -252,44 +252,6 @@ an arbitrary connection/target from the browser.
       symmetric clause/rule check was written to catch, and it was equally silent where it
       happened. Fixed with a round-trip test over all three clause forms.
 
-### Engine — Compound `@expect` rules with AND / OR
-
-Today a comma between rules means AND, and there is no OR at all: a disjunction has to be written as
-`EXPR a = 'A' OR a = 'B'`, which drops out of the rule vocabulary into a raw predicate and so loses
-the diagnostics, autocomplete and policy legibility the named rules exist to give. `AND`/`OR` are
-more expressive than a comma, and the parenthesised mixture is the case that cannot be expressed at
-all right now.
-
-- [ ] Accept boolean composition of rule terms: `NOT NULL AND (LENGTH BETWEEN 5 AND 10 OR
-      MATCHES ^LEGACY-)`. Keep the comma as a synonym for top-level AND so every existing script
-      keeps working — it is used throughout the samples and docs.
-
-**Design notes, so this is not rediscovered.**
-
-- **Precedence is ordinary SQL**, which is exactly why `BETWEEN … AND …` is not a special case:
-  `NOT` binds tighter than `AND`, which binds tighter than `OR`, and a `BETWEEN` bound is parsed at a
-  level above the `AND` connective. `BETWEEN 1 AND 10 AND NOT BLANK` then resolves the same way it
-  would in a `WHERE` clause. Parentheses group. This replaces `FindTopLevelAnd`, which takes the
-  first depth-zero `AND` and is only correct while `AND` cannot also be a connective.
-- **The parser has to become a real one.** `ColumnRuleParser` is a comma splitter feeding per-rule
-  regexes; composition needs precedence climbing over rule terms. Keep what `SplitTopLevel` already
-  gets right — commas inside `MATCHES` patterns, `IN` lists, `EXPR` calls, quoted strings and
-  backslash escapes stay literal — because those are the cases that make a naive split wrong.
-- **NULL handling already implies the answer.** "NULL skips every rule except NOT NULL, and the row
-  passes" is three-valued logic with UNKNOWN treated as passing — the SQL `CHECK` convention the
-  reference page already cites. So use SQL's truth tables: a skipped term is UNKNOWN,
-  `UNKNOWN OR TRUE` is TRUE, `UNKNOWN AND TRUE` is UNKNOWN, and the row fails only on FALSE. A
-  pure-AND list then behaves exactly as it does today, which is the compatibility argument.
-- **Failure reporting is the hard part, not the grammar.** Evaluation currently records a failure per
-  failing rule, and `__dq_rule`, the capped samples, the per-rule counts on job history and
-  `eng.data_quality_rules` all assume a flat list of independent rules. Under an `OR`, a false term
-  is not a failure — only the whole expression is. Decide what `__dq_rule` carries for a compound
-  expression before writing the parser, or the metrics surface will quietly start reporting
-  sub-terms as failures that never failed the row.
-- Follow the **Syntax Addition Checklist** in [CONTRIBUTING.md](CONTRIBUTING.md): parser and runtime
-  together, reference page, lint and autocomplete (`DefaultGrammar.cs`, `LanguageService`), and
-  rejection-path tests alongside the accepted forms.
-
 ### Engine — Hoist row-invariant BETWEEN bounds
 
 Measured 2026-08-10 (`ColumnQualityCostTests`, 50k rows, rules attached to columns they pass):
