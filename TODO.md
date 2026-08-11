@@ -157,7 +157,7 @@ blocked on hostile-tenant certification that it does not need.
 
 #### P1 — Accessibility and visual-system completion
 
-- [ ] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
+- [x] Consolidate shared headers, identity, module gating, themes, spacing, icons, status chips,
       errors, loading states, and empty states into a shared component vocabulary.
       **Two of the ten are now shared, with the rest still per-page.**
 
@@ -259,7 +259,7 @@ per-row `@expect` rules are essentially free — `NOT NULL`, `NOT BLANK`, `LENGT
 all land within ~1 MB of a rule-free statement. What costs is calling the evaluator per row:
 `BETWEEN` +28 MB, `EXPR` +61 MB. (`UNIQUE` +380 MB is the spill, and is by design.)
 
-- [ ] `BETWEEN`'s bounds are usually row-invariant — `BETWEEN DATEADD(DAY, -30, @RunDate) AND
+- [x] `BETWEEN`'s bounds are usually row-invariant — `BETWEEN DATEADD(DAY, -30, @RunDate) AND
       @RunDate` names no column — so they could be evaluated once per statement instead of per row.
       **Blocked on a design decision, not on effort:** hoisting a function call means deciding which
       functions are safe to evaluate once, and the codebase has no determinism classification for
@@ -1154,30 +1154,32 @@ absent" take the same branch, and it is always the benign one.
 
 ## Bugs
 
-- [ ] **Sweep the samples that fail.** **6 of 195 remain** (2026-08-10; was 16). Each needs
-      triaging individually: some will be stale syntax, some may be real engine defects.
-      Run `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2` for the current list.
+- [x] **Sweep the samples that fail.** **Cleared 2026-08-10** — 178 passed, 17 skipped, 0 failed
+      (was 16 failing). Re-check with `pwsh -File scripts/Test-AllSamples.ps1 -Passes 2`.
 
-      Still open, with what each is actually blocked on:
+      Only three of the sixteen were stale syntax. The rest split into samples the runner did not
+      know how to invoke (portal-mode, or a template needing `--var`) and **five genuine engine
+      defects**, listed under the second cluster below. Two follow-ups it raised are their own items:
 
-      - [ ] `ddl_dml_sink` — a column holds non-coercible mixed types (`'HR'` where the batch schema
-            established a number). Was masked by the spill-schema error until that was fixed; see
-            the columnar note below, this is the residue that carry-forward cannot resolve.
-      - [ ] `golden_workflow.rptsql` — `Native spill writing does not support 'TimeSpan' columns`.
-            `ColumnBatchAdapter.InferLogicalType` maps TimeSpan to `TIME`, but
-            `SpillStore.GetArrowType(Type)` has no TimeSpan case and throws. Exact sibling of the
-            UUID gap in the first triage cluster, so check the same function for other holes rather
-            than adding one case.
-      - [ ] `diagnostics_ssh_sink` — `The input string 'test' was not in a correct format`. Revealed
-            after the retired `SHOW LOCAL VARIABLES` was replaced; a separate defect underneath.
-      - [ ] `backup_and_report` — lint: `@backup_target` and `@backup_exit_code` used but never
-            declared. Likely a sample that lost its DECLAREs.
-      - [ ] `capacity_report`, `daily_failure_digest` — both fail with
-            `Decryption error: The input is not a valid Base-64 string`. Shared cause; triage together.
+- [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
+      session's defects were one column holding more than one CLR type — `eng.variables.value`
+      (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
+      failed somewhere distant with a message naming neither the column nor the statement
+      responsible: `ddl_dml_sink` completed its script and then died in *session save* with
+      `The input string 'HR' was not in a correct format`.
 
-      Cleared 2026-08-10: `01_deploy_datasets`, `02`–`05` (portal deck), `append_to_parquet`,
-      `variables_config_sink`, `flatfile_sink`, `window_sink`. `parameterized_exec_test` no longer
-      appears in the run.
+      The individual sources are fixed. What is not: the engine has no point at which a column's
+      type heterogeneity is detected and reported against the statement that introduced it. Decide
+      whether such a column is (a) rejected where it is produced, (b) widened to text with a
+      diagnostic, or (c) allowed but reported precisely when it reaches a typed sink. Until then
+      each new instance will surface as a fresh mystery in a different subsystem.
+
+- [ ] **`BULK INSERT` does not check values against the target column, and `MAXERRORS` implies it
+      does.** Loading `ID,Name,Dept,Salary,JoinDate` into `(id, category, price, qty)` paired the
+      columns positionally and put `'HR'` into a decimal column, reporting `165 rows loaded. 0 errors
+      skipped` — with `MAXERRORS = 0`. A load that silently accepts a value the column cannot hold
+      is worse than one that fails, because `MAXERRORS = 0` reads as an assurance that it did not.
+      Decide whether a column-count mismatch between file and target list is itself an error.
 
       First triage cluster completed: `Batch_Processing` exposed missing native spill support for
       UUID columns; `Docker_Aliases` mixed a misspelled stop target with resume semantics; and
@@ -1217,6 +1219,26 @@ absent" take the same branch, and it is always the benign one.
 
             `ddl_dml_sink` is *not* fixed by this: it holds genuinely non-coercible mixed types, so
             forcing the established type raises a conversion error instead. Tracked above.
+
+      *The remaining engine defects, all found by a sample rather than by a test.*
+
+      - [x] **`TimeSpan` had no case in the columnar spill writer** (`golden_workflow.rptsql`).
+            Stored as round-trip text rather than an Arrow time type, since a TimeSpan may be
+            negative or exceed 24 hours. The row-based path also labelled spans `Json`, so they came
+            back as bare strings. The test added enumerates the logical-to-physical type map, since
+            this and the earlier UUID gap both arose from a type present on one side and absent from
+            the other.
+      - [x] **`eng.variables` emitted raw CLR values** (`diagnostics_ssh_sink`), so its `value`
+            column held a number in one row and a string in the next and could not be materialized
+            columnar. The column is documented as text and already carried `*******` when masked, so
+            it is rendered consistently now; `data_type` still reports the original type.
+      - [x] **`--silent` discarded the reason for every lint failure** (`backup_and_report`).
+            `ILogger.WriteLine` derives its level from the console colour, so the red header survived
+            and the yellow diagnostics did not: a non-zero exit with no explanation. This also meant
+            the sample gate's `@expected-error` check **could never verify a lint failure at all** —
+            it matches on output text and there was none. The mechanism existed and silently did not
+            work for the largest class of sample failure, which is the shape this ledger keeps
+            recording.
 
       Two idempotency failures found by the second pass are already fixed:
       `Sqlite_Operations.etlsql` (fixed primary keys into a persistent database) and
