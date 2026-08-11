@@ -1285,10 +1285,30 @@ absent" take the same branch, and it is always the benign one.
       a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
       equal counts in the wrong order corrupt just as silently.
 
-- [ ] **P0 — the engine exhausts a thread stack under low spill thresholds.** The SLT host dies
-      with `System.StackOverflowException` on a threadpool worker (confirmed from a crash dump via
-      `dotnet test --blame-crash`, then `dotnet-dump analyze -c clrthreads`). A stack overflow
-      cannot be caught, so the only symptom is `Test host process crashed` with no message.
+- [ ] **P0 — `AstSerializer` recurses per operand, so a ~50-term boolean chain kills the process.**
+      **Found 2026-08-11. Nothing to do with spilling** — reproduces at default thresholds.
+
+      **Exact cause.** `AstSerializer.FormatBinary` → `AstNode.ToSql()` → `Format` recurses once per
+      operand of a left-deep `AND` chain, three frames per term and no depth guard. A `WHERE` with
+      49 conjuncts overflows the stack. Reproducer: `tests/slt_data/corpus/select5.test` L20609
+      (`join-50-1`, 50 tables and 49 equality predicates). The runtime prints
+      `Stack overflow.` / `Repeated 50 times:` with exactly that three-frame cycle.
+
+      **It is on the mandatory production path, not a diagnostic.** The caller is
+      `Evaluator.cs:1040` — the canonical-script hash captured for `ExecutionPolicySnapshot` at
+      `CurrentRecursiveDepth == 0`, before any statement executes. Every top-level script is
+      serialized in full, so any script with a boolean chain this long dies at governance capture
+      with no message, no statement having run, and nothing catchable. Fifty `AND` terms is
+      ordinary in generated ETL predicates.
+
+      **Fix:** make the serializer iterative for chained binary operators (accumulate the spine into
+      a list, emit in a loop) rather than recursing; the parser already bounds depth via
+      `MaxRecursiveDepth`, the serializer bounds nothing. A depth guard that throws a clean
+      `ExecutionException` is the fallback if flattening proves invasive, but a guard alone turns a
+      crash into a refusal to run a legitimate script, so prefer flattening.
+
+      **Regression test:** a script whose `WHERE` has a few hundred `AND` terms must serialize and
+      execute. Cheap, deterministic, and in the engine suite rather than SLT.
 
       **The instrument was broken, and every earlier conclusion here was drawn through it.** Two
       defects in the corpus harness, both now fixed, invalidated the whole investigation:
@@ -1320,14 +1340,15 @@ absent" take the same branch, and it is always the benign one.
       dump, because the runtime tears the overflowing stack down before the collector runs. Do not
       spend time reading them.
 
-      **Next step:** re-run the corpus now that thresholds actually apply and progress is attributed
-      per file. If it crashes, the per-file logs name the real statement for the first time. If it
-      does not, the original crash needs re-reproducing from scratch before anything is concluded —
-      note that under 4-way parallelism a stack overflow may itself be a concurrency artifact.
+      **How it was finally found.** Per-file progress logs narrowed the crash from a 1-in-4 guess to
+      five candidates; running each file alone identified `select5.test` (`select1`–`select4` all
+      exit 0), and running it alone let the runtime print the repeating frame cycle that names the
+      method. Total elapsed once the instrument was trustworthy: about fifteen minutes.
 
-      **Lesson worth keeping:** four hypotheses were tested and disproved against an instrument that
-      could not report what it claimed. Verify that a diagnostic actually observes the thing it
-      names before spending experiments on what it says.
+      **Lesson worth keeping:** five hypotheses were tested and disproved against an instrument that
+      could not report what it claimed — and all five were about spilling, because the broken
+      instrument's only signal was a threshold setting that was never applied. Verify that a
+      diagnostic actually observes the thing it names before spending experiments on what it says.
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
