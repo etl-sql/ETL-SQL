@@ -1132,7 +1132,16 @@ absent" take the same branch, and it is always the benign one.
       of that run called all six threshold-coupled tests; that was wrong, and it was wrong in the
       direction of dismissing a defect, so read the failure before classifying it.
 
-      The rest are tests silently coupled to default thresholds:
+      **All six are now resolved (2026-08-10).** The lane re-run after the P0 fix reports 4
+      failures out of 5,981, and two of those are the pre-existing release-branch failures
+      recorded below — so the lane is green apart from a known baseline and can gate once
+      that baseline is dealt with. What the other five turned out to be:
+
+      Every one read only the **first batch** and called it the result, or asserted a plan
+      that thresholds choose. None was a product defect, but none was harmless either: each
+      was asserting the batch size rather than the thing it was named for.
+
+      The rest, for the record:
 
       - `Scale_Aggregate_100kRows_CorrectResults` and `Scale_Join_SpillToDisk_CorrectResults`
         (`HardeningScaleTests.cs:85`) call `.FirstAsync()` and assert on the **first batch**, not the

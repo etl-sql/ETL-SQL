@@ -115,9 +115,17 @@ namespace ETL_SQL.Tests.Engine
                 sink.Lines.Clear();
                 await ev.Evaluate(Parse("SELECT * FROM #LotsOfRows;"));
 
-                var resultLine = Assert.Single(sink.Lines);
-                using var document = JsonDocument.Parse(resultLine);
-                var renderedRows = document.RootElement.GetProperty("rows").GetArrayLength();
+                // Summed across every emitted block, not taken from a single one. A result that
+                // spans batches is rendered as an isFirst block plus continuations — that is the
+                // streaming protocol, not a fault — so asserting one block made this test about the
+                // batch size rather than about the cap it is named for.
+                Assert.NotEmpty(sink.Lines);
+                var renderedRows = 0;
+                foreach (var line in sink.Lines)
+                {
+                    using var block = JsonDocument.Parse(line);
+                    renderedRows += block.RootElement.GetProperty("rows").GetArrayLength();
+                }
 
                 Assert.Equal(10, renderedRows);
                 Assert.Equal(10, ev.LastResult?.Rows.Count);

@@ -92,8 +92,13 @@ GENERATE 10 ROWS INTO #b WITH (SEED = 123) AS ( val = 'RANDOM_INT(1, 1000)' );
 ";
             await evaluator.Evaluate(Parse(sql));
 
-            var resA = (await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #a;")).Statements[0]).ToListAsync()).First();
-            var resB = (await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #b;")).Statements[0]).ToListAsync()).First();
+            // Every batch, not the first. Reading one batch compared only as many rows as the
+            // batch size happened to hold, so the reproducibility this test exists to prove was
+            // itself batch-size dependent.
+            var resA = await ETL_SQL.Tests.Core.TestHelpers.ReadAllRows(
+                evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #a;")).Statements[0]));
+            var resB = await ETL_SQL.Tests.Core.TestHelpers.ReadAllRows(
+                evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #b;")).Statements[0]));
 
             Assert.Equal(10, resA.Rows.Count);
             Assert.Equal(10, resB.Rows.Count);
