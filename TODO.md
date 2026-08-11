@@ -1186,13 +1186,34 @@ absent" take the same branch, and it is always the benign one.
       `ORDER BY` and no frame. So `SELECT COUNT(*) OVER (PARTITION BY customer_id)` over a large
       table returns **silently wrong numbers** — no error, no warning.
 
-      The sibling branch `ProcessBucketDeepSpill` shows the correct shape: it sorts by the partition
-      keys and resets its state at each boundary. This branch needs the same treatment, or must
-      decline when a bucket contains more than one partition key.
-
       Found by the spill lane, not by a test — `ExternalWindowEngine_PartitionSampleIncreasesFanOutWithoutLosingRows`
       asserts `COUNT(*) OVER (PARTITION BY Grp)` is 1 for 4,096 unique groups and returns 249 under a
       low threshold. It passes at the default only because the buckets stay under 10,000 rows.
+
+      **Reproducers are committed and skipped**, in
+      `tests/ETL-SQL.Tests/Engine/WindowPartitionSpillCorrectnessTests.cs`. They drive the defect
+      through the engine with a pinned threshold, so they fail on the behaviour rather than on a plan
+      choice: `SUM` over 200 two-row partitions returns 16 — the bucket's sum — instead of 2. Unskip
+      them with the fix.
+
+      **The obvious fix is wrong; do not take it.** Declining the path whenever a `PARTITION BY` is
+      present makes results correct, and was tried and reverted, because it costs more than it buys:
+      `ExternalWindowEngine_FullPartitionAggregates_UseStreamingSpillReplay` shows the path is
+      *intended* for a partitioned window and asserts it is chosen, so the change would have meant
+      weakening an existing assertion to fit the fix. Worse, a partitioned window would then fall
+      through to materializing each bucket in memory — turning a large query that works today into
+      an OOM. Trading a wrong answer for a crash is not a fix.
+
+      **Do this instead: accumulate per partition key rather than per bucket.**
+      `ProcessBucketPartitionReplaySpill` should build
+      `Dictionary<CompositeKey, Dictionary<string, object?>>` and, when emitting, look each row's own
+      partition key up. `ScanPartitionReplayRows` can evaluate `group.Signature.PartitionBy` per row
+      exactly as `PartitionStream` does. The columnar fast path
+      (`TryScanPartitionReplayBatches`) can only build the key when every partition expression is a
+      plain identifier resolvable to a batch ordinal — when it is not, return null, which already
+      falls back to the row scan. That keeps the optimization and makes it correct, which is what
+      the sibling `ProcessBucketDeepSpill` achieves by sorting on the partition keys and resetting
+      its state at each boundary.
 
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
