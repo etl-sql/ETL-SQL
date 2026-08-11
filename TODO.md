@@ -1239,7 +1239,34 @@ absent" take the same branch, and it is always the benign one.
 
 ### Test baseline — pre-existing failures on `release/v0.18.0`
 
-- [ ] **Session save and load disagree about the storage root.** Root cause of the long-standing
+- [x] **Spill wrote outside its session directory.** **Fixed 2026-08-11**, and it was a production
+      defect rather than the test artefact it looked like.
+
+      `SessionRoot` is the root that *contains* session directories: every production caller passes
+      a parent (`EngineRunner` → `sessionManager.SessionRoot`; Orchestrator and `DashboardService` →
+      `storageAuthority.CheckpointRoot`), the property itself falls back to
+      `_sessionStateManager.SessionRoot`, and both `SessionStateManager` and
+      `SqliteSessionMetadataStore` append the session id to it.
+
+      `SpillStore` did not. It used `Path.Combine(_context.SessionRoot, "spill")`, so in production
+      **every session's spill files landed in one shared `<root>/spill`** while
+      `SessionStateManager.CleanupSession` looked under `<root>/<id>/spill` and found nothing —
+      concurrent sessions sharing a spill directory, and spilled data surviving the session that
+      produced it. Now scoped by session id, matching what cleanup resolves.
+
+      `SpillEncryptionTests` was compensating for this by setting `SessionRoot` to an
+      already-scoped path, which made the *metadata* save land at `<root>/<id>/<id>` while the load
+      looked at `<root>/<id>` — that mismatch was the `NullReferenceException`. With spill fixed the
+      test uses production semantics and passes.
+
+      **The trap worth remembering:** the first plausible reading was "`SaveSession` should not
+      trust a pre-combined `SessionRoot`", which would have changed session persistence for every
+      caller to accommodate one test's wrong assumption. Checking what the property means across
+      *all* its assignments inverted the fix.
+
+      Original diagnosis retained below for the record.
+
+- [ ] ~~**Session save and load disagree about the storage root.**~~ Root cause of the long-standing
       `SpillEncryptionTests.SpillEncryption_ShouldPersistAcrossSessions` baseline failure, traced
       2026-08-11 — recorded so the next person does not re-derive it:
 

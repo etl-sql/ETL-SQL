@@ -159,7 +159,14 @@ namespace ETL_SQL.Tests.Hardening
 
                 var evaluator = sp.GetRequiredService<Evaluator>();
                 string sessionId = evaluator.SessionId;
-                evaluator.SessionRoot = Path.Combine(sessionRoot, sessionId);
+                // SessionRoot is the root that *contains* session directories, not one session's
+                // own directory — SessionStateManager and SqliteSessionMetadataStore both append the
+                // session id to it, and every production caller passes a parent
+                // (EngineRunner uses sessionManager.SessionRoot; the Orchestrator and DashboardService
+                // use storageAuthority.CheckpointRoot). Passing an already-scoped path here made the
+                // save land at <root>/<id>/<id> while the load looked at <root>/<id>, so LoadSession
+                // returned null and this test had been failing on the release branch ever since.
+                evaluator.SessionRoot = sessionRoot;
                 evaluator.IsPersistentSession = true;
                 evaluator.TempTableSpillThresholdRows = 1;
 
@@ -192,7 +199,7 @@ namespace ETL_SQL.Tests.Hardening
                 var evaluator2 = sp2.GetRequiredService<Evaluator>();
                 evaluator2.IsPersistentSession = true;
                 evaluator2.SessionId = sessionId;
-                evaluator2.SessionRoot = Path.Combine(sessionRoot, sessionId);
+                evaluator2.SessionRoot = sessionRoot;
 
                 var state = await manager.LoadSession(sessionId);
                 await evaluator2.LoadSessionState(state);

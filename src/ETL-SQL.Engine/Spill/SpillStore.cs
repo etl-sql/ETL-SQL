@@ -89,13 +89,23 @@ public partial class SpillStore : ISpillStore
 
             if (IsPersistent)
             {
-                // Stable path in the session directory
+                // Stable path in the session directory.
+                //
+                // SessionRoot is the root that *contains* session directories, not one session's
+                // own: every production caller passes a parent (EngineRunner passes
+                // sessionManager.SessionRoot; the Orchestrator and DashboardService pass
+                // storageAuthority.CheckpointRoot), and both SessionStateManager and
+                // SqliteSessionMetadataStore append the session id to it. This did not, so every
+                // session's spill files landed together in <root>/spill while
+                // SessionStateManager.CleanupSession looked under <root>/<id>/spill and found
+                // nothing — concurrent sessions sharing a directory, and spill data surviving the
+                // session that produced it.
                 _cachedRootPath = _context.StorageCapability?.TryGetGrantRoot(
                     "checkpoint",
                     ETL_SQL.Core.Multitenancy.TenantStorageAccess.Write,
                     out var checkpointRoot) == true
                     ? Path.Combine(checkpointRoot!, "spill")
-                    : Path.Combine(_context.SessionRoot, "spill");
+                    : Path.Combine(SessionDirectory(_context), "spill");
 
                 // Deterministic Key based on MachineKey + SessionId (Centralized)
                 _cachedSessionKey = NormalizeAesKey(
@@ -147,6 +157,16 @@ public partial class SpillStore : ISpillStore
         return IsPersistent == _context.IsPersistentSession &&
             (!IsPersistent || _cachedSessionId == _context.SessionId);
     }
+
+    /// <summary>
+    /// The directory belonging to this session, matching what <c>SessionStateManager</c> resolves
+    /// so that cleanup finds what spill wrote. Falls back to the root itself when there is no
+    /// session id to scope by, which is the pre-existing behaviour for an unnamed session.
+    /// </summary>
+    private static string SessionDirectory(IExecutionContext context) =>
+        string.IsNullOrWhiteSpace(context.SessionId)
+            ? context.SessionRoot
+            : Path.Combine(context.SessionRoot, context.SessionId);
 
     private static byte[] NormalizeAesKey(byte[]? key, string sessionId)
     {
