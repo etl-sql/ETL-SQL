@@ -423,35 +423,99 @@ public class ExternalWindowEngine
         });
     }
 
+    /// <summary>
+    /// Two passes over one spill bucket: scan it to fold each partition's aggregate, then replay it
+    /// writing each row the aggregate belonging to <b>its own</b> partition.
+    ///
+    /// <para>Buckets are hash partitions, so a bucket holds every row whose partition key hashed
+    /// there — which for a PARTITION BY of higher cardinality than the bucket count is many
+    /// partitions, not one. Folding the bucket into a single aggregate and stamping it on every row
+    /// made <c>COUNT(*) OVER (PARTITION BY k)</c> report the bucket's row count, silently.</para>
+    /// </summary>
     private async IAsyncEnumerable<Row> ProcessBucketPartitionReplaySpill(string name, WindowGroup group)
     {
         var results = await TryScanPartitionReplayBatches(name, group);
-        if (results == null)
-            results = await ScanPartitionReplayRows(name, group);
+        results ??= await ScanPartitionReplayRows(name, group);
 
         await foreach (var row in ReadPartitionStream(name))
         {
-            foreach (var (key, value) in results)
-                row[key] = value;
+            var key = await PartitionKeyTextAsync(row, group);
+            if (!results.TryGetValue(key, out var values))
+            {
+                // The replay pass saw a partition the scan pass did not. That can only mean the two
+                // derived keys differently, which would silently hand this row another partition's
+                // aggregate -- the defect this method was rewritten to remove.
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                    $"Window partition replay found no aggregate for a row's partition in bucket '{name}'. " +
+                    "The scan and replay passes disagree on the partition key.");
+            }
+            foreach (var (resultKey, value) in values)
+                row[resultKey] = value;
             yield return row;
         }
     }
 
-    private async Task<Dictionary<string, object?>?> TryScanPartitionReplayBatches(
+    /// <summary>
+    /// The partition key rendered as text, so the scan and replay passes agree even when one reads a
+    /// value from a column batch and the other from a materialized row: the same column can come
+    /// back as <c>long</c> one way and <c>int</c> the other, and boxed equality would then place the
+    /// same partition under two keys.
+    /// </summary>
+    private async Task<string> PartitionKeyTextAsync(Row row, WindowGroup group)
+    {
+        if (group.Signature.PartitionBy is not { Count: > 0 } partitionBy) return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < partitionBy.Count; i++)
+        {
+            if (i > 0) builder.Append('\u001F');
+            builder.Append(RenderPartitionKeyPart(await _context.EvaluateValue(partitionBy[i], row)));
+        }
+        return builder.ToString();
+    }
+
+    private static string RenderPartitionKeyPart(object? value) => value switch
+    {
+        null or DBNull => "\u0000",
+        string text => text,
+        IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => value.ToString() ?? string.Empty
+    };
+
+    /// <summary>
+    /// Columnar fast path for the scan pass, folding one accumulator set per partition key.
+    /// Returns null — falling back to the row scan — when the bucket is not columnar, when a
+    /// function's argument cannot be read from a batch, or when a partition expression is not a
+    /// plain column this batch carries, since the key cannot be built by ordinal then.
+    /// </summary>
+    private async Task<Dictionary<string, Dictionary<string, object?>>?> TryScanPartitionReplayBatches(
         string name,
         WindowGroup group)
     {
         var functions = group.Columns.Select(column => (FunctionCallExpression)column.Expression).ToList();
         if (functions.Any(function => function.Filter != null || !TryGetBatchArgument(function, out _)))
             return null;
-        var accumulators = group.Columns
-            .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
-            .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
+
+        var partitionBy = group.Signature.PartitionBy ?? new List<Expression>();
+        var partitionColumns = new List<string>(partitionBy.Count);
+        foreach (var expression in partitionBy)
+        {
+            if (expression is not IdentifierExpression identifier) return null;
+            partitionColumns.Add(identifier.Name.Split('.').Last());
+        }
+
+        var aggregateFunctions = functions.Where(IsPartitionAggregate).ToList();
+        var valueFunctions = functions
+            .Where(function => function.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
+                || function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        var states = new Dictionary<string, PartitionReplayState>(StringComparer.Ordinal);
         long scannedRows = 0;
+
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
         if (reader is not IColumnarSpillReader columnarReader) return null;
+
         await foreach (var batch in columnarReader.AsColumnBatchesAsync())
         {
             using (batch)
@@ -461,38 +525,61 @@ public class ExternalWindowEngine
                     if (!TryGetBatchArgument(function, out var argument) || argument == null) return null;
                     return batch.Schema.GetOrdinal(argument);
                 }
-                var aggregateOrdinals = accumulators.Select(item => Ordinal(item.Function)).ToArray();
-                var valueFunctions = functions
-                    .Where(function => function.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
-                        || function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
-                    .Select(function => (Function: function, Ordinal: Ordinal(function)!.Value))
-                    .ToArray();
+
+                var aggregateOrdinals = aggregateFunctions.Select(Ordinal).ToArray();
+                var valueOrdinals = valueFunctions.Select(function => Ordinal(function)!.Value).ToArray();
+
+                var partitionOrdinals = new int[partitionColumns.Count];
+                for (var i = 0; i < partitionColumns.Count; i++)
+                {
+                    var ordinal = batch.Schema.GetOrdinal(partitionColumns[i]);
+                    if (ordinal < 0) return null;
+                    partitionOrdinals[i] = ordinal;
+                }
+
                 for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                 {
-                    for (var i = 0; i < accumulators.Count; i++)
+                    var key = BatchPartitionKeyText(batch, partitionOrdinals, rowIndex);
+                    if (!states.TryGetValue(key, out var state))
+                        states[key] = state = new PartitionReplayState(aggregateFunctions.Count);
+
+                    for (var i = 0; i < aggregateFunctions.Count; i++)
                     {
-                        var (function, accumulator) = accumulators[i];
+                        var function = aggregateFunctions[i];
                         var value = aggregateOrdinals[i] is { } ordinal
                             ? RowPacker.ReadBatchValue(batch, ordinal, rowIndex)
                             : null;
-                        accumulator.Add(function.FunctionName, value, _context, IsCountStar(function));
+                        state.Accumulators[i].Add(function.FunctionName, value, _context, IsCountStar(function));
                     }
-                    foreach (var (function, ordinal) in valueFunctions)
+
+                    for (var i = 0; i < valueFunctions.Count; i++)
                     {
-                        var key = $"WINDOW_{function.ToSql().ToUpperInvariant()}";
-                        var value = RowPacker.ReadBatchValue(batch, ordinal, rowIndex);
+                        var function = valueFunctions[i];
+                        var resultKey = WindowResultKey(function);
+                        var value = RowPacker.ReadBatchValue(batch, valueOrdinals[i], rowIndex);
                         if (function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
-                            || !values.ContainsKey(key))
-                            values[key] = value;
+                            || !state.Values.ContainsKey(resultKey))
+                            state.Values[resultKey] = value;
                     }
                 }
                 scannedRows += batch.RowCount;
             }
         }
-        foreach (var (function, accumulator) in accumulators)
-            values[$"WINDOW_{function.ToSql().ToUpperInvariant()}"] = accumulator.GetValue(function.FunctionName);
+
         ColumnarWindowScanRows += scannedRows;
-        return values;
+        return Materialize(states, aggregateFunctions);
+    }
+
+    private static string BatchPartitionKeyText(ColumnBatch batch, int[] ordinals, int rowIndex)
+    {
+        if (ordinals.Length == 0) return string.Empty;
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < ordinals.Length; i++)
+        {
+            if (i > 0) builder.Append('\u001F');
+            builder.Append(RenderPartitionKeyPart(RowPacker.ReadBatchValue(batch, ordinals[i], rowIndex)));
+        }
+        return builder.ToString();
     }
 
     private static bool TryGetBatchArgument(FunctionCallExpression function, out string? argument)
@@ -505,54 +592,92 @@ public class ExternalWindowEngine
         return argument != "*";
     }
 
-    private async Task<Dictionary<string, object?>> ScanPartitionReplayRows(string name, WindowGroup group)
+    /// <summary>Row-based scan pass; the fallback whenever the columnar one cannot apply.</summary>
+    private async Task<Dictionary<string, Dictionary<string, object?>>> ScanPartitionReplayRows(
+        string name,
+        WindowGroup group)
     {
-        var accumulators = group.Columns
-            .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
-            .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
-            .ToList();
-        Row? firstRow = null;
-        Row? lastRow = null;
+        var functions = group.Columns.Select(column => (FunctionCallExpression)column.Expression).ToList();
+        var aggregateFunctions = functions.Where(IsPartitionAggregate).ToList();
+        var states = new Dictionary<string, PartitionReplayState>(StringComparer.Ordinal);
 
         await foreach (var row in ReadPartitionStream(name))
         {
-            firstRow ??= row;
-            lastRow = row;
-            foreach (var (f, acc) in accumulators)
+            var key = await PartitionKeyTextAsync(row, group);
+            if (!states.TryGetValue(key, out var state))
+                states[key] = state = new PartitionReplayState(aggregateFunctions.Count);
+
+            state.FirstRow ??= row;
+            state.LastRow = row;
+
+            for (var i = 0; i < aggregateFunctions.Count; i++)
             {
-                if (f.Filter != null && !await _context.EvaluateCondition(f.Filter, row))
+                var function = aggregateFunctions[i];
+                if (function.Filter != null && !await _context.EvaluateCondition(function.Filter, row))
                     continue;
 
                 object? value = null;
-                if (f.Arguments.Count > 0)
-                    value = await _context.EvaluateValue(f.Arguments[0], row);
+                if (function.Arguments.Count > 0)
+                    value = await _context.EvaluateValue(function.Arguments[0], row);
 
-                acc.Add(f.FunctionName, value, _context, IsCountStar(f));
+                state.Accumulators[i].Add(function.FunctionName, value, _context, IsCountStar(function));
             }
         }
 
-        var results = accumulators.ToDictionary(
-            x => $"WINDOW_{x.Function.ToSql().ToUpperInvariant()}",
-            x => x.Accumulator.GetValue(x.Function.FunctionName),
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var column in group.Columns)
+        foreach (var state in states.Values)
         {
-            var f = (FunctionCallExpression)column.Expression;
-            var sourceRow = f.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
-                ? firstRow
-                : f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
-                    ? lastRow
-                    : null;
-            if (sourceRow != null)
+            foreach (var function in functions)
             {
-                results[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] =
-                    await _context.EvaluateValue(f.Arguments[0], sourceRow);
+                var sourceRow = function.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
+                    ? state.FirstRow
+                    : function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
+                        ? state.LastRow
+                        : null;
+                if (sourceRow != null)
+                    state.Values[WindowResultKey(function)] =
+                        await _context.EvaluateValue(function.Arguments[0], sourceRow);
             }
         }
 
+        return Materialize(states, aggregateFunctions);
+    }
+
+    private static Dictionary<string, Dictionary<string, object?>> Materialize(
+        Dictionary<string, PartitionReplayState> states,
+        List<FunctionCallExpression> aggregateFunctions)
+    {
+        var results = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
+        foreach (var (key, state) in states)
+        {
+            for (var i = 0; i < aggregateFunctions.Count; i++)
+            {
+                var function = aggregateFunctions[i];
+                state.Values[WindowResultKey(function)] =
+                    state.Accumulators[i].GetValue(function.FunctionName);
+            }
+            results[key] = state.Values;
+        }
         return results;
     }
+
+    private static string WindowResultKey(FunctionCallExpression function) =>
+        $"WINDOW_{function.ToSql().ToUpperInvariant()}";
+
+    /// <summary>One partition's folded state within a bucket.</summary>
+    private sealed class PartitionReplayState
+    {
+        public PartitionReplayState(int aggregateCount)
+        {
+            Accumulators = new StreamingWindowAggregate[aggregateCount];
+            for (var i = 0; i < aggregateCount; i++) Accumulators[i] = new StreamingWindowAggregate();
+        }
+
+        public StreamingWindowAggregate[] Accumulators { get; }
+        public Dictionary<string, object?> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Row? FirstRow { get; set; }
+        public Row? LastRow { get; set; }
+    }
+
 
     private static bool IsPartitionAggregate(FunctionCallExpression f)
     {

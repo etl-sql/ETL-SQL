@@ -24,7 +24,7 @@ namespace ETL_SQL.Tests.Engine
     /// </summary>
     public class WindowPartitionSpillCorrectnessTests
     {
-        [Fact(Skip = "Reproduces the open P0 in TODO.md: bucket-wide window values under PARTITION BY. Unskip with the fix.")]
+        [Fact]
         public async Task CountOverAHighCardinalityPartition_CountsThePartitionNotTheBucket()
         {
             // Every key is distinct, so every count must be 1. A bucket-wide aggregate would report
@@ -39,7 +39,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.All(result.Rows, row => Assert.Equal(1m, row["n"]));
         }
 
-        [Fact(Skip = "Reproduces the open P0 in TODO.md: bucket-wide window values under PARTITION BY. Unskip with the fix.")]
+        [Fact]
         public async Task SumOverAPartition_IsThePartitionsSum()
         {
             // Two rows per key, each valued 1, so every SUM is 2 regardless of how the keys were

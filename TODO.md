@@ -146,11 +146,11 @@ Both moved out of the SaaS track (2026-08-09). Each item's own text already said
 SaaS-isolation prerequisite, so filing them under a SaaS heading made cross-profile Studio work look
 blocked on hostile-tenant certification that it does not need.
 
-- [ ] **Portal ETL IDE Data Preview & Schema Browser**: add interactive schema inspection and bounded
+- [x] **Portal ETL IDE Data Preview & Schema Browser**: add interactive schema inspection and bounded
       row previews of intermediate `#temp` tables and governed source connections. Cross-profile
       Studio capability: start with Solo/Team, require Enterprise connection ACLs, and certify tenant
       scope before enabling it in SaaS (SaaS domain 7).
-- [ ] **Portal Script Concurrent Editing Locks**: implement optimistic concurrency plus collaborative
+- [x] **Portal Script Concurrent Editing Locks**: implement optimistic concurrency plus collaborative
       edit/session leases that warn authors and prevent silent overwrite. Team/Enterprise
       collaboration work; SaaS additionally requires tenant-scoped lease keys, hard expiry,
       disconnect recovery, and negative cross-tenant tests (SaaS domain 5).
@@ -1166,7 +1166,22 @@ absent" take the same branch, and it is always the benign one.
       know how to invoke (portal-mode, or a template needing `--var`) and **five genuine engine
       defects**, listed under the second cluster below. Two follow-ups it raised are their own items:
 
-- [ ] **P0 — `PARTITION BY` returns bucket-wide window values once a partition spills.**
+- [x] **P0 — `PARTITION BY` returned bucket-wide window values once a partition spilled.**
+      **Fixed 2026-08-10** by folding one accumulator set per partition key instead of one per
+      bucket, in both scan passes, with the replay pass looking up each row's own key. The columnar
+      fast path builds the key from batch ordinals and declines — falling back to the row scan —
+      when a partition expression is not a plain column it carries. Keys are rendered to text
+      through one shared helper because the scan may read a value from a column batch while the
+      replay reads it from a materialized row, and the same column can come back as `long` one way
+      and `int` the other; boxed equality would then file one partition under two keys.
+
+      Reproducers in `WindowPartitionSpillCorrectnessTests` are now live, and
+      `ExternalWindowEngine_FullPartitionAggregates_UseStreamingSpillReplay` still passes — that
+      test asserts both that this path is chosen for a partitioned window and that the columnar scan
+      is used, so it is the evidence the optimization survived the fix rather than being disabled by
+      it. 61 window tests also pass under the spill lane's thresholds.
+
+      The record of the original defect follows, because the failed first attempt is the useful part.
       `ExternalWindowEngine.ProcessBucketPartitionReplaySpill` computes **one** set of aggregate
       values for an entire hash bucket and then writes them onto every row in it:
 
