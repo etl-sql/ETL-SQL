@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
@@ -145,6 +146,53 @@ namespace ETL_SQL.Tests.Core
             Assert.True(eval.LastResult?.Rows.Count == 2,
                 $"A {terms}-term predicate chain returned "
                 + $"{eval.LastResult?.Rows.Count.ToString() ?? "no result"} rows; both rows satisfy it.");
+        }
+
+        /// <summary>
+        /// Every lint rule, against a long chain.
+        ///
+        /// <para>Two recursive tree walks were found and fixed by the tests above; 38 source files
+        /// mention <c>BinaryExpression</c>, so fixing the two instances does not close the class.
+        /// Auditing them by hand is the wrong instrument — reflecting over the rules drives whatever
+        /// exists, including rules added later, and a walk that still recurses takes the process
+        /// down rather than failing an assertion. A crashed run is the signal here.</para>
+        /// </summary>
+        [Fact]
+        public async Task EveryLintRule_SurvivesALongConjunction()
+        {
+            const int terms = 500;
+            var sql = "SELECT a FROM t WHERE "
+                + string.Join(" AND ", Enumerable.Range(0, terms).Select(i => $"a{i} = {i}")) + ";";
+
+            var linter = new Linter();
+            var rules = typeof(ILintRule).Assembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && typeof(ILintRule).IsAssignableFrom(t))
+                .Where(t => t.GetConstructor(Type.EmptyTypes) != null)
+                .ToList();
+
+            Assert.True(rules.Count > 0, "Found no lint rules to drive; the reflection filter is wrong.");
+
+            foreach (var rule in rules)
+                linter.AddRule((ILintRule)Activator.CreateInstance(rule)!);
+
+            var results = await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext());
+
+            Assert.True(results != null, $"Linting a {terms}-term chain with {rules.Count} rules produced nothing.");
+        }
+
+        /// <summary>
+        /// EXPLAIN builds its own plan tree over the same expressions, by a different walk.
+        /// </summary>
+        [Fact]
+        public async Task Explain_SurvivesALongConjunction()
+        {
+            const int terms = 500;
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            await Run(eval, "CREATE TABLE #t (a INT); INSERT INTO #t (a) VALUES (1);");
+
+            var predicate = string.Join(" AND ", Enumerable.Range(0, terms).Select(_ => "a > 0"));
+            await Run(eval, $"EXPLAIN SELECT a FROM #t WHERE {predicate};");
         }
 
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
