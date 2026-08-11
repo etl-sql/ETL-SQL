@@ -1,0 +1,182 @@
+# BULK INSERT — engine surface, not SQL semantics.
+#
+# The SQLite corpus contains zero BULK INSERT statements and always will: it is a
+# conformance corpus for a database, and a load from a file is not SQL. Two defects
+# landed here in v0.18.0 with nothing to catch them, both of the same shape — the
+# load accepted the data and produced a wrong table rather than an error.
+#
+# Behaviour recorded here is what the engine does today. Where that is a trap rather
+# than a decision, the record says so.
+
+file staff.csv
+ID,Name,Dept
+1,Ann,Engineering
+2,Bob,Operations
+3,Cy,Support
+----
+
+statement ok
+CREATE TABLE #staff (id INT, name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #staff FROM '${dir}\staff.csv' WITH (FIELDTERMINATOR = ',', FIRSTROW = 2);
+
+query
+SELECT id, name, dept FROM #staff ORDER BY id;
+----
+1|Ann|Engineering
+2|Bob|Operations
+3|Cy|Support
+
+# FIRSTROW is how a header is skipped, matching T-SQL. Omitting it loads the header as
+# data. Whether that is caught depends entirely on the target's type: against an INT
+# column the header text fails conversion and the load stops, which is the good case
+# and worth pinning — the value and the column are both named.
+
+statement ok
+CREATE TABLE #staff_noskip (id INT, name VARCHAR(50), dept VARCHAR(50));
+
+statement error cannot be converted to target type INT
+BULK INSERT #staff_noskip FROM '${dir}\staff.csv' WITH (FIELDTERMINATOR = ',');
+
+# Against text columns nothing is out of range, so the same mistake is silent: three
+# rows become four and the extra one is the header. Type checking is the only thing
+# standing between a forgotten FIRSTROW and a quietly wrong table.
+
+statement ok
+CREATE TABLE #staff_text (id VARCHAR(10), name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #staff_text FROM '${dir}\staff.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT COUNT(*) FROM #staff_text;
+----
+4
+
+query
+SELECT id FROM #staff_text ORDER BY id;
+----
+1
+2
+3
+ID
+
+# Mapping is positional, also matching T-SQL — the header's names are never consulted,
+# so a file whose columns are in a different order than the target loads transposed.
+# Types catch it only when they happen to disagree; all-text targets accept anything.
+
+file wrong_order.csv
+Dept,Name,ID
+Engineering,Ann,1
+----
+
+statement ok
+CREATE TABLE #transposed (id VARCHAR(20), name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #transposed FROM '${dir}\wrong_order.csv' WITH (FIELDTERMINATOR = ',', FIRSTROW = 2);
+
+query
+SELECT id, name, dept FROM #transposed;
+----
+Engineering|Ann|1
+
+# Fewer source columns than targets leaves the remainder NULL. This one is deliberate
+# and has its own unit test asserting it; recorded so a change to it is visible here too.
+
+file short.csv
+1,Ann
+----
+
+statement ok
+CREATE TABLE #short (id INT, name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #short FROM '${dir}\short.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT id, name, dept FROM #short;
+----
+1|Ann|NULL
+
+# More source columns than targets drops the surplus, equally silently.
+
+file wide.csv
+1,Ann,Engineering,extra,more
+----
+
+statement ok
+CREATE TABLE #narrow (id INT, name VARCHAR(50));
+
+statement ok
+BULK INSERT #narrow FROM '${dir}\wide.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT id, name FROM #narrow;
+----
+1|Ann
+
+# Non-comma terminators.
+
+file pipes.txt
+1|Ann|Engineering
+2|Bob|Operations
+----
+
+statement ok
+CREATE TABLE #piped (id INT, name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #piped FROM '${dir}\pipes.txt' WITH (FIELDTERMINATOR = '|');
+
+query
+SELECT id, name, dept FROM #piped ORDER BY id;
+----
+1|Ann|Engineering
+2|Bob|Operations
+
+# An empty field becomes an empty string in a text column — not NULL, so IS NULL does
+# not find it. Against a numeric column the same two commas are a hard error rather
+# than NULL, which is loud (the safe direction) but is not what most ETL tools do with
+# an empty numeric field, and is worth deciding rather than inheriting. Note the pair
+# below is the same file loaded twice: the bytes are identical and the outcomes are
+# empty string, and refusal.
+
+file blanks.csv
+1,,Engineering
+----
+
+statement ok
+CREATE TABLE #blanks (id INT, name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #blanks FROM '${dir}\blanks.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT id, name, dept FROM #blanks;
+----
+1||Engineering
+
+query
+SELECT COUNT(*) FROM #blanks WHERE name IS NULL;
+----
+0
+
+file blank_number.csv
+1,,Engineering
+----
+
+statement ok
+CREATE TABLE #blank_number (id INT, score INT, dept VARCHAR(50));
+
+statement error cannot be converted to target type INT
+BULK INSERT #blank_number FROM '${dir}\blank_number.csv' WITH (FIELDTERMINATOR = ',');
+
+# A missing file is an error, not an empty load.
+
+statement ok
+CREATE TABLE #absent (id INT);
+
+statement error
+BULK INSERT #absent FROM '${dir}\does_not_exist.csv' WITH (FIELDTERMINATOR = ',');

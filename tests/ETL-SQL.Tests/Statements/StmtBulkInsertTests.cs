@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -168,10 +169,15 @@ namespace ETL_SQL.Tests.Statements
 
             var parser = new Parser(new Lexer(script).Tokenize());
 
-            // Should not throw, but RowsProcessed should be 0 (or it might throw if engine enforces existence)
-            // Looking at BulkInsertStatementHandler.cs, source.ReadBatches will yield break if file missing.
-            await _evaluator.Evaluate(parser.Parse());
+            // This previously asserted a silent success, because the flat-file reader yields no
+            // batches for a path that does not exist and the test was written to whatever the code
+            // did — its own comment said "or it might throw if engine enforces existence". A load
+            // whose source is absent must fail: zero rows and a green run is indistinguishable from
+            // a file that was legitimately empty, and the table is wrong rather than merely empty.
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => _evaluator.Evaluate(parser.Parse()));
 
+            Assert.Contains("not found", ex.Message, System.StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0, _evaluator.Telemetry.RowsProcessed);
         }
     }

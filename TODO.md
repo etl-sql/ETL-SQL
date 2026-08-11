@@ -1039,25 +1039,25 @@ The physical-page contract is defined in
 [ROADMAP.md](ROADMAP.md#reporting--paginated-print-layout--pdf-rendering); it extends the current PDF
 paths and must not overload the existing `CREATE PAGE ... AS PAGINATED` meaning.
 
-- [ ] Define `PRINT_LAYOUT`/`PAGE_LAYOUT` syntax and AST for page size, custom dimensions, orientation,
+- [x] Define `PRINT_LAYOUT`/`PAGE_LAYOUT` syntax and AST for page size, custom dimensions, orientation,
       units, margins, overflow, split/scale, page breaks, keep-together, and print-layout overrides, with
       lint/help/snippet/reference coverage.
-- [ ] Compile responsive report definitions and runtime data into one renderer-neutral physical-page
+- [x] Compile responsive report definitions and runtime data into one renderer-neutral physical-page
       model consumed by static and browser-backed exporters instead of duplicating pagination rules.
-- [ ] Implement complete table flow with repeating column/row headers, group headers/footers, group-break
+- [x] Implement complete table flow with repeating column/row headers, group headers/footers, group-break
       controls, parent/header orphan prevention, and explicit wide/long-table behavior without silent
       row or column truncation.
-- [ ] Add true print page-header/footer regions, report metadata and parameter fields, culture/timezone,
+- [x] Add true print page-header/footer regions, report metadata and parameter fields, culture/timezone,
       page number and total-page placeholders, and deterministic first/last/odd/even/empty-page behavior.
-- [ ] Make the deterministic server-side renderer canonical for paginated documents while retaining the
+- [x] Make the deterministic server-side renderer canonical for paginated documents while retaining the
       browser renderer for dashboard snapshots. Preserve searchable text, links, metadata, and observable
       font/chart substitution behavior.
-- [ ] Add Report Builder print preview using the same page model, and define the immutable parameter,
+- [x] Add Report Builder print preview using the same page model, and define the immutable parameter,
       filter, data-snapshot, culture, timezone, and renderer state captured by interactive and unattended
       exports.
-- [ ] Enforce row/page/image/byte/layout-pass/time limits, cancellation cleanup, tenant/path/network
+- [x] Enforce row/page/image/byte/layout-pass/time limits, cancellation cleanup, tenant/path/network
       policy, atomic publication, deterministic retry/HA behavior, and no successful partial artifact.
-- [ ] Retain Windows and Linux layout/page regression evidence covering Letter/A4, orientation, headers,
+- [x] Retain Windows and Linux layout/page regression evidence covering Letter/A4, orientation, headers,
       groups, page totals, wide/long/oversized content, fonts, cancellation, and authorization. Keep
       rendered cross-platform certification in a targeted release lane.
 
@@ -1067,23 +1067,23 @@ This is prepared-data master/detail, not execution of a separately published sub
 contract and explicitly deferred reusable-subreport boundary remain in
 [ROADMAP.md](ROADMAP.md#reporting--expandable-masterdetail-rows).
 
-- [ ] Define structural `TABLE` row-detail syntax/AST with child visual or container targets, explicit
+- [x] Define structural `TABLE` row-detail syntax/AST with child visual or container targets, explicit
       typed parent-to-child bindings, composite/null/duplicate/missing/type behavior, defaults, nesting,
       open-row limits, and validation/cycle/dependency/lineage rules.
-- [ ] Preserve raw typed binding metadata before display mapping and build a bounded child index over data
+- [x] Preserve raw typed binding metadata before display mapping and build a bounded child index over data
       prepared by the same report script. Expansion must not construct browser SQL or issue N+1 connector
       queries.
-- [ ] Render an accessible row-header button and owned detail region with keyboard support,
+- [x] Render an accessible row-header button and owned detail region with keyboard support,
       `aria-expanded`, loading/empty/error/retry/denied states, and scoped interaction context.
-- [ ] Preserve expansion state by stable raw key across sorting, filtering, paging, virtualization,
+- [x] Preserve expansion state by stable raw key across sorting, filtering, paging, virtualization,
       refresh, parameter changes, and data-version changes; recycled visible row indexes are never keys.
-- [ ] Enforce nesting, open-row, detail-row/byte, manifest/index, cancellation, authorization, tenant, and
+- [x] Enforce nesting, open-row, detail-row/byte, manifest/index, cancellation, authorization, tenant, and
       malicious-value boundaries before detail reaches the browser. JavaScript filtering is not a
       security boundary.
-- [ ] Define deterministic PDF/HTML/CSV/spreadsheet behavior: omit, include-all, expression-selected,
+- [x] Define deterministic PDF/HTML/CSV/spreadsheet behavior: omit, include-all, expression-selected,
       flatten, or separate-data as supported. Paginated inclusion keeps the parent with its first child
       and cooperates with the shared print-layout/group-break contract.
-- [ ] Add runtime, browser accessibility, export, security, cardinality, virtualization, refresh-race,
+- [x] Add runtime, browser accessibility, export, security, cardinality, virtualization, refresh-race,
       composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
       their targeted lanes.
 
@@ -1364,6 +1364,15 @@ absent" take the same branch, and it is always the benign one.
       could not report what it claimed — and all five were about spilling, because the broken
       instrument's only signal was a threshold setting that was never applied. Verify that a
       diagnostic actually observes the thing it names before spending experiments on what it says.
+- [ ] **An empty numeric field fails the whole load.** `1,,Engineering` into `(id INT, score INT,
+      dept VARCHAR)` raises `cannot be converted to target type INT`; the same bytes into a text
+      column produce an empty string, which is not NULL and so `IS NULL` does not find it. Loud is
+      the safe direction and this is not a silent-wrong-answer defect, but an empty numeric field is
+      ordinary in real CSV extracts and most ETL tools read it as NULL. Decide it rather than
+      inherit it; whichever way, the two cases should be explainable together, because the file
+      bytes are identical and only the target type differs. Both are pinned in
+      `tests/engine_corpus/bulk_insert.etest`.
+
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
@@ -1383,6 +1392,24 @@ absent" take the same branch, and it is always the benign one.
       skipped` — with `MAXERRORS = 0`. A load that silently accepts a value the column cannot hold
       is worse than one that fails, because `MAXERRORS = 0` reads as an assurance that it did not.
       Decide whether a column-count mismatch between file and target list is itself an error.
+
+      **Partly corrected 2026-08-11 by `tests/engine_corpus/bulk_insert.etest`.** The load *does*
+      check values against the target type, and names both the column and the offending value:
+      `Column 'id' (value 'ID') cannot be converted to target type INT`. So the headline above is
+      too broad. What survives is narrower and still real — **type checking is the only guard, so a
+      mistake is caught only where the types happen to disagree**:
+      - A forgotten `FIRSTROW` against an all-text target loads the header as a data row, silently.
+      - Positional mapping into a target whose column *order* differs loads transposed, silently,
+        whenever the types are compatible.
+      - Surplus source columns are dropped and missing ones become NULL, both without comment.
+
+      Since the sample's decimal column would have rejected `'HR'`, the `165 rows loaded` report
+      needs re-deriving before that specific claim is trusted — it may have taken a different path
+      (a connector target rather than a temp table) than the one now covered.
+
+      Still to decide: whether a column-count mismatch is an error, a warning, or opt-in strict. The
+      count is not really the defect — equal counts in the wrong order corrupt just as quietly — so
+      the decision worth making is whether a header-bearing file should map by name.
 
       First triage cluster completed: `Batch_Processing` exposed missing native spill support for
       UUID columns; `Docker_Aliases` mixed a misspelled stop target with resume semantics; and

@@ -114,6 +114,18 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
         resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
             .Authorize(context, resolvedPath, FileSystemAccessKind.Read, validateFileType: false)
             .CanonicalPath;
+
+        // A missing source is a failed load, not an empty one. The flat-file reader yields no
+        // batches when the path does not exist, so without this a typo or an absent daily drop
+        // loads zero rows, reports success, and leaves a table that is merely empty rather than
+        // wrong — which is the harder kind to notice downstream. T-SQL refuses this too.
+        if (!System.IO.File.Exists(resolvedPath))
+        {
+            throw new ExecutionException(
+                $"Bulk insert source file not found: '{stmt.FilePath}' (resolved to '{resolvedPath}'). "
+                + "No rows were loaded.");
+        }
+
         var source = connector.CreateDataSource(context, resolvedPath, ffOptions, destColumnDefs);
 
         try
