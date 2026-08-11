@@ -58,6 +58,14 @@ public sealed record CreateConnectionStatement(string name, string? type = null,
     public Dictionary<string, Expression>? Options { get; } = options;
     public ObjectCreationMode Mode { get; } = mode;
 }
+
+public sealed record CreateToolStatement(string ToolName, string ToolType, Dictionary<string, Expression>? Options = null, ObjectCreationMode Mode = ObjectCreationMode.Create) : Statement
+{
+    public string ToolName { get; } = ToolName;
+    public string ToolType { get; } = ToolType;
+    public Dictionary<string, Expression>? Options { get; } = Options;
+    public ObjectCreationMode Mode { get; } = Mode;
+}
 public sealed record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
 {
     public Expression Path { get; } = path;
@@ -485,6 +493,15 @@ public sealed record ExecuteRemoteBlockStatement : Statement
         Body = body;
         IntoTable = intoTable;
     }
+}
+
+public sealed record ExecuteToolStatement(string ToolAlias, TableReference? SourceTable = null, TableReference? TargetTable = null, Dictionary<string, Expression>? Parameters = null, List<ExpectedSchemaColumn>? ExpectedSchema = null) : Statement
+{
+    public string ToolAlias { get; } = ToolAlias;
+    public TableReference? SourceTable { get; } = SourceTable;
+    public TableReference? TargetTable { get; } = TargetTable;
+    public Dictionary<string, Expression>? Parameters { get; } = Parameters;
+    public List<ExpectedSchemaColumn>? ExpectedSchema { get; } = ExpectedSchema;
 }
 
 public sealed record ExecutePushdownStatement : Statement

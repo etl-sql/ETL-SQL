@@ -675,6 +675,74 @@ public class ExtensionParser : ParserComponent
     public Statement ParseExecute()
     {
         var startToken = _parser.Current;
+        if (Match(TokenType.TOOL))
+        {
+            var toolAlias = Consume(TokenType.STRING_LITERAL, "Expected string literal for tool alias").Value;
+            TableReference? sourceTable = null;
+            if (Match(TokenType.FROM)) sourceTable = ParseTableReference(allowFunction: false, allowWithClause: false);
+            
+            TableReference? targetTable = null;
+            if (Match(TokenType.INTO)) targetTable = ParseTableReference(allowFunction: false, allowWithClause: false);
+
+            Dictionary<string, Expression>? parameters = null;
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                parameters = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                if (_parser.Current.Type != TokenType.RPAREN)
+                {
+                    while (true)
+                    {
+                        var paramName = ConsumeIdentifier("Expected parameter name").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' after parameter name");
+                        parameters[paramName] = ParseExpression();
+                        if (!Match(TokenType.COMMA)) break;
+                    }
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after parameters");
+            }
+
+            List<ExpectedSchemaColumn>? expectedSchema = null;
+            if (Match(TokenType.EXPECT))
+            {
+                Consume(TokenType.SCHEMA, "Expected SCHEMA after EXPECT");
+                Consume(TokenType.LPAREN, "Expected '(' after SCHEMA");
+                expectedSchema = new List<ExpectedSchemaColumn>();
+                if (_parser.Current.Type != TokenType.RPAREN)
+                {
+                    while (true)
+                    {
+                        var colName = ConsumeIdentifier("Expected column name").Value;
+                        string dataType = "VARCHAR";
+                        if (_parser.IsIdentifier(_parser.Current))
+                        {
+                            dataType = Advance().Value;
+                            if (Match(TokenType.LPAREN))
+                            {
+                                dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value;
+                                if (Match(TokenType.COMMA))
+                                    dataType += "," + Consume(TokenType.NUMBER, "Expected scale").Value;
+                                dataType += ")";
+                                Consume(TokenType.RPAREN, "Expected ')' after type length");
+                            }
+                        }
+                        bool notNull = false;
+                        if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); notNull = true; }
+                        expectedSchema.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
+                        if (!Match(TokenType.COMMA)) break;
+                    }
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA list");
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new ExecuteToolStatement(toolAlias, sourceTable, targetTable, parameters, expectedSchema)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
         if (Match(TokenType.LPAREN))
         {
             if (_parent.IsStatementStart(_parser.Current.Type))

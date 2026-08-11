@@ -1590,25 +1590,25 @@ public static class DefaultGrammar
             "NAVIGATION", "JOB", "SCHEDULE", "NOTIFICATION", "DIRECTORY", "PROCEDURE", "FUNCTION",
             "INDEX", "TAG", "LINEAGE", "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION",
             "SHARE", "EMBED", "SAVED", "ALERT", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR",
-            "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE"
+            "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "UNIQUE", "TOOL"
         };
 
         var createOrAlterKeywords = new[] {
             "CONNECTION", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
             "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
-            "THEME", "ALERT"
+            "THEME", "ALERT", "TOOL"
         };
 
         var createOrReplaceKeywords = new[] {
             "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
             "VISUAL", "PAGE", "DATASET", "CONTAINER", "BUTTON", "STYLE", "NAVIGATION", "TEMPLATE",
-            "THEME", "ALERT"
+            "THEME", "ALERT", "TOOL"
         };
 
         var alterKeywords = new[] {
             "CONNECTION", "TABLE", "PROCEDURE", "FUNCTION", "VIEW", "JOB", "SCHEDULE", "NOTIFICATION",
             "VISUAL", "PAGE", "CONTAINER", "BUTTON", "TEMPLATE", "USER", "FOLDER", "REPORT",
-            "DATASET", "SUBSCRIPTION", "ALERT"
+            "DATASET", "SUBSCRIPTION", "ALERT", "TOOL"
         };
 
         foreach (var keyword in createKeywords)

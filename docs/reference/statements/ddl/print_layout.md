@@ -5,7 +5,7 @@ Defines print layout overrides (page breaks, keep-together, exclusions) on indiv
 ```sql
 CREATE VISUAL DepartmentChart AS BAR (
     ...
-    PRINT_LAYOUT = (
+    PRINT_LAYOUT (
         PAGE_BREAK_BEFORE = ON,
         KEEP_TOGETHER = ON,
         EXCLUDE_FROM_PRINT = OFF

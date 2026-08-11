@@ -40,11 +40,13 @@ public static class AstSerializer
         // ── Execution ──
         ExecStatement s => FormatExec(s),
         ExecuteRemoteBlockStatement s => $"EXECUTE ({s.ConnectionName.ToSql()}) BEGIN ... END",
+        ExecuteToolStatement s => FormatExecuteTool(s),
         ExecutePushdownStatement s => FormatExecutePushdown(s),
         ExecuteStatement s => FormatExecuteProcedure(s),
 
         // ── DDL ──
         CreateConnectionStatement s => FormatCreateConnection(s),
+        CreateToolStatement s => FormatCreateTool(s),
         AlterConnectionStatement s => FormatAlterConnection(s),
         CreateSshKeyPairStatement s => FormatCreateSshKeyPair(s),
         CreatePgpKeyPairStatement s => FormatCreatePgpKeyPair(s),
@@ -964,6 +966,49 @@ public static class AstSerializer
         var cols = n.Columns != null && n.Columns.Count > 0 ? "(" + string.Join(", ", n.Columns) + ") " : "";
         var vals = string.Join(", ", n.Values.Select(v => v.ToSql()));
         return $"THEN INSERT {cols}VALUES ({vals})";
+    }
+
+    private static string FormatCreateTool(CreateToolStatement s)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("CREATE");
+        if (s.Mode == ObjectCreationMode.CreateOrAlter) sb.Append(" OR ALTER");
+        else if (s.Mode == ObjectCreationMode.CreateOrReplace) sb.Append(" OR REPLACE");
+        sb.Append($" TOOL {s.ToolName} AS {s.ToolType}");
+
+        if (s.Options?.Count > 0)
+        {
+            sb.Append(" (");
+            sb.Append(string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {Format(kv.Value)}")));
+            sb.Append(")");
+        }
+        return sb.ToString();
+    }
+
+    private static string FormatExecuteTool(ExecuteToolStatement s)
+    {
+        var sb = new System.Text.StringBuilder($"EXECUTE TOOL '{s.ToolAlias}'");
+        if (s.SourceTable != null)
+        {
+            sb.Append($" FROM {FormatTableReference(s.SourceTable)}");
+        }
+        if (s.TargetTable != null)
+        {
+            sb.Append($" INTO {FormatTableReference(s.TargetTable)}");
+        }
+        if (s.Parameters?.Count > 0)
+        {
+            sb.Append(" WITH (");
+            sb.Append(string.Join(", ", s.Parameters.Select(kv => $"{kv.Key} = {Format(kv.Value)}")));
+            sb.Append(")");
+        }
+        if (s.ExpectedSchema?.Count > 0)
+        {
+            sb.Append(" EXPECT SCHEMA (");
+            sb.Append(string.Join(", ", s.ExpectedSchema.Select(c => $"{c.ColumnName} {c.DataType}{(c.NotNull ? " NOT NULL" : "")}")));
+            sb.Append(")");
+        }
+        return sb.ToString();
     }
 
     // ── Expression formatters ────────────────────────────────────────────

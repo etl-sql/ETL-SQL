@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Execution;
+
 /// <summary>
 /// Defines operations for persisting session state metadata to high-performance storage.
 /// Supports variables, lineage, and temp table rehydration.
@@ -23,6 +25,9 @@ public interface ISessionMetadataStore : IDisposable
 
     Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections);
     Task<IEnumerable<ETL_SQL.Core.Data.ConnectionInfo>> LoadConnectionsAsync();
+
+    Task SaveToolDefinitionsAsync(IEnumerable<ETL_SQL.Core.CreateToolStatement> toolDefinitions);
+    Task<IEnumerable<ETL_SQL.Core.CreateToolStatement>> LoadToolDefinitionsAsync();
 
     Task SaveDockerStateAsync(string? lastConn, IDictionary<string, string> connStrings);
     Task<(string? LastConn, Dictionary<string, string> ConnStrings)> LoadDockerStateAsync();

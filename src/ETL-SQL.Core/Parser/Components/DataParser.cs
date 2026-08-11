@@ -202,6 +202,11 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("CONNECTION");
             return ParseCreateConnection(startToken, mode);
         }
+        if (Match(TokenType.TOOL))
+        {
+            RejectUnsupportedCreateIfNotExists("TOOL");
+            return ParseCreateTool(startToken, mode);
+        }
         if (Match(TokenType.TABLE))
         {
             RejectUnsupportedCreateMode(mode, "TABLE", ObjectCreationMode.CreateOrReplace);
@@ -1343,6 +1348,32 @@ public class DataParser : ParserComponent
             }
         }
         return parameters;
+    }
+
+    private Statement ParseCreateTool(Token startToken, ObjectCreationMode mode)
+    {
+        var name = ConsumeIdentifier("Expected tool name after CREATE TOOL").Value;
+        Consume(TokenType.AS, "Expected AS after tool name in CREATE TOOL");
+        var toolType = Advance().Value;
+
+        Dictionary<string, Expression>? options = null;
+        if (Match(TokenType.LPAREN))
+        {
+            if (_parser.Current.Type != TokenType.RPAREN)
+            {
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                while (true)
+                {
+                    var optName = ConsumeIdentifier("Expected option name").Value;
+                    Consume(TokenType.EQUALS, "Expected '=' after option name");
+                    options[optName] = ParseExpression();
+                    if (!Match(TokenType.COMMA)) break;
+                }
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close tool options");
+        }
+
+        return new CreateToolStatement(name, toolType, options, mode) { Line = startToken.Line, Column = startToken.Column };
     }
 
     private Statement ParseCreateConnection(Token startToken, ObjectCreationMode mode)

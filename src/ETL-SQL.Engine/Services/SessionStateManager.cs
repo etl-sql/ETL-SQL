@@ -135,6 +135,10 @@ public class SessionStateManager : ISessionStateManager
                 }).ToList();
             await store.SaveConnectionsAsync(connections);
 
+            // 3.5 Save Tool Definitions
+            var toolDefs = evaluator.ReportContext.ToolDefinitions.Values;
+            await store.SaveToolDefinitionsAsync(toolDefs);
+
             // 4. Save Docker State
             var dockerStrings = evaluator.DockerManager.GetState();
             var dockerLast = evaluator.DockerManager.LastConnectionString;
@@ -205,6 +209,9 @@ public class SessionStateManager : ISessionStateManager
 
             // 3. Load Connections
             state.Connections = (await store.LoadConnectionsAsync()).ToList();
+
+            // 3.5 Load Tool Definitions
+            state.ToolDefinitions = (await store.LoadToolDefinitionsAsync()).ToList();
 
             // 4. Load Docker State
             var (lastDocker, dockerStrings) = await store.LoadDockerStateAsync();

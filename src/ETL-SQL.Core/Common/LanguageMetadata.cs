@@ -20,13 +20,13 @@ public static class LanguageMetadata
         "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
         "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
         "DATABASE", "DIRECTORY", "ALTER", "VIEW", "VIEWS", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR", "PGP_KEY_PAIR",
-        "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE", "VISUAL", "PAGE", "DATASET", "CONTAINER", "NAVIGATION", "STYLE", "TAG", "LINEAGE", "SETS"
+        "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE", "VISUAL", "PAGE", "DATASET", "CONTAINER", "NAVIGATION", "STYLE", "TAG", "LINEAGE", "SETS", "TOOL"
     };
 
     public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
         "IF", "ELSE", "WHILE", "FOR", "FOREACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
-        "RAISEERROR", "RAISERROR", "ASSERT", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "GO", "CASE", "WHEN", "THEN", "GOTO"
+        "RAISEERROR", "RAISERROR", "ASSERT", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "GO", "CASE", "WHEN", "THEN", "GOTO", "TOOL"
     };
 
     public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)

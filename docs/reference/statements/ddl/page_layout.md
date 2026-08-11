@@ -6,7 +6,7 @@ Defines the physical page layout (size, margins, orientation, scale) for a `CREA
 CREATE PAGE Revenue AS PAGINATED (
     STRUCTURE = 'A',
     MAP ('A' = MonthlyRevenueTable),
-    PAGE_LAYOUT = (
+    PAGE_LAYOUT (
         SIZE = 'Letter',             -- 'Letter', 'A4', or 'Custom'
         ORIENTATION = 'Landscape',   -- 'Portrait' or 'Landscape'
         MARGINS = (0.5, 0.5, 0.5, 0.5), -- Top, Right, Bottom, Left

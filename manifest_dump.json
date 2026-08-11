@@ -1,0 +1,766 @@
+{
+  "source": "C:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\08_Reporting\\master_detail_rows.rptsql",
+  "builtAt": "2026-08-11T20:05:10.7972425Z",
+  "title": "Master/Detail Row Expansion",
+  "description": "Demonstrates in-place child table expansion from a master row, 4 levels deep.",
+  "visuals": [
+    {
+      "name": "detail_shipments",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "OrderId",
+        "LineId",
+        "Shipment ID",
+        "Carrier",
+        "Status"
+      ],
+      "rows": [
+        [
+          "1001",
+          "1",
+          "SHP-991",
+          "FedEx",
+          "Delivered"
+        ],
+        [
+          "1001",
+          "1",
+          "SHP-992",
+          "UPS",
+          "In Transit"
+        ],
+        [
+          "1001",
+          "2",
+          "SHP-993",
+          "FedEx",
+          "Delivered"
+        ],
+        [
+          "1002",
+          "1",
+          "SHP-994",
+          "USPS",
+          "Pending"
+        ],
+        [
+          "1003",
+          "1",
+          "SHP-995",
+          "FedEx",
+          "Delivered"
+        ],
+        [
+          "1003",
+          "2",
+          "SHP-996",
+          "UPS",
+          "Exception"
+        ]
+      ],
+      "columnMeta": [
+        {
+          "hidden": true
+        },
+        {
+          "hidden": true
+        },
+        null,
+        null,
+        null
+      ],
+      "options": {
+        "VISIBLE": "False",
+        "PAGE_SIZE": "5",
+        "SEARCH": "False",
+        "mapping:column": "COLUMN",
+        "mapping:orderid": "OrderId",
+        "mapping:lineid": "LineId",
+        "mapping:shipmentid": "ShipmentId",
+        "mapping:carrier": "Carrier",
+        "mapping:shipmentstatus": "ShipmentStatus"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "detail_order_lines",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "rowDetail": {
+        "targetName": "detail_shipments",
+        "limit": 100,
+        "bindings": [
+          {
+            "parentColumn": "OrderId",
+            "childParameter": "OrderId"
+          },
+          {
+            "parentColumn": "LineId",
+            "childParameter": "LineId"
+          }
+        ]
+      },
+      "columns": [
+        "OrderId",
+        "Line",
+        "Item",
+        "Qty",
+        "Price"
+      ],
+      "rows": [
+        [
+          "1001",
+          "1",
+          "Widget A",
+          "2",
+          "150.00"
+        ],
+        [
+          "1001",
+          "2",
+          "Widget B",
+          "1",
+          "150.00"
+        ],
+        [
+          "1002",
+          "1",
+          "Widget C",
+          "5",
+          "24.10"
+        ],
+        [
+          "1003",
+          "1",
+          "Widget A",
+          "5",
+          "150.00"
+        ],
+        [
+          "1003",
+          "2",
+          "Widget D",
+          "1",
+          "240.00"
+        ],
+        [
+          "1004",
+          "1",
+          "Widget E",
+          "2",
+          "150.00"
+        ],
+        [
+          "1005",
+          "1",
+          "Widget F",
+          "1",
+          "15.00"
+        ]
+      ],
+      "rowDetailKeys": [
+        {
+          "OrderId": "1001",
+          "LineId": "1"
+        },
+        {
+          "OrderId": "1001",
+          "LineId": "2"
+        },
+        {
+          "OrderId": "1002",
+          "LineId": "1"
+        },
+        {
+          "OrderId": "1003",
+          "LineId": "1"
+        },
+        {
+          "OrderId": "1003",
+          "LineId": "2"
+        },
+        {
+          "OrderId": "1004",
+          "LineId": "1"
+        },
+        {
+          "OrderId": "1005",
+          "LineId": "1"
+        }
+      ],
+      "columnMeta": [
+        {
+          "hidden": true
+        },
+        null,
+        null,
+        null,
+        {
+          "format": "C"
+        }
+      ],
+      "options": {
+        "VISIBLE": "False",
+        "PAGE_SIZE": "5",
+        "SEARCH": "False",
+        "mapping:column": "COLUMN",
+        "mapping:orderid": "OrderId",
+        "mapping:lineid": "LineId",
+        "mapping:item": "Item",
+        "mapping:quantity": "Quantity",
+        "mapping:price": "Price"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "detail_orders",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "rowDetail": {
+        "targetName": "detail_order_lines",
+        "limit": 100,
+        "bindings": [
+          {
+            "parentColumn": "OrderId",
+            "childParameter": "OrderId"
+          }
+        ]
+      },
+      "columns": [
+        "CustomerId",
+        "Order ID",
+        "Date",
+        "Amount"
+      ],
+      "rows": [
+        [
+          "101",
+          "1001",
+          "2023-01-15",
+          "450.00"
+        ],
+        [
+          "101",
+          "1002",
+          "2023-03-22",
+          "120.50"
+        ],
+        [
+          "102",
+          "1003",
+          "2023-04-10",
+          "990.00"
+        ],
+        [
+          "101",
+          "1004",
+          "2023-05-01",
+          "300.00"
+        ],
+        [
+          "103",
+          "1005",
+          "2022-11-05",
+          "15.00"
+        ]
+      ],
+      "rowDetailKeys": [
+        {
+          "OrderId": "1001"
+        },
+        {
+          "OrderId": "1002"
+        },
+        {
+          "OrderId": "1003"
+        },
+        {
+          "OrderId": "1004"
+        },
+        {
+          "OrderId": "1005"
+        }
+      ],
+      "columnMeta": [
+        {
+          "hidden": true
+        },
+        null,
+        null,
+        {
+          "format": "C"
+        }
+      ],
+      "options": {
+        "VISIBLE": "False",
+        "PAGE_SIZE": "5",
+        "SEARCH": "False",
+        "mapping:column": "COLUMN",
+        "mapping:customerid": "CustomerId",
+        "mapping:orderid": "OrderId",
+        "mapping:orderdate": "OrderDate",
+        "mapping:amount": "Amount"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "master_customers",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "rowDetail": {
+        "targetName": "detail_orders",
+        "limit": 100,
+        "bindings": [
+          {
+            "parentColumn": "CustomerId",
+            "childParameter": "CustomerId"
+          }
+        ]
+      },
+      "columns": [
+        "ID",
+        "Company",
+        "Status"
+      ],
+      "rows": [
+        [
+          "101",
+          "Acme Corp",
+          "Active"
+        ],
+        [
+          "102",
+          "Globex Inc",
+          "Active"
+        ],
+        [
+          "103",
+          "Initech",
+          "Inactive"
+        ]
+      ],
+      "rowDetailKeys": [
+        {
+          "CustomerId": "101"
+        },
+        {
+          "CustomerId": "102"
+        },
+        {
+          "CustomerId": "103"
+        }
+      ],
+      "rowStyles": [
+        "#e8f5e9",
+        "#e8f5e9",
+        "#ffebee"
+      ],
+      "rowFontStyles": [
+        "#111111",
+        "#111111",
+        "#111111"
+      ],
+      "options": {
+        "mapping:column": "COLUMN",
+        "mapping:customerid": "CustomerId",
+        "mapping:companyname": "CompanyName",
+        "mapping:status": "Status"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "dashboard",
+      "structure": "A",
+      "mode": "DASHBOARD",
+      "slotMap": {
+        "A": "master_customers"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "1"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 21,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [],
+  "executionTree": [
+    {
+      "id": "7eb3dff7-9a61-4ca0-a2b9-aa012ce72b51",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 1.2496,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "5f622278-2720-4c13-bb69-4477cf269780",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1135,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6a34f73a-3569-4498-b53d-b0ec6412e597",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0074,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6c1b1697-b887-4ea8-b5a8-59c6a545a6f5",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 4,
+          "durationMs": 0.1649,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 24257.125530624624,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ea4b9fef-6e93-48c1-8e98-ba7724b3e183",
+          "name": "INSERT INTO #customers",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0282,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 70921.98581560283,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ea25a20e-68a9-4629-82a2-7556e0126da0",
+          "name": "INSERT INTO #customers",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0146,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 136986.301369863,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "23e639ee-0981-45ce-9d4e-62698bca69e6",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0541,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 36968.576709796675,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fdf7631f-5397-40d8-bd4a-e54d8cfbee62",
+          "name": "INSERT INTO #orders",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0154,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 129870.12987012987,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e78081bb-06bb-4241-b540-c0fa8e27838e",
+          "name": "INSERT INTO #orders",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0133,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 150375.93984962406,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9f166353-982b-4cfe-849b-04baf408fd58",
+          "name": "INSERT INTO #orders",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.013,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 153846.15384615384,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8a871543-96c9-4b87-ab08-5e2db2d25f7a",
+          "name": "INSERT INTO #orders",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0128,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 156250,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "26d8083d-fd46-4af9-9c9f-286256814c75",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.051,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 39215.686274509804,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a8f360f5-9d0d-4d7a-bd17-1a053fd8cb6f",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0156,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 128205.12820512822,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "79b5bec2-2e8a-442b-b82d-37f8f645a750",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0139,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 143884.89208633095,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7c0616ee-a13b-4dba-839b-2e031a2f2072",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0137,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 145985.401459854,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6d298aaf-7996-43d6-b4ac-3a2d15a56625",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0151,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 132450.3311258278,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c2bc799f-4385-4258-bcff-4ee302eccad6",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0131,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 152671.75572519083,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a8a8cc8b-2bef-4b2b-887f-76a788b05a63",
+          "name": "INSERT INTO #order_lines",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.013,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 153846.15384615384,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4b9fe358-fd09-4ee0-a0c8-400da828003e",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0468,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 42735.042735042734,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "522223e9-e0e5-4f7f-a4dc-cd1197848dbc",
+          "name": "INSERT INTO #shipments",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0148,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 135135.13513513512,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "30108112-232c-4e48-8c2b-ccaef95a59f8",
+          "name": "INSERT INTO #shipments",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0141,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 141843.97163120567,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1a960871-be8f-433a-9426-0ea7b1815af0",
+          "name": "INSERT INTO #shipments",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0129,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 155038.75968992247,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "dc6e31b5-5f41-4d4c-bef8-17e02c3dce33",
+          "name": "INSERT INTO #shipments",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0129,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 155038.75968992247,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "bed74661-d76c-4068-b718-98ab2a29b31f",
+          "name": "INSERT INTO #shipments",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 0.0126,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 158730.15873015873,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6150ed47-3b4a-4357-b066-f070ee43d762",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0248,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7a369f39-2fba-49db-9dd3-ca85740ed0a6",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0146,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8ed3537f-4a25-488b-8377-ce37de594ce0",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.013,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "77c51ffc-bcfe-4380-9128-3e1868903994",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.014,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0fb4be42-a323-4669-8c06-209d2fcc37b3",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0218,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

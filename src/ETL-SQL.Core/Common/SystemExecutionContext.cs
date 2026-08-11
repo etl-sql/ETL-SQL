@@ -218,6 +218,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+    public IDictionary<string, CreateToolStatement> ToolDefinitions { get; } = new Dictionary<string, CreateToolStatement>(StringComparer.OrdinalIgnoreCase);
     public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; } = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
     public string TemplatePath { get; set; } = "./Templates";
     public string? ReportTitle { get; set; }

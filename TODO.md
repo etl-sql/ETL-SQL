@@ -993,34 +993,34 @@ raw `CMD` connector or arbitrary shell execution.
 
 #### P1 — Pure-transform foundation
 
-- [ ] Define the language/AST contract for invoking an approved logical tool operation with typed
+- [x] Define the language/AST contract for invoking an approved logical tool operation with typed
       parameters, input schema, and output schema. Scripts cannot select executables, interpreters,
       images, paths, shells, environment variables, or arbitrary argument strings.
-- [ ] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
+- [x] Implement the governed tool catalog and lifecycle (`Staged`, `Approved`, `Disabled`, `Revoked`),
       immutable artifact digest/signature verification, publisher/approver separation, tenant/environment
       ownership, grants, promotion preflight, and portable logical aliases.
-- [ ] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
+- [x] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
       allowlisted environment, dedicated identity, canonical scratch root, process-tree containment,
       bounded CPU/memory/process/time/output limits, cancellation, and cleanup.
-- [ ] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a
+- [x] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a
       path to a high-volume framed format. Specify handshake, schemas, null/decimal/time/binary/Unicode,
       size limits, compression, backpressure, stderr diagnostics, cancellation, and terminal outcome.
-- [ ] Validate every returned value and stage output until protocol completion, schema/type/size/row
+- [x] Validate every returned value and stage output until protocol completion, schema/type/size/row
       limits, and data-quality rules all pass. Stream with bounded memory and never publish partial output.
-- [ ] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
+- [x] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
       execution, capability access, cancellation, denial, and publication without retaining payloads or
       secret values.
 
 #### P2 — Hardened and side-effecting operation support
 
-- [ ] Add OCI Hardened/Dedicated bindings with pinned images, read-only roots, non-root identity,
+- [x] Add OCI Hardened/Dedicated bindings with pinned images, read-only roots, non-root identity,
       capability/seccomp restrictions, isolated scratch, default-deny network, no runtime socket, and
       metadata/control-plane protections. Keep runtime binding environment-owned so scripts remain
       portable.
-- [ ] Add declared file, network, Gateway-resource, and just-in-time named-secret capabilities bound to
+- [x] Add declared file, network, Gateway-resource, and just-in-time named-secret capabilities bound to
       tenant, environment, tool digest, operation, actor, run/attempt, limits, policy version, expiry, and
       nonce. Pure transforms receive none by default.
-- [ ] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
+- [x] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
       fully validated staged output. Replacement sandboxes reauthorize on resume; they never serialize a
       process, handle, live connection, resolved secret, or reusable capability.
 - [ ] Introduce side-effecting action tools only after a durable operation ledger and explicit

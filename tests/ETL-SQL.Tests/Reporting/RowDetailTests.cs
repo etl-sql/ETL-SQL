@@ -10,15 +10,7 @@ namespace ETL_SQL.Tests.Reporting
 {
     public class RowDetailTests
     {
-        [Fact]
-        public async Task DumpSampleManifest()
-        {
-            var scriptPath = @"C:\Users\chuck\scratch\ETL-SQL\samples\08_Reporting\master_detail_rows.rptsql";
-            await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
-            var manifest = await service.GetManifestAsync();
-            var json = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-            System.IO.File.WriteAllText(@"C:\Users\chuck\scratch\ETL-SQL\manifest_dump.json", json);
-        }
+
         [Fact]
         public async Task RowDetail_BuildsIndexAndRetainsMetadata()
         {
@@ -58,8 +50,7 @@ CREATE PAGE dashboard AS DASHBOARD (
             {
                 await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 var manifest = await service.GetManifestAsync();
-                var json = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                System.IO.File.WriteAllText(@"C:\Users\chuck\scratch\ETL-SQL\manifest_dump.json", json);
+                // Removed dev file write
 
                 if (manifest.Visuals == null || manifest.Visuals.Count == 0)
                 {

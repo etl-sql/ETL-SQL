@@ -1745,6 +1745,7 @@ public class ReportParser : ParserComponent
             Column = "$sparkline",
             SparklineColumns = cols,
             SparklineType = sparklineType,
+            DisplayName = displayName
         };
     }
 
