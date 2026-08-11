@@ -1204,10 +1204,27 @@ absent" take the same branch, and it is always the benign one.
 - [x] **Give the lane a `-ContinueOnFailure` switch.** `Invoke-DotNetTest` exits on the first failing
       project (correct for a gate), so SLT never ran and one pass cannot produce a full triage list.
       Done — `scripts/test-lane.ps1` accumulates `$script:LaneFailures` and defers the exit code.
-- [ ] **Vary data shape in the fuzzer.** Keep the grammar walk; add a seeded generator varying row
+- [x] **Vary data shape in the fuzzer.** Keep the grammar walk; add a seeded generator varying row
       count across the batch/spill boundaries, null density per column (0%, sparse, one entire
       batch, 100%), and type mix — including a column whose CLR type differs between batches, which
       is what the spill defect actually was.
+
+      **Done 2026-08-11.** `FuzzDataShape` draws row count from counts chosen to straddle batch
+      boundaries (`0, 1, 2, 6, 7, 8, 13, 49, 50, 51, 99, 101, 257` — awkward on purpose, since a
+      count that divides evenly into batches hides the bugs batch boundaries cause), a per-column
+      null density, and values that have historically confused typed sinks (`00123`, `1e5`,
+      `4.50`, an embedded quote, over-length strings, negative and tiny decimals).
+
+      The seed now resolves in `InitializeAsync` — one `ResolveSeed()` for both the data and the
+      grammar walk, because seeding them separately would mean a reported reproducer did not
+      reproduce. Shape is echoed to test output and written into every reproducer file. Verified:
+      the same seed yields the same shape across runs, different seeds differ, and
+      `ETLSQL_FUZZ_SEED=999` lands on `WholeBatch` nulls — the all-NULL-column-in-one-batch case
+      that has no type evidence, which is the shape the spill defect actually needed.
+
+      Not yet varied: the fuzz table's *schema* is still fixed at four columns of three types, so a
+      column whose CLR type differs between batches is only approximated by the whole-batch NULL
+      case. Varying column count and declared types is the natural next step.
 - [x] **A rule-catalogue property test.** Reflect over every `ColumnRule` and assert each can fail on
       a crafted row, and that misconfiguration (unknown type, unprojected column, arity mismatch) is
       a hard error rather than a rule that passes everything. Design decision 5 already states this

@@ -32,6 +32,7 @@ namespace ETL_SQL.FuzzTests
         private string _fuzzLogDir = null!;
         private string _fuzzTableName = null!;
         private int _seed;
+        private FuzzDataShape _dataShape = FuzzDataShape.FromSeed(0);
         private bool _strictExec;
         private bool _dumpExec;
         private readonly HashSet<string> _execMessages = new(StringComparer.Ordinal);
@@ -70,9 +71,18 @@ namespace ETL_SQL.FuzzTests
             var createTableQuery = $"CREATE TABLE src.{_fuzzTableName} (ID INT, Price DECIMAL, Name VARCHAR(50), TotalAmount DECIMAL);";
             await _evaluator.Evaluate(new Parser(new Lexer(createTableQuery).Tokenize(), createTableQuery).Parse());
 
-            // 3. Seed dynamic table
-            var insertQuery = $"INSERT INTO src.{_fuzzTableName} VALUES (1, 10.5, 'Alice', 100.0), (2, 20.0, 'Bob', 250.0), (3, null, null, null);";
-            await _evaluator.Evaluate(new Parser(new Lexer(insertQuery).Tokenize(), insertQuery).Parse());
+            // 3. Seed the table with a data shape drawn from the same seed as the grammar walk.
+            //
+            // Every lane varied the query and held the data constant: three rows, one of them all
+            // NULL. That is why the entire columnar/spill layer was unreachable by fuzzing — the
+            // defects there were not missed, they could not be executed. Row count, per-column null
+            // density and value spread now vary too, and because the shape comes from the seed a
+            // reproducer still reproduces.
+            _seed = ResolveSeed();
+            _dataShape = FuzzDataShape.FromSeed(_seed);
+
+            foreach (var insert in _dataShape.BuildInserts($"src.{_fuzzTableName}"))
+                await _evaluator.Evaluate(new Parser(new Lexer(insert).Tokenize(), insert).Parse());
 
             // 4. Create fuzz logging directory
             _fuzzLogDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "fuzz");
@@ -83,6 +93,15 @@ namespace ETL_SQL.FuzzTests
         {
             return Task.CompletedTask;
         }
+
+        /// <summary>
+        /// The one place the seed is decided, so the data shape and the grammar walk cannot end up
+        /// drawn from different seeds — which would make a reported reproducer not reproduce.
+        /// </summary>
+        private static int ResolveSeed() =>
+            int.TryParse(Environment.GetEnvironmentVariable("ETLSQL_FUZZ_SEED"), out var parsed)
+                ? parsed
+                : Environment.TickCount;
 
         [Fact]
         public async Task RunFuzzer()
@@ -97,8 +116,9 @@ namespace ETL_SQL.FuzzTests
             // Seed both RNG streams from an overridable seed and record it, so any failure found in
             // CI is reproducible: rerun with ETLSQL_FUZZ_SEED=<seed>. The seed is echoed to test
             // output and written into every reproducer file.
-            string? seedEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_SEED");
-            _seed = int.TryParse(seedEnv, out var parsedSeed) ? parsedSeed : Environment.TickCount;
+            // _seed was resolved during InitializeAsync, because the seeded data shape is drawn from
+            // it and the table is populated before this runs. Re-resolving here would hand the
+            // grammar walk a different seed than the data, and an unseeded rerun a different shape.
             // Strict-exec (opt-in via ETLSQL_FUZZ_STRICT_EXEC=1) treats an un-allowlisted sanitized
             // ExecutionException as a semantic engine bug. It is opt-in for the randomized lane
             // because the current generator emits many invalid object references, so new random seeds
@@ -108,6 +128,7 @@ namespace ETL_SQL.FuzzTests
             _strictExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_STRICT_EXEC") == "1";
             _dumpExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_DUMP_EXEC") == "1";
             Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} generationAttempts={generationAttempts} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
+            Console.WriteLine($"[Fuzzer] data shape: {_dataShape}");
 
             var tree = DefaultGrammar.Build();
             var generator = new GrammarWalkGenerator(tree, new Random(_seed));
@@ -421,6 +442,7 @@ namespace ETL_SQL.FuzzTests
                 $"-- Exception: {ex.GetType().Name}\n" +
                 $"-- Message: {ex.Message}\n" +
                 $"-- Seed: {_seed} (rerun with ETLSQL_FUZZ_SEED={_seed})\n" +
+                $"-- Data shape: {_dataShape}\n" +
                 $"-- Original Query: {query}\n\n{minimalQuery}";
             File.WriteAllText(reproPath, content);
         }
