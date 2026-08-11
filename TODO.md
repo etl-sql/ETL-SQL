@@ -1274,38 +1274,40 @@ absent" take the same branch, and it is always the benign one.
       a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
       equal counts in the wrong order corrupt just as silently.
 
-- [ ] **The SLT test host crashes when a temp table crosses its spill threshold.** Under the spill
-      lane the SqlLogicTests host reports 6 tests passed and then `Test Run Aborted.` — a process
-      abort, not a test failure, so nothing names it. Found only because `-ContinueOnFailure` let a
-      run reach SLT at all.
+- [ ] **P0 — the streaming join re-wraps its own enumerator, and deep rebuffering overflows the
+      stack.** Diagnosed from a crash dump (`dotnet test --blame-crash`, then `dotnet-dump`): the
+      faulting thread carries `System.StackOverflowException` on a threadpool worker, which is why
+      the run reports only `Test host process crashed` — a stack overflow cannot be caught, so no
+      assertion or handler ever names it.
 
-      Isolated to **two thresholds, each sufficient on its own**:
-      `Engine__TempTableSpillThresholdRows=25` and `Engine__MaxInMemoryBatches=2`. The other four
-      the lane sets (`BatchSize`, `JoinSpillThreshold`, `ExternalSortChunkSize`,
-      `WindowSpillThreshold`) each leave SLT green, so this is the temp-table in-memory-to-spill
-      transition specifically.
+      The stack shows a closed cycle in `JoinEngine`, each turn adding permanent layers to the
+      enumerator chain:
 
-      **It does not reproduce through the CLI**, and that is now well tested rather than assumed:
-      35 separate INSERTs into a temp table at `TempTableSpillThresholdRows=25` exit 0 and report
-      `Disk Spilled 0.01 MB`, so the spill fires and nothing crashes. Repeating it with NULLs
-      scattered through the columns — matching the corpus, which the first attempt did not — also
-      exits 0. So neither the spill itself nor NULL handling is sufficient; the trigger needs the
-      test-host environment.
+      ```
+      PerformNestedLoopJoinStream (JoinEngine.cs:836)
+        -> StreamSingleJoin (537)
+          -> ContinueStream (550)
+            -> PrependRows (544)
+              -> PerformNestedLoopJoinStream (828)   // and round again
+      ```
 
-      Candidates that differ there and are worth checking first: `MemoryGrantArbiter.Shared` is
-      process-wide and six SLT tests have already run against it, so the arbiter arrives with
-      consumed budget rather than fresh; and the spill writer is started **unawaited**
-      (`pendingSpillWrite = WriteSpillBatchAsync(...)` in `DataSources.cs`, awaited later) whenever
-      `EffectivePipelineDepth > 0`, so a fault there surfaces off the calling stack.
+      `StreamSingleJoin` buffers a peek, then rebuilds the stream as `PrependRows(buffered,
+      remaining)` wrapped by `ContinueStream`. Every rebuffering event adds another wrapper, and
+      because each `MoveNextAsync` walks the whole chain, stack depth grows with the number of
+      rebuffering events rather than staying constant. Enough of them and the process dies.
 
-      **Next step is a dump, not more reasoning.** The message is
-      `Test host process crashed` with no exception, so run the repro under
-      `DOTNET_DbgEnableMiniDump=1` and read the faulting stack, or host the SLT runner in a console
-      app where an unhandled exception prints. Two rounds of plausible-looking inference have
-      already been wrong here.
+      **Not a test-only fault.** Low spill thresholds make rebuffering frequent, which is why the
+      spill lane finds it in seconds, but nothing bounds the chain at the defaults either — a join
+      over enough data reaches the same place. It presents as a process death with no error, which
+      is the worst possible diagnostic.
+
+      Fix by making the rebuffer flat rather than nested: hand the buffered rows and the remainder
+      to a single iterator that yields the buffer and then drains the source, instead of wrapping
+      the previous stream each time. The chain must not grow per rebuffer.
+
       Reproduce: `ETL_SQL_RUN_SLT=1 Engine__TempTableSpillThresholdRows=25 dotnet test
-      tests/ETL-SQL.SqlLogicTests --filter Category=SLT`. Output stops mid-corpus at an `INSERT`,
-      which is where to bisect.
+      tests/ETL-SQL.SqlLogicTests --filter Category=SLT --blame-crash`.
+      `Engine__MaxInMemoryBatches=2` reproduces it equally.
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
