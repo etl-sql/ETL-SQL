@@ -1,0 +1,120 @@
+# Flat-file sink and source — the round trip, which is the engine's whole job.
+#
+# Writing a table out and reading it back is the shape most ETL scripts actually are,
+# and it is the shape a database conformance corpus never exercises. It is also where
+# this release's type-instability defects surfaced: a column whose CLR type varies
+# between batches serializes fine and comes back wrong, or fails somewhere distant
+# from the statement that produced it.
+#
+# The invariant throughout: what comes back equals what went out.
+
+statement ok
+CREATE TABLE #staff (id INT, name VARCHAR(50), dept VARCHAR(50), salary DECIMAL(10,2));
+
+statement ok
+INSERT INTO #staff (id, name, dept, salary) VALUES
+  (1, 'Ana', 'Engineering', 5000.50),
+  (2, 'Ben', 'Operations', 6000.00),
+  (3, 'Cy', 'Support', 5500.25);
+
+statement ok
+CREATE CONNECTION csv_out AS FLATFILE('${dir}\staff_out.csv', DELIMITER=',', HEADER=ON);
+
+statement ok
+INSERT INTO csv_out.FILE SELECT * FROM #staff;
+
+query
+SELECT id, name, dept, salary FROM csv_out.FILE ORDER BY id;
+----
+1|Ana|Engineering|5000.50
+2|Ben|Operations|6000.00
+3|Cy|Support|5500.25
+
+# A header-less pipe file: the delimiter and header setting must survive the round trip
+# together. Reading a HEADER=OFF file must not consume the first data row as names.
+
+statement ok
+CREATE CONNECTION pipe_out AS FLATFILE('${dir}\staff_out.txt', DELIMITER='|', HEADER=OFF);
+
+statement ok
+INSERT INTO pipe_out.FILE SELECT * FROM #staff;
+
+query
+SELECT COUNT(*) FROM pipe_out.FILE;
+----
+3
+
+# A column holding more than one CLR type is the defect class that cost this release
+# three samples. A text column carrying values that look numeric must come back as it
+# went out, not silently renumbered or widened.
+
+statement ok
+CREATE TABLE #mixed (id INT, code VARCHAR(20));
+
+statement ok
+INSERT INTO #mixed (id, code) VALUES (1, '00123'), (2, 'HR'), (3, '4.50'), (4, '1e5');
+
+statement ok
+CREATE CONNECTION mixed_out AS FLATFILE('${dir}\mixed.csv', DELIMITER=',', HEADER=ON);
+
+statement ok
+INSERT INTO mixed_out.FILE SELECT * FROM #mixed;
+
+query
+SELECT id, code FROM mixed_out.FILE ORDER BY id;
+----
+1|00123
+2|HR
+3|4.50
+4|1e5
+
+# NULL does NOT survive the round trip: it is written as an empty field and read back
+# as an empty string, so IS NULL finds nothing afterwards. CSV has no native NULL, so
+# some convention has to be chosen (a NULL_STRING option, or quoted-empty meaning ""
+# against bare-empty meaning NULL) — until one is, a flat-file round trip is not
+# identity for any nullable column, and a pipeline that stages through CSV loses the
+# distinction silently. Recorded as behaviour, flagged in TODO.md as a decision.
+
+statement ok
+CREATE TABLE #nulls (id INT, note VARCHAR(50));
+
+statement ok
+INSERT INTO #nulls (id, note) VALUES (1, NULL), (2, 'present');
+
+statement ok
+CREATE CONNECTION nulls_out AS FLATFILE('${dir}\nulls.csv', DELIMITER=',', HEADER=ON);
+
+statement ok
+INSERT INTO nulls_out.FILE SELECT * FROM #nulls;
+
+query
+SELECT id, note FROM nulls_out.FILE ORDER BY id;
+----
+1|
+2|present
+
+query
+SELECT COUNT(*) FROM nulls_out.FILE WHERE note IS NULL;
+----
+0
+
+# Values containing the delimiter must be quoted on write and unquoted on read, or the
+# round trip silently gains a column.
+
+statement ok
+CREATE TABLE #commas (id INT, description VARCHAR(100));
+
+statement ok
+INSERT INTO #commas (id, description) VALUES (1, 'Engineering, Platform'), (2, 'plain');
+
+statement ok
+CREATE CONNECTION commas_out AS FLATFILE('${dir}\commas.csv', DELIMITER=',', HEADER=ON);
+
+statement ok
+INSERT INTO commas_out.FILE SELECT * FROM #commas;
+
+query
+SELECT id, description FROM commas_out.FILE ORDER BY id;
+----
+1|Engineering, Platform
+2|plain

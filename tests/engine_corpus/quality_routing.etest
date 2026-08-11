@@ -1,0 +1,125 @@
+# @expect rules and ON FAILURE routing — engine surface, not SQL semantics.
+#
+# Where a failing row goes is the whole feature, and it is invisible to a corpus that
+# only checks query results: a rule that never fires reports exactly what clean data
+# reports. Three defects in v0.18.0 had that shape, and ToSql() dropped the ON FAILURE
+# clause entirely for a while, which rerouted quarantined rows to nowhere without
+# changing a single result.
+
+statement ok
+CREATE TABLE #incoming (id INT, email VARCHAR(100));
+
+statement ok
+INSERT INTO #incoming (id, email) VALUES
+  (1, 'ana@example.test'),
+  (NULL, 'ben@example.test'),
+  (3, 'not-an-email'),
+  (4, 'cy@example.test');
+
+# QUARANTINE diverts the failing rows and lets the rest through. The two tables must
+# partition the input: nothing lost, nothing duplicated.
+
+statement ok
+quality_load:
+SELECT
+  id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */,
+  email /* @expect: 'MATCHES ^[^@]+@[^@]+\.[^@]+$'; @fail: 'QUARANTINE'; */
+INTO #clean
+FROM #incoming
+ON FAILURE QUARANTINE TO #quarantined;
+
+query
+SELECT id, email FROM #clean ORDER BY id;
+----
+1|ana@example.test
+4|cy@example.test
+
+query
+SELECT COUNT(*) FROM #quarantined;
+----
+2
+
+query
+SELECT (SELECT COUNT(*) FROM #clean) + (SELECT COUNT(*) FROM #quarantined);
+----
+4
+
+# WARN keeps the row in the output and records the failure instead of diverting it.
+# The row count is the tell: WARN and QUARANTINE differ only in where the row lands.
+
+statement ok
+warn_load:
+SELECT
+  id /* @expect: 'NOT NULL'; @fail: 'WARN'; */,
+  email
+INTO #warned
+FROM #incoming
+ON FAILURE WARN;
+
+query
+SELECT COUNT(*) FROM #warned;
+----
+4
+
+# THROW stops the statement. The failing row must not be committed anywhere.
+
+statement ok
+CREATE TABLE #thrown (id INT, email VARCHAR(100));
+
+statement error
+throw_load:
+SELECT
+  id /* @expect: 'NOT NULL'; @fail: 'THROW'; */,
+  email
+INTO #thrown_out
+FROM #incoming
+ON FAILURE THROW;
+
+# Numbered rules apply independently to one column; a row failing either is routed.
+
+statement ok
+CREATE TABLE #ages (id INT, age INT);
+
+statement ok
+INSERT INTO #ages (id, age) VALUES (1, 30), (2, -5), (3, NULL), (4, 200);
+
+statement ok
+age_load:
+SELECT
+  id,
+  age /* @expect_1: 'NOT NULL'; @fail_1: 'QUARANTINE';
+         @expect_2: 'BETWEEN 0 AND 120'; @fail_2: 'QUARANTINE'; */
+INTO #ages_clean
+FROM #ages
+ON FAILURE QUARANTINE TO #ages_bad;
+
+query
+SELECT id, age FROM #ages_clean ORDER BY id;
+----
+1|30
+
+query
+SELECT COUNT(*) FROM #ages_bad;
+----
+3
+
+# A clean input must leave the quarantine target empty rather than absent — a rule that
+# fires on nothing and a rule that never runs look identical from the result alone.
+
+statement ok
+CREATE TABLE #all_good (id INT);
+
+statement ok
+INSERT INTO #all_good (id) VALUES (1), (2);
+
+statement ok
+good_load:
+SELECT id /* @expect: 'NOT NULL'; @fail: 'QUARANTINE'; */
+INTO #good_clean
+FROM #all_good
+ON FAILURE QUARANTINE TO #good_quarantine;
+
+query
+SELECT COUNT(*) FROM #good_clean;
+----
+2

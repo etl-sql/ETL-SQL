@@ -1364,6 +1364,18 @@ absent" take the same branch, and it is always the benign one.
       could not report what it claimed — and all five were about spilling, because the broken
       instrument's only signal was a threshold setting that was never applied. Verify that a
       diagnostic actually observes the thing it names before spending experiments on what it says.
+- [ ] **NULL does not survive a flat-file round trip.** Writing a table with a NULL to CSV and
+      reading it back yields an empty string, so `IS NULL` finds nothing afterwards — verified in
+      `tests/engine_corpus/flatfile_roundtrip.etest`. Everything else round trips intact, including
+      values that merely look numeric (`00123`, `1e5`), decimals, and values containing the
+      delimiter. CSV has no native NULL, so this needs a convention rather than a bug fix: a
+      `NULL_STRING` option on the connector, or treating quoted-empty as `""` against bare-empty as
+      NULL. Until one exists, staging through a flat file silently collapses NULL and empty, and a
+      pipeline that does so is lossy in a way nothing reports.
+
+      Pairs with the `BULK INSERT` empty-field item below — the same distinction, drawn
+      inconsistently at each end. Worth settling once, for both directions, rather than twice.
+
 - [ ] **An empty numeric field fails the whole load.** `1,,Engineering` into `(id INT, score INT,
       dept VARCHAR)` raises `cannot be converted to target type INT`; the same bytes into a text
       column produce an empty string, which is not NULL and so `IS NULL` does not find it. Loud is
