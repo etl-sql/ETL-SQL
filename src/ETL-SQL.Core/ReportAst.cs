@@ -129,6 +129,7 @@ public record VisualMapping : AstNode
     // Phase 3B: sparkline virtual column
     public List<string>? SparklineColumns { get; init; }
     public string? SparklineType { get; init; }  // "line" | "bar" | "area"
+    public bool Hidden { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
 
@@ -253,6 +254,19 @@ public record TypedSeries : AstNode
     public new required string Column { get; init; }
 }
 
+public record RowDetailBinding(string ParentColumn, string ChildParameter) : AstNode
+{
+    public override string ToSql() => $"@{ChildParameter} = {ParentColumn}";
+}
+
+public record RowDetailDefinition : AstNode
+{
+    public required string TargetName { get; init; }
+    public List<RowDetailBinding> Bindings { get; init; } = new();
+    public int? Limit { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
 /// <summary>CREATE STYLE <name> AS (key = value, ...)</summary>
 public record CreateStyleStatement : Statement
 {
@@ -308,6 +322,8 @@ public record CreateVisualStatement : Statement
     /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
     public string? StyleName { get; init; }
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+    public PrintLayoutOverride? PrintLayout { get; init; }
+    public RowDetailDefinition? RowDetail { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
 
@@ -330,6 +346,29 @@ public record CreatePageStatement : Statement
     /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
     public int RefreshIntervalSeconds { get; init; }
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+    public PageLayoutDefinition? PrintLayout { get; init; }
+}
+
+public record PageLayoutDefinition
+{
+    public string? PageSize { get; init; }
+    public decimal? CustomWidth { get; init; }
+    public decimal? CustomHeight { get; init; }
+    public string? Orientation { get; init; }
+    public string? Units { get; init; }
+    public decimal? MarginTop { get; init; }
+    public decimal? MarginRight { get; init; }
+    public decimal? MarginBottom { get; init; }
+    public decimal? MarginLeft { get; init; }
+    public string? Overflow { get; init; }
+}
+
+public record PrintLayoutOverride
+{
+    public bool? PageBreakBefore { get; init; }
+    public bool? PageBreakAfter { get; init; }
+    public bool? KeepTogether { get; init; }
+    public bool? ExcludeFromPrint { get; init; }
 }
 
 /// <summary>

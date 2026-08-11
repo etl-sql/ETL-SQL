@@ -206,19 +206,19 @@ The authoritative design and rejected alternatives remain in
 manifest-bound preview; it must not rehydrate every connection from the producing session or accept
 an arbitrary connection/target from the browser.
 
-- [ ] Extend `QuarantineReplayManifest` with nullable target connection alias, connector type, and
+- [x] Extend `QuarantineReplayManifest` with nullable target connection alias, connector type, and
       catalog-backed provenance written at capture time. Existing manifests without provenance remain
       view-only.
-- [ ] Decide and document preview authority: require the steward's ordinary connection permission, or
+- [x] Decide and document preview authority: require the steward's ordinary connection permission, or
       make `DataQualityStewardAccess` plus the manifest-bound target sufficient. Then make
       `QuarantineTargetReadability` resolve enabled catalog entries using the caller's verified identity.
-- [ ] Bootstrap the bounded preview session from the manifest's `SHARED:` alias, preserving the 15-second
+- [x] Bootstrap the bounded preview session from the manifest's `SHARED:` alias, preserving the 15-second
       timeout, row cap, RLS identity, connector policy, secret resolution, and redacted errors. Gate the
       capability behind `Portal:DataQuality:AllowConnectionPreview`, default off.
-- [ ] Audit every raw quarantine preview and add positive and negative coverage for readable targets,
+- [x] Audit every raw quarantine preview and add positive and negative coverage for readable targets,
       catalog misses, disabled entries, switch-off, unauthorized callers, request tampering, and error
       redaction.
-- [ ] Document the administration and audit behavior, and extend the data-quality UI sandbox story so
+- [x] Document the administration and audit behavior, and extend the data-quality UI sandbox story so
       readable catalog-backed and view-only targets remain independently testable.
 
 ### Portal — Data Quality Follow-through
@@ -955,7 +955,7 @@ Tenant Portability Bundle**.*
 The five deliverables below implement the portability contract in
 [ROADMAP.md](ROADMAP.md#language--dialect-standardization-and-drift-prevention).
 
-- [ ] Publish a machine-readable canonical EBNF grammar for the accepted ETL-SQL language, with working
+- [x] Publish a machine-readable canonical EBNF grammar for the accepted ETL-SQL language, with working
       examples for every documented syntax form and an explicit process for keeping it synchronized with
       `Parser.cs`.
 - [ ] Expand the shared SqlLogicTests corpus under `tests/slt_data/` to cover exact results, boundary
@@ -964,7 +964,7 @@ The five deliverables below implement the portability contract in
 - [x] Add the syntax-addition checklist to `CONTRIBUTING.md`: parser/runtime, EBNF, docs/help/snippets,
       lint/autocomplete, connector pushdown mappings, compatibility, and regression tests must move
       together.
-- [ ] Build an EBNF-to-parser conformance runner that generates valid and invalid sequences and proves the
+- [x] Build an EBNF-to-parser conformance runner that generates valid and invalid sequences and proves the
       execution parser accepts/rejects them consistently. Keep this in its own deterministic fuzz/release
       lane rather than slowing smoke or fast tests.
 - [ ] Move provider-specific SQL rewrites out of `QueryCompiler` and scattered connector code into a
@@ -972,16 +972,16 @@ The five deliverables below implement the portability contract in
 
 ### Connectors — Transactional File Staging
 
-- [ ] Define and implement the `TRANSACTIONAL=TRUE` connector contract, including parser/help/snippet
+- [x] Define and implement the `TRANSACTIONAL=TRUE` connector contract, including parser/help/snippet
       coverage, collision-safe engine-owned staging names, canonical `ResolvePath` enforcement, and the
       connector types that can truthfully support atomic publication.
-- [ ] Commit completed output by atomic rename where the destination guarantees it; otherwise fail
+- [x] Commit completed output by atomic rename where the destination guarantees it; otherwise fail
       preflight or use a documented provider-specific commit protocol rather than claiming false
       atomicity.
-- [ ] On failure, cancellation, retry, or process loss, remove or reconcile staged artifacts without
+- [x] On failure, cancellation, retry, or process loss, remove or reconcile staged artifacts without
       deleting a previously published target. Define checkpoint/resume and multi-output behavior
       explicitly.
-- [ ] Certify local files and supported remote-transfer connectors for success, mid-stream failure,
+- [x] Certify local files and supported remote-transfer connectors for success, mid-stream failure,
       cancellation, overwrite policy, concurrent writers, cleanup failure, path/symlink escape, and
       crash residue. Keep network-backed certification in the integration/release lanes.
 

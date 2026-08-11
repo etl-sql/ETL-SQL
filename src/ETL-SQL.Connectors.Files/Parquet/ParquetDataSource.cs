@@ -11,6 +11,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+
 using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
@@ -29,6 +30,7 @@ namespace ETL_SQL.Connectors.Parquet
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly bool _transactional = false;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
@@ -51,6 +53,11 @@ namespace ETL_SQL.Connectors.Parquet
             // Security Hardening: Defense in depth
             context.SecurityService.ValidatePath(_filePath);
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+
+            if (options != null && options.TryGetValue("TRANSACTIONAL", out var tx))
+            {
+                _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
+            }
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
@@ -170,14 +177,13 @@ namespace ETL_SQL.Connectors.Parquet
                 else fields.Add(new DataField<string>(col, nullable: true));
             }
 
-            string targetPath = _filePath;
+            string targetPath = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
             string? tempFile = null;
 
             if (_encryption.Enabled)
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
-                tempFile = System.IO.Path.GetTempFileName();
-                targetPath = tempFile;
+                tempFile = targetPath;
             }
 
             var dir = System.IO.Path.GetDirectoryName(_filePath);
@@ -213,15 +219,32 @@ namespace ETL_SQL.Connectors.Parquet
                     }
                 }
 
-                if (_encryption.Enabled)
+                if (_encryption.Enabled && tempFile != null)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    _encryption.EncryptFile(targetPath, _filePath);
+                    _encryption.EncryptFile(tempFile, _filePath);
+                    System.IO.File.Delete(tempFile);
+                }
+                else
+                {
+                    // Atomic rename if staging file was used (i.e. transactional, or always if staging path differs from final)
+                    if (targetPath != _filePath)
+                    {
+                        if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
+                        System.IO.File.Move(targetPath, _filePath);
+                    }
                 }
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile, _logger);
+                if (tempFile != null && System.IO.File.Exists(tempFile))
+                {
+                    try { System.IO.File.Delete(tempFile); } catch { /* best effort */ }
+                }
+                if (targetPath != _filePath && System.IO.File.Exists(targetPath))
+                {
+                    try { System.IO.File.Delete(targetPath); } catch { /* best effort */ }
+                }
             }
         }
 

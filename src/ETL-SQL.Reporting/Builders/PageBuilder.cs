@@ -44,7 +44,20 @@ namespace ETL_SQL.Reporting.Builders
                 TitleIsMarkdown = titleMd,
                 Subtitle = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                Tooltip = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip)
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip),
+                PrintLayout = pStmt.PrintLayout == null ? null : new PageLayoutDefinitionManifest
+                {
+                    PageSize = pStmt.PrintLayout.PageSize,
+                    CustomWidth = pStmt.PrintLayout.CustomWidth,
+                    CustomHeight = pStmt.PrintLayout.CustomHeight,
+                    Orientation = pStmt.PrintLayout.Orientation,
+                    Units = pStmt.PrintLayout.Units,
+                    MarginTop = pStmt.PrintLayout.MarginTop,
+                    MarginRight = pStmt.PrintLayout.MarginRight,
+                    MarginBottom = pStmt.PrintLayout.MarginBottom,
+                    MarginLeft = pStmt.PrintLayout.MarginLeft,
+                    Overflow = pStmt.PrintLayout.Overflow
+                }
             };
 
 

@@ -174,6 +174,10 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsHidden { get; set; }
 
+        [JsonPropertyName("printLayout")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public PrintLayoutOverrideManifest? PrintLayout { get; set; }
+
         /// <summary>Resolved ECharts option JSON object (as a pre-serialised string).</summary>
         [JsonPropertyName("chartConfig")]
         public string? ChartConfig { get; set; }
@@ -206,6 +210,10 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
 
+        [JsonPropertyName("rowDetail")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public RowDetailManifest? RowDetail { get; set; }
+
         /// <summary>Column headers for TABLE visuals (and raw data access).</summary>
         [JsonPropertyName("columns")]
         public List<string> Columns { get; set; } = new();
@@ -223,6 +231,11 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("highlightRows")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<List<string?>>? HighlightRows { get; set; }
+
+        /// <summary>Captured row-detail binding keys before mapping projection.</summary>
+        [JsonPropertyName("rowDetailKeys")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<Dictionary<string, string?>>? RowDetailKeys { get; set; }
 
         /// <summary>Row-level background colors applied via FORMATTING rules.</summary>
         [JsonPropertyName("rowStyles")]
@@ -332,6 +345,35 @@ namespace ETL_SQL.Reporting
     {
         [JsonPropertyName("column")] public string Column { get; set; } = "";
         [JsonPropertyName("value")] public string Value { get; set; } = "";
+    }
+
+    public class DataBarMetaManifest
+    {
+        [JsonPropertyName("color")] public string Color { get; set; } = string.Empty;
+        [JsonPropertyName("min")] public double Min { get; set; }
+        [JsonPropertyName("max")] public double Max { get; set; }
+    }
+
+    public class RowDetailManifest
+    {
+        [JsonPropertyName("targetName")]
+        public string TargetName { get; set; } = string.Empty;
+        
+        [JsonPropertyName("limit")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Limit { get; set; }
+
+        [JsonPropertyName("bindings")]
+        public List<RowDetailBindingManifest> Bindings { get; set; } = new();
+    }
+
+    public class RowDetailBindingManifest
+    {
+        [JsonPropertyName("parentColumn")]
+        public string ParentColumn { get; set; } = string.Empty;
+
+        [JsonPropertyName("childParameter")]
+        public string ChildParameter { get; set; } = string.Empty;
     }
 
     public class DataLabelsManifest
@@ -472,6 +514,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("printLayout")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public PageLayoutDefinitionManifest? PrintLayout { get; set; }
     }
 
     /// <summary>Metadata for a CREATE DATASET entry.</summary>
@@ -511,6 +557,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("align")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Align { get; set; }
+
+        [JsonPropertyName("hidden")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool Hidden { get; set; }
 
         [JsonPropertyName("dataBar")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -737,5 +787,27 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
         [JsonPropertyName("defaultValue")] public string? DefaultValue { get; set; }
         [JsonPropertyName("isRequired")] public bool IsRequired { get; set; }
+    }
+
+    public class PageLayoutDefinitionManifest
+    {
+        [JsonPropertyName("pageSize")] public string? PageSize { get; set; }
+        [JsonPropertyName("customWidth")] public decimal? CustomWidth { get; set; }
+        [JsonPropertyName("customHeight")] public decimal? CustomHeight { get; set; }
+        [JsonPropertyName("orientation")] public string? Orientation { get; set; }
+        [JsonPropertyName("units")] public string? Units { get; set; }
+        [JsonPropertyName("marginTop")] public decimal? MarginTop { get; set; }
+        [JsonPropertyName("marginRight")] public decimal? MarginRight { get; set; }
+        [JsonPropertyName("marginBottom")] public decimal? MarginBottom { get; set; }
+        [JsonPropertyName("marginLeft")] public decimal? MarginLeft { get; set; }
+        [JsonPropertyName("overflow")] public string? Overflow { get; set; }
+    }
+
+    public class PrintLayoutOverrideManifest
+    {
+        [JsonPropertyName("pageBreakBefore")] public bool? PageBreakBefore { get; set; }
+        [JsonPropertyName("pageBreakAfter")] public bool? PageBreakAfter { get; set; }
+        [JsonPropertyName("keepTogether")] public bool? KeepTogether { get; set; }
+        [JsonPropertyName("excludeFromPrint")] public bool? ExcludeFromPrint { get; set; }
     }
 }

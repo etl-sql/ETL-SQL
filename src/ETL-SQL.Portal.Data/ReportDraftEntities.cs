@@ -58,6 +58,10 @@ public class ReportScriptDraft : IVersionedEntity
 
     public long Version { get; set; } = 1;
 
+    public int? EditSessionUserId { get; set; }
+    public string? EditSessionUserName { get; set; }
+    public DateTime? EditSessionExpiresAtUtc { get; set; }
+
     public ICollection<ReportScriptDraftDecision> Decisions { get; set; } = [];
 }
 

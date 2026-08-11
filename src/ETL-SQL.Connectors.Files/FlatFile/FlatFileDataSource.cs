@@ -48,6 +48,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
         private bool _hasValidatedAccess = false;
+        private readonly bool _transactional = false;
 
         private class FixedWidthColumn
         {
@@ -250,6 +251,11 @@ namespace ETL_SQL.Connectors.FlatFile
                         });
                         currentStart += width.Value;
                     }
+                }
+
+                if (options.TryGetValue("TRANSACTIONAL", out var tx))
+                {
+                    _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
                 }
             }
 
@@ -868,7 +874,8 @@ namespace ETL_SQL.Connectors.FlatFile
             // Security Hardening: local write guardrail + enterprise policy re-check at the boundary.
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
-            string tempFile = System.IO.Path.GetTempFileName();
+            string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
+
             try
             {
                 if (append && System.IO.File.Exists(_filePath) && !_compress && !_encryption.Enabled)

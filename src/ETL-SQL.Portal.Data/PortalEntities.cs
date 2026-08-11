@@ -231,6 +231,10 @@ public class Report : IVersionedEntity
     public bool IsDeleted { get; set; } = false;
     public long Version { get; set; } = 1;
 
+    public int? EditSessionUserId { get; set; }
+    public string? EditSessionUserName { get; set; }
+    public DateTime? EditSessionExpiresAtUtc { get; set; }
+
     public ICollection<ReportSnapshot> Snapshots { get; set; } = [];
     public ICollection<Subscription> Subscriptions { get; set; } = [];
     public ICollection<ReportJobLink> ReportJobLinks { get; set; } = [];

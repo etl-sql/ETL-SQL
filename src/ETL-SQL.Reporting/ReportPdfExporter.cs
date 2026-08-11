@@ -41,6 +41,9 @@ namespace ETL_SQL.Reporting
 
         private byte[] ExportAuto(ReportManifest manifest, PdfExportOptions options)
         {
+            if (HasPaginatedLayout(manifest))
+                return _staticExporter.Export(manifest, options);
+
             if (!string.IsNullOrWhiteSpace(options.Host))
             {
                 try
@@ -62,6 +65,9 @@ namespace ETL_SQL.Reporting
 
         private async Task<byte[]> ExportAutoAsync(ReportManifest manifest, PdfExportOptions options, CancellationToken cancellationToken)
         {
+            if (HasPaginatedLayout(manifest))
+                return await _staticExporter.ExportAsync(manifest, options, cancellationToken);
+
             if (!string.IsNullOrWhiteSpace(options.Host))
             {
                 try
@@ -79,6 +85,16 @@ namespace ETL_SQL.Reporting
             }
 
             return await _staticExporter.ExportAsync(manifest, options, cancellationToken);
+        }
+
+        private static bool HasPaginatedLayout(ReportManifest manifest)
+        {
+            foreach (var page in manifest.Pages)
+            {
+                if (string.Equals(page.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
     }
 }

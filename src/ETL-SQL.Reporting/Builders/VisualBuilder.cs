@@ -37,7 +37,24 @@ namespace ETL_SQL.Reporting.Builders
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
                 IsMarkdown = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
-                Tooltip = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip)
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip),
+                PrintLayout = vStmt.PrintLayout == null ? null : new PrintLayoutOverrideManifest
+                {
+                    PageBreakBefore = vStmt.PrintLayout.PageBreakBefore,
+                    PageBreakAfter = vStmt.PrintLayout.PageBreakAfter,
+                    KeepTogether = vStmt.PrintLayout.KeepTogether,
+                    ExcludeFromPrint = vStmt.PrintLayout.ExcludeFromPrint
+                },
+                RowDetail = vStmt.RowDetail == null ? null : new RowDetailManifest
+                {
+                    TargetName = vStmt.RowDetail.TargetName,
+                    Limit = vStmt.RowDetail.Limit,
+                    Bindings = vStmt.RowDetail.Bindings.Select(b => new RowDetailBindingManifest
+                    {
+                        ParentColumn = b.ParentColumn,
+                        ChildParameter = b.ChildParameter
+                    }).ToList()
+                }
             };
 
             if (title != null) vm.Options["title"] = title;
@@ -225,6 +242,10 @@ namespace ETL_SQL.Reporting.Builders
                     }
 
                     ResolveActionValues(vm);
+                    if (vStmt.RowDetail != null && vStmt.RowDetail.Bindings.Count > 0)
+                    {
+                        ExtractRowDetailKeys(vStmt, vm);
+                    }
                     CalculateSummaries(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
@@ -511,6 +532,35 @@ namespace ETL_SQL.Reporting.Builders
             }
         }
 
+        private static void ExtractRowDetailKeys(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            if (vStmt.RowDetail == null) return;
+            var colIdx = vm.Columns
+                .Select((c, i) => (c, i))
+                .ToDictionary(x => x.c, x => x.i, StringComparer.OrdinalIgnoreCase);
+
+            var bindingExtractors = vStmt.RowDetail.Bindings
+                .Select(b => 
+                {
+                    if (colIdx.TryGetValue(b.ParentColumn, out var idx))
+                    {
+                        int capturedIdx = idx;
+                        return (b.ChildParameter, (Func<List<string?>, string?>)(row => capturedIdx < row.Count ? row[capturedIdx] : null));
+                    }
+                    return (b.ChildParameter, (Func<List<string?>, string?>)(row => null));
+                }).ToList();
+
+            vm.RowDetailKeys = new List<Dictionary<string, string?>>(vm.Rows.Count);
+            for (int r = 0; r < vm.Rows.Count; r++)
+            {
+                var row = vm.Rows[r];
+                var keys = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (param, extract) in bindingExtractors)
+                    keys[param] = extract(row);
+                vm.RowDetailKeys.Add(keys);
+            }
+        }
+
         private void ApplyTableMappings(CreateVisualStatement vStmt, VisualManifest vm)
         {
             // Build case-insensitive source column index
@@ -602,11 +652,9 @@ namespace ETL_SQL.Reporting.Builders
             var metas = selected.Select((x, si) =>
             {
                 var m = x.m;
-                bool hasAny = m.Format != null || m.Align != null || m.DataBar
-                    || m.ColorScaleFrom != null || m.CellRenderer != null
-                    || m.SparklineColumns != null;
+                var hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null || m.CellRenderer != null || m.SparklineColumns != null || m.Hidden;
                 if (!hasAny) return (ColumnMetaManifest?)null;
-                var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align };
+                var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align, Hidden = m.Hidden };
                 if (m.DataBar)
                 {
                     meta.DataBar = true;

@@ -32,6 +32,7 @@ namespace ETL_SQL.Connectors.Excel
         private readonly bool _mapByHeaderName;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly bool _transactional = false;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
@@ -58,6 +59,7 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("IGNORE_EXTRA_COLUMNS", out var iec)) _ignoreExtraColumns = iec.ToUpperInvariant() == "ON" || iec.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("NULL_MISSING_COLUMNS", out var nmc)) _nullMissingColumns = nmc.ToUpperInvariant() == "ON" || nmc.ToUpperInvariant() == "TRUE";
                 if (options.TryGetValue("MAP_BY_HEADER_NAME", out var mbh)) _mapByHeaderName = mbh.ToUpperInvariant() == "ON" || mbh.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("TRANSACTIONAL", out var tx)) _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
             }
 
             _encryption = new EncryptionOptions(options);
@@ -442,7 +444,7 @@ namespace ETL_SQL.Connectors.Excel
             var book = new Dictionary<string, object>();
             book[sheetName] = materializedRows;
 
-            string tempFile = System.IO.Path.GetTempFileName();
+            string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
             try
             {
                 using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write))

@@ -38,6 +38,8 @@ public sealed class ColumnQualityValidator
     private readonly IReadOnlyDictionary<FailAction, FailureActionClause> _routing;
     private readonly bool _hasExpressionRules;
     private readonly Dictionary<string, HashSet<string>> _existsInKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<BetweenRule> _rowInvariantBetweenRules = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<BetweenRule, (object? Lower, object? Upper)> _hoistedBetweenBounds = new();
 
     /// <summary>Delimits parts of a composite key; a unit separator cannot appear in a rendered value.</summary>
     private const char KeyPartSeparator = '\u001F';
@@ -61,6 +63,14 @@ public sealed class ColumnQualityValidator
         // else is a pure per-row predicate that costs no state machine.
         _hasExpressionRules = ruleSets.Any(rs =>
             rs.Bindings.Any(binding => binding.Rules.Any(rule => rule is ExprRule or BetweenRule)));
+
+        foreach (var rule in ruleSets.SelectMany(rs => rs.Bindings).SelectMany(b => b.Rules))
+        {
+            if (rule is BetweenRule between && IsRowInvariant(between.Lower) && IsRowInvariant(between.Upper))
+            {
+                _rowInvariantBetweenRules.Add(between);
+            }
+        }
     }
 
     /// <summary>True when at least one rule needs the whole-input UNIQUE pre-pass.</summary>
@@ -739,13 +749,65 @@ public sealed class ColumnQualityValidator
     /// </summary>
     private async ValueTask<bool> BetweenPassesAsync(BetweenRule rule, object? value, Row projected)
     {
-        var lower = await _context.EvaluateValue(rule.Lower, projected);
-        var upper = await _context.EvaluateValue(rule.Upper, projected);
+        object? lower;
+        object? upper;
+
+        if (_rowInvariantBetweenRules.Contains(rule))
+        {
+            if (_hoistedBetweenBounds.TryGetValue(rule, out var bounds))
+            {
+                lower = bounds.Lower;
+                upper = bounds.Upper;
+            }
+            else
+            {
+                lower = await _context.EvaluateValue(rule.Lower, projected);
+                upper = await _context.EvaluateValue(rule.Upper, projected);
+                _hoistedBetweenBounds.TryAdd(rule, (lower, upper));
+            }
+        }
+        else
+        {
+            lower = await _context.EvaluateValue(rule.Lower, projected);
+            upper = await _context.EvaluateValue(rule.Upper, projected);
+        }
+
         if (lower is null or DBNull || upper is null or DBNull) return true;
 
         return _context.CompareConstants(value, lower) >= 0
             && _context.CompareConstants(value, upper) <= 0;
     }
+
+    private static bool IsRowInvariant(Expression expr) => expr switch
+    {
+        LiteralExpression => true,
+        ParameterExpression => true,
+        VariableExpression => true,
+        UnaryExpression u => IsRowInvariant(u.Expression),
+        BinaryExpression b => IsRowInvariant(b.Left) && IsRowInvariant(b.Right),
+        ListExpression l => l.Items.All(IsRowInvariant),
+        FunctionCallExpression f => IsDeterministicFunction(f.FunctionName) && f.Arguments.All(IsRowInvariant),
+        IsNullExpression n => IsRowInvariant(n.Expression),
+        IsDistinctFromExpression d => IsRowInvariant(d.Left) && IsRowInvariant(d.Right),
+        _ => false // IdentifierExpression, SubqueryExpression, and any unrecognized nodes are not hoistable
+    };
+
+    private static bool IsDeterministicFunction(string functionName) => functionName.ToUpperInvariant() switch
+    {
+        // Safe to hoist once per statement per the row-invariant design decision
+        "GETDATE" or "SYSDATETIME" or "SYSUTCDATETIME" => true,
+        // Common deterministic dates
+        "DATEADD" or "DATEDIFF" or "DATE_TRUNC" or "DATE_PART" or "DAYOFWEEK" or "DAYOFYEAR" or "DATENAME" or "EOMONTH" or "DATEFROMPARTS" => true,
+        // Null checks
+        "ISNULL" or "COALESCE" or "NULLIF" => true,
+        // Casts
+        "CAST" or "CONVERT" or "TRY_CAST" or "TRY_CONVERT" => true,
+        // Strings
+        "UPPER" or "LOWER" or "LEN" or "SUBSTRING" or "TRIM" or "LTRIM" or "RTRIM" or "REPLACE" or "CHARINDEX" or "LEFT" or "RIGHT" or "CONCAT" => true,
+        // Math
+        "ABS" or "ROUND" or "CEILING" or "FLOOR" => true,
+        _ => false
+    };
 
 
     // ── CASTABLE AS ────────────────────────────────────────────────────────

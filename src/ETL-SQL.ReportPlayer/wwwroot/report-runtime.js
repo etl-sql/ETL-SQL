@@ -1512,7 +1512,7 @@
         if (effectiveTheme) card.classList.add('theme-' + effectiveTheme.toLowerCase());
 
         switch (type) {
-            case 'TABLE':       renderTable(card, visual);                        break;
+            case 'TABLE':       renderTable(card, visual, manifest);              break;
             case 'CARD':        renderCard(card, visual);                         break;
             case 'SLICER':
             case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
@@ -2112,7 +2112,7 @@
 
     // ── Table ───────────────────────────────────────────────────────────────
 
-    function renderTable(container, visual) {
+    function renderTable(container, visual, manifest) {
         if (!visual.columns || visual.columns.length === 0) {
             container.appendChild(noDataEl('No data available'));
             return;
@@ -2180,10 +2180,18 @@
         const thead  = document.createElement('thead');
         const headerRow = document.createElement('tr');
 
+        const hasDetail = visual.rowDetail != null && manifest != null;
+        if (hasDetail) {
+            const expTh = document.createElement('th');
+            expTh.className = 'expand-col sortable';
+            headerRow.appendChild(expTh);
+        }
+
         visual.columns.forEach((col, ci) => {
             const th   = document.createElement('th');
             th.className = 'sortable';
             const meta = colMeta[ci] || {};
+            if (meta.hidden) th.style.display = 'none';
             if (meta.align) th.style.textAlign = meta.align;
 
             const label = document.createElement('span');
@@ -2280,11 +2288,97 @@
                 if (rowBg)   tr.style.backgroundColor = rowBg;
                 if (rowFont) tr.style.color = rowFont;
 
+                if (hasDetail) {
+                    const expTd = document.createElement('td');
+                    expTd.className = 'expand-cell';
+                    expTd.style.width = '30px';
+                    expTd.style.textAlign = 'center';
+                    
+                    const expBtn = document.createElement('button');
+                    expBtn.className = 'expand-btn';
+                    expBtn.style.cursor = 'pointer';
+                    expBtn.style.background = 'none';
+                    expBtn.style.border = 'none';
+                    expBtn.style.padding = '4px';
+                    expBtn.innerHTML = '&#9658;'; // Right triangle
+                    expBtn.setAttribute('aria-expanded', 'false');
+                    expTd.appendChild(expBtn);
+                    tr.appendChild(expTd);
+
+                    let detailTr = null;
+                    expBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const isExpanded = expBtn.getAttribute('aria-expanded') === 'true';
+                        if (isExpanded) {
+                            expBtn.innerHTML = '&#9658;';
+                            expBtn.setAttribute('aria-expanded', 'false');
+                            if (detailTr) detailTr.style.display = 'none';
+                        } else {
+                            expBtn.innerHTML = '&#9660;'; // Down triangle
+                            expBtn.setAttribute('aria-expanded', 'true');
+                            if (!detailTr) {
+                                detailTr = document.createElement('tr');
+                                detailTr.className = 'detail-row';
+                                const detailTd = document.createElement('td');
+                                let visibleCols = visual.columns.filter((c, i) => !(colMeta[i] || {}).hidden).length;
+                                detailTd.colSpan = visibleCols + 1;
+                                detailTd.className = 'nested-row-detail-td';
+                                detailTr.appendChild(detailTd);
+                                tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+
+                                const detailCard = document.createElement('div');
+                                detailCard.className = 'detail-container';
+                                detailTd.appendChild(detailCard);
+
+                                const targetName = visual.rowDetail.targetName;
+                                // Try finding visual or container
+                                const targetVisual = (manifest.visuals || []).find(v => v.name.toLowerCase() === targetName.toLowerCase());
+                                if (targetVisual) {
+                                    const keys = visual.rowDetailKeys ? visual.rowDetailKeys[origIdx] : {};
+                                    const clonedVisual = JSON.parse(JSON.stringify(targetVisual));
+                                    
+                                    if (clonedVisual.rows && visual.rowDetail.bindings) {
+                                        const b = visual.rowDetail.bindings;
+                                        clonedVisual.rows = clonedVisual.rows.filter(childRow => {
+                                            return b.every(binding => {
+                                                const childColIdx = clonedVisual.columns.findIndex(c => c.toLowerCase() === binding.childParameter.toLowerCase());
+                                                if (childColIdx < 0) return false;
+                                                const pVal = keys[binding.childParameter];
+                                                const cVal = childRow[childColIdx];
+                                                return String(pVal) === String(cVal);
+                                            });
+                                        });
+                                        if (visual.rowDetail.limit && clonedVisual.rows.length > visual.rowDetail.limit) {
+                                            clonedVisual.rows = clonedVisual.rows.slice(0, visual.rowDetail.limit);
+                                        }
+                                    }
+                                    // Ensure the cloned visual is visible when rendered as a nested detail,
+                                    // since the original target visual was likely set to VISIBLE = OFF.
+                                    if (clonedVisual.options) {
+                                        clonedVisual.options['VISIBLE'] = 'ON';
+                                    }
+                                    renderVisual(detailCard, clonedVisual, null, manifest);
+                                } else {
+                                    const targetContainer = (manifest.containers || []).find(c => c.name.toLowerCase() === targetName.toLowerCase());
+                                    if (targetContainer) {
+                                        // Complex container mapping not fully implemented in this minimal pass
+                                        detailCard.textContent = 'Container detail not fully supported in preview';
+                                    } else {
+                                        detailCard.textContent = 'Detail target not found: ' + targetName;
+                                    }
+                                }
+                            }
+                            detailTr.style.display = '';
+                        }
+                    });
+                }
+
                 visual.columns.forEach((col, ci) => {
                     const td   = document.createElement('td');
                     const meta = colMeta[ci] || {};
                     const rawVal = row[ci] != null ? String(row[ci]) : '';
                     const fmtVal = formatValue(rawVal, meta.format || opts['FORMAT']);
+                    if (meta.hidden) td.style.display = 'none';
                     if (meta.align) td.style.textAlign = meta.align;
 
                     // COLOR_SCALE: gradient background based on column min/max

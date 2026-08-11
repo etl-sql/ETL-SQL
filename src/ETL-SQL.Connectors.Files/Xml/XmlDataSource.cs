@@ -31,6 +31,7 @@ namespace ETL_SQL.Connectors.Xml
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly bool _transactional = false;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
@@ -59,6 +60,7 @@ namespace ETL_SQL.Connectors.Xml
                     };
                 }
                 if (options.TryGetValue("TRIM", out var tr)) _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("TRANSACTIONAL", out var tx)) _transactional = tx.ToUpperInvariant() == "ON" || tx.ToUpperInvariant() == "TRUE";
             }
 
             _encryption = new EncryptionOptions(options);
@@ -344,7 +346,7 @@ namespace ETL_SQL.Connectors.Xml
                 }
             }
 
-            string tempFile = System.IO.Path.GetTempFileName();
+            string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_filePath, _transactional);
             try
             {
                 if (alreadyXml && singleXml != null)

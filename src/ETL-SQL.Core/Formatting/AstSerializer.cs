@@ -1275,6 +1275,27 @@ public static class AstSerializer
             : "";
         return $"{col.ColumnName} {col.DataType}{pk}{unq}{nullable}{identity}{def}{check}{fk}{tags}";
     }
+    private static string FormatPageLayoutDefinition(PageLayoutDefinition layout)
+    {
+        var parts = new List<string>();
+        if (layout.PageSize != null) parts.Add($"PAGE_SIZE = '{layout.PageSize}'");
+        if (layout.Orientation != null) parts.Add($"ORIENTATION = '{layout.Orientation}'");
+        if (layout.MarginTop.HasValue) parts.Add($"MARGINS = ({layout.MarginTop}, {layout.MarginRight}, {layout.MarginBottom}, {layout.MarginLeft})");
+        if (layout.Units != null) parts.Add($"UNITS = '{layout.Units}'");
+        if (layout.Overflow != null) parts.Add($"OVERFLOW = '{layout.Overflow}'");
+        return "PAGE_LAYOUT (" + string.Join(", ", parts) + ")";
+    }
+
+    private static string FormatPrintLayoutOverride(PrintLayoutOverride layout)
+    {
+        var parts = new List<string>();
+        if (layout.PageBreakBefore.HasValue) parts.Add($"PAGE_BREAK_BEFORE = {(layout.PageBreakBefore.Value ? "ON" : "OFF")}");
+        if (layout.PageBreakAfter.HasValue) parts.Add($"PAGE_BREAK_AFTER = {(layout.PageBreakAfter.Value ? "ON" : "OFF")}");
+        if (layout.KeepTogether.HasValue) parts.Add($"KEEP_TOGETHER = {(layout.KeepTogether.Value ? "ON" : "OFF")}");
+        if (layout.ExcludeFromPrint.HasValue) parts.Add($"EXCLUDE_FROM_PRINT = {(layout.ExcludeFromPrint.Value ? "ON" : "OFF")}");
+        return "PRINT_LAYOUT (" + string.Join(", ", parts) + ")";
+    }
+
     private static string FormatCreateVisual(CreateVisualStatement s)
     {
         var sb = new System.Text.StringBuilder();
@@ -1301,6 +1322,8 @@ public static class AstSerializer
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
         if (s.DefaultValue != null && s.VisualType != VisualType.Text)
             sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
+        if (s.PrintLayout != null)
+            sb.AppendLine($"    {FormatPrintLayoutOverride(s.PrintLayout)},");
 
         var result = sb.ToString().TrimEnd().TrimEnd(',');
         return result + "\n);";
@@ -1321,6 +1344,7 @@ public static class AstSerializer
             parts.Add("STYLE (" + FormatStringAssignments(s.Styles) + ")");
         if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
         if (s.RefreshIntervalSeconds > 0) parts.Add($"REFRESH = {s.RefreshIntervalSeconds}");
+        if (s.PrintLayout != null) parts.Add(FormatPageLayoutDefinition(s.PrintLayout));
 
         return $"{CreationVerb(s.Mode)} PAGE {s.Name} AS {s.PageMode.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
     }

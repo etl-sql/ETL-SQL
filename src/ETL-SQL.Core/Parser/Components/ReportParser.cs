@@ -43,6 +43,8 @@ public class ReportParser : ParserComponent
         int? decimals = null;
         TableSummaryOptions? summaryOptions = null;
         var fetchMode = VisualFetchMode.Auto;
+        PrintLayoutOverride? printLayout = null;
+        RowDetailDefinition? rowDetail = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -157,10 +159,20 @@ public class ReportParser : ParserComponent
                 (summaries, summaryOptions) = ParseSummaryClause();
                 Consume(TokenType.RPAREN, "Expected ')' to close SUMMARY");
             }
+            else if (IsCurrentValue("PRINT_LAYOUT"))
+            {
+                Advance();
+                printLayout = ParsePrintLayoutOverride();
+            }
+            else if (IsCurrentValue("ROW_DETAIL"))
+            {
+                Advance();
+                rowDetail = ParseRowDetailDefinition();
+            }
             else
             {
                 throw new SyntaxException(
-                    $"Unexpected token '{_parser.Current.Value}' inside CREATE VISUAL body",
+                    $"Unexpected token '{_parser.Current.Value}' inside CREATE VISUAL body. Type: {_parser.Current.Type}, MatchRowDetail: {IsCurrentValue("ROW_DETAIL")}",
                     _parser.Current.Line, _parser.Current.Column);
             }
             Match(TokenType.COMMA);
@@ -219,12 +231,162 @@ public class ReportParser : ParserComponent
             StyleName = styleName,
             Tooltip = tooltip,
             Mode = mode,
+            PrintLayout = printLayout,
+            RowDetail = rowDetail,
             Line = startToken.Line,
             Column = startToken.Column
         };
     }
 
     // ── CREATE PAGE ───────────────────────────────────────────────────────
+
+    private PageLayoutDefinition ParsePageLayoutDefinition()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after PAGE_LAYOUT or PRINT_LAYOUT");
+        var layout = new PageLayoutDefinition();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (IsCurrentValue("PAGE_SIZE") || IsCurrentValue("SIZE"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { PageSize = ConsumeReportOptionValue() };
+            }
+            else if (Match(TokenType.ORIENTATION))
+            {
+                Match(TokenType.EQUALS);
+                layout = layout with { Orientation = ConsumeReportOptionValue() };
+            }
+            else if (IsCurrentValue("MARGINS") || Match(TokenType.MARGIN))
+            {
+                if (IsCurrentValue("MARGINS") || IsCurrentValue("MARGIN")) Advance();
+                Match(TokenType.EQUALS);
+                Consume(TokenType.LPAREN, "Expected '(' for margins");
+                var top = decimal.Parse(ConsumeReportOptionValue());
+                Match(TokenType.COMMA);
+                var right = decimal.Parse(ConsumeReportOptionValue());
+                Match(TokenType.COMMA);
+                var bottom = decimal.Parse(ConsumeReportOptionValue());
+                Match(TokenType.COMMA);
+                var left = decimal.Parse(ConsumeReportOptionValue());
+                Consume(TokenType.RPAREN, "Expected ')' for margins");
+                layout = layout with { MarginTop = top, MarginRight = right, MarginBottom = bottom, MarginLeft = left };
+            }
+            else if (IsCurrentValue("UNITS") || IsCurrentValue("UNIT"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { Units = ConsumeReportOptionValue() };
+            }
+            else if (IsCurrentValue("OVERFLOW"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { Overflow = ConsumeReportOptionValue() };
+            }
+            else
+            {
+                throw new SyntaxException($"Unexpected layout option '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' to close layout definitions");
+        return layout;
+    }
+
+    private RowDetailDefinition ParseRowDetailDefinition()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after ROW_DETAIL");
+        var def = new RowDetailDefinition { TargetName = string.Empty };
+
+        while (!Match(TokenType.RPAREN))
+        {
+            if (IsCurrentValue("TARGET"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                def = def with { TargetName = ConsumeIdentifierOrString("Expected target visual name").Value };
+            }
+            else if (Match(TokenType.MAPPINGS) || IsCurrentValue("BINDINGS") || IsCurrentValue("MAP"))
+            {
+                // If it was BINDINGS or MAP, we need to advance over it.
+                // Match(TokenType.MAPPINGS) already advanced.
+                if (IsCurrentValue("BINDINGS") || IsCurrentValue("MAP") || _parser.Current.Type == TokenType.IDENTIFIER)
+                {
+                    Advance();
+                }
+                Consume(TokenType.LPAREN, "Expected '(' after BINDINGS");
+                while (!Match(TokenType.RPAREN))
+                {
+                    var paramName = Consume(TokenType.VARIABLE, "Expected parameter (e.g., @childParam)").Value.TrimStart('@');
+                    Match(TokenType.EQUALS);
+                    var colName = ConsumeIdentifierOrString("Expected parent column name").Value;
+                    def.Bindings.Add(new RowDetailBinding(colName, paramName));
+                    Match(TokenType.COMMA);
+                }
+            }
+            else if (IsCurrentValue("LIMIT"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var limitStr = Consume(TokenType.NUMBER, "Expected number for LIMIT").Value;
+                if (int.TryParse(limitStr, out var limitVal))
+                {
+                    def = def with { Limit = limitVal };
+                }
+            }
+            else
+            {
+                throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in ROW_DETAIL", _parser.Current.Line, _parser.Current.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+
+        if (string.IsNullOrWhiteSpace(def.TargetName))
+            throw new SyntaxException("ROW_DETAIL requires a TARGET = <name>", _parser.Current.Line, _parser.Current.Column);
+
+        return def;
+    }
+
+    private PrintLayoutOverride ParsePrintLayoutOverride()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after PRINT_LAYOUT");
+        var layout = new PrintLayoutOverride();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            if (IsCurrentValue("PAGE_BREAK_BEFORE"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { PageBreakBefore = ParseOnOffValue() == "ON" };
+            }
+            else if (IsCurrentValue("PAGE_BREAK_AFTER"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { PageBreakAfter = ParseOnOffValue() == "ON" };
+            }
+            else if (IsCurrentValue("KEEP_TOGETHER"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { KeepTogether = ParseOnOffValue() == "ON" };
+            }
+            else if (IsCurrentValue("EXCLUDE_FROM_PRINT") || IsCurrentValue("EXCLUDE"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                layout = layout with { ExcludeFromPrint = ParseOnOffValue() == "ON" };
+            }
+            else
+            {
+                throw new SyntaxException($"Unexpected print layout override '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' to close PRINT_LAYOUT");
+        return layout;
+    }
 
     private PageMode ParsePageMode()
     {
@@ -254,6 +416,7 @@ public class ReportParser : ParserComponent
         bool titleMd = false, subtitleMd = false;
         TooltipDefinition? tooltip = null;
         int refreshSecs = 0;
+        PageLayoutDefinition? printLayout = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -314,6 +477,11 @@ public class ReportParser : ParserComponent
                 ParseContainerLayout(ref structure, slotMap, pageStyles, ref isPinnable);
                 Consume(TokenType.RPAREN, "Expected ')' to close LAYOUT");
             }
+            else if (IsCurrentValue("PRINT_LAYOUT") || IsCurrentValue("PAGE_LAYOUT"))
+            {
+                Advance();
+                printLayout = ParsePageLayoutDefinition();
+            }
             else
             {
                 throw new SyntaxException(
@@ -347,6 +515,7 @@ public class ReportParser : ParserComponent
             Visibility = visibility,
             RefreshIntervalSeconds = refreshSecs,
             Mode = mode,
+            PrintLayout = printLayout,
             Line = startToken.Line,
             Column = startToken.Column
         };
@@ -1576,7 +1745,6 @@ public class ReportParser : ParserComponent
             Column = "$sparkline",
             SparklineColumns = cols,
             SparklineType = sparklineType,
-            DisplayName = displayName
         };
     }
 
@@ -1610,12 +1778,12 @@ public class ReportParser : ParserComponent
                 // TABLE column syntax: col_name [FORMAT 'fmt'] [ALIGN 'dir'] [DATA_BAR [COLOR 'c']]
                 //                                [COLOR_SCALE FROM 'c1' TO 'c2']
                 //                                [IMAGE [WIDTH n] | HYPERLINK [LABEL 'text']]
-                //                                [AS 'alias']
+                //                                [AS 'alias'] [HIDDEN]
                 string? format = null, align = null, displayName = null;
                 string? dataBarColor = null, colorScaleFrom = null, colorScaleTo = null;
                 string? cellRenderer = null, hyperlinkLabel = null;
                 int? imageWidth = null;
-                bool dataBar = false;
+                bool dataBar = false, hidden = false;
                 while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
                 {
                     if (_parser.Current.Type == TokenType.FORMAT ||
@@ -1630,6 +1798,11 @@ public class ReportParser : ParserComponent
                     {
                         Advance();
                         align = Consume(TokenType.STRING_LITERAL, "Expected alignment value after ALIGN").Value;
+                    }
+                    else if (IsCurrentValue("HIDDEN"))
+                    {
+                        Advance();
+                        hidden = true;
                     }
                     else if (_parser.Current.Type == TokenType.DATA_BAR)
                     {
@@ -1700,7 +1873,8 @@ public class ReportParser : ParserComponent
                     ColorScaleTo = colorScaleTo,
                     CellRenderer = cellRenderer,
                     ImageWidth = imageWidth,
-                    HyperlinkLabel = hyperlinkLabel
+                    HyperlinkLabel = hyperlinkLabel,
+                    Hidden = hidden
                 });
             }
             Match(TokenType.COMMA);

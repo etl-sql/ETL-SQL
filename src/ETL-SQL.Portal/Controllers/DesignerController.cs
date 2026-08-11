@@ -10,6 +10,7 @@ using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -391,6 +392,60 @@ public class DesignerController : ControllerBase
         }
     }
 
+    // ── POST /api/designer/preview/pdf ────────────────────────────────────────
+
+    [HttpPost("preview/pdf")]
+    [Authorize(Roles = "Admin,Publisher")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public async Task<IActionResult> PreviewPdf([FromBody] PreviewDesignerRequest req, CancellationToken cancellationToken)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } scriptLimit)
+            return scriptLimit;
+        if (_previewService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer preview service is not configured." });
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var manifest = await _previewService.BuildPreviewAsync(req.Script, req.Page, User, cancellationToken);
+            var exporter = new ETL_SQL.Reporting.ReportPdfExporter();
+            var pdfBytes = await exporter.ExportAsync(manifest, new ETL_SQL.Reporting.PdfExportOptions
+            {
+                Mode = ETL_SQL.Reporting.PdfExportMode.Static,
+                Host = null
+            }, cancellationToken);
+
+            return File(pdfBytes, "application/pdf", "preview.pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Preview access denied." });
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Preview exceeded the 30 second timeout." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"PDF generation failed: {ex.Message}" });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
     // ── POST /api/designer/save ──────────────────────────────────────────────
 
     [HttpPost("save")]
@@ -438,6 +493,85 @@ public class DesignerController : ControllerBase
             gate?.Release();
         }
     }
+
+    // ── POST /api/designer/lease ──────────────────────────────────────────────
+
+    [HttpPost("lease")]
+    [Authorize(Roles = "Admin,Publisher")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptSave)]
+    public async Task<IActionResult> AcquireLease([FromBody] LeaseDesignerRequest req, CancellationToken cancellationToken)
+    {
+        var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
+        
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId, cancellationToken);
+        if (report is null) return NotFound(new { error = "Report not found." });
+        
+        var now = DateTime.UtcNow;
+        var expiresAt = now.AddMinutes(5); // Hard expiry in 5 mins
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userName = User.Identity?.Name;
+        
+        // Check if there is an existing valid lease by someone else
+        if (report.EditSessionExpiresAtUtc > now && report.EditSessionUserId != userId)
+        {
+            if (!req.Force) 
+            {
+                return Conflict(new { error = "Another user is currently editing this report.", owner = report.EditSessionUserName, expires = report.EditSessionExpiresAtUtc });
+            }
+        }
+        
+        report.EditSessionUserId = userId;
+        report.EditSessionUserName = userName;
+        report.EditSessionExpiresAtUtc = expiresAt;
+        
+        var draft = await db.ReportScriptDrafts.FirstOrDefaultAsync(d => d.ReportId == req.ReportId && (d.Status == "draft" || d.Status == "pending" || d.Status == "rejected"), cancellationToken);
+        if (draft != null)
+        {
+            draft.EditSessionUserId = userId;
+            draft.EditSessionUserName = userName;
+            draft.EditSessionExpiresAtUtc = expiresAt;
+        }
+        
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return Ok(new { acquired = true, expiresAt });
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        {
+            return Conflict(new { error = "The report was modified while acquiring the lease." });
+        }
+    }
+
+    [HttpDelete("lease/{reportId:int}")]
+    [Authorize(Roles = "Admin,Publisher")]
+    [RequireStudioCapability(StudioCapabilities.ScriptSave)]
+    public async Task<IActionResult> ReleaseLease(int reportId, CancellationToken cancellationToken)
+    {
+        var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
+        if (report != null && report.EditSessionUserId == userId)
+        {
+            report.EditSessionUserId = null;
+            report.EditSessionUserName = null;
+            report.EditSessionExpiresAtUtc = null;
+            
+            var draft = await db.ReportScriptDrafts.FirstOrDefaultAsync(d => d.ReportId == reportId && (d.Status == "draft" || d.Status == "pending" || d.Status == "rejected"), cancellationToken);
+            if (draft != null && draft.EditSessionUserId == userId)
+            {
+                draft.EditSessionUserId = null;
+                draft.EditSessionUserName = null;
+                draft.EditSessionExpiresAtUtc = null;
+            }
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        return NoContent();
+    }
+
+    public record LeaseDesignerRequest(int ReportId, bool Force = false);
 
     // ── POST /api/designer/generate ───────────────────────────────────────────
 

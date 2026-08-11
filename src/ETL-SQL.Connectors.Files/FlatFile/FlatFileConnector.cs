@@ -46,13 +46,15 @@ namespace ETL_SQL.Connectors.FlatFile
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
             { "PASSWORD", Array.Empty<string>() },
+            { "TRANSACTIONAL", new[] { "ON", "OFF" } },
             { "CULTURE", Array.Empty<string>() },
             { "TRIM", new[] { "ON", "OFF" } },
             { "FORMAT", new[] { "DELIMITED", "FIXED" } },
             { "EXPECTED_HASH", Array.Empty<string>() },
             { "WAIT_FOR_LOCK", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "LOCK_TIMEOUT_SEC", Array.Empty<string>() },
-            { "TRUNCATE_STRING", new[] { "ON", "OFF" } }
+            { "TRUNCATE_STRING", new[] { "ON", "OFF" } },
+            { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
@@ -69,7 +71,8 @@ namespace ETL_SQL.Connectors.FlatFile
             { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF" } },
             { "TRIM", new[] { "ON", "OFF" } },
             { "FORMAT", new[] { "DELIMITED", "FIXED" } },
-            { "TRUNCATE_STRING", new[] { "ON", "OFF" } }
+            { "TRUNCATE_STRING", new[] { "ON", "OFF" } },
+            { "TRANSACTIONAL", new[] { "ON", "OFF" } }
         };
 
         public string GetHelp() =>

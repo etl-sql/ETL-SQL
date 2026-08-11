@@ -28,7 +28,8 @@ namespace ETL_SQL.Connectors.Parquet
             { "PATH", Array.Empty<string>() },
             { "COMPRESSION", new[] { "SNAPPY", "GZIP", "LZO", "BROTLI", "LZ4", "ZSTD", "UNCOMPRESSED" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
-            { "PASSWORD", Array.Empty<string>() }
+            { "PASSWORD", Array.Empty<string>() },
+            { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
@@ -36,7 +37,10 @@ namespace ETL_SQL.Connectors.Parquet
         public string GetHelp() =>
             "Parquet Connector: Connects to Apache Parquet files.\n" +
             "Options:\n" +
-            "  COMPRESSION: SNAPPY (default) | GZIP | LZO | BROTLI | LZ4 | ZSTD | UNCOMPRESSED";
+            "  COMPRESSION: SNAPPY (default) | GZIP | LZO | BROTLI | LZ4 | ZSTD | UNCOMPRESSED\n" +
+            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  PASSWORD: Password for encryption/decryption\n" +
+            "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
             => new ParquetDataSource(context, connectionString, options);

@@ -30,7 +30,8 @@ namespace ETL_SQL.Connectors.Json
             { "ENCRYPT", new[] { "ON", "OFF" } },
             { "PASSWORD", Array.Empty<string>() },
             { "ENCODING", new[] { "UTF8", "ANSI", "UTF16", "UNICODE", "LATIN1" } },
-            { "TRIM", new[] { "ON", "OFF" } }
+            { "TRIM", new[] { "ON", "OFF" } },
+            { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
@@ -41,7 +42,8 @@ namespace ETL_SQL.Connectors.Json
             "  ROOT_PATH: JSONPath to the data array (e.g. '$.Rows')\n" +
             "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
-            "  PASSWORD: Password for encryption/decryption";
+            "  PASSWORD: Password for encryption/decryption\n" +
+            "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {

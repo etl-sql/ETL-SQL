@@ -151,11 +151,7 @@ namespace ETL_SQL.Reporting
             style.Font.Size = Unit.FromPoint(10);
 
             var section = document.AddSection();
-            section.PageSetup.PageFormat = PageFormat.A4;
-            section.PageSetup.TopMargin = Unit.FromPoint(36);
-            section.PageSetup.BottomMargin = Unit.FromPoint(36);
-            section.PageSetup.LeftMargin = Unit.FromPoint(36);
-            section.PageSetup.RightMargin = Unit.FromPoint(36);
+            ApplyPageSetup(section, null, manifest);
 
             // ── Report header ─────────────────────────────────────────────────
             var titlePara = section.AddParagraph(
@@ -170,10 +166,6 @@ namespace ETL_SQL.Reporting
                 descPara.Format.Font.Color = _greyDark2;
             }
 
-            var tsPara = section.AddParagraph($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC");
-            tsPara.Format.SpaceBefore = Unit.FromPoint(4);
-            tsPara.Format.Font.Size = Unit.FromPoint(8);
-            tsPara.Format.Font.Color = _greyDark1;
 
             var sep = section.AddParagraph();
             sep.Format.SpaceBefore = Unit.FromPoint(10);
@@ -182,37 +174,95 @@ namespace ETL_SQL.Reporting
             sep.Format.Borders.Bottom.Color = _greyLight2;
 
             // ── Visuals ───────────────────────────────────────────────────────
-            foreach (var visual in GetVisualsInOrder(manifest))
-                await RenderVisualAsync(section, visual, manifest, tempFiles, cancellationToken);
+            if (manifest.Pages.Count > 0)
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var page in manifest.Pages)
+                {
+                    var pageSection = document.AddSection();
+                    ApplyPageSetup(pageSection, page.PrintLayout, manifest);
+
+                    foreach (var (_, vName) in page.SlotMap.OrderBy(kv => kv.Key))
+                    {
+                        if (!seen.Add(vName)) continue;
+                        var v = manifest.Visuals.FirstOrDefault(x => string.Equals(x.Name, vName, StringComparison.OrdinalIgnoreCase));
+                        if (v != null)
+                            await RenderVisualAsync(pageSection, v, manifest, tempFiles, cancellationToken);
+                    }
+                }
+                
+                // Any loose visuals
+                foreach (var v in manifest.Visuals)
+                {
+                    if (seen.Add(v.Name))
+                        await RenderVisualAsync(section, v, manifest, tempFiles, cancellationToken);
+                }
+            }
+            else
+            {
+                foreach (var visual in manifest.Visuals)
+                    await RenderVisualAsync(section, visual, manifest, tempFiles, cancellationToken);
+            }
 
             return document;
         }
 
-        private static IEnumerable<VisualManifest> GetVisualsInOrder(ReportManifest manifest)
+        private static void ApplyPageSetup(Section section, PageLayoutDefinitionManifest? layout, ReportManifest manifest)
         {
-            if (manifest.Pages.Count == 0) return manifest.Visuals;
+            if (layout == null)
+            {
+                section.PageSetup.PageFormat = PageFormat.A4;
+                section.PageSetup.TopMargin = Unit.FromPoint(36);
+                section.PageSetup.BottomMargin = Unit.FromPoint(36);
+                section.PageSetup.LeftMargin = Unit.FromPoint(36);
+                section.PageSetup.RightMargin = Unit.FromPoint(36);
+                AddFooter(section, manifest);
+                return;
+            }
 
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var result = new List<VisualManifest>();
+            if (string.Equals(layout.PageSize, "Letter", StringComparison.OrdinalIgnoreCase))
+                section.PageSetup.PageFormat = PageFormat.Letter;
+            else if (string.Equals(layout.PageSize, "Legal", StringComparison.OrdinalIgnoreCase))
+                section.PageSetup.PageFormat = PageFormat.Legal;
+            else if (string.Equals(layout.PageSize, "A3", StringComparison.OrdinalIgnoreCase))
+                section.PageSetup.PageFormat = PageFormat.A3;
+            else
+                section.PageSetup.PageFormat = PageFormat.A4;
 
-            foreach (var page in manifest.Pages)
-                foreach (var (_, vName) in page.SlotMap.OrderBy(kv => kv.Key))
-                {
-                    if (!seen.Add(vName)) continue;
-                    var v = manifest.Visuals.FirstOrDefault(x =>
-                        string.Equals(x.Name, vName, StringComparison.OrdinalIgnoreCase));
-                    if (v != null) result.Add(v);
-                }
+            if (string.Equals(layout.Orientation, "Landscape", StringComparison.OrdinalIgnoreCase))
+                section.PageSetup.Orientation = Orientation.Landscape;
 
-            foreach (var v in manifest.Visuals)
-                if (seen.Add(v.Name)) result.Add(v);
+            if (layout.MarginTop.HasValue) section.PageSetup.TopMargin = Unit.FromInch((double)layout.MarginTop.Value);
+            if (layout.MarginBottom.HasValue) section.PageSetup.BottomMargin = Unit.FromInch((double)layout.MarginBottom.Value);
+            if (layout.MarginLeft.HasValue) section.PageSetup.LeftMargin = Unit.FromInch((double)layout.MarginLeft.Value);
+            if (layout.MarginRight.HasValue) section.PageSetup.RightMargin = Unit.FromInch((double)layout.MarginRight.Value);
 
-            return result;
+            AddFooter(section, manifest);
         }
+
+        private static void AddFooter(Section section, ReportManifest manifest)
+        {
+            var footer = section.Footers.Primary;
+            var para = footer.AddParagraph();
+            para.Format.Alignment = ParagraphAlignment.Center;
+            para.Format.Font.Size = Unit.FromPoint(8);
+            para.Format.Font.Color = _greyDark1;
+            
+            para.AddText($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC   |   Page ");
+            para.AddPageField();
+            para.AddText(" of ");
+            para.AddNumPagesField();
+        }
+
+
 
         private async Task RenderVisualAsync(Section section, VisualManifest v, ReportManifest manifest, List<string> tempFiles, CancellationToken cancellationToken)
         {
+            if (v.PrintLayout?.ExcludeFromPrint == true) return;
+
             var heading = section.AddParagraph(v.Name);
+            if (v.PrintLayout?.PageBreakBefore == true)
+                heading.Format.PageBreakBefore = true;
             heading.Format.SpaceBefore = Unit.FromPoint(16);
             heading.Format.Font.Size = Unit.FromPoint(13);
             heading.Format.Font.Bold = true;
@@ -249,6 +299,12 @@ namespace ETL_SQL.Reporting
                 default:
                     await RenderChartAsync(section, v, tempFiles, cancellationToken);
                     break;
+            }
+
+            if (v.PrintLayout?.PageBreakAfter == true)
+            {
+                var brPara = section.AddParagraph();
+                brPara.Format.PageBreakBefore = true;
             }
         }
 
@@ -308,7 +364,7 @@ namespace ETL_SQL.Reporting
 
             section.AddParagraph(); // visual gap before table
 
-            int cap = Math.Min(v.Rows.Count, 500);
+            int cap = v.Rows.Count;
 
             // Size columns proportionally to their content so wide text columns get
             // more room and short ones (ids, codes) don't force everything to wrap.
@@ -328,10 +384,15 @@ namespace ETL_SQL.Reporting
             double totalWeight = weights.Sum();
 
             var table = section.AddTable();
+            
+            if (v.PrintLayout?.KeepTogether == true)
+                table.KeepTogether = true;
+                
             for (int ci = 0; ci < v.Columns.Count; ci++)
                 table.AddColumn(Unit.FromPoint(ContentWidthPt * weights[ci] / totalWeight));
 
             var header = table.AddRow();
+            header.HeadingFormat = true; // Repeat header on new pages
             header.Shading.Color = _greyLight3;
             for (int ci = 0; ci < v.Columns.Count; ci++)
             {
@@ -353,15 +414,6 @@ namespace ETL_SQL.Reporting
                 }
             }
 
-            if (v.Rows.Count > cap)
-            {
-                var moreRow = table.AddRow();
-                moreRow.Cells[0].MergeRight = v.Columns.Count - 1;
-                var p = moreRow.Cells[0].AddParagraph($"… {v.Rows.Count - cap:N0} more rows not shown");
-                p.Format.Font.Size = Unit.FromPoint(8);
-                p.Format.Font.Italic = true;
-                p.Format.Font.Color = _greyDark1;
-            }
         }
 
         private static string FormatCell(string? raw) => ReportCellFormatter.FormatCellForPdf(raw);

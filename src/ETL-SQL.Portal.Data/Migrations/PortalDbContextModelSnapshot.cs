@@ -1367,6 +1367,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.Property<string>("Domain")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("EditSessionExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("EditSessionUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EditSessionUserName")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("FolderId")
                         .HasColumnType("INTEGER");
 
@@ -1733,6 +1742,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EditSessionExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("EditSessionUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EditSessionUserName")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("PublishedAtUtc")

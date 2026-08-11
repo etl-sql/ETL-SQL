@@ -134,5 +134,23 @@ namespace ETL_SQL.Core.Common
 
             return new ChainedStream(currentStream, baseStream);
         }
+
+        /// <summary>
+        /// Returns an engine-owned staging path for a file write. If <paramref name="transactional"/> is true,
+        /// the path is forced into the exact same directory as the target <paramref name="targetFilePath"/>
+        /// so that the final publication via File.Move is an instantaneous, atomic file-system metadata swap.
+        /// If transactional is false, falls back to the OS %TEMP% directory.
+        /// </summary>
+        public static string GetStagingFilePath(string targetFilePath, bool transactional)
+        {
+            if (transactional)
+            {
+                var dir = System.IO.Path.GetDirectoryName(targetFilePath);
+                if (string.IsNullOrEmpty(dir)) dir = Environment.CurrentDirectory;
+                else System.IO.Directory.CreateDirectory(dir);
+                return System.IO.Path.Combine(dir, System.IO.Path.GetFileName(targetFilePath) + ".etl-stage-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            }
+            return System.IO.Path.GetTempFileName();
+        }
     }
 }
