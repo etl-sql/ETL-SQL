@@ -151,6 +151,33 @@ cross-platform and operator-run certifications below.
       `coverage-gate.json` beneath the timestamped release-validation run.
 - [ ] Confirm the **Test structure audit** phase passed. This proves expensive/release-only categories
       still have targeted ownership and that file reorganization did not change lane membership.
+- [ ] Run the corpus a **second time under low engine thresholds**, and compare results to the
+      default run:
+      ```powershell
+      pwsh -File scripts/test-lane.ps1 -Lane spill -ContinueOnFailure
+      ```
+      ETL-SQL is an engine that speaks SQL, not a database. The default corpus run certifies SQL
+      *semantics*; it says nothing about batching, spilling, or streaming, because at default
+      thresholds none of those paths execute. Running the same queries with the thresholds set to a
+      handful of rows turns every query already in the corpus into spill coverage, which is how the
+      `PARTITION BY` window defect in v0.18.0 was found.
+
+      **The invariant is that the two runs agree.** Configuration must not change results: any query
+      whose answer differs between the default and low-threshold runs is a P0 correctness defect, not
+      a tuning artifact. Read such a difference before classifying it — the first read of that lane's
+      first run dismissed a real P0 as threshold coupling.
+
+      **Verify the configuration actually landed before trusting a green run.** The overrides are
+      environment variables, and a harness that resolves no `IConfiguration` accepts and ignores them
+      in silence — the SLT corpus did exactly that from its introduction until 2026-08-11, so a lane
+      configured to spill at 25 rows ran at 1,000,000 and exercised nothing it claimed to.
+      `SltRunnerConfigurationTests` now asserts the wiring; if it is absent or skipped, this step is
+      decorative. An ignored setting and a setting with no effect are indistinguishable from the
+      outside, which is why this is asserted rather than observed.
+
+      Advisory, not yet blocking: the lane cannot gate until the corpus is batch-size-agnostic and
+      the release-branch baseline failures are resolved (both tracked in `TODO.md`). Record the run
+      and its diff in the release-validation evidence either way.
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
@@ -299,9 +326,18 @@ and the safeguards added:
 | Doc link check passed locally, failed on CI (v0.16.0) | 101 `file:///` links used absolute paths that resolved only against the dev's own checkout | converted to repo-relative; `DocSanityTests` now catches any re-introduction on CI |
 | Flaky memory-governor test — passed one CI run, failed the next (v0.16.0) | the external-join repartition assertion rode a borderline partition-planner estimate | build data sized to exceed `maxPartitions × budget`, forcing the columnar-repartition path deterministically |
 | `Set-Version` silently skipped doc version baselines (v0.16.0) | its hardcoded `Docs/...` paths did not survive the docs IA restructure and it only **warned** (SKIP) | paths repointed to `docs/...` in `Set-Version.ps1`/`set-version.sh`; keep missing expected targets visible during release review |
+| The SLT corpus ignored every engine threshold the lane set (v0.18.0) | `SltRunner` builds its own `ServiceCollection` and registered no `IConfiguration`; `DefaultThresholds` takes a nullable config and falls back to built-in constants, so overrides were accepted and dropped in silence | `IConfiguration` registered from environment variables; `SltRunnerConfigurationTests` asserts an override reaches the evaluator **and** that the unconfigured default is unchanged |
+| A 50-term `AND` chain killed the process at default settings (v0.18.0) | nothing varied expression *depth*; the parser's ceiling of 100 counts nested parentheses, and a chain is parsed by a loop that never increments it, so it went straight past into a serializer with no bound | serializer and parser tree-walks flattened onto explicit worklists; `ExpressionDepthTests` covers chains to 2,000 terms and both sides of the ceiling |
 
 Principle: any file that embeds the version should read it from `Directory.Build.props`, not hardcode
 it (`Set-Version.ps1` cannot find every hardcoded copy).
+
+Principle: **a validation step is only worth its runtime if the thing it configures can be shown to
+have taken effect.** Both v0.18.0 entries above are the same failure — a control that exists, looks
+implemented, and is never asserted end to end. A gate phase that sets thresholds nothing reads, or a
+progress log that names an arbitrary worker, does not report a weaker signal than intended; it
+reports a confident wrong one, and costs more than having no step at all. When adding a phase, add
+the assertion that it is wired up in the same change.
 
 **The local gate runs on Windows only and does not run the enterprise-hardening cert lane.** Four of
 v0.16.0's blockers were Windows-vs-Linux divergences (shell globbing, dev-absolute paths, a spawn-path
