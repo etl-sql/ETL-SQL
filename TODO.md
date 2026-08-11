@@ -1285,8 +1285,12 @@ absent" take the same branch, and it is always the benign one.
       a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
       equal counts in the wrong order corrupt just as silently.
 
-- [ ] **P0 — `AstSerializer` recurses per operand, so a ~50-term boolean chain kills the process.**
-      **Found 2026-08-11. Nothing to do with spilling** — reproduces at default thresholds.
+- [x] **P0 — `AstSerializer` recurses per operand, so a ~50-term boolean chain kills the process.**
+      **Found and fixed 2026-08-11. Nothing to do with spilling** — reproduced at default thresholds.
+      Fixed in `550ba693`: both the serializer and `Parser.ResolveNamedWindows` now walk expressions
+      on an explicit worklist. `select5.test` runs all 1,436 records in 10s; `ExpressionDepthTests`
+      guards chains to 2,000 terms, both sides of the parser ceiling, and the exact
+      parenthesization the execution-policy hash depends on.
 
       **Exact cause.** `AstSerializer.FormatBinary` → `AstNode.ToSql()` → `Format` recurses once per
       operand of a left-deep `AND` chain, three frames per term and no depth guard. A `WHERE` with
@@ -1301,14 +1305,17 @@ absent" take the same branch, and it is always the benign one.
       with no message, no statement having run, and nothing catchable. Fifty `AND` terms is
       ordinary in generated ETL predicates.
 
-      **Fix:** make the serializer iterative for chained binary operators (accumulate the spine into
-      a list, emit in a loop) rather than recursing; the parser already bounds depth via
-      `MaxRecursiveDepth`, the serializer bounds nothing. A depth guard that throws a clean
-      `ExecutionException` is the fallback if flattening proves invasive, but a guard alone turns a
-      crash into a refusal to run a legitimate script, so prefer flattening.
+      **Why the existing ceiling did not catch it** — worth keeping, because it generalizes: the
+      parser *does* bound expression nesting at 100 and reports a located diagnostic past it. That
+      guard counts nested parentheses, and `a AND b AND c` is parsed by a **loop** that never
+      increments it. Deep nesting was bounded and safe; an arbitrarily long chain went straight past
+      into a serializer with no bound at all. A guard that covers one shape of depth reads as
+      covering both.
 
-      **Regression test:** a script whose `WHERE` has a few hundred `AND` terms must serialize and
-      execute. Cheap, deterministic, and in the engine suite rather than SLT.
+      **Still open from this:** two other tree walks were found by the same test and fixed here, but
+      nothing proves there is not a third. A walk over every `AstNode` visitor asserting each is
+      iterative — or a shared iterative traversal helper they all use — would close the class rather
+      than the instances.
 
       **The instrument was broken, and every earlier conclusion here was drawn through it.** Two
       defects in the corpus harness, both now fixed, invalidated the whole investigation:
