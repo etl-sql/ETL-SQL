@@ -980,28 +980,74 @@ public static class AstSerializer
         return $"{op}{e.Expression.ToSql()}";
     }
 
-    private static string FormatBinary(BinaryExpression e)
+    private static string BinaryOperatorText(TokenType op) => op switch
     {
-        string op = e.Operator switch
+        TokenType.PLUS => "+",
+        TokenType.MINUS => "-",
+        TokenType.STAR => "*",
+        TokenType.SLASH => "/",
+        TokenType.MODULO => "%",
+        TokenType.EQUALS => "=",
+        TokenType.NOT_EQUALS => "<>",
+        TokenType.LESS_THAN => "<",
+        TokenType.LESS_EQUALS => "<=",
+        TokenType.GREATER_THAN => ">",
+        TokenType.GREATER_EQUALS => ">=",
+        TokenType.REGEX_MATCH => "~",
+        TokenType.REGEX_IMATCH => "~*",
+        TokenType.AND => "AND",
+        TokenType.OR => "OR",
+        _ => op.ToString()
+    };
+
+    /// <summary>
+    /// Serializes a binary expression without recursing through its operands.
+    ///
+    /// <para>The obvious implementation — <c>$"({e.Left.ToSql()} {op} {e.Right.ToSql()})"</c> — costs
+    /// three stack frames per term, so a <c>WHERE</c> with roughly fifty conjuncts exhausted the
+    /// stack and killed the process. That is reachable: a fifty-way join writes forty-nine
+    /// predicates, and generated ETL predicates are routinely longer. It was also unsurvivable,
+    /// because every top-level script is serialized in full to hash it for the execution-policy
+    /// snapshot (Evaluator.cs) before a single statement runs, and a stack overflow cannot be
+    /// caught — the process died with no message and nothing executed.</para>
+    ///
+    /// <para>Walking the binary spine on an explicit stack puts chain length on the heap instead.
+    /// Operands that are not themselves binary still go through <see cref="Format(AstNode)"/>, so
+    /// depth now tracks structural nesting (a function wrapping an expression) rather than the
+    /// length of an <c>AND</c> chain. Output is byte-identical to the recursive form: the hash it
+    /// feeds must not change.</para>
+    /// </summary>
+    private static string FormatBinary(BinaryExpression root)
+    {
+        var output = new Stack<string>();
+        var work = new Stack<(AstNode Node, bool Expanded)>();
+        work.Push((root, false));
+
+        while (work.Count > 0)
         {
-            TokenType.PLUS => "+",
-            TokenType.MINUS => "-",
-            TokenType.STAR => "*",
-            TokenType.SLASH => "/",
-            TokenType.MODULO => "%",
-            TokenType.EQUALS => "=",
-            TokenType.NOT_EQUALS => "<>",
-            TokenType.LESS_THAN => "<",
-            TokenType.LESS_EQUALS => "<=",
-            TokenType.GREATER_THAN => ">",
-            TokenType.GREATER_EQUALS => ">=",
-            TokenType.REGEX_MATCH => "~",
-            TokenType.REGEX_IMATCH => "~*",
-            TokenType.AND => "AND",
-            TokenType.OR => "OR",
-            _ => e.Operator.ToString()
-        };
-        return $"({e.Left.ToSql()} {op} {e.Right.ToSql()})";
+            var (node, expanded) = work.Pop();
+
+            if (node is not BinaryExpression binary)
+            {
+                output.Push(node.ToSql());
+                continue;
+            }
+
+            if (!expanded)
+            {
+                // Left is pushed last so it is popped — and so completes — first.
+                work.Push((binary, true));
+                work.Push((binary.Right, false));
+                work.Push((binary.Left, false));
+                continue;
+            }
+
+            var right = output.Pop();
+            var left = output.Pop();
+            output.Push($"({left} {BinaryOperatorText(binary.Operator)} {right})");
+        }
+
+        return output.Pop();
     }
 
     private static string FormatLiteral(LiteralExpression e)

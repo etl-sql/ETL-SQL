@@ -898,82 +898,98 @@ public class Parser : IParser
             };
         }
 
+        // Worklist rather than recursion: this walk descends one frame per operand, so a WHERE
+        // clause with a few dozen conjuncts — a fifty-way join writes forty-nine — overflowed the
+        // stack during parsing, before the statement existed to be rejected. Resolution is
+        // per-node and order-independent, so a stack of pending children is equivalent.
+        var pending = new Stack<Expression>();
+
         void ResolveExpression(Expression? expression)
         {
-            if (expression == null) return;
+            if (expression != null) pending.Push(expression);
 
-            switch (expression)
+            while (pending.Count > 0)
             {
-                case FunctionCallExpression function:
-                    foreach (var argument in function.Arguments) ResolveExpression(argument);
-                    ResolveExpression(function.Filter);
-                    if (function.WithinGroupOrderBy != null)
-                    {
-                        foreach (var order in function.WithinGroupOrderBy) ResolveExpression(order.Expression);
-                    }
-                    if (!string.IsNullOrWhiteSpace(function.WindowName))
-                    {
-                        function.Window = ResolveDefinition(function.WindowName!, function);
-                        function.WindowName = null;
-                    }
-                    else if (function.Window != null)
-                    {
-                        ResolveWindowExpressions(function.Window);
-                        function.Window = ResolveWindowClause(function.Window);
-                    }
-                    break;
-                case UnaryExpression unary:
-                    ResolveExpression(unary.Expression);
-                    break;
-                case BinaryExpression binary:
-                    ResolveExpression(binary.Left);
-                    ResolveExpression(binary.Right);
-                    break;
-                case MemberAccessExpression member:
-                    ResolveExpression(member.Expression);
-                    break;
-                case SubqueryExpression:
-                    break;
-                case ListExpression list:
-                    foreach (var item in list.Items) ResolveExpression(item);
-                    break;
-                case StarExpression star:
-                    foreach (var replace in star.Replace) ResolveExpression(replace.Value);
-                    break;
-                case IsNullExpression isNull:
-                    ResolveExpression(isNull.Expression);
-                    break;
-                case IsDistinctFromExpression distinct:
-                    ResolveExpression(distinct.Left);
-                    ResolveExpression(distinct.Right);
-                    break;
-                case InExpression inExpression:
-                    ResolveExpression(inExpression.Left);
-                    ResolveExpression(inExpression.Right);
-                    break;
-                case BetweenExpression between:
-                    ResolveExpression(between.Left);
-                    ResolveExpression(between.Start);
-                    ResolveExpression(between.End);
-                    break;
-                case LikeExpression like:
-                    ResolveExpression(like.Left);
-                    ResolveExpression(like.Pattern);
-                    ResolveExpression(like.EscapeChar);
-                    break;
-                case CaseExpression caseExpression:
-                    ResolveExpression(caseExpression.InputExpression);
-                    foreach (var when in caseExpression.WhenClauses)
-                    {
-                        ResolveExpression(when.Condition);
-                        ResolveExpression(when.Result);
-                    }
-                    ResolveExpression(caseExpression.ElseResult);
-                    break;
-                case AtTimeZoneExpression atTimeZone:
-                    ResolveExpression(atTimeZone.Left);
-                    ResolveExpression(atTimeZone.TimeZone);
-                    break;
+                var current = pending.Pop();
+
+                void Enqueue(Expression? child)
+                {
+                    if (child != null) pending.Push(child);
+                }
+
+                switch (current)
+                {
+                    case FunctionCallExpression function:
+                        foreach (var argument in function.Arguments) Enqueue(argument);
+                        Enqueue(function.Filter);
+                        if (function.WithinGroupOrderBy != null)
+                        {
+                            foreach (var order in function.WithinGroupOrderBy) Enqueue(order.Expression);
+                        }
+                        if (!string.IsNullOrWhiteSpace(function.WindowName))
+                        {
+                            function.Window = ResolveDefinition(function.WindowName!, function);
+                            function.WindowName = null;
+                        }
+                        else if (function.Window != null)
+                        {
+                            ResolveWindowExpressions(function.Window);
+                            function.Window = ResolveWindowClause(function.Window);
+                        }
+                        break;
+                    case UnaryExpression unary:
+                        Enqueue(unary.Expression);
+                        break;
+                    case BinaryExpression binary:
+                        Enqueue(binary.Left);
+                        Enqueue(binary.Right);
+                        break;
+                    case MemberAccessExpression member:
+                        Enqueue(member.Expression);
+                        break;
+                    case SubqueryExpression:
+                        break;
+                    case ListExpression list:
+                        foreach (var item in list.Items) Enqueue(item);
+                        break;
+                    case StarExpression star:
+                        foreach (var replace in star.Replace) Enqueue(replace.Value);
+                        break;
+                    case IsNullExpression isNull:
+                        Enqueue(isNull.Expression);
+                        break;
+                    case IsDistinctFromExpression distinct:
+                        Enqueue(distinct.Left);
+                        Enqueue(distinct.Right);
+                        break;
+                    case InExpression inExpression:
+                        Enqueue(inExpression.Left);
+                        Enqueue(inExpression.Right);
+                        break;
+                    case BetweenExpression between:
+                        Enqueue(between.Left);
+                        Enqueue(between.Start);
+                        Enqueue(between.End);
+                        break;
+                    case LikeExpression like:
+                        Enqueue(like.Left);
+                        Enqueue(like.Pattern);
+                        Enqueue(like.EscapeChar);
+                        break;
+                    case CaseExpression caseExpression:
+                        Enqueue(caseExpression.InputExpression);
+                        foreach (var when in caseExpression.WhenClauses)
+                        {
+                            Enqueue(when.Condition);
+                            Enqueue(when.Result);
+                        }
+                        Enqueue(caseExpression.ElseResult);
+                        break;
+                    case AtTimeZoneExpression atTimeZone:
+                        Enqueue(atTimeZone.Left);
+                        Enqueue(atTimeZone.TimeZone);
+                        break;
+                }
             }
         }
 
