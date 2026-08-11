@@ -1274,16 +1274,27 @@ absent" take the same branch, and it is always the benign one.
       a warning on mismatch, or an explicit strict mode. Note the count is not really the defect —
       equal counts in the wrong order corrupt just as silently.
 
-- [ ] **The SLT lane aborts under spill thresholds.** With the spill lane's configuration the
-      SqlLogicTests host reports 6 tests passed and then `Test Run Aborted.` — a host crash rather
-      than a test failure, so no assertion names it. Found only because `-ContinueOnFailure` let
-      the lane reach SLT at all; the default stops at the failing engine project first.
+- [ ] **The SLT test host crashes when a temp table crosses its spill threshold.** Under the spill
+      lane the SqlLogicTests host reports 6 tests passed and then `Test Run Aborted.` — a process
+      abort, not a test failure, so nothing names it. Found only because `-ContinueOnFailure` let a
+      run reach SLT at all.
 
-      **Cause not isolated.** The output stops mid-corpus at an `INSERT` around row 25, which
-      matches the lane's `TempTableSpillThresholdRows = 25` — but a direct 40-row INSERT into a
-      temp table at that threshold exits 0 and spills nothing, so that correlation did not hold.
-      Reproduce by running the SLT lane alone under those thresholds and bisecting the corpus.
+      Isolated to **two thresholds, each sufficient on its own**:
+      `Engine__TempTableSpillThresholdRows=25` and `Engine__MaxInMemoryBatches=2`. The other four
+      the lane sets (`BatchSize`, `JoinSpillThreshold`, `ExternalSortChunkSize`,
+      `WindowSpillThreshold`) each leave SLT green, so this is the temp-table in-memory-to-spill
+      transition specifically.
 
+      **It does not reproduce through the CLI.** 35 separate INSERTs into a temp table at
+      `TempTableSpillThresholdRows=25` exits 0 and reports `Disk Spilled 0.01 MB` — the spill fires
+      and nothing crashes. So the trigger needs the test-host environment, not merely the spill.
+      A process abort with no exception is consistent with a stack overflow or a throw on a
+      background thread, neither of which is catchable; check for recursion in the temp-table
+      spill transition and for unawaited work started during it.
+
+      Reproduce: `ETL_SQL_RUN_SLT=1 Engine__TempTableSpillThresholdRows=25 dotnet test
+      tests/ETL-SQL.SqlLogicTests --filter Category=SLT`. Output stops mid-corpus at an `INSERT`,
+      which is where to bisect.
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`
       (number and string), `#GenData.price` (`'HR'` among decimals), and the spill batches. Each
