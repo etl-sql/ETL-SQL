@@ -1161,8 +1161,16 @@ absent" take the same branch, and it is always the benign one.
       `ETL-SQL.Tests`, which resolves configuration through the production composition root and so
       genuinely ran at the lane's thresholds — that is where the P0 was found. The SLT corpus did
       not: `SltRunner` registered no `IConfiguration` and silently used built-in defaults, so the
-      lane's low thresholds never applied to it. Now that they do, the corpus is exercising spill
-      paths for the first time and its results are not comparable to any previous run.
+      lane's low thresholds never applied to it.
+
+      **First genuine low-threshold corpus run: green (2026-08-11).** All 45 files, 4 minutes,
+      0 failures, at `TempTableSpillThresholdRows=25`, `MaxInMemoryBatches=2`, `BatchSize=7`,
+      `JoinSpillThreshold=10`, `ExternalSortChunkSize=10`, `WindowSpillThreshold=10` — including
+      `select3` (3,351 records), `select4` (3,857), and `select5` (1,436). Because SLT verifies
+      actual results against recorded expected values, a green run at these thresholds *is* the
+      configuration-invariance evidence: every query returns the same answer spilled as unspilled.
+      So the SLT half of the lane can gate as soon as the `ETL-SQL.Tests` half is batch-size-agnostic
+      and the release-branch baseline is resolved.
 - [x] **Give the lane a `-ContinueOnFailure` switch.** `Invoke-DotNetTest` exits on the first failing
       project (correct for a gate), so SLT never ran and one pass cannot produce a full triage list.
       Done — `scripts/test-lane.ps1` accumulates `$script:LaneFailures` and defers the exit code.
