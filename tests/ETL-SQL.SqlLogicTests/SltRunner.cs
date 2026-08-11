@@ -32,8 +32,11 @@ namespace ETL_SQL.SqlLogicTests
         private static readonly System.Diagnostics.Process CurrentProcess = System.Diagnostics.Process.GetCurrentProcess();
         private const double MemoryGuardFraction = 0.75;
 
+        private static int _instanceCounter;
+
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
+        private readonly int _instanceId = System.Threading.Interlocked.Increment(ref _instanceCounter);
         private int _queryCount;
 
         public SltRunner(ILogger? logger = null)
@@ -221,9 +224,12 @@ SET TELEMETRY = OFF;";
         {
             get
             {
+                // Runners created without a CurrentFile (CorpusRegressionTests builds several) would
+                // otherwise all share one "unknown" log and overwrite each other -- the same
+                // collision this per-file naming exists to remove.
                 var name = CurrentFile != null
                     ? System.IO.Path.GetFileNameWithoutExtension(CurrentFile)
-                    : "unknown";
+                    : $"unnamed-{_instanceId}";
                 return System.IO.Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, $"slt_progress.{name}.log");
             }
