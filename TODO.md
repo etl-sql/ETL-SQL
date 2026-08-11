@@ -1239,6 +1239,35 @@ absent" take the same branch, and it is always the benign one.
 
 ### Test baseline — pre-existing failures on `release/v0.18.0`
 
+- [ ] **Session save and load disagree about the storage root.** Root cause of the long-standing
+      `SpillEncryptionTests.SpillEncryption_ShouldPersistAcrossSessions` baseline failure, traced
+      2026-08-11 — recorded so the next person does not re-derive it:
+
+      - `SessionStateManager.SaveSession` takes its root from **`evaluator.SessionRoot`**, which
+        callers already set to a session-scoped directory (`<root>/<sessionId>`).
+      - `LoadSession` takes its root from the **manager's** `SessionRoot` and then appends the
+        session id itself, via `GetSessionDirectory` → `<root>/<sessionId>/metadata.db`.
+
+      The store appends the id a second time: `SqliteSessionMetadataStore.cs:38` builds
+      `Path.Combine(resolvedRoot, sessionId, "metadata.db")`. So with `SessionRoot` already
+      session-scoped, a save lands at `<root>/<id>/<id>/metadata.db` while the load looks at
+      `<root>/<id>/metadata.db`. `File.Exists` fails, `LoadSession` returns null, and the caller
+      dereferences it. The symptom was a bare `NullReferenceException` at
+      `Evaluator.LoadSessionState`, naming neither the session nor the path. Confirmed from the new
+      diagnostic, which reported root
+      `...\ETL-SQL-SpillTests\<guid>\3ac953a1` — the session-scoped form.
+
+      **Now reports itself:** `LoadSessionState` rejects a null state with the session id, the root
+      it looked in, and the likely cause. That converts the crash into a diagnosis but does **not**
+      fix the asymmetry — decide which end owns session scoping (most likely: `SaveSession` should
+      use the same `GetSessionDirectory` resolution as `LoadSession` rather than trusting a
+      pre-combined `SessionRoot`), then make both use it. Not attempted here because session
+      persistence has enough callers that the change wants its own verification pass.
+
+      Related silent path in the same file: `SaveSession` **returns without saving** when handed an
+      object that is not an `Evaluator` (`if (evaluatorObj is not Evaluator evaluator) return;`), so
+      a wrong caller gets a successful-looking no-op.
+
 - [ ] **12 tests fail on the release branch itself**, verified by checking out `release/v0.18.0`
       clean (2026-08-10), so they are not regressions from any feature branch and release evidence
       cannot be collected until they are resolved or explicitly accepted:

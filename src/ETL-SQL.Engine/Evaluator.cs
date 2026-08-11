@@ -1405,6 +1405,17 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task LoadSessionState(SessionState state)
     {
+        // LoadSession returns null when it finds no session file, so a root mismatch between save
+        // and load arrives here as a NullReferenceException naming neither the session nor the path
+        // it looked in. Say what actually happened instead.
+        if (state == null)
+        {
+            throw new ExecutionException(
+                $"No saved session state was found to load (session '{SessionId ?? "<unset>"}', root "
+                + $"'{SessionRoot}'). SessionStateManager.LoadSession returns null when the session "
+                + "file is absent; check that the root used to save matches the root being read.");
+        }
+
         _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
         DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
 
