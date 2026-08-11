@@ -1291,11 +1291,18 @@ absent" take the same branch, and it is always the benign one.
               -> PerformNestedLoopJoinStream (828)   // and round again
       ```
 
-      `StreamSingleJoin` buffers a peek, then rebuilds the stream as `PrependRows(buffered,
-      remaining)` wrapped by `ContinueStream`. Every rebuffering event adds another wrapper, and
-      because each `MoveNextAsync` walks the whole chain, stack depth grows with the number of
-      rebuffering events rather than staying constant. Enough of them and the process dies.
+      `StreamSingleJoin` peeks one left row to read the schema, then rebuilds its input as
+      `PrependRows(firstLeft, ContinueStream(leftEnumerator))` (JoinEngine.cs:496) — one wrapper
+      pair per invocation, not per row.
 
+      **What drives the depth is not yet pinned, and the first guess was wrong.** Written up
+      earlier as "a layer per rebuffering event"; the call site shows `PrependRows` runs once per
+      `StreamSingleJoin`, so that cannot be it. The cycle in the dump returns to
+      `PerformNestedLoopJoinStream` through `PrependRows`, so the chain is re-entering the join
+      stream — candidates are the depth of a join chain (each join wrapping the previous join's
+      output) and nested-loop re-enumerating a left side that is itself a join stream. Establish
+      which before changing anything: the two obvious readings imply different fixes, and the
+      visible dump frames are truncated so frame counts there prove nothing.
       **Not a test-only fault.** Low spill thresholds make rebuffering frequent, which is why the
       spill lane finds it in seconds, but nothing bounds the chain at the defaults either — a join
       over enough data reaches the same place. It presents as a process death with no error, which
