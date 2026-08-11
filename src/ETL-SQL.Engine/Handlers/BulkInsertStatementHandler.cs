@@ -78,19 +78,40 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
 
         if (options.TryGetValue("FIELDTERMINATOR", out var ft)) ffOptions["DELIMITER"] = Unescape(ft);
         if (options.TryGetValue("ROWTERMINATOR", out var rt)) ffOptions["ROW_DELIMITER"] = Unescape(rt);
-        if (options.TryGetValue("FIRSTROW", out var fr) && int.TryParse(fr, out var firstRow))
+
+        int firstRow = 1;
+        if (options.TryGetValue("FIRSTROW", out var fr) && int.TryParse(fr, out var parsedFirstRow))
+            firstRow = parsedFirstRow;
+
+        // A header is present when the caller skipped a row (the T-SQL idiom, FIRSTROW = 2) or said
+        // so outright. Knowing that is what lets the load map by column name below; T-SQL cannot,
+        // because it never reads the header, and needs a format file to map by anything but ordinal.
+        bool headerPresent = firstRow >= 2
+            || (options.TryGetValue("HEADER", out var hdr) && IsTrue(hdr));
+
+        if (headerPresent)
         {
+            // Let the reader consume row 1 as names rather than discarding it positionally, so the
+            // names reach the mapping step. FIRSTROW counts the header, so anything beyond row 2 is
+            // additional data to skip.
+            ffOptions["HEADER"] = "TRUE";
+            ffOptions["START_AT"] = Math.Max(0, firstRow - 2).ToString();
+        }
+        else
+        {
+            ffOptions["HEADER"] = "FALSE";
             ffOptions["START_AT"] = Math.Max(0, firstRow - 1).ToString();
         }
-
-        // For BULK INSERT, we handle headers manually via positional mapping or FIRSTROW.
-        // Setting HEADER to FALSE prevents FlatFileDataSource from skipping an extra row.
-        ffOptions["HEADER"] = "FALSE";
 
         foreach (var opt in options)
         {
             if (!ffOptions.ContainsKey(opt.Key)) ffOptions[opt.Key] = opt.Value;
         }
+
+        // MAPPING = 'POSITION' forces T-SQL's ordinal pairing for scripts ported from SQL Server,
+        // where the header's names are data rather than metadata.
+        bool forcePositional = options.TryGetValue("MAPPING", out var mappingMode)
+            && mappingMode.Trim().Equals("POSITION", StringComparison.OrdinalIgnoreCase);
 
         // 4. Create Source via ConnectorRegistry to avoid circular dependency
         var connector = _connectorRegistry.GetConnector("FLATFILE");
@@ -126,7 +147,10 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
                 + "No rows were loaded.");
         }
 
-        var source = connector.CreateDataSource(context, resolvedPath, ffOptions, destColumnDefs);
+        // The template schema names columns for a header-less file. When the file has its own header
+        // those names are the ones the mapping needs, so the template must not stand in for them.
+        var source = connector.CreateDataSource(
+            context, resolvedPath, ffOptions, headerPresent ? null : destColumnDefs);
 
         try
         {
@@ -160,14 +184,35 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
                 var mappedBatch = new DataTable();
                 mappedBatch.SetColumns(destColumns);
 
+                // Resolve the pairing once per batch, not per row. When the file carries a header and
+                // every target column matches one of its names, pair by name: positional pairing is
+                // what lets a file whose columns are merely in a different order load transposed,
+                // with no error whenever the types happen to be compatible. Any target left
+                // unmatched means the header does not describe this table, so fall back to ordinal
+                // rather than half-mapping — and say so, because a silent fallback is the same
+                // defect wearing a different hat.
+                var pairing = ResolvePairing(
+                    mapping, batch.ColumnNames, headerPresent && !forcePositional, out var pairedByName);
+
+                if (batchIndex == 1)
+                {
+                    if (pairedByName)
+                        _logger.Debug("Bulk insert into '{Target}' paired {Count} columns by header name.",
+                            stmt.TargetTable.TableName, pairing.Count);
+                    else if (headerPresent && !forcePositional)
+                        _logger.Warning(
+                            "Bulk insert into '{Target}': the file's header does not name every target column, "
+                            + "so columns were paired by position instead. Header: [{Header}]; target: [{Target2}]. "
+                            + "Positional pairing loads a reordered file transposed without error.",
+                            stmt.TargetTable.TableName, string.Join(", ", batch.ColumnNames), string.Join(", ", mapping));
+                }
+
                 foreach (var sourceRow in batch.Rows)
                 {
                     var mappedRow = new Row();
-                    // Source data is always positional in the flat file.
-                    // We map the i-th source column to the i-th entry in our 'mapping' list.
-                    for (int i = 0; i < mapping.Count && i < batch.ColumnNames.Count; i++)
+                    foreach (var (target, sourceColumn) in pairing)
                     {
-                        mappedRow[mapping[i]] = sourceRow[batch.ColumnNames[i]];
+                        mappedRow[target] = NullIfBlank(sourceRow[sourceColumn]);
                     }
                     await mappedBatch.AddRowAsync(mappedRow);
                 }
@@ -230,6 +275,51 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
             await source.DisposeAsync();
         }
     }
+
+    private static bool IsTrue(string value) =>
+        value.Trim() is var v
+        && (v.Equals("ON", StringComparison.OrdinalIgnoreCase)
+            || v.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
+            || v.Equals("1", StringComparison.Ordinal)
+            || v.Equals("YES", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Pairs each target column with the source column it reads from.
+    ///
+    /// <para>Name pairing is used only when every target column is named by the header, so the
+    /// choice is all-or-nothing: a partial match means the header describes a different table, and
+    /// filling some columns by name and the rest by position would be worse than either.</para>
+    /// </summary>
+    private static List<(string Target, string Source)> ResolvePairing(
+        IReadOnlyList<string> targets, IReadOnlyList<string> sourceColumns, bool preferNames, out bool pairedByName)
+    {
+        pairedByName = false;
+
+        if (preferNames)
+        {
+            var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var source in sourceColumns) byName.TryAdd(source, source);
+
+            if (targets.All(t => byName.ContainsKey(t)))
+            {
+                pairedByName = true;
+                return targets.Select(t => (t, byName[t])).ToList();
+            }
+        }
+
+        var positional = new List<(string, string)>();
+        for (int i = 0; i < targets.Count && i < sourceColumns.Count; i++)
+            positional.Add((targets[i], sourceColumns[i]));
+        return positional;
+    }
+
+    /// <summary>
+    /// An absent value is NULL, not an empty string. This is T-SQL's <c>KEEPNULLS</c> promoted from
+    /// opt-in to default: a blank field in an extract means "no value", and leaving it as <c>""</c>
+    /// makes it invisible to <c>IS NULL</c> while still failing conversion to any numeric column.
+    /// </summary>
+    private static object? NullIfBlank(object? value) =>
+        value is string s && string.IsNullOrWhiteSpace(s) ? null : value;
 
     private async Task<(int written, int errors)> WriteBisect(
         IReadOnlyList<Row> rows, IReadOnlyList<string> destColumns, IDataSource destination,

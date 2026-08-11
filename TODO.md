@@ -1415,7 +1415,18 @@ absent" take the same branch, and it is always the benign one.
       `yield break` is in the shared read path, so it probably is; only the `BULK INSERT` boundary
       was fixed.
 
-- [ ] **DECIDED 2026-08-11 (owner's call) — implement both, then reconcile with T-SQL.**
+- [x] **DECIDED 2026-08-11 (owner's call) — IMPLEMENTED for `BULK INSERT` the same day.**
+      `BulkInsertStatementHandler` now pairs by header name when a header is present and every
+      target column is named by it, falling back to positional **with a warning** when the header
+      does not describe the table (a silent fallback would be the same defect wearing a different
+      hat). `MAPPING = 'POSITION'` forces T-SQL ordinal pairing for ported scripts. Blank, empty and
+      whitespace-only fields become NULL regardless of target type. `bulk_insert.etest` pins all of
+      it, including the reordered-file case that previously loaded transposed without error.
+
+      **Still to do:** the read side. A flat file *read back* still yields `''` for an empty field,
+      so `flatfile_roundtrip.etest` still records NULL as lost on the round trip. The two ends are
+      now inconsistent in the other direction, which is worse than before for anyone comparing them
+      — finish this before the next release.
       1. **Header mapping is by name.** When the source file has a header, map its columns to the
          target by name rather than by position.
       2. **Blank or empty is NULL**, on both the load and the read-back side.

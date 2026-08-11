@@ -62,9 +62,14 @@ SELECT id FROM #staff_text ORDER BY id;
 3
 ID
 
-# Mapping is positional, also matching T-SQL — the header's names are never consulted,
-# so a file whose columns are in a different order than the target loads transposed.
-# Types catch it only when they happen to disagree; all-text targets accept anything.
+# When the file has a header, columns pair by NAME. A file whose columns are in a
+# different order than the target therefore lands correctly, where positional pairing
+# would have loaded it transposed with no error whenever the types were compatible.
+#
+# This diverges from T-SQL, which pairs strictly by ordinal and needs a format file to
+# do anything else. It matches SqlBulkCopyColumnMapping, which pairs by name or ordinal
+# — the same vendor's convention one layer up, and the right one for a tool whose input
+# usually has a header.
 
 file wrong_order.csv
 Dept,Name,ID
@@ -72,13 +77,28 @@ Engineering,Ann,1
 ----
 
 statement ok
-CREATE TABLE #transposed (id VARCHAR(20), name VARCHAR(50), dept VARCHAR(50));
+CREATE TABLE #reordered (id VARCHAR(20), name VARCHAR(50), dept VARCHAR(50));
 
 statement ok
-BULK INSERT #transposed FROM '${dir}\wrong_order.csv' WITH (FIELDTERMINATOR = ',', FIRSTROW = 2);
+BULK INSERT #reordered FROM '${dir}\wrong_order.csv' WITH (FIELDTERMINATOR = ',', FIRSTROW = 2);
 
 query
-SELECT id, name, dept FROM #transposed;
+SELECT id, name, dept FROM #reordered;
+----
+1|Ann|Engineering
+
+# MAPPING = 'POSITION' restores T-SQL's ordinal pairing for ported scripts. Same file,
+# same target, transposed result — which is what positional pairing means here.
+
+statement ok
+CREATE TABLE #forced_positional (id VARCHAR(20), name VARCHAR(50), dept VARCHAR(50));
+
+statement ok
+BULK INSERT #forced_positional FROM '${dir}\wrong_order.csv'
+WITH (FIELDTERMINATOR = ',', FIRSTROW = 2, MAPPING = 'POSITION');
+
+query
+SELECT id, name, dept FROM #forced_positional;
 ----
 Engineering|Ann|1
 
@@ -136,12 +156,11 @@ SELECT id, name, dept FROM #piped ORDER BY id;
 1|Ann|Engineering
 2|Bob|Operations
 
-# An empty field becomes an empty string in a text column — not NULL, so IS NULL does
-# not find it. Against a numeric column the same two commas are a hard error rather
-# than NULL, which is loud (the safe direction) but is not what most ETL tools do with
-# an empty numeric field, and is worth deciding rather than inheriting. Note the pair
-# below is the same file loaded twice: the bytes are identical and the outcomes are
-# empty string, and refusal.
+# A blank or empty field is NULL, whatever the target type. This is T-SQL's KEEPNULLS
+# promoted from opt-in to default: a blank field in an extract means "no value", and
+# leaving it as '' both hides it from IS NULL and still fails conversion to any numeric
+# column. Previously the same two commas produced an empty string against text and a
+# hard error against a number — identical bytes, two different outcomes.
 
 file blanks.csv
 1,,Engineering
@@ -156,12 +175,12 @@ BULK INSERT #blanks FROM '${dir}\blanks.csv' WITH (FIELDTERMINATOR = ',');
 query
 SELECT id, name, dept FROM #blanks;
 ----
-1||Engineering
+1|NULL|Engineering
 
 query
 SELECT COUNT(*) FROM #blanks WHERE name IS NULL;
 ----
-0
+1
 
 file blank_number.csv
 1,,Engineering
@@ -170,8 +189,31 @@ file blank_number.csv
 statement ok
 CREATE TABLE #blank_number (id INT, score INT, dept VARCHAR(50));
 
-statement error cannot be converted to target type INT
+statement ok
 BULK INSERT #blank_number FROM '${dir}\blank_number.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT id, score, dept FROM #blank_number;
+----
+1|NULL|Engineering
+
+# Whitespace-only counts as blank too: a padded export must not produce a value that is
+# neither NULL nor meaningfully present.
+
+file padded.csv
+1,   ,Engineering
+----
+
+statement ok
+CREATE TABLE #padded (id INT, score INT, dept VARCHAR(50));
+
+statement ok
+BULK INSERT #padded FROM '${dir}\padded.csv' WITH (FIELDTERMINATOR = ',');
+
+query
+SELECT COUNT(*) FROM #padded WHERE score IS NULL;
+----
+1
 
 # A missing file is an error, not an empty load.
 
