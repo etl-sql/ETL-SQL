@@ -1295,6 +1295,30 @@ absent" take the same branch, and it is always the benign one.
       object that is not an `Evaluator` (`if (evaluatorObj is not Evaluator evaluator) return;`), so
       a wrong caller gets a successful-looking no-op.
 
+- [ ] **P1 — a full engine-lane run exhausted machine memory and crashed the test host (2026-08-11).**
+      The run aborted with `Test host process crashed` after 4,607 of 6,109 tests, so ~1,500 never
+      ran. Two separate problems, one fixed and one open:
+
+      **Fixed — nothing bounded the test host, and orphans were not reaped.** A `testhost` was still
+      holding **6.5 GB** after the run had aborted; killing it returned free RAM from 7.2 GB to
+      13.7 GB on a 31 GB machine. Gates added: `System.GC.HeapHardLimit` = 12 GB via
+      `tests/ETL-SQL.Tests/runtimeconfig.template.json`, which reaches the generated
+      `runtimeconfig.json` and therefore applies to a plain `dotnet test`, not only the lane; plus
+      `-MemoryLimitGB` (default 8, `0` to disable) on `scripts/test-lane.ps1` for lanes that shell
+      out. Verified the limit is genuinely enforced — at a pathological 16 MB the host thrashes
+      rather than passing, which is the proof it is not being ignored. 221 tests pass under the
+      12 GB ceiling.
+
+      **Open — the cause of the memory growth itself is not yet identified.** Do not assume it is
+      the spill-scoping change just because that was the most recent commit: the concurrent
+      session's working-tree files changed between the completing run and the crashing one, so the
+      two runs differ by more than one commit. Attribute it before reverting anything.
+
+      **Next step:** re-run with `--blame-crash` under the new ceiling, which names the test that
+      crashed, exactly as it did for the SLT stack overflow. The suite has no per-test progress
+      breadcrumb of its own — the same instrument gap that cost days on that defect — so consider
+      adding one if `--blame-crash` proves insufficient.
+
 - [ ] **12 tests fail on the release branch itself**, verified by checking out `release/v0.18.0`
       clean (2026-08-10), so they are not regressions from any feature branch and release evidence
       cannot be collected until they are resolved or explicitly accepted:

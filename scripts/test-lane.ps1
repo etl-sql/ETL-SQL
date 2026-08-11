@@ -17,10 +17,28 @@ param(
     # first failure and nothing further; triage wants the whole picture in one pass, which the
     # default cannot give -- the spill lane stops before SLT runs, so one run never lists
     # everything that lane broke.
-    [switch]$ContinueOnFailure
+    [switch]$ContinueOnFailure,
+
+    # Hard ceiling on the test host's managed heap, in GB. A runaway test should fail its own run,
+    # not take the developer's machine down with it -- on 2026-08-11 a full engine lane consumed all
+    # available RAM and crashed the host, and nothing stopped it or said what it was doing. The
+    # runtime enforces this itself via DOTNET_GCHeapHardLimit, so an allocation past the ceiling
+    # raises OutOfMemoryException inside the run and names the test, instead of the OS thrashing.
+    #
+    # Set to 0 to disable (for a deliberate scale run that legitimately needs more).
+    [int]$MemoryLimitGB = 8
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($MemoryLimitGB -gt 0) {
+    # DOTNET_GCHeapHardLimit is a hex byte count, no 0x prefix.
+    $env:DOTNET_GCHeapHardLimit = ([int64]$MemoryLimitGB * 1GB).ToString("X")
+    Write-Host "Memory ceiling: ${MemoryLimitGB}GB (DOTNET_GCHeapHardLimit=0x$($env:DOTNET_GCHeapHardLimit))" -ForegroundColor DarkGray
+} else {
+    $env:DOTNET_GCHeapHardLimit = $null
+    Write-Host "Memory ceiling: disabled" -ForegroundColor Yellow
+}
 
 $script:LaneFailures = @()
 $script:LaneExitCode = 0
