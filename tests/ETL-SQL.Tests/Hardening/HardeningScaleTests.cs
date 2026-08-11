@@ -52,7 +52,8 @@ namespace ETL_SQL.Tests.Hardening
             await ev.Connections["#T2"].WriteBatches(AsyncEnumerable.ToAsyncEnumerable((IEnumerable<DataTable>)new[] { dt2 }));
 
             // 3. Perform a JOIN that should spill to disk
-            var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT t1.id, t2.score FROM #t1 AS t1 JOIN #t2 AS t2 ON t1.id = t2.id ORDER BY t1.id;").Statements[0]).FirstAsync();
+            var res = await TestHelpers.ReadAllRows(
+                ev.ExecuteQuery(TestHelpers.Parse("SELECT t1.id, t2.score FROM #t1 AS t1 JOIN #t2 AS t2 ON t1.id = t2.id ORDER BY t1.id;").Statements[0]));
 
             Assert.Equal(10000, res.Rows.Count);
             Assert.Equal(1, Convert.ToInt32(res.Rows[0][0]));
@@ -82,7 +83,8 @@ namespace ETL_SQL.Tests.Hardening
             }
             await ev.Connections["#T"].WriteBatches(AsyncEnumerable.ToAsyncEnumerable((IEnumerable<DataTable>)new[] { dt }));
 
-            var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT grp, SUM(val) AS total FROM #t GROUP BY grp ORDER BY grp;").Statements[0]).FirstAsync();
+            var res = await TestHelpers.ReadAllRows(
+                ev.ExecuteQuery(TestHelpers.Parse("SELECT grp, SUM(val) AS total FROM #t GROUP BY grp ORDER BY grp;").Statements[0]));
 
             Assert.Equal(10, res.Rows.Count);
             for (int j = 0; j < 10; j++)

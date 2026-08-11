@@ -23,6 +23,29 @@ namespace ETL_SQL.Tests.Core
             await eval.Evaluate(Parse(sql));
         }
 
+        /// <summary>
+        /// Drains every batch of a query result into one table.
+        ///
+        /// <para>Use this instead of <c>.FirstAsync()</c> whenever a test asserts on a row count or
+        /// on "all the rows". <c>FirstAsync</c> takes the <b>first batch</b>, which equals the whole
+        /// result only while the result is smaller than <c>Engine:BatchSize</c> — a configuration
+        /// value, not a property of the engine. Two scale tests asserted 10 and 10,000 rows that way
+        /// and so had never checked anything across a batch boundary; the second expected exactly
+        /// 10,000, which *is* the default batch size, and passed on that coincidence.</para>
+        /// </summary>
+        public static async Task<DataTable> ReadAllRows(IAsyncEnumerable<DataTable> batches)
+        {
+            DataTable? combined = null;
+            await foreach (var batch in batches)
+            {
+                combined ??= new DataTable();
+                if (combined.ColumnNames.Count == 0 && batch.ColumnNames.Count > 0)
+                    combined.SetColumns(batch.ColumnNames);
+                foreach (var row in batch.Rows) combined.Rows.Add(row);
+            }
+            return combined ?? new DataTable();
+        }
+
         public static void AssertRowsMatch(DataTable result, params object[][] expected)
         {
             Assert.Equal(expected.Length, result.Rows.Count);

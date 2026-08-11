@@ -1110,8 +1110,13 @@ absent" take the same branch, and it is always the benign one.
       milliseconds, instead of relying on an exception thrown by the spill writer on data large
       enough to spill.
 - [ ] **Make the corpus batch-size-agnostic so the spill lane can become a gate.** Its first run:
-      5,971 tests, 8 failures, 6 of them caused by the lane — and **none of the six was a product
-      defect**. They are tests silently coupled to default thresholds:
+      5,971 tests, 8 failures, 6 of them caused by the lane. **One of the six is a real P0
+      correctness defect** — bucket-wide window values under `PARTITION BY`, recorded in Bugs —
+      found within an hour of the lane existing, which is the whole argument for it. The first read
+      of that run called all six threshold-coupled tests; that was wrong, and it was wrong in the
+      direction of dismissing a defect, so read the failure before classifying it.
+
+      The rest are tests silently coupled to default thresholds:
 
       - `Scale_Aggregate_100kRows_CorrectResults` and `Scale_Join_SpillToDisk_CorrectResults`
         (`HardeningScaleTests.cs:85`) call `.FirstAsync()` and assert on the **first batch**, not the
@@ -1160,6 +1165,34 @@ absent" take the same branch, and it is always the benign one.
       Only three of the sixteen were stale syntax. The rest split into samples the runner did not
       know how to invoke (portal-mode, or a template needing `--var`) and **five genuine engine
       defects**, listed under the second cluster below. Two follow-ups it raised are their own items:
+
+- [ ] **P0 — `PARTITION BY` returns bucket-wide window values once a partition spills.**
+      `ExternalWindowEngine.ProcessBucketPartitionReplaySpill` computes **one** set of aggregate
+      values for an entire hash bucket and then writes them onto every row in it:
+
+      ```csharp
+      var results = await TryScanPartitionReplayBatches(name, group);  // one dictionary per bucket
+      await foreach (var row in ReadPartitionStream(name))
+          foreach (var (key, value) in results) row[key] = value;      // same value on every row
+      ```
+
+      That is correct only if a bucket holds exactly one logical partition. Buckets are hash
+      partitions, so with more distinct partition keys than buckets — the normal case for a
+      high-cardinality `PARTITION BY` — one bucket holds many partitions and each row receives the
+      **bucket's** aggregate instead of its own.
+
+      Reached whenever a bucket exceeds `WindowSpillThreshold` (default 10,000 rows) and the
+      functions are partition-aggregate compatible: `COUNT`/`SUM`/`MIN`/`MAX`/`AVG` with no
+      `ORDER BY` and no frame. So `SELECT COUNT(*) OVER (PARTITION BY customer_id)` over a large
+      table returns **silently wrong numbers** — no error, no warning.
+
+      The sibling branch `ProcessBucketDeepSpill` shows the correct shape: it sorts by the partition
+      keys and resets its state at each boundary. This branch needs the same treatment, or must
+      decline when a bucket contains more than one partition key.
+
+      Found by the spill lane, not by a test — `ExternalWindowEngine_PartitionSampleIncreasesFanOutWithoutLosingRows`
+      asserts `COUNT(*) OVER (PARTITION BY Grp)` is 1 for 4,096 unique groups and returns 249 under a
+      low threshold. It passes at the default only because the buckets stay under 10,000 rows.
 
 - [ ] **A heterogeneous column cannot be persisted, and says so far from the cause.** Three of this
       session's defects were one column holding more than one CLR type — `eng.variables.value`

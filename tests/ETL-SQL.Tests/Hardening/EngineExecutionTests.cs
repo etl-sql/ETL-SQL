@@ -50,6 +50,10 @@ namespace ETL_SQL.Tests.Hardening
         public async Task JoinEngine_StreamingUnqualifiedEquality_UsesHashJoin()
         {
             var e = NewEvaluator();
+            // Pinned, not inherited: this asserts the in-memory hash join is *chosen*, so it must
+            // not depend on the ambient threshold. Under a low one the same 64 rows go external and
+            // the assertion fails for a reason unrelated to the behaviour under test.
+            e.JoinSpillThreshold = 100_000;
             var logger = new CapturingLogger();
             var engine = new JoinEngine(e, logger);
 
