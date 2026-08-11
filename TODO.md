@@ -1435,12 +1435,34 @@ absent" take the same branch, and it is always the benign one.
       instead of the column's default, so NULL-for-empty is a supported T-SQL behaviour — it is just
       opt-in there and would be the default here.
 
-      **Verify both claims against current Microsoft documentation before writing code** — they are
-      stated here from knowledge, not from a checked source, and the whole point of this item is
-      parity. Then: update `tests/engine_corpus/bulk_insert.etest` (which currently pins the
-      *old* behaviour — empty text field becomes `''`, empty numeric field is a hard error) and
+      **Checked against Microsoft Learn 2026-08-11 — both claims hold, with one useful nuance:**
+      - T-SQL `BULK INSERT` maps **implicitly by ordinal position**; name-based mapping requires a
+        **format file** (non-XML or XML), also used by `bcp` and `OPENROWSET(BULK ...)`. Confirmed.
+      - **But name-based mapping is an established Microsoft pattern one layer up:**
+        `SqlBulkCopyColumnMapping` lets you map source to target *by name or by ordinal*, and when
+        the mapping collection is empty it falls back to ordinal. So decision (1) matches the
+        **.NET bulk-copy API**, not the T-SQL statement. That is a much better precedent to cite
+        than "we diverge from SQL Server": we are choosing the API-layer convention over the
+        statement-layer one, which is defensible in a tool where the file usually *has* a header.
+      - `KEEPNULLS` specifies that empty fields "retain a null value ... instead of having any
+        default values for the columns inserted" — so decision (2) is exactly T-SQL's `KEEPNULLS`
+        behaviour, promoted from opt-in to default. Note it governs **default-vs-NULL**, not
+        conversion: our current hard error on an empty numeric field is *stricter* than SQL Server
+        with or without `KEEPNULLS`, so this change moves toward parity rather than away.
+
+      Suggested wording for the divergence note in user docs: mapping follows the header when one is
+      present (as `SqlBulkCopy` does), with an option to force positional mapping for scripts ported
+      from T-SQL.
+
+      Then: update `tests/engine_corpus/bulk_insert.etest` (which currently pins the *old*
+      behaviour — empty text field becomes `''`, empty numeric field is a hard error) and
       `flatfile_roundtrip.etest` (NULL currently returns as `''`), and reconcile with
       `TestBulkInsert_EmptyFieldsInSource_MappedAsNull`.
+
+      Sources: [BULK INSERT (T-SQL)](https://learn.microsoft.com/en-us/sql/t-sql/statements/bulk-insert-transact-sql?view=sql-server-ver17),
+      [Keep Nulls or Use Default Values During Bulk Import](https://learn.microsoft.com/en-us/sql/relational-databases/import-export/keep-nulls-or-use-default-values-during-bulk-import-sql-server?view=sql-server-ver17),
+      [Map Table Columns to Data-File Fields with a Format File](https://learn.microsoft.com/en-us/sql/relational-databases/import-export/use-a-format-file-to-map-table-columns-to-data-file-fields-sql-server?view=sql-server-ver16),
+      [SqlBulkCopyColumnMapping](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlclient.sqlbulkcopycolumnmapping?view=sqlclient-dotnet-standard-5.2).
 
 - [ ] **NULL does not survive a flat-file round trip.** Writing a table with a NULL to CSV and
       reading it back yields an empty string, so `IS NULL` finds nothing afterwards — verified in
