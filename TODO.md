@@ -1023,7 +1023,7 @@ raw `CMD` connector or arbitrary shell execution.
 - [x] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
       fully validated staged output. Replacement sandboxes reauthorize on resume; they never serialize a
       process, handle, live connection, resolved secret, or reusable capability.
-- [ ] Introduce side-effecting action tools only after a durable operation ledger and explicit
+- [x] Introduce side-effecting action tools only after a durable operation ledger and explicit
       idempotency/reconciliation contract exist. Ambiguous external effects must not be retried as if
       process exit proved the outcome.
 - [ ] Provide tenant-admin catalog/binding/grant workflows with platform-policy revocation but no implicit

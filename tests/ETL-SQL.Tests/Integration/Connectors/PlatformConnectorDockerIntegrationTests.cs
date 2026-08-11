@@ -191,6 +191,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .WithPortBinding(ServicePort, true)
                 .WithEnvironment("ASPNETCORE_URLS", $"http://+:{ServicePort}")
                 .WithEnvironment("Orchestrator__ApiKey", ApiKey)
+                .WithEnvironment("Orchestrator__RequireFederatedIdentity", "false")
+                .WithEnvironment("Orchestrator__IdentitySigningSecret", "docker-orchestrator-smoke-key-32bytes")
                 .WithEnvironment("Orchestrator__DatabasePath", "/app/data/etlsql.db")
                 .WithEnvironment("Orchestrator__ScriptRoot", "/app/Reports")
                 .WithEnvironment("Jobs__UseProcessSpawning", "true")

@@ -148,8 +148,26 @@ public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
 
         using var process = new Process { StartInfo = startInfo };
         
+        var operationId = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}";
+        
+        if (context.Ledger != null && stmt.TargetTable == null)
+        {
+            var existingOp = await context.Ledger.GetStateAsync(operationId);
+            if (existingOp?.Status == ETL_SQL.Core.Execution.OperationStatus.Completed)
+            {
+                _logger.Info("Tool '{ToolAlias}' already completed successfully in a previous run (Idempotency Key: {OpId}). Skipping.", stmt.ToolAlias, operationId);
+                return;
+            }
+            
+            await context.Ledger.RecordStartAsync(operationId, "ToolExecution", stmt.ToolAlias);
+        }
+
         try
         {
+            if (context.Ledger != null && stmt.TargetTable == null)
+            {
+                startInfo.EnvironmentVariables["ETLSQL_IDEMPOTENCY_KEY"] = operationId;
+            }
             process.Start();
         }
         catch (Exception ex)
@@ -209,6 +227,11 @@ public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
 
         if (process.ExitCode != 0)
         {
+            if (context.Ledger != null && stmt.TargetTable == null)
+            {
+                await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, errorOutput.ToString());
+            }
+
             var errStr = errorOutput.ToString();
             var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
             var effective = context.ExecutionIdentity?.EffectiveUser ?? context.ExecutionPolicy?.Actor ?? actor;
@@ -230,6 +253,11 @@ public class ExecuteToolStatementHandler(ILogger logger) : IStatementHandler
             });
 
             throw new ExecutionException($"Tool '{stmt.ToolAlias}' failed with exit code {process.ExitCode}. Error: {errStr}", null, stmt.Line, stmt.Column);
+        }
+        
+        if (context.Ledger != null && stmt.TargetTable == null)
+        {
+            await context.Ledger.RecordCompletionAsync(operationId, process.ExitCode, null);
         }
 
         if (stmt.TargetTable != null && stagedOutput != null)

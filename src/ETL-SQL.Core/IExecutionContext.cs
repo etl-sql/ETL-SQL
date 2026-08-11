@@ -500,6 +500,7 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
 
     /// <summary>Manager for session persistence and key derivation.</summary>
     ETL_SQL.Core.Execution.ISessionStateManager SessionStateManager { get; }
+    ETL_SQL.Core.Execution.IOperationLedger? Ledger { get; }
 
     void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1);
     IDisposable EnterRecursiveScope();

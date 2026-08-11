@@ -108,6 +108,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private Action<string, string?, ConsoleColor>? _onMessageHandler;
 
     public ISpillStore SpillStore => _spillStore;
+    public ETL_SQL.Core.Execution.IOperationLedger? Ledger { get; set; }
 
     public QueryCompiler QueryCompiler => _registry.QueryCompiler;
     public ExpressionEvaluator ExpressionEvaluator => _registry.ExpressionEvaluator;
@@ -574,6 +575,12 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _procedureExecutor = _registry.ProcedureExecutor;
         _constraintValidator = new DataConstraintValidator(_expressionEvaluator, _connections);
         _spillCoordinator = new EvaluatorSpillCoordinator(this, _logger);
+        
+        var ledgerFactory = _serviceProvider?.GetService(typeof(ETL_SQL.Core.Execution.IOperationLedgerFactory)) as ETL_SQL.Core.Execution.IOperationLedgerFactory;
+        if (ledgerFactory != null)
+        {
+            Ledger = ledgerFactory.Create(SessionRoot, SessionId ?? "temp");
+        }
 
         // Link Telemetry to registry components if needed, or initialized via registry.Initialize
         Telemetry.IsProfiling = _options.IsProfiling;

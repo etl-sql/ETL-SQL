@@ -59,6 +59,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
 
     public ILogger Logger { get; } = new ConsoleLogger();
     public SecurityService SecurityService { get; }
+    public ETL_SQL.Core.Execution.IOperationLedger? Ledger => null;
     public ILineageTracker LineageTracker => throw new NotSupportedException();
     public IDockerManager DockerManager => throw new NotSupportedException();
     public IFunctionRegistry FunctionRegistry => throw new NotSupportedException();
