@@ -1087,6 +1087,22 @@ contract and explicitly deferred reusable-subreport boundary remain in
       composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
       their targeted lanes.
 
+### Triage rule — a wrong answer outranks a crash
+
+Standing rule for this ledger, set 2026-08-10. **A defect that returns a wrong answer is more
+serious than one that fails**, and is filed at least P0 regardless of how narrow the trigger looks.
+A crash is self-reporting: someone sees it, and nothing downstream consumes it. A wrong number is
+consumed — written to a table, put in a report, acted on — and there is no moment at which anyone
+learns it was wrong.
+
+This also settles fix trade-offs: **never trade a wrong answer for a crash**. The first attempt at
+the window partition-spill P0 did exactly that — it returned correct results by declining a spill
+path, which would have made large partitioned queries exhaust memory instead. Correct-but-crashing
+is not a fix, it is a different defect.
+
+When one is found: file it as P0 with a reproducer that fails on the *behaviour*, not on a plan or
+threshold choice, so it cannot be mistaken for a configuration artifact later.
+
 ### Testing — reachability and silent-pass coverage
 
 Opened 2026-08-10 after five defects in one session shared a shape the suite cannot see. Diagnosis
