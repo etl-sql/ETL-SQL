@@ -1285,13 +1285,24 @@ absent" take the same branch, and it is always the benign one.
       `WindowSpillThreshold`) each leave SLT green, so this is the temp-table in-memory-to-spill
       transition specifically.
 
-      **It does not reproduce through the CLI.** 35 separate INSERTs into a temp table at
-      `TempTableSpillThresholdRows=25` exits 0 and reports `Disk Spilled 0.01 MB` — the spill fires
-      and nothing crashes. So the trigger needs the test-host environment, not merely the spill.
-      A process abort with no exception is consistent with a stack overflow or a throw on a
-      background thread, neither of which is catchable; check for recursion in the temp-table
-      spill transition and for unawaited work started during it.
+      **It does not reproduce through the CLI**, and that is now well tested rather than assumed:
+      35 separate INSERTs into a temp table at `TempTableSpillThresholdRows=25` exit 0 and report
+      `Disk Spilled 0.01 MB`, so the spill fires and nothing crashes. Repeating it with NULLs
+      scattered through the columns — matching the corpus, which the first attempt did not — also
+      exits 0. So neither the spill itself nor NULL handling is sufficient; the trigger needs the
+      test-host environment.
 
+      Candidates that differ there and are worth checking first: `MemoryGrantArbiter.Shared` is
+      process-wide and six SLT tests have already run against it, so the arbiter arrives with
+      consumed budget rather than fresh; and the spill writer is started **unawaited**
+      (`pendingSpillWrite = WriteSpillBatchAsync(...)` in `DataSources.cs`, awaited later) whenever
+      `EffectivePipelineDepth > 0`, so a fault there surfaces off the calling stack.
+
+      **Next step is a dump, not more reasoning.** The message is
+      `Test host process crashed` with no exception, so run the repro under
+      `DOTNET_DbgEnableMiniDump=1` and read the faulting stack, or host the SLT runner in a console
+      app where an unhandled exception prints. Two rounds of plausible-looking inference have
+      already been wrong here.
       Reproduce: `ETL_SQL_RUN_SLT=1 Engine__TempTableSpillThresholdRows=25 dotnet test
       tests/ETL-SQL.SqlLogicTests --filter Category=SLT`. Output stops mid-corpus at an `INSERT`,
       which is where to bisect.
