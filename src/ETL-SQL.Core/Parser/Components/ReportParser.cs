@@ -1097,7 +1097,7 @@ public class ReportParser : ParserComponent
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
-            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+            if ((_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.ORIENTATION) &&
                 _parser.Current.Value.Equals("ORIENTATION", StringComparison.OrdinalIgnoreCase))
             {
                 Advance();

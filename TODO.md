@@ -967,7 +967,7 @@ The five deliverables below implement the portability contract in
 - [x] Build an EBNF-to-parser conformance runner that generates valid and invalid sequences and proves the
       execution parser accepts/rejects them consistently. Keep this in its own deterministic fuzz/release
       lane rather than slowing smoke or fast tests.
-- [ ] Move provider-specific SQL rewrites out of `QueryCompiler` and scattered connector code into a
+- [x] Move provider-specific SQL rewrites out of `QueryCompiler` and scattered connector code into a
       centralized, registered dialect abstraction with focused translation and unsupported-feature tests.
 
 ### Connectors — Transactional File Staging

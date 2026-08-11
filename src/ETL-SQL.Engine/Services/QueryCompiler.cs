@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Dialects;
 
 namespace ETL_SQL.Engine.Services;
 /// <summary>
@@ -23,11 +24,12 @@ public class QueryCompiler(Evaluator evaluator)
     {
         _paramCounter = 0;
         _currentParams = new Dictionary<string, object?>();
-        var sql = CompileExpressionInternal(e, d);
+        var dialect = SqlDialectRegistry.GetDialect(d);
+        var sql = CompileExpressionInternal(e, dialect);
         return new CompiledSql(sql, _currentParams);
     }
 
-    private string CompileExpressionInternal(Expression e, string d)
+    private string CompileExpressionInternal(Expression e, ISqlDialect dialect)
     {
         if (e is IdentifierExpression id)
         {
@@ -38,25 +40,7 @@ public class QueryCompiler(Evaluator evaluator)
                 _currentParams[pName] = val;
                 return pName;
             }
-
-            var name = id.Name.ToUpperInvariant();
-            if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
-            {
-                if (name == "SYSDATE") return "GETDATE()";
-                if (name == "NOW") return "GETDATE()";
-            }
-            else if (d.Equals("POSTGRES", StringComparison.OrdinalIgnoreCase))
-            {
-                if (name == "SYSDATE") return "NOW()";
-                if (name == "GETDATE") return "NOW()";
-            }
-            else if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
-            {
-                if (name == "NOW") return "SYSDATE";
-                if (name == "GETDATE") return "SYSDATE";
-            }
-
-            return id.Name;
+            return dialect.RewriteIdentifier(id.Name);
         }
         if (e is LiteralExpression lit)
         {
@@ -82,144 +66,11 @@ public class QueryCompiler(Evaluator evaluator)
                 TokenType.RSHIFT => ">>",
                 _ => bin.Operator.ToString()
             };
-            return $"({CompileExpressionInternal(bin.Left, d)} {op} {CompileExpressionInternal(bin.Right, d)})";
+            return $"({CompileExpressionInternal(bin.Left, dialect)} {op} {CompileExpressionInternal(bin.Right, dialect)})";
         }
         if (e is FunctionCallExpression f)
         {
-            var funcName = f.FunctionName.ToUpperInvariant();
-
-            // Dialect-specific function rewriting
-            if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
-            {
-                if (funcName == "SYSDATE")
-                {
-                    return "GETDATE()";
-                }
-                if (funcName == "NOW")
-                {
-                    return "GETDATE()";
-                }
-                if (funcName == "LENGTH" && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"LEN({arg})";
-                }
-                if (funcName == "TRUNC" && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"CAST({arg} AS DATE)";
-                }
-                if (funcName == "TRUNC" && f.Arguments.Count == 2)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    var part = f.Arguments[1] is LiteralExpression litVal && litVal.Value != null ? (litVal.Value.ToString() ?? "") : "";
-                    if (part.Equals("MM", StringComparison.OrdinalIgnoreCase) || part.Equals("MONTH", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return $"DATEADD(month, DATEDIFF(month, 0, {arg}), 0)";
-                    }
-                    if (part.Equals("YY", StringComparison.OrdinalIgnoreCase) || part.Equals("YEAR", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return $"DATEADD(year, DATEDIFF(year, 0, {arg}), 0)";
-                    }
-                }
-            }
-            else if (d.Equals("POSTGRES", StringComparison.OrdinalIgnoreCase))
-            {
-                if (funcName == "SYSDATE")
-                {
-                    return "NOW()";
-                }
-                if (funcName == "GETDATE")
-                {
-                    return "NOW()";
-                }
-                if (funcName == "ISNULL" && f.Arguments.Count == 2)
-                {
-                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
-                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
-                    return $"COALESCE({arg1}, {arg2})";
-                }
-                if (funcName == "LEN" && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"LENGTH({arg})";
-                }
-                if ((funcName == "YEAR" || funcName == "MONTH" || funcName == "DAY") && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"EXTRACT({funcName} FROM {arg})";
-                }
-                if (funcName == "TRUNC" && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"DATE_TRUNC('day', {arg})";
-                }
-                if (funcName == "TRUNC" && f.Arguments.Count == 2)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    var part = f.Arguments[1] is LiteralExpression litVal2 && litVal2.Value != null ? (litVal2.Value.ToString() ?? "day") : "day";
-                    return $"DATE_TRUNC('{part}', {arg})";
-                }
-            }
-            else if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
-            {
-                if (funcName == "SYSDATE")
-                {
-                    return "SYSDATE";
-                }
-                if (funcName == "NOW")
-                {
-                    return "SYSDATE";
-                }
-                if (funcName == "GETDATE")
-                {
-                    return "SYSDATE";
-                }
-                if (funcName == "ISNULL" && f.Arguments.Count == 2)
-                {
-                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
-                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
-                    return $"COALESCE({arg1}, {arg2})";
-                }
-                if (funcName == "LEN" && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"LENGTH({arg})";
-                }
-                if ((funcName == "YEAR" || funcName == "MONTH" || funcName == "DAY") && f.Arguments.Count == 1)
-                {
-                    var arg = CompileExpressionInternal(f.Arguments[0], d);
-                    return $"EXTRACT({funcName} FROM {arg})";
-                }
-                if (funcName == "SUBSTRING" && f.Arguments.Count == 3)
-                {
-                    var arg1 = CompileExpressionInternal(f.Arguments[0], d);
-                    var arg2 = CompileExpressionInternal(f.Arguments[1], d);
-                    var arg3 = CompileExpressionInternal(f.Arguments[2], d);
-                    return $"SUBSTR({arg1}, {arg2}, {arg3})";
-                }
-            }
-
-            if (f.FunctionName.Equals("CAST", StringComparison.OrdinalIgnoreCase) ||
-                f.FunctionName.Equals("TRY_CAST", StringComparison.OrdinalIgnoreCase))
-            {
-                if (f.Arguments.Count >= 2)
-                {
-                    var castExpr = CompileExpressionInternal(f.Arguments[0], d);
-                    string typeStr = "";
-                    if (f.Arguments[1] is LiteralExpression litType)
-                    {
-                        typeStr = litType.Value?.ToString() ?? "";
-                    }
-                    else
-                    {
-                        typeStr = CompileExpressionInternal(f.Arguments[1], d);
-                    }
-                    return $"{f.FunctionName.ToUpperInvariant()}({castExpr} AS {typeStr})";
-                }
-            }
-            var args = string.Join(", ", f.Arguments.Select(a => CompileExpressionInternal(a, d)));
-            return $"{f.FunctionName}({args})";
+            return dialect.RewriteFunctionCall(f.FunctionName, f.Arguments, arg => CompileExpressionInternal(arg, dialect));
         }
         if (e is VariableExpression v)
         {
@@ -233,13 +84,13 @@ public class QueryCompiler(Evaluator evaluator)
             var not = inExp.IsNot ? "NOT " : "";
             if (inExp.Subquery != null)
             {
-                return $"{CompileExpressionInternal(inExp.Left, d)} {not}IN ({CompileQueryInternal(inExp.Subquery, d)})";
+                return $"{CompileExpressionInternal(inExp.Left, dialect)} {not}IN ({CompileQueryInternal(inExp.Subquery, dialect)})";
             }
-            return $"{CompileExpressionInternal(inExp.Left, d)} {not}IN {CompileExpressionInternal(inExp.Right, d)}";
+            return $"{CompileExpressionInternal(inExp.Left, dialect)} {not}IN {CompileExpressionInternal(inExp.Right, dialect)}";
         }
         if (e is ListExpression list)
         {
-            return "(" + string.Join(", ", list.Items.Select(item => CompileExpressionInternal(item, d))) + ")";
+            return "(" + string.Join(", ", list.Items.Select(item => CompileExpressionInternal(item, dialect))) + ")";
         }
         return e?.ToSql() ?? "";
     }
@@ -251,34 +102,33 @@ public class QueryCompiler(Evaluator evaluator)
     {
         _paramCounter = 0;
         _currentParams = new Dictionary<string, object?>();
-        var sql = CompileQueryInternal(s, d);
+        var dialect = SqlDialectRegistry.GetDialect(d);
+        var sql = CompileQueryInternal(s, dialect);
         return new CompiledSql(sql, _currentParams);
     }
 
-    private string CompileQueryInternal(Statement s, string d)
+    private string CompileQueryInternal(Statement s, ISqlDialect dialect)
     {
         if (s is SelectStatement sel)
         {
             var selectParts = new List<string>();
-            if (sel.TopCount != null && d == "MSSQL")
+            if (sel.TopCount != null && dialect.SupportsTop)
             {
-                var percent = sel.IsTopPercent ? " PERCENT" : "";
-                var ties = sel.WithTies ? " WITH TIES" : "";
-                selectParts.Add($"TOP ({CompileExpressionInternal(sel.TopCount, d)}){percent}{ties}");
+                selectParts.Add(dialect.FormatTop(CompileExpressionInternal(sel.TopCount, dialect), sel.IsTopPercent, sel.WithTies));
             }
 
             if (sel.IsDistinct) selectParts.Add("DISTINCT");
 
             var cols = (sel.Columns.Count == 1 && sel.Columns[0].Expression is IdentifierExpression id && id.Name == "*")
                 ? "*"
-                : string.Join(", ", sel.Columns.Select(c => CompileExpressionInternal(c.Expression, d) + (c.Alias != null ? $" AS {c.Alias}" : "")));
+                : string.Join(", ", sel.Columns.Select(c => CompileExpressionInternal(c.Expression, dialect) + (c.Alias != null ? $" AS {c.Alias}" : "")));
             selectParts.Add(cols);
 
             var sql = "SELECT " + string.Join(" ", selectParts);
 
             if (sel.FromTable != null)
             {
-                sql += $" FROM {CompileTableReferenceInternal(sel.FromTable, d)}";
+                sql += $" FROM {CompileTableReferenceInternal(sel.FromTable, dialect)}";
             }
 
             if (sel.Joins != null)
@@ -287,48 +137,28 @@ public class QueryCompiler(Evaluator evaluator)
                 {
                     var jt = join.JoinType;
                     if (!jt.Contains("JOIN") && !jt.Contains("APPLY")) jt += " JOIN";
-                    sql += $" {jt} {CompileTableReferenceInternal(join.Table, d)}";
-                    if (!join.IsApply) sql += $" ON {CompileExpressionInternal(join.Condition, d)}";
+                    sql += $" {jt} {CompileTableReferenceInternal(join.Table, dialect)}";
+                    if (!join.IsApply) sql += $" ON {CompileExpressionInternal(join.Condition, dialect)}";
                 }
             }
 
-            if (sel.WhereClause != null) sql += " WHERE " + CompileExpressionInternal(sel.WhereClause, d);
+            if (sel.WhereClause != null) sql += " WHERE " + CompileExpressionInternal(sel.WhereClause, dialect);
 
             if (sel.GroupBy != null && sel.GroupBy.Count > 0)
             {
-                sql += " GROUP BY " + string.Join(", ", sel.GroupBy.Select(g => CompileExpressionInternal(g, d)));
+                sql += " GROUP BY " + string.Join(", ", sel.GroupBy.Select(g => CompileExpressionInternal(g, dialect)));
             }
 
-            if (sel.HavingClause != null) sql += " HAVING " + CompileExpressionInternal(sel.HavingClause, d);
+            if (sel.HavingClause != null) sql += " HAVING " + CompileExpressionInternal(sel.HavingClause, dialect);
 
             if (sel.OrderBy != null && sel.OrderBy.Count > 0)
             {
-                sql += " ORDER BY " + string.Join(", ", sel.OrderBy.Select(o => CompileExpressionInternal(o.Expression, d) + (o.Descending ? " DESC" : " ASC")));
+                sql += " ORDER BY " + string.Join(", ", sel.OrderBy.Select(o => CompileExpressionInternal(o.Expression, dialect) + (o.Descending ? " DESC" : " ASC")));
             }
 
-            if (sel.Offset != null)
-            {
-                if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
-                {
-                    sql += $" OFFSET {CompileExpressionInternal(sel.Offset, d)} ROWS";
-                    if (sel.LimitCount != null) sql += $" FETCH NEXT {CompileExpressionInternal(sel.LimitCount, d)} ROWS ONLY";
-                }
-                else
-                {
-                    sql += $" OFFSET {CompileExpressionInternal(sel.Offset, d)}";
-                    if (sel.LimitCount != null && !d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
-                    {
-                        sql += $" LIMIT {CompileExpressionInternal(sel.LimitCount, d)}";
-                    }
-                }
-            }
-            else if (sel.LimitCount != null)
-            {
-                if (!d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase) && !d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
-                {
-                    sql += $" LIMIT {CompileExpressionInternal(sel.LimitCount, d)}";
-                }
-            }
+            string? offset = sel.Offset != null ? CompileExpressionInternal(sel.Offset, dialect) : null;
+            string? limit = sel.LimitCount != null ? CompileExpressionInternal(sel.LimitCount, dialect) : null;
+            sql += dialect.FormatOffsetLimit(offset, limit);
 
             return sql;
         }
@@ -342,93 +172,88 @@ public class QueryCompiler(Evaluator evaluator)
                 SetOpType.INTERSECT => "INTERSECT",
                 _ => "UNION"
             };
-            return $"{CompileQueryInternal(setOp.Left, d)} {op} {CompileQueryInternal(setOp.Right, d)}";
+            return $"{CompileQueryInternal(setOp.Left, dialect)} {op} {CompileQueryInternal(setOp.Right, dialect)}";
         }
         if (s is MergeStatement m)
         {
-            return CompileMergeInternal(m, d);
+            return CompileMergeInternal(m, dialect);
         }
         return s.ToSql();
     }
 
-    private string CompileTableReferenceInternal(TableReference t, string d)
+    private string CompileTableReferenceInternal(TableReference t, ISqlDialect dialect)
     {
         if (t == null) return "";
         string sql;
         if (t.Subquery != null)
         {
-            sql = $"({CompileQueryInternal(t.Subquery, d)})";
+            sql = $"({CompileQueryInternal(t.Subquery, dialect)})";
         }
         else if (t.FunctionCall != null)
         {
-            var args = string.Join(", ", t.FunctionCall.Arguments.Select(a => CompileExpressionInternal(a, d)));
+            var args = string.Join(", ", t.FunctionCall.Arguments.Select(a => CompileExpressionInternal(a, dialect)));
             sql = $"{t.FunctionCall.FunctionName}({args})";
         }
         else
         {
-            sql = _evaluator.GetSqlTableName(t, d);
+            sql = _evaluator.GetSqlTableName(t, dialect.Name);
         }
 
         if (t.Alias != null)
         {
-            if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
-                sql += " " + t.Alias;
-            else
-                sql += " AS " + t.Alias;
+            sql += dialect.FormatTableAlias(t.Alias);
         }
         return sql;
     }
 
-    private string CompileMergeInternal(MergeStatement m, string d)
+    private string CompileMergeInternal(MergeStatement m, ISqlDialect dialect)
     {
-        var targetTable = _evaluator.GetSqlTableName(m.TargetTable, d);
-        var sql = d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase)
-            ? $"MERGE INTO {targetTable} T"
-            : $"MERGE INTO {targetTable} AS T";
+        var targetTable = _evaluator.GetSqlTableName(m.TargetTable, dialect.Name);
+        var sql = $"MERGE INTO {targetTable}{dialect.FormatTableAlias("T")}";
 
-        sql += $" USING {CompileTableReferenceInternal(m.SourceTable, d)}";
+        sql += $" USING {CompileTableReferenceInternal(m.SourceTable, dialect)}";
 
         // If the source table reference didn't have an alias, we explicitly add one for the ON clause (S and T are standard)
         if (m.SourceTable.Alias == null)
         {
-            sql += d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase) ? " S" : " AS S";
+            sql += dialect.FormatTableAlias("S");
         }
 
-        sql += $" ON {CompileExpressionInternal(m.OnCondition, d)}";
+        sql += $" ON {CompileExpressionInternal(m.OnCondition, dialect)}";
 
         foreach (var clause in m.MatchedClauses)
         {
             sql += "\n WHEN MATCHED";
-            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, d);
-            sql += " THEN " + CompileMergeActionInternal(clause, d);
+            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, dialect);
+            sql += " THEN " + CompileMergeActionInternal(clause, dialect);
         }
 
         foreach (var clause in m.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Target))
         {
             sql += "\n WHEN NOT MATCHED";
-            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, d);
-            sql += " THEN " + CompileMergeActionInternal(clause, d);
+            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, dialect);
+            sql += " THEN " + CompileMergeActionInternal(clause, dialect);
         }
 
         foreach (var clause in m.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Source))
         {
             sql += "\n WHEN NOT MATCHED BY SOURCE";
-            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, d);
-            sql += " THEN " + CompileMergeActionInternal(clause, d);
+            if (clause.Condition != null) sql += " AND " + CompileExpressionInternal(clause.Condition, dialect);
+            sql += " THEN " + CompileMergeActionInternal(clause, dialect);
         }
 
         return sql + ";";
     }
 
-    private string CompileMergeActionInternal(MergeActionClause clause, string d)
+    private string CompileMergeActionInternal(MergeActionClause clause, ISqlDialect dialect)
     {
         switch (clause.ActionType)
         {
             case MergeActionType.UPDATE:
-                return "UPDATE SET " + string.Join(", ", clause.UpdateAssignments!.Select(a => $"{a.ColumnName} = {CompileExpressionInternal(a.Value, d)}"));
+                return "UPDATE SET " + string.Join(", ", clause.UpdateAssignments!.Select(a => $"{a.ColumnName} = {CompileExpressionInternal(a.Value, dialect)}"));
             case MergeActionType.INSERT:
                 var cols = clause.InsertColumns != null ? "(" + string.Join(", ", clause.InsertColumns) + ")" : "";
-                return $"INSERT {cols} VALUES (" + string.Join(", ", clause.InsertValues!.Select(v => CompileExpressionInternal(v, d))) + ")";
+                return $"INSERT {cols} VALUES (" + string.Join(", ", clause.InsertValues!.Select(v => CompileExpressionInternal(v, dialect))) + ")";
             case MergeActionType.DELETE:
                 return "DELETE";
             default:

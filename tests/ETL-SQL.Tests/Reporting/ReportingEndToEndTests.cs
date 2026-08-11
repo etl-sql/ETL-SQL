@@ -517,6 +517,7 @@ CREATE BUTTON SearchButton AS (
             await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
             var manifest = await service.GetManifestAsync();
+            Assert.Null(manifest.Error);
 
             Assert.Equal(expectedTitle, manifest.Title);
             Assert.Equal(expectedVisuals, manifest.Visuals.Count);

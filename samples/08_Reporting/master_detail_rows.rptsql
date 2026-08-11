@@ -1,0 +1,125 @@
+-- =====================================================================
+-- Expandable Master/Detail Rows Example
+-- =====================================================================
+-- This script demonstrates the prepared-data ROW_DETAIL capability,
+-- allowing a parent TABLE visual to expand and display a nested child
+-- visual without requiring SQL execution or server callbacks at runtime.
+-- This example demonstrates nesting 4 levels deep.
+-- =====================================================================
+
+SET REPORT TITLE = 'Master/Detail Row Expansion';
+SET REPORT DESCRIPTION = 'Demonstrates in-place child table expansion from a master row, 4 levels deep.';
+
+-- 1. Create mockup data for Level 1 (Customers)
+SELECT 101 AS CustomerId, 'Acme Corp' AS CompanyName, 'Active' AS Status INTO #customers;
+INSERT INTO #customers VALUES (102, 'Globex Inc', 'Active');
+INSERT INTO #customers VALUES (103, 'Initech', 'Inactive');
+
+-- 2. Create mockup data for Level 2 (Orders)
+SELECT 1001 AS OrderId, 101 AS CustomerId, '2023-01-15' AS OrderDate, 450.00 AS Amount INTO #orders;
+INSERT INTO #orders VALUES (1002, 101, '2023-03-22', 120.50);
+INSERT INTO #orders VALUES (1003, 102, '2023-04-10', 990.00);
+INSERT INTO #orders VALUES (1004, 101, '2023-05-01', 300.00);
+INSERT INTO #orders VALUES (1005, 103, '2022-11-05', 15.00);
+
+-- 3. Create mockup data for Level 3 (Order Lines)
+SELECT 1001 AS OrderId, 1 AS LineId, 'Widget A' AS Item, 2 AS Quantity, 150.00 AS Price INTO #order_lines;
+INSERT INTO #order_lines VALUES (1001, 2, 'Widget B', 1, 150.00);
+INSERT INTO #order_lines VALUES (1002, 1, 'Widget C', 5, 24.10);
+INSERT INTO #order_lines VALUES (1003, 1, 'Widget A', 5, 150.00);
+INSERT INTO #order_lines VALUES (1003, 2, 'Widget D', 1, 240.00);
+INSERT INTO #order_lines VALUES (1004, 1, 'Widget E', 2, 150.00);
+INSERT INTO #order_lines VALUES (1005, 1, 'Widget F', 1, 15.00);
+
+-- 4. Create mockup data for Level 4 (Shipments)
+SELECT 1001 AS OrderId, 1 AS LineId, 'SHP-991' AS ShipmentId, 'FedEx' AS Carrier, 'Delivered' AS ShipmentStatus INTO #shipments;
+INSERT INTO #shipments VALUES (1001, 1, 'SHP-992', 'UPS', 'In Transit');
+INSERT INTO #shipments VALUES (1001, 2, 'SHP-993', 'FedEx', 'Delivered');
+INSERT INTO #shipments VALUES (1002, 1, 'SHP-994', 'USPS', 'Pending');
+INSERT INTO #shipments VALUES (1003, 1, 'SHP-995', 'FedEx', 'Delivered');
+INSERT INTO #shipments VALUES (1003, 2, 'SHP-996', 'UPS', 'Exception');
+
+-- 5. Define Level 4 visual (Shipments)
+CREATE VISUAL detail_shipments AS TABLE (
+    SOURCE = (SELECT * FROM #shipments),
+    MAPPINGS (
+        COLUMN OrderId HIDDEN,
+        COLUMN LineId HIDDEN,
+        COLUMN ShipmentId AS 'Shipment ID',
+        COLUMN Carrier AS 'Carrier',
+        COLUMN ShipmentStatus AS 'Status'
+    ),
+    OPTIONS (
+        VISIBLE = OFF,
+        PAGE_SIZE = 5,
+        SEARCH = OFF
+    )
+);
+
+-- 6. Define Level 3 visual (Order Lines) pointing to Shipments
+CREATE VISUAL detail_order_lines AS TABLE (
+    SOURCE = (SELECT * FROM #order_lines),
+    ROW_DETAIL (
+        TARGET = 'detail_shipments',
+        MAP ( @OrderId = OrderId, @LineId = LineId ),
+        LIMIT = 100
+    ),
+    MAPPINGS (
+        COLUMN OrderId HIDDEN,
+        COLUMN LineId AS 'Line',
+        COLUMN Item AS 'Item',
+        COLUMN Quantity AS 'Qty',
+        COLUMN Price FORMAT 'C' AS 'Price'
+    ),
+    OPTIONS (
+        VISIBLE = OFF,
+        PAGE_SIZE = 5,
+        SEARCH = OFF
+    )
+);
+
+-- 7. Define Level 2 visual (Orders) pointing to Order Lines
+CREATE VISUAL detail_orders AS TABLE (
+    SOURCE = (SELECT * FROM #orders),
+    ROW_DETAIL (
+        TARGET = 'detail_order_lines',
+        MAP ( @OrderId = OrderId ),
+        LIMIT = 100
+    ),
+    MAPPINGS (
+        COLUMN CustomerId HIDDEN,
+        COLUMN OrderId AS 'Order ID',
+        COLUMN OrderDate AS 'Date',
+        COLUMN Amount FORMAT 'C' AS 'Amount'
+    ),
+    OPTIONS (
+        VISIBLE = OFF,
+        PAGE_SIZE = 5,
+        SEARCH = OFF
+    )
+);
+
+-- 8. Define Level 1 visual (Customers) pointing to Orders
+CREATE VISUAL master_customers AS TABLE (
+    SOURCE = (SELECT * FROM #customers),
+    ROW_DETAIL (
+        TARGET = 'detail_orders',
+        MAP ( @CustomerId = CustomerId ),
+        LIMIT = 100
+    ),
+    MAPPINGS (
+        COLUMN CustomerId AS 'ID',
+        COLUMN CompanyName AS 'Company',
+        COLUMN Status AS 'Status'
+    ),
+    FORMATTING (
+        WHEN Status = 'Active' THEN '#e8f5e9' FONT_COLOR '#111111',
+        WHEN Status = 'Inactive' THEN '#ffebee' FONT_COLOR '#111111'
+    )
+);
+
+-- 9. Define the page layout
+CREATE PAGE dashboard AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP ('A' = master_customers)
+);

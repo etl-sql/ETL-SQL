@@ -53,8 +53,7 @@ namespace ETL_SQL.Connectors.FlatFile
             { "EXPECTED_HASH", Array.Empty<string>() },
             { "WAIT_FOR_LOCK", new[] { "ON", "OFF", "TRUE", "FALSE" } },
             { "LOCK_TIMEOUT_SEC", Array.Empty<string>() },
-            { "TRUNCATE_STRING", new[] { "ON", "OFF" } },
-            { "TRANSACTIONAL", new[] { "ON", "OFF", "TRUE", "FALSE" } }
+            { "TRUNCATE_STRING", new[] { "ON", "OFF" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)

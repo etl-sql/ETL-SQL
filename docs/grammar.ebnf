@@ -1,0 +1,121 @@
+/* ETL-SQL EBNF Grammar */
+/* This is a subset of the full grammar focusing on the core ETL-SQL statements for conformance testing. */
+
+script = { statement ";" } EOF ;
+
+statement = select_statement
+          | set_variable_statement
+          | print_statement
+          | if_statement
+          | while_statement
+          | block_statement
+          | declare_statement
+          | insert_statement
+          | update_statement
+          | delete_statement
+          | create_connection_statement
+          | create_job_statement
+          | waitfor_statement
+          | run_script_statement
+          | execute_statement
+          | create_visual_statement
+          | create_page_statement
+          | create_dataset_statement
+          | create_container_statement
+          | create_navigation_statement
+          | create_button_statement
+          | create_style_statement
+          | set_report_metadata_statement
+          | merge_statement
+          | with_statement ;
+
+set_variable_statement = "SET" variable_name "=" expression ;
+print_statement = "PRINT" expression ;
+if_statement = "IF" expression block_statement [ "ELSE" block_statement ] ;
+while_statement = "WHILE" expression block_statement ;
+block_statement = "BEGIN" { statement ";" } "END" ;
+
+declare_statement = "DECLARE" variable_name data_type [ "=" expression ] ;
+data_type = "INT" | "VARCHAR" [ "(" number ")" ] | "DECIMAL" | "DATETIME" | "BOOLEAN" ;
+
+insert_statement = "INSERT" "INTO" table_reference [ "(" column_list ")" ] ( select_statement | values_clause ) ;
+values_clause = "VALUES" "(" expression_list ")" { "," "(" expression_list ")" } ;
+
+update_statement = "UPDATE" table_reference "SET" assignment_list [ "WHERE" expression ] ;
+assignment_list = assignment { "," assignment } ;
+assignment = identifier "=" expression ;
+
+delete_statement = "DELETE" "FROM" table_reference [ "WHERE" expression ] ;
+
+create_connection_statement = "CREATE" "CONNECTION" identifier "AS" identifier [ "(" connection_options ")" ] ;
+connection_options = identifier "=" expression { "," identifier "=" expression } ;
+
+create_job_statement = "CREATE" "JOB" identifier "FOR" "SCRIPT" string_literal ;
+
+waitfor_statement = "WAITFOR" ( "DELAY" string_literal | "TIME" string_literal | "(" expression ")" ) | "WAIT" "UNTIL" expression ;
+
+run_script_statement = "RUN" "SCRIPT" string_literal [ "WITH" "(" parameter_assignments ")" ] ;
+parameter_assignments = variable_name "=" expression { "," variable_name "=" expression } ;
+
+execute_statement = ( "EXECUTE" | "EXEC" ) identifier "BEGIN" { statement ";" } "END" ;
+
+column_list = identifier { "," identifier } ;
+expression_list = expression { "," expression } ;
+
+merge_statement = "MERGE" "INTO" table_reference [ "AS" identifier ] "USING" table_reference [ "AS" identifier ] "ON" expression merge_when_clause { merge_when_clause } ;
+merge_when_clause = "WHEN" "MATCHED" [ "AND" expression ] "THEN" "UPDATE" "SET" assignment_list
+                  | "WHEN" "NOT" "MATCHED" [ "AND" expression ] "THEN" "INSERT" [ "(" column_list ")" ] "VALUES" "(" expression_list ")" ;
+
+with_statement = "WITH" [ "RECURSIVE" ] cte_definition { "," cte_definition } select_statement ;
+cte_definition = identifier "AS" "(" select_statement ")" ;
+
+select_statement = "SELECT" [ "TOP" number ] select_list "FROM" table_reference [ "WHERE" expression ] ;
+
+select_list = "*" | select_item { "," select_item } ;
+select_item = expression [ [ "AS" ] identifier ] ;
+
+table_reference = identifier ;
+
+expression = literal
+           | identifier
+           | variable_name
+           | function_call
+           | expression binary_operator expression
+           | "(" expression ")" ;
+
+literal = string_literal | number_literal | "NULL" | "TRUE" | "FALSE" ;
+
+binary_operator = "+" | "-" | "*" | "/" | "=" | "<>" | ">" | "<" | ">=" | "<=" | "AND" | "OR" ;
+
+function_call = identifier "(" [ expression { "," expression } ] ")" [ "OVER" "(" window_clause ")" ] ;
+window_clause = [ "PARTITION" "BY" expression_list ] [ "ORDER" "BY" order_list ] [ window_frame_clause ] ;
+order_list = expression [ "ASC" | "DESC" ] { "," expression [ "ASC" | "DESC" ] } ;
+window_frame_clause = ( "ROWS" | "RANGE" ) "BETWEEN" window_frame_bound "AND" window_frame_bound ;
+window_frame_bound = "UNBOUNDED" "PRECEDING" | "CURRENT" "ROW" | "UNBOUNDED" "FOLLOWING" | number "PRECEDING" | number "FOLLOWING" ;
+
+identifier = letter { letter | digit | "_" } ;
+variable_name = "@" identifier ;
+create_visual_statement = "CREATE" "VISUAL" identifier "AS" visual_type [ "(" report_options ")" ] ;
+visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "COMBO" | "BOXPLOT" | "TREEMAP" | "HEATMAP" | "FUNNEL" | "GAUGE" | "WATERFALL" | "BUBBLE" | "RADAR" | "CANDLESTICK" | "MAP" | "SANKEY" | "SUNBURST" | "NETWORK" | "TRELLIS" | "MATRIX" | "GANTT" | "TABLE" | "CARD" | "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
+
+create_page_statement = "CREATE" "PAGE" identifier "AS" "(" report_options ")" ;
+create_dataset_statement = "CREATE" "DATASET" identifier [ "ENCRYPT" "=" expression ] "AS" select_statement ;
+create_container_statement = "CREATE" "CONTAINER" identifier "AS" "(" report_options ")" ;
+create_navigation_statement = "CREATE" "NAVIGATION" identifier "AS" "(" report_options ")" ;
+create_button_statement = "CREATE" "BUTTON" identifier "AS" "(" report_options ")" ;
+create_style_statement = "CREATE" "STYLE" identifier "AS" "(" report_options ")" ;
+
+set_report_metadata_statement = "SET" "REPORT" ( "TITLE" | "DESCRIPTION" ) "=" string_literal ;
+
+report_options = report_clause { "," report_clause } ;
+report_clause = identifier [ "=" expression | "(" report_options ")" ] ;
+
+number = digit { digit } ;
+string_literal = "'" { any_char_except_quote | "''" } "'" ;
+number_literal = digit { digit } [ "." digit { digit } ] ;
+
+letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M"
+       | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+       | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m"
+       | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" ;
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
