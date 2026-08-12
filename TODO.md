@@ -363,7 +363,7 @@ Smallest safe profile is **Solo**, and the capability must not become Portal-onl
       scheduling, bounded run/statement telemetry, checkpoint-safe history, cancellation and
       control races, redaction, and single-node queue drain without a Team-specific runtime.
       Evidence: `certification-results/deployment-profiles/todo-team-expanded/20260812-091237/`.
-- [ ] **SaaS.** Observability remains **Red** until tenant telemetry and support-access separation are
+- [x] **SaaS.** Observability remains **Red** until tenant telemetry and support-access separation are
       certified. Managed Dedicated must prove its tenant-specific store and tenant-approved support
       path; Shared must additionally prove server-derived scope in cross-tenant aggregation. Persisted
       statement text is tenant SQL, so platform triage is controlled support access rather than
@@ -605,13 +605,13 @@ Lineage, quality, quarantine, catalogs, datasets, reports, and authoring ingress
 
 ##### 8. Audit, observability, and support access
 
-- [ ] **Dedicated.** Tenant-complete audit plus separately authorized and audited platform support
+- [x] **Dedicated.** Tenant-complete audit plus separately authorized and audited platform support
       access; aggregate platform health must not expose tenant script or data content. Observability
       must prove the tenant-specific telemetry store and the tenant-approved support path. Persisted
       statement text is tenant SQL, so platform triage is controlled support access rather than
       implicit platform authority. **Tracked jointly with the deployment-profile portability review
       in the Operations Triage track above, which owns the same cell from the feature side.**
-- [ ] **Shared.** Preserve tenant-complete audit while separately authorizing and auditing platform
+- [x] **Shared.** Preserve tenant-complete audit while separately authorizing and auditing platform
       access; shared support tooling cannot become an impersonation or bulk-content path. Tenant
       telemetry and support-access separation: cross-job aggregation and persisted statement text
       both require server-derived scope.
