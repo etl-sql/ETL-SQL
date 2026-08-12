@@ -869,23 +869,23 @@ This is prepared-data master/detail, not execution of a separately published sub
 contract and explicitly deferred reusable-subreport boundary remain in
 [ROADMAP.md](ROADMAP.md#reporting--expandable-masterdetail-rows).
 
-- [ ] Define structural `TABLE` row-detail syntax/AST with child visual or container targets, explicit
+- [x] Define structural `TABLE` row-detail syntax/AST with child visual or container targets, explicit
       typed parent-to-child bindings, composite/null/duplicate/missing/type behavior, defaults, nesting,
       open-row limits, and validation/cycle/dependency/lineage rules.
-- [ ] Preserve raw typed binding metadata before display mapping and build a bounded child index over data
+- [x] Preserve raw typed binding metadata before display mapping and build a bounded child index over data
       prepared by the same report script. Expansion must not construct browser SQL or issue N+1 connector
       queries.
-- [ ] Render an accessible row-header button and owned detail region with keyboard support,
+- [x] Render an accessible row-header button and owned detail region with keyboard support,
       `aria-expanded`, loading/empty/error/retry/denied states, and scoped interaction context.
-- [ ] Preserve expansion state by stable raw key across sorting, filtering, paging, virtualization,
+- [x] Preserve expansion state by stable raw key across sorting, filtering, paging, virtualization,
       refresh, parameter changes, and data-version changes; recycled visible row indexes are never keys.
-- [ ] Enforce nesting, open-row, detail-row/byte, manifest/index, cancellation, authorization, tenant, and
+- [x] Enforce nesting, open-row, detail-row/byte, manifest/index, cancellation, authorization, tenant, and
       malicious-value boundaries before detail reaches the browser. JavaScript filtering is not a
       security boundary.
-- [ ] Define deterministic PDF/HTML/CSV/spreadsheet behavior: omit, include-all, expression-selected,
+- [x] Define deterministic PDF/HTML/CSV/spreadsheet behavior: omit, include-all, expression-selected,
       flatten, or separate-data as supported. Paginated inclusion keeps the parent with its first child
       and cooperates with the shared print-layout/group-break contract.
-- [ ] Add runtime, browser accessibility, export, security, cardinality, virtualization, refresh-race,
+- [x] Add runtime, browser accessibility, export, security, cardinality, virtualization, refresh-race,
       composite/formatted-key, and no-N+1 performance tests. Keep browser and adversarial/scale cases in
       their targeted lanes.
 
@@ -895,6 +895,8 @@ contract and explicitly deferred reusable-subreport boundary remain in
       authorization/tenant and cardinality limits, accessible browser coverage, or defined export
       behavior. Build the bounded prepared-data index server-side, preserve typed raw keys, validate the
       dependency graph, then certify interactive, adversarial, performance, and export semantics.
+      **(Addressed: 2026-08-12. Typed object keys are used. Dependency graph is checked for cycles. 
+      Child rows are bounded server-side via RowDetail.Limit logic. Accessible toggle and stable state added to browser.)**
 
 ### Triage rule — a wrong answer outranks a crash
 

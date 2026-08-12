@@ -242,10 +242,6 @@ namespace ETL_SQL.Reporting.Builders
                     }
 
                     ResolveActionValues(vm);
-                    if (vStmt.RowDetail != null && vStmt.RowDetail.Bindings.Count > 0)
-                    {
-                        ExtractRowDetailKeys(vStmt, vm);
-                    }
                     CalculateSummaries(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
@@ -505,11 +501,27 @@ namespace ETL_SQL.Reporting.Builders
                 if (firstBatch)
                 {
                     vm.Columns = batch.ColumnNames.ToList();
+                    if (targetRows == vm.Rows && vStmt.RowDetail != null && vStmt.RowDetail.Bindings.Count > 0)
+                    {
+                        vm.RowDetailKeys = new List<Dictionary<string, object?>>();
+                    }
                     firstBatch = false;
                 }
                 foreach (var row in batch.Rows)
                 {
                     targetRows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
+
+                    if (targetRows == vm.Rows && vm.RowDetailKeys != null && vStmt.RowDetail != null)
+                    {
+                        var keys = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var b in vStmt.RowDetail.Bindings)
+                        {
+                            keys[b.ChildParameter] = batch.ColumnNames.Contains(b.ParentColumn, StringComparer.OrdinalIgnoreCase)
+                                ? row[b.ParentColumn]
+                                : null;
+                        }
+                        vm.RowDetailKeys.Add(keys);
+                    }
 
                     // Apply formatting rules row-by-row (only if styles list is provided)
                     if (targetStyles != null && vStmt.FormattingRules.Count > 0)
@@ -532,34 +544,6 @@ namespace ETL_SQL.Reporting.Builders
             }
         }
 
-        private static void ExtractRowDetailKeys(CreateVisualStatement vStmt, VisualManifest vm)
-        {
-            if (vStmt.RowDetail == null) return;
-            var colIdx = vm.Columns
-                .Select((c, i) => (c, i))
-                .ToDictionary(x => x.c, x => x.i, StringComparer.OrdinalIgnoreCase);
-
-            var bindingExtractors = vStmt.RowDetail.Bindings
-                .Select(b => 
-                {
-                    if (colIdx.TryGetValue(b.ParentColumn, out var idx))
-                    {
-                        int capturedIdx = idx;
-                        return (b.ChildParameter, (Func<List<string?>, string?>)(row => capturedIdx < row.Count ? row[capturedIdx] : null));
-                    }
-                    return (b.ChildParameter, (Func<List<string?>, string?>)(row => null));
-                }).ToList();
-
-            vm.RowDetailKeys = new List<Dictionary<string, string?>>(vm.Rows.Count);
-            for (int r = 0; r < vm.Rows.Count; r++)
-            {
-                var row = vm.Rows[r];
-                var keys = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-                foreach (var (param, extract) in bindingExtractors)
-                    keys[param] = extract(row);
-                vm.RowDetailKeys.Add(keys);
-            }
-        }
 
         private void ApplyTableMappings(CreateVisualStatement vStmt, VisualManifest vm)
         {

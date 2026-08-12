@@ -81,6 +81,7 @@ namespace ETL_SQL.Reporting
 
             // ── Visuals ──────────────────────────────────────────────────────
             await BuildVisualsAsync(manifest, interactionValues, deferredVisuals);
+            BoundRowDetailVisuals(manifest);
             RefreshTelemetry(manifest);
 
             // ── Pages ────────────────────────────────────────────────────────
@@ -274,6 +275,8 @@ namespace ETL_SQL.Reporting
 
             if (visuals.Count == 0)
                 return;
+
+            ValidateDependencyGraph(visuals);
 
             if (!CanBuildVisualsInParallel(visuals.Count, interactionValues))
             {
@@ -594,6 +597,119 @@ namespace ETL_SQL.Reporting
                 return s is "OFF" or "FALSE" or "0";
             }
             return visibility.ToUpperInvariant() is "OFF" or "FALSE" or "0";
+        }
+
+        private void ValidateDependencyGraph(List<VisualBuildInput> visuals)
+        {
+            var graph = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var v in visuals)
+            {
+                if (v.Statement.RowDetail != null && !string.IsNullOrWhiteSpace(v.Statement.RowDetail.TargetName))
+                {
+                    graph[v.Name] = v.Statement.RowDetail.TargetName;
+                }
+            }
+
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var path = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var node in graph.Keys)
+            {
+                if (HasCycle(node, graph, visited, path, out var cyclePath))
+                {
+                    var cycleStr = string.Join(" -> ", cyclePath);
+                    throw new InvalidOperationException($"Cycle detected in ROW_DETAIL dependencies: {cycleStr}");
+                }
+            }
+        }
+
+        private void BoundRowDetailVisuals(ReportManifest manifest)
+        {
+            if (manifest.Visuals == null) return;
+            var visualDict = manifest.Visuals.ToDictionary(v => v.Name, v => v, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var parent in manifest.Visuals)
+            {
+                if (parent.RowDetail == null || string.IsNullOrWhiteSpace(parent.RowDetail.TargetName) || parent.RowDetailKeys == null)
+                    continue;
+
+                if (!visualDict.TryGetValue(parent.RowDetail.TargetName, out var target) || target.Rows == null || target.Columns == null)
+                    continue;
+
+                var bindings = parent.RowDetail.Bindings;
+                if (bindings == null || bindings.Count == 0) continue;
+
+                int limit = (parent.RowDetail.Limit.HasValue && parent.RowDetail.Limit.Value > 0) ? parent.RowDetail.Limit.Value : 10000;
+                var filteredTargetRows = new List<List<string?>>();
+                
+                var childColIndices = new int[bindings.Count];
+                for (int b = 0; b < bindings.Count; b++)
+                {
+                    childColIndices[b] = target.Columns.FindIndex(c => c.Equals(bindings[b].ChildParameter, StringComparison.OrdinalIgnoreCase));
+                }
+
+                // If any binding column isn't found in target, we can't filter
+                if (childColIndices.Any(idx => idx < 0)) continue;
+
+                foreach (var parentKeys in parent.RowDetailKeys)
+                {
+                    int addedCount = 0;
+                    foreach (var row in target.Rows)
+                    {
+                        bool matches = true;
+                        for (int b = 0; b < bindings.Count; b++)
+                        {
+                            var pVal = parentKeys.TryGetValue(bindings[b].ChildParameter, out var pv) ? pv : null;
+                            var cVal = row[childColIndices[b]];
+                            if (Convert.ToString(pVal) != Convert.ToString(cVal))
+                            {
+                                matches = false;
+                                break;
+                            }
+                        }
+
+                        if (matches)
+                        {
+                            filteredTargetRows.Add(row);
+                            addedCount++;
+                            if (addedCount >= limit) break;
+                        }
+                    }
+                }
+                
+                // Replace target rows with the bounded, reachable set
+                target.Rows = filteredTargetRows.Distinct().ToList();
+            }
+        }
+
+        private bool HasCycle(string current, Dictionary<string, string> graph, HashSet<string> visited, HashSet<string> path, out List<string> cyclePath)
+        {
+            cyclePath = new List<string>();
+            if (path.Contains(current))
+            {
+                cyclePath.Add(current);
+                return true;
+            }
+            if (visited.Contains(current))
+            {
+                return false;
+            }
+
+            visited.Add(current);
+            path.Add(current);
+
+            if (graph.TryGetValue(current, out var next))
+            {
+                if (HasCycle(next, graph, visited, path, out var subCycle))
+                {
+                    cyclePath.Add(current);
+                    cyclePath.AddRange(subCycle);
+                    return true;
+                }
+            }
+
+            path.Remove(current);
+            return false;
         }
     }
 }

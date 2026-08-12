@@ -235,7 +235,7 @@ namespace ETL_SQL.Reporting
         /// <summary>Captured row-detail binding keys before mapping projection.</summary>
         [JsonPropertyName("rowDetailKeys")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public List<Dictionary<string, string?>>? RowDetailKeys { get; set; }
+        public List<Dictionary<string, object?>>? RowDetailKeys { get; set; }
 
         /// <summary>Row-level background colors applied via FORMATTING rules.</summary>
         [JsonPropertyName("rowStyles")]

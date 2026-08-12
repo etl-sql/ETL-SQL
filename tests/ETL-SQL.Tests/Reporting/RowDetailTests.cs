@@ -67,12 +67,37 @@ CREATE PAGE dashboard AS DASHBOARD (
 
                 Assert.NotNull(parent.RowDetailKeys);
                 Assert.Equal(2, parent.RowDetailKeys.Count);
-                Assert.Equal("1", parent.RowDetailKeys[0]["pid"]);
-                Assert.Equal("2", parent.RowDetailKeys[1]["pid"]);
+                Assert.Equal(1L, Convert.ToInt64(parent.RowDetailKeys[0]["pid"]));
+                Assert.Equal(2L, Convert.ToInt64(parent.RowDetailKeys[1]["pid"]));
 
                 // Mappings applied, parent shouldn't contain ParentId column
                 Assert.DoesNotContain("ParentId", parent.Columns, StringComparer.OrdinalIgnoreCase);
                 Assert.Contains("DisplayLabel", parent.Columns, StringComparer.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+        }
+        [Fact]
+        public async Task RowDetail_DependencyCycle_ThrowsException()
+        {
+            string scriptPath = Path.Combine(Path.GetTempPath(), $"row_detail_cycle_{Guid.NewGuid()}.rptsql");
+            File.WriteAllText(scriptPath, @"
+CREATE VISUAL A AS TABLE (
+    SOURCE = (SELECT 1 AS Id),
+    ROW_DETAIL (TARGET = 'B', MAP (@id = Id))
+);
+CREATE VISUAL B AS TABLE (
+    SOURCE = (SELECT 1 AS Id),
+    ROW_DETAIL (TARGET = 'A', MAP (@id = Id))
+);
+");
+            try
+            {
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetManifestAsync());
+                Assert.Contains("Cycle detected in ROW_DETAIL dependencies", ex.Message);
             }
             finally
             {
