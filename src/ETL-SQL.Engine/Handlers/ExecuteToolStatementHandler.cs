@@ -20,10 +20,11 @@ namespace ETL_SQL.Engine.Handlers;
 /// Runs a registered tool process, streams data to it via stdin (JSON Lines),
 /// and collects results from stdout (JSON Lines).
 /// </summary>
-public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null) : IStatementHandler
+public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null, ICapabilityTokenIssuer? tokenIssuer = null) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
+    private readonly ICapabilityTokenIssuer? _tokenIssuer = tokenIssuer;
     public Type SupportedStatementType => typeof(ExecuteToolStatement);
 
     public async Task Execute(Statement statement, IExecutionContext context)
@@ -90,6 +91,10 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             if (string.IsNullOrWhiteSpace(image))
                 throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER is missing the IMAGE option.", null, stmt.Line, stmt.Column);
             
+            // 1. Pinned images
+            if (!image.Contains("@sha256:"))
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER must use a pinned image digest (e.g. @sha256:...).", null, stmt.Line, stmt.Column);
+
             var isolateNetwork = GetOptionBoolean(toolDef.Options, "ISOLATE_NETWORK") ?? true;
 
             startInfo.FileName = "docker";
@@ -97,6 +102,16 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             {
                 startInfo.ArgumentList.Add(arg);
             }
+            
+            // 2. Non-root identity
+            var runAsUser = GetOptionString(toolDef.Options, "RUN_AS_USER") ?? "65534:65534";
+            startInfo.ArgumentList.Add("--user");
+            startInfo.ArgumentList.Add(runAsUser);
+
+            // 3. Isolated scratch
+            startInfo.ArgumentList.Add("--tmpfs");
+            startInfo.ArgumentList.Add("/tmp:rw,noexec,nosuid,size=65536k");
+
             if (isolateNetwork)
             {
                 startInfo.ArgumentList.Add("--network");
@@ -180,7 +195,21 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         {
             using var process = new Process { StartInfo = startInfo };
             
-            var operationId = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}";
+            // P2 - Immutable Logical Checkpoint Identities
+            var argString = string.Join("|", startInfo.ArgumentList);
+            var envKeys = startInfo.EnvironmentVariables.Keys.Cast<string>()
+                .Where(k => k != "ETLSQL_CAPABILITY_TOKEN" && k != "ETLSQL_IDEMPOTENCY_KEY")
+                .OrderBy(k => k);
+            var envString = string.Join("|", envKeys.Select(k => $"{k}={startInfo.EnvironmentVariables[k]}"));
+            var policyHash = context.ExecutionPolicy?.PolicyHash ?? "no-policy";
+            var identityMaterial = $"{context.SessionId ?? "temp"}_{stmt.ToolAlias}_{stmt.Line}_{toolDef.ToolType}_{policyHash}_{argString}_{envString}";
+            
+            string operationId;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var hashBytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(identityMaterial));
+                operationId = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            }
             
             if (context.Ledger != null && stmt.TargetTable == null)
             {
@@ -200,6 +229,36 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 {
                     startInfo.EnvironmentVariables["ETLSQL_IDEMPOTENCY_KEY"] = operationId;
                 }
+
+                // P2 - Capability Tokens
+                if (_tokenIssuer != null)
+                {
+                    var hasCapabilities = toolDef.Options?.ContainsKey("CAPABILITIES") == true || (stmt.Parameters?.ContainsKey("CAPABILITIES") == true);
+                    if (hasCapabilities)
+                    {
+                        var policy = context.ExecutionPolicy;
+                        var actor = context.ExecutionIdentity?.RealUser ?? context.ExecutionPolicy?.Actor ?? "system";
+                        var rawCaps = GetOptionString(toolDef.Options, "CAPABILITIES") ?? string.Empty;
+
+                        var cap = new CapabilityToken
+                        {
+                            TenantId = context.StorageCapability?.Tenant?.Tenant.Value,
+                            Environment = null,
+                            ToolDigest = toolDef.ToolType,
+                            OperationId = operationId,
+                            Actor = actor,
+                            RunAttempt = policy?.JobId,
+                            PolicyVersion = policy?.PolicyVersion,
+                            Nonce = Guid.NewGuid().ToString("N"),
+                            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(timeoutSecs / 60.0 + 5), // Bound to timeout
+                            AllowNetworkAccess = rawCaps.Contains("NETWORK", StringComparison.OrdinalIgnoreCase),
+                            AllowGatewayResources = rawCaps.Contains("GATEWAY", StringComparison.OrdinalIgnoreCase)
+                        };
+
+                        startInfo.EnvironmentVariables["ETLSQL_CAPABILITY_TOKEN"] = _tokenIssuer.IssueToken(cap);
+                    }
+                }
+
                 process.Start();
             }
             catch (Exception ex)

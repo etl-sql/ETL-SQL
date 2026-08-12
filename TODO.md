@@ -798,17 +798,17 @@ raw `CMD` connector or arbitrary shell execution.
 
 #### P2 — Hardened and side-effecting operation support
 
-- [ ] Add OCI Hardened/Dedicated bindings with pinned images, read-only roots, non-root identity,
+- [x] Add OCI Hardened/Dedicated bindings with pinned images, read-only roots, non-root identity,
       capability/seccomp restrictions, isolated scratch, default-deny network, no runtime socket, and
       metadata/control-plane protections. Keep runtime binding environment-owned so scripts remain
       portable.
-- [ ] Add declared file, network, Gateway-resource, and just-in-time named-secret capabilities bound to
+- [x] Add declared file, network, Gateway-resource, and just-in-time named-secret capabilities bound to
       tenant, environment, tool digest, operation, actor, run/attempt, limits, policy version, expiry, and
       nonce. Pure transforms receive none by default.
-- [ ] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
+- [x] Persist logical checkpoints containing immutable tool/protocol/policy/input identities and only
       fully validated staged output. Replacement sandboxes reauthorize on resume; they never serialize a
       process, handle, live connection, resolved secret, or reusable capability.
-- [ ] Introduce side-effecting action tools only after a durable operation ledger and explicit
+- [x] Introduce side-effecting action tools only after a durable operation ledger and explicit
       idempotency/reconciliation contract exist. Ambiguous external effects must not be retried as if
       process exit proved the outcome.
 

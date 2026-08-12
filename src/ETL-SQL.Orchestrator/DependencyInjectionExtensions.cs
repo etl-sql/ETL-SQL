@@ -104,6 +104,8 @@ namespace ETL_SQL.Orchestrator
             if (toolCatalog != null)
                 services.AddSingleton(toolCatalog);
 
+            services.AddSingleton<ICapabilityTokenIssuer, ETL_SQL.Engine.Governance.DefaultCapabilityTokenIssuer>();
+
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);
             ETL_SQL.Engine.Functions.StandardFunctions.Register(fnRegistry);
