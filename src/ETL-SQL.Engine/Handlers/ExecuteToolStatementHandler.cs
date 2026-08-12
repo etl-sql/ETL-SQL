@@ -422,10 +422,23 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         var batch = new DataTable();
         batch.SetColumns(cols);
 
+        long totalBytes = 0;
+        int rowCount = 0;
+        const long MaxBytes = 100 * 1024 * 1024; // 100 MB limit
+        const int MaxRows = 1_000_000;
+
         string? line;
         while ((line = await stdout.ReadLineAsync(token)) != null)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
+            
+            totalBytes += System.Text.Encoding.UTF8.GetByteCount(line);
+            if (totalBytes > MaxBytes)
+                throw new ExecutionException("Tool output exceeded the maximum allowed size of 100MB.", null, 0, 0);
+            
+            rowCount++;
+            if (rowCount > MaxRows)
+                throw new ExecutionException("Tool output exceeded the maximum allowed row count of 1,000,000.", null, 0, 0);
             
             try
             {
@@ -439,21 +452,27 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                         var colName = cols[i];
                         if (dict.TryGetValue(colName, out var val))
                         {
+                            object? rawVal = null;
                             if (val is JsonElement je)
                             {
-                                row[i] = je.ValueKind switch
+                                rawVal = je.ValueKind switch
                                 {
                                     JsonValueKind.String => je.GetString(),
                                     JsonValueKind.Number => je.TryGetInt64(out var l) ? l : je.GetDouble(),
                                     JsonValueKind.True => true,
                                     JsonValueKind.False => false,
+                                    JsonValueKind.Null => null,
                                     _ => je.ToString()
                                 };
                             }
                             else
                             {
-                                row[i] = val;
+                                rawVal = val;
                             }
+                            
+                            row[i] = rawVal != null && expectedSchema != null && expectedSchema.Count > i
+                                ? ETL_SQL.Core.Data.TypeConverter.Cast(rawVal, expectedSchema[i].DataType)
+                                : rawVal;
                         }
                     }
                 }
@@ -468,7 +487,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             }
             catch (JsonException ex)
             {
-                _logger.Warning("Failed to parse tool output JSON: {Error}", ex.Message);
+                throw new ExecutionException($"Tool output malformed JSON at row {rowCount}: {ex.Message}", null, 0, 0);
             }
         }
 

@@ -787,10 +787,10 @@ raw `CMD` connector or arbitrary shell execution.
 - [x] Implement the Standard direct-process binding for approved pure transforms: no shell, sanitized
       allowlisted environment, dedicated identity, canonical scratch root, process-tree containment,
       bounded CPU/memory/process/time/output limits, cancellation, and cleanup.
-- [ ] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a
+- [x] Implement the versioned typed streaming protocol, beginning with JSON Lines compatibility and a
       path to a high-volume framed format. Specify handshake, schemas, null/decimal/time/binary/Unicode,
       size limits, compression, backpressure, stderr diagnostics, cancellation, and terminal outcome.
-- [ ] Validate every returned value and stage output until protocol completion, schema/type/size/row
+- [x] Validate every returned value and stage output until protocol completion, schema/type/size/row
       limits, and data-quality rules all pass. Stream with bounded memory and never publish partial output.
 - [ ] Add lineage, metrics, sanitized diagnostics, and audit for catalog lifecycle, policy decisions,
       execution, capability access, cancellation, denial, and publication without retaining payloads or
